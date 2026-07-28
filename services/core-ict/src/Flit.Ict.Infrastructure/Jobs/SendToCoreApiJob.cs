@@ -30,7 +30,11 @@ public sealed class SendToCoreApiJob(
 
     protected override string JobName => "send-to-core-api";
 
-    protected override async Task RunCycleAsync(IServiceScope scope, CancellationToken ct)
+    protected override Task RunCycleAsync(IServiceScope scope, CancellationToken ct) =>
+        // Advisory lock: guarda multi-réplica (evita doble materialización del mismo master).
+        RunUnderAdvisoryLockAsync(scope, IctAdvisoryLock.Keys.SendToCoreApi, _ => MaterializeAsync(scope, ct), ct);
+
+    private static async Task MaterializeAsync(IServiceScope scope, CancellationToken ct)
     {
         var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
         var draftClient = scope.ServiceProvider.GetRequiredService<IProcedureDraftClient>();

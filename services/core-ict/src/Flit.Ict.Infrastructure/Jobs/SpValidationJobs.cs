@@ -16,11 +16,14 @@ public sealed class BusinessValidationJob(
 
     protected override string JobName => "business-validation";
 
-    protected override async Task RunCycleAsync(IServiceScope scope, CancellationToken ct)
-    {
-        var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
-        await db.Database.ExecuteSqlRawAsync("CALL ict.sp_processor_validation_business()", ct);
-    }
+    protected override Task RunCycleAsync(IServiceScope scope, CancellationToken ct) =>
+        // Advisory lock: con >1 réplica, solo una corre el SP por ciclo (evita doble emisión de estados/webhooks).
+        RunUnderAdvisoryLockAsync(scope, IctAdvisoryLock.Keys.Business, async connection =>
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = "CALL ict.sp_processor_validation_business()";
+            await cmd.ExecuteNonQueryAsync(ct);
+        }, ct);
 }
 
 /// <summary>Job 2 (v1 RunExternalApiValidations): ejecuta el SP que identifica las fuentes externas.</summary>
@@ -33,9 +36,11 @@ public sealed class ExternalValidationJob(
 
     protected override string JobName => "external-validation";
 
-    protected override async Task RunCycleAsync(IServiceScope scope, CancellationToken ct)
-    {
-        var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
-        await db.Database.ExecuteSqlRawAsync("CALL ict.sp_processor_validation_external()", ct);
-    }
+    protected override Task RunCycleAsync(IServiceScope scope, CancellationToken ct) =>
+        RunUnderAdvisoryLockAsync(scope, IctAdvisoryLock.Keys.External, async connection =>
+        {
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = "CALL ict.sp_processor_validation_external()";
+            await cmd.ExecuteNonQueryAsync(ct);
+        }, ct);
 }

@@ -33,85 +33,112 @@ public sealed class OrchestratorJob(
 
     protected override string JobName => "orchestrator";
 
-    protected override async Task RunCycleAsync(IServiceScope scope, CancellationToken ct)
-    {
-        var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
-        var consult = scope.ServiceProvider.GetRequiredService<IConsultationClient>();
-        var connection = db.Database.GetDbConnection();
-        var wasClosed = connection.State != ConnectionState.Open;
-        if (wasClosed)
-        {
-            await connection.OpenAsync(ct);
-        }
-
-        try
+    protected override Task RunCycleAsync(IServiceScope scope, CancellationToken ct) =>
+        // Advisory lock: guarda multi-réplica (solo una instancia consulta el lote por ciclo).
+        RunUnderAdvisoryLockAsync(scope, IctAdvisoryLock.Keys.Orchestrator, async connection =>
         {
             var pending = await ReadPendingAsync(connection, ct);
-            var currentYear = DateTime.UtcNow.Year;
-
-            foreach (var q in pending)
+            if (pending.Count == 0)
             {
-                try
+                return;
+            }
+
+            var currentYear = DateTime.UtcNow.Year;
+            // Concurrencia: las consultas a fuentes externas (gRPC, lo lento) corren en paralelo, cada una
+            // en su propio scope/conexión (thread-safe). El semáforo acota el paralelismo.
+            using var gate = new SemaphoreSlim(Math.Max(1, Options.OrchestratorConcurrency));
+            await Task.WhenAll(pending.Select(q => ProcessQueryAsync(gate, q, currentYear, ct)));
+        }, ct);
+
+    /// <summary>Procesa UNA source_query en su propio scope/conexión (thread-safe), gateado por el semáforo.</summary>
+    private async Task ProcessQueryAsync(SemaphoreSlim gate, PendingQuery q, int currentYear, CancellationToken ct)
+    {
+        await gate.WaitAsync(ct);
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
+            var consult = scope.ServiceProvider.GetRequiredService<IConsultationClient>();
+            var connection = db.Database.GetDbConnection();
+            var wasClosed = connection.State != ConnectionState.Open;
+            if (wasClosed)
+            {
+                await connection.OpenAsync(ct);
+            }
+
+            try
+            {
+                await ProcessOneAsync(connection, consult, q, currentYear, ct);
+            }
+            finally
+            {
+                if (wasClosed)
                 {
-                    var result = await consult.QueryAsync(
-                        q.TenantId, q.QueryType, q.Plate, q.Vin, q.DocumentType, q.DocumentNumber, ct);
-                    var issues = ExternalSourceValidators.Validate(q.TransactionType, q.QueryType, result, currentYear);
-                    var warnings = ExternalSourceValidators.Warnings(result);
-                    var isValid = issues.Count == 0;
-
-                    await InsertResponseAsync(connection, q.Id, q.TenantId, JsonSerializer.Serialize(result), ct);
-                    await MarkQueriedAsync(connection, q.Id, isValid, ct);
-
-                    // Traspaso: el organismo de matrícula lo fija el RUNT (paridad v1). Se captura de la
-                    // consulta VEHICLE y se guarda en el master; core-api lo resuelve al transit_office_id
-                    // del catálogo al materializar. En VIN/RNMC/DRIVER no viene organismo (queda null).
-                    if (string.Equals(q.QueryType, "VEHICLE", StringComparison.OrdinalIgnoreCase)
-                        && !string.IsNullOrWhiteSpace(result.TransitOfficeName))
-                    {
-                        await UpdateTransitOfficeNameAsync(connection, q.MasterId, result.TransitOfficeName, ct);
-                    }
-
-                    // Novedad de NEGOCIO BLOQUEANTE (SOAT/RTM/RNMC): terminal, deja el master en ps=4.
-                    if (!isValid)
-                    {
-                        await FlagNoveltyAsync(connection, q.MasterId, string.Join("; ", issues), ct);
-                    }
-                    // Advertencia INFORMATIVA (paz y salvo del conductor/DRIVER): fiel a v1, se registra en el
-                    // master pero NO bloquea el paso a borrador (el OT decidirá). Visible en el estado.
-                    else if (warnings.Count > 0)
-                    {
-                        await RecordWarningAsync(connection, q.MasterId, string.Join("; ", warnings), ct);
-                    }
-                }
-#pragma warning disable CA1031 // el orquestador debe ser resiliente a CUALQUIER fallo técnico de la fuente
-                catch (Exception ex)
-#pragma warning restore CA1031
-                {
-                    // Fallo TÉCNICO de la fuente (core-api caído, ErrorCode gRPC, timeout): reintentar hasta
-                    // MaxAttempts. Una fila que falla NO aborta el resto del lote. Al AGOTAR los intentos se
-                    // deja el master con novedades (ps=4) con el MENSAJE del fallo: el cliente lo ve en el
-                    // estado (messageValidation/statusObservation/statusProcess[].observation) y corrige. El
-                    // response v1 NO cambia: se reusa el mismo camino (external_comments_validation + record_process_status).
-                    await RecordAttemptFailureAsync(connection, q.Id, ct);
-                    if (q.Attempts + 1 >= MaxAttempts)
-                    {
-                        // FlagNovelty PRIMERO (deja el master en ps=4, excluido del gate de materialización
-                        // aunque lo siguiente fallara); luego cerrar la source_query para liberar el gate.
-                        await FlagNoveltyAsync(connection, q.MasterId,
-                            $"Fuentes externas no disponibles tras {MaxAttempts} intentos: {ex.Message}", ct);
-                        await MarkQueriedAsync(connection, q.Id, isValid: false, ct);
-                    }
-
-                    IctJobLog.CycleError(logger, ex, JobName);
+                    await connection.CloseAsync();
                 }
             }
         }
         finally
         {
-            if (wasClosed)
+            gate.Release();
+        }
+    }
+
+    private async Task ProcessOneAsync(
+        DbConnection connection, IConsultationClient consult, PendingQuery q, int currentYear, CancellationToken ct)
+    {
+        try
+        {
+            var result = await consult.QueryAsync(
+                q.TenantId, q.QueryType, q.Plate, q.Vin, q.DocumentType, q.DocumentNumber, ct);
+            var issues = ExternalSourceValidators.Validate(q.TransactionType, q.QueryType, result, currentYear);
+            var warnings = ExternalSourceValidators.Warnings(result);
+            var isValid = issues.Count == 0;
+
+            await InsertResponseAsync(connection, q.Id, q.TenantId, JsonSerializer.Serialize(result), ct);
+            await MarkQueriedAsync(connection, q.Id, isValid, ct);
+
+            // Traspaso: el organismo de matrícula lo fija el RUNT (paridad v1). Se captura de la
+            // consulta VEHICLE y se guarda en el master; core-api lo resuelve al transit_office_id
+            // del catálogo al materializar. En VIN/RNMC/DRIVER no viene organismo (queda null).
+            if (string.Equals(q.QueryType, "VEHICLE", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(result.TransitOfficeName))
             {
-                await connection.CloseAsync();
+                await UpdateTransitOfficeNameAsync(connection, q.MasterId, result.TransitOfficeName, ct);
             }
+
+            // Novedad de NEGOCIO BLOQUEANTE (SOAT/RTM/RNMC): terminal, deja el master en ps=4.
+            if (!isValid)
+            {
+                await FlagNoveltyAsync(connection, q.MasterId, string.Join("; ", issues), ct);
+            }
+            // Advertencia INFORMATIVA (paz y salvo del conductor/DRIVER): fiel a v1, se registra en el
+            // master pero NO bloquea el paso a borrador (el OT decidirá). Visible en el estado.
+            else if (warnings.Count > 0)
+            {
+                await RecordWarningAsync(connection, q.MasterId, string.Join("; ", warnings), ct);
+            }
+        }
+#pragma warning disable CA1031 // el orquestador debe ser resiliente a CUALQUIER fallo técnico de la fuente
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            // Fallo TÉCNICO de la fuente (core-api caído, ErrorCode gRPC, timeout): reintentar hasta
+            // MaxAttempts. Una fila que falla NO aborta el resto del lote. Al AGOTAR los intentos se
+            // deja el master con novedades (ps=4) con el MENSAJE del fallo: el cliente lo ve en el
+            // estado (messageValidation/statusObservation/statusProcess[].observation) y corrige. El
+            // response v1 NO cambia: se reusa el mismo camino (external_comments_validation + record_process_status).
+            await RecordAttemptFailureAsync(connection, q.Id, ct);
+            if (q.Attempts + 1 >= MaxAttempts)
+            {
+                // FlagNovelty PRIMERO (deja el master en ps=4, excluido del gate de materialización
+                // aunque lo siguiente fallara); luego cerrar la source_query para liberar el gate.
+                await FlagNoveltyAsync(connection, q.MasterId,
+                    $"Fuentes externas no disponibles tras {MaxAttempts} intentos: {ex.Message}", ct);
+                await MarkQueriedAsync(connection, q.Id, isValid: false, ct);
+            }
+
+            IctJobLog.CycleError(logger, ex, JobName);
         }
     }
 

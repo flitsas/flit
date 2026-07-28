@@ -1,3 +1,5 @@
+using System.Data;
+using System.Data.Common;
 using System.Diagnostics;
 using Flit.Ict.Domain.Jobs;
 using Flit.Ict.Infrastructure.Persistence;
@@ -28,6 +30,9 @@ public sealed class IctJobOptions
 
     public int OrchestratorPollSeconds { get; init; } = 20;
 
+    /// <summary>Concurrencia del orquestador (Job 3): consultas a fuentes externas en paralelo por ciclo.</summary>
+    public int OrchestratorConcurrency { get; init; } = 10;
+
     public int SendPollSeconds { get; init; } = 20;
 
     public int WebhookPollSeconds { get; init; } = 10;
@@ -57,6 +62,9 @@ public abstract class IctPollingJob(
     ILogger logger) : BackgroundService
 {
     protected IctJobOptions Options => options.Value;
+
+    /// <summary>Fábrica de scopes DI, expuesta para procesar ítems en scopes/conexiones propios (concurrencia).</summary>
+    protected IServiceScopeFactory ScopeFactory => scopeFactory;
 
     protected abstract TimeSpan PollInterval { get; }
 
@@ -128,6 +136,58 @@ public abstract class IctPollingJob(
     }
 
     /// <summary>
+    /// Corre <paramref name="work"/> bajo un advisory lock de sesión (guarda multi-réplica): abre la
+    /// conexión del scope, intenta el lock y, si lo consigue, ejecuta el trabajo y lo libera; si otra
+    /// réplica lo tiene, salta el ciclo. El trabajo recibe la MISMA conexión (abierta y con el lock).
+    /// </summary>
+    protected async Task RunUnderAdvisoryLockAsync(
+        IServiceScope scope, long lockKey, Func<DbConnection, Task> work, CancellationToken ct)
+    {
+        var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
+        var connection = db.Database.GetDbConnection();
+        var wasClosed = connection.State != ConnectionState.Open;
+        if (wasClosed)
+        {
+            await connection.OpenAsync(ct);
+        }
+
+        try
+        {
+            if (!await IctAdvisoryLock.TryLockAsync(connection, lockKey, ct))
+            {
+                IctJobLog.LockContended(logger, JobName);
+                return; // otra réplica corre este ciclo
+            }
+
+            try
+            {
+                await work(connection);
+            }
+            finally
+            {
+                // Liberar SIEMPRE (aunque el ciclo se cancele); el reset de pool de Npgsql es el respaldo.
+                try
+                {
+                    await IctAdvisoryLock.UnlockAsync(connection, lockKey, CancellationToken.None);
+                }
+#pragma warning disable CA1031 // liberar el lock es best-effort
+                catch (Exception ex)
+                {
+                    IctJobLog.CycleError(logger, ex, JobName);
+                }
+#pragma warning restore CA1031
+            }
+        }
+        finally
+        {
+            if (wasClosed)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
+
+    /// <summary>
     /// Registra el ciclo en <c>ict.job_runs</c> (auditoría + SLA de la métrica ict_jobs_out_of_sla).
     /// Best-effort en scope propio: un fallo de auditoría NUNCA rompe el job.
     /// SLA incumplido = el ciclo falló, o su duración superó su propio <see cref="PollInterval"/>
@@ -174,4 +234,7 @@ internal static partial class IctJobLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "ICT job {JobName}: no se pudo registrar la corrida en job_runs (se ignora).")]
     public static partial void JobRunRecordError(ILogger logger, Exception ex, string jobName);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "ICT job {JobName}: otra réplica tiene el lock; se salta este ciclo.")]
+    public static partial void LockContended(ILogger logger, string jobName);
 }
