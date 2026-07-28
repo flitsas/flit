@@ -29,6 +29,7 @@ internal static class ConsolidadoEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "migrado_solo_lectura" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Trámite migrado (solo lectura): no se regenera el consolidado."),
                 "modalidad_no_soportada" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El consolidado solo está disponible para matrícula inicial y traspaso."),
                 SubmitGate.FurRequerido => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe generar el FUR antes del consolidado."),
                 SubmitGate.DocumentosIncompletos => Results.Problem(statusCode: 409, title: "Conflict", detail: "Sube los documentos obligatorios antes de generar el consolidado."),

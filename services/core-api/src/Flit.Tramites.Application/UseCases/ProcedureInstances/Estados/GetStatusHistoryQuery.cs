@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 
@@ -48,9 +49,47 @@ public sealed class GetStatusHistoryHandler(IProcedureInstanceRepository repo)
         var (entries, total) = pageData.Value;
         var items = entries
             .Select(e => new StatusHistoryItemDto(
-                e.Id, e.FromStatus, e.ToStatus, e.ChangedAt, e.ChangedByUserId, e.ChangedByName, e.Reason))
+                e.Id, e.FromStatus, e.ToStatus, e.ChangedAt, e.ChangedByUserId, ResolveActorName(e), e.Reason))
             .ToList();
 
         return (new StatusHistoryPageDto(items, total, page, pageSize), null);
+    }
+
+    private const string MigrationOrigin = "migration_v1";
+
+    /// <summary>
+    /// Migración V1→V2 — para eventos importados desde V1 (marcados con <c>origen=migration_v1</c> en
+    /// el metadata) muestra el usuario REAL de V1 (<c>metadata.usuario</c>) en vez del usuario de sistema
+    /// "Migración V1" resuelto por <c>changed_by</c>. Así el historial se lee transparente/idéntico a uno
+    /// nativo. Para eventos nativos (o migración sin usuario) cae al nombre ya resuelto. No se altera
+    /// <c>ChangedByUserId</c>: la trazabilidad técnica del changed_by real se conserva.
+    /// </summary>
+    private static string? ResolveActorName(ProcedureInstanceStatusHistoryEntry entry)
+    {
+        if (string.IsNullOrEmpty(entry.Metadata))
+            return entry.ChangedByName;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(entry.Metadata);
+            var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("origen", out var origen)
+                && origen.ValueKind == JsonValueKind.String
+                && string.Equals(origen.GetString(), MigrationOrigin, StringComparison.Ordinal)
+                && root.TryGetProperty("usuario", out var usuario)
+                && usuario.ValueKind == JsonValueKind.String)
+            {
+                var real = usuario.GetString();
+                if (!string.IsNullOrWhiteSpace(real))
+                    return real;
+            }
+        }
+        catch (JsonException)
+        {
+            // Metadata no parseable: se preserva el nombre resuelto por changed_by.
+        }
+
+        return entry.ChangedByName;
     }
 }

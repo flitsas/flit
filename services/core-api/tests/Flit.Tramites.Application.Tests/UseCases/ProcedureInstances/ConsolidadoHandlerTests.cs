@@ -164,6 +164,25 @@ public sealed class ConsolidadoHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_Migrado_NoRegeneraYRetornaSoloLectura()
+    {
+        // Migración V1→V2: el trámite migrado ya trae su consolidado histórico (source=migration).
+        // Regenerarlo lo reemplazaría; el handler sale con 'migrado_solo_lectura' sin escribir.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        instance.IsMigrated = true;
+        instance.Status = TramiteEstado.Aprobado;
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().Be("migrado_solo_lectura");
+        result.Should().BeNull();
+        _storage.Saved.Should().BeEmpty(); // no generó/sobrescribió el consolidado
+    }
+
+    [Fact]
     public async Task HandleAsync_Matricula_OrdenaPorModalidad()
     {
         // Matrícula ⇒ factura antes que aduana (precedencia por modalidad, que también ordena

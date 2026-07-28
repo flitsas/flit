@@ -375,6 +375,13 @@ jobs:
               exit 1
             fi
 
+            # Carpeta de intercambio del migrador V1->V2 (perfil `migracion`): por aqui
+            # entran los archivos de ids y salen los reportes. Se crea aqui, con el
+            # usuario del deploy, y no se deja que la cree Docker al montar el bind:
+            # Docker la crearia como root y quien entre por SSH no podria escribir
+            # dentro, con un "permission denied" que no dice de donde viene.
+            mkdir -p migracion
+
             # Tag + puertos segun ambiente (override del .env del VPS).
             # deploy_tag: sha-<commit> inmutable en PDN; tag movil (dev/qa) en DEV/QA.
             export CORE_API_TAG=${{ needs.setup.outputs.deploy_tag }}

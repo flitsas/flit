@@ -58,6 +58,33 @@ public sealed class GetStatusHistoryHandlerTests
         result.Items[1].ChangedByName.Should().BeNull();
     }
 
+    [Fact] // Migración V1→V2: el historial muestra el usuario REAL de V1, no el sistema "Migración V1".
+    public async Task EventoMigracion_MuestraUsuarioRealDeV1()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var now = DateTimeOffset.UtcNow;
+        // changed_by resuelve a "Migración V1", pero el metadata conserva el actor real de V1.
+        var migrado = new ProcedureInstanceStatusHistoryEntry(
+            Guid.NewGuid(), "entregado", "aprobado", now, Guid.NewGuid(), "Migración V1", "Aprobado en RUNT")
+        {
+            Metadata = """{"origen":"migration_v1","usuario":"DIANA CHACON","usuario_rol":"g_escrituras"}""",
+        };
+        // Evento nativo con metadata.usuario pero SIN 'origen=migration_v1': NO se altera.
+        var nativo = new ProcedureInstanceStatusHistoryEntry(
+            Guid.NewGuid(), "borrador", "preparado", now.AddMinutes(-5), Guid.NewGuid(), "Ana Gestora", null)
+        {
+            Metadata = """{"usuario":"Sistema Interno"}""",
+        };
+        _repo.GetStatusHistoryPageAsync(InstanceId, TenantId, 0, 20, ct)
+            .Returns(((IReadOnlyList<ProcedureInstanceStatusHistoryEntry>)[migrado, nativo], 2));
+
+        var (result, _) = await _handler.HandleAsync(InstanceId, TenantId, 1, 20, ct);
+
+        result!.Items[0].ChangedByName.Should().Be("DIANA CHACON");  // usuario real, no "Migración V1"
+        result.Items[0].ChangedByUserId.Should().NotBeNull();        // se conserva la trazabilidad técnica
+        result.Items[1].ChangedByName.Should().Be("Ana Gestora");    // nativo intacto
+    }
+
     [Theory]
     [InlineData(0, 0, 0, 20)]     // defaults: page<1 → 1, pageSize<1 → 20
     [InlineData(3, 10, 20, 10)]   // skip = (page-1)*pageSize

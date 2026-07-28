@@ -106,6 +106,12 @@ public sealed class GenerarFurHandler(
         if (instance is null)
             return (null, "not_found");
 
+        // Migración V1→V2 — un trámite migrado es una FOTO de solo lectura: NO se regeneran sus
+        // documentos. La generación BORRA y re-inserta cada tipo (fur/compraventa/certificado), así que
+        // regenerar aquí destruiría los PDFs históricos migrados y los reemplazaría por mocks del sistema.
+        if (instance.IsMigrated)
+            return (null, "migrado_solo_lectura");
+
         var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
         var esTraspaso = string.Equals(codigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
         // HU #10856 — matrícula inicial no tiene revisión técnico-mecánica: se oculta la tabla RTM.

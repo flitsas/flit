@@ -137,10 +137,16 @@ public sealed class GetWizardStateHandler(
         if (instance is null)
             return (null, "not_found");
 
+        // Migración V1→V2 — un trámite migrado en estado terminal es una foto de solo lectura: se
+        // resuelve SIEMPRE por el camino estático (ComputeState → BuildReadonlySnapshot), aunque el
+        // tenant tenga el wizard dinámico habilitado. Evita que el camino dinámico intente gatear una
+        // foto histórica.
+        var esMigradoTerminal = instance.IsMigrated && TramiteEstado.EsFinal(instance.Status);
+
         // FEATURE-08 / HU-BE-06 (CFD-09): wizard dinámico flag-guarded. Solo cuando F08_DynamicProcedures
         // está habilitado para el tenant Y la instancia tiene snapshot (tipo dinámico). En cualquier otro
         // caso se preserva el camino estático (BuildMatricula/BuildTraspaso) sin regresión (AC-02).
-        if (snapshotRepo is not null && await _dynamicPolicy.IsEnabledAsync(instance.TenantId, ct))
+        if (!esMigradoTerminal && snapshotRepo is not null && await _dynamicPolicy.IsEnabledAsync(instance.TenantId, ct))
         {
             var snapshot = await snapshotRepo.GetByInstanceIdAsync(id, tenantId, ct);
             if (snapshot is not null)
@@ -372,9 +378,50 @@ public sealed class GetWizardStateHandler(
         var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
                         ?? TramiteModalidadEntrada.MatriculaInicial;
 
+        // Migración V1→V2 — un trámite MIGRADO en estado terminal es una FOTO de solo lectura: no se
+        // capturó paso a paso en V2, así que no se somete al gating vivo del wizard (que exige datos
+        // —comercial, biométrica, FUR— que la migración legítimamente no reconstruye). Se reporta el
+        // expediente como completo/solo-lectura para que el visor lo muestre íntegro. Reutiliza
+        // TramiteEstado.EsFinal (aprobado/anulado = inmutable, RF04) como predicado de "terminal".
+        if (instance.IsMigrated && TramiteEstado.EsFinal(instance.Status))
+            return BuildReadonlySnapshot(instance, modalidad);
+
         return modalidad == TramiteModalidadEntrada.Traspaso
             ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride, comparendosBloquean, prendaDocumentoOtRequerido)
             : BuildMatricula(instance, identidadAprobadaPartes, documentosCompletosOverride);
+    }
+
+    /// <summary>
+    /// Migración V1→V2 — estado del wizard para un trámite MIGRADO en estado terminal: FOTO de solo
+    /// lectura. Todos los pasos se reportan <c>complete</c> (sin reasons) para que el visor los muestre
+    /// íntegros; <c>canSubmit=false</c> y <c>blockers=[]</c> porque un trámite terminal no admite acciones
+    /// (<see cref="TramiteEstado.EsFinal"/>, RF04) y <see cref="TramiteStateMachine.TransitionsFrom"/> ya
+    /// devuelve [] para aprobado/anulado. No evalúa gates: el expediente ya vino tal cual de V1 y no debe
+    /// someterse al gating del flujo vivo (que exige comercial/biométrica/FUR inexistentes en la foto).
+    /// </summary>
+    private static WizardStateDto BuildReadonlySnapshot(
+        ProcedureInstance instance, TramiteModalidadEntrada modalidad)
+    {
+        var esTraspaso = modalidad == TramiteModalidadEntrada.Traspaso;
+        var totalPasos = esTraspaso ? TraspasoGates.TotalPasos : MatriculaGates.TotalPasos;
+        var codigoTipologia = esTraspaso
+            ? TramiteTipologiaCatalog.CodigoTraspasoStandard
+            : TramiteTipologiaCatalog.CodigoMatriculaInicial;
+        var pasos = TipologiaMatrizCatalog.Get(codigoTipologia)?.Pasos ?? [];
+
+        var steps = new List<WizardStepDto>(totalPasos);
+        for (var p = 1; p <= totalPasos; p++)
+            steps.Add(new WizardStepDto(p, StepKey(esTraspaso, p), StepLabel(pasos, p), "complete", []));
+
+        return new WizardStateDto(
+            esTraspaso ? TramiteModalidadEntradaCodes.Traspaso : TramiteModalidadEntradaCodes.MatriculaInicial,
+            instance.TipologiaCodigo,
+            totalPasos,
+            steps,
+            false,   // canSubmit: terminal, sin acciones
+            [],      // blockers
+            instance.Status,
+            TramiteStateMachine.TransitionsFrom(instance.Status));
     }
 
     // ---- Matrícula inicial (5 pasos) ----------------------------------------

@@ -333,4 +333,12 @@ public sealed record ProcedureInstanceStatusHistoryEntry(
     DateTimeOffset ChangedAt,
     Guid? ChangedByUserId,
     string? ChangedByName,
-    string? Reason);
+    string? Reason)
+{
+    /// <summary>
+    /// Metadata jsonb crudo del evento. En eventos de migración V1→V2 conserva el actor REAL de V1
+    /// (<c>usuario</c>/<c>usuario_rol</c>/<c>usuario_email</c>) y el marcador <c>origen=migration_v1</c>,
+    /// que la capa de aplicación usa para mostrar el usuario real en vez del sistema "Migración V1".
+    /// </summary>
+    public string? Metadata { get; init; }
+}

@@ -182,6 +182,31 @@ public sealed class FurHandlerTests
     }
 
     [Fact]
+    public async Task Generar_Migrado_NoRegeneraYRetornaSoloLectura()
+    {
+        // Migración V1→V2: un trámite migrado es una foto de solo lectura. Aunque tenga organismo y
+        // biométrica (que normalmente dispararían la generación), NO se regenera ni se sobreescriben
+        // los PDFs históricos: se devuelve 'migrado_solo_lectura' sin tocar el storage.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.IsMigrated = true;
+        instance.Status = TramiteEstado.Aprobado;
+        WithOrganismo(instance);
+        instance.BiometricValidations.Add(Bio("comprador"));
+        instance.BiometricValidations.Add(Bio("vendedor"));
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenant, ct);
+
+        error.Should().Be("migrado_solo_lectura");
+        result.Should().BeNull();
+        _storage.Saved.Should().BeEmpty();   // no generó nada
+        _storage.Deleted.Should().BeEmpty(); // no borró/sobreescribió los PDFs migrados
+    }
+
+    [Fact]
     public async Task Generar_Traspaso_WithoutBiometria_GeneratesFurNoFirmadoWithoutCertificate()
     {
         // HU #10463 AC1/AC5: sin validación (falta vendedor) el FUR se genera igual (NO biometria_gate)
