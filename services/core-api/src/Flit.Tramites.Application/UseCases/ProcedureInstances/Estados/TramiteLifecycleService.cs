@@ -35,8 +35,14 @@ public sealed class TramiteLifecycleService(
     IDynamicProceduresPolicy? dynamicPolicy = null,
     IProcedureTypeSnapshotRepository? snapshotRepo = null,
     ISignatureVaultPolicy? vaultPolicy = null,
-    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null) : ITramiteLifecycleService
+    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null,
+    TramiteValidationPolicy? validationPolicy = null) : ITramiteLifecycleService
 {
+    // HU #10970 — modo por ambiente de CF-03 en el gate de radicación. Sin inyectar ⇒ bloqueo duro
+    // (comportamiento previo a esta historia).
+    private readonly TramiteValidationPolicy _validationPolicy =
+        validationPolicy ?? TramiteValidationPolicy.BlockAll;
+
     // HU #10548 — si el OT destino deshabilita la validación de identidad, el gate no la exige.
     // Default permisivo (siempre exige) cuando no hay política cableada (tests).
     private readonly IIdentityValidationPolicy _identityPolicy =
@@ -414,6 +420,12 @@ public sealed class TramiteLifecycleService(
     /// </summary>
     private async Task<string?> EvaluarEstadoVehiculoRegistralAsync(ProcedureInstance instance, CancellationToken ct)
     {
+        // HU #10970 — fuera del modo block el gate no corta la transición. A diferencia del preflight,
+        // aquí no hay semáforo donde dejar un warn: una transición se permite o no, así que warn y off
+        // se comportan igual (no bloquear). La señal en amarillo la sigue dando el preflight.
+        if (_validationPolicy.VehicleRegistrationState != TramiteValidationMode.Block)
+            return null;
+
         if (TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) != TramiteModalidadEntrada.MatriculaInicial)
             return null;
 
