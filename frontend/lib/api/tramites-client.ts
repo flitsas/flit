@@ -20,6 +20,7 @@ import type {
   CreateInstanceRequest,
   PreflightPreviewResult,
   DocumentOcrResult,
+  PersistOcrFieldsResult,
   EditarPrevalidacionRequest,
   EditarPrevalidacionResult,
   ReenviarPrevalidacionResult,
@@ -680,6 +681,42 @@ export const tramitesClient = {
       throw new Error(problemMessage(res, body));
     }
     return JSON.parse(await res.text()) as DocumentOcrResult;
+  },
+
+  /**
+   * HU #10975 (Feature #10972) — persiste en `field_values` los campos que el OCR ya extrajo del
+   * documento (p. ej. número de póliza y fechas del SOAT), que antes se pintaban en el panel de
+   * validación y se descartaban. El backend aplica su propia whitelist por tipo y la regla de
+   * precedencia (el dato de una consulta al RUNT manda sobre el de un PDF), así que aquí se manda
+   * el JSON del OCR tal cual.
+   */
+  persistOcrFields: async (
+    instanceId: string,
+    tipo: string,
+    fields: Record<string, unknown>,
+    tenantId?: string,
+  ): Promise<PersistOcrFieldsResult> => {
+    // Solo los escalares de texto/número interesan: el backend descarta lo que no esté en su
+    // whitelist, pero enviar arrays/objetos (paginas_documento, alertas…) solo infla el request.
+    const planos: Record<string, string> = {};
+    for (const [k, v] of Object.entries(fields)) {
+      if (typeof v === 'string' && v.trim() !== '') planos[k] = v.trim();
+      else if (typeof v === 'number') planos[k] = String(v);
+    }
+
+    const res = await fetch(
+      apiUrl(`/api/v1/tramites/instances/${instanceId}/ocr-fields`),
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...tenantHeader(tenantId) },
+        body: JSON.stringify({ tipo, fields: planos }),
+      },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(problemMessage(res, body));
+    }
+    return JSON.parse(await res.text()) as PersistOcrFieldsResult;
   },
 
   // Subida directa navegador→S3 (presigned). El binario NO pasa por el request del
