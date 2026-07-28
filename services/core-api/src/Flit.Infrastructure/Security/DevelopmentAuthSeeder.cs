@@ -61,6 +61,7 @@ public static class DevelopmentAuthSeeder
         await SeedReportesPermissionsAsync(db, cancellationToken);
         await SeedDetailedReportPermissionsAsync(db, cancellationToken);
         await SeedLogQxPermissionsAsync(db, cancellationToken);
+        await SeedIctLogsPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
     }
 
@@ -925,6 +926,76 @@ public static class DevelopmentAuthSeeder
                 Name = "Ver LOG QX",
                 HttpMethod = "GET",
                 RoutePattern = "/api/v1/admin/log-qx",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // Grant a SuperAdmin (idempotente): solo si aún no lo tiene.
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin")
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
+            {
+                db.RoleGrants.Add(new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Observabilidad ICT (Feature #10888, §A.11) — módulo <c>ict-logs</c> + permiso <c>ict.logs.read</c>
+    /// que protege <c>GET /api/v1/ict/logs</c> (submódulo frontend de logs/alertas ICT). Mismo patrón e
+    /// idempotencia que <see cref="SeedLogQxPermissionsAsync"/>: crea módulo y permiso si faltan y concede
+    /// el permiso a SuperAdmin (que además bypassa por rol). Sin este seed, ningún usuario no-superadmin
+    /// podía recibir el permiso por el flujo RBAC estándar.
+    /// </summary>
+    private static async Task SeedIctLogsPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "ict-logs" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "ict-logs",
+                Name = "Logs ICT",
+                SortOrder = 9,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var action = await db.RbacActions
+            .FirstOrDefaultAsync(a => a.Slug == "ict.logs.read", ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = "ict.logs.read",
+                Name = "Ver logs ICT",
+                HttpMethod = "GET",
+                RoutePattern = "/api/v1/ict/logs",
                 IsActive = true,
                 CreatedAt = now,
             };
