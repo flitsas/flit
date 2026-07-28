@@ -61,12 +61,18 @@ public sealed class RunPreflightHandler(
     IConsultationTenantOverrideProvider overrideProvider,
     IConsultationRestrictionPolicy restrictionPolicy,
     ITransitOfficeResolver transitOfficeResolver,
-    IConsultationBlockingPolicy? blockingPolicy = null)
+    IConsultationBlockingPolicy? blockingPolicy = null,
+    TramiteValidationPolicy? validationPolicy = null)
 {
     // FEATURE 05 — política de bloqueo por criterio y OT (default permisivo con los defaults por
     // criterio cuando no se inyecta, p. ej. tests que no ejercitan la configurabilidad).
     private readonly IConsultationBlockingPolicy _blockingPolicy =
         blockingPolicy ?? NullConsultationBlockingPolicy.Instance;
+
+    // HU #10970 — modo por ambiente de CF-01/CF-03. Sin inyectar ⇒ ambas en bloqueo duro, el
+    // comportamiento previo a esta historia (mismo criterio que _blockingPolicy con su null-object).
+    private readonly TramiteValidationPolicy _validationPolicy =
+        validationPolicy ?? TramiteValidationPolicy.BlockAll;
 
     // FEATURE 05 — el proveedor de comparendos ya no es una constante: lo resuelve
     // FinesProviderResolver por (fuente del tenant, tipo de persona del actor).
@@ -75,6 +81,9 @@ public sealed class RunPreflightHandler(
     private const string FieldVinConflictoTraspaso = "vin_conflicto_traspaso";
     private const string CheckVinMatricula = "vin_matricula";
     private const string CheckSimitOmitida = "simit_omitida";
+    // HU #10970 — check de duplicidad en modo advertencia. NO está en CriterioDeCheck: no es un criterio
+    // configurable de FEATURE 05, así que AplicarPoliticaDeBloqueo nunca reescribe su severidad.
+    private const string CheckDuplicidadTramite = "duplicidad_tramite";
 
     // A4/B4 (HU #10673, ADR-0029) — atributos del vehículo que el operador puede TRANSFORMAR durante el
     // trámite (color/combustible). Cada valor efectivo (el que va al FUR) mapea con su flag de cambio
@@ -202,7 +211,9 @@ public sealed class RunPreflightHandler(
         // reporta el vehículo ya matriculado) y unknown (RUNT sin dato) pasan a bloqueo DURO; el fail
         // "clásico" (p. ej. REGISTRADO, esperado en un 0 km) conserva la degradación histórica a warn
         // (HU #10538). Si AC2 (fuente FLIT) ya bloqueó arriba, no hace falta re-endurecer.
-        vehicleStateBlock ??= EndurecerEstadoVehiculoMatricula(checks, modalidad);
+        // HU #10970 — en modo warn/off el endurecimiento no bloquea (ver EndurecerEstadoVehiculoMatricula).
+        vehicleStateBlock ??= EndurecerEstadoVehiculoMatricula(
+            checks, modalidad, _validationPolicy.VehicleRegistrationState);
         if (vehicleStateBlock is not null)
             return (null, VehicleStatePolicy.ErrorCode, null, vehicleStateBlock);
 
@@ -210,9 +221,19 @@ public sealed class RunPreflightHandler(
         // Inicial, placa en Traspaso), evaluado ANTES de componer el overall y persistir el snapshot.
         // Si hay coincidencia, el preflight NO se persiste: se devuelve el bloqueo 409 con el id del
         // trámite existente. Independiente de CF-03 (registral) — ambos deben dar luz verde.
-        var duplicateId = await FindDuplicateActiveProcedureAsync(instance, modalidad, tenantId, vin, plate, ct);
-        if (duplicateId is not null)
-            return (null, InitialProcedureValidationGate.DuplicateActiveProcedure, duplicateId, null);
+        // HU #10970 — en modo off ni se consulta el repositorio; en modo warn no se corta el flujo y el
+        // hallazgo viaja como check amarillo dentro del snapshot que sí se persiste.
+        if (_validationPolicy.DuplicateActiveProcedure != TramiteValidationMode.Off)
+        {
+            var duplicateId = await FindDuplicateActiveProcedureAsync(instance, modalidad, tenantId, vin, plate, ct);
+            if (duplicateId is not null)
+            {
+                if (_validationPolicy.DuplicateActiveProcedure == TramiteValidationMode.Block)
+                    return (null, InitialProcedureValidationGate.DuplicateActiveProcedure, duplicateId, null);
+
+                checks.Add(BuildDuplicidadCheck(duplicateId.Value));
+            }
+        }
 
         // Composición del overall con la regla del dominio.
         var overall = ComposeOverall(checks);
@@ -388,10 +409,17 @@ public sealed class RunPreflightHandler(
     /// </list>
     /// En TRASPASO no se toca: se exige <c>"ACTIVO"</c> (vehículo en circulación) y el <c>fail</c> se
     /// mantiene intacto (comportamiento previo).
+    ///
+    /// <para>HU #10970 — <paramref name="mode"/> decide qué pasa con los dos casos de bloqueo:
+    /// <c>block</c> (default) los deja como arriba; <c>warn</c> los reescribe a <c>warn</c> con el
+    /// mismo mensaje y NO devuelve bloqueo (el operador ve el hallazgo en amarillo y sigue);
+    /// <c>off</c> no toca esos dos casos (ni señal). La degradación <c>fail</c>→<c>warn</c> del último
+    /// caso se conserva en los tres modos: es de la HU #10538, NO de CF-03.</para>
     /// </summary>
     internal static VehicleStateBlock? EndurecerEstadoVehiculoMatricula(
         List<PreflightCheckDto> checks,
-        TramiteModalidadEntrada? modalidad)
+        TramiteModalidadEntrada? modalidad,
+        TramiteValidationMode mode = TramiteValidationMode.Block)
     {
         if (modalidad != TramiteModalidadEntrada.MatriculaInicial)
             return null;
@@ -405,22 +433,34 @@ public sealed class RunPreflightHandler(
             switch (c.Status)
             {
                 case "ok":
+                    if (mode == TramiteValidationMode.Off)
+                        break;
+
                     checks[i] = c with
                     {
-                        Status = "fail",
+                        Status = mode == TramiteValidationMode.Block ? "fail" : "warn",
                         Message = "El vehículo ya se encuentra matriculado según el RUNT.",
                     };
+                    if (mode == TramiteValidationMode.Warn)
+                        break;
+
                     return new VehicleStateBlock(
                         VehicleStatePolicy.VehicleStatusActivoRunt,
                         VehicleStatePolicy.ProcedureTypeMatriculaInicial,
                         VehicleStateSource.Runt);
 
                 case "unknown":
+                    if (mode == TramiteValidationMode.Off)
+                        break;
+
                     checks[i] = c with
                     {
-                        Status = "fail",
+                        Status = mode == TramiteValidationMode.Block ? "fail" : "warn",
                         Message = "No fue posible confirmar el estado del vehículo en el RUNT. Vuelve a intentarlo.",
                     };
+                    if (mode == TramiteValidationMode.Warn)
+                        break;
+
                     return new VehicleStateBlock(
                         VehicleStatePolicy.VehicleStatusDesconocido,
                         VehicleStatePolicy.ProcedureTypeMatriculaInicial,
@@ -434,6 +474,20 @@ public sealed class RunPreflightHandler(
 
         return null;
     }
+
+    /// <summary>
+    /// CF-01 (HU #10876) en modo <c>warn</c> (HU #10970) — hallazgo de duplicidad que NO corta el flujo.
+    /// Status <c>warn</c> para que <see cref="ComposeOverall"/> pinte amarillo y el operador vea que ya
+    /// hay un trámite en curso con la misma llave, con su id para poder retomarlo manualmente. En modo
+    /// <c>block</c> este check no existe: ahí la duplicidad viaja como 409 y el snapshot ni se persiste.
+    /// </summary>
+    internal static PreflightCheckDto BuildDuplicidadCheck(Guid existingProcedureInstanceId) =>
+        new(CheckDuplicidadTramite,
+            "Trámite duplicado en curso",
+            "warn",
+            SystemSource,
+            "Ya existe un trámite en curso para la misma placa/VIN (id " +
+            $"{existingProcedureInstanceId}). El bloqueo por duplicidad está en modo advertencia en este ambiente.");
 
     /// <summary>
     /// Corre la consulta de vehículo a través de la CADENA de proveedores (HU #10478): Kyverum RUNT
@@ -632,7 +686,12 @@ public sealed class RunPreflightHandler(
             return null;
         }
 
-        if (conflicto.Code == VinConflictCode.TramiteMatriculaCompletada)
+        // HU #10970 — en modo warn/off el VIN con matrícula APROBADA deja de ser bloqueo duro y vuelve a
+        // tratarse como el check informativo de la HU #10538 ("VIN ya matriculado", warn) con su señal de
+        // ruta de traspaso. Ese check NO se suprime en modo off porque pertenece a la HU #10538, no a
+        // CF-03: apagar CF-03 desactiva su bloqueo, no la información de otra historia.
+        if (conflicto.Code == VinConflictCode.TramiteMatriculaCompletada
+            && _validationPolicy.VehicleRegistrationState == TramiteValidationMode.Block)
         {
             return new VehicleStateBlock(
                 VehicleStatePolicy.VehicleStatusAprobadoFlit,

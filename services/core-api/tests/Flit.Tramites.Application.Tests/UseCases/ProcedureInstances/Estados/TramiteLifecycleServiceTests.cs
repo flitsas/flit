@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -231,6 +232,55 @@ public sealed class TramiteLifecycleServiceTests
         var i = Wire(TramiteEstado.Borrador, conGates: true);
 
         var outcome = await Transition(i, TramiteEstado.Preparado);
+
+        outcome.Success.Should().BeTrue();
+        await _repo.DidNotReceive().FindTramitesByVinAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// HU #10970 — mismo servicio pero con el modo de CF-03 configurado por ambiente, para verificar
+    /// que fuera de <c>block</c> el gate de radicación deja pasar la transición.
+    /// </summary>
+    private TramiteLifecycleService SutConModoRegistral(TramiteValidationMode modo) =>
+        new(_repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            validationPolicy: new TramiteValidationPolicy(TramiteValidationMode.Block, modo));
+
+    [Theory]
+    [InlineData(TramiteValidationMode.Warn)]
+    [InlineData(TramiteValidationMode.Off)]
+    public async Task Radicar_VinConMatriculaAprobada_ModoNoBlock_NoBloquea(TramiteValidationMode modo)
+    {
+        // HU #10970 (AC5) — en warn/off el gate registral no corta la radicación. Warn y off se
+        // comportan igual aquí: una transición se permite o no, no hay semáforo donde dejar el aviso.
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        ConVin(i, "1HGCM82633A004352");
+        _repo.FindTramitesByVinAsync(i.TenantId, "1HGCM82633A004352", i.Id, Arg.Any<CancellationToken>())
+            .Returns(new List<VinTramiteExistente>
+            {
+                new(Guid.NewGuid(), TramiteEstado.Aprobado, Paso: 5, Placa: null, Vin: "1HGCM82633A004352"),
+            });
+
+        var outcome = await SutConModoRegistral(modo).TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeTrue();
+        outcome.ErrorCode.Should().NotBe(VehicleStatePolicy.ErrorCode);
+        i.Status.Should().Be(TramiteEstado.Preparado);
+    }
+
+    [Fact]
+    public async Task Radicar_ModoRegistralOff_NoConsultaElRepoPorVin()
+    {
+        // off no evalúa: ni siquiera se paga el viaje a BD para releer los trámites del VIN.
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        ConVin(i, "1HGCM82633A004352");
+
+        var outcome = await SutConModoRegistral(TramiteValidationMode.Off).TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
 
         outcome.Success.Should().BeTrue();
         await _repo.DidNotReceive().FindTramitesByVinAsync(
