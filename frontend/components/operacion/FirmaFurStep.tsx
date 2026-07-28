@@ -1757,7 +1757,18 @@ function FurSection({
     setGeneratingConsolidado(true);
     setConsolidadoError(null);
     try {
-      await tramitesClient.generarConsolidado(instanceId);
+      // HU #11017 — el consolidado se genera aunque falten documentos obligatorios: si vuelve marcado
+      // como incompleto se avisa qué falta, en vez de dejar al gestor con un expediente que el
+      // organismo rechazará sin explicación.
+      const generado = await tramitesClient.generarConsolidado(instanceId);
+      if (generado?.incompleto) {
+        const faltantes = (generado.documentosFaltantes ?? []).map(documentLabel).join(', ');
+        setConsolidadoError(
+          faltantes
+            ? `Consolidado generado, pero faltan documentos obligatorios: ${faltantes}.`
+            : 'Consolidado generado, pero faltan documentos obligatorios.',
+        );
+      }
       await load();
       onRefresh?.();
     } catch (err) {

@@ -73,6 +73,8 @@ public static class DependencyInjection
         services.AddScoped<DeleteAttachmentHandler>();
         services.AddScoped<DownloadAttachmentHandler>();
         services.AddScoped<GenerarImprontaAttachmentHandler>();
+        // HU #11017 - el consolidado genera en cascada la impronta que falte a traves de este puerto.
+        services.AddScoped<IImprontaAutoGenerator, ImprontaAutoGenerator>();
         // Diferir la impronta al paso FUR: marca el ítem de checklist sin adjuntar para no bloquear el paso 2.
         services.AddScoped<SetImprontaDiferidaHandler>();
         // RF36 — autogeneración del Certificado RUES (NIT). El cliente externo (IRuesExternalClient) se

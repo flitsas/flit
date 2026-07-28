@@ -358,4 +358,131 @@ public sealed class ConsolidadoHandlerTests
         _storage.Saved.Should().ContainSingle();
         await _repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
+
+    // ── HU #11017 — cascada: el consolidado genera lo que falte en vez de bloquear ──────────────
+
+    /// <summary>Regenerador que "produce" el FUR faltante (lo añade a la instancia que verá el repo).</summary>
+    private sealed class FakeFurProducer(ProcedureInstance instance, FakeStorage storage)
+        : IExpedienteHotDocumentsRegenerator
+    {
+        public int Calls { get; private set; }
+
+        public Task<string?> RegenerateHotDocumentsAsync(Guid id, Guid tenantId, CancellationToken ct = default)
+        {
+            Calls++;
+            var path = $"{instance.Id:D}/fur";
+            storage.Files[path] = System.Text.Encoding.UTF8.GetBytes("%PDF-fur");
+            instance.Attachments.Add(new ProcedureInstanceAttachment
+            {
+                Id = Guid.NewGuid(),
+                ProcedureInstanceId = instance.Id,
+                TenantId = instance.TenantId,
+                Tipo = "fur",
+                Filename = "fur.pdf",
+                Mimetype = "application/pdf",
+                SizeBytes = 10,
+                Sha256 = "sha-fur",
+                StoragePath = path,
+                Source = "system",
+                UploadedAt = DateTimeOffset.UtcNow,
+            });
+            return Task.FromResult<string?>(null);
+        }
+    }
+
+    /// <summary>Regenerador que falla con un motivo real del generador (p. ej. falta el organismo).</summary>
+    private sealed class FakeFailingRegenerator(string error) : IExpedienteHotDocumentsRegenerator
+    {
+        public Task<string?> RegenerateHotDocumentsAsync(Guid id, Guid tenantId, CancellationToken ct = default) =>
+            Task.FromResult<string?>(error);
+    }
+
+    private sealed class FakeImprontaGenerator : IImprontaAutoGenerator
+    {
+        public int Calls { get; private set; }
+
+        public Task<string?> TryGenerateAsync(Guid id, Guid tenantId, Guid userId, CancellationToken ct = default)
+        {
+            Calls++;
+            return Task.FromResult<string?>(null);
+        }
+    }
+
+    [Fact]
+    public async Task HandleAsync_SinFur_LoGeneraEnCascadaYConsolida()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "fur"));
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+
+        var regenerador = new FakeFurProducer(instance, _storage);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, regenerador);
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        // Antes devolvía fur_requerido y el gestor tenía que generar el FUR a mano primero.
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        regenerador.Calls.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task HandleAsync_SinFur_YRegeneracionFallida_DevuelveElMotivoReal()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "fur"));
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var handler = new GenerarConsolidadoHandler(
+            _repo, _merger, _storage, null, new FakeFailingRegenerator("organismo_requerido"));
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        result.Should().BeNull();
+        // El gestor ve la causa REAL, no un genérico "falta el FUR" que no le dice qué hacer.
+        error.Should().Be("organismo_requerido");
+    }
+
+    [Fact]
+    public async Task HandleAsync_SinImpronta_LaGeneraCuandoHayUsuario()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "impronta"));
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var impronta = new FakeImprontaGenerator();
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, null, impronta);
+
+        var (_, error) = await handler.HandleAsync(id, tenantId, Guid.NewGuid(), CancellationToken.None);
+
+        error.Should().BeNull();
+        impronta.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task HandleAsync_SinUsuario_NoIntentaGenerarLaImpronta()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var impronta = new FakeImprontaGenerator();
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, null, impronta);
+
+        await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        // El proveedor exige el operador: sin usuario no se intenta (y el consolidado igual sale).
+        impronta.Calls.Should().Be(0);
+    }
 }

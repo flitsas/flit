@@ -15,7 +15,14 @@ public sealed record ConsolidadoDocumentDto(Guid AttachmentId, string Tipo, stri
 /// consolidado maestro vigente sin regenerarlo (Feature #10701, botón único). El consolidado del
 /// wizard siempre regenera, así que su default es <c>true</c>.
 /// </param>
-public sealed record GenerarConsolidadoResult(ConsolidadoDocumentDto Document, bool Regenerado = true);
+public sealed record GenerarConsolidadoResult(
+    ConsolidadoDocumentDto Document,
+    bool Regenerado = true,
+    // HU #11017 - el consolidado ya NO se bloquea por documentos obligatorios faltantes: se genera y se
+    // marca. `Incompleto` + `DocumentosFaltantes` permiten avisar al gestor de que falta, en vez de
+    // negarle el documento sin explicacion.
+    bool Incompleto = false,
+    IReadOnlyList<string>? DocumentosFaltantes = null);
 
 /// <summary>
 /// Regenera los documentos "en caliente" del expediente del wizard (FUR + certificados generados)
@@ -28,21 +35,44 @@ public interface IExpedienteHotDocumentsRegenerator
 }
 
 /// <summary>
-/// Genera el expediente consolidado de matrícula inicial: fusiona el FUR, el certificado de
-/// identidad y los demás adjuntos del trámite en un único PDF (tipo <c>consolidado</c>).
-/// Idempotente: re-generar reemplaza el adjunto previo. Requiere FUR generado y documentos
-/// obligatorios completos (misma regla que radicación).
+/// Genera la impronta del trámite cuando falta, para que el consolidado no obligue al gestor a
+/// producirla antes (HU #11017). Lo implementa <c>GenerarImprontaAttachmentHandler</c>; devuelve el
+/// código de error del proveedor o <c>null</c> si se generó. Best-effort: el consolidado sigue.
+/// </summary>
+public interface IImprontaAutoGenerator
+{
+    Task<string?> TryGenerateAsync(Guid id, Guid tenantId, Guid userId, CancellationToken ct = default);
+}
+
+/// <summary>
+/// Genera el expediente consolidado: fusiona el FUR, el certificado de identidad y los demás adjuntos
+/// del trámite en un único PDF (tipo <c>consolidado</c>). Idempotente: re-generar reemplaza el previo.
+/// <para>HU #11017 — genera EN CASCADA lo que falte en vez de bloquear: si no hay FUR (ni impronta,
+/// cuando se conoce el usuario) los produce y sigue. Los documentos obligatorios faltantes ya no
+/// impiden el consolidado: se genera marcado como incompleto, con la lista de lo que falta.</para>
 /// </summary>
 public sealed class GenerarConsolidadoHandler(
     IProcedureInstanceRepository repo,
     IExpedienteConsolidadoMerger merger,
     IAttachmentStorage storage,
     ChecklistMatrixCompleteness? matrixCompleteness = null,
-    IExpedienteHotDocumentsRegenerator? hotDocsRegenerator = null)
+    IExpedienteHotDocumentsRegenerator? hotDocsRegenerator = null,
+    IImprontaAutoGenerator? improntaGenerator = null)
 {
+    public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        CancellationToken ct = default) =>
+        HandleAsync(id, tenantId, userId: null, ct);
+
+    /// <param name="userId">
+    /// Operador que pide el consolidado. Necesario solo para generar la impronta en cascada (el
+    /// proveedor la exige); sin él, la impronta faltante simplemente no se autogenera.
+    /// </param>
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
+        Guid? userId,
         CancellationToken ct = default)
     {
         // Grafo de checklist (incluye Attachments): permite que el gate "gestor manda" (matriz +
@@ -71,15 +101,35 @@ public sealed class GenerarConsolidadoHandler(
         // HU #10522 (RF27/41) — el consolidado ya no rechaza otras modalidades: matrícula y traspaso
         // conservan su orden; cualquier otra modalidad usa el orden genérico (ver ConsolidadoOrderingResolver).
 
-        if (!instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase)))
-            return (null, SubmitGate.FurRequerido);
+        // HU #11017 — cascada: si falta el FUR se genera aquí, en vez de devolver `fur_requerido` y
+        // dejar al gestor adivinando el orden correcto. Si aun así no aparece, se responde con el
+        // motivo REAL del generador (p. ej. organismo_requerido) y no con "falta el FUR".
+        if (!TieneFur(instance))
+        {
+            if (hotDocsRegenerator is null)
+                return (null, SubmitGate.FurRequerido);
 
-        // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz (flag ON).
-        var docsCompletos = matrixCompleteness is null
+            var errorFur = await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct);
+            instance = await repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct) ?? instance;
+            if (!TieneFur(instance))
+                return (null, errorFur ?? SubmitGate.FurRequerido);
+        }
+
+        // HU #11017 — impronta en cascada. Best-effort y solo con usuario conocido: depende del RUNT
+        // (Kyverum) y de que el trámite esté en borrador, así que su fallo NO impide el consolidado.
+        if (improntaGenerator is not null && userId is { } operador && !TieneImpronta(instance))
+        {
+            await improntaGenerator.TryGenerateAsync(id, tenantId, operador, ct).ConfigureAwait(false);
+            instance = await repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct) ?? instance;
+        }
+
+        // HU #11017 — los documentos obligatorios faltantes YA NO bloquean (antes: documentos_incompletos).
+        // El consolidado se genera igual y se devuelve MARCADO, con la lista de lo que falta, para que el
+        // gestor lo sepa antes de que el organismo se lo rechace.
+        var checklist = matrixCompleteness is null
             ? null
-            : await matrixCompleteness.TryComputeCompletoAsync(instance, tenantId, ct);
-        if (!(docsCompletos ?? DocumentosObligatoriosCompletos(instance)))
-            return (null, SubmitGate.DocumentosIncompletos);
+            : await matrixCompleteness.TryComputeAsync(instance, tenantId, ct);
+        var faltantes = checklist?.FaltanObligatorios ?? FaltantesObligatorios(instance);
 
         var ordered = ConsolidadoOrderingResolver.Select(instance.Attachments, instance.ModalidadEntrada);
         if (ordered.Count == 0)
@@ -163,16 +213,24 @@ public sealed class GenerarConsolidadoHandler(
         await repo.SaveChangesAsync(ct);
 
         var dto = new ConsolidadoDocumentDto(newAttachment.Id, doc.Tipo, doc.Filename, stored.Sha256);
-        return (new GenerarConsolidadoResult(dto), null);
+        return (new GenerarConsolidadoResult(
+            dto, Regenerado: true, Incompleto: faltantes.Count > 0, DocumentosFaltantes: faltantes), null);
     }
 
-    private static bool DocumentosObligatoriosCompletos(ProcedureInstance instance)
+    private static bool TieneFur(ProcedureInstance instance) =>
+        instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase));
+
+    private static bool TieneImpronta(ProcedureInstance instance) =>
+        instance.Attachments.Any(a => a.Tipo.StartsWith("impronta", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Tipos obligatorios que faltan según el checklist del catálogo (HU #11017).</summary>
+    private static IReadOnlyList<string> FaltantesObligatorios(ProcedureInstance instance)
     {
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
         var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
-        return computed?.Completo ?? true;
+        return computed?.FaltanObligatorios ?? [];
     }
 
     private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken ct)

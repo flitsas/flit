@@ -1204,6 +1204,12 @@ export interface ConsolidadoDocument {
 
 export interface GenerarConsolidadoResult {
   document: ConsolidadoDocument;
+  /**
+   * HU #11017 — el consolidado ya no se bloquea por documentos obligatorios faltantes: se genera y se
+   * marca. `incompleto` avisa al gestor y `documentosFaltantes` dice exactamente qué falta.
+   */
+  incompleto?: boolean;
+  documentosFaltantes?: string[] | null;
 }
 
 // ── Participantes del portal (Slice 7B) — lado gestor autenticado ───
