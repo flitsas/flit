@@ -56,6 +56,7 @@ public interface IOtClientProcedureRepository
         Guid procedureInstanceId,
         Guid? approvedBy,
         string source,
+        Guid? mandateSignerId = null,
         CancellationToken cancellationToken = default);
 
     Task<OtClientProcedure?> RejectAsync(

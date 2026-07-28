@@ -282,6 +282,9 @@ public static class AdminIdentitySubjectTypes
 {
     /// <summary>Representante legal por compañía (HU #10900).</summary>
     public const string LegalRepresentative = "legal_representative";
+
+    /// <summary>Mandatario (firmante de mandato) por OT (ADR-0036, HU #10911).</summary>
+    public const string MandateSigner = "mandate_signer";
 }
 
 /// <summary>Estados de la máquina de la validación de identidad administrativa.</summary>

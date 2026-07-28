@@ -179,6 +179,7 @@ app.MapAdminQuipuxEndpoints();
 app.MapAdminLogQxEndpoints();
 app.MapAdminTransitOfficeTenantsEndpoints();
 app.MapAdminMandateSignersEndpoints();
+app.MapAdminMandateSignerIdentityEndpoints();
 app.MapAdminSignatureVaultEndpoints();
 app.MapAdminLegalRepresentativesEndpoints();
 app.MapAdminDeedsEndpoints();

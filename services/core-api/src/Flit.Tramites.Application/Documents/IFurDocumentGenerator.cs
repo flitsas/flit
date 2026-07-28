@@ -14,7 +14,12 @@ public sealed record DocumentParte(
     string? Phone = null,
     string? Address = null,
     string? City = null,
-    bool EsJuridica = false);
+    bool EsJuridica = false,
+    // ADR-0036 (HU #10914/#10915) — representante legal del mandante (solo persona jurídica): quien
+    // firma en representación de la empresa en la solicitud virtual y el mandato. Null si no aplica.
+    string? RepresentanteLegalNombre = null,
+    string? RepresentanteLegalTipoDoc = null,
+    string? RepresentanteLegalDocumento = null);
 
 /// <summary>
 /// Atributos del vehículo embebidos en el FUR (de field_values, Slice 5/M5).
@@ -89,12 +94,20 @@ public sealed record FurDocumentData(
     // (solicitar/registrar). AcreedorPrenda es el beneficiario del gravamen. Por defecto sin prenda.
     bool TienePrenda = false,
     string? AcreedorPrenda = null,
+    // ADR-0036 (HU #10914/#10915) — las firmas (mandato / solicitud virtual) solo se muestran en
+    // estado distinto de borrador. Por defecto true (no afecta FUR/compraventa).
+    bool FirmasVisibles = true,
     // HU #10920 (Feature #10918) — plantilla de FUR a generar según la clasificación del vehículo
     // (resuelta por IFurTemplateResolver). Por defecto AUTOMOTOR (comportamiento previo intacto).
     FurTemplateFormat TemplateFormat = FurTemplateFormat.Automotor)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;
+
+    /// <summary>La parte radicadora (comprador en matrícula; comprador en traspaso es el adquiriente).</summary>
+    public DocumentParte? Radicador => Partes.FirstOrDefault(p =>
+        string.Equals(p.Rol, "comprador", StringComparison.OrdinalIgnoreCase))
+        ?? (Partes.Count > 0 ? Partes[0] : null);
 }
 
 /// <summary>Un documento generado, listo para persistir vía IAttachmentStorage.</summary>
@@ -114,6 +127,56 @@ public interface IFurDocumentGenerator
 
     /// <summary>Genera el contrato de compraventa (solo traspaso) con los datos del trámite.</summary>
     GeneratedDocument GenerateCompraventa(FurDocumentData data);
+}
+
+/// <summary>
+/// Contrato del generador de la <b>Solicitud de trámite de forma virtual</b> (ADR-0036, HU #10914).
+/// Aplica SIEMPRE (persona natural y jurídica); solo varía el firmante (persona natural a nombre
+/// propio; persona jurídica su representante legal). Implementación productiva vía QuestPDF (tipo
+/// <c>tramite_virtual</c>), fusionable al Expediente Consolidado (mismo patrón que compraventa/RUES).
+/// </summary>
+public interface ISolicitudVirtualGenerator
+{
+    /// <summary>Genera la solicitud de trámite virtual (tipo <c>tramite_virtual</c>).</summary>
+    GeneratedDocument GenerateSolicitudVirtual(FurDocumentData data);
+}
+
+/// <summary>
+/// Firmante del mandato (MANDATARIO) resuelto para el trámite (ADR-0036, HU #10915/#10916): el
+/// representante que el OT registró en <c>admin.mandate_signers</c> y firma en nombre de la compañía
+/// gestora. <c>null</c> mientras el trámite está en <i>preparado</i> y aún no se ha elegido/filtrado el
+/// firmante (se regenera al aprobar, HU #10916): el PDF pinta placeholders y no muestra el bloque de firmas.
+/// </summary>
+public sealed record MandatarioFirmante(string? Nombre, string? Documento);
+
+/// <summary>
+/// Datos para el <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). El MANDANTE es la parte que
+/// radica (<see cref="FurDocumentData.Radicador"/>): persona natural a nombre propio, o el representante
+/// legal en nombre de la empresa. El MANDATARIO depende del OT: institucional fijo (Sabaneta UT-SETSA /
+/// Bello UT-MAB, tomado de <see cref="InstitutionalMandataryName"/>/<see cref="InstitutionalMandataryNit"/>)
+/// o el firmante persona (<see cref="Mandatario"/>) de la plantilla genérica/Bello.
+/// <para><b>Texto legal:</b> transcrito de las plantillas legacy de FLIT 1.0; queda marcado para
+/// revisión del PO (ADR-0036 §10.2) antes de considerar cerrada la HU.</para>
+/// </summary>
+public sealed record MandatoData(
+    FurDocumentData Tramite,
+    string TemplateCode,
+    string? InstitutionalMandataryName,
+    string? InstitutionalMandataryNit,
+    MandatarioFirmante? Mandatario);
+
+/// <summary>
+/// Contrato del generador del <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). Solo aplica
+/// cuando el OT/persona exige mandato (<c>TramiteDocumentContext.ExigeMandato</c>: persona jurídica
+/// siempre; persona natural solo si el OT lo configura). Implementación productiva vía QuestPDF (tipo
+/// <c>mandato</c>), fusionable al Expediente Consolidado (mismo patrón que compraventa/RUES/solicitud
+/// virtual). La variante de plantilla la decide <c>MandatoTemplateResolver</c> (dominio) por el
+/// <c>template_code</c> del OT.
+/// </summary>
+public interface IMandatoGenerator
+{
+    /// <summary>Genera el contrato de mandato (tipo <c>mandato</c>).</summary>
+    GeneratedDocument GenerateMandato(MandatoData data);
 }
 
 /// <summary>

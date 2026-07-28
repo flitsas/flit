@@ -99,6 +99,16 @@ public static class AdminInfrastructureExtensions
             Flit.Infrastructure.Storage.SignatureVaultArtifactStorage>();
         services.AddScoped<ISignatureVaultPolicy, SignatureVaultPolicy>();
 
+        // HU #10912 (ADR-0036) — configuración de mandato por OT (plantilla + exige-PN + mandatario
+        // institucional), leída por código de OT para el flujo de trámite.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IMandateRequirementPolicy,
+            Flit.Infrastructure.OtRules.MandateRequirementPolicy>();
+
+        // HU #10916 (ADR-0036 §D9) — directorio de mandatarios por OT/compañía: resuelve el firmante del
+        // mandato al aprobar y rellena su nombre/documento en el PDF regenerado.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IMandateSignerDirectory,
+            Flit.Infrastructure.OtRules.MandateSignerDirectory>();
+
         // HU #10900 (ADR-0033) — directorio de representantes legales por compañía + escrituras.
         // Readers/repos tenant-scoped (RLS) + adaptador del puerto de identidad biométrica que
         // consume el resolutor de firma/identidad (registrado en AddAdminApplication).

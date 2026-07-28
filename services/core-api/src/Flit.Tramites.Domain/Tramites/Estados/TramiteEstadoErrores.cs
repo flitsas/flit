@@ -54,4 +54,11 @@ public static class TramiteEstadoErrores
     /// adjuntado (409).
     /// </summary>
     public const string PrendaDocumentoRequerido = "prenda_documento_requerido";
+
+    /// <summary>
+    /// ADR-0036 §D9 (HU #10916) — al aprobar un trámite que exige mandato hay VARIOS mandatarios y
+    /// ninguno cotejó con el usuario que aprueba: se debe elegir uno explícitamente (409, subsanable
+    /// reintentando la transición con <c>mandateSignerId</c>).
+    /// </summary>
+    public const string MandatarioRequerido = "mandatario_requerido";
 }

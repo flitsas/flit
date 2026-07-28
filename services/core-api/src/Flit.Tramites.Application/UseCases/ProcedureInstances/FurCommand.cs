@@ -4,6 +4,7 @@ using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Avaluos;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
@@ -42,6 +43,10 @@ public sealed class GenerarFurHandler(
     IAttachmentStorage storage,
     ILogger<GenerarFurHandler> logger,
     ISignatureVaultPolicy? vaultPolicy = null,
+    ISolicitudVirtualGenerator? solicitudVirtualGenerator = null,
+    IMandatoGenerator? mandatoGenerator = null,
+    IMandateRequirementPolicy? mandatePolicy = null,
+    IMandateSignerDirectory? mandateDirectory = null,
     ISoatRtmCertificateGenerator? soatRtmGenerator = null,
     GetSuggestedCommercialValueHandler? avaluoHandler = null,
     IFurTemplateResolver? templateResolver = null,
@@ -51,6 +56,21 @@ public sealed class GenerarFurHandler(
     // ADR-0025 §4 / HU #10645 — baúl de firmas: cubre la identidad de un actor NIT y alimenta la
     // IMAGEN real de la firma en el FUR. Default seguro (NUNCA resuelve) en tests que no lo ejercitan.
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
+    // ADR-0036 (HU #10914) — Solicitud de trámite virtual (siempre). Opcional: los tests que no lo
+    // ejercitan construyen el handler sin él (no se genera el documento).
+    private readonly ISolicitudVirtualGenerator? _solicitudVirtualGenerator = solicitudVirtualGenerator;
+
+    // ADR-0036 (HU #10915) — Contrato de mandato (condicional). Opcional: sin el generador no se emite.
+    private readonly IMandatoGenerator? _mandatoGenerator = mandatoGenerator;
+
+    // ADR-0036 (HU #10912/#10915) — config de mandato por OT (plantilla / exige a PN / mandatario
+    // institucional). Default seguro (NUNCA resuelve ⇒ plantilla genérica, solo PJ) si no se inyecta.
+    private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
+
+    // ADR-0036 §D9 (HU #10916) — directorio de mandatarios: rellena el firmante del PDF del mandato desde
+    // instance.MandateSignerId (resuelto al aprobar). Default seguro (NUNCA resuelve) si no se inyecta.
+    private readonly IMandateSignerDirectory _mandateDirectory = mandateDirectory ?? NullMandateSignerDirectory.Instance;
 
     // HU #10920 (Feature #10918) — resuelve la plantilla de FUR según la clasificación del vehículo. Si no
     // se inyecta (tests), la plantilla es AUTOMOTOR (comportamiento previo intacto).
@@ -142,6 +162,32 @@ public sealed class GenerarFurHandler(
         var generated = new List<GeneratedDocument> { generator.GenerateFur(data) };
         if (esTraspaso)
             generated.Add(generator.GenerateCompraventa(data));
+
+        // ADR-0036 (HU #10914) — Solicitud de trámite virtual: SIEMPRE (persona natural y jurídica).
+        // Idempotente: el reemplazo por tipo (más abajo) sustituye el adjunto 'tramite_virtual' previo.
+        if (_solicitudVirtualGenerator is not null)
+            generated.Add(_solicitudVirtualGenerator.GenerateSolicitudVirtual(data));
+
+        // ADR-0036 (HU #10915) — Contrato de mandato: CONDICIONAL (persona jurídica siempre; persona
+        // natural solo si el OT lo exige). El firmante (mandatario) aún NO se resuelve en preparado: se
+        // regenera al aprobar con el firmante elegido/filtrado (HU #10916). Generar-o-limpiar: si el
+        // trámite dejó de exigir mandato en una regeneración, se retira el adjunto 'mandato' previo.
+        var mandato = await TryGenerateMandatoAsync(data, Get(fv, "transit_office_code"), instance.MandateSignerId, ct);
+        if (mandato is not null)
+        {
+            generated.Add(mandato);
+        }
+        else
+        {
+            foreach (var prev in instance.Attachments
+                         .Where(a => string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase))
+                         .ToList())
+            {
+                storage.Delete(prev.StoragePath);
+                instance.Attachments.Remove(prev);
+                repo.RemoveAttachment(prev);
+            }
+        }
 
         if (identidadValidada)
         {
@@ -449,6 +495,9 @@ public sealed class GenerarFurHandler(
             SellosIdentidad: sellosIdentidad,
             TienePrenda: tienePrenda,
             AcreedorPrenda: acreedorPrenda,
+            // ADR-0036 (HU #10914/#10915) — las firmas del mandato/solicitud virtual solo aparecen en
+            // estado distinto de borrador (punto 18 del requerimiento).
+            FirmasVisibles: !string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase),
             TemplateFormat: templateFormat);
     }
 
@@ -577,6 +626,45 @@ public sealed class GenerarFurHandler(
         var vence = v.ValidUntil is { } vu
             ? vu.ToOffset(ColombiaOffset).ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "-";
         return $"Validación biométrica {doc}\nUUID {uuid}\nFirma {firma}\nAprob {aprob} · Vence {vence}";
+    }
+
+    /// <summary>
+    /// ADR-0036 (HU #10915) — Genera el Contrato de Mandato si el trámite lo EXIGE: persona jurídica
+    /// siempre; persona natural solo si el OT lo configura (<c>RequiresForNaturalPerson</c>). Resuelve la
+    /// config del OT por el <c>transit_office_code</c> del trámite; sin generador o sin exigencia devuelve
+    /// <c>null</c> (el caller retira el mandato previo). El firmante (mandatario) va <c>null</c>: en
+    /// preparado aún no está elegido/filtrado (HU #10916 lo resuelve al aprobar y regenera).
+    /// </summary>
+    private async Task<GeneratedDocument?> TryGenerateMandatoAsync(
+        FurDocumentData data, string? transitOfficeCode, Guid? mandateSignerId, CancellationToken ct)
+    {
+        if (_mandatoGenerator is null || string.IsNullOrWhiteSpace(transitOfficeCode))
+            return null;
+
+        var config = await _mandatePolicy.ResolveAsync(transitOfficeCode, ct);
+        var esJuridica = data.Radicador?.EsJuridica ?? false;
+        var exigeMandato = esJuridica || (config?.RequiresForNaturalPerson ?? false);
+        if (!exigeMandato)
+            return null;
+
+        // HU #10916 — firmante resuelto al aprobar (instance.MandateSignerId). En preparado va null ⇒ el
+        // PDF pinta placeholders y se regenera al aprobar. Sabaneta (institucional) no lleva firmante persona.
+        MandatarioFirmante? mandatario = null;
+        if (mandateSignerId is { } signerId)
+        {
+            var signer = await _mandateDirectory.GetByIdAsync(signerId, ct).ConfigureAwait(false);
+            if (signer is not null)
+                mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento);
+        }
+
+        var mandatoData = new MandatoData(
+            data,
+            config?.TemplateCode ?? MandatoTemplateResolver.Generico,
+            config?.InstitutionalMandataryName,
+            config?.InstitutionalMandataryNit,
+            mandatario);
+
+        return _mandatoGenerator.GenerateMandato(mandatoData);
     }
 
     /// <summary>
@@ -821,7 +909,7 @@ public sealed class GenerarFurHandler(
     {
         var a = instance.Actors.FirstOrDefault(x =>
             string.Equals(x.ActorType, rol, StringComparison.OrdinalIgnoreCase));
-        var (ciudad, direccion) = ParseActorMetadata(a?.Metadata);
+        var (ciudad, direccion, rl) = ParseActorMetadata(a?.Metadata);
         // HU #10688 — persona jurídica (tipo juridical o documento NIT): la razón social no se trocea en el FUR.
         var esJuridica = ActorPersonTypes.IsJuridical(a?.PersonType)
             || string.Equals(a?.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase);
@@ -834,27 +922,36 @@ public sealed class GenerarFurHandler(
             string.IsNullOrWhiteSpace(a?.Phone) ? null : a.Phone.Trim(),
             direccion,
             ciudad,
-            esJuridica));
+            esJuridica,
+            // ADR-0036 (HU #10914/#10915) — representante legal del mandante (solo persona jurídica).
+            RepresentanteLegalNombre: Trim(rl?.NombreCompleto),
+            RepresentanteLegalTipoDoc: Trim(rl?.TipoDocumento),
+            RepresentanteLegalDocumento: Trim(rl?.NumeroDocumento)));
     }
+
+    private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static readonly JsonSerializerOptions ActorMetadataJson = new(JsonSerializerDefaults.Web);
 
-    private static (string? Ciudad, string? Direccion) ParseActorMetadata(string? metadata)
+    private static (string? Ciudad, string? Direccion, ActorMetadataRl? RepresentanteLegal) ParseActorMetadata(string? metadata)
     {
         if (string.IsNullOrWhiteSpace(metadata) || metadata == "{}")
-            return (null, null);
+            return (null, null, null);
         try
         {
             var m = JsonSerializer.Deserialize<ActorMetadataDto>(metadata, ActorMetadataJson);
-            return (m?.Ciudad, m?.Direccion);
+            return (m?.Ciudad, m?.Direccion, m?.RepresentanteLegal);
         }
         catch (JsonException)
         {
-            return (null, null);
+            return (null, null, null);
         }
     }
 
-    private sealed record ActorMetadataDto(string? Ciudad, string? Direccion);
+    private sealed record ActorMetadataDto(string? Ciudad, string? Direccion, ActorMetadataRl? RepresentanteLegal);
+
+    /// <summary>Subconjunto del representante legal leído de <c>actor.metadata</c> (ADR-0036).</summary>
+    private sealed record ActorMetadataRl(string? TipoDocumento, string? NumeroDocumento, string? NombreCompleto);
 
     private static DateTime? ParseFechaTramite(string? raw)
     {

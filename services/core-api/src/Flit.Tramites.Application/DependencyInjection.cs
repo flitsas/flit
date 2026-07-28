@@ -153,6 +153,8 @@ public static class DependencyInjection
         services.AddScoped<ListFirmasHandler>();
         services.AddScoped<SimularFirmaHandler>();
         services.AddScoped<GenerarFurHandler>();
+        // ADR-0036 §D9 (HU #10916) — resolución del mandatario al aprobar (consumida por AdminOtEndpoints).
+        services.AddScoped<MandatoApprovalHandler>();
         // HU #10860 (ADR-0032) — el consolidado del wizard regenera en cascada el FUR/documentos en
         // caliente vía este puerto, resuelto al mismo GenerarFurHandler (mismo scope/unidad de trabajo).
         services.AddScoped<IExpedienteHotDocumentsRegenerator>(sp => sp.GetRequiredService<GenerarFurHandler>());

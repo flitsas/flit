@@ -83,8 +83,11 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             Id = signerId,
             TransitOfficeId = data.TransitOfficeId,
             FullName = data.FullName,
+            DocumentType = data.DocumentType,
             DocumentNumber = data.DocumentNumber,
             IntegrityHash = data.IntegrityHash,
+            Email = data.Email,
+            UserId = data.UserId,
             RegisteredAt = data.RegisteredAt,
             IsActive = true,
             CreatedAt = now,
@@ -133,8 +136,11 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
         var oldCompanyIds = currentAssignments.Select(c => c.CompanyTenantId).ToList();
 
         signer.FullName = data.FullName;
+        signer.DocumentType = data.DocumentType;
         signer.DocumentNumber = data.DocumentNumber;
         signer.IntegrityHash = data.IntegrityHash;
+        signer.Email = data.Email;
+        signer.UserId = data.UserId;
         signer.UpdatedAt = now;
         signer.UpdatedBy = data.UpdatedBy;
 

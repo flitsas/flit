@@ -7,6 +7,13 @@ public sealed class ApproveOtClientProcedureCommand
     public Guid ProcedureInstanceId { get; init; }
 
     public Guid? ApprovedBy { get; init; }
+
+    /// <summary>
+    /// ADR-0036 §D9 (HU #10916) — mandatario resuelto para firmar el mandato (el endpoint lo resolvió/
+    /// eligió antes de aprobar). <c>null</c> = el trámite no exige mandato-persona o es institucional.
+    /// Se persiste en <c>procedure_instances.mandate_signer_id</c> en el mismo save que la aprobación.
+    /// </summary>
+    public Guid? MandateSignerId { get; init; }
 }
 
 public enum ApproveOtClientProcedureStatus

@@ -704,11 +704,28 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("document_number");
 
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("CC")
+                        .HasColumnName("document_type");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("email");
+
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("full_name");
+
+                    b.Property<Guid?>("IdentityValidationRef")
+                        .HasColumnType("uuid")
+                        .HasColumnName("identity_validation_ref");
 
                     b.Property<string>("IntegrityHash")
                         .IsRequired()
@@ -726,6 +743,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("registered_at");
 
+                    b.Property<Guid?>("SignatureVaultId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("signature_vault_id");
+
                     b.Property<Guid>("TransitOfficeId")
                         .HasColumnType("uuid")
                         .HasColumnName("transit_office_id");
@@ -738,8 +759,18 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
 
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
                     b.HasKey("Id")
                         .HasName("pk_mandate_signers");
+
+                    b.HasIndex("SignatureVaultId")
+                        .HasDatabaseName("ix_mandate_signers_signature_vault_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_mandate_signers_user_id");
 
                     b.HasIndex("TransitOfficeId", "IsActive")
                         .HasDatabaseName("ix_mandate_signers_transit_office_id_is_active");
@@ -783,7 +814,7 @@ namespace Flit.Infrastructure.Migrations
                     b.HasIndex("MandateSignerId")
                         .HasDatabaseName("ix_mandate_signer_companies_mandate_signer_id");
 
-                    b.HasIndex("TransitOfficeId", "CompanyTenantId")
+                    b.HasIndex("TransitOfficeId", "CompanyTenantId", "MandateSignerId")
                         .IsUnique()
                         .HasDatabaseName("uq_mandate_signer_companies_active")
                         .HasFilter("is_active");
@@ -1975,6 +2006,76 @@ namespace Flit.Infrastructure.Migrations
                         .HasDatabaseName("uq_tenant_whitelist_users_tenant_email");
 
                     b.ToTable("tenant_whitelist_users", "admin");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.TransitOfficeMandateConfigEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("InstitutionalMandataryName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("institutional_mandatary_name");
+
+                    b.Property<string>("InstitutionalMandataryNit")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("institutional_mandatary_nit");
+
+                    b.Property<bool>("RequiresForNaturalPerson")
+                        .HasColumnType("boolean")
+                        .HasColumnName("requires_for_natural_person");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("row_version");
+
+                    b.Property<string>("TemplateCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("template_code");
+
+                    b.Property<Guid>("TransitOfficeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transit_office_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_transit_office_mandate_config");
+
+                    b.HasIndex("TransitOfficeId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_transit_office_mandate_config_transit_office");
+
+                    b.ToTable("transit_office_mandate_config", "admin", t =>
+                        {
+                            t.ExcludeFromMigrations();
+
+                            t.HasTrigger("tr_transit_office_mandate_config_row_version");
+                        });
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.TransitOfficeProfile", b =>
@@ -5077,6 +5178,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("draft_finalized_at");
 
+                    b.Property<Guid?>("MandateSignerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("mandate_signer_id");
+
                     b.Property<string>("ModalidadEntrada")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -5152,6 +5257,10 @@ namespace Flit.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_procedure_instances");
+
+                    b.HasIndex("MandateSignerId")
+                        .HasDatabaseName("ix_procedure_instances_mandate_signer_id")
+                        .HasFilter("mandate_signer_id IS NOT NULL");
 
                     b.HasIndex("ProcedureTypeId")
                         .HasDatabaseName("ix_procedure_instances_procedure_type_id");

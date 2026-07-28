@@ -66,6 +66,8 @@ public sealed class UpdateMandateSignerHandler
 
         var fullName = command.FullName.Trim();
         var documentNumber = command.DocumentNumber.Trim();
+        var documentType = string.IsNullOrWhiteSpace(command.DocumentType) ? "CC" : command.DocumentType.Trim();
+        var email = string.IsNullOrWhiteSpace(command.Email) ? null : command.Email.Trim();
         // Regenera la huella con la MISMA fecha de registro original (RF: huella determinista).
         var integrityHash = MandateSignerIntegrityHash.Compute(fullName, documentNumber, signer.RegisteredAt);
 
@@ -78,7 +80,10 @@ public sealed class UpdateMandateSignerHandler
                 integrityHash,
                 [.. companyIds.Distinct()],
                 command.UpdatedBy,
-                command.CorrelationId),
+                command.CorrelationId,
+                documentType,
+                email,
+                command.UserId),
             cancellationToken).ConfigureAwait(false);
 
         return updated
