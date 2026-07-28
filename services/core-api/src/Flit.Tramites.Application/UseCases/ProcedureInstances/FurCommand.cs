@@ -10,6 +10,7 @@ using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.Extensions.Logging;
 
@@ -286,7 +287,7 @@ public sealed class GenerarFurHandler(
                         FechaVencimiento: soatVenc,
                         FechaExpedicion: Get(fv, "soat_expedicion"),
                         Entidad: Get(fv, "soat_aseguradora"),
-                        Estado: Get(fv, "soat_estado")),
+                        Estado: EstadoSoatDisplay(Get(fv, SoatGate.FieldKey))),
                     esMatricula
                         ? null // matrícula inicial: sin RTM
                         : new SoatRtmBlock(
@@ -964,6 +965,24 @@ public sealed class GenerarFurHandler(
 
     private static string? Get(Dictionary<string, string?> fv, string key) =>
         fv.TryGetValue(key, out var v) ? v : null;
+
+    /// <summary>
+    /// HU #10973 — presentación del estado del SOAT en el certificado. La llave <c>soat_estado</c> es
+    /// ante todo el GATE de aprobación del OT, así que se persiste en el vocabulario de
+    /// <see cref="SoatGate"/> (minúscula); aquí se sube a mayúscula solo para imprimir.
+    /// <para><c>unknown</c> significa "el RUNT no reportó estado": se imprime EN BLANCO en vez de la
+    /// palabra "unknown", coherente con la regla de HU #10856 (valor ausente ⇒ celda vacía).</para>
+    /// Cualquier otro valor se imprime tal cual en mayúscula, lo que conserva legibles los trámites
+    /// previos a esta HU (que guardaron el crudo del RUNT, p. ej. "VIGENTE").
+    /// </summary>
+    private static string? EstadoSoatDisplay(string? estado)
+    {
+        var v = estado?.Trim();
+        if (string.IsNullOrEmpty(v) || string.Equals(v, SoatGate.Unknown, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return v.ToUpperInvariant();
+    }
 
     // Devuelve el snapshot RUNT si existe (no vacío); si no, cae al valor efectivo. Se usa para imprimir
     // el dato original del vehículo en el FUR aunque exista una transformación declarada en el efectivo.

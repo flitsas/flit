@@ -1,3 +1,5 @@
+using Flit.Tramites.Domain.Tramites.Services;
+
 namespace Flit.Tramites.Application.UseCases.Consultations;
 
 /// <summary>
@@ -138,7 +140,12 @@ public static class KyverumRuntVehicleResultMapper
             ?? data?.Soat?.FirstOrDefault();
         Add(fields, "soat_vencimiento", soat?.FechaVencimSoat);
         Add(fields, "soat_aseguradora", soat?.RazonSocialAsegur);
-        Add(fields, "soat_estado", soat?.Estado); // HU #10856 — estado real del SOAT para el certificado.
+        // HU #10856 — estado real del SOAT para el certificado.
+        // HU #10973 — NORMALIZADO al vocabulario de SoatGate: esta llave alimenta también el gate de
+        // aprobación del OT, y el frontend compara estricto contra "vigente" en minúscula
+        // (lib/tramites/estados.ts). Antes se escribía el crudo del RUNT ("VIGENTE"), que bloqueaba
+        // la aprobación en trámites con SOAT vigente.
+        Add(fields, SoatGate.FieldKey, SoatGate.Normalize(soat?.Estado));
 
         // RTM: preferir vigente; si no, la primera.
         var rtm = data?.Rtm?.FirstOrDefault(t =>

@@ -1,3 +1,5 @@
+using Flit.Tramites.Domain.Tramites.Services;
+
 namespace Flit.Tramites.Application.UseCases.Consultations;
 
 /// <summary>
@@ -185,12 +187,28 @@ public static class VerifikResultMapper
         if (!string.IsNullOrWhiteSpace(soat?.EntidadExpideSoat))
             fields.Add(new HydratedField("soat_aseguradora", soat.EntidadExpideSoat, null));
 
+        // HU #10973 — el estado del SOAT alimenta el certificado de vigencia SOAT/RTM Y el gate de
+        // aprobación del OT (SoatGate, HU #10804). Se persiste NORMALIZADO al vocabulario del gate:
+        // Verifik devuelve "VIGENTE" en mayúscula y el frontend compara estricto contra "vigente"
+        // (lib/tramites/estados.ts), así que el valor crudo bloquearía la aprobación del OT.
+        var soatEstado = SoatGate.Normalize(soat?.Estado);
+        if (soatEstado is not null)
+            fields.Add(new HydratedField(SoatGate.FieldKey, soatEstado, null));
+
         // RTM: tomar la vigente; si no, la primera.
         var rtm = data?.TecnoMecanica?.FirstOrDefault(t =>
             string.Equals(t?.Vigente, "SI", StringComparison.OrdinalIgnoreCase))
             ?? data?.TecnoMecanica?.FirstOrDefault();
         if (!string.IsNullOrWhiteSpace(rtm?.FechaVencimiento))
             fields.Add(new HydratedField("rtm_vencimiento", rtm.FechaVencimiento, null));
+
+        // HU #10973 — estado y CDA que expide la RTM: ya venían deserializados en la respuesta y se
+        // descartaban, dejando en blanco dos celdas del certificado. A diferencia del SOAT, no
+        // alimentan ningún gate, así que se persisten tal cual los reporta el RUNT.
+        if (!string.IsNullOrWhiteSpace(rtm?.Estado))
+            fields.Add(new HydratedField("rtm_estado", rtm.Estado, null));
+        if (!string.IsNullOrWhiteSpace(rtm?.CdaExpide))
+            fields.Add(new HydratedField("rtm_entidad", rtm.CdaExpide, null));
 
         return fields;
     }
