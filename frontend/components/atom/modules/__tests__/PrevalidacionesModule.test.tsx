@@ -474,6 +474,18 @@ describe('PrevalidacionesModule (HU #11006 — CF-02/CF-04/CF-05)', () => {
     });
     expect(screen.getAllByText('—').length).toBeGreaterThan(0);
   });
+
+  it('AC3: respuesta vacía con standalone=true muestra el estado vacío, sin fallback a mostrar filas de trámite', async () => {
+    mocks.listTenantBiometricValidations.mockResolvedValueOnce(listResponse([]));
+
+    render(<PrevalidacionesModule />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/no hay prevalidaciones aún/i)).toBeInTheDocument();
+    });
+    // No debe aparecer ninguna fila (el bug preexistente de HU #10869/#10944 caía a "mostrar todas").
+    expect(screen.queryByRole('list', { name: /prevalidaciones de identidad/i })).toBeNull();
+  });
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

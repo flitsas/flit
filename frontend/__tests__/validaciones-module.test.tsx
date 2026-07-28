@@ -212,6 +212,16 @@ describe('Validaciones — datos y accesibilidad', () => {
     expect(rechazadaLink.getAttribute('aria-label')).toMatch(/correo —/i);
   });
 
+  it('AC5 (HU #11006, CF-03, regresión): Validaciones sigue listando ambos tipos, sin enviar standalone', async () => {
+    render(<Validaciones />);
+
+    await waitFor(() => {
+      expect(mocks.listTenantBiometricValidations).toHaveBeenCalled();
+    });
+    const lastArg = mocks.listTenantBiometricValidations.mock.calls.at(-1)?.[0];
+    expect(lastArg).not.toHaveProperty('standalone');
+  });
+
   it('muestra el motivo de rechazo sanitizado en la fila rechazada', async () => {
     render(<Validaciones />);
 
