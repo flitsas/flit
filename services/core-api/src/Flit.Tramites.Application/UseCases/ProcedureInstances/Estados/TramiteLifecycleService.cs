@@ -137,7 +137,7 @@ public sealed class TramiteLifecycleService(
                 ? EvaluateDynamicSubmit(instance, snapshot, identidadAprobada, docsCompletos)
                 : SubmitGate.Evaluate(instance, identidadAprobada, docsCompletos);
             if (gateErrors.Count > 0)
-                return TramiteTransitionOutcome.Fail(gateErrors[0], DetalleGatePreparacion(gateErrors[0]));
+                return TramiteTransitionOutcome.Fail(gateErrors[0], DetalleGatePreparacion(gateErrors));
 
             // R10 (HU #10597) — gate de prenda del traspaso: con gravámenes en warn se exige una
             // decisión de prenda vigente (y su documento cuando la decisión lo requiere). "omitir" es
@@ -195,14 +195,28 @@ public sealed class TramiteLifecycleService(
         return TramiteTransitionOutcome.Ok(instance);
     }
 
-    /// <summary>Causa exacta del gate de preparación (RF03) para el mensaje al usuario.</summary>
-    private static string DetalleGatePreparacion(string code) => code switch
+    /// <summary>
+    /// Causa(s) exacta(s) del gate de preparación (RF03) para el mensaje al usuario. Lista TODO lo que
+    /// falta (no solo el primer bloqueo) con un texto legible por cada código de <see cref="SubmitGate"/>,
+    /// para que el encabezado del wizard diga qué debe completar el gestor en vez de un genérico.
+    /// </summary>
+    private static string DetalleGatePreparacion(IReadOnlyList<string> codes)
     {
-        TramiteEstadoErrores.IdentidadNoAprobada =>
-            "La validación de identidad del comprador no está aprobada o no está vigente.",
-        TramiteEstadoErrores.DocumentosIncompletos =>
-            "Faltan documentos obligatorios del checklist para preparar el trámite.",
-        _ => "El trámite no cumple los requisitos para prepararse.",
+        var faltantes = codes.Select(FaltanteGatePreparacion).ToList();
+        return faltantes.Count == 1
+            ? $"No se puede preparar el trámite: falta {faltantes[0]}."
+            : "No se puede preparar el trámite. Falta: " + string.Join("; ", faltantes) + ".";
+    }
+
+    /// <summary>Fragmento legible de lo que falta por cada código de gate de preparación (RF03).</summary>
+    private static string FaltanteGatePreparacion(string code) => code switch
+    {
+        TramiteEstadoErrores.DocumentosIncompletos => "cargar los documentos obligatorios del checklist",
+        TramiteEstadoErrores.IdentidadNoAprobada => "aprobar la validación de identidad de las partes (comprador/vendedor)",
+        SubmitGate.FurRequerido => "generar el FUR",
+        SubmitGate.OrganismoRequerido => "seleccionar el organismo de tránsito",
+        SubmitGate.ImprontaRequerida => "generar la impronta de motor y chasis",
+        _ => $"resolver un requisito pendiente ({code})",
     };
 
     /// <summary>
