@@ -14,7 +14,12 @@ export type AlertMetric =
   | "rejection_rate_pct"
   | "stuck_count"
   | "external_api_errors"
-  | "pending_identity_validations";
+  | "pending_identity_validations"
+  // Métricas ICT (HU5 / E1), evaluadas cross-schema sobre ict.*
+  | "ict_stuck_in_validation"
+  | "ict_novelty_rate_pct"
+  | "ict_webhook_delivery_failures"
+  | "ict_jobs_out_of_sla";
 export type AlertOperator = "gt" | "gte" | "lt" | "lte";
 
 export interface ReportSchedule {
@@ -56,6 +61,10 @@ export interface AlertEvent {
   threshold: number;
   notified: boolean;
   message: string | null;
+  /** Momento del reconocimiento (null = sin reconocer). */
+  acknowledgedAt: string | null;
+  /** Usuario que reconoció el disparo. */
+  acknowledgedBy: string | null;
 }
 
 export interface AlertEventsPage {
@@ -190,6 +199,19 @@ export function fetchAlertEvents(
       pageSize: params.pageSize,
       tenantId: params.tenantId,
     },
+    signal,
+  });
+}
+
+/** Reconoce (set-once) un disparo de alerta; devuelve el evento actualizado. */
+export function acknowledgeAlertEvent(
+  id: string,
+  tenantId?: string,
+  signal?: AbortSignal,
+): Promise<AlertEvent> {
+  return apiFetch<AlertEvent>(`${base}/alert-events/${id}/ack`, {
+    method: "POST",
+    query: { tenantId },
     signal,
   });
 }

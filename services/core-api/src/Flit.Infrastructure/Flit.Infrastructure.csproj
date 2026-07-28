@@ -40,6 +40,9 @@
     <ProjectReference Include="..\Flit.Modules.Improntas.Domain\Flit.Modules.Improntas.Domain.csproj" />
     <ProjectReference Include="..\Flit.Modules.Quipux.Application\Flit.Modules.Quipux.Application.csproj" />
     <ProjectReference Include="..\Flit.Modules.Quipux.Domain\Flit.Modules.Quipux.Domain.csproj" />
+    <!-- Contratos gRPC compartidos con core-ict (ICT). Plano C: core-api es CLIENTE de IctStateCallback
+         (reflejo de estado del trámite → core-ict). El .csproj vive en services/core-ict/. -->
+    <ProjectReference Include="..\..\..\core-ict\src\Flit.Ict.Grpc.Contracts\Flit.Ict.Grpc.Contracts.csproj" />
     <!-- Quipux: el PDF consolidado se publica en el bucket S3 DE QUIPUX (qxinterconnect), que lee
          el documento de ahí — por eso el payload de radicación lleva la key y no el binario. Es el
          único punto de FLIT 2.0 con credenciales AWS directas: el File Manager corporativo no

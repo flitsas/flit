@@ -135,9 +135,17 @@ public sealed class KyverumRuntSoat
 
 public sealed class KyverumRuntRtm
 {
-    [JsonPropertyName("estado")]
-    public string? Estado { get; set; }
+    // Vigencia de la revisión técnico-mecánica: "SI" / "NO" / "NO APLICA" (mismo dominio que Verifik).
+    // OJO: la RTM de Kyverum NO usa "estado"/"fechaVencimiento" (como sí el SOAT), sino "vigente" y
+    // "fechaVencimientoRvt". Leer los nombres equivocados dejaba la RTM en null → novedad falsa
+    // "RTM no vigente" aunque el RUNT sí traía una revisión vigente.
+    [JsonPropertyName("vigente")]
+    public string? Vigente { get; set; }
 
-    [JsonPropertyName("fechaVencimiento")]
-    public string? FechaVencimiento { get; set; }
+    // Estado del trámite de la RVT ("APROBADA", ...). Informativo.
+    [JsonPropertyName("estadoRvt")]
+    public string? EstadoRvt { get; set; }
+
+    [JsonPropertyName("fechaVencimientoRvt")]
+    public string? FechaVencimientoRvt { get; set; }
 }

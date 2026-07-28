@@ -130,4 +130,53 @@ public sealed class KyverumRuntVehicleResultMapperTests
 
         Field(result, "owner_document_type").Should().BeNull();
     }
+
+    // ── RTM real de Kyverum: usa "vigente"/"fechaVencimientoRvt" (NO "estado"/"fechaVencimiento") ──
+    // Regresión del bug donde el modelo leía los nombres equivocados y la RTM quedaba en "unknown"
+    // (novedad falsa "RTM no vigente") aunque el RUNT sí traía una revisión vigente. Se deserializa
+    // desde JSON con la forma REAL para blindar también el binding de JsonPropertyName.
+    [Fact]
+    public void Rtm_ConCampoVigenteSi_SeLeeComoOkYHidrataLaVigente()
+    {
+        const string json = """
+        {
+          "ok": true,
+          "data": {
+            "vehiculo": { "placa": "PRU57A", "estadoAutomotor": "ACTIVO", "gravamenes": "NO", "prendas": "NO" },
+            "rtm": [
+              { "vigente": "SI", "estadoRvt": "APROBADA", "fechaVencimientoRvt": "2027-02-22T00:00:00.000-05:00" },
+              { "vigente": "NO", "estadoRvt": "APROBADA", "fechaVencimientoRvt": "2026-02-17T00:00:00.000-05:00" }
+            ]
+          }
+        }
+        """;
+        var response = JsonSerializer.Deserialize<KyverumRuntVehicleResponse>(json, WebJsonOptions)!;
+
+        var result = KyverumRuntVehicleResultMapper.MapVehicle(response);
+
+        Status(result, "tecnomecanica").Should().Be("ok");                              // hay una "SI"
+        Field(result, "rtm_vencimiento").Should().Be("2027-02-22T00:00:00.000-05:00");  // prefiere la vigente
+        Field(result, "rtm_estado").Should().Be("VIGENTE");
+    }
+
+    // Revisiones presentes pero todas "NO" → RTM vencida → fail (bloquea, igual que Verifik).
+    [Fact]
+    public void Rtm_TodasNoVigentes_EsFail()
+    {
+        const string json = """
+        {
+          "ok": true,
+          "data": {
+            "vehiculo": { "estadoAutomotor": "ACTIVO" },
+            "rtm": [ { "vigente": "NO", "fechaVencimientoRvt": "2026-02-17T00:00:00.000-05:00" } ]
+          }
+        }
+        """;
+        var response = JsonSerializer.Deserialize<KyverumRuntVehicleResponse>(json, WebJsonOptions)!;
+
+        var result = KyverumRuntVehicleResultMapper.MapVehicle(response);
+
+        Status(result, "tecnomecanica").Should().Be("fail");
+        Field(result, "rtm_estado").Should().Be("NO VIGENTE");
+    }
 }

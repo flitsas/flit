@@ -2153,6 +2153,14 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("uuidv7()");
 
+                    b.Property<DateTimeOffset?>("AcknowledgedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("acknowledged_at");
+
+                    b.Property<Guid?>("AcknowledgedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("acknowledged_by");
+
                     b.Property<Guid>("AlertRuleId")
                         .HasColumnType("uuid")
                         .HasColumnName("alert_rule_id");
@@ -5178,6 +5186,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("draft_finalized_at");
 
+                    b.Property<string>("ExternalRef")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("external_ref");
+
                     b.Property<Guid?>("MandateSignerId")
                         .HasColumnType("uuid")
                         .HasColumnName("mandate_signer_id");
@@ -5189,6 +5202,11 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("matricula_inicial")
                         .HasColumnName("modalidad_entrada");
+
+                    b.Property<string>("Origin")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("origin");
 
                     b.Property<string>("PlateFlowStatus")
                         .HasMaxLength(20)
@@ -5268,6 +5286,11 @@ namespace Flit.Infrastructure.Migrations
                     b.HasIndex("TenantId", "DraftFinalizedAt")
                         .HasDatabaseName("ix_procedure_instances_draft_finalized")
                         .HasFilter("status = 'borrador' AND draft_finalized_at IS NOT NULL");
+
+                    b.HasIndex("TenantId", "ExternalRef")
+                        .IsUnique()
+                        .HasDatabaseName("uq_procedure_instances_tenant_external_ref")
+                        .HasFilter("external_ref IS NOT NULL AND deleted_at IS NULL");
 
                     b.HasIndex("TenantId", "ReferenceNumber")
                         .IsUnique()

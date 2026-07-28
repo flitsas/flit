@@ -103,6 +103,21 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .IsUnique()
             .HasDatabaseName("uq_procedure_instances_tenant_reference");
 
+        // ICT — origen/referencia externa para materialización idempotente. Columnas agregadas por
+        // migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapean para el modelo
+        // EF. El índice único parcial (creado en 40-ICT-procedure-external-ref.sql) impide dos borradores
+        // para el mismo pre-trámite; aquí se declara para que EF conozca el modelo (no emite DDL).
+        builder.Property(x => x.Origin)
+            .HasColumnName("origin")
+            .HasMaxLength(20);
+        builder.Property(x => x.ExternalRef)
+            .HasColumnName("external_ref")
+            .HasMaxLength(64);
+        builder.HasIndex(x => new { x.TenantId, x.ExternalRef })
+            .IsUnique()
+            .HasDatabaseName("uq_procedure_instances_tenant_external_ref")
+            .HasFilter("external_ref IS NOT NULL AND deleted_at IS NULL");
+
         builder.HasIndex(x => new { x.TenantId, x.Status, x.CreatedAt })
             .HasDatabaseName("ix_procedure_instances_tenant_id_status_created_at");
 

@@ -29,4 +29,10 @@ public sealed class AlertEvent
 
     /// <summary>Mensaje en español enviado en el correo de la alerta.</summary>
     public string? Message { get; set; }
+
+    /// <summary>Momento en que un operador reconoció el disparo (null = sin reconocer). Set-once.</summary>
+    public DateTimeOffset? AcknowledgedAt { get; set; }
+
+    /// <summary>Usuario que reconoció el disparo (claim sub del JWT).</summary>
+    public Guid? AcknowledgedBy { get; set; }
 }

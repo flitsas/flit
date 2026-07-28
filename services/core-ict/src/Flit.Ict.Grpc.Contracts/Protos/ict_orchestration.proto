@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+package flit.ict.v1;
+
+option csharp_namespace = "Flit.Ict.Grpc.Contracts";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// Servicio expuesto por core-api (servidor) e invocado por core-ict (cliente).
+// Las implementaciones en core-api son adaptadores delgados sobre los casos de uso
+// existentes (CreateProcedureInstanceHandler + PatchFieldValuesHandler + ...).
+// El tenant SIEMPRE viaja explícito; el service-token autoriza a ICT como sistema.
+service IctOrchestration {
+  // Crea el borrador de trámite en una única unidad de trabajo (create + field_values +
+  // actores + comercial + adjuntos por referencia). Idempotente por external_ref.
+  rpc CreateDraftFromIct (CreateDraftFromIctRequest) returns (DraftReply);
+  rpc PatchFieldValues   (PatchFieldValuesRequest)   returns (DraftReply);
+  rpc UpsertActors       (UpsertActorsRequest)       returns (DraftReply);
+  rpc RegisterAttachment (RegisterAttachmentRequest) returns (AttachmentReply);
+  rpc GetStatus          (GetStatusRequest)          returns (StatusReply);
+
+  // Ciclo de vida del borrador ya materializado (servicios v1 pauseDraftProcess/abortProcess).
+  // Actúan sobre tramites.procedure_instances; validan el estado (borrador) en core-api.
+  rpc PauseDraft (PauseDraftRequest) returns (DraftReply);
+  rpc AbortDraft (AbortDraftRequest) returns (DraftReply);
+}
+
+message CreateDraftFromIctRequest {
+  string tenant_id           = 1;   // uuid identity.tenants
+  string procedure_type_code = 2;   // p.ej. "MATRICULA_NUEVA" (resuelto por ict.procedure_type_mapping)
+  string created_by_user_id  = 3;   // uuid del usuario técnico ICT del tenant
+  string transit_office_id   = 4;   // opcional (uuid)
+  string origin              = 5;   // "ict"
+  string external_ref        = 6;   // ict.external_integration_master.id
+  repeated FieldValue field_values = 7;
+  repeated Actor actors            = 8;
+  CommercialData commercial        = 9;
+  repeated AttachmentRef attachments = 10;
+  string transit_office_name       = 11;  // organismo RUNT (traspaso): core-api lo resuelve a transit_office_id
+}
+
+message FieldValue {
+  string field_key  = 1;
+  string value_text = 2;
+  google.protobuf.Struct value_json = 3;
+}
+
+message Actor {
+  string actor_type      = 1;   // owner|buyer|seller|lessee
+  string document_type   = 2;
+  string document_number = 3;
+  string full_name       = 4;
+  string email           = 5;
+  string phone           = 6;
+  google.protobuf.Struct metadata = 7;
+}
+
+message CommercialData {
+  string valor_venta  = 1;
+  string causal       = 2;
+  string metodo_pago  = 3;
+  string selling_date = 4;
+}
+
+message AttachmentRef {
+  string document_type = 1;
+  string filename      = 2;
+  string mime_type     = 3;
+  int64  size_bytes    = 4;
+  string sha256        = 5;
+  string storage_path  = 6;   // referencia opaca del File Manager (no se re-suben bytes)
+}
+
+message PatchFieldValuesRequest {
+  string tenant_id             = 1;
+  string procedure_instance_id = 2;
+  repeated FieldValue items    = 3;
+}
+
+message UpsertActorsRequest {
+  string tenant_id             = 1;
+  string procedure_instance_id = 2;
+  repeated Actor actors        = 3;
+}
+
+message RegisterAttachmentRequest {
+  string tenant_id             = 1;
+  string procedure_instance_id = 2;
+  AttachmentRef attachment     = 3;
+}
+
+message GetStatusRequest {
+  string tenant_id             = 1;
+  string procedure_instance_id = 2;
+}
+
+message PauseDraftRequest {
+  string tenant_id             = 1;
+  string procedure_instance_id = 2;
+  bool   paused                = 3;   // true = pausar, false = reanudar
+  string observation           = 4;   // se muestra en dashboard cuando está pausado
+  string actor_user            = 5;   // manager (auditoría)
+  string actor_mail            = 6;
+  string actor_company         = 7;
+}
+
+message AbortDraftRequest {
+  string tenant_id             = 1;
+  string procedure_instance_id = 2;
+  string observation           = 3;   // nota/razón de la anulación
+  string actor_user            = 4;
+  string actor_mail            = 5;
+  string actor_company         = 6;
+}
+
+message DraftReply {
+  string procedure_instance_id = 1;
+  string reference_number      = 2;
+  string status                = 3;   // vocabulario v2 (TramiteEstado)
+  string error_code            = 4;   // vacío si OK
+}
+
+message AttachmentReply {
+  string attachment_id = 1;
+  string error_code    = 2;
+}
+
+message StatusReply {
+  string status = 1;
+  google.protobuf.Timestamp submitted_at = 2;
+  string error_code = 3;
+}
