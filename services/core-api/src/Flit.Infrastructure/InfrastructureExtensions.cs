@@ -4,6 +4,7 @@ using Flit.Infrastructure.Consultations.Avaluos;
 using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Infrastructure.Email;
+using Flit.Infrastructure.Ict;
 using Flit.Infrastructure.Improntas;
 using Flit.Infrastructure.KyverumRunt;
 using Flit.Infrastructure.Rues;
@@ -47,6 +48,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Infrastructure;
@@ -93,12 +95,21 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
+        // HU #10878 (Feature #10862, CF-04) — caché cross-trámite de consultas externas (ADR-0030)
+        // + gate de consentimiento Habeas Data para el reúso de datos de persona (ADR-0031).
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IExternalQueryCacheRepository, ExternalQueryCacheRepository>();
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonDataConsentRepository, PersonDataConsentRepository>();
+        // HU #10865 — entidad persona/sujeto a nivel tenant (Feature #10864, CF-00, ADR-0030).
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonRepository, PersonRepository>();
         // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IDocumentTypeCatalog, DocumentTypeCatalog>();
         // HU #10521 (RF31) — puente de parámetros documentales por gestora hacia el checklist condicional.
         services.AddScoped<Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider, ChecklistCompanyParamsProvider>();
         // HU #10522 (RF17/RF22) — puente de la matriz documental resuelta del gestor hacia el checklist (matriz viva).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IResolvedChecklistMatrixProvider, Services.ResolvedChecklistMatrixProvider>();
+        // CF-06 (HU #10881) — override OT del documento de prenda (independiente del semáforo de gravámenes),
+        // SNAPSHOT: solo overrides activos antes de crear el trámite.
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IPrendaDocumentRequirementPolicy, Services.PrendaDocumentRequirementPolicy>();
         // HU #10522 (RF40) — política de validación por IA de improntas (por defecto: advertir).
         services.Configure<Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions>(
             configuration.GetSection(
@@ -107,6 +118,29 @@ public static class InfrastructureExtensions
         // sin depender de Microsoft.Extensions.Options.
         services.AddSingleton(sp =>
             sp.GetRequiredService<IOptions<Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions>>().Value);
+
+        // HU #10970 — modo por ambiente de CF-01 (duplicidad) y CF-03 (precondición registral):
+        // block (default fail-safe) / warn / off. Se configura por el .env de cada VPS
+        // (TramiteValidations__<Validación>__Mode) porque DEV, QA y PDN corren TODOS con
+        // ASPNETCORE_ENVIRONMENT=Development y appsettings.{Environment}.json no los distingue.
+        services.Configure<Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicyOptions>(
+            configuration.GetSection(
+                Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicyOptions.SectionName));
+        // Igual que ImprontaValidation: Application consume la política YA resuelta, sin IOptions.
+        services.AddSingleton(sp =>
+        {
+            var options = sp.GetRequiredService<
+                IOptions<Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicyOptions>>().Value;
+            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Flit.TramiteValidations");
+            var policy = Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicy.Resolve(
+                options,
+                (name, raw) => TramiteValidationLog.UnrecognizedMode(logger, name, raw));
+            TramiteValidationLog.PolicyResolved(
+                logger,
+                policy.DuplicateActiveProcedure,
+                policy.VehicleRegistrationState);
+            return policy;
+        });
 
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
@@ -132,13 +166,25 @@ public static class InfrastructureExtensions
 
         // HU #10256 — FUR por overlay PdfSharpCore sobre plantillas blank.
         services.AddSingleton<IFurDocumentGenerator, FurOverlayDocumentGenerator>();
+        // HU #10919 (Feature #10918) — plantilla de FUR según la clasificación del vehículo (catálogo
+        // tramites.vehicle_classification_fur). Singleton: cachea el catálogo una sola vez.
+        services.AddSingleton<IFurTemplateResolver, Documents.Fur.VehicleClassificationFurResolver>();
         services.AddSingleton<IExpedienteConsolidadoMerger, PdfExpedienteConsolidadoMerger>();
         // HU #10458 — certificado de identidad en PDF real (QuestPDF). Reemplaza el mock text/plain
         // para que pase IsMergeableMime y se fusione en el Expediente Consolidado.
         services.AddSingleton<IIdentityCertificateGenerator, Documents.IdentityCertificatePdfGenerator>();
         services.AddSingleton<IRuesCertificateGenerator, Documents.RuesCertificatePdfGenerator>();
+        // HU #10926 (ADR-0033) — resolutor de escrituras vigentes por actor NIT para adjuntarlas al
+        // consolidado. Scoped: depende de los readers de escrituras/directorio (DbContext) + storage.
+        services.AddScoped<Flit.Tramites.Application.Documents.IProcedureDeedResolver, Documents.ProcedureDeedResolver>();
         // HU #10762 — certificado RNMC suelto (PDF real) con el resultado de medidas correctivas por parte.
         services.AddSingleton<IRnmcCertificateGenerator, Documents.RnmcCertificatePdfGenerator>();
+        // ADR-0036 (HU #10914) — Solicitud de trámite de forma virtual (PDF real, siempre).
+        services.AddSingleton<ISolicitudVirtualGenerator, Documents.SolicitudVirtualPdfGenerator>();
+        // ADR-0036 (HU #10915) — Contrato Privado de Mandato (PDF real, condicional por OT/persona).
+        services.AddSingleton<IMandatoGenerator, Documents.MandatoPdfGenerator>();
+        // HU #10856 — certificados de vigencia SOAT/RTM (PDF real con membrete FLIT) desde el RUNT.
+        services.AddSingleton<ISoatRtmCertificateGenerator, Documents.SoatRtmCertificatePdfGenerator>();
 
         AddConsultationProviders(services, configuration);
         AddIdentityValidation(services, configuration);
@@ -473,6 +519,17 @@ public static class InfrastructureExtensions
         };
         services.AddSingleton(biometrics);
 
+        // HU #11028 — simulación de validaciones de identidad admin: APAGADA salvo que el ambiente la
+        // encienda explícitamente. Una identidad simulada habilita la firma del mandato, así que el
+        // default seguro es no permitirla.
+        services.AddSingleton(new Flit.Admin.Application.Identity.AdminIdentityMockOptions
+        {
+            Enabled = string.Equals(
+                Cfg("AdminIdentity:Mock:Enabled", "ADMIN_IDENTITY_MOCK_ENABLED"),
+                "true",
+                StringComparison.OrdinalIgnoreCase),
+        });
+
         services.Configure<KyverumOptions>(o =>
         {
             o.BaseUrl = Cfg("Kyverum:BaseUrl", "KYVERUM_BASE_URL") ?? "https://verify.kyverum.com";
@@ -538,6 +595,10 @@ public static class InfrastructureExtensions
         // despacha las filas pendientes hacia IProcedureStateChangeNotifier (webhooks OT) tras el commit.
         services.AddScoped<ITramiteTransitionPublisher, ProcedureStateChangeOutboxPublisher>();
         services.AddHostedService<ProcedureStateChangeOutboxProcessor>();
+
+        // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
+        // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.
+        services.AddIctStateReflection(configuration);
     }
 
     private static void AddImprontas(IServiceCollection services, IConfiguration configuration)

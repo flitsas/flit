@@ -14,7 +14,12 @@ public sealed record DocumentParte(
     string? Phone = null,
     string? Address = null,
     string? City = null,
-    bool EsJuridica = false);
+    bool EsJuridica = false,
+    // ADR-0036 (HU #10914/#10915) — representante legal del mandante (solo persona jurídica): quien
+    // firma en representación de la empresa en la solicitud virtual y el mandato. Null si no aplica.
+    string? RepresentanteLegalNombre = null,
+    string? RepresentanteLegalTipoDoc = null,
+    string? RepresentanteLegalDocumento = null);
 
 /// <summary>
 /// Atributos del vehículo embebidos en el FUR (de field_values, Slice 5/M5).
@@ -53,7 +58,10 @@ public sealed record FirmaBaulMetadata(
     string FullName,
     DateOnly VigenciaDesde,
     DateOnly VigenciaHasta,
-    Guid SignatureVaultId);
+    Guid SignatureVaultId,
+    // HU #10930 (Feature #10929): código alfanumérico digitado por el usuario en el baúl. Es el valor
+    // que se estampa como "Hash" en el FUR (NO el UUID de la fila SignatureVaultId). null si no lo trae.
+    string? Hash = null);
 
 /// <summary>
 /// Datos del trámite ensamblados para generar los documentos. Vehículo (atributos completos),
@@ -83,12 +91,53 @@ public sealed record FurDocumentData(
     IReadOnlyDictionary<string, string>? SellosIdentidad = null,
     // HU #10601 (Feature #10585) — marcación de prenda/gravamen en el FUR: TienePrenda marca el
     // checkbox requested_process_11 cuando la decisión de prenda vigente implica gravamen
-    // (solicitar/registrar). AcreedorPrenda es el beneficiario del gravamen. Por defecto sin prenda.
+    // (solicitar/registrar). Por defecto sin prenda.
     bool TienePrenda = false,
-    string? AcreedorPrenda = null)
+    // Beneficiario del gravamen. HU #10989: su TEXTO ya no se transporta hasta el mapper — se compone
+    // en GenerarFurHandler (FurPrendaObservation) y llega impreso dentro de Observaciones, porque el
+    // recuadro OBSERVACIONES es el sitio del formulario donde se declara (decisión D2 del plan de
+    // completitud documental). Este campo queda como dato del modelo para consumidores futuros.
+    string? AcreedorPrenda = null,
+    // ADR-0036 (HU #10914/#10915) — las firmas (mandato / solicitud virtual) solo se muestran en
+    // estado distinto de borrador. Por defecto true (no afecta FUR/compraventa).
+    bool FirmasVisibles = true,
+    // HU #10920 (Feature #10918) — plantilla de FUR a generar según la clasificación del vehículo
+    // (resuelta por IFurTemplateResolver). Por defecto AUTOMOTOR (comportamiento previo intacto).
+    FurTemplateFormat TemplateFormat = FurTemplateFormat.Automotor)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;
+
+    /// <summary>La parte radicadora (comprador en matrícula; comprador en traspaso es el adquiriente).</summary>
+    public DocumentParte? Radicador => Partes.FirstOrDefault(p =>
+        string.Equals(p.Rol, "comprador", StringComparison.OrdinalIgnoreCase))
+        ?? (Partes.Count > 0 ? Partes[0] : null);
+
+    /// <summary>
+    /// Tenant contra el que se resuelven las firmas del baúl (HU #11030). El baúl es por tenant; el
+    /// ensamblador lo fija desde la instancia del trámite.
+    /// </summary>
+    public Guid TenantIdParaFirmas { get; init; }
+
+    /// <summary>
+    /// Parte que OTORGA: en un traspaso es quien VENDE el vehículo —el propietario actual, que apodera
+    /// para el trámite y a cuyo nombre se declara— y en matrícula inicial, donde no hay vendedor, es la
+    /// parte radicadora. Antes el mandato y la solicitud de trámite virtual se emitían siempre a nombre
+    /// del radicador, de modo que en un traspaso hablaban del COMPRADOR: apoderaban y declaraban por la
+    /// parte equivocada (HU #11030/#11032).
+    /// </summary>
+    public DocumentParte? Otorgante =>
+        Partes.FirstOrDefault(p => string.Equals(p.Rol, "vendedor", StringComparison.OrdinalIgnoreCase))
+        ?? Radicador;
+
+    /// <summary>Quien otorga el mandato (HU #11030). Ver <see cref="Otorgante"/>.</summary>
+    public DocumentParte? Mandante => Otorgante;
+
+    /// <summary>
+    /// Propietario que solicita el trámite virtual (HU #11032): el vendedor en traspaso —es su vehículo
+    /// el que se transfiere— y el radicador en matrícula inicial. Ver <see cref="Otorgante"/>.
+    /// </summary>
+    public DocumentParte? Propietario => Otorgante;
 }
 
 /// <summary>Un documento generado, listo para persistir vía IAttachmentStorage.</summary>
@@ -108,6 +157,64 @@ public interface IFurDocumentGenerator
 
     /// <summary>Genera el contrato de compraventa (solo traspaso) con los datos del trámite.</summary>
     GeneratedDocument GenerateCompraventa(FurDocumentData data);
+}
+
+/// <summary>
+/// Contrato del generador de la <b>Solicitud de trámite de forma virtual</b> (ADR-0036, HU #10914).
+/// Aplica SIEMPRE (persona natural y jurídica); solo varía el firmante (persona natural a nombre
+/// propio; persona jurídica su representante legal). Implementación productiva vía QuestPDF (tipo
+/// <c>tramite_virtual</c>), fusionable al Expediente Consolidado (mismo patrón que compraventa/RUES).
+/// </summary>
+public interface ISolicitudVirtualGenerator
+{
+    /// <summary>Genera la solicitud de trámite virtual (tipo <c>tramite_virtual</c>).</summary>
+    GeneratedDocument GenerateSolicitudVirtual(FurDocumentData data);
+}
+
+/// <summary>
+/// Firmante del mandato (MANDATARIO) resuelto para el trámite (ADR-0036, HU #10915/#10916): el
+/// representante que el OT registró en <c>admin.mandate_signers</c> y firma en nombre de la compañía
+/// gestora. <c>null</c> mientras el trámite está en <i>preparado</i> y aún no se ha elegido/filtrado el
+/// firmante (se regenera al aprobar, HU #10916): el PDF pinta placeholders y no muestra el bloque de firmas.
+/// </summary>
+public sealed record MandatarioFirmante(
+    string? Nombre,
+    string? Documento,
+    // HU #11030 — firma del MANDATARIO con la misma precedencia que el resto de documentos: imagen del
+    // baúl si la tiene, y si no el sello de su validación de identidad. Sin ninguna, el PDF deja la
+    // línea en blanco (comportamiento previo).
+    byte[]? FirmaImagen = null,
+    string? SelloIdentidad = null);
+
+/// <summary>
+/// Datos para el <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). El MANDANTE es la parte que
+/// otorga el poder (<see cref="FurDocumentData.Mandante"/>): el VENDEDOR en un traspaso —su empresa es
+/// la que apodera— y el radicador en matrícula inicial. Persona natural a nombre propio, o el
+/// representante legal en nombre de la empresa. El MANDATARIO depende del OT: institucional fijo (Sabaneta UT-SETSA /
+/// Bello UT-MAB, tomado de <see cref="InstitutionalMandataryName"/>/<see cref="InstitutionalMandataryNit"/>)
+/// o el firmante persona (<see cref="Mandatario"/>) de la plantilla genérica/Bello.
+/// <para><b>Texto legal:</b> transcrito de las plantillas legacy de FLIT 1.0; queda marcado para
+/// revisión del PO (ADR-0036 §10.2) antes de considerar cerrada la HU.</para>
+/// </summary>
+public sealed record MandatoData(
+    FurDocumentData Tramite,
+    string TemplateCode,
+    string? InstitutionalMandataryName,
+    string? InstitutionalMandataryNit,
+    MandatarioFirmante? Mandatario);
+
+/// <summary>
+/// Contrato del generador del <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). Solo aplica
+/// cuando el OT/persona exige mandato (<c>TramiteDocumentContext.ExigeMandato</c>: persona jurídica
+/// siempre; persona natural solo si el OT lo configura). Implementación productiva vía QuestPDF (tipo
+/// <c>mandato</c>), fusionable al Expediente Consolidado (mismo patrón que compraventa/RUES/solicitud
+/// virtual). La variante de plantilla la decide <c>MandatoTemplateResolver</c> (dominio) por el
+/// <c>template_code</c> del OT.
+/// </summary>
+public interface IMandatoGenerator
+{
+    /// <summary>Genera el contrato de mandato (tipo <c>mandato</c>).</summary>
+    GeneratedDocument GenerateMandato(MandatoData data);
 }
 
 /// <summary>
@@ -134,17 +241,43 @@ public interface IIdentityCertificateGenerator
     GeneratedDocument GenerateIdentityCertificate(IdentityCertificateData data);
 }
 
+/// <summary>Una actividad económica del RUES (HU #10589): código CIIU, nombre y descripción. Nulos → en blanco.</summary>
+public sealed record RuesActividad(string? Codigo, string? Nombre, string? Descripcion);
+
 /// <summary>
 /// Datos para el Certificado RUES (HU #10589): razón social + NIT del actor persona jurídica y su
 /// estado en RUES. En modo mock el estado es "ACTIVA"; con el proveedor real se enriquece con
-/// matrícula mercantil / cámara de comercio.
+/// matrícula mercantil / cámara de comercio. HU #10589 (Feature #10852) — se amplía a la tabla
+/// certificadora completa según la muestra oficial: REGISTRO COMERCIAL, REPRESENTACIÓN LEGAL y
+/// ACTIVIDADES ECONÓMICAS. Todo lo que no devuelve la consulta se deja en blanco.
 /// </summary>
 public sealed record RuesCertificateData(
     Guid ProcedureInstanceId,
     string ReferenceNumber,
     string RazonSocial,
     string Nit,
-    string Estado);
+    string Estado,
+    // Tabla certificadora del RUES (existencia y representación legal). Nulos → en blanco.
+    string? MatriculaMercantil = null,
+    string? CamaraComercio = null,
+    string? Sigla = null,
+    string? FechaMatricula = null,
+    string? UltimoAnoRenovado = null,
+    string? FechaRenovacion = null,
+    string? Direccion = null,
+    string? Municipio = null,
+    string? Categoria = null,
+    string? ActividadEconomica = null,
+    string? TipoOrganizacion = null,
+    // HU #10589 (Feature #10852) — campos adicionales del REGISTRO COMERCIAL de la muestra oficial.
+    string? TipoCompania = null,
+    string? Email = null,
+    string? IdRm = null,
+    string? FechaActualizacion = null,
+    string? RazonCancelacion = null,
+    // Bloque de texto de la REPRESENTACIÓN LEGAL (facultades del representante) y lista de ACTIVIDADES.
+    string? RepresentacionLegal = null,
+    IReadOnlyList<RuesActividad>? Actividades = null);
 
 /// <summary>
 /// Contrato del generador del Certificado RUES. La implementación productiva es

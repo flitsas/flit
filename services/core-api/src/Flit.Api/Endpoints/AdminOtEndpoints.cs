@@ -18,6 +18,9 @@ using Flit.Admin.Application.OtRules.CreateOtRule;
 using Flit.Admin.Application.OtRules.ListOtRules;
 using Flit.Admin.Application.OtRules.UpdateOtRule;
 using Flit.Admin.Application.OtProfile.GetOtProfile;
+using Flit.Admin.Domain.OtClientProcedures;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
 using Flit.Admin.Application.OtRequirements.GetOtRequirements;
@@ -860,7 +863,14 @@ public static class AdminOtEndpoints
     private static async Task<IResult> ApproveClientProcedureAsync(
         Guid id,
         HttpContext httpContext,
+        ApproveOtClientProcedureRequest? request,
         ApproveOtClientProcedureHandler handler,
+        IOtClientProcedureRepository otRepository,
+        MandatoApprovalHandler mandatoApproval,
+        GenerarFurHandler furHandler,
+        ILoggerFactory loggerFactory,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
         if (!TryResolveTenantId(httpContext.User, out var tenantId))
@@ -870,12 +880,87 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var approvingUserId = ResolveUserId(httpContext.User);
+
+        // ADR-0036 §D9 (HU #10916) — la aprobación del OT NO pasa por TramiteLifecycleService, así que la
+        // resolución del mandatario se orquesta aquí (el API referencia Admin y Trámites; el módulo Admin
+        // no puede referenciar Trámites). 1) Validar acceso y obtener el tenant cliente. 2) Resolver el
+        // firmante en el scope RLS del cliente. 3) 409 si hay que elegir. 4) Aprobar (persiste el
+        // firmante en el mismo save). 5) Regenerar el mandato con el firmante (best-effort).
+        var procedure = await otRepository
+            .GetByIdAsync(tenantId, id, scopedOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (procedure is null)
+        {
+            return Results.NotFound(new { error = "Trámite no encontrado" });
+        }
+
+        var decision = await otRepository
+            .ExecuteInClientTenantScopeAsync(
+                procedure.ClientTenantId,
+                () => mandatoApproval.CheckAsync(
+                    id, procedure.ClientTenantId, approvingUserId, request?.MandateSignerId, cancellationToken),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (decision.Outcome == MandatoApprovalOutcome.RequiereSeleccion)
+        {
+            // Varios mandatarios y ninguno cotejó: el aprobador debe elegir uno y reintentar con mandateSignerId.
+            return Results.Json(
+                new { error = "mandatario_requerido" },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
+        if (decision.Outcome == MandatoApprovalOutcome.IdentidadRequerida)
+        {
+            // ADR-0036 §D9 (HU #10911/#10916) — el mandatario resuelto no tiene identidad validada vigente:
+            // debe validarla (se valida una vez y se apalanca mientras esté vigente) antes de firmar.
+            return Results.Json(
+                new { error = "mandatario_identidad_requerida" },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
         var result = await handler.HandleAsync(new ApproveOtClientProcedureCommand
         {
             OtTenantId = tenantId,
             ProcedureInstanceId = id,
-            ApprovedBy = ResolveUserId(httpContext.User),
+            ApprovedBy = approvingUserId,
+            MandateSignerId = decision.MandateSignerId,
+            TransitOfficeId = scopedOfficeId,
         }, cancellationToken).ConfigureAwait(false);
+
+        // HU #10996 — regenerar los documentos en caliente (FUR, mandato, trámite virtual y certificados)
+        // SIEMPRE que se apruebe, no solo cuando hubo un mandatario que resolver: así el consolidado y los
+        // formularios reflejan las firmas y la documentación actualizada al aprobar. La regeneración del FUR
+        // invalida además los consolidados (se rehacen en la próxima consulta). Best-effort: un fallo aquí
+        // NO revierte la aprobación ya persistida.
+        if (result.Status == ApproveOtClientProcedureStatus.Approved)
+        {
+            try
+            {
+                await otRepository
+                    .ExecuteInClientTenantScopeAsync(
+                        procedure.ClientTenantId,
+                        () => furHandler.HandleAsync(id, procedure.ClientTenantId, cancellationToken),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                AdminOtMandatoLog.RegeneracionMandatoOmitida(
+                    loggerFactory.CreateLogger("AdminOt.ApproveMandato"), ex, id);
+            }
+        }
 
         return result.Status switch
         {
@@ -893,6 +978,8 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         RejectOtClientProcedureRequest request,
         RejectOtClientProcedureHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
         if (!TryResolveTenantId(httpContext.User, out var tenantId))
@@ -902,11 +989,22 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
         var result = await handler.HandleAsync(new RejectOtClientProcedureCommand
         {
             OtTenantId = tenantId,
             ProcedureInstanceId = id,
             RejectedBy = ResolveUserId(httpContext.User),
+            TransitOfficeId = scopedOfficeId,
             Request = request,
         }, cancellationToken).ConfigureAwait(false);
 
@@ -1002,10 +1100,11 @@ public static class AdminOtEndpoints
         {
             "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
             "modalidad_no_soportada" => Results.Conflict(new { error = "modalidad_no_soportada" }),
+            // HU #11017 — el consolidado ya no rechaza por documentos obligatorios faltantes (se genera
+            // marcado como incompleto), así que ese código dejó de emitirse. `fur_requerido` solo llega
+            // cuando la regeneración en cascada tampoco pudo producirlo y no dio un motivo propio.
             Flit.Tramites.Application.UseCases.ProcedureInstances.SubmitGate.FurRequerido =>
                 Results.Conflict(new { error = "fur_requerido" }),
-            Flit.Tramites.Application.UseCases.ProcedureInstances.SubmitGate.DocumentosIncompletos =>
-                Results.Conflict(new { error = "documentos_incompletos" }),
             "sin_adjuntos" => Results.Conflict(new { error = "sin_adjuntos" }),
             "adjunto_no_disponible" => Results.Conflict(new { error = "adjunto_no_disponible" }),
             "mimetype_no_soportado" => Results.Conflict(new { error = "mimetype_no_soportado" }),
@@ -2068,4 +2167,12 @@ public static class AdminOtEndpoints
         bool IsSuspended,
         long RowVersion,
         DateTimeOffset? DeletedAt = null);
+}
+
+/// <summary>Logging source-generated (CA1848) de la aprobación OT. Sin PII.</summary>
+internal static partial class AdminOtMandatoLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se pudo regenerar el mandato al aprobar el trámite {InstanceId}; se conserva el mandato previo.")]
+    public static partial void RegeneracionMandatoOmitida(ILogger logger, Exception ex, Guid instanceId);
 }

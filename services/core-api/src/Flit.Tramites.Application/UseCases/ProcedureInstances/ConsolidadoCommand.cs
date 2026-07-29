@@ -15,23 +15,64 @@ public sealed record ConsolidadoDocumentDto(Guid AttachmentId, string Tipo, stri
 /// consolidado maestro vigente sin regenerarlo (Feature #10701, botón único). El consolidado del
 /// wizard siempre regenera, así que su default es <c>true</c>.
 /// </param>
-public sealed record GenerarConsolidadoResult(ConsolidadoDocumentDto Document, bool Regenerado = true);
+public sealed record GenerarConsolidadoResult(
+    ConsolidadoDocumentDto Document,
+    bool Regenerado = true,
+    // HU #11017 - el consolidado ya NO se bloquea por documentos obligatorios faltantes: se genera y se
+    // marca. `Incompleto` + `DocumentosFaltantes` permiten avisar al gestor de que falta, en vez de
+    // negarle el documento sin explicacion.
+    bool Incompleto = false,
+    IReadOnlyList<string>? DocumentosFaltantes = null);
 
 /// <summary>
-/// Genera el expediente consolidado de matrícula inicial: fusiona el FUR, el certificado de
-/// identidad y los demás adjuntos del trámite en un único PDF (tipo <c>consolidado</c>).
-/// Idempotente: re-generar reemplaza el adjunto previo. Requiere FUR generado y documentos
-/// obligatorios completos (misma regla que radicación).
+/// Regenera los documentos "en caliente" del expediente del wizard (FUR + certificados generados)
+/// para que salgan con fecha vigente antes de consolidar (HU #10860, cascada β de ADR-0032). Lo
+/// implementa <c>GenerarFurHandler</c>; devuelve un código de error o null si la regeneración fue ok.
+/// </summary>
+public interface IExpedienteHotDocumentsRegenerator
+{
+    Task<string?> RegenerateHotDocumentsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
+}
+
+/// <summary>
+/// Genera la impronta del trámite cuando falta, para que el consolidado no obligue al gestor a
+/// producirla antes (HU #11017). Lo implementa <c>GenerarImprontaAttachmentHandler</c>; devuelve el
+/// código de error del proveedor o <c>null</c> si se generó. Best-effort: el consolidado sigue.
+/// </summary>
+public interface IImprontaAutoGenerator
+{
+    Task<string?> TryGenerateAsync(Guid id, Guid tenantId, Guid userId, CancellationToken ct = default);
+}
+
+/// <summary>
+/// Genera el expediente consolidado: fusiona el FUR, el certificado de identidad y los demás adjuntos
+/// del trámite en un único PDF (tipo <c>consolidado</c>). Idempotente: re-generar reemplaza el previo.
+/// <para>HU #11017 — genera EN CASCADA lo que falte en vez de bloquear: si no hay FUR (ni impronta,
+/// cuando se conoce el usuario) los produce y sigue. Los documentos obligatorios faltantes ya no
+/// impiden el consolidado: se genera marcado como incompleto, con la lista de lo que falta.</para>
 /// </summary>
 public sealed class GenerarConsolidadoHandler(
     IProcedureInstanceRepository repo,
     IExpedienteConsolidadoMerger merger,
     IAttachmentStorage storage,
-    ChecklistMatrixCompleteness? matrixCompleteness = null)
+    ChecklistMatrixCompleteness? matrixCompleteness = null,
+    IExpedienteHotDocumentsRegenerator? hotDocsRegenerator = null,
+    IImprontaAutoGenerator? improntaGenerator = null)
 {
+    public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        CancellationToken ct = default) =>
+        HandleAsync(id, tenantId, userId: null, ct);
+
+    /// <param name="userId">
+    /// Operador que pide el consolidado. Necesario solo para generar la impronta en cascada (el
+    /// proveedor la exige); sin él, la impronta faltante simplemente no se autogenera.
+    /// </param>
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
+        Guid? userId,
         CancellationToken ct = default)
     {
         // Grafo de checklist (incluye Attachments): permite que el gate "gestor manda" (matriz +
@@ -40,18 +81,74 @@ public sealed class GenerarConsolidadoHandler(
         if (instance is null)
             return (null, "not_found");
 
+        // Migración V1→V2 — un trámite migrado es una FOTO de solo lectura: NO se regenera el
+        // consolidado. V1 ya trae su propio expediente consolidado (tipo 'consolidado', source=migration);
+        // regenerarlo aquí lo reemplazaría por uno nuevo del sistema, perdiendo el histórico.
+        //
+        // Va ANTES del caché y de la regeneración en cascada de HU #10860 a propósito: un trámite
+        // migrado llega con ConsolidadoWizardVigente en false (el default de la columna), así que si
+        // este guard fuera después, la cascada regeneraría el FUR y los documentos en caliente —
+        // exactamente lo que el modo foto existe para impedir.
+        if (instance.IsMigrated)
+            return (null, "migrado_solo_lectura");
+
+        // HU #10860 (ADR-0032) — caché explícita del expediente del wizard: si está vigente y el
+        // consolidado persistido existe, se sirve sin regenerar (espejo del maestro, Feature #10701).
+        var consolidadoVigente = instance.Attachments
+            .FirstOrDefault(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
+        if (instance.ConsolidadoWizardVigente && consolidadoVigente is not null)
+        {
+            var vigenteDto = new ConsolidadoDocumentDto(
+                consolidadoVigente.Id, consolidadoVigente.Tipo, consolidadoVigente.Filename, consolidadoVigente.Sha256);
+            return (new GenerarConsolidadoResult(vigenteDto, Regenerado: false), null);
+        }
+
+        // HU #10860 — regeneración en cascada (β): al estar invalidado, se regeneran primero el FUR y
+        // los documentos en caliente (con fecha vigente) y luego se consolida. Best-effort: si la
+        // regeneración falla (p. ej. falta el organismo), se consolida con los documentos existentes.
+        if (!instance.ConsolidadoWizardVigente && hotDocsRegenerator is not null)
+        {
+            await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct);
+            // HU #11034 — el regenerador ACTUALIZA la instancia (invalida consolidados), y un trigger de
+            // base de datos sube su row_version, que es token de concurrencia. Sin releer, el guardado
+            // final del consolidado viajaba con la versión vieja y Postgres afectaba 0 filas:
+            // DbUpdateConcurrencyException. Es el mismo motivo por el que se relee tras la cascada de la
+            // HU #11029; a esta llamada, anterior, le faltaba.
+            instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+        }
+
         // HU #10522 (RF27/41) — el consolidado ya no rechaza otras modalidades: matrícula y traspaso
         // conservan su orden; cualquier otra modalidad usa el orden genérico (ver ConsolidadoOrderingResolver).
 
-        if (!instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase)))
-            return (null, SubmitGate.FurRequerido);
+        // HU #11017 — cascada: si falta el FUR se genera aquí, en vez de devolver `fur_requerido` y
+        // dejar al gestor adivinando el orden correcto. Si aun así no aparece, se responde con el
+        // motivo REAL del generador (p. ej. organismo_requerido) y no con "falta el FUR".
+        if (!TieneFur(instance))
+        {
+            if (hotDocsRegenerator is null)
+                return (null, SubmitGate.FurRequerido);
 
-        // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz (flag ON).
-        var docsCompletos = matrixCompleteness is null
+            var errorFur = await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct);
+            instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+            if (!TieneFur(instance))
+                return (null, errorFur ?? SubmitGate.FurRequerido);
+        }
+
+        // HU #11017 — impronta en cascada. Best-effort y solo con usuario conocido: depende del RUNT
+        // (Kyverum) y de que el trámite esté en borrador, así que su fallo NO impide el consolidado.
+        if (improntaGenerator is not null && userId is { } operador && !TieneImpronta(instance))
+        {
+            await improntaGenerator.TryGenerateAsync(id, tenantId, operador, ct).ConfigureAwait(false);
+            instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+        }
+
+        // HU #11017 — los documentos obligatorios faltantes YA NO bloquean (antes: documentos_incompletos).
+        // El consolidado se genera igual y se devuelve MARCADO, con la lista de lo que falta, para que el
+        // gestor lo sepa antes de que el organismo se lo rechace.
+        var checklist = matrixCompleteness is null
             ? null
-            : await matrixCompleteness.TryComputeCompletoAsync(instance, tenantId, ct);
-        if (!(docsCompletos ?? DocumentosObligatoriosCompletos(instance)))
-            return (null, SubmitGate.DocumentosIncompletos);
+            : await matrixCompleteness.TryComputeAsync(instance, tenantId, ct);
+        var faltantes = checklist?.FaltanObligatorios ?? FaltantesObligatorios(instance);
 
         var ordered = ConsolidadoOrderingResolver.Select(instance.Attachments, instance.ModalidadEntrada);
         if (ordered.Count == 0)
@@ -75,7 +172,12 @@ public sealed class GenerarConsolidadoHandler(
             }
         }
 
-        var merged = merger.Merge(pdfParts);
+        // HU #10857 — expediente con portada institucional (primera página) para todos los tipos.
+        var mergeRequest = new MergeRequest(
+            Parts: ordered.Zip(pdfParts, (a, pdf) => new MergePart(pdf, DocumentLabels.Display(a.Tipo))).ToList(),
+            Cover: ExpedienteCoverInfoBuilder.FromInstance(instance),
+            EstadoTramite: instance.Status);
+        var merged = merger.Compose(mergeRequest);
         var now = DateTimeOffset.UtcNow;
         var filename = $"consolidado_{SafeRef(instance.ReferenceNumber)}.pdf";
         var doc = new GeneratedDocument("consolidado", filename, "application/pdf", merged);
@@ -124,19 +226,44 @@ public sealed class GenerarConsolidadoHandler(
         instance.Events.Add(evento);
         repo.Add(evento);
 
+        // HU #10860 — el consolidado recién generado refleja el expediente actual: marca vigente.
+        instance.ConsolidadoWizardVigente = true;
+
         await repo.SaveChangesAsync(ct);
 
         var dto = new ConsolidadoDocumentDto(newAttachment.Id, doc.Tipo, doc.Filename, stored.Sha256);
-        return (new GenerarConsolidadoResult(dto), null);
+        return (new GenerarConsolidadoResult(
+            dto, Regenerado: true, Incompleto: faltantes.Count > 0, DocumentosFaltantes: faltantes), null);
     }
 
-    private static bool DocumentosObligatoriosCompletos(ProcedureInstance instance)
+    /// <summary>
+    /// Relee la instancia con el rastreo LIMPIO tras un paso de la cascada (HU #11029/#11034). Es
+    /// obligatorio después de cualquier handler que guarde sobre la misma instancia: deja atrás los
+    /// adjuntos borrados que siguen colgando de las colecciones ya cargadas y, sobre todo, recoge el
+    /// <c>row_version</c> nuevo —token de concurrencia que un trigger sube en cada UPDATE—, sin el cual
+    /// el guardado final afecta 0 filas y revienta con DbUpdateConcurrencyException.
+    /// </summary>
+    private async Task<ProcedureInstance> ReloadAsync(
+        Guid id, Guid tenantId, ProcedureInstance fallback, CancellationToken ct)
+    {
+        repo.ResetTracking();
+        return await repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct).ConfigureAwait(false) ?? fallback;
+    }
+
+    private static bool TieneFur(ProcedureInstance instance) =>
+        instance.Attachments.Any(a => string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase));
+
+    private static bool TieneImpronta(ProcedureInstance instance) =>
+        instance.Attachments.Any(a => a.Tipo.StartsWith("impronta", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Tipos obligatorios que faltan según el checklist del catálogo (HU #11017).</summary>
+    private static IReadOnlyList<string> FaltantesObligatorios(ProcedureInstance instance)
     {
         var manual = ChecklistEstadoJson.Parse(instance.ChecklistEstado);
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
         var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
-        return computed?.Completo ?? true;
+        return computed?.FaltanObligatorios ?? [];
     }
 
     private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken ct)

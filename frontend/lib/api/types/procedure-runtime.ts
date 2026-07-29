@@ -15,7 +15,10 @@ export type InstanceStatus =
   | 'preparado'
   | 'entregado'
   | 'aprobado'
-  | 'rechazado';
+  | 'rechazado'
+  // HU #10870 — reabre la edición de un entregado/rechazado sin volver a borrador; re-radicar
+  // (subsanacion → entregado) es la única transición permitida desde aquí (HU #10874, AC2).
+  | 'subsanacion';
 
 /**
  * Sub-estado INTERNO de la ruta de placa (Feature #10587 / HU #10785), ORTOGONAL a
@@ -51,6 +54,36 @@ export interface CreateInstanceRequest {
   transitOfficeId?: string;
 }
 
+/**
+ * CF-02 (HU #10879/#10883) — datos del vehículo capturados en el PASO 1, cuando el trámite todavía
+ * no existe. Alimentan tanto la consulta desacoplada (`runPreflightPreview`) como la creación al
+ * avanzar al paso 2 (`createInstanceFromConsulta`).
+ */
+export interface ConsultaVehiculoInput {
+  modalidad: WizardModalidad;
+  vin?: string | null;
+  plate?: string | null;
+  ownerDocumentType?: string | null;
+  ownerDocumentNumber?: string | null;
+}
+
+/**
+ * Resultado de la consulta del paso 1 SIN trámite creado. `previewToken` se devuelve al backend al
+ * avanzar al paso 2 para que la creación reuse esta consulta en vez de repetirla contra el RUNT.
+ */
+export interface PreflightPreviewResult {
+  previewToken: string;
+  preflight: PreflightSnapshot;
+  /** Atributos del vehículo hidratados por la consulta, en la forma que ya pinta el wizard. */
+  vehicleFields: FieldValue[];
+}
+
+/** Trámite recién creado al avanzar al paso 2, con su preflight ya persistido. */
+export interface CreateFromConsultaResult {
+  instance: ProcedureInstanceSummary;
+  preflight: PreflightSnapshot | null;
+}
+
 export interface ProcedureInstanceSummary {
   id: string;
   referenceNumber: string;
@@ -83,6 +116,12 @@ export interface InstanceSummary {
   vehiculoLinea: string | null;
   compradorNombre: string | null;
   compradorDocumento: string | null;
+  /**
+   * HU #11020 — parte SALIENTE del traspaso, para identificar el trámite desde el dashboard sin
+   * abrirlo. `null` en matrícula inicial (no hay vendedor).
+   */
+  vendedorNombre?: string | null;
+  vendedorDocumento?: string | null;
   organismoTransito: string | null;
   pasoActual: number;
   totalPasos: number;
@@ -103,6 +142,12 @@ export interface InstanceSummary {
   tenantId: string;
   /** Razón social de la compañía; solo presente en el listado multi-tenant del SuperAdmin. */
   companiaNombre: string | null;
+  /** Subsanación activa sobre rechazado (edición sin cambiar status). */
+  subsanacionActiva?: boolean;
+  /** Veces que se activó la subsanación en este expediente. */
+  subsanacionCount?: number;
+  /** Motivo (texto libre) del último rechazo del OT; null si no hay rechazo con motivo. */
+  ultimoRechazoMotivo?: string | null;
 }
 
 /** Respuesta de GET /instances. */
@@ -135,6 +180,15 @@ export interface StatusHistory {
   toStatus: InstanceStatus;
   changedAt: string;
   reason: string | null;
+  /**
+   * HU #10871/#10872 (backend) — observación de subsanación serializada como JSON en
+   * `procedure_instance_status_history.metadata`. `GetProcedureInstanceHandler.ToDetail`
+   * (commit f3b64f5e) la expone filtrada a `{motivo, items:[{campo,detalle}]}`; por
+   * seguridad/Habeas Data NO incluye `fieldSnapshot` ni los tenant ids. Llega `null` en
+   * entradas sin observación (p. ej. aprobar/rechazar); `lib/tramites/subsanacion.ts` degrada
+   * entonces al `reason` plano (ver SubsanacionPanel).
+   */
+  metadata?: string | null;
 }
 
 export interface Actor {
@@ -142,6 +196,11 @@ export interface Actor {
   documentType: string;
   documentNumber: string;
   fullName: string;
+  /**
+   * HU #11014 — correo del actor. Respaldo del expediente cuando la identidad está apalancada o
+   * cubierta por el baúl y no hay validación propia de la que leerlo. PII (Ley 1581).
+   */
+  email?: string | null;
 }
 
 export interface ProcedureInstanceDetail {
@@ -157,6 +216,15 @@ export interface ProcedureInstanceDetail {
   completedAt: string | null;
   /** HU #10350 — sello de borrador finalizado; controla el modo readOnly parcial del wizard. */
   draftFinalizedAt?: string | null;
+  /**
+   * HU #10879/#10883 — paso actual PERSISTIDO del wizard (autosave por paso). `null`/ausente ⇒ el
+   * frontend cae al paso derivado de los gates (comportamiento previo).
+   */
+  currentStep?: string | null;
+  /** Subsanación activa sobre rechazado (edición sin cambiar status). */
+  subsanacionActiva?: boolean;
+  /** Veces que se activó la subsanación en este expediente. */
+  subsanacionCount?: number;
   fieldValues: FieldValue[];
   statusHistory: StatusHistory[];
   actors: Actor[];
@@ -231,6 +299,32 @@ export interface ProcedureActor {
   personType?: ActorPersonType;
   /** Representante legal (solo persona jurídica). Embebido en actor.metadata. */
   representanteLegal?: RepresentanteLegal;
+  /**
+   * @deprecated HU #10956 revierte el check de consentimiento Habeas Data de HU #10885: el
+   * formulario ya NO ofrece esta opción (la identidad de un actor se consulta SIEMPRE en vivo,
+   * ver ADR-0031 actualizado). El campo se mantiene tipado solo porque el backend puede devolver
+   * actores persistidos ANTES de esta HU con un valor previo en `GET actors`; `normalizeActors`
+   * lo descarta explícitamente antes de cada guardado — nunca vuelve a viajar en el PUT.
+   */
+  autorizaReutilizacionDatos?: boolean;
+}
+
+// ── Precarga de datos de CONTACTO ya conocidos (HU #10956, revierte parcialmente HU #10885) ──────
+// GET /api/v1/tramites/actors/contact-lookup?tipoDocumento=..&numeroDocumento=..  (header
+// X-Tenant-Id). Se dispara tras resolver la IDENTIDAD del actor en vivo (RUNT/RUES/directorio):
+// NUNCA incluye nombre ni documento (esos siempre vienen de esa consulta) ni requiere consentimiento
+// previo — el contacto es un dato que la propia compañía ya capturó, no una consulta a un tercero.
+// Sin antecedentes, responde 200 con los 4 campos en null (AC4), nunca 404.
+export interface ActorContactLookupInput {
+  tipoDocumento: ActorDocumentType;
+  numeroDocumento: string;
+}
+
+export interface ActorContactLookupResult {
+  ciudad: string | null;
+  email: string | null;
+  direccion: string | null;
+  telefono: string | null;
 }
 
 /** Respuesta de GET /instances/{id}/actors. */
@@ -256,7 +350,10 @@ export interface RuntPersonLookupResult {
   documentNumber: string;
   licenseStatus: string | null;    // driverStatus del conductor
   source: 'RUNT';
-  mode: 'real' | 'mock';
+  // HU #10885 (Feature #10862, CF-04) — 'cache' cuando el dato se reutilizó de una consulta previa
+  // vigente del mismo tenant (AC1, ADR-0030/ADR-0031), sin llamar al proveedor externo. El backend
+  // NO expone `queriedAt` para este lookup (gap de contrato documentado, HU #10885): solo el origen.
+  mode: 'real' | 'mock' | 'cache';
   // Campos enriquecidos (presentes cuando found=true)
   citizenStatus?: string | null;    // Estado del ciudadano (ACTIVA/INACTIVA)
   hasPendingFines?: boolean;        // true si tieneMultas == "SI"
@@ -296,7 +393,80 @@ export interface RuesPersonLookupResult {
   camaraComercio: string | null;
   documentType: 'NIT';
   source: 'RUES';
-  mode: 'real' | 'mock';
+  // HU #10885 — igual que RuntPersonLookupResult.mode: 'cache' = dato reutilizado (AC1), sin
+  // `queriedAt` disponible en el backend para este lookup.
+  mode: 'real' | 'mock' | 'cache';
+}
+
+// ── Directorio de representantes/escrituras — consumo del wizard (HU #10903/#10906) ──
+// GET /api/v1/tramites/deeds/active (tenant-scoped por header). Cada fila es el par (escritura ×
+// compañía representada) de una escritura activa y VIGENTE del tenant, proyectada para el collapse
+// del primer paso del wizard: NIT + razón social + días restantes de vigencia. Una misma compañía
+// (NIT) puede aparecer en varias filas si tiene más de una escritura vigente (Feature #10929); `id`
+// (de la escritura) y `description` distinguen esas filas.
+export interface ActiveDeed {
+  /** Id de la escritura (llave estable de la fila; distingue dos escrituras del mismo NIT). */
+  id: string;
+  nit: string;
+  name: string;
+  diasRestantes: number;
+  /** Vigencia hasta (fecha ISO YYYY-MM-DD). */
+  vigenciaHasta: string;
+  /** Descripción de la escritura (p. ej. número/notaría), si viene. */
+  description?: string | null;
+}
+
+/** Compañía representada precargada por NIT (razón social + contacto). */
+export interface LegalRepresentativeLookupCompany {
+  nit: string;
+  razonSocial: string;
+  email?: string | null;
+  address?: string | null;
+  city?: string | null;
+  phone?: string | null;
+}
+
+/** Representante legal (persona natural) precargado por NIT. */
+export interface LegalRepresentativeLookupContact {
+  tipoDoc: string;
+  documento: string;
+  nombres: string;
+  primerApellido: string;
+  segundoApellido?: string | null;
+  email?: string | null;
+  telefono?: string | null;
+}
+
+/**
+ * Un representante seleccionable de la compañía (HU #10937), con sus banderas de firma/identidad
+ * vigentes calculadas por su propio documento. Cuando la compañía tiene VARIOS, el FE muestra un
+ * selector; el elegido precarga sus datos y firma con su información (firma del baúl o validación de
+ * identidad por su documento). `documento` es PII (Ley 1581): no loguear.
+ */
+export interface LegalRepresentativeOption {
+  tipoDoc: string;
+  documento: string;
+  nombres: string;
+  primerApellido: string;
+  segundoApellido?: string | null;
+  email?: string | null;
+  telefono?: string | null;
+  firmaVigente: boolean;
+  identidadVigente: boolean;
+}
+
+// GET /api/v1/tramites/legal-representatives/lookup?nit=NNN — precarga comprador/vendedor por NIT.
+// 200 con el match (compañía + representante(s) + banderas de firma/identidad VIGENTES al momento) o
+// 404 → null (el FE cae a la consulta RUES/RUNT normal). HU #10937: `representantes` trae TODOS los
+// representantes activos de la compañía para el selector; `representante`/`firmaVigente`/
+// `identidadVigente` reflejan el primario (primero) por compatibilidad con el consumo previo.
+export interface LegalRepresentativeLookupResult {
+  company: LegalRepresentativeLookupCompany;
+  representante: LegalRepresentativeLookupContact;
+  firmaVigente: boolean;
+  identidadVigente: boolean;
+  /** HU #10937 — todos los representantes activos de la compañía (para elegir cuál firma). */
+  representantes: LegalRepresentativeOption[];
 }
 
 // ── Semáforo de consulta (stub #10201) ─────────────────────────────
@@ -341,6 +511,14 @@ export interface PreflightSnapshot {
   overall: PreflightOverall;
   checks: PreflightCheck[];
   createdAt: string;
+  /**
+   * HU #10885 (Feature #10862, CF-04, AC1) — presentes solo cuando el snapshot viene de
+   * `tramitesClient.runConsultation` (espejo de `ConsultationResult.fromCache/queriedAt`, ADR-0030).
+   * `runPreflight`/`getPreflight` (semáforo multi-proveedor) no los completan hoy: quedan
+   * `undefined` y el panel simplemente no muestra el badge de origen/fecha.
+   */
+  fromCache?: boolean;
+  queriedAt?: string | null;
 }
 
 // ── Consulta real #10201: POST /instances/{id}/consultations/{templateCode} ──
@@ -365,6 +543,13 @@ export interface ConsultationResult {
   overall: PreflightOverall;
   checks: ConsultationCheck[];
   hydratedFields: ConsultationHydratedField[];
+  /**
+   * HU #10878/#10885 (ADR-0030, CF-04) — `true` cuando el resultado se sirvió desde
+   * `tramites.external_query_cache` (AC1), sin llamar al proveedor externo. `queriedAt` es la
+   * fecha de la consulta ORIGEN (la que generó el dato cacheado, no necesariamente "ahora").
+   */
+  fromCache?: boolean;
+  queriedAt?: string | null;
 }
 
 // ── Documentos / checklist del trámite (Slice 3) ───────────────────
@@ -416,6 +601,20 @@ export interface DocumentOcrResult {
    * multi-documento; null/ausente si no hubo recorte. El wizard sube este recorte en vez del original.
    */
   extractedPdfBase64?: string | null;
+}
+
+/**
+ * HU #10975 (Feature #10972) — resultado de persistir en `field_values` lo que extrajo el OCR.
+ * Las dos listas de omitidos son deliberadas: sin ellas, "el certificado sigue saliendo vacío"
+ * no se puede depurar desde fuera del backend.
+ */
+export interface PersistOcrFieldsResult {
+  /** Cuántas llaves se escribieron efectivamente. */
+  persistidos: number;
+  /** Llaves que ya tenían un valor de mayor precedencia (consulta al RUNT o dato del usuario). */
+  omitidosPorPrecedencia: string[];
+  /** Campos del OCR que no están en la whitelist del tipo de documento. */
+  ignoradosFueraDeAlcance: string[];
 }
 
 /** Item del checklist guiado por la tipología del trámite. */
@@ -496,6 +695,17 @@ export interface WizardState {
    * documento (se consulta y se genera el certificado). Ausente/false ⇒ se oculta.
    */
   rnmcEnabled?: boolean;
+  /**
+   * HU #10879/#10883 — paso actual PERSISTIDO (autosave del avance del wizard, PATCH
+   * /instances/{id}/current-step). Si NO es null/ausente, PRIMA como punto de retoma al reabrir el
+   * borrador (AC2 de HU #10883): el frontend abre en esta `key` de paso. Si es null, el frontend cae
+   * al paso DERIVADO de los gates (comportamiento previo, sin regresión).
+   */
+  persistedCurrentStep?: string | null;
+  /** Subsanación activa sobre rechazado (edición sin cambiar status). */
+  subsanacionActiva?: boolean;
+  /** Veces que se activó la subsanación en este expediente. */
+  subsanacionCount?: number;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
@@ -693,18 +903,30 @@ export interface IniciarBiometriaResult {
 export interface BiometricValidationsResponse {
   validations: BiometricValidation[];
   provider: string;
+  /**
+   * HU #11014 (ADR-0025 §4) — partes cuya identidad queda cubierta por la FIRMA DEL BAÚL en vez de por
+   * una validación biométrica. Se rotulan como «firmado desde el baúl»: no hay certificado que mostrar.
+   */
+  firmaBaulPartes?: string[] | null;
 }
 
 /**
  * Espejo de TenantBiometricValidationDto (HU #10234): fila de la vista transversal del submódulo
  * "Validaciones de Identidad". Incluye el trámite al que pertenece (para navegar). Sin email ni
  * captureUrl (vista de monitoreo, no de gestión de la captura).
+ *
+ * HU #10869 — Feature #10864: instanceId, referenceNumber y modalidad son nullable para soportar
+ * prevalidaciones standalone (sin trámite asociado). Los campos null se muestran como "—" en la
+ * tabla y la navegación al trámite se condiciona a instanceId != null.
  */
 export interface TenantBiometricValidation {
   id: string;
-  instanceId: string;
-  referenceNumber: string;
-  modalidad: string;
+  /** HU #10869 — null para prevalidaciones standalone (sin trámite). */
+  instanceId: string | null;
+  /** HU #10869 — null para prevalidaciones standalone (sin trámite). */
+  referenceNumber: string | null;
+  /** HU #10869 — null para prevalidaciones standalone (sin trámite). */
+  modalidad: string | null;
   partyRole: BiometricParte | null;
   name: string;
   documentType: string;
@@ -722,6 +944,19 @@ export interface TenantBiometricValidation {
   validUntil: string | null;
   /** Días calendario de vigencia restantes (0 si venció). Null si no hay aprobación. */
   daysRemaining: number | null;
+  /**
+   * CF-05 (HU #10886, AC2) — enlace de captura VIGENTE, para reenviarlo por otros medios. Null cuando
+   * no hay nada que compartir: proveedor sin enlace (mock), estado terminal o enlace ya vencido.
+   */
+  captureUrl: string | null;
+  /** Vencimiento del ENLACE de captura (distinto de `validUntil`, que es la vigencia de la identidad). */
+  linkExpiresAt: string | null;
+  /**
+   * CF-05 (Feature #11004, HU #11006) — correo de la validación, vista autenticada del gestor del
+   * tenant (D3): completo, sin enmascarar. `null` si el backend aún no lo envía (HU #11005 en curso
+   * en paralelo) — se muestra "—" sin romper la tabla.
+   */
+  email: string | null;
 }
 
 /** KPIs agregados del submódulo de Validaciones (espejo de BiometricValidationStatsDto). */
@@ -777,6 +1012,11 @@ export interface TenantBiometricValidationFilters {
   page?: number;
   /** Filas por página (10–50). */
   pageSize?: number;
+  /**
+   * CF-02 (Feature #11004, HU #11006) — true = solo prevalidaciones standalone (sin trámite);
+   * false = solo ligadas a trámite; omitido = todas (comportamiento de Validaciones — CF-03).
+   */
+  standalone?: boolean;
 }
 
 /** Cola en dead-letter de una validación atascada. `envio` = el envío al proveedor (Kyverum) agotó
@@ -809,6 +1049,43 @@ export interface StuckIdentityValidationsResponse {
   stuck: StuckIdentityValidation[];
   total: number;
   maxDeliveryAttempts: number;
+}
+
+/**
+ * Categoría de alerta ACCIONABLE de una validación de identidad (HU #10873/#10875). Espejo de
+ * `IdentityValidationAlertKinds` del backend. `null` (fuera de este union) = sin alerta, solo puede
+ * traer recordatorio de reenvío (`RequiresResendReminder`).
+ */
+export type IdentityValidationAlertKind = 'rechazada' | 'expirada' | 'por_vencer' | 'atascada';
+
+/**
+ * Fila de alerta/recordatorio de validación de identidad (HU #10873, AC1/AC2). Espejo de
+ * `IdentityValidationAlertDto`. Consumida por la vista consolidada del trámite (HU #10875, POR PULL —
+ * sin campana ni push).
+ */
+export interface IdentityValidationAlert {
+  id: string;
+  /** null en prevalidaciones standalone (Feature #10864): la validación no cuelga de ningún trámite. */
+  instanceId: string | null;
+  referenceNumber: string;
+  recipientUserId: string;
+  // string (no BiometricParte): el DTO del backend no acota el rol a comprador/vendedor — futuro-proof.
+  partyRole: string | null;
+  name: string;
+  documentType: string;
+  documentNumber: string;
+  status: BiometricEstado;
+  alertKind: IdentityValidationAlertKind | null;
+  requiresResendReminder: boolean;
+  daysRemainingVigencia: number | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+/** Respuesta de GET .../identity-validation/alerts (tenant o por instancia). Espejo de IdentityValidationAlertsResponse. */
+export interface IdentityValidationAlertsResponse {
+  alerts: IdentityValidationAlert[];
+  total: number;
 }
 
 /** Vista PÚBLICA por token (sin PII sensible). Espejo de BiometriaPublicViewDto. */
@@ -916,6 +1193,15 @@ export interface GenerarFurResult {
   documents: FurDocument[];
 }
 
+/**
+ * Respuesta de GET /instances/{id}/fur/template-format (HU #10924): plantilla de FUR que aplica según
+ * la clasificación del vehículo. `format` ∈ 'AUTOMOTOR' | 'MAQUINARIA' | 'REMOLQUES'.
+ */
+export interface FurTemplateFormatResult {
+  format: string;
+  vehicleClass: string | null;
+}
+
 // ── Impronta integrada al trámite (paso FUR) ─────────────────────────
 // POST /api/v1/tramites/instances/{id}/attachments/generate-impronta -> GenerarImprontaAttachmentResult (201)
 // Genera el Certificado de Improntas Digitales (Kyverum RUNT) con los datos del trámite y lo
@@ -943,6 +1229,12 @@ export interface ConsolidadoDocument {
 
 export interface GenerarConsolidadoResult {
   document: ConsolidadoDocument;
+  /**
+   * HU #11017 — el consolidado ya no se bloquea por documentos obligatorios faltantes: se genera y se
+   * marca. `incompleto` avisa al gestor y `documentosFaltantes` dice exactamente qué falta.
+   */
+  incompleto?: boolean;
+  documentosFaltantes?: string[] | null;
 }
 
 // ── Participantes del portal (Slice 7B) — lado gestor autenticado ───
@@ -1074,6 +1366,82 @@ export interface PortalFirmaUrl {
 /** Resultado de finalizar la participación. */
 export interface FinalizarPortalResult {
   completedAt: string;
+}
+
+// ── Prevalidación de identidad standalone (Feature #10864 — HU #10868) ──────
+// POST /api/v1/tramites/biometric-validations (sin instanceId)
+// Crea una validación biométrica sin trámite previo. El enlace de captura
+// se devuelve en captureUrl para que el operador lo comparta.
+
+/**
+ * Tipo de persona para prevalidación standalone. 'natural' → valida al titular;
+ * 'juridical' → valida al representante legal (datos legalRep* requeridos).
+ */
+export type PrevalidacionPersonType = 'natural' | 'juridical';
+
+/**
+ * Cuerpo del POST /api/v1/tramites/biometric-validations (sin trámite).
+ * Espejo de IniciarPrevalidacionRequest del contrato OpenAPI (§5.2 del diseño).
+ */
+export interface IniciarPrevalidacionRequest {
+  documentType: string;
+  documentNumber: string;
+  name: string;
+  email: string;
+  personType?: PrevalidacionPersonType;
+  legalRepDocumentType?: string | null;
+  legalRepDocumentNumber?: string | null;
+  legalRepName?: string | null;
+  legalRepEmail?: string | null;
+}
+
+/**
+ * Resultado del POST /api/v1/tramites/biometric-validations (201/202).
+ * Espejo de IniciarKyverumVerifyResult del contrato OpenAPI (§5.1 del diseño).
+ */
+export interface IniciarPrevalidacionResult {
+  validationId: string;
+  captureUrl: string | null;
+  status: BiometricEstado;
+  /** 201 = creada de inmediato; 202 = encolada (fallo transitorio del proveedor). */
+  enqueued?: boolean;
+}
+
+// ── HU #10944 (Feature #10864, CF-03) — editar y reenviar prevalidación ─────
+
+/**
+ * Cuerpo del PATCH /api/v1/tramites/biometric-validations/{id} — HU #10943/#10944, D7.
+ * Todos los campos son opcionales: solo se envían los que el operador cambió. El tipo/número
+ * de documento (titular o RL) NUNCA se envían desde esta pantalla — no son editables (D7); el
+ * backend los acepta solo para DETECTAR un intento de cambio (422 documento_no_editable).
+ */
+export interface EditarPrevalidacionRequest {
+  name?: string;
+  email?: string;
+  legalRepName?: string;
+  legalRepEmail?: string;
+}
+
+/**
+ * Resultado del PATCH — espejo de EditarPrevalidacionResult del contrato OpenAPI.
+ * `resent=true` ⟺ el cambio de correo disparó el reenvío automático (D8); `captureUrl` solo viene
+ * poblado si `resent=true` y el envío no quedó encolado (fallo transitorio del proveedor).
+ */
+export interface EditarPrevalidacionResult {
+  validation: BiometricValidation;
+  captureUrl: string | null;
+  resent: boolean;
+}
+
+/**
+ * Resultado del POST .../resend (reenvío manual) — espejo de ReenviarPrevalidacionResult del
+ * contrato OpenAPI. `queued=true` (HTTP 202) ⟺ el proveedor falló transitoriamente; el reenvío
+ * YA consumió cupo del tope (D10) aunque el envío no se completó.
+ */
+export interface ReenviarPrevalidacionResult {
+  validation: BiometricValidation;
+  captureUrl: string;
+  queued?: boolean;
 }
 
 // ── HU-2 (N03, RF05) — historial de transiciones de estado ─────────────────

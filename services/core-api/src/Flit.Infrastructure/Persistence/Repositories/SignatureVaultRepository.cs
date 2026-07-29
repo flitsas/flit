@@ -60,7 +60,8 @@ internal sealed class SignatureVaultRepository : ISignatureVaultRepository
             data.StorageSha256,
             data.VigenciaDesde,
             data.VigenciaHasta,
-            data.MandateSignerId);
+            data.MandateSignerId,
+            data.CodigoHash);
 
         var now = DateTimeOffset.UtcNow;
         var entity = new SignatureVaultEntity
@@ -78,6 +79,7 @@ internal sealed class SignatureVaultRepository : ISignatureVaultRepository
             VigenciaDesde = aggregate.VigenciaDesde,
             VigenciaHasta = aggregate.VigenciaHasta,
             MandateSignerId = aggregate.MandateSignerId,
+            CodigoHash = aggregate.CodigoHash,
             CreatedAt = now,
             CreatedBy = data.CreatedBy,
         };

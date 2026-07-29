@@ -104,19 +104,33 @@ export function fetchOtBandejaHealth(
   });
 }
 
-export function approveOtClientProcedure(id: string): Promise<OtClientProcedure> {
+/**
+ * Aprueba un trámite entregado. ADR-0036 §D9 (HU #10916): si el trámite exige mandato y hay varios
+ * mandatarios sin cotejo, el backend responde 409 con `{ error: "mandatario_requerido" }` (ApiError,
+ * status 409); el llamador debe reintentar pasando `mandateSignerId` con el mandatario elegido.
+ * SuperAdmin debe pasar `scope.transitOfficeId` (mismo override que list/consolidado).
+ */
+export function approveOtClientProcedure(
+  id: string,
+  mandateSignerId?: string,
+  scope?: OtApiScope,
+): Promise<OtClientProcedure> {
   return apiFetch<OtClientProcedure>(`${base}/client-procedures/${id}/approve`, {
     method: "POST",
+    body: mandateSignerId ? { mandateSignerId } : undefined,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
   });
 }
 
 export function rejectOtClientProcedure(
   id: string,
   body: RejectOtClientProcedureRequest,
+  scope?: OtApiScope,
 ): Promise<OtClientProcedure> {
   return apiFetch<OtClientProcedure>(`${base}/client-procedures/${id}/reject`, {
     method: "POST",
     body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
   });
 }
 

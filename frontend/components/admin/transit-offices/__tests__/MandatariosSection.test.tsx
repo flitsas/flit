@@ -1,5 +1,6 @@
-// ADR-0023 — pestaña "Mandatario" del hub Admin OT: 4 estados de UI, alta con multiselect,
-// exclusividad (compañía tomada por otro mandatario deshabilitada + badge) e inactivación.
+// ADR-0023 + ADR-0036 — pestaña "Mandatario" del hub Admin OT: 4 estados de UI, alta con multiselect,
+// MULTIPLICIDAD (una compañía puede tener varios mandatarios), tipo de documento/correo/usuario e
+// inactivación.
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -15,6 +16,12 @@ vi.mock("@/lib/api/admin-mandate-signers", () => ({
   updateMandateSigner: vi.fn(),
   inactivateMandateSigner: vi.fn(),
   reactivateMandateSigner: vi.fn(),
+  sendMandateSignerIdentity: vi.fn(),
+  resendMandateSignerIdentity: vi.fn(),
+}));
+
+vi.mock("@/lib/api/admin-ot-security", () => ({
+  fetchOtUsers: vi.fn().mockResolvedValue({ data: [] }),
 }));
 
 import {
@@ -23,6 +30,8 @@ import {
   createMandateSigner,
   inactivateMandateSigner,
   reactivateMandateSigner,
+  resendMandateSignerIdentity,
+  sendMandateSignerIdentity,
 } from "@/lib/api/admin-mandate-signers";
 
 const companies: OtCompany[] = [
@@ -31,18 +40,15 @@ const companies: OtCompany[] = [
     legalName: "Compañía A S.A.S.",
     isActive: true,
     isEnabled: true,
-    assignedSignerId: null,
-    assignedSignerName: null,
-    assignedSignerHash: null,
+    assignedSigners: [],
   },
   {
     companyTenantId: "cia-b",
     legalName: "Compañía B S.A.S.",
     isActive: true,
     isEnabled: true,
-    assignedSignerId: "signer-2",
-    assignedSignerName: "Daniel Ríos",
-    assignedSignerHash: "abc123",
+    // ADR-0036 multiplicidad: ya tiene un mandatario, pero admite más.
+    assignedSigners: [{ mandateSignerId: "signer-2", fullName: "Daniel Ríos", integrityHash: "abc123" }],
   },
 ];
 
@@ -50,8 +56,14 @@ const samuel: MandateSigner = {
   id: "signer-1",
   transitOfficeId: "ot-1",
   fullName: "Samuel Cárdenas",
+  documentType: "CC",
   documentNumber: "1090123456",
   integrityHash: "a".repeat(64),
+  email: null,
+  userId: null,
+  identityValidationRef: null,
+  identityStatus: "none",
+  signatureVaultId: null,
   registeredAt: "2026-07-07T12:00:00Z",
   isActive: true,
   companyTenantIds: ["cia-a"],
@@ -65,7 +77,7 @@ function renderSection() {
   );
 }
 
-describe("MandatariosSection (ADR-0023)", () => {
+describe("MandatariosSection (ADR-0023 + ADR-0036)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchOtCompanies).mockResolvedValue(companies);
@@ -104,7 +116,7 @@ describe("MandatariosSection (ADR-0023)", () => {
     expect(screen.queryByText("1090123456")).not.toBeInTheDocument();
   });
 
-  it("multiselect: la compañía tomada por otro mandatario está deshabilitada con badge", async () => {
+  it("multiplicidad: una compañía con otro mandatario NO se deshabilita, solo se anota", async () => {
     vi.mocked(fetchMandateSigners).mockResolvedValue([samuel]);
     const user = userEvent.setup();
     renderSection();
@@ -114,12 +126,12 @@ describe("MandatariosSection (ADR-0023)", () => {
 
     const list = screen.getByTestId("ms-company-list");
     expect(within(list).getByLabelText(/Compañía A/i)).not.toBeDisabled();
-    // B ya es de Daniel Ríos → deshabilitada + badge.
-    expect(within(list).getByLabelText(/Compañía B/i)).toBeDisabled();
-    expect(within(list).getByText(/ya tiene mandatario: Daniel Ríos/i)).toBeInTheDocument();
+    // B ya tiene a Daniel Ríos, pero con multiplicidad sigue seleccionable (solo se anota).
+    expect(within(list).getByLabelText(/Compañía B/i)).not.toBeDisabled();
+    expect(within(list).getByText(/1 mandatario más/i)).toBeInTheDocument();
   });
 
-  it("alta: registra un mandatario con nombre, documento y compañía", async () => {
+  it("alta: registra un mandatario con tipo/número de documento y compañía", async () => {
     vi.mocked(fetchMandateSigners).mockResolvedValue([]);
     vi.mocked(createMandateSigner).mockResolvedValue({ id: "new-1", integrityHash: "b".repeat(64) });
     const user = userEvent.setup();
@@ -135,15 +147,18 @@ describe("MandatariosSection (ADR-0023)", () => {
     await waitFor(() =>
       expect(createMandateSigner).toHaveBeenCalledWith("ot-1", {
         fullName: "Nuevo Firmante",
+        documentType: "CC",
         documentNumber: "555999",
+        email: null,
+        userId: null,
         companyTenantIds: ["cia-a"],
       }),
     );
   });
 
-  it("alta: muestra el mensaje del backend (422) al chocar la exclusividad", async () => {
+  it("alta: muestra el mensaje del backend (422)", async () => {
     vi.mocked(fetchMandateSigners).mockResolvedValue([]);
-    const serverMessage = "La compañía ya tiene un mandatario asignado: Daniel Ríos.";
+    const serverMessage = "La compañía no está habilitada o está inactiva en el OT.";
     vi.mocked(createMandateSigner).mockRejectedValue(
       new ApiValidationError([{ field: "companyTenantIds", message: serverMessage }], 422),
     );
@@ -189,5 +204,52 @@ describe("MandatariosSection (ADR-0023)", () => {
     await waitFor(() =>
       expect(reactivateMandateSigner).toHaveBeenCalledWith("ot-1", "signer-1"),
     );
+  });
+
+  // HU #11000 — la tabla muestra el estado de identidad y ofrece la acción sin abrir el panel.
+  it.each([
+    ["valid", "Identidad validada", "Reenviar validación"],
+    ["expired", "Identidad vencida", "Renovar validación"],
+    ["pending", "Validación en proceso", "Reenviar validación"],
+    ["none", "Identidad sin validar", "Enviar validación"],
+  ] as const)(
+    "columna Identidad: %s pinta «%s» y ofrece «%s»",
+    async (identityStatus, label, action) => {
+      vi.mocked(fetchMandateSigners).mockResolvedValue([
+        { ...samuel, identityStatus, email: "samuel@x.co" },
+      ]);
+      renderSection();
+      await screen.findByText("Samuel Cárdenas");
+
+      expect(within(screen.getByTestId("ms-identity-signer-1")).getByText(label)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: new RegExp(action, "i") })).toBeInTheDocument();
+    },
+  );
+
+  it("la acción de identidad renueva la vencida y recarga la lista", async () => {
+    vi.mocked(fetchMandateSigners).mockResolvedValue([
+      { ...samuel, identityStatus: "expired", email: "samuel@x.co" },
+    ]);
+    vi.mocked(resendMandateSignerIdentity).mockResolvedValue({
+      id: "val-1", status: "enviado", captureUrl: null, validUntil: null, reused: false,
+    });
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Samuel Cárdenas");
+
+    await user.click(screen.getByRole("button", { name: /Renovar validación de Samuel Cárdenas/i }));
+
+    await waitFor(() =>
+      expect(resendMandateSignerIdentity).toHaveBeenCalledWith("ot-1", "signer-1"),
+    );
+    expect(sendMandateSignerIdentity).not.toHaveBeenCalled();
+  });
+
+  it("sin correo, la acción de identidad queda deshabilitada", async () => {
+    vi.mocked(fetchMandateSigners).mockResolvedValue([{ ...samuel, email: null }]);
+    renderSection();
+    await screen.findByText("Samuel Cárdenas");
+
+    expect(screen.getByRole("button", { name: /Enviar validación/i })).toBeDisabled();
   });
 });

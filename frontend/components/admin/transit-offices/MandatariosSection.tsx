@@ -3,18 +3,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
+import { ShieldAlert, ShieldCheck } from "lucide-react";
 import {
   createMandateSigner,
-  fetchMandateSigners,
+  fetchMandateSignersWithFlags,
   fetchOtCompanies,
+  linkMandateSignerIdentity,
+  mockMandateSignerIdentity,
   inactivateMandateSigner,
   reactivateMandateSigner,
+  resendMandateSignerIdentity,
+  sendMandateSignerIdentity,
   updateMandateSigner,
   type MandateSigner,
   type MandateSignerInput,
+  type MandateSignerSaved,
   type OtCompany,
 } from "@/lib/api/admin-mandate-signers";
 import { MandatarioFormPanel } from "./MandatarioFormPanel";
+import { hasPriorIdentity, identityUi } from "./mandatario-identity";
 
 /**
  * Pestaña "Mandatario" del hub Admin OT (ADR-0023): lista los mandatarios activos del OT,
@@ -29,21 +36,24 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<MandateSigner | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // HU #11028 — la simulación de identidad solo existe donde el ambiente la habilita.
+  const [mockEnabled, setMockEnabled] = useState(false);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const [signerList, companyList] = await Promise.all([
-          fetchMandateSigners(transitOfficeId, signal),
+        const [signerResult, companyList] = await Promise.all([
+          fetchMandateSignersWithFlags(transitOfficeId, signal),
           fetchOtCompanies(transitOfficeId, signal),
         ]);
         if (signal?.aborted) {
           return;
         }
-        setSigners(signerList);
+        setSigners(signerResult.signers);
+        setMockEnabled(signerResult.mockIdentityEnabled);
         setCompanies(companyList);
-        setStatus(signerList.length === 0 ? "empty" : "ready");
+        setStatus(signerResult.signers.length === 0 ? "empty" : "ready");
       } catch {
         if (!signal?.aborted) {
           setStatus("error");
@@ -88,6 +98,64 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
       await load();
     } catch {
       show("No se pudo inactivar el mandatario.", "error");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // HU #11000 — acción rápida de identidad desde la fila: envía la primera validación o
+  // reenvía/renueva la existente (vencida, rechazada o en curso), sin abrir el panel de edición.
+  const handleIdentity = async (signer: MandateSigner) => {
+    setBusyId(signer.id);
+    try {
+      const result = hasPriorIdentity(signer.identityStatus)
+        ? await resendMandateSignerIdentity(transitOfficeId, signer.id)
+        : await sendMandateSignerIdentity(transitOfficeId, signer.id);
+      show(
+        result.reused
+          ? `${signer.fullName} ya tiene una validación de identidad vigente.`
+          : `Validación de identidad enviada al correo de ${signer.fullName}.`,
+        "success",
+      );
+      await load();
+    } catch {
+      show("No se pudo enviar la validación de identidad.", "error");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // HU #11028 — vincula una identidad que la PERSONA ya validó (como representante legal, en otro
+  // organismo…). No envía correo: si no hay ninguna vigente, se dice y no se crea nada.
+  const handleLinkIdentity = async (signer: MandateSigner) => {
+    setBusyId(signer.id);
+    try {
+      await linkMandateSignerIdentity(transitOfficeId, signer.id);
+      show(`Identidad vigente vinculada a ${signer.fullName}.`, "success");
+      await load();
+    } catch (err) {
+      const conflicto = err instanceof Error && err.message.includes("409");
+      show(
+        conflicto
+          ? `${signer.fullName} no tiene una validación de identidad vigente que vincular.`
+          : "No se pudo vincular la validación de identidad.",
+        "error",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // HU #11028 — simula una validación aprobada para poder probar la firma del mandato en ambientes
+  // donde nadie puede completar una biométrica real. Queda marcada como simulada.
+  const handleMockIdentity = async (signer: MandateSigner) => {
+    setBusyId(signer.id);
+    try {
+      await mockMandateSignerIdentity(transitOfficeId, signer.id);
+      show(`Validación de identidad SIMULADA para ${signer.fullName} (solo pruebas).`, "success");
+      await load();
+    } catch {
+      show("No se pudo simular la validación de identidad.", "error");
     } finally {
       setBusyId(null);
     }
@@ -152,6 +220,9 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
                 Compañías
               </th>
               <th className="px-4 py-2.5 bg-muted">
+                Identidad
+              </th>
+              <th className="px-4 py-2.5 bg-muted">
                 Huella
               </th>
               <th className="rounded-r-xl px-4 py-2.5 text-right bg-muted">
@@ -182,6 +253,25 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
                         .map((id) => companyNameById.get(id) ?? id)
                         .join(", ")}
                 </td>
+                <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}>
+                  {(() => {
+                    const identity = identityUi(signer.identityStatus);
+                    return (
+                      <span
+                        data-testid={`ms-identity-${signer.id}`}
+                        className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                        style={identity.style}
+                      >
+                        {identity.isValid ? (
+                          <ShieldCheck className="h-3 w-3" />
+                        ) : (
+                          <ShieldAlert className="h-3 w-3" />
+                        )}
+                        {identity.label}
+                      </span>
+                    );
+                  })()}
+                </td>
                 <td
                   className={`border-y px-4 py-3 font-mono opacity-70 ${signer.isActive ? "" : "opacity-40"}`}
                   title={signer.integrityHash}
@@ -192,6 +282,48 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
                   <div className="flex justify-end gap-2">
                     {signer.isActive ? (
                       <>
+                        <button
+                          type="button"
+                          className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                          style={{ color: "#557EFF", borderColor: "#557EFF" }}
+                          disabled={busyId === signer.id || !signer.email}
+                          title={
+                            signer.email
+                              ? undefined
+                              : "Agrega un correo al mandatario para poder enviarle la validación."
+                          }
+                          aria-label={`${identityUi(signer.identityStatus).action} de ${signer.fullName}`}
+                          onClick={() => void handleIdentity(signer)}
+                        >
+                          {identityUi(signer.identityStatus).action}
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                          disabled={busyId === signer.id || signer.identityStatus === "valid"}
+                          title={
+                            signer.identityStatus === "valid"
+                              ? "El mandatario ya tiene una identidad validada y vigente."
+                              : "Vincula una validación de identidad que esta persona ya haya completado."
+                          }
+                          aria-label={`Vincular validación existente de ${signer.fullName}`}
+                          onClick={() => void handleLinkIdentity(signer)}
+                        >
+                          Vincular validación
+                        </button>
+                        {mockEnabled && (
+                          <button
+                            type="button"
+                            className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                            style={{ color: "#b45309", borderColor: "#f0c38e" }}
+                            disabled={busyId === signer.id || signer.identityStatus === "valid"}
+                            title="Crea una validación de identidad SIMULADA. Solo para ambientes de prueba."
+                            aria-label={`Simular validación de identidad de ${signer.fullName}`}
+                            onClick={() => void handleMockIdentity(signer)}
+                          >
+                            Simular validación
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold"
@@ -233,19 +365,35 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
 
       <MandatarioFormPanel
         open={formOpen}
+        transitOfficeId={transitOfficeId}
         editing={editing}
         companies={companies}
         onClose={() => setFormOpen(false)}
         onSubmit={handleSubmit}
-        onSaved={() => {
+        onSaved={(saved) => {
           setFormOpen(false);
-          show(editing ? "Mandatario actualizado." : "Mandatario registrado.", "success");
+          // HU #11000 — el aviso refleja qué pasó con la validación de identidad en el alta.
+          show(editing ? "Mandatario actualizado." : mensajeAlta(saved.identity), "success");
           void load();
         }}
         onError={(message) => show(message, "error")}
       />
     </div>
   );
+}
+
+/** Aviso del alta según el desenlace de la validación de identidad (HU #11000). */
+function mensajeAlta(identity: MandateSignerSaved["identity"]): string {
+  switch (identity) {
+    case "sent":
+      return "Mandatario registrado. Se envió la validación de identidad a su correo.";
+    case "reused":
+      return "Mandatario registrado. Ya tenía una identidad validada vigente: se apalancó.";
+    case "failed":
+      return "Mandatario registrado, pero no se pudo enviar la validación de identidad. Reenvíala desde la fila.";
+    default:
+      return "Mandatario registrado. Agrégale un correo para enviarle la validación de identidad.";
+  }
 }
 
 /** Enmascara el número de documento (PII, Ley 1581): solo se muestran los últimos 4 dígitos. */

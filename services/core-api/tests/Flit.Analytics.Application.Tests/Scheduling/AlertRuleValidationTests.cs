@@ -56,6 +56,20 @@ public sealed class AlertRuleValidationTests
     }
 
     [Theory]
+    [InlineData("ict_stuck_in_validation")]
+    [InlineData("ict_novelty_rate_pct")]
+    [InlineData("ict_webhook_delivery_failures")]
+    [InlineData("ict_jobs_out_of_sla")]
+    public void Metricas_ict_estan_en_el_vocabulario(string metric)
+    {
+        // HU5 / E1: las métricas de observabilidad ICT son válidas para crear reglas de alerta.
+        var (result, error) = SchedulingValidation.ValidateAlertRule(Valid(metric: metric));
+
+        error.Should().BeNull();
+        result!.Metric.Should().Be(metric);
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("eq")]
     public void Operador_fuera_del_vocabulario_devuelve_error(string? @operator)

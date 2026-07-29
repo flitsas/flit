@@ -32,7 +32,7 @@ public sealed class SetImprontaDiferidaHandler(IProcedureInstanceRepository repo
         var instance = await repo.GetByIdWithWizardGraphAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft");
 
         // Se resuelve el Id real del ítem (no se asume el literal "impronta"): en la ruta de matriz los

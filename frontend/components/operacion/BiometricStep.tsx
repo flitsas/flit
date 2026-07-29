@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Check,
-  ChevronRight,
   Copy,
   ExternalLink,
   FileSignature,
@@ -14,13 +13,13 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { getToken } from '@/lib/api/client';
-import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
+import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type {
+  BiometricEstado,
   BiometricParte,
   BiometricValidation,
-  IdentityAuditEvent,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
@@ -57,26 +56,34 @@ const PARTE_LABEL: Record<BiometricParte, string> = {
 
 const KYVERUM = 'kyverum';
 
+// CF-08 (Feature #11004, HU #11009) — etiquetas del historial (mismo vocabulario que Validaciones/
+// Prevalidaciones e IdentityStatusPanel).
+const ESTADO_LABEL: Record<BiometricEstado, string> = {
+  enviado: 'Enviado',
+  en_proceso: 'En proceso',
+  aprobado: 'Aprobado',
+  rechazado: 'Rechazado',
+  expirado: 'Expirado',
+  pendiente_envio: 'Pendiente de envío',
+  error_envio: 'Error de envío',
+};
+
+const ESTADO_TONE: Record<BiometricEstado, StatusTone> = {
+  enviado: 'info',
+  en_proceso: 'warning',
+  aprobado: 'success',
+  rechazado: 'danger',
+  expirado: 'neutral',
+  pendiente_envio: 'info',
+  error_envio: 'danger',
+};
+
 /** Formatea una fecha ISO a un texto legible (es-CO). Devuelve el ISO crudo si no parsea. */
 function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
-}
-
-/**
- * ¿El usuario actual es SuperAdmin? Se resuelve del JWT en cliente (tras montar, para no romper la
- * hidratación SSR). Gatea la bitácora técnica de la validación, que trae detalle de soporte
- * (descifrado, error_type, firma) que no debe ver un gestor normal.
- */
-function useIsSuperAdmin(): boolean {
-  const [is, setIs] = useState(false);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIs(isSuperAdmin(decodeJwtPayload(getToken())));
-  }, []);
-  return is;
 }
 
 /**
@@ -212,6 +219,10 @@ export function BiometricStep({
                 instanceId={instanceId}
                 provider={provider}
                 validation={validation}
+                // CF-08 (Feature #11004, HU #11009) — TODAS las validaciones de la parte (orden
+                // cronológico), no solo la vigente: la tarjeta de acción sigue mostrando solo esta
+                // última, pero el historial completo queda visible debajo.
+                historial={matches}
                 vaultCovered={vaultCoveredPartes.includes(parte)}
                 onChanged={() => void handleRefresh()}
               />
@@ -251,6 +262,7 @@ function ParteCard({
   instanceId,
   provider,
   validation,
+  historial,
   vaultCovered,
   onChanged,
 }: {
@@ -258,14 +270,12 @@ function ParteCard({
   instanceId: string | null;
   provider: string;
   validation: BiometricValidation | null;
+  /** CF-08 (Feature #11004, HU #11009) — todas las validaciones de la parte, orden cronológico. */
+  historial: BiometricValidation[];
   vaultCovered: boolean;
   onChanged: () => void;
 }) {
   const estado = validation?.status;
-  const isAdmin = useIsSuperAdmin();
-  // La bitácora solo aplica a validaciones Kyverum (mock no genera eventos) y solo para soporte.
-  // No aplica a la cobertura por baúl (no hay validación biométrica que auditar).
-  const showAudit = !vaultCovered && isAdmin && validation != null && validation.provider === KYVERUM;
   return (
     <fieldset
       className="rounded-xl border p-4"
@@ -305,10 +315,67 @@ function ParteCard({
         />
       )}
 
-      {showAudit && (
-        <IdentityAuditPanel instanceId={instanceId} validationId={validation!.id} />
-      )}
+      {/* CF-08 (Feature #11004, HU #11009) — historial completo de la parte (ya NO se limita a
+          matches[matches.length-1]); no aplica a la cobertura por baúl (no hay biométrica que auditar). */}
+      {!vaultCovered && <HistorialValidaciones historial={historial} vigenteId={validation?.id ?? null} />}
     </fieldset>
+  );
+}
+
+/**
+ * CF-08 (Feature #11004, HU #11009) — "Historial de validaciones" de una parte: todas las filas que
+ * `GET .../biometric` devuelve para esa parte, no solo la vigente/más reciente (que sigue siendo la
+ * única con tarjeta de acción arriba). Cada ítem trae su propio tracking (bitácora) cuando es Kyverum
+ * — mock no genera eventos de auditoría. Se omite por completo si la parte aún no tiene ninguna
+ * validación (estado vacío, cubierto por `StartAction`).
+ */
+function HistorialValidaciones({
+  historial,
+  vigenteId,
+}: {
+  historial: BiometricValidation[];
+  vigenteId: string | null;
+}) {
+  if (historial.length === 0) return null;
+
+  // Con una sola validación no hay "historial" real que anunciar (es la misma que ya se ve en la
+  // tarjeta de acción de arriba): se conserva únicamente el acceso a su tracking, igual que antes de
+  // esta HU, sin el encabezado ni la fila de estado/fecha duplicada.
+  if (historial.length === 1) {
+    const [v] = historial;
+    return v.provider === KYVERUM ? <IdentityValidationTrackingPanel validationId={v.id} /> : null;
+  }
+
+  return (
+    <div className="mt-3 space-y-2 border-t pt-3">
+      <p className="text-[11px] font-semibold opacity-70">
+        Historial de validaciones ({historial.length})
+      </p>
+      <ul className="space-y-2">
+        {historial.map((v) => (
+          <li key={v.id} className="rounded-lg border p-2 text-[11px]" style={{ borderColor: '#EEF1F6' }}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <StatusBadge label={ESTADO_LABEL[v.status] ?? v.status} tone={ESTADO_TONE[v.status] ?? 'neutral'} />
+                {v.id === vigenteId && (
+                  <span
+                    className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold"
+                    style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+                  >
+                    Vigente
+                  </span>
+                )}
+                {v.score != null && <span className="opacity-60">{v.score}/100</span>}
+              </div>
+              <span className="opacity-60">
+                {formatFecha(v.validatedAt ?? v.expiresAt)}
+              </span>
+            </div>
+            {v.provider === KYVERUM && <IdentityValidationTrackingPanel validationId={v.id} />}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -701,146 +768,3 @@ function StartAction({
   );
 }
 
-/** Texto del resultado de un evento de bitácora, anexando el código HTTP si lo hay. */
-function auditOutcomeLabel(e: IdentityAuditEvent): string {
-  return e.httpStatus != null ? `${e.outcome} (HTTP ${e.httpStatus})` : e.outcome;
-}
-
-/**
- * Bitácora técnica (solo soporte/SuperAdmin) del ciclo de una validación de identidad. Disclosure
- * colapsable que carga los eventos bajo demanda (`GET .../audit`): envío, llegada del webhook, si
- * descifró el secreto, firma, resultado y reconciliaciones. Diagnóstico de "qué pasó" sin entrar a la
- * BD ni a los logs del pod. Sin PII ni secretos (el backend ya sanea).
- */
-function IdentityAuditPanel({
-  instanceId,
-  validationId,
-}: {
-  instanceId: string | null;
-  validationId: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [events, setEvents] = useState<IdentityAuditEvent[] | null>(null);
-  const [referenced, setReferenced] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadAudit = useCallback(async () => {
-    if (!instanceId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await tramitesClient.getBiometricAudit(instanceId, validationId);
-      setEvents(res.events);
-      setReferenced(res.referencedFromOtherProcedure ?? false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo cargar la bitácora.');
-    } finally {
-      setLoading(false);
-    }
-  }, [instanceId, validationId]);
-
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    // Carga perezosa: solo la primera vez que se abre (o si quedó sin datos por un error previo).
-    if (next && events === null && !loading) void loadAudit();
-  };
-
-  return (
-    <div className="mt-3 border-t pt-3">
-      <button
-        type="button"
-        onClick={toggle}
-        className="flex items-center gap-1.5 text-[11px] font-semibold opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        aria-expanded={open}
-        aria-label="Historial técnico de la validación (soporte)"
-      >
-        <ChevronRight
-          className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`}
-          aria-hidden
-        />
-        Historial técnico (soporte)
-      </button>
-
-      {open && (
-        <div className="mt-2 space-y-2">
-          {loading && (
-            <p className="text-[11px] opacity-60" role="status" aria-live="polite">
-              Cargando bitácora…
-            </p>
-          )}
-          {error && (
-            <p className="text-[11px]" style={{ color: '#FF4E00' }} role="alert" aria-live="polite">
-              {error}
-            </p>
-          )}
-          {/*
-           * HU #10350 — identidad reutilizada ("apalancada"): la validación se realizó en otro trámite
-           * del mismo cliente. Aviso informativo (no error); debajo se muestra su bitácora real.
-           */}
-          {referenced && (
-            <p
-              className="rounded-lg px-2.5 py-1.5 text-[11px]"
-              style={{ background: 'rgba(85,126,255,0.10)', color: '#3B5BDB' }}
-              role="status"
-            >
-              Validación reutilizada de otro trámite del mismo cliente (identidad ya verificada). El
-              historial técnico corresponde a ese trámite.
-            </p>
-          )}
-          {events && events.length === 0 && (
-            <p className="text-[11px] opacity-60">Sin eventos registrados todavía.</p>
-          )}
-          {events && events.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-[10.5px]">
-                <thead>
-                  <tr className="opacity-60">
-                    <th className="py-1 pr-2 font-semibold">Fecha</th>
-                    <th className="py-1 pr-2 font-semibold">Etapa</th>
-                    <th className="py-1 pr-2 font-semibold">Resultado</th>
-                    <th className="py-1 pr-2 font-semibold">Cifrado</th>
-                    <th className="py-1 pr-2 font-semibold">Detalle</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {events.map((e, i) => (
-                    <tr
-                      key={i}
-                      className="border-t align-top"
-                      style={{ borderColor: '#EEF1F6' }}
-                    >
-                      <td className="whitespace-nowrap py-1 pr-2 opacity-70">
-                        {formatFecha(e.occurredAt)}
-                      </td>
-                      <td className="py-1 pr-2 font-medium">{e.stage}</td>
-                      <td className="py-1 pr-2">{auditOutcomeLabel(e)}</td>
-                      <td className="py-1 pr-2">
-                        {e.decryptOk == null ? '—' : e.decryptOk ? 'OK' : 'Falló'}
-                      </td>
-                      <td className="py-1 pr-2 opacity-70">
-                        {e.errorType ?? e.providerStatus ?? e.message ?? ''}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => void loadAudit()}
-            disabled={loading || !instanceId}
-            className="flex items-center gap-1 text-[10.5px] font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{ color: '#557EFF' }}
-            aria-label="Refrescar bitácora"
-          >
-            <RefreshCw className={`h-2.5 w-2.5 ${loading ? 'animate-spin' : ''}`} aria-hidden />
-            Refrescar
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}

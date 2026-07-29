@@ -6,11 +6,19 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 /// (PreflightOverall / PreflightCheckStatus). NO usar enums para preservar la
 /// serializacion JSON exacta.
 /// </summary>
+/// <remarks>
+/// HU #10878 (ADR-0030): <see cref="FromCache"/>/<see cref="QueriedAt"/> son ADITIVOS (propiedades
+/// posicionales opcionales, con default) — no rompen ninguna construcción existente de 4 argumentos
+/// posicionales. <see cref="FromCache"/> = true cuando el resultado vino de
+/// <c>tramites.external_query_cache</c> sin llamar al proveedor externo (AC1).
+/// </remarks>
 public sealed record ConsultationResult(
     string Provider,
     string Overall,
     IReadOnlyList<ConsultationCheck> Checks,
-    IReadOnlyList<HydratedField> HydratedFields);
+    IReadOnlyList<HydratedField> HydratedFields,
+    bool FromCache = false,
+    DateTimeOffset? QueriedAt = null);
 
 /// <summary>
 /// Un check individual de la consulta. Status ∈ {"ok","warn","fail","unknown","error"}.

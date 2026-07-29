@@ -8,11 +8,13 @@ namespace Flit.Infrastructure.OtRules;
 /// Implementación del puerto <see cref="ISignatureVaultPolicy"/> (HU #10643, ADR-0025 §4): ACTIVA el
 /// flag hasta ahora inerte <c>signature_vault_enabled</c>. Lee la configuración operativa del tenant
 /// vía <see cref="ITenantSettingsRepository"/> (<c>admin.tenant_operational_policies</c>, el mismo
-/// resolver que usa el admin) y, si el baúl está habilitado, resuelve la firma <c>activa</c> por
-/// (tenant, NIT) con <see cref="ISignatureVaultReader.FindActiveByNitAsync"/> y enforce la vigencia
-/// con <see cref="SignatureVault.EstaVigente"/> en fecha Colombia (UTC-5). Mismo patrón que
-/// <see cref="IdentityValidationPolicy"/>/<see cref="RnmcRequirementPolicy"/>. NUNCA devuelve material
-/// de firma: solo la referencia al artefacto (ADR-0025 §3).
+/// resolver que usa el admin) y, si el baúl está habilitado, resuelve la firma <c>activa</c> de la
+/// PERSONA por (tenant, tipo+número de documento) con
+/// <see cref="ISignatureVaultReader.FindActiveByDocumentAsync"/> y enforce la vigencia con
+/// <see cref="SignatureVault.EstaVigente"/> en fecha Colombia (UTC-5). HU #10930/#10937: el baúl es de
+/// la persona (el representante legal seleccionado del actor jurídico), ya no del NIT de la compañía.
+/// Mismo patrón que <see cref="IdentityValidationPolicy"/>/<see cref="RnmcRequirementPolicy"/>. NUNCA
+/// devuelve material de firma: solo la referencia al artefacto (ADR-0025 §3).
 /// </summary>
 internal sealed class SignatureVaultPolicy : ISignatureVaultPolicy
 {
@@ -30,10 +32,11 @@ internal sealed class SignatureVaultPolicy : ISignatureVaultPolicy
 
     public async Task<SignatureVaultMatch?> ResolveAsync(
         Guid tenantId,
-        string nitEmpresa,
+        string documentType,
+        string documentNumber,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(nitEmpresa))
+        if (string.IsNullOrWhiteSpace(documentType) || string.IsNullOrWhiteSpace(documentNumber))
         {
             return null;
         }
@@ -45,8 +48,10 @@ internal sealed class SignatureVaultPolicy : ISignatureVaultPolicy
             return null;
         }
 
+        // Firma de la PERSONA (representante legal seleccionado del actor) por documento — HU #10930/#10937.
         var vault = await _reader
-            .FindActiveByNitAsync(tenantId, nitEmpresa.Trim(), cancellationToken).ConfigureAwait(false);
+            .FindActiveByDocumentAsync(tenantId, documentType.Trim(), documentNumber.Trim(), cancellationToken)
+            .ConfigureAwait(false);
         if (vault is null)
         {
             return null;
@@ -67,6 +72,7 @@ internal sealed class SignatureVaultPolicy : ISignatureVaultPolicy
             vault.StorageSha256,
             vault.VigenciaDesde,
             vault.VigenciaHasta,
-            vault.DocumentNumber);
+            vault.DocumentNumber,
+            vault.CodigoHash);
     }
 }

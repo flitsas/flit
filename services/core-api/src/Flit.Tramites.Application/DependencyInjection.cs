@@ -38,11 +38,17 @@ public static class DependencyInjection
         services.AddScoped<GetProcedureInstanceHandler>();
         services.AddScoped<ListProcedureInstancesHandler>();
         services.AddScoped<PatchFieldValuesHandler>();
+        // HU #10975 (Feature #10972) — persiste en field_values lo que el OCR semántico ya extrae.
+        services.AddScoped<PersistOcrFieldsHandler>();
+        // HU #10990 (Feature #10972) — resuelve el RUES por actor al generar el expediente.
+        services.AddScoped<IRuesActorDataResolver, RuesActorDataResolver>();
         services.AddScoped<SubmitProcedureInstanceHandler>();
         // HU #10349 — finalizar borrador (fase 2): datos completos sin exigir identidad/FUR.
         services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
         // HU #10536 — marcar trámite como prioritario (ordenamiento con primacía en los listados).
         services.AddScoped<SetPriorityProcedureInstanceHandler>();
+        // HU #10879 — persistir el avance del borrador por pasos (autosave del paso actual del wizard).
+        services.AddScoped<SetCurrentStepProcedureInstanceHandler>();
 
         // N 03 (ADR-0022) — ciclo de vida de estados: servicio único de transición + endpoint
         // /transition. Puertos: el recorder de historial (HU-2) se registra abajo; el publisher
@@ -50,18 +56,26 @@ public static class DependencyInjection
         // (ProcedureStateChangeOutboxPublisher, InfrastructureExtensions).
         services.AddScoped<ITramiteLifecycleService, TramiteLifecycleService>();
         services.AddScoped<TransitionProcedureInstanceHandler>();
+        services.AddScoped<StartSubsanacionHandler>();
         services.AddScoped<GetActorsHandler>();
         services.AddScoped<PutActorsHandler>();
+        // HU #10955 (AC2/AC3/AC4/AC5) — lookup de datos de contacto ya conocidos (ciudad/email/
+        // dirección/teléfono) de una persona, sin gate de consentimiento.
+        services.AddScoped<ActorContactLookupHandler>();
         // HU #10520 — validación de carga por tipo (MIME/tamaño) con respaldo global. El catálogo
         // (IDocumentTypeCatalog) se registra en Infraestructura; aquí solo el validador que lo consume.
         services.AddScoped<AttachmentValidator>();
         services.AddScoped<UploadAttachmentHandler>();
         services.AddScoped<PresignAttachmentHandler>();
         services.AddScoped<RegisterAttachmentHandler>();
+        // Materialización de adjuntos ICT por referencia (escritura de sistema; bypassa el whitelist del front).
+        services.AddScoped<RegisterIntegrationAttachmentHandler>();
         services.AddScoped<ListAttachmentsHandler>();
         services.AddScoped<DeleteAttachmentHandler>();
         services.AddScoped<DownloadAttachmentHandler>();
         services.AddScoped<GenerarImprontaAttachmentHandler>();
+        // HU #11017 - el consolidado genera en cascada la impronta que falte a traves de este puerto.
+        services.AddScoped<IImprontaAutoGenerator, ImprontaAutoGenerator>();
         // Diferir la impronta al paso FUR: marca el ítem de checklist sin adjuntar para no bloquear el paso 2.
         services.AddScoped<SetImprontaDiferidaHandler>();
         // RF36 — autogeneración del Certificado RUES (NIT). El cliente externo (IRuesExternalClient) se
@@ -78,6 +92,13 @@ public static class DependencyInjection
         services.AddScoped<UseCases.Avaluos.GetSuggestedCommercialValueHandler>();
         services.AddScoped<RunPreflightHandler>();
         services.AddScoped<GetPreflightHandler>();
+
+        // CF-02 (HU #10879/#10883) — consulta del paso 1 sin trámite creado y creación al avanzar al
+        // paso 2. El store es SINGLETON: custodia en memoria las consultas del paso 1 (minutos) para
+        // que crear el trámite no repita la llamada al proveedor externo.
+        services.AddSingleton<IPreflightPreviewStore, InMemoryPreflightPreviewStore>();
+        services.AddScoped<RunPreflightPreviewHandler>();
+        services.AddScoped<CreateProcedureInstanceFromConsultaHandler>();
 
         // FEATURE 05 — consulta RNMC desacoplada del pre-vuelo (corre en el paso final, por actor).
         services.AddScoped<RunRnmcConsultHandler>();
@@ -103,6 +124,17 @@ public static class DependencyInjection
         // HU #10350 — asegurar identidad vigente (reuso de validación ≤30 días) al guardar la parte.
         services.AddScoped<EnsureIdentityHandler>();
 
+        // HU #10866 (CF-01, Feature #10864) — Prevalidación standalone (sin trámite): upsert de
+        // la entidad Person + inicio de validación biométrica con ProcedureInstanceId=null.
+        services.AddScoped<UseCases.Persons.IniciarPrevalidacionHandler>();
+        // HU #10943 (CF-03, Feature #10864) — editar datos de contacto (reenvío automático si cambia
+        // el correo) y reenviar manualmente una prevalidación standalone.
+        services.AddScoped<UseCases.Persons.EditarPrevalidacionHandler>();
+        services.AddScoped<UseCases.Persons.ReenviarPrevalidacionHandler>();
+        // CF-06 (Feature #11004, ADR-0036) — detalle de UNA validación por id (poll), tenant-scoped,
+        // sirve tanto a standalone como a trámite.
+        services.AddScoped<UseCases.Persons.GetPrevalidacionDetailHandler>();
+
         // Kyverum Verify (HU #10233): iniciar validación remota + procesar webhook firmado. El cliente
         // HTTP, el protector de secretos y el publisher de eventos se registran en Infraestructura.
         services.AddScoped<IniciarKyverumVerifyHandler>();
@@ -119,6 +151,8 @@ public static class DependencyInjection
         services.AddScoped<ListStuckIdentityValidationsHandler>();
         services.AddScoped<RequeueStuckIdentityValidationHandler>();
         services.AddScoped<RequeueAllStuckIdentityValidationsHandler>();
+        // HU #10873 — alertas y recordatorios de validación de identidad (AC1/AC2), entrega POR PULL.
+        services.AddScoped<ListIdentityValidationAlertsHandler>();
 
         // Firma electrónica + FUR. El proveedor de firma es MOCK swappable (contract-first).
         // IFurDocumentGenerator se registra en Infrastructure (FurOverlayDocumentGenerator — overlay PdfSharpCore, HU #10256).
@@ -131,6 +165,12 @@ public static class DependencyInjection
         services.AddScoped<ListFirmasHandler>();
         services.AddScoped<SimularFirmaHandler>();
         services.AddScoped<GenerarFurHandler>();
+        // ADR-0036 §D9 (HU #10916) — resolución del mandatario al aprobar (consumida por AdminOtEndpoints).
+        services.AddScoped<MandatoApprovalHandler>();
+        // HU #10860 (ADR-0032) — el consolidado del wizard regenera en cascada el FUR/documentos en
+        // caliente vía este puerto, resuelto al mismo GenerarFurHandler (mismo scope/unidad de trabajo).
+        services.AddScoped<IExpedienteHotDocumentsRegenerator>(sp => sp.GetRequiredService<GenerarFurHandler>());
+        services.AddScoped<GetFurTemplateFormatHandler>(); // HU #10924 — formato de FUR por clasificación
         services.AddScoped<GenerarConsolidadoHandler>();
         // Feature #10701 — presigned view URL inline (HU #10702) y consolidado maestro (HU #10706).
         services.AddScoped<GetAttachmentPreviewUrlHandler>();
@@ -143,6 +183,8 @@ public static class DependencyInjection
         services.AddScoped<DescargarCertificadoIdentidadHandler>();
         // Bitácora de solo lectura del ciclo de una validación (diagnóstico desde la API).
         services.AddScoped<GetIdentityAuditHandler>();
+        // CF-07 (Feature #11004, ADR-0036) — misma bitácora, sin depender de instanceId (standalone + trámite).
+        services.AddScoped<GetIdentityAuditByValidationHandler>();
 
         // Portal público de participantes + consent Ley 1581 (Slice 7 Part B). Magic-link con token
         // hasheado (solo SHA-256 en BD); el portal agrega/encadena biométrica y firma reusando los
@@ -157,6 +199,9 @@ public static class DependencyInjection
         services.AddScoped<GetFirmaUrlPortalHandler>();
         services.AddScoped<SimularFirmaPortalHandler>();
 
+        // HU #10878 (Feature #10862, CF-04, ADR-0030/ADR-0031) — cache-aside cross-trámite de
+        // consultas externas, consumido por los 3 handlers de consulta de abajo.
+        services.AddScoped<UseCases.Consultations.ExternalQueryCacheService>();
         services.AddScoped<UseCases.Consultations.RunConsultationHandler>();
         services.AddScoped<UseCases.Consultations.RuntPersonLookupHandler>();
         services.AddScoped<UseCases.Consultations.ValidateSoatViaRuntHandler>();

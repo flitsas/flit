@@ -2,6 +2,7 @@ using Flit.Admin.Domain.Auditing;
 using Flit.Admin.Domain.Companies;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Admin.Domain.Companies.LegalRepresentatives;
 using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
@@ -98,6 +99,44 @@ public static class AdminInfrastructureExtensions
             Flit.Infrastructure.Storage.SignatureVaultArtifactStorage>();
         services.AddScoped<ISignatureVaultPolicy, SignatureVaultPolicy>();
 
+        // HU #10912 (ADR-0036) — configuración de mandato por OT (plantilla + exige-PN + mandatario
+        // institucional), leída por código de OT para el flujo de trámite.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IMandateRequirementPolicy,
+            Flit.Infrastructure.OtRules.MandateRequirementPolicy>();
+
+        // HU #10916 (ADR-0036 §D9) — directorio de mandatarios por OT/compañía: resuelve el firmante del
+        // mandato al aprobar y rellena su nombre/documento en el PDF regenerado.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IMandateSignerDirectory,
+            Flit.Infrastructure.OtRules.MandateSignerDirectory>();
+
+        // HU #10900 (ADR-0033) — directorio de representantes legales por compañía + escrituras.
+        // Readers/repos tenant-scoped (RLS) + adaptador del puerto de identidad biométrica que
+        // consume el resolutor de firma/identidad (registrado en AddAdminApplication).
+        services.AddScoped<ILegalRepresentativeReader, DbLegalRepresentativeReader>();
+        services.AddScoped<ILegalRepresentativeRepository, LegalRepresentativeRepository>();
+        services.AddScoped<IDeedReader, DbDeedReader>();
+        services.AddScoped<IDeedRepository, DeedRepository>();
+
+        // HU #10902 (ADR-0033) — custodia del PDF de la escritura en storage (delega en
+        // IAttachmentStorage vía presigned URLs; el SHA-256 lo aporta el cliente).
+        services.AddScoped<Flit.Admin.Application.Companies.Deeds.IDeedDocumentStorage,
+            Flit.Infrastructure.Storage.DeedDocumentStorage>();
+        services.AddScoped<Flit.Admin.Application.Companies.LegalRepresentatives.IRepresentativeIdentityLookup,
+            RepresentativeIdentityLookup>();
+
+        // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
+        // correo: persistencia tenant-scoped, adaptador Kyverum DESACOPLADO (reutiliza IKyverumVerifyClient
+        // + cifra el secreto del webhook) y linker que ancla la identidad aprobada al sujeto
+        // (representante legal → identity_validation_ref). El servicio se registra en AddAdminApplication.
+        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentityValidationRepository,
+            AdminIdentityValidationRepository>();
+        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentitySubjectLinker,
+            AdminIdentitySubjectLinker>();
+        // HU #11028 — identidad que la persona ya validó dentro de un trámite de las compañías del OT.
+        services.AddScoped<Flit.Admin.Application.Identity.IPersonIdentityLookup, PersonIdentityLookup>();
+        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentityValidationProvider,
+            Flit.Infrastructure.Kyverum.KyverumAdminIdentityValidationProvider>();
+
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
 
@@ -139,7 +178,12 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IOtApiCallLogRepository, OtApiCallLogRepository>();
         services.AddScoped<IOtWebhookSecretHasher, OtWebhookSecretHasherService>();
         services.AddScoped<IOtWebhookDispatchService, OtWebhookDispatchService>();
-        services.AddScoped<IProcedureStateChangeNotifier, OtWebhookProcedureStateChangeNotifier>();
+        // Concreto + mapeo a la interfaz (misma instancia). El concreto lo consume el notifier COMPUESTO
+        // (OT + reflejo ICT, ver AddIctStateReflection); si el canal inverso ICT no está configurado, este
+        // mapeo a la interfaz sigue vigente y el comportamiento OT no cambia.
+        services.AddScoped<OtWebhookProcedureStateChangeNotifier>();
+        services.AddScoped<IProcedureStateChangeNotifier>(sp =>
+            sp.GetRequiredService<OtWebhookProcedureStateChangeNotifier>());
 
         services.AddHttpClient(nameof(OtWebhookDispatchService), client =>
         {

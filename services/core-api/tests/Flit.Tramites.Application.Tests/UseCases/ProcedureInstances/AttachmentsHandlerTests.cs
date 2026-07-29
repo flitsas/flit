@@ -88,7 +88,8 @@ public sealed class AttachmentsHandlerTests
         string modalidad = "matricula_inicial",
         string status = TramiteEstado.Borrador,
         string? tipologia = null,
-        string checklistEstado = "{}") =>
+        string checklistEstado = "{}",
+        bool subsanacionActiva = false) =>
         new()
         {
             Id = id,
@@ -99,6 +100,7 @@ public sealed class AttachmentsHandlerTests
             ModalidadEntrada = modalidad,
             TipologiaCodigo = tipologia,
             ChecklistEstado = checklistEstado,
+            SubsanacionActiva = subsanacionActiva,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -182,6 +184,37 @@ public sealed class AttachmentsHandlerTests
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(Instance(id, tenant, status: status));
+
+        var (_, error) = await _upload.HandleAsync(id, tenant, Pdf(), null, ct);
+
+        error.Should().Be("not_draft");
+        _storage.Saved.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Upload_RechazadoConSubsanacionActiva_PermiteAdjuntar()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, status: TramiteEstado.Rechazado, subsanacionActiva: true);
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _upload.HandleAsync(id, tenant, Pdf(tipo: "factura"), null, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        instance.Attachments.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Upload_RechazadoSinFlag_Returns409()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct)
+            .Returns(Instance(id, tenant, status: TramiteEstado.Rechazado, subsanacionActiva: false));
 
         var (_, error) = await _upload.HandleAsync(id, tenant, Pdf(), null, ct);
 

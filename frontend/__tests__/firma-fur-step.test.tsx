@@ -180,13 +180,15 @@ describe('FirmaFurStep — firma solo en traspaso', () => {
 });
 
 describe('FirmaFurStep — solicitar y simular firma', () => {
-  it('solicita la firma de una parte', async () => {
-    const user = userEvent.setup();
+  // HU #11019 — el botón de solicitar la firma se retiró: el gate ya no la exige (ADR-0028) y pedirla
+  // solo añadía un paso que no desbloquea nada. La tarjeta sigue mostrando el estado de la firma.
+  it('no ofrece solicitar la firma de la compraventa', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
     const card = await screen.findByRole('group', { name: 'Firma Comprador' });
-    await user.click(within(card).getByRole('button', { name: 'Solicitar firma' }));
-    await waitFor(() => expect(mocks.solicitarFirma).toHaveBeenCalledTimes(1));
-    expect(mocks.solicitarFirma.mock.calls[0][1]).toMatchObject({ parte: 'comprador' });
+
+    expect(within(card).queryByRole('button', { name: 'Solicitar firma' })).toBeNull();
+    expect(within(card).getByText('Firma no solicitada.')).toBeInTheDocument();
+    expect(mocks.solicitarFirma).not.toHaveBeenCalled();
   });
 
   it('muestra signUrl y permite simular cuando la firma está enviada', async () => {
@@ -317,15 +319,19 @@ describe('FirmaFurStep — generar FUR', () => {
     expect(onRefresh).toHaveBeenCalled();
   });
 
-  it('maneja el 409 biometria_gate con un mensaje explicativo', async () => {
-    mocks.generarFur.mockRejectedValue(new Error('409 Conflict: biometria_gate'));
+  // HU #11017 — la identidad dejo de bloquear la generacion del FUR (HU #10463): el backend ya no
+  // emite `biometria_gate`. Un 409 sin codigo conocido cae al mensaje generico, que apunta al
+  // organismo de transito, la unica restriccion que queda.
+  it('un 409 sin codigo conocido cae al mensaje generico del organismo', async () => {
+    mocks.generarFur.mockRejectedValue(new Error('409 Conflict: algo_inesperado'));
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
     await screen.findByRole('region', { name: 'Generación del FUR' });
     await user.click(screen.getByRole('button', { name: 'Generar FUR / certificado' }));
     expect(
-      await screen.findByText(/Falta validar identidad/),
+      await screen.findByText(/selecciona el organismo de tránsito/i),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Falta validar identidad/)).toBeNull();
   });
 
   it('maneja el 409 organismo_requerido', async () => {
@@ -596,12 +602,18 @@ describe('FirmaFurStep — firma no bloqueante en traspaso (B12, HU #10661)', ()
     ).toBeInTheDocument();
   });
 
-  it('traspaso: los endpoints de firma siguen disponibles (Solicitar/Simular no se rompen)', async () => {
-    // AC5: aunque la firma sea informativa, las acciones y llamadas API se conservan.
-    const user = userEvent.setup();
+  it('traspaso: la firma es informativa y ya no se solicita desde el paso (HU #11019)', async () => {
+    // AC5 de ADR-0028 sigue vigente en el MODELO (endpoints y estado intactos), pero la UI ya no
+    // ofrece la acción: la firma de compraventa no bloquea y pedirla no aportaba nada al gestor.
+    mocks.listFirmas.mockResolvedValue([FIRMA_ENVIADA]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
     const card = await screen.findByRole('group', { name: 'Firma Comprador' });
-    await user.click(within(card).getByRole('button', { name: 'Solicitar firma' }));
-    await waitFor(() => expect(mocks.solicitarFirma).toHaveBeenCalledTimes(1));
+
+    // El estado de una firma ya existente se sigue mostrando…
+    expect(
+      (within(card).getByLabelText('Enlace de firma Comprador') as HTMLInputElement).value,
+    ).toContain('https://mock/sign/sig-1');
+    // …pero no hay forma de solicitar una nueva.
+    expect(within(card).queryByRole('button', { name: 'Solicitar firma' })).toBeNull();
   });
 });

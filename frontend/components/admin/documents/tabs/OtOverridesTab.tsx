@@ -6,6 +6,7 @@ import { useToast } from "@/components/admin/Toast";
 import { OrderOverrideForm } from "@/components/admin/documents/panels/OrderOverrideForm";
 import { OverridesList } from "@/components/admin/documents/panels/OverridesList";
 import { OtRequirementsList } from "@/components/admin/documents/panels/OtRequirementsList";
+import { PledgeDocumentOverrideToggle } from "@/components/admin/documents/panels/PledgeDocumentOverrideToggle";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import { fetchProcedureDocumentRequirements } from "@/lib/api/admin-procedure-documents";
 import {
@@ -258,6 +259,21 @@ export function OtOverridesTab({ procedureTypeId }: { procedureTypeId: string })
       {transitOfficeId ? (
         <>
           <section className="flex flex-col gap-3">
+            <div>
+              <h3 className="text-xs font-semibold">Documento de prenda (HU #10887)</h3>
+              <p className="text-[11px] opacity-60">
+                Override dedicado de obligatoriedad para el documento de inscripción/registro
+                de prenda en este OT. Independiente de «Orden de los documentos»: no requiere
+                agregarlo ahí primero.
+              </p>
+            </div>
+            <PledgeDocumentOverrideToggle
+              procedureTypeId={procedureTypeId}
+              transitOfficeId={transitOfficeId}
+            />
+          </section>
+
+          <section className="flex flex-col gap-3 border-t pt-4">
             <div>
               <h3 className="text-xs font-semibold">Orden de los documentos</h3>
               <p className="text-[11px] opacity-60">

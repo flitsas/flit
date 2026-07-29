@@ -4,7 +4,11 @@ namespace Flit.Tramites.Domain.Tramites.Estados;
 /// Máquina de estados del ciclo de vida del trámite (N 03, RF02). Pura. Opera sobre los
 /// estados de negocio de <see cref="TramiteEstado"/> (los persistidos en
 /// <c>procedure_instances.status</c>). <c>aprobado</c> y <c>anulado</c> son terminales (RF04).
-/// Reemplaza la máquina interna de 14 estados de TRAM-12a (ADR-0022).
+/// <para>
+/// La subsanación NO es un estado: se activa con flag sobre <c>rechazado</c>. Re-radicar
+/// (<c>rechazado → entregado</c>) solo es válida cuando <c>subsanacion_activa</c> (validado en
+/// <c>TramiteLifecycleService</c>).
+/// </para>
 /// </summary>
 public static class TramiteStateMachine
 {
@@ -17,7 +21,9 @@ public static class TramiteStateMachine
             // (preasignado/asignado) es un sub-estado interno ortogonal (ver PlateFlowStateMachine).
             [TramiteEstado.Preparado] = [TramiteEstado.Entregado],
             [TramiteEstado.Entregado] = [TramiteEstado.Aprobado, TramiteEstado.Rechazado],
-            [TramiteEstado.Rechazado] = [TramiteEstado.Borrador, TramiteEstado.Anulado],
+            // Rechazado → entregado: re-radicación tras activar subsanación (flag). El lifecycle
+            // exige subsanacion_activa; sin el flag la transición se rechaza.
+            [TramiteEstado.Rechazado] = [TramiteEstado.Borrador, TramiteEstado.Anulado, TramiteEstado.Entregado],
             [TramiteEstado.Aprobado] = [],
             [TramiteEstado.Anulado] = [],
         };

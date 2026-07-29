@@ -211,6 +211,9 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh, rnmcEnabled = f
   // Adjuntos + biométrica del expediente (alimentan MatriculaResumen y ExpedienteVisor).
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
   const [biometric, setBiometric] = useState<BiometricValidation[]>([]);
+  // HU #11014 — partes cubiertas por la firma del baúl: el expediente las rotula como firmadas desde
+  // el baúl en vez de hablar del certificado de validación de identidad.
+  const [firmaBaulPartes, setFirmaBaulPartes] = useState<string[]>([]);
   // FEATURE 05 — resultado RNMC por actor (medidas correctivas). Se consulta al entrar a este paso
   // (cuando ya se capturó la fecha de expedición de cada actor), no en el pre-vuelo.
   const [rnmcChecks, setRnmcChecks] = useState<PreflightCheck[]>([]);
@@ -239,10 +242,13 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh, rnmcEnabled = f
       // pierde el listado de adjuntos, y viceversa. Ambos son informativos.
       const [att, bio] = await Promise.allSettled([
         tramitesClient.getAttachments(instanceId),
-        tramitesClient.listBiometric(instanceId),
+        tramitesClient.listBiometricExpediente(instanceId),
       ]);
       if (att.status === 'fulfilled') setAttachments(att.value);
-      if (bio.status === 'fulfilled') setBiometric(bio.value);
+      if (bio.status === 'fulfilled') {
+        setBiometric(bio.value.validations);
+        setFirmaBaulPartes(bio.value.firmaBaulPartes);
+      }
     } catch {
       // El expediente es informativo; no bloquea el render del paso.
     }
@@ -398,6 +404,7 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh, rnmcEnabled = f
         vin={fv('vin')}
         attachments={attachments}
         biometric={biometric}
+        firmaBaulPartes={firmaBaulPartes}
         orgTransito={{ nombre: organismo.name, ciudad: organismo.city, codigo: organismo.code }}
       />
 
@@ -1040,7 +1047,8 @@ function FirmaSection({
     onRefresh?.();
   };
 
-  const partes: SignatureParte[] = ['comprador', 'vendedor'];
+  // HU #11019 — saliente antes que entrante, igual que el expediente y el dashboard.
+  const partes: SignatureParte[] = ['vendedor', 'comprador'];
 
   return (
     <section className="space-y-4" aria-label="Firma de la compraventa">
@@ -1114,25 +1122,6 @@ function FirmaParteCard({
   const [error, setError] = useState<string | null>(null);
   const readOnly = useWizardReadOnly();
 
-  const handleSolicitar = async () => {
-    if (!instanceId) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await tramitesClient.solicitarFirma(instanceId, { parte });
-      onChanged();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      setError(
-        msg.startsWith('409')
-          ? 'La firma de la compraventa solo aplica a traspaso.'
-          : 'No se pudo solicitar la firma.',
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const handleSimular = async () => {
     if (!instanceId || !signature) return;
     setBusy(true);
@@ -1182,18 +1171,11 @@ function FirmaParteCard({
             </button>
           )}
         </div>
-      ) : readOnly ? (
-        <p className="text-[11px] opacity-60">Firma no solicitada.</p>
       ) : (
-        <button
-          type="button"
-          onClick={() => void handleSolicitar()}
-          disabled={busy || !instanceId}
-          className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: '#557EFF' }}
-        >
-          {busy ? 'Solicitando…' : 'Solicitar firma'}
-        </button>
+        // HU #11019 — se retira el botón de solicitar la firma de la compraventa. El gate ya no la exige
+        // desde ADR-0028 (B12/HU #10661), así que pedirla solo añadía un paso que no desbloquea nada.
+        // El estado de una firma ya solicitada se sigue mostrando arriba.
+        <p className="text-[11px] opacity-60">Firma no solicitada.</p>
       )}
 
       {error && (
@@ -1665,6 +1647,13 @@ function ImprontaSection({
 /** Tipos de documento generados por el FUR. */
 const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad', 'certificado_identidad_vendedor', 'certificado_rnmc']);
 
+/**
+ * HU #10987 — tope de las observaciones manuales. El recuadro OBSERVACIONES del FUR es un campo
+ * `multiline` de alto fijo en el manifest: un texto más largo se desbordaría del formulario. El
+ * límite es de presentación, no de negocio.
+ */
+const FUR_OBSERVACIONES_MAX = 300;
+
 function FurSection({
   instanceId,
   modalidad,
@@ -1681,6 +1670,14 @@ function FurSection({
   const [error, setError] = useState<string | null>(null);
   const [consolidadoError, setConsolidadoError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<FurDocument[] | null>(null);
+  // HU #10924 — plantilla de FUR que aplica según la clasificación del vehículo (backend = fuente de verdad).
+  const [furFormat, setFurFormat] = useState<string | null>(null);
+  // HU #10987 / #10988 (Feature #10972) — el recuadro OBSERVACIONES y la fecha del trámite del FUR
+  // leían `fur_observations` y `fur_processing_date`, dos llaves que NADIE escribía: el gestor no
+  // podía aportar observaciones y la fecha era la de generación, impuesta por un fallback silencioso.
+  const [observaciones, setObservaciones] = useState('');
+  const [fechaTramite, setFechaTramite] = useState('');
+  const [savingCampos, setSavingCampos] = useState(false);
 
   const load = useCallback(async () => {
     if (!instanceId) return;
@@ -1688,10 +1685,38 @@ function FurSection({
       const list = await tramitesClient.getAttachments(instanceId);
       setDocs(list.filter((a) => FUR_TIPOS.has(a.tipo)));
       setConsolidado(list.find((a) => a.tipo === 'consolidado') ?? null);
+      const fmt = await tramitesClient.getFurTemplateFormat(instanceId);
+      setFurFormat(fmt.format);
+      const detail = await tramitesClient.getInstance(instanceId);
+      const valor = (key: string) =>
+        detail?.fieldValues?.find((f) => f.fieldKey === key)?.valueText ?? '';
+      setObservaciones(valor('fur_observations'));
+      setFechaTramite(valor('fur_processing_date').slice(0, 10));
     } catch {
-      // El listado de adjuntos es secundario; el error de generar se muestra abajo.
+      // El listado de adjuntos y el formato son secundarios; el error de generar se muestra abajo.
     }
   }, [instanceId]);
+
+  /**
+   * Persiste observaciones y fecha del trámite. Se dispara al perder el foco y ANTES de generar, para
+   * que el PDF salga con lo que el gestor tiene en pantalla y no con lo último guardado.
+   * Best-effort: fuera de borrador/subsanación el backend responde `not_draft` y el campo queda de
+   * solo lectura de hecho — no tiene sentido bloquear la generación por eso.
+   */
+  const guardarCampos = useCallback(async () => {
+    if (!instanceId) return;
+    setSavingCampos(true);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'fur_observations', valueText: observaciones.trim() || null },
+        { formFieldId: null, fieldKey: 'fur_processing_date', valueText: fechaTramite || null },
+      ]);
+    } catch {
+      // Silencio intencionado: ver comentario de arriba.
+    } finally {
+      setSavingCampos(false);
+    }
+  }, [instanceId, observaciones, fechaTramite]);
 
   useEffect(() => {
     // load solo hace setState DESPUÉS del await (no es cascada síncrona).
@@ -1704,20 +1729,25 @@ function FurSection({
     setGenerating(true);
     setError(null);
     try {
+      // HU #10987/#10988 — guardar antes de generar: si el gestor escribe y pulsa el botón sin que
+      // el textarea pierda el foco, el PDF saldría sin ese texto.
+      await guardarCampos();
       const result = await tramitesClient.generarFur(instanceId);
       setLastResult(result.documents);
       await load();
       onRefresh?.();
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
+      // HU #11017 — la identidad dejó de bloquear la generación del FUR en HU #10463 (el documento sale
+      // con el sello "NO FIRMADO"), así que el backend ya no emite `biometria_gate` y ese mensaje solo
+      // podía confundir. La ÚNICA restricción que queda es el organismo de tránsito, que es un dato
+      // imprescindible del formulario: sin él no hay FUR que llenar.
       setError(
-        msg.includes('biometria_gate')
-          ? 'Falta validar identidad: primero debe aprobarse la biométrica requerida de las partes.'
-          : msg.includes('organismo_requerido')
-            ? 'Selecciona el organismo de tránsito antes de generar el FUR.'
-            : msg.startsWith('409')
-              ? 'No se pudo generar el FUR: revisa la identidad y el organismo de tránsito.'
-              : 'No se pudo generar el FUR.',
+        msg.includes('organismo_requerido')
+          ? 'Selecciona el organismo de tránsito antes de generar el FUR.'
+          : msg.startsWith('409')
+            ? 'No se pudo generar el FUR: selecciona el organismo de tránsito e inténtalo de nuevo.'
+            : 'No se pudo generar el FUR.',
       );
     } finally {
       setGenerating(false);
@@ -1729,7 +1759,18 @@ function FurSection({
     setGeneratingConsolidado(true);
     setConsolidadoError(null);
     try {
-      await tramitesClient.generarConsolidado(instanceId);
+      // HU #11017 — el consolidado se genera aunque falten documentos obligatorios: si vuelve marcado
+      // como incompleto se avisa qué falta, en vez de dejar al gestor con un expediente que el
+      // organismo rechazará sin explicación.
+      const generado = await tramitesClient.generarConsolidado(instanceId);
+      if (generado?.incompleto) {
+        const faltantes = (generado.documentosFaltantes ?? []).map(documentLabel).join(', ');
+        setConsolidadoError(
+          faltantes
+            ? `Consolidado generado, pero faltan documentos obligatorios: ${faltantes}.`
+            : 'Consolidado generado, pero faltan documentos obligatorios.',
+        );
+      }
       await load();
       onRefresh?.();
     } catch (err) {
@@ -1754,7 +1795,18 @@ function FurSection({
   return (
     <section className="space-y-4" aria-label="Generación del FUR">
       <div>
-        <h4 className="text-sm font-bold">FUR / contrato de compraventa</h4>
+        <div className="flex items-center gap-2">
+          <h4 className="text-sm font-bold">FUR / contrato de compraventa</h4>
+          {furFormat && (
+            <span
+              className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+              style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+              title="Plantilla de FUR determinada por la clasificación del vehículo"
+            >
+              Plantilla: {furFormat}
+            </span>
+          )}
+        </div>
         <p className="text-xs opacity-70">
           Genera el FUR y el certificado de identidad (y, en traspaso, el
           contrato de compraventa) con los datos del trámite. Este paso es
@@ -1774,6 +1826,54 @@ function FurSection({
           {error}
         </div>
       )}
+
+      {/* HU #10987 / #10988 — datos del FUR que aporta el gestor. Antes de esta HU el recuadro
+          OBSERVACIONES del formulario oficial era de solo-lectura automática y la fecha era la de
+          generación del PDF. */}
+      <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: '#DFE5ED' }}>
+        <div>
+          <label htmlFor="fur-fecha-tramite" className="text-xs font-semibold mb-1.5 block">
+            Fecha del trámite
+          </label>
+          <input
+            id="fur-fecha-tramite"
+            type="date"
+            value={fechaTramite}
+            onChange={(e) => setFechaTramite(e.target.value)}
+            onBlur={() => void guardarCampos()}
+            disabled={!instanceId}
+            className="rounded-lg border px-3 py-2 text-xs"
+            style={{ borderColor: '#DFE5ED' }}
+          />
+          <p className="text-[10px] opacity-60 mt-1">
+            Se estampa en el FUR y en el resto de documentos del trámite. Si la dejas vacía se usa la
+            fecha de hoy.
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor="fur-observaciones" className="text-xs font-semibold mb-1.5 block">
+            Observaciones
+          </label>
+          <textarea
+            id="fur-observaciones"
+            value={observaciones}
+            onChange={(e) => setObservaciones(e.target.value)}
+            onBlur={() => void guardarCampos()}
+            disabled={!instanceId}
+            rows={3}
+            maxLength={FUR_OBSERVACIONES_MAX}
+            placeholder="Particularidades del vehículo o del negocio que el formulario no contempla."
+            className="w-full rounded-lg border px-3 py-2 text-xs"
+            style={{ borderColor: '#DFE5ED' }}
+          />
+          <p className="text-[10px] opacity-60 mt-1">
+            {observaciones.length}/{FUR_OBSERVACIONES_MAX} · Se imprimen en el recuadro OBSERVACIONES
+            del FUR, junto a las transformaciones declaradas y, si aplica, el gravamen.
+            {savingCampos && ' · Guardando…'}
+          </p>
+        </div>
+      </div>
 
       <button
         type="button"

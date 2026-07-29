@@ -56,6 +56,8 @@ public interface IOtClientProcedureRepository
         Guid procedureInstanceId,
         Guid? approvedBy,
         string source,
+        Guid? mandateSignerId = null,
+        Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
 
     Task<OtClientProcedure?> RejectAsync(
@@ -64,6 +66,21 @@ public interface IOtClientProcedureRepository
         string reason,
         Guid? rejectedBy,
         string source,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Observación subsanable del OT: transiciona a <c>rechazado</c> con checklist HÍBRIDO
+    /// (motivo + ítems) en metadata. El operador activa la edición con POST /subsanar.
+    /// </summary>
+    Task<OtClientProcedure?> ObserveAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string reason,
+        IReadOnlyList<OtProcedureObservationItem> items,
+        Guid? observedBy,
+        string source,
+        Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

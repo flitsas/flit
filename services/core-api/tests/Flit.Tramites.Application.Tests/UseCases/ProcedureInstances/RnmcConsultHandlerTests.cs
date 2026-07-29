@@ -87,6 +87,25 @@ public sealed class RnmcConsultHandlerTests
             restrictionPolicy ?? NullConsultationRestrictionPolicy.Instance);
     }
 
+    [Fact] // Migración V1→V2: foto de solo lectura → no consulta ni persiste field_values (evita el 500).
+    public async Task Migrado_NoConsultaNiPersisteYRetornaSoloLectura()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", Actor("comprador", "111"));
+        instance.IsMigrated = true;
+        instance.Status = "aprobado";
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var provider = new StubProvider("verifik_rnmc", Rnmc("green"));
+        var handler = Build([("verifik_rnmc", provider)], rnmcRequired: true);
+
+        var (result, error) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        error.Should().Be("migrado_solo_lectura");
+        result.Should().BeNull();
+        provider.LastContext.Should().BeNull();  // no corrió la consulta
+        instance.FieldValues.Should().BeEmpty(); // no persistió rnmc_checks / rnmc_medida_pendiente
+    }
+
     [Fact] // Opt-in de la compañía → consulta comprador y vendedor (PN) y persiste rnmc_checks.
     public async Task Consulta_CompradorYVendedor_CuandoCompaniaActiva()
     {

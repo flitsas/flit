@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Migrador de trámites Flit V1 -> V2 (instancia 1: data plana).
+
+    Consola de un solo uso operativo: recibe una ORDEN DE TRABAJO (lista de ids de V1)
+    y migra esos trámites a V2. La SELECCIÓN de qué migrar NO es responsabilidad de este
+    programa: se la entregan por parámetro. Ver README.md.
+
+    AOT desactivado (igual que Flit.Infrastructure): EF Core usa reflexión y no es
+    AOT-compatible. Es el "JIT como escape documentado" de ADR-0002 §2 Decisión 5.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Flit.DataMigration.V1</RootNamespace>
+    <AssemblyName>Flit.DataMigration.V1</AssemblyName>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+    <NuGetAuditMode>direct</NuGetAuditMode>
+    <!-- CA1848: LoggerMessage delegates son ruido en una consola de migración de un solo uso;
+         aquí el log es salida para el operador, no telemetría de alto volumen.
+         CA1031: el bucle por trámite captura Exception a propósito para que un registro malo
+         mande a cuarentena sin abortar el lote completo. -->
+    <NoWarn>$(NoWarn);CA1848;CA1031</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Flit.Infrastructure/Flit.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <!--
+      Config local del desarrollador: no está versionada, por eso Condition.
+
+      CopyToPublishDirectory=Never es una medida de SEGURIDAD, no una optimización. Este archivo
+      contiene credenciales reales (cadenas de conexión a producción, token de Cognito). Sin esta
+      línea, `dotnet publish` lo metía en la salida, y como la imagen de Docker se construye con
+      publish, el token del desarrollador que hiciera el build acabaría dentro de la imagen y
+      viajaría al registro de contenedores.
+
+      En el servidor este archivo se crea a mano (o se monta como volumen); nunca se hornea.
+    -->
+    <None Update="appsettings.Local.json" CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="Never"
+          Condition="Exists('appsettings.Local.json')" />
+  </ItemGroup>
+
+</Project>

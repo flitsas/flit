@@ -12,7 +12,13 @@ public abstract record IdentityValidationEvent
     public abstract string EventType { get; }
 
     public required Guid TenantId { get; init; }
-    public required Guid ProcedureInstanceId { get; init; }
+
+    /// <summary>
+    /// HU #10865 — nullable para prevalidaciones standalone (sin trámite previo).
+    /// Null cuando la validación biométrica no está ligada a ninguna instancia de trámite.
+    /// </summary>
+    public Guid? ProcedureInstanceId { get; init; }
+
     public required Guid ValidationId { get; init; }
 
     /// <summary>'mock' | 'kyverum'.</summary>

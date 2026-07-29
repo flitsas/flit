@@ -172,7 +172,9 @@ describe("TramitesSuperSection — HU #10218", () => {
     await user.click(within(dialog).getByRole("button", { name: /Confirmar/i }));
 
     await waitFor(() => {
-      expect(approveOtClientProcedure).toHaveBeenCalledWith(PROC_ID);
+      expect(approveOtClientProcedure).toHaveBeenCalledWith(PROC_ID, undefined, {
+        transitOfficeId: OT_ID,
+      });
     });
     // UX: tras aprobar, el trámite sale de la cola de pendientes.
     await waitFor(() => {
@@ -198,9 +200,11 @@ describe("TramitesSuperSection — HU #10218", () => {
     await user.click(confirmBtn);
 
     await waitFor(() => {
-      expect(rejectOtClientProcedure).toHaveBeenCalledWith(PROC_ID, {
-        reason: "Documentos incompletos",
-      });
+      expect(rejectOtClientProcedure).toHaveBeenCalledWith(
+        PROC_ID,
+        { reason: "Documentos incompletos" },
+        { transitOfficeId: OT_ID },
+      );
     });
     // UX: tras rechazar, el trámite sale de la cola de pendientes.
     await waitFor(() => {

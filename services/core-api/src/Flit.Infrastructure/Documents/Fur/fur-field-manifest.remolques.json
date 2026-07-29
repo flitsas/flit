@@ -1,0 +1,65 @@
+{
+  "version": "2026-07-24-remolques-v1",
+  "pageWidth": 1008,
+  "pageHeight": 612,
+  "coordinateOrigin": "top-left",
+  "defaultFont": "Arial",
+  "fields": [
+    { "id": "traffic_secretary_name", "type": "text", "x": 668, "y": 44, "w": 280, "h": 10, "fontSize": 7 },
+    { "id": "traffic_secretary_city", "type": "text", "x": 650, "y": 64, "w": 62, "h": 10, "fontSize": 7 },
+    { "id": "traffic_secretary_code", "type": "text", "x": 718, "y": 64, "w": 55, "h": 10, "fontSize": 7 },
+    { "id": "processing_day", "type": "text", "x": 779, "y": 71, "w": 28, "h": 10, "fontSize": 7, "align": "center" },
+    { "id": "processing_month", "type": "text", "x": 811, "y": 71, "w": 28, "h": 10, "fontSize": 7, "align": "center" },
+    { "id": "processing_year", "type": "text", "x": 845, "y": 71, "w": 32, "h": 10, "fontSize": 7, "align": "center" },
+
+    { "id": "plate_letter", "type": "text", "x": 903, "y": 56, "w": 28, "h": 11, "fontSize": 9, "align": "center" },
+    { "id": "plate_number", "type": "text", "x": 936, "y": 56, "w": 30, "h": 11, "fontSize": 9, "align": "center" },
+
+    { "id": "requested_process_1", "type": "checkbox", "x": 86, "y": 101, "size": 9 },
+    { "id": "requested_process_2", "type": "checkbox", "x": 155, "y": 101, "size": 9 },
+
+    { "id": "vehicle_brand", "type": "text", "x": 498, "y": 96, "w": 160, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_line", "type": "text", "x": 666, "y": 96, "w": 165, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_colors", "type": "text", "x": 498, "y": 132, "w": 130, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_model", "type": "text", "x": 633, "y": 132, "w": 60, "h": 12, "fontSize": 7 },
+
+    { "id": "vehicle_serial_number", "type": "text", "x": 736, "y": 204, "w": 240, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_vin_number", "type": "text", "x": 736, "y": 228, "w": 240, "h": 12, "fontSize": 7 },
+
+    { "id": "vehicle_owner_first_last_name", "type": "text", "x": 90, "y": 297, "w": 150, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_owner_second_last_name", "type": "text", "x": 245, "y": 297, "w": 150, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_owner_name", "type": "text", "x": 400, "y": 297, "w": 120, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_owner_document_type_c", "type": "checkbox", "x": 94, "y": 321, "size": 9 },
+    { "id": "vehicle_owner_document_type_nit", "type": "checkbox", "x": 127, "y": 321, "size": 9 },
+    { "id": "vehicle_owner_document_type_nn", "type": "checkbox", "x": 159, "y": 321, "size": 9 },
+    { "id": "vehicle_owner_document_type_p", "type": "checkbox", "x": 193, "y": 321, "size": 9 },
+    { "id": "vehicle_owner_document_type_ce", "type": "checkbox", "x": 234, "y": 321, "size": 9 },
+    { "id": "vehicle_owner_document_type_ti", "type": "checkbox", "x": 279, "y": 321, "size": 9 },
+    { "id": "vehicle_owner_document_type_nuip", "type": "checkbox", "x": 329, "y": 321, "size": 9 },
+    { "id": "vehicle_owner_document_type_cd", "type": "checkbox", "x": 385, "y": 321, "size": 9 },
+    { "id": "vehicle_owner_document_number", "type": "text", "x": 431, "y": 320, "w": 62, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_owner_address", "type": "text", "x": 90, "y": 348, "w": 190, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_owner_city", "type": "text", "x": 286, "y": 348, "w": 120, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_owner_phone", "type": "text", "x": 418, "y": 348, "w": 70, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_owner_signature", "type": "multiline", "x": 90, "y": 376, "w": 390, "h": 28, "fontSize": 6, "bold": false },
+
+    { "id": "vehicle_buyer_first_last_name", "type": "text", "x": 90, "y": 448, "w": 150, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_buyer_second_last_name", "type": "text", "x": 245, "y": 448, "w": 150, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_buyer_name", "type": "text", "x": 400, "y": 448, "w": 120, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_buyer_document_type_c", "type": "checkbox", "x": 94, "y": 482, "size": 9 },
+    { "id": "vehicle_buyer_document_type_nit", "type": "checkbox", "x": 127, "y": 482, "size": 9 },
+    { "id": "vehicle_buyer_document_type_nn", "type": "checkbox", "x": 159, "y": 482, "size": 9 },
+    { "id": "vehicle_buyer_document_type_p", "type": "checkbox", "x": 193, "y": 482, "size": 9 },
+    { "id": "vehicle_buyer_document_type_ce", "type": "checkbox", "x": 234, "y": 482, "size": 9 },
+    { "id": "vehicle_buyer_document_type_ti", "type": "checkbox", "x": 279, "y": 482, "size": 9 },
+    { "id": "vehicle_buyer_document_type_nuip", "type": "checkbox", "x": 329, "y": 482, "size": 9 },
+    { "id": "vehicle_buyer_document_type_cd", "type": "checkbox", "x": 385, "y": 482, "size": 9 },
+    { "id": "vehicle_buyer_document_number", "type": "text", "x": 431, "y": 481, "w": 62, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_buyer_address", "type": "text", "x": 90, "y": 508, "w": 190, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_buyer_city", "type": "text", "x": 286, "y": 508, "w": 120, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_buyer_phone", "type": "text", "x": 418, "y": 508, "w": 70, "h": 12, "fontSize": 7 },
+    { "id": "vehicle_buyer_signature", "type": "multiline", "x": 90, "y": 537, "w": 390, "h": 28, "fontSize": 6, "bold": false },
+
+    { "id": "observations", "type": "multiline", "x": 498, "y": 422, "w": 490, "h": 55, "fontSize": 6.5, "bold": false }
+  ]
+}

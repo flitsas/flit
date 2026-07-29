@@ -10,6 +10,12 @@ public static class FurOverlayRenderer
     /// <summary>Ancho máximo de la imagen de firma del baúl dentro del campo (el resto es metadatos).</summary>
     private const double SignatureImageMaxWidth = 115;
 
+    /// <summary>
+    /// HU #11016 — fracción del ALTO del campo que puede ocupar la firma. El resto es aire: una firma
+    /// que llena el campo de borde a borde termina tocando (o pisando) las líneas vecinas del FUR.
+    /// </summary>
+    private const double SignatureImageMaxHeightRatio = 0.8;
+
     /// <summary>Separación entre imagen de firma y bloque de metadatos.</summary>
     private const double SignatureSidecarGap = 6;
 
@@ -80,7 +86,7 @@ public static class FurOverlayRenderer
             case FurFieldType.Multiline:
             case FurFieldType.Text:
                 if (!string.IsNullOrWhiteSpace(value.Text))
-                    DrawText(gfx, field, value.Text!);
+                    DrawText(gfx, field, value.Text!, value.FontSizeDelta);
                 break;
         }
     }
@@ -95,14 +101,18 @@ public static class FurOverlayRenderer
     private static void DrawText(
         XGraphics gfx,
         FurFieldDefinition field,
-        string text)
+        string text,
+        double fontSizeDelta = 0)
     {
-        var font = CreateFont(field.FontSize, field.Bold);
+        // HU #11031 — cuerpo efectivo = el del manifiesto ± el ajuste que traiga el valor, con un
+        // mínimo legible. Lo usa el sello de identidad, que va 2pt por debajo del resto del campo.
+        var fontSize = Math.Max(3, field.FontSize + fontSizeDelta);
+        var font = CreateFont(fontSize, field.Bold);
         var lines = field.Type == FurFieldType.Multiline
             ? text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             : [text];
 
-        var lineHeight = field.FontSize * 1.25;
+        var lineHeight = fontSize * 1.25;
         for (var i = 0; i < lines.Length; i++)
         {
             var line = lines[i];
@@ -119,7 +129,7 @@ public static class FurOverlayRenderer
                 };
             }
 
-            var yBaseline = yTop + field.FontSize * 0.82;
+            var yBaseline = yTop + fontSize * 0.82;
             gfx.DrawString(line, font, XBrushes.Black, new XPoint(drawX, yBaseline));
         }
     }
@@ -134,7 +144,14 @@ public static class FurOverlayRenderer
         var fieldW = field.W > 0 ? field.W : 120;
         var imageW = Math.Min(SignatureImageMaxWidth, fieldW * 0.38);
 
-        DrawImage(gfx, field.X, field.Y, imageW, fieldH, imageBytes);
+        // HU #11016 — la firma se dibujaba con el ALTO COMPLETO del campo y sin respetar la relación de
+        // aspecto: un PNG apaisado se estiraba verticalmente y se salía del espacio de firma, pisando lo
+        // que hubiera encima. Se encaja dentro de (imageW × fieldH * SignatureImageMaxHeightRatio)
+        // conservando la proporción y se centra verticalmente en el campo.
+        var (drawW, drawH) = FitInBox(imageBytes, imageW, fieldH * SignatureImageMaxHeightRatio);
+        var imageY = field.Y + Math.Max(0, (fieldH - drawH) / 2);
+
+        DrawImage(gfx, field.X, imageY, drawW, drawH, imageBytes);
 
         if (string.IsNullOrWhiteSpace(sidecarText))
             return;
@@ -191,6 +208,25 @@ public static class FurOverlayRenderer
         var h = field.H > 0 ? field.H : 36;
         var w = field.W > 0 ? field.W : 120;
         DrawImage(gfx, field.X, field.Y, w, h, imageBytes);
+    }
+
+    /// <summary>
+    /// Mide la imagen y delega la geometría en <see cref="FurSignatureLayout.Fit"/> (HU #11016). Si la
+    /// imagen no se puede leer se cae al tamaño de la caja: el dibujo posterior fallará igual, pero el
+    /// cálculo no revienta la generación del FUR.
+    /// </summary>
+    private static (double Width, double Height) FitInBox(byte[] imageBytes, double maxW, double maxH)
+    {
+        try
+        {
+            using var ms = new MemoryStream(imageBytes);
+            using var img = XImage.FromStream(() => ms);
+            return FurSignatureLayout.Fit(img.PixelWidth, img.PixelHeight, maxW, maxH);
+        }
+        catch (Exception)
+        {
+            return (maxW, maxH);
+        }
     }
 
     private static void DrawImage(XGraphics gfx, double x, double y, double w, double h, byte[] imageBytes)

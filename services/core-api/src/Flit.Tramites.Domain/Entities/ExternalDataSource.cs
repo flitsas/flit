@@ -10,6 +10,13 @@ public sealed class ExternalDataSource
     public int TimeoutMs { get; set; } = 5000;
     public bool IsActive { get; set; } = true;
     public string ExternalRefs { get; set; } = "{}";
+
+    /// <summary>
+    /// Vigencia (horas) de la caché de reutilización cross-trámite (CF-04, HU #10878, ADR-0030).
+    /// NULL = usa el default global <see cref="ExternalQueryCacheRules.DefaultTtlHours"/>.
+    /// </summary>
+    public int? CacheTtlHours { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public Guid? CreatedBy { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }

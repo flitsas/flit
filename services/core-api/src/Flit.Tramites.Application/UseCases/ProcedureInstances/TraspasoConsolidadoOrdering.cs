@@ -15,6 +15,10 @@ internal static class TraspasoConsolidadoOrdering
         "fur",
         // Licencia de Tránsito emitida por el OT al decidir el trámite (misma posición que en matrícula).
         "licencia_transito",
+        // ADR-0036 (HU #10915/#10914) — autorizaciones de radicación tras el FUR: el mandato
+        // (condicional) y la solicitud de trámite virtual (siempre), antes de los certificados.
+        "mandato",
+        "tramite_virtual",
         "certificado_identidad",
         // Certificado de identidad del vendedor (traspaso), tras el del comprador.
         "certificado_identidad_vendedor",
@@ -23,6 +27,10 @@ internal static class TraspasoConsolidadoOrdering
         // HU #10762 — certificado RNMC (medidas correctivas), junto a los demás certificados generados.
         "certificado_rnmc",
         "compraventa",
+        // HU #10926 — escritura de la compañía (NIT) de cada actor, tras la compraventa: vendedor/
+        // propietario ('escritura') y comprador ('escritura_comprador').
+        "escritura",
+        "escritura_comprador",
         "factura",
         "aduana",
         "impronta",

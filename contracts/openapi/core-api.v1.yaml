@@ -3108,7 +3108,112 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/tramites/actors/contact-lookup:
+    get:
+      operationId: actorContactLookup
+      tags: [Tramites, Actores]
+      summary: Lookup de datos de CONTACTO ya conocidos de una persona (HU #10955, AC2/AC3/AC4/AC5)
+      description: >
+        Precarga ciudad, correo, dirección y teléfono del registro MÁS RECIENTE (por fecha de
+        creación) de esa persona (`tipoDocumento` + `numeroDocumento`) entre los actores de CUALQUIER
+        trámite del tenant. NUNCA devuelve nombre ni documento — esos siempre se obtienen del RUNT en
+        vivo (AC1, `POST /instances/{id}/runt-person`), que dejó de reutilizar consultas previas
+        aunque exista `PersonDataConsent` registrado (revierte parcialmente la HU #10878/ADR-0031,
+        ver ADR-0031 actualizado). Sin gate de consentimiento (AC4): el contacto no es una consulta a
+        un tercero, es un dato que la propia compañía ya capturó de esa persona. Sin antecedentes
+        (persona nunca ha sido actor de un trámite del tenant) responde 200 con los cuatro campos en
+        `null`, NUNCA 404 (AC3). Aislado por tenant: el tenant se resuelve del JWT vía
+        `TenantEnforcementMiddleware`, no del `X-Tenant-Id` crudo del cliente (AC5).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tipoDocumento
+          in: query
+          required: true
+          schema: { type: string, enum: [CC, CE, NIT, PAS, TI] }
+          description: Tipo de documento de la persona a consultar.
+        - name: numeroDocumento
+          in: query
+          required: true
+          schema: { type: string }
+          description: Número de documento de la persona a consultar.
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+          description: >
+            Compañía a consultar. Para un usuario de compañía, el middleware lo sobrescribe con el
+            tenant del JWT (no puede leer el contacto de otra compañía cambiando este header).
+      responses:
+        "200":
+          description: Datos de contacto conocidos (o los cuatro campos en null si no hay antecedentes).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActorContactLookupResponse"
+        "400":
+          description: Falta el header X-Tenant-Id, o tipoDocumento/numeroDocumento inválidos o ausentes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+
   /api/v1/tramites/biometric-validations:
+    post:
+      operationId: iniciarPrevalidacionIdentidad
+      tags: [Tramites, Identidad, Prevalidacion]
+      summary: Crear prevalidación de identidad standalone (sin trámite) — HU #10866, CF-01
+      description: >
+        Crea una validación biométrica de identidad sin trámite asociado (prevalidación standalone).
+        Hace upsert de la entidad persona en el tenant por (documentType, documentNumber) y luego
+        inicia la validación con el proveedor activo (Kyverum → captureUrl real; mock → magic-link).
+        Para persona jurídica (personType='juridical'), el sujeto que valida biométricamente es el
+        representante legal (legalRep*). Requiere X-Tenant-Id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IniciarPrevalidacionRequest"
+      responses:
+        "201":
+          description: Prevalidación creada. captureUrl listo para compartir.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IniciarPrevalidacionResult"
+        "202":
+          description: Encolado (fallo transitorio del proveedor). Worker reintentará el envío.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IniciarPrevalidacionResult"
+        "400":
+          description: Datos inválidos o incompletos.
+        "409":
+          description: Ya existe una prevalidación activa o en proceso para este documento.
+        "422":
+          description: >
+            prevalidacion_solo_natural (CF-01/D1, Feature #11004, ADR-0036) — la prevalidación standalone
+            solo admite persona natural; la validación de personas jurídicas se realiza dentro de un
+            trámite. Se rechaza server-side aunque el body envíe personType=juridical directo a la API.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor rechazó la solicitud (error definitivo).
+        "503":
+          description: El proveedor no está disponible (error transitorio).
     get:
       operationId: listTenantBiometricValidations
       tags: [Tramites, Identidad]
@@ -3232,6 +3337,14 @@ paths:
           required: false
           description: Filas por página. El cliente elige de 10 en 10 hasta 50; fuera de rango se acota.
           schema: { type: integer, minimum: 10, maximum: 50, default: 20 }
+        - name: standalone
+          in: query
+          required: false
+          description: >
+            HU #10867 / CF-02 (Feature #11004): true = solo prevalidaciones standalone (sin trámite,
+            instanceId=null); false = solo validaciones ligadas a un trámite; omitido = todas (comportamiento
+            actual del submódulo Validaciones — CF-03, no cambia).
+          schema: { type: boolean }
       responses:
         "200":
           description: Validaciones del tenant + KPIs.
@@ -3243,6 +3356,190 @@ paths:
           description: >
             Falta el header X-Tenant-Id, parámetros de filtro inválidos (estado/provider/parte fuera de
             catálogo, scoreMin &gt; scoreMax, createdFrom &gt; createdTo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/biometric-validations/{id}:
+    get:
+      operationId: getPrevalidacionDetail
+      tags: [Tramites, Identidad, Prevalidacion]
+      summary: Detalle de una validación de identidad por id (tenant-scoped) — CF-06, Feature #11004
+      description: >
+        Devuelve el estado actual de UNA validación (standalone o de trámite) para poll de detalle.
+        Mismo DTO que usa el listado por-instancia (BiometricValidationDto): estado, intentos, enlace de
+        captura vigente, vigencia. Reemplaza la necesidad de un instanceId para prevalidaciones standalone.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Detalle de la validación.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiometricValidationDto"
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe o pertenece a otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: editarPrevalidacionIdentidad
+      tags: [Tramites, Identidad, Prevalidacion]
+      summary: Editar los datos de contacto de una prevalidación standalone — HU #10943, CF-03
+      description: >
+        Edita nombre/correo (titular) y nombre/correo del representante legal (persona jurídica) de una
+        prevalidación STANDALONE (procedureInstanceId=null y personId≠null). El tipo/número de documento
+        (titular o RL) NUNCA es editable (D7). Un cambio de correo (case-insensitive/trim) dispara el
+        reenvío automático en la misma transacción, con nuevo enlace y TTL de 24 h (D8); editar solo el
+        nombre no reenvía. El cambio de correo consume cupo de reenvíos igual que el reenvío manual (D10).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EditarPrevalidacionRequest"
+      responses:
+        "200":
+          description: Prevalidación actualizada (y reenviada si cambió el correo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EditarPrevalidacionResult"
+        "400":
+          description: Falta el header X-Tenant-Id o el cuerpo de la solicitud.
+        "403":
+          description: no_editable — la validación pertenece a un trámite (solo lectura en este módulo).
+        "404":
+          description: Prevalidación no encontrada.
+        "409":
+          description: >
+            identidad_aprobada (la identidad ya está aprobada, vigente o vencida) o
+            referenciada_por_tramite (defensa en profundidad, D11).
+        "422":
+          description: documento_no_editable — el tipo/número de documento no es editable (D7).
+        "429":
+          description: reenvio_en_cooldown o tope_reenvios (D10).
+        "502":
+          description: proveedor_error — el proveedor rechazó el reenvío (error definitivo).
+        "503":
+          description: proveedor_no_disponible — el proveedor no está disponible (error transitorio).
+
+  /api/v1/tramites/biometric-validations/{id}/resend:
+    post:
+      operationId: reenviarPrevalidacionIdentidad
+      tags: [Tramites, Identidad, Prevalidacion]
+      summary: Reenviar manualmente la validación de identidad de una prevalidación standalone — HU #10943, CF-03
+      description: >
+        Reenvía la validación de identidad sobre el MISMO registro (sin crear otro): nuevo token/enlace,
+        TTL de 24 h, intentos y sondeos de reconciliación reiniciados a 0 (D8). Solo aplica a prevalidaciones
+        STANDALONE; bloqueado si el estado es `aprobado` (D9) o si se agotó el tope de 3 reenvíos / no ha
+        pasado el cooldown de 5 minutos (D10).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Reenvío completado (enviado/en_proceso).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReenviarPrevalidacionResult"
+        "202":
+          description: Encolado (fallo transitorio del proveedor). El reenvío ya consumió cupo del tope.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReenviarPrevalidacionResult"
+        "400":
+          description: Falta el header X-Tenant-Id.
+        "403":
+          description: no_editable — la validación pertenece a un trámite (solo lectura en este módulo).
+        "404":
+          description: Prevalidación no encontrada.
+        "409":
+          description: >
+            identidad_aprobada (la identidad ya está aprobada, vigente o vencida) o
+            referenciada_por_tramite (defensa en profundidad, D11).
+        "429":
+          description: reenvio_en_cooldown o tope_reenvios (D10).
+        "502":
+          description: proveedor_error — el proveedor rechazó el reenvío (error definitivo).
+        "503":
+          description: proveedor_no_disponible — el proveedor no está disponible (error transitorio).
+
+  /api/v1/tramites/biometric-validations/{validationId}/audit:
+    get:
+      operationId: getIdentityAuditByValidation
+      tags: [Tramites, Identidad]
+      summary: Bitácora de una validación de identidad, sin depender de instancia — CF-07, Feature #11004
+      description: >
+        Equivalente a GET /instances/{id}/biometric/{validationId}/audit pero SIN instanceId: sirve tanto
+        para prevalidaciones standalone como de trámite. Autorización: cualquier usuario autenticado del
+        tenant (D2, ADR-0036 — no restringido a SuperAdmin). Respuesta saneada, sin secretos ni PII cruda
+        (mismo criterio que el endpoint por-instancia).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: validationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Bitácora de la validación.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityAuditResponse"
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe o pertenece a otro tenant.
           content:
             application/json:
               schema:
@@ -4856,6 +5153,56 @@ paths:
           description: No autenticado.
         "403":
           description: Sin rol AdminCompany, o tenant ajeno.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/analytics/alert-events/{id}/ack:
+    post:
+      tags: [Analytics · Alertas por umbral (Reportes 2.0)]
+      operationId: analyticsAlertEventsAck
+      summary: Marca un disparo de alerta como reconocido (set-once)
+      description: >
+        Reportes 2.0 (HU-D) / HU5 (observabilidad ICT). Requiere policy AdminCompany. Reconoce un
+        disparo de `analytics.alert_events` de forma idempotente set-once (conserva el primer
+        reconocimiento). Un id de otro tenant "no existe" (404). SuperAdmin DEBE indicar `tenantId`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+          description: Id del disparo (alert_event).
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin; obligatorio para él.
+      responses:
+        "200":
+          description: Disparo reconocido; devuelve el evento actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertEventDto"
+        "400":
+          description: Falta tenant (SuperAdmin sin `tenantId`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado.
+        "403":
+          description: Sin rol AdminCompany, o tenant ajeno.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: El disparo de alerta no existe.
           content:
             application/json:
               schema:
@@ -7127,6 +7474,25 @@ components:
         maxDeliveryAttempts:
           type: integer
           description: Tope de reintentos a partir del cual un evento se considera dead-letter.
+    ActorContactLookupResponse:
+      type: object
+      description: >
+        Datos de CONTACTO ya conocidos de una persona (HU #10955). NUNCA incluye nombre ni documento
+        — esos siempre vienen del RUNT en vivo. Los cuatro campos van en null si la persona nunca ha
+        sido actor de un trámite del tenant (AC3).
+      properties:
+        ciudad:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        direccion:
+          type: string
+          nullable: true
+        telefono:
+          type: string
+          nullable: true
     EnsureIdentityResult:
       type: object
       description: Desenlace de asegurar la identidad vigente de una parte (HU #10350).
@@ -7192,20 +7558,28 @@ components:
             Para mock proviene del scorer; para Kyverum se deriva de las coincidencias del payload.
     TenantBiometricValidationDto:
       type: object
-      required: [id, instanceId, referenceNumber, modalidad, name, documentType, documentNumber, status, provider, expired, createdAt]
+      required: [id, name, documentType, documentNumber, status, provider, expired, createdAt, email, attempts, maxAttempts, resendCount]
       description: Fila de la vista transversal del submódulo de Validaciones (HU #10234).
       properties:
         id: { type: string, format: uuid }
         instanceId:
           type: string
           format: uuid
-          description: Instancia (trámite) a la que pertenece la validación (para navegar).
+          nullable: true
+          description: >
+            Instancia (trámite) a la que pertenece la validación (para navegar). Null para
+            prevalidaciones standalone (HU #10865/#10867).
         referenceNumber:
           type: string
-          description: Referencia del trámite (p.ej. TRM-2026-000007).
+          nullable: true
+          description: >
+            Referencia del trámite (p.ej. TRM-2026-000007). Null para prevalidaciones standalone.
         modalidad:
           type: string
-          description: Modalidad de entrada del trámite (matricula_inicial | traspaso).
+          nullable: true
+          description: >
+            Modalidad de entrada del trámite (matricula_inicial | traspaso). Null para prevalidaciones
+            standalone.
         partyRole: { type: string, nullable: true }
         name: { type: string }
         documentType: { type: string }
@@ -7226,6 +7600,27 @@ components:
           description: Motivo de rechazo SANITIZADO (sin PII), solo con status=rechazado.
         createdAt: { type: string, format: date-time }
         validatedAt: { type: string, format: date-time, nullable: true }
+        email:
+          type: string
+          format: email
+          description: >
+            CF-05 (Feature #11004) — correo de la validación. Vista autenticada del gestor del tenant
+            (D3): completo, sin enmascarar. Solo visible en Validaciones y Prevalidaciones — no en
+            exports/Dashboard.
+        attempts:
+          type: integer
+          description: Intentos ya realizados (CF-06, Feature #11004).
+        maxAttempts:
+          type: integer
+          description: Tope de intentos permitidos.
+        resendCount:
+          type: integer
+          description: Veces que se reenvió la validación (HU #10943).
+        lastResentAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Momento del último reenvío. Null si nunca se ha reenviado.
         validUntil:
           type: string
           format: date-time
@@ -7271,6 +7666,41 @@ components:
         total:
           type: integer
           description: Total de filas del conjunto filtrado completo (para calcular el nº de páginas).
+    IdentityAuditEventDto:
+      type: object
+      required: [occurredAt, stage, outcome]
+      description: Una fila de la bitácora de identidad, expuesta a la API (sin secretos ni PII).
+      properties:
+        occurredAt: { type: string, format: date-time }
+        stage:
+          type: string
+          description: >
+            send|send_response|send_error|webhook_received|webhook_not_verifiable|
+            webhook_signature_invalid|webhook_applied|reconcile
+        outcome: { type: string }
+        httpStatus: { type: integer, nullable: true }
+        signaturePresent: { type: boolean, nullable: true }
+        secretPresent: { type: boolean, nullable: true }
+        decryptOk: { type: boolean, nullable: true }
+        providerStatus: { type: string, nullable: true }
+        errorType: { type: string, nullable: true }
+        message: { type: string, nullable: true }
+    IdentityAuditResponse:
+      type: object
+      required: [validationId, events]
+      description: >
+        Respuesta de la bitácora (CF-07, Feature #11004). referencedFromOtherProcedure = true cuando la
+        identidad está reutilizada de OTRO trámite del mismo cliente (solo aplica al endpoint por-instancia;
+        el endpoint por-validationId no tiene ese contexto y siempre reporta false).
+      properties:
+        validationId: { type: string, format: uuid }
+        referencedFromOtherProcedure:
+          type: boolean
+          default: false
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/IdentityAuditEventDto"
     IniciarKyverumVerifyResult:
       type: object
       required: [validation, captureUrl]
@@ -7285,6 +7715,170 @@ components:
           default: false
           description: >
             true = el envío falló transitoriamente y quedó encolado para reintento (estado `pendiente_envio`).
+
+    IniciarPrevalidacionRequest:
+      type: object
+      required: [documentType, documentNumber, name, email]
+      description: >
+        Entrada para crear una prevalidación de identidad standalone (sin trámite) — HU #10866, CF-01.
+        Para persona jurídica (personType='juridical') se requieren los campos legalRep*.
+      properties:
+        documentType:
+          type: string
+          maxLength: 20
+          example: "CC"
+          description: Tipo de documento de la persona (CC, CE, NIT, PP…)
+        documentNumber:
+          type: string
+          maxLength: 40
+          example: "1234567890"
+        name:
+          type: string
+          maxLength: 200
+          description: Nombre completo de la persona (o razón social si es jurídica).
+        email:
+          type: string
+          format: email
+          maxLength: 320
+          description: Correo al que se envía el enlace de captura.
+        personType:
+          type: string
+          enum: [natural, juridical]
+          default: natural
+          description: >
+            'natural' → valida al titular; 'juridical' → valida al representante legal
+            (campos legalRep* requeridos si personType='juridical').
+        legalRepDocumentType:
+          type: string
+          maxLength: 20
+          nullable: true
+          description: Tipo de documento del representante legal.
+        legalRepDocumentNumber:
+          type: string
+          maxLength: 40
+          nullable: true
+        legalRepName:
+          type: string
+          maxLength: 200
+          nullable: true
+        legalRepEmail:
+          type: string
+          format: email
+          maxLength: 320
+          nullable: true
+          description: Correo del RL. Si vacío se usa el email de la empresa.
+
+    IniciarPrevalidacionResult:
+      type: object
+      required: [validation, captureUrl]
+      description: Resultado de crear una prevalidación standalone — HU #10866, CF-01.
+      properties:
+        validation:
+          $ref: "#/components/schemas/BiometricValidationDto"
+        captureUrl:
+          type: string
+          description: >
+            URL de captura. Kyverum → URL real del proveedor. Mock → magic-link público.
+            Vacío si queued=true (fallo transitorio).
+        queued:
+          type: boolean
+          default: false
+          description: >
+            true = el proveedor Kyverum falló de forma transitoria y la validación quedó
+            encolada para reintento automático (estado pendiente_envio, HTTP 202).
+
+    EditarPrevalidacionRequest:
+      type: object
+      description: >
+        Edición de una prevalidación standalone — HU #10943, CF-03, D7. Todos los campos son
+        opcionales; documentType/documentNumber/legalRepDocumentType/legalRepDocumentNumber solo
+        existen para DETECTAR un intento de cambiarlos (→ 422 documento_no_editable), nunca se
+        persisten.
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          nullable: true
+          description: Nuevo nombre del titular (persona natural o razón social).
+        email:
+          type: string
+          format: email
+          maxLength: 320
+          nullable: true
+          description: Nuevo correo del titular. Si difiere del actual, dispara el reenvío automático (D8).
+        legalRepName:
+          type: string
+          maxLength: 200
+          nullable: true
+          description: Nuevo nombre del representante legal (solo persona jurídica).
+        legalRepEmail:
+          type: string
+          format: email
+          maxLength: 320
+          nullable: true
+          description: >
+            Nuevo correo del representante legal (solo persona jurídica). Si difiere del actual,
+            dispara el reenvío automático dirigido al RL (D8, AC3).
+        documentType:
+          type: string
+          maxLength: 20
+          nullable: true
+          description: NO editable. Presente solo para detectar el intento (→ 422).
+        documentNumber:
+          type: string
+          maxLength: 40
+          nullable: true
+          description: NO editable. Presente solo para detectar el intento (→ 422).
+        legalRepDocumentType:
+          type: string
+          maxLength: 20
+          nullable: true
+          description: NO editable. Presente solo para detectar el intento (→ 422).
+        legalRepDocumentNumber:
+          type: string
+          maxLength: 40
+          nullable: true
+          description: NO editable. Presente solo para detectar el intento (→ 422).
+
+    EditarPrevalidacionResult:
+      type: object
+      required: [validation, resent]
+      description: Resultado de editar una prevalidación standalone — HU #10943, CF-03.
+      properties:
+        validation:
+          $ref: "#/components/schemas/BiometricValidationDto"
+        captureUrl:
+          type: string
+          nullable: true
+          description: >
+            Enlace de captura NUEVO, solo si resent=true y el envío no quedó encolado (fallo
+            transitorio del proveedor). Null si resent=false (no hubo cambio de correo).
+        resent:
+          type: boolean
+          description: >
+            true si el cambio de correo disparó el reenvío automático (D8); false si solo cambió
+            el nombre (o ningún dato de contacto).
+
+    ReenviarPrevalidacionResult:
+      type: object
+      required: [validation, captureUrl]
+      description: Resultado de reenviar manualmente una prevalidación standalone — HU #10943, CF-03.
+      properties:
+        validation:
+          $ref: "#/components/schemas/BiometricValidationDto"
+        captureUrl:
+          type: string
+          description: >
+            URL de captura NUEVA. Kyverum → URL real del proveedor. Mock → magic-link público.
+            Vacío si queued=true (fallo transitorio).
+        queued:
+          type: boolean
+          default: false
+          description: >
+            true = el proveedor Kyverum falló de forma transitoria y la validación quedó encolada
+            para reintento automático (estado pendiente_envio, HTTP 202). El reenvío YA consumió
+            cupo del tope (D10) aunque el envío no se completó.
+
     KyverumWebhookPayload:
       type: object
       required: [evento, data]
@@ -8016,7 +8610,7 @@ components:
         name: { type: string, maxLength: 120, example: Rechazo OT alto }
         metric:
           type: string
-          enum: [rejection_rate_pct, stuck_count, external_api_errors, pending_identity_validations]
+          enum: [rejection_rate_pct, stuck_count, external_api_errors, pending_identity_validations, ict_stuck_in_validation, ict_novelty_rate_pct, ict_webhook_delivery_failures, ict_jobs_out_of_sla]
         operator:
           type: string
           enum: [gt, gte, lt, lte]
@@ -8049,7 +8643,7 @@ components:
         name: { type: string, maxLength: 120 }
         metric:
           type: string
-          enum: [rejection_rate_pct, stuck_count, external_api_errors, pending_identity_validations]
+          enum: [rejection_rate_pct, stuck_count, external_api_errors, pending_identity_validations, ict_stuck_in_validation, ict_novelty_rate_pct, ict_webhook_delivery_failures, ict_jobs_out_of_sla]
         operator:
           type: string
           enum: [gt, gte, lt, lte]
@@ -8087,7 +8681,17 @@ components:
           type: boolean
           description: true si el correo a los destinatarios se envió (best-effort).
         message: { type: string, nullable: true }
-      required: [id, alertRuleId, ruleName, triggeredAt, metricValue, threshold, notified, message]
+        acknowledgedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Momento del reconocimiento (null = sin reconocer).
+        acknowledgedBy:
+          type: string
+          format: uuid
+          nullable: true
+          description: Usuario (claim sub) que reconoció el disparo.
+      required: [id, alertRuleId, ruleName, triggeredAt, metricValue, threshold, notified, message, acknowledgedAt, acknowledgedBy]
 
     AlertEventsPageResponse:
       type: object

@@ -99,18 +99,18 @@ public sealed class WizardBiometricaStateTests
         instance.Attachments.Add(Doc("impronta"));
     }
 
-    /// <summary>Completa pasos 1-3 de matrícula (VIN, docs, comprador+RUNT) → Identidad (4) alcanzable.</summary>
+    /// <summary>Completa pasos 1-3 de matrícula (VIN, comprador+RUNT, docs) → Identidad (4) alcanzable.</summary>
     private static void CompletarHastaIdentidadMatricula(ProcedureInstance instance)
     {
         AgregarVinYDocsMatricula(instance);
         instance.Actors.Add(Comprador());
     }
 
-    /// <summary>Completa pasos 1-5 de traspaso (placa, documentos, vendedor, comprador, preflight, comercial) → FUR (6) alcanzable.</summary>
+    /// <summary>Completa pasos 1-5 de traspaso (placa, vendedor, comprador, documentos, preflight, comercial) → FUR (6) alcanzable.</summary>
     private static void CompletarHastaFurTraspaso(ProcedureInstance instance)
     {
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
-        // Los documentos gobiernan el paso 2; se marcan los obligatorios (vía estado manual).
+        // HU #10935 — los documentos gobiernan el paso 4 (tras los actores); se marcan los obligatorios.
         instance.ChecklistEstado =
             "{\"contrato_compraventa\":true,\"impronta\":true,\"soat\":true,\"rtm\":true,\"paz_salvo\":true,\"cedulas\":true}";
         instance.Actors.Add(Vendedor());

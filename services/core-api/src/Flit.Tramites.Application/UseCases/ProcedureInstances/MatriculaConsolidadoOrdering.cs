@@ -14,11 +14,18 @@ internal static class MatriculaConsolidadoOrdering
         // Licencia de Tránsito emitida por el OT al decidir el trámite: entra al consolidado
         // justo después del FUR (generar o re-generar desde cualquier módulo la incluye).
         "licencia_transito",
+        // ADR-0036 (HU #10915/#10914) — autorizaciones de radicación tras el FUR: el mandato
+        // (condicional) y la solicitud de trámite virtual (siempre), antes de los certificados.
+        "mandato",
+        "tramite_virtual",
         "certificado_identidad",
         // HU #10589 — certificado RUES de la persona jurídica, tras el de identidad.
         "certificado_rues",
         // HU #10762 — certificado RNMC (medidas correctivas), junto a los demás certificados generados.
         "certificado_rnmc",
+        // HU #10926 — escritura de la compañía (NIT) del actor, tras los certificados generados.
+        "escritura",
+        "escritura_comprador",
         "factura",
         "aduana",
         "impronta",

@@ -173,6 +173,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
         <AvaluoComercialCard
           instanceId={instanceId}
           disabled={readOnly}
+          accepted={data.valueOrigin === 'suggestion'}
           onAccept={(value, source, sugerido) =>
             setData((d) => ({
               ...d,

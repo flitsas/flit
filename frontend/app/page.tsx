@@ -13,12 +13,13 @@ import { Ayuda } from "@/components/atom/modules/Ayuda";
 import { RbacAdmin } from "@/components/atom/modules/RbacAdmin";
 import { Auditoria } from "@/components/atom/modules/Auditoria";
 import { LogQx } from "@/components/atom/modules/LogQx";
+import { IctLogs } from "@/components/atom/modules/IctLogs";
 import { useAccessibleModules } from "@/hooks/useAccessibleModules";
 import { useAuthGate } from "@/hooks/useAuthGate";
 import { buildValidModules, parseModule } from "@/lib/nav/modules";
 import { trackModuleView } from "@/lib/telemetry"; // Reportes2 HU-A
 import { getToken } from "@/lib/api/client";
-import { canReadLogQx, decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { canReadIctLogs, canReadLogQx, decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 
 function HomeContent() {
   const router = useRouter();
@@ -33,6 +34,8 @@ function HomeContent() {
   // LOG QX (HU #10795) — gate por permiso `logqx.read` (o SuperAdmin). Se re-lee de forma
   // perezosa (no reactiva) igual que `isSuperAdminUser`: el JWT no cambia durante la sesión.
   const [canLogQx] = useState<boolean>(() => canReadLogQx(decodeJwtPayload(getToken())));
+  // ICT (HU10893) — gate por permiso `ict.logs.read` (o SuperAdmin), lectura perezosa como los demás.
+  const [canIctLogs] = useState<boolean>(() => canReadIctLogs(decodeJwtPayload(getToken())));
 
   const accessibleCodes = accessibleModules.map((m) => m.code) as ModuleId[];
   // "ayuda" es soporte universal (no es un módulo RBAC): siempre navegable, aunque no
@@ -88,6 +91,7 @@ function HomeContent() {
       {module === "rbac"         && <RbacAdmin />}
       {module === "auditoria"    && isSuperAdminUser && <Auditoria />}
       {module === "log-qx"       && canLogQx && <LogQx initialInstanceId={params.get("instanceId") ?? undefined} />}
+      {module === "ict-logs"     && canIctLogs && <IctLogs />}
     </Shell>
   );
 }

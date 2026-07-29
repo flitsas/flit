@@ -26,7 +26,7 @@ public sealed class TraspasoGatesTests
     [Fact]
     public void Paso6_SinGateDocumentos_Avanza()
     {
-        // Los documentos se exigen ahora en el paso 2; el paso 6 (FUR) ya NO bloquea por docs.
+        // Los documentos se exigen ahora en el paso 4; el paso 6 (FUR) ya NO bloquea por docs.
         var ctx = BaseCtx() with { DocumentosObligatoriosCompletos = false };
         TraspasoGates.PasoCompleto(6, ctx).Ok.Should().BeTrue();
     }
@@ -37,29 +37,30 @@ public sealed class TraspasoGatesTests
         TraspasoGates.PasoCompleto(6, BaseCtx()).Ok.Should().BeTrue();
     }
 
-    [Fact]
-    public void Paso2_DocumentosIncompletos_Bloquea()
+    [Fact] // HU #10935 — documentos ahora es el paso 4 (después de los actores).
+    public void Paso4_DocumentosIncompletos_Bloquea()
     {
         var ctx = BaseCtx() with { DocumentosObligatoriosCompletos = false };
-        var r = TraspasoGates.PasoCompleto(2, ctx);
+        var r = TraspasoGates.PasoCompleto(4, ctx);
         r.Ok.Should().BeFalse();
         r.Code.Should().Be("documentos_incompletos");
     }
 
     [Fact]
-    public void Paso2_DocumentosIncompletos_ForzarNoBypass()
+    public void Paso4_DocumentosIncompletos_ForzarNoBypass()
     {
         // Gating ESTRICTO de documentos (igual que matrícula): forzar no omite obligatorios.
         var ctx = BaseCtx() with { DocumentosObligatoriosCompletos = false, ForzarContinuar = true };
-        TraspasoGates.PasoCompleto(2, ctx).Code.Should().Be("documentos_incompletos");
+        TraspasoGates.PasoCompleto(4, ctx).Code.Should().Be("documentos_incompletos");
     }
 
     [Fact]
-    public void MaxPasoAlcanzable_DocumentosIncompletos_Es2()
+    public void MaxPasoAlcanzable_DocumentosIncompletos_Es4()
     {
-        // Documentos viven en el paso 2 → docs incompletos bloquean en 2 → max alcanzable = 2.
+        // HU #10935 — documentos viven en el paso 4 (tras los actores) → docs incompletos
+        // bloquean en 4 → max alcanzable = 4.
         var ctx = BaseCtx() with { DocumentosObligatoriosCompletos = false };
-        TraspasoGates.MaxPasoAlcanzable(ctx).Should().Be(2);
+        TraspasoGates.MaxPasoAlcanzable(ctx).Should().Be(4);
     }
 
     [Fact]
@@ -105,32 +106,32 @@ public sealed class TraspasoGatesTests
         TraspasoGates.MaxPasoAlcanzable(ctx).Should().Be(1);
     }
 
-    [Fact]
-    public void Paso2_PreflightRed_Bloquea()
+    [Fact] // HU #10935 — el preflight/documentos ahora es el paso 4.
+    public void Paso4_PreflightRed_Bloquea()
     {
         var ctx = BaseCtx() with { Preflight = new PreflightSnapshot("red", false) };
-        var r = TraspasoGates.PasoCompleto(2, ctx);
+        var r = TraspasoGates.PasoCompleto(4, ctx);
         r.Ok.Should().BeFalse();
         r.Code.Should().Be("preflight_red");
     }
 
     [Fact]
-    public void Paso2_ForzarContinuar_BypassPreflightRed()
+    public void Paso4_ForzarContinuar_BypassPreflightRed()
     {
         var ctx = BaseCtx() with { Preflight = new PreflightSnapshot("red", false), ForzarContinuar = true };
-        TraspasoGates.PasoCompleto(2, ctx).Ok.Should().BeTrue();
+        TraspasoGates.PasoCompleto(4, ctx).Ok.Should().BeTrue();
     }
 
     [Fact]
-    public void Paso2_RiesgoPreflightAceptado_BypassPreflightRed()
+    public void Paso4_RiesgoPreflightAceptado_BypassPreflightRed()
     {
-        // "Asumo el riesgo" levanta el bloqueo de preflight rojo subsanable en el paso 2.
+        // "Asumo el riesgo" levanta el bloqueo de preflight rojo subsanable en el paso de documentos.
         var ctx = BaseCtx() with { Preflight = new PreflightSnapshot("red", false), RiesgoPreflightAceptado = true };
-        TraspasoGates.PasoCompleto(2, ctx).Ok.Should().BeTrue();
+        TraspasoGates.PasoCompleto(4, ctx).Ok.Should().BeTrue();
     }
 
     [Fact]
-    public void Paso2_PreflightProviderError_BloqueaDuroNoSubsanable()
+    public void Paso4_PreflightProviderError_BloqueaDuroNoSubsanable()
     {
         // Consulta no verificable (error de proveedor) = bloqueo DURO: ni "aceptar riesgo" ni
         // forzar lo levantan. Hay que reejecutar la consulta.
@@ -140,13 +141,13 @@ public sealed class TraspasoGatesTests
             RiesgoPreflightAceptado = true,
             ForzarContinuar = true,
         };
-        var r = TraspasoGates.PasoCompleto(2, ctx);
+        var r = TraspasoGates.PasoCompleto(4, ctx);
         r.Ok.Should().BeFalse();
         r.Code.Should().Be("preflight_provider_error");
     }
 
     [Fact]
-    public void Paso2_RiesgoPreflightAceptado_AunExigeDocumentos()
+    public void Paso4_RiesgoPreflightAceptado_AunExigeDocumentos()
     {
         // El riesgo NO afloja el gating de documentos: sigue exigiendo obligatorios.
         var ctx = BaseCtx() with
@@ -155,13 +156,13 @@ public sealed class TraspasoGatesTests
             RiesgoPreflightAceptado = true,
             DocumentosObligatoriosCompletos = false,
         };
-        var r = TraspasoGates.PasoCompleto(2, ctx);
+        var r = TraspasoGates.PasoCompleto(4, ctx);
         r.Ok.Should().BeFalse();
         r.Code.Should().Be("documentos_incompletos");
     }
 
-    [Fact]
-    public void Paso4_RiesgoPreflightAceptado_NoBypassSimit()
+    [Fact] // HU #10935 — el comprador/SIMIT ahora es el paso 3.
+    public void Paso3_RiesgoPreflightAceptado_NoBypassSimit()
     {
         // A diferencia de ForzarContinuar, el riesgo NO omite la validación SIMIT del comprador.
         var ctx = BaseCtx() with
@@ -169,7 +170,7 @@ public sealed class TraspasoGatesTests
             RiesgoPreflightAceptado = true,
             SimitComprador = new SimitSnapshot(Consultado: true, "222", TotalComparendos: 2),
         };
-        var r = TraspasoGates.PasoCompleto(4, ctx);
+        var r = TraspasoGates.PasoCompleto(3, ctx);
         r.Ok.Should().BeFalse();
         r.Code.Should().Be("simit_multas");
     }
@@ -199,38 +200,38 @@ public sealed class TraspasoGatesTests
         TraspasoGates.PasoCompleto(1, ctx).Ok.Should().BeTrue();
     }
 
-    [Fact]
-    public void Paso3_VendedorIncompleto_Bloquea()
+    [Fact] // HU #10935 — el vendedor ahora es el paso 2.
+    public void Paso2_VendedorIncompleto_Bloquea()
     {
         var ctx = BaseCtx() with { Vendedor = new ParteDatos("V", "111", "no-email") };
-        var r = TraspasoGates.PasoCompleto(3, ctx);
+        var r = TraspasoGates.PasoCompleto(2, ctx);
         r.Ok.Should().BeFalse();
         r.Code.Should().Be("vendedor_incompleto");
     }
 
     [Fact]
-    public void Paso3_RuntVendedorDocDistinto_Bloquea()
+    public void Paso2_RuntVendedorDocDistinto_Bloquea()
     {
         var ctx = BaseCtx() with { RuntVendedor = new RuntSnapshot(Consultado: true, "999") };
-        TraspasoGates.PasoCompleto(3, ctx).Code.Should().Be("runt_vendedor");
+        TraspasoGates.PasoCompleto(2, ctx).Code.Should().Be("runt_vendedor");
     }
 
-    [Fact]
-    public void Paso4_SimitConComparendos_Bloquea()
+    [Fact] // HU #10935 — el comprador/SIMIT ahora es el paso 3.
+    public void Paso3_SimitConComparendos_Bloquea()
     {
         var ctx = BaseCtx() with { SimitComprador = new SimitSnapshot(Consultado: true, "222", TotalComparendos: 3) };
-        TraspasoGates.PasoCompleto(4, ctx).Code.Should().Be("simit_multas");
+        TraspasoGates.PasoCompleto(3, ctx).Code.Should().Be("simit_multas");
     }
 
-    [Fact] // FEATURE 05 — comparendos informativos (ComparendosBloquean=false) NO bloquean el paso 4.
-    public void Paso4_SimitConComparendos_NoBloquea_SiComparendosSonInformativos()
+    [Fact] // FEATURE 05 — comparendos informativos (ComparendosBloquean=false) NO bloquean el paso 3.
+    public void Paso3_SimitConComparendos_NoBloquea_SiComparendosSonInformativos()
     {
         var ctx = BaseCtx() with
         {
             SimitComprador = new SimitSnapshot(Consultado: true, "222", TotalComparendos: 3),
             ComparendosBloquean = false,
         };
-        TraspasoGates.PasoCompleto(4, ctx).Ok.Should().BeTrue();
+        TraspasoGates.PasoCompleto(3, ctx).Ok.Should().BeTrue();
     }
 
     [Fact]
@@ -302,9 +303,10 @@ public sealed class TraspasoGatesTests
     [Fact]
     public void DetectarModificacionPasosCerrados_ClaveDePasoAbierto_Permitido()
     {
+        // HU #10935 — el comprador es el paso 3; con maxEditable=3 aún es editable (no cerrado).
         var r = TraspasoGates.DetectarModificacionPasosCerrados(
             maxPasoEditable: 3,
-            clavesModificadas: new[] { "vendedor" }); // paso 3 aún editable
+            clavesModificadas: new[] { "comprador" }); // paso 3 aún editable
         r.Ok.Should().BeTrue();
     }
 

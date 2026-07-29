@@ -341,6 +341,56 @@ public sealed class EnsureIdentityHandlerTests
         vault.Calls.Should().Be(0);
     }
 
+    // ── HU #10867 — Reutilizar prevalidación standalone vigente al crear trámite ────────────────
+
+    [Fact]
+    public async Task Handle_PrevalidacionStandaloneVigenteAprobada_Reusada_AC1()
+    {
+        // AC1: Given prevalidación standalone aprobada vigente (ProcedureInstanceId == null)
+        // When se crea trámite con esa persona como actor
+        // Then EnsureIdentity retorna outcome "reusada" y el ValidationId de la standalone.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConComprador();
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+
+        // Standalone: ProcedureInstanceId == null, aprobada, vigente (hace 5 días)
+        var standalone = Validation(BiometricEstados.Aprobado, DateTimeOffset.UtcNow.AddDays(-5));
+        standalone.ProcedureInstanceId = null;
+
+        _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
+            .Returns(standalone);
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().Be(EnsureIdentityOutcomes.Reusada);
+        // Reuso por referencia: se devuelve el Id de la standalone, sin clonar ni crear fila nueva.
+        result.ValidationId.Should().Be(standalone.Id);
+        _repo.DidNotReceive().Add(Arg.Any<ProcedureInstanceBiometricValidation>());
+    }
+
+    [Fact]
+    public async Task Handle_PrevalidacionStandaloneExpirada_NoReutiliza_RequiereValidacion_AC2()
+    {
+        // AC2: Given prevalidación standalone con más de 30 días de antigüedad
+        // When se crea trámite con esa persona como actor
+        // Then el repositorio no la devuelve (ya filtrada) y EnsureIdentity retorna "requiere_validacion".
+        // La responsabilidad del filtro de vigencia es del repositorio; el handler recibe null.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConComprador();
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+
+        // El repositorio filtra la standalone expirada (>30 días) y devuelve null.
+        _repo.FindVigenteApprovedByDocumentAsync(TenantId, TipoDoc, Documento, Arg.Any<DateTimeOffset>(), ct)
+            .Returns((ProcedureInstanceBiometricValidation?)null);
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
+        _repo.DidNotReceive().Add(Arg.Any<ProcedureInstanceBiometricValidation>());
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────────────────────
 
     private static ProcedureInstance MatriculaConComprador() => new()
@@ -412,12 +462,15 @@ public sealed class EnsureIdentityHandlerTests
     private sealed class FakeVaultPolicy(SignatureVaultMatch? match) : ISignatureVaultPolicy
     {
         public int Calls { get; private set; }
+
+        /// <summary>Último DOCUMENTO consultado (HU #10937: el baúl se resuelve por documento del representante).</summary>
         public string? LastNit { get; private set; }
 
-        public Task<SignatureVaultMatch?> ResolveAsync(Guid tenantId, string nitEmpresa, CancellationToken cancellationToken = default)
+        public Task<SignatureVaultMatch?> ResolveAsync(
+            Guid tenantId, string documentType, string documentNumber, CancellationToken cancellationToken = default)
         {
             Calls++;
-            LastNit = nitEmpresa;
+            LastNit = documentNumber;
             return Task.FromResult(match);
         }
     }

@@ -85,13 +85,15 @@ public static class AdminMandateSignersEndpoints
     private static async Task<IResult> ListAsync(
         Guid transitOfficeId,
         [FromServices] ListMandateSignersHandler handler,
+        [FromServices] Flit.Admin.Application.Identity.AdminIdentityMockOptions mockOptions,
         CancellationToken cancellationToken)
     {
         var result = await handler
             .HandleAsync(new ListMandateSignersQuery { TransitOfficeId = transitOfficeId }, cancellationToken)
             .ConfigureAwait(false);
 
-        return Results.Ok(new { data = result });
+        // HU #11028 — la consola solo ofrece "Simular validación" si el ambiente la tiene habilitada.
+        return Results.Ok(new { data = result, mockIdentityEnabled = mockOptions.Enabled });
     }
 
     private static async Task<IResult> ListCompaniesAsync(
@@ -119,6 +121,9 @@ public static class AdminMandateSignersEndpoints
             FullName = request.FullName ?? string.Empty,
             DocumentNumber = request.DocumentNumber ?? string.Empty,
             CompanyTenantIds = request.CompanyTenantIds ?? [],
+            DocumentType = request.DocumentType ?? "CC",
+            Email = request.Email,
+            UserId = request.UserId,
             CreatedBy = ResolveUserId(httpContext.User),
         };
 
@@ -127,7 +132,14 @@ public static class AdminMandateSignersEndpoints
         return result.IsValid
             ? Results.Created(
                 $"/api/v1/admin/transit-offices/{transitOfficeId}/mandate-signers/{result.MandateSignerId}",
-                new { id = result.MandateSignerId, integrityHash = result.IntegrityHash })
+                new
+                {
+                    id = result.MandateSignerId,
+                    integrityHash = result.IntegrityHash,
+                    // HU #11000 — desenlace de la validación de identidad disparada por el alta, para que
+                    // el aviso al usuario sea veraz ("enviada" / "ya validada" / "no se pudo enviar").
+                    identity = result.Identity.ToString().ToLowerInvariant(),
+                })
             : ValidationProblem(result.Errors);
     }
 
@@ -146,6 +158,9 @@ public static class AdminMandateSignersEndpoints
             FullName = request.FullName ?? string.Empty,
             DocumentNumber = request.DocumentNumber ?? string.Empty,
             CompanyTenantIds = request.CompanyTenantIds ?? [],
+            DocumentType = request.DocumentType ?? "CC",
+            Email = request.Email,
+            UserId = request.UserId,
             UpdatedBy = ResolveUserId(httpContext.User),
         };
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
-import { Building2, FileClock, FileSignature, FileText, Hash, Save, Shuffle, Stamp } from "lucide-react";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { Building2, FileClock, FileText, Hash, Save, Shuffle, Stamp, Users } from "lucide-react";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
 import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
@@ -16,7 +16,32 @@ import { ConfiguracionEmpresaTab } from "./tabs/ConfiguracionEmpresaTab";
 // se muestra en esa misma ventana (sin banner de éxito que quede fijo en la vista).
 // Whitelist (AC3), matriz OT (AC4) e historial (AC5) se inyectan como slots.
 
-type TabId = "matricula" | "traspasos" | "config" | "documentos" | "placas" | "historial" | "baul";
+type TabId =
+  | "matricula"
+  | "traspasos"
+  | "config"
+  | "documentos"
+  | "placas"
+  | "representantes"
+  | "historial";
+
+/**
+ * Navegación al Baúl de Firmas expuesta a la pestaña de representantes (HU #10904, ajustes HU #10929).
+ * El Baúl ya no es una pestaña propia: vive como una sección dentro de la pestaña "Representantes
+ * legales". `goToBaul` lleva a esa sección (scroll) y `baulVisible` indica si está disponible (depende
+ * de `baulFirmasActivo`). El proveedor real lo aporta el contenedor de la pestaña de representantes.
+ */
+export interface CompanyTabsNav {
+  goToBaul: () => void;
+  baulVisible: boolean;
+}
+
+export const CompanyTabsNavContext = createContext<CompanyTabsNav | null>(null);
+
+/** Hook para que los slots naveguen entre pestañas. Fuera del proveedor devuelve no-ops seguros. */
+export function useCompanyTabsNav(): CompanyTabsNav {
+  return useContext(CompanyTabsNavContext) ?? { goToBaul: () => {}, baulVisible: false };
+}
 
 interface TabDef {
   id: TabId;
@@ -33,28 +58,31 @@ const TABS: TabDef[] = [
   { id: "documentos", label: "Documentos", icon: FileText, isConfig: false },
   // HU #10653 (Feature #10587) — visualización de placas preasignadas por OT (solo si está activa).
   { id: "placas", label: "Placas preasignadas", icon: Hash, isConfig: false },
+  // HU #10904 (Feature #10852) — directorio de representantes legales de las compañías representadas.
+  // Ajustes HU #10929: aloja también el Baúl de Firmas como sección interna y es el único punto de
+  // alta/edición de escrituras (por compañía, desde el detalle del representante).
+  { id: "representantes", label: "Representantes legales", icon: Users, isConfig: false },
   { id: "historial", label: "Historial de Cambios", icon: FileClock, isConfig: false },
 ];
-
-// HU #10644 — pestaña del Baúl de Firmas; solo se muestra si `baulFirmasActivo` está activo.
-const BAUL_TAB: TabDef = { id: "baul", label: "Baúl de Firmas", icon: FileSignature, isConfig: false };
 
 export interface CompanyConfigTabsProps {
   settings: TenantSettings;
   /** Persiste la configuración. Debe lanzar ApiValidationError (con `errors[]`) en 422. */
   onSaveSettings: (update: TenantSettingsUpdate) => Promise<void>;
   whitelistSlot?: ReactNode;
+  /** Tabla consolidada de Organismos de Tránsito: grant + bloqueos + restricciones de
+   *  consulta scoped por OT (HU #10194 — consolidación; endpoints propios, fuera del PUT
+   *  atómico de settings). */
   otSlot?: ReactNode;
-  /** HU #10761 — restricciones de consulta por OT (endpoint propio, fuera del PUT atómico). */
-  otRestrictionsSlot?: ReactNode;
-  /** FEATURE 05 — criterios de bloqueo del preflight por OT (endpoint propio). */
-  otBlockingSlot?: ReactNode;
   auditSlot?: ReactNode;
   documentosSlot?: ReactNode;
-  /** Panel del Baúl de Firmas (HU #10644). Solo se muestra si `baulFirmasActivo` está activo. */
-  baulFirmasSlot?: ReactNode;
   /** HU #10653 — visor de placas preasignadas. Solo si la preasignación está activa. */
   platesSlot?: ReactNode;
+  /**
+   * HU #10904 (ajustes HU #10929) — pestaña de representantes legales, que además aloja el Baúl de
+   * Firmas como sección interna (según `baulFirmasActivo`).
+   */
+  legalRepresentativesSlot?: ReactNode;
 }
 
 export function CompanyConfigTabs({
@@ -62,20 +90,17 @@ export function CompanyConfigTabs({
   onSaveSettings,
   whitelistSlot,
   otSlot,
-  otRestrictionsSlot,
-  otBlockingSlot,
   auditSlot,
   documentosSlot,
-  baulFirmasSlot,
   platesSlot,
+  legalRepresentativesSlot,
 }: CompanyConfigTabsProps) {
   const [tab, setTab] = useState<TabId>("matricula");
-  // La pestaña de placas solo aparece si la preasignación está activa; la del Baúl solo si el toggle
-  // `baulFirmasActivo` está activo en la config guardada.
-  const visibleTabs = useMemo(() => {
-    const base = TABS.filter((t) => t.id !== "placas" || settings.preasignacionPlacaActiva);
-    return settings.baulFirmasActivo ? [...base, BAUL_TAB] : base;
-  }, [settings.preasignacionPlacaActiva, settings.baulFirmasActivo]);
+  // La pestaña de placas solo aparece si la preasignación está activa.
+  const visibleTabs = useMemo(
+    () => TABS.filter((t) => t.id !== "placas" || settings.preasignacionPlacaActiva),
+    [settings.preasignacionPlacaActiva],
+  );
   const [form, setForm] = useState<SettingsForm>(() => formFromSettings(settings));
   // Línea base (última configuración guardada) para detectar cambios; se actualiza al guardar.
   const [initialForm, setInitialForm] = useState<SettingsForm>(() => formFromSettings(settings));
@@ -127,7 +152,7 @@ export function CompanyConfigTabs({
     }
   };
 
-  // Si la pestaña activa deja de existir (p. ej. se desactivó el Baúl o las placas), recae en la primera.
+  // Si la pestaña activa deja de existir (p. ej. se desactivaron las placas), recae en la primera.
   const currentTab = visibleTabs.find((t) => t.id === tab) ?? visibleTabs[0];
   const activeTabId = currentTab.id;
 
@@ -168,15 +193,13 @@ export function CompanyConfigTabs({
             form={form}
             onChange={patch}
             otSlot={otSlot}
-            otRestrictionsSlot={otRestrictionsSlot}
-            otBlockingSlot={otBlockingSlot}
             fieldErrors={fieldErrors}
           />
         )}
         {activeTabId === "documentos" && documentosSlot}
         {activeTabId === "placas" && platesSlot}
+        {activeTabId === "representantes" && legalRepresentativesSlot}
         {activeTabId === "historial" && auditSlot}
-        {activeTabId === "baul" && baulFirmasSlot}
       </div>
 
       {errorBanner && (

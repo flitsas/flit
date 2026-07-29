@@ -26,6 +26,10 @@ public sealed class ConsolidadoMaestroHandlerTests
     {
         public byte[] NormalizeToPdf(byte[] content, string mimetype) => content;
         public byte[] Merge(IReadOnlyList<byte[]> pdfParts) => pdfParts.SelectMany(x => x).ToArray();
+
+        // La portada la ejercita el merger real (HU #10857); aquí concatenamos las partes en orden.
+        public byte[] Compose(MergeRequest request) =>
+            Merge(request.Parts.Select(p => p.Pdf).ToList());
     }
 
     private sealed class FakeStorage : IAttachmentStorage
@@ -103,7 +107,7 @@ public sealed class ConsolidadoMaestroHandlerTests
     public async Task HandleAsync_InstanceNotFound_ReturnsNotFound()
     {
         var ct = TestContext.Current.CancellationToken;
-        _repo.GetByIdWithAttachmentsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+        _repo.GetByIdWithChecklistGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns((ProcedureInstance?)null);
 
         var (result, error) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct: ct);
@@ -122,7 +126,7 @@ public sealed class ConsolidadoMaestroHandlerTests
         var instance = InstanceWithAttachments(id, tenantId,
             ("consolidado", "consolidado.pdf"),
             ("consolidado_maestro", "maestro.pdf"));
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, ct: ct);
 
@@ -142,7 +146,7 @@ public sealed class ConsolidadoMaestroHandlerTests
             ("fur", "fur.pdf"),
             ("consolidado", "consolidado_prev.pdf"),
             ("consolidado_maestro", "maestro_prev.pdf"));
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, ct: ct);
 
@@ -166,7 +170,7 @@ public sealed class ConsolidadoMaestroHandlerTests
             ("factura", "factura.pdf"),
             ("aduana", "aduana.pdf"),
             ("fur", "fur.pdf"));
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, ct: ct);
 
@@ -206,7 +210,7 @@ public sealed class ConsolidadoMaestroHandlerTests
             UploadedAt = DateTimeOffset.UtcNow.AddHours(-1),
         };
         instance.Attachments.Add(prevAttachment);
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, ct: ct);
 
@@ -229,7 +233,7 @@ public sealed class ConsolidadoMaestroHandlerTests
         var instance = InstanceWithAttachments(id, tenantId,
             ("factura", "factura.pdf"),
             ("impronta", "impronta.pdf"));
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, ct: ct);
 
@@ -251,7 +255,7 @@ public sealed class ConsolidadoMaestroHandlerTests
             ("consolidado_maestro", "maestro_vigente.pdf"));
         instance.ConsolidadoMaestroVigente = true;
         var maestro = instance.Attachments.Single(a => a.Tipo == "consolidado_maestro");
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, ct: ct);
 
@@ -275,7 +279,7 @@ public sealed class ConsolidadoMaestroHandlerTests
         var instance = InstanceWithAttachments(id, tenantId,
             ("factura", "factura.pdf"),
             ("fur", "fur.pdf"));
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
         var (result, error) = await _handler.HandleAsync(id, tenantId, ct: ct);
 
@@ -297,7 +301,7 @@ public sealed class ConsolidadoMaestroHandlerTests
             ("factura", "factura.pdf"),
             ("aduana", "aduana.pdf"),
             ("soat", "soat.pdf"));
-        _repo.GetByIdWithAttachmentsAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
         // Matriz OT: SOAT antes que factura. "aduana" no está en la matriz → va al final (Anexos).
         var precedencia = new[] { "soat", "factura" };

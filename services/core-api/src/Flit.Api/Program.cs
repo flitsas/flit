@@ -15,8 +15,13 @@ using Flit.Modules.Security.Domain.Auth;
 using Flit.Tramites.Application;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+
+// Plano C: core-api hace push gRPC hacia core-ict (callback de estado) sobre HTTP/2 en claro (h2c) en la
+// red interna. Sin este switch, el cliente gRPC exige TLS y la llamada saliente falla.
+AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -108,6 +113,41 @@ builder.Services.AddCors(options => options.AddPolicy(
         .AllowAnyMethod()
         .AllowCredentials()));
 
+// gRPC server para la orquestación desde core-ict (ICT): crear el borrador reutilizando los casos
+// de uso de trámites.
+builder.Services.AddGrpc();
+
+// El gRPC (h2c) necesita un endpoint dedicado SOLO HTTP/2: Kestrel no multiplexa HTTP/1.1 y HTTP/2
+// en el mismo puerto en texto plano (el REST lo rechazaría con HTTP_1_1_REQUIRED). Es opt-in por
+// Ict:GrpcPort — si no está configurado, el binding de la API REST queda EXACTAMENTE como estaba.
+// Al declarar endpoints por código Kestrel ignora ASPNETCORE_URLS/launchSettings, así que se
+// re-declara el endpoint REST desde esas mismas URLs (mismo puerto/host que hoy) y se añade el gRPC.
+var ictGrpcPort = builder.Configuration.GetValue<int?>("Ict:GrpcPort");
+if (ictGrpcPort is { } grpcPort)
+{
+    builder.WebHost.ConfigureKestrel((context, options) =>
+    {
+        var restUrls = (context.Configuration[WebHostDefaults.ServerUrlsKey] ?? "http://localhost:4003")
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var raw in restUrls)
+        {
+            var uri = new Uri(raw
+                .Replace("://+", "://0.0.0.0", StringComparison.Ordinal)
+                .Replace("://*", "://0.0.0.0", StringComparison.Ordinal));
+            if (string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase))
+            {
+                options.ListenLocalhost(uri.Port, lo => lo.Protocols = HttpProtocols.Http1AndHttp2);
+            }
+            else
+            {
+                options.ListenAnyIP(uri.Port, lo => lo.Protocols = HttpProtocols.Http1AndHttp2);
+            }
+        }
+
+        options.ListenAnyIP(grpcPort, lo => lo.Protocols = HttpProtocols.Http2);
+    });
+}
+
 var app = builder.Build();
 
 // Migraciones automáticas al arrancar: valida si hay migraciones pendientes
@@ -167,6 +207,14 @@ app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 
 app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
 app.MapGet("/api/v1/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
 
+// Orquestación ICT (core-ict -> core-api): exige el service-token (esquema/policy IctService) para que
+// solo core-ict autenticado como sistema pueda invocar la orquestación (no un tercero en el puerto interno).
+app.MapGrpcService<Flit.Api.Grpc.IctOrchestrationService>()
+    .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.IctServicePolicy);
+// Consulta de fuentes externas para ICT (reusa el subsistema de consultas de core-api).
+app.MapGrpcService<Flit.Api.Grpc.IctConsultationService>()
+    .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.IctServicePolicy);
+
 // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
 app.MapAuthEndpoints();
 app.MapSecurityEndpoints();
@@ -179,7 +227,11 @@ app.MapAdminQuipuxEndpoints();
 app.MapAdminLogQxEndpoints();
 app.MapAdminTransitOfficeTenantsEndpoints();
 app.MapAdminMandateSignersEndpoints();
+app.MapAdminMandateSignerIdentityEndpoints();
 app.MapAdminSignatureVaultEndpoints();
+app.MapAdminLegalRepresentativesEndpoints();
+app.MapAdminDeedsEndpoints();
+app.MapAdminLegalRepresentativeIdentityEndpoints();
 app.MapAdminDocumentTypesEndpoints();
 app.MapAdminProcedureDocumentRequirementsEndpoints();
 app.MapAdminDocumentOrderOverridesEndpoints();
@@ -212,6 +264,7 @@ app.MapTramitesPreflightEndpoints();
 app.MapTramitesRnmcEndpoints();
 app.MapTramitesWizardEndpoints();
 app.MapTramitesStatusHistoryEndpoints();
+app.MapLegalRepresentativeConsumptionEndpoints();
 
 // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
 app.MapAnalyticsEndpoints();

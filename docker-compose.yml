@@ -20,8 +20,9 @@ services:
   # ── Backend: core-api (ASP.NET Core) ──────────────────────────────────────
   backend:
     build:
-      context: ./services/core-api
-      dockerfile: Dockerfile
+      # Context = services/ para incluir Flit.Ict.Grpc.Contracts (ProjectReference desde core-api).
+      context: ./services
+      dockerfile: core-api/Dockerfile
     container_name: flit-backend-dev
     environment:
       ASPNETCORE_ENVIRONMENT: Development
@@ -34,12 +35,42 @@ services:
       Smtp__DefaultSenderEmail: tramitesvehiculos@flitsas.com
       Smtp__DefaultSenderPassword: "TramitesNoti2024*"
       Smtp__DefaultSenderName: FLIT Tramites
+      # gRPC ICT (orquestación): endpoint dedicado SOLO HTTP/2 (h2c). Kestrel no multiplexa HTTP/1.1
+      # y HTTP/2 en el mismo puerto en texto plano, por eso el gRPC va en un puerto aparte del REST 8081.
+      Ict__GrpcPort: "8082"
+      # Service-token gRPC este-oeste (HMAC compartido con core-ict). Dev únicamente; en prod llega por secreto.
+      Ict__ServiceToken__Secret: dev-ict-service-token-shared-secret-change-in-prod-01234567
+      # Plano C: reflejo de estado del trámite hacia core-ict (callback gRPC). Red interna Docker.
+      Ict__StateCallback__Address: http://core-ict:4020
     ports:
       - "4003:8081"
     depends_on:
       postgres:
         condition: service_healthy
     # volume configuration can be added if code changes need to be reflected dynamically (though usually require rebuilding for .NET unless dotnet watch is configured inside container)
+
+  # ── Backend: core-ict (Integración con Terceros) ──────────────────────────
+  core-ict:
+    build:
+      context: ./services/core-ict
+      dockerfile: Dockerfile
+    container_name: flit-core-ict-dev
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:4020
+      ConnectionStrings__Core: Host=postgres;Port=5432;Database=flit_dev;Username=postgres;Password=postgres
+      # gRPC hacia core-api (orquestación de creación del borrador): puerto dedicado HTTP/2 del backend.
+      CoreApiGrpc__Address: http://backend:8082
+      # Service-token gRPC este-oeste (HMAC compartido con core-api). Valida tanto el canal directo
+      # (orquestación/consulta) como el inverso (callback de estados, aud=core-ict-internal).
+      Ict__ServiceToken__Secret: dev-ict-service-token-shared-secret-change-in-prod-01234567
+    ports:
+      - "4020:4020"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_started
 
   # ── Frontend: Next.js ─────────────────────────────────────────────────────
   frontend:

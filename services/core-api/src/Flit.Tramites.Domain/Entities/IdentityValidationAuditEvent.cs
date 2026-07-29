@@ -87,6 +87,15 @@ public static class IdentityValidationAuditStages
 
     /// <summary>El enlace de captura venció (expires_at &lt;= now) y la validación se terminalizó como expirada.</summary>
     public const string Expired = "expired";
+
+    /// <summary>
+    /// HU #10943 (CF-03) — se editaron los datos de contacto de una prevalidación standalone (nombre y/o
+    /// correo del sujeto). El <c>Detail</c>/<c>Message</c> NUNCA lleva el correo en claro (enmascarado).
+    /// </summary>
+    public const string ContactEdited = "contact_edited";
+
+    /// <summary>HU #10943 (CF-03) — se reenvió la validación (manual o automático por cambio de correo).</summary>
+    public const string Resend = "resend";
 }
 
 /// <summary>Desenlaces comunes (<see cref="IdentityValidationAuditEvent.Outcome"/>).</summary>

@@ -109,6 +109,64 @@ public sealed class PatchFieldValuesTests
         await _repo.Received(1).SaveChangesAsync(ct);
     }
 
+    // ── HU #10870 (AC1): subsanación reabre la edición COMPLETA, no solo transit_office_* ─────────
+
+    [Fact]
+    public async Task HandleAsync_Subsanacion_NonTransitField_IsAllowed()
+    {
+        // A diferencia de otros estados post-envío (solo transit_office_*/soat_estado), en
+        // subsanación cualquier campo del trámite vuelve a ser editable SIN pasar por borrador.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = Instance(id, tenantId, TramiteEstado.Rechazado);
+        instance.SubsanacionActiva = true;
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+        _repo.GetFormFieldIdByKeyAsync(Arg.Any<Guid>(), Arg.Any<string>(), ct).Returns((Guid?)null);
+
+        var request = new PatchFieldValuesRequest(
+            [new FieldValueInput(Guid.NewGuid(), "plate", "ABC123", null)]);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, request, ct);
+
+        error.Should().BeNull();
+        instance.FieldValues.Should().ContainSingle(f => f.FieldKey == "plate" && f.ValueText == "ABC123");
+        result.Should().NotBeNull();
+        await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Subsanacion_ExistingField_IsUpdated()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = Instance(id, tenantId, TramiteEstado.Rechazado);
+        instance.SubsanacionActiva = true;
+        var existing = new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = id,
+            FormFieldId = Guid.NewGuid(),
+            FieldKey = "plate",
+            ValueText = "OLD",
+            Source = "user",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        instance.FieldValues.Add(existing);
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+
+        var request = new PatchFieldValuesRequest(
+            [new FieldValueInput(existing.FormFieldId, "plate", "NEW", null)]);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, request, ct);
+
+        error.Should().BeNull();
+        existing.ValueText.Should().Be("NEW");
+        await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
     [Fact]
     public async Task HandleAsync_Draft_NewField_IsAdded()
     {
@@ -257,6 +315,27 @@ public sealed class PatchFieldValuesTests
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(TraspasoInstance(id, tenantId, TramiteEstado.Entregado));
+
+        var request = new PatchFieldValuesRequest(
+            [new FieldValueInput(null, "transit_office_code", "11001000", null)]);
+
+        var (_, error) = await _sut.HandleAsync(id, tenantId, request, ct);
+
+        error.Should().Be("ot_traspaso_no_modificable");
+        await _repo.DidNotReceive().SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Traspaso_Subsanacion_TransitOfficeChange_StillRejected()
+    {
+        // HU #10870 — subsanación reabre la edición general, pero el bloqueo B11 del OT en traspaso
+        // (lo fija el RUNT) sigue vigente: no es una excepción a esa regla.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var traspaso = TraspasoInstance(id, tenantId, TramiteEstado.Rechazado);
+        traspaso.SubsanacionActiva = true;
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(traspaso);
 
         var request = new PatchFieldValuesRequest(
             [new FieldValueInput(null, "transit_office_code", "11001000", null)]);

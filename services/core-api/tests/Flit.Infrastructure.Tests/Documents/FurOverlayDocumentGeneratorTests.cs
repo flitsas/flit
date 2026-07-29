@@ -100,6 +100,38 @@ public sealed class FurOverlayDocumentGeneratorTests
     }
 
     [Fact]
+    public void GenerateCompraventa_IdentidadValidada_PintaFirmasConSello()
+    {
+        // HU #10859 (ADR-0031): con identidad validada la compraventa se firma con el sello por rol.
+        var data = TraspasoData() with
+        {
+            IdentidadValidada = true,
+            SellosIdentidad = new Dictionary<string, string>
+            {
+                ["comprador"] = "hash-comprador (2026)",
+                ["vendedor"] = "hash-vendedor (2026)",
+            },
+        };
+
+        var pdf = Flit.Infrastructure.Documents.Fur.FurCompraventaDocumentGenerator.Generate(data);
+
+        Encoding.ASCII.GetString(pdf, 0, 4).Should().Be("%PDF");
+    }
+
+    [Fact]
+    public void GenerateCompraventa_IdentidadPendiente_ProducePdfSinFirmas_SinLanzar()
+    {
+        // HU #10859: sin validación de identidad, la compraventa se emite igual (sin firmas), no bloquea.
+        var data = TraspasoData() with { IdentidadValidada = false, SellosIdentidad = null };
+
+        byte[]? pdf = null;
+        var act = () => pdf = Flit.Infrastructure.Documents.Fur.FurCompraventaDocumentGenerator.Generate(data);
+
+        act.Should().NotThrow();
+        Encoding.ASCII.GetString(pdf!, 0, 4).Should().Be("%PDF");
+    }
+
+    [Fact]
     public void FurFieldMapper_MarksMatriculaTramite()
     {
         var values = FurFieldMapper.Map(FullData());
@@ -336,6 +368,8 @@ public sealed class FurOverlayDocumentGeneratorTests
     [Fact]
     public void FurFieldMapper_VaultSignatureImage_IncludesSidecarMetadata()
     {
+        // HU #10930 (Feature #10929): el sidecar estampa el codigo_hash digitado en el baúl, NO el UUID
+        // de la fila.
         var vaultId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
         var data = FullData() with
         {
@@ -347,7 +381,8 @@ public sealed class FurOverlayDocumentGeneratorTests
                     "RENTING SAS",
                     new DateOnly(2026, 1, 1),
                     new DateOnly(2026, 12, 31),
-                    vaultId),
+                    vaultId,
+                    "ABC-123-XYZ"),
             },
         };
 
@@ -356,9 +391,41 @@ public sealed class FurOverlayDocumentGeneratorTests
         sig.ImageBytes.Should().NotBeNullOrEmpty();
         sig.ImageSidecarText.Should().Contain("Doc. 900123456");
         sig.ImageSidecarText.Should().Contain("RENTING SAS");
-        sig.ImageSidecarText.Should().Contain("01/01/2026");
-        sig.ImageSidecarText.Should().Contain("31/12/2026");
-        sig.ImageSidecarText.Should().Contain(vaultId.ToString("D"));
+        // HU #11018 — formato de negocio unico en documentos: AÑO/MES/DIA.
+        sig.ImageSidecarText.Should().Contain("2026/01/01");
+        sig.ImageSidecarText.Should().Contain("2026/12/31");
+        // Se pinta el codigo_hash del baúl…
+        sig.ImageSidecarText.Should().Contain("Hash: ABC-123-XYZ");
+        // …y NUNCA el UUID de la fila.
+        sig.ImageSidecarText.Should().NotContain(vaultId.ToString("D"));
+    }
+
+    [Fact]
+    public void FurFieldMapper_VaultSignatureImage_WithoutCodigoHash_OmitsHashLine()
+    {
+        // HU #10930: si la firma del baúl no trae codigo_hash, se OMITE la línea "Hash" (no se imprime
+        // el GUID de la fila).
+        var vaultId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        var data = FullData() with
+        {
+            FirmaImagenes = new Dictionary<string, byte[]> { ["comprador"] = [0x89, 0x50, 0x4E, 0x47] },
+            FirmaBaulMetadatos = new Dictionary<string, FirmaBaulMetadata>
+            {
+                ["comprador"] = new FirmaBaulMetadata(
+                    "900123456",
+                    "RENTING SAS",
+                    new DateOnly(2026, 1, 1),
+                    new DateOnly(2026, 12, 31),
+                    vaultId,
+                    null),
+            },
+        };
+
+        var values = FurFieldMapper.Map(data);
+        var sig = values["vehicle_owner_signature"];
+        sig.ImageSidecarText.Should().Contain("Doc. 900123456");
+        sig.ImageSidecarText.Should().NotContain("Hash:");
+        sig.ImageSidecarText.Should().NotContain(vaultId.ToString("D"));
     }
 
     [Fact]
@@ -390,8 +457,9 @@ public sealed class FurOverlayDocumentGeneratorTests
     {
         // Construir el generador dispara el static ctor que registra el resolutor embebido.
         _ = CreateGenerator();
-        GlobalFontSettings.FontResolver.Should().BeOfType<FurFontResolver>(
-            "sin resolutor, PdfSharpCore no resuelve 'Arial' en runtimes sin fuentes (alpine) y el FUR responde HTTP 500");
+        GlobalFontSettings.FontResolver.Should().BeOfType<Flit.Infrastructure.Documents.Branding.FlitFontResolver>(
+            "desde HU #10855 el overlay del FUR comparte el resolutor superset (Poppins + DejaVu); sin él, "
+            + "PdfSharpCore no resuelve 'Arial' en runtimes sin fuentes (alpine) y el FUR responde HTTP 500");
     }
 
     [Fact]

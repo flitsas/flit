@@ -252,7 +252,7 @@ public sealed class SubirDocumentoPortalHandler(
             return (null, "file_too_large");
 
         var instance = participant.ProcedureInstance!;
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();

@@ -8,6 +8,9 @@ public sealed class RejectOtClientProcedureCommand
 
     public Guid? RejectedBy { get; init; }
 
+    /// <summary>Override de organismo para SuperAdmin (mismo contrato que list/consolidado).</summary>
+    public Guid? TransitOfficeId { get; init; }
+
     public RejectOtClientProcedureRequest Request { get; init; } = new();
 }
 

@@ -44,7 +44,7 @@ public sealed class GenerarImprontaAttachmentHandler(
         var instance = await repo.GetByIdWithFurGraphAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft");
         if (instance.Attachments.Any(a => string.Equals(a.Tipo, "impronta", StringComparison.OrdinalIgnoreCase)))
             return (null, "impronta_ya_existe");
@@ -133,4 +133,19 @@ public sealed class GenerarImprontaAttachmentHandler(
             ImprontaProviderErrorKind.Validation => "provider_validation",
             _ => "provider_unauthorized",
         };
+}
+
+/// <summary>
+/// Adaptador de <see cref="IImprontaAutoGenerator"/> sobre <see cref="GenerarImprontaAttachmentHandler"/>
+/// (HU #11017): permite que el consolidado genere la impronta que falte sin acoplarse a la firma del
+/// handler. Best-effort por contrato — devuelve el código de error en vez de lanzar.
+/// </summary>
+public sealed class ImprontaAutoGenerator(GenerarImprontaAttachmentHandler handler) : IImprontaAutoGenerator
+{
+    public async Task<string?> TryGenerateAsync(
+        Guid id, Guid tenantId, Guid userId, CancellationToken ct = default)
+    {
+        var (_, error) = await handler.HandleAsync(id, tenantId, userId, ct).ConfigureAwait(false);
+        return error;
+    }
 }

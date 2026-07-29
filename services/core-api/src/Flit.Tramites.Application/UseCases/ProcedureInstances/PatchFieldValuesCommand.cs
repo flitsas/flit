@@ -36,10 +36,10 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
             return (null, "ot_traspaso_no_modificable");
         }
 
-        if (instance.Status != TramiteEstado.Borrador)
+        // Subsanación (flag sobre rechazado) o borrador: edición completa. Fuera de eso, tras el
+        // envío solo se permiten claves de organismo de tránsito (generación diferida del FUR).
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
         {
-            // Tras el envío solo se permiten claves de organismo de tránsito (generación
-            // diferida del FUR). Cualquier otro campo sigue bloqueado en not_draft.
             var blocked = request.Items.Where(i =>
                 !IsPostSubmitTransitOfficeKey(i.FieldKey)).ToList();
             if (blocked.Count > 0)
