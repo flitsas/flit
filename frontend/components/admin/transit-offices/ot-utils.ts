@@ -1,5 +1,6 @@
-import { formatFecha } from "@/lib/format/date";
 "use client";
+
+import { formatFecha } from "@/lib/format/date";
 
 /** Muestra los últimos 6 caracteres visibles de una URL (HU #10219 AC1). */
 export function maskTargetUrl(url: string): string {
