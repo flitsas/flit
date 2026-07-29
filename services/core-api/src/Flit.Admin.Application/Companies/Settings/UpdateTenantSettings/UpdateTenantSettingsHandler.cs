@@ -102,6 +102,7 @@ public sealed class UpdateTenantSettingsHandler
             OnlyOwnVehicles = switches.OnlyOwnVehicles,
             SignatureVaultEnabled = request.BaulFirmasActivo,
             PlatePreassignEnabled = request.PreasignacionPlacaActiva,
+            PlateFlowSkipToTerminado = request.PlateFlowSkipToTerminado,
             NotificationChannel = channel,
             NotificationTarget = target,
             PaymentMethods = [.. methods],

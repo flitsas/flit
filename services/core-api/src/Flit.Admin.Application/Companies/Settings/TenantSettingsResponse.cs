@@ -17,6 +17,8 @@ public sealed record TenantSettingsResponse(
     IReadOnlyDictionary<string, ConsultationProviderChoice> ConsultationProviderConfig,
     // Feature #10587 — preasignación de placa por compañía.
     bool PreasignacionPlacaActiva,
+    // Sub-flujo post-radicación: con placa completa, omitir Asignado → Terminado.
+    bool PlateFlowSkipToTerminado,
     AvaluoProviderConfigDto AvaluoProviderConfig,
     // FEATURE 02 — fuente de comparendos (internal | external).
     string FinesQuerySource);

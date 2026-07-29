@@ -42,8 +42,9 @@ public sealed record InstanceSummaryDto(
     string? VendedorDocumento = null,
     bool SubsanacionActiva = false,           // flag de edición sobre rechazado
     int SubsanacionCount = 0,                 // veces que se activó la subsanación
-    string? UltimoRechazoMotivo = null);     // reason (texto libre) del último rechazo OT
-
+    string? UltimoRechazoMotivo = null,      // reason (texto libre) del último rechazo OT
+    /// <summary>Sub-estado de placa (null | preasignado | asignado | terminado), ortogonal a Estado.</summary>
+    string? PlateFlowStatus = null);
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
 /// <see cref="InstanceSummaryDto"/> para la tabla de operación.
@@ -134,7 +135,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             string.IsNullOrWhiteSpace(seller?.DocumentNumber) ? null : seller.DocumentNumber,
             e.SubsanacionActiva,
             e.SubsanacionCount,
-            DeriveUltimoRechazoMotivo(e));
+            DeriveUltimoRechazoMotivo(e),
+            e.PlateFlowStatus);
     }
 
     /// <summary>
