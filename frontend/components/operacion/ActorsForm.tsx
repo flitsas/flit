@@ -30,6 +30,7 @@ import type {
   ActorRol,
   LegalRepresentativeLookupResult,
   LegalRepresentativeOption,
+  MecanismoFirma,
   BiometricEstado,
   ProcedureActor,
   RepresentanteLegal,
@@ -1081,6 +1082,33 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 label={identidadVigente ? 'Identidad vigente' : 'Sin identidad vigente'}
               />
             </div>
+            {/* HU #11061 — con los DOS mecanismos vigentes el gestor elige con cuál se registra el
+                trámite. Con uno solo no se pregunta: se usa el que hay. Sin ninguno el flujo
+                continúa y los badges de arriba ya dicen que no hay firma que plasmar. */}
+            {firmaVigente && identidadVigente && (
+              <div className="mt-2">
+                <label
+                  htmlFor={`${index}-mecanismo-firma`}
+                  className="opacity-60 font-normal block mb-1"
+                >
+                  Firma con la que se registra el trámite
+                </label>
+                <select
+                  id={`${index}-mecanismo-firma`}
+                  value={actors[index]?.representanteLegal?.mecanismoFirma ?? 'baul'}
+                  disabled={readOnly}
+                  onChange={(e) =>
+                    updateRepLegal(index, {
+                      mecanismoFirma: e.target.value as MecanismoFirma,
+                    })
+                  }
+                  className={INPUT_BASE}
+                >
+                  <option value="baul">Firma del baúl</option>
+                  <option value="identidad">Sello de validación de identidad</option>
+                </select>
+              </div>
+            )}
           </div>
         </div>
       );

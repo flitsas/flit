@@ -83,6 +83,12 @@ export interface CompanyConfigTabsProps {
    * Firmas como sección interna (según `baulFirmasActivo`).
    */
   legalRepresentativesSlot?: ReactNode;
+  /**
+   * HU #11062 — compañía que se está configurando. Se rotula por ENCIMA de la barra de pestañas para
+   * que sobreviva al cambio de pestaña, y se repite en la confirmación de guardado. `null` mientras
+   * se resuelve (o si la identidad no se pudo cargar): la pantalla sigue funcionando sin el rótulo.
+   */
+  company?: { razonSocial: string; nit: string } | null;
 }
 
 export function CompanyConfigTabs({
@@ -94,6 +100,7 @@ export function CompanyConfigTabs({
   documentosSlot,
   platesSlot,
   legalRepresentativesSlot,
+  company,
 }: CompanyConfigTabsProps) {
   const [tab, setTab] = useState<TabId>("matricula");
   // La pestaña de placas solo aparece si la preasignación está activa.
@@ -158,6 +165,25 @@ export function CompanyConfigTabs({
 
   return (
     <div className="flex flex-1 flex-col gap-4">
+      {/* HU #11062 — identifica la compañía en TODA la pantalla: va sobre la barra de pestañas, así
+          que no desaparece al cambiar de pestaña. Antes el tenant solo estaba en la URL y nada en
+          pantalla confirmaba sobre qué compañía persistía el "Guardar todo" (un PUT atómico). */}
+      {company && (
+        <header
+          className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-[#DFE5ED] px-4 py-3 dark:border-white/10"
+          style={{ background: "rgba(85,126,255,0.04)" }}
+          aria-label="Compañía en configuración"
+        >
+          <span className="text-[10px] font-semibold uppercase tracking-wider opacity-60">
+            Configurando
+          </span>
+          <span className="text-sm font-bold text-[#162744] dark:text-white">
+            {company.razonSocial}
+          </span>
+          <span className="text-xs opacity-70">NIT {company.nit}</span>
+        </header>
+      )}
+
       <div className="flex items-center gap-1 overflow-x-auto border-b" role="tablist">
         {visibleTabs.map((t) => {
           const Icon = t.icon;
@@ -234,6 +260,7 @@ export function CompanyConfigTabs({
           changes={changes}
           phase={confirmPhase}
           error={confirmError}
+          company={company}
           onConfirm={doSave}
           onCancel={closeConfirm}
           onClose={closeConfirm}

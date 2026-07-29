@@ -7,11 +7,20 @@ import { StatusBadge } from "@/components/atom/StatusBadge";
 import { useToast } from "@/components/admin/Toast";
 import {
   fetchLegalRepresentative,
+  resendLegalRepresentativeIdentity,
+  sendLegalRepresentativeIdentity,
   type AssignableProcedureType,
   type LegalRepresentativeCompanySummary,
   type LegalRepresentativeItem,
   type RepresentativeDeed,
 } from "@/lib/api/admin-legal-representatives";
+import {
+  hasPriorIdentity,
+  identityUi,
+  puedeRenovarIdentidad,
+  vigenciaLabel,
+} from "@/lib/admin/identity-vigencia";
+import { formatFecha } from "@/lib/format/date";
 import {
   fetchDeedDetail,
   saveDeed,
@@ -56,6 +65,8 @@ export function LegalRepresentativeDetailModal({
   const [deedFormCompany, setDeedFormCompany] = useState<LegalRepresentativeCompanySummary | null>(null);
   // Escritura en edición dentro del panel; `null` = alta.
   const [deedEditing, setDeedEditing] = useState<DeedEditingRef | null>(null);
+  // HU #11059 — renovación de la identidad vencida en curso.
+  const [renovando, setRenovando] = useState(false);
 
   const load = useCallback(
     async (id: string, signal?: AbortSignal) => {
@@ -138,6 +149,33 @@ export function LegalRepresentativeDetailModal({
     if (item) void load(item.id);
   };
 
+  /**
+   * HU #11059 — renueva la identidad del representante. Sin validación previa se ENVÍA la primera;
+   * con una previa (vencida, rechazada o en curso) se RENUEVA con `resend`, que es el camino que ya
+   * respeta la vigencia en el backend. La UI solo ofrece esto cuando no está vigente.
+   */
+  const handleRenovarIdentidad = async () => {
+    if (!item) return;
+    const actual = detail ?? item;
+    setRenovando(true);
+    try {
+      const result = hasPriorIdentity(actual.identityStatus)
+        ? await resendLegalRepresentativeIdentity(tenantId, item.id)
+        : await sendLegalRepresentativeIdentity(tenantId, item.id);
+      show(
+        result.reused
+          ? `${fullName(actual)} ya tiene una validación de identidad vigente.`
+          : `Validación de identidad enviada al correo de ${fullName(actual)}.`,
+        "success",
+      );
+      await load(item.id);
+    } catch {
+      show("No se pudo enviar la validación de identidad.", "error");
+    } finally {
+      setRenovando(false);
+    }
+  };
+
   if (!item) return null;
   const header = detail ?? item;
   const status = signatureStatus(header.hasSignatureOrIdentity);
@@ -161,6 +199,85 @@ export function LegalRepresentativeDetailModal({
             <dd className="mt-0.5">
               <StatusBadge tone={status.tone} label={status.label} />
             </dd>
+          </div>
+          {/* HU #11059 — identidad y firma del baúl VENCEN POR SEPARADO, así que cada una lleva su
+              propio estado y su propia vigencia. Antes solo existía el booleano "tiene firma o
+              identidad", que no distingue una vigente de una vencida y por eso no permitía renovar. */}
+          <div className="sm:col-span-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div
+              className="rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10"
+              data-testid="rl-identidad"
+            >
+              <dt className="font-semibold opacity-60">Validación de identidad</dt>
+              <dd className="mt-1 space-y-1.5">
+                <span
+                  className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                  style={identityUi(header.identityStatus).style}
+                >
+                  {identityUi(header.identityStatus).label}
+                </span>
+                {vigenciaLabel(header.identityStatus, header.identityValidUntil) && (
+                  <p className="text-[10px] opacity-60" data-testid="rl-identidad-vigencia">
+                    {vigenciaLabel(header.identityStatus, header.identityValidUntil)}
+                  </p>
+                )}
+                {puedeRenovarIdentidad(header.identityStatus) ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleRenovarIdentidad()}
+                    disabled={renovando || !header.email}
+                    title={
+                      header.email
+                        ? undefined
+                        : "Agrega un correo al representante para poder enviarle la validación."
+                    }
+                    className="block rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                    style={{ color: "#557EFF", borderColor: "#557EFF" }}
+                  >
+                    {renovando ? "Enviando…" : identityUi(header.identityStatus).action}
+                  </button>
+                ) : (
+                  <p className="text-[10px] opacity-60">
+                    Vigente: no requiere renovación.
+                  </p>
+                )}
+              </dd>
+            </div>
+
+            <div
+              className="rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10"
+              data-testid="rl-firma-baul"
+            >
+              <dt className="font-semibold opacity-60">Firma del baúl</dt>
+              <dd className="mt-1 space-y-1.5">
+                <span
+                  className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                  style={
+                    header.firmaBaulVigente
+                      ? { background: "rgba(112,207,58,0.14)", color: "#3f7a15" }
+                      : { background: "rgba(245,158,11,0.16)", color: "#b45309" }
+                  }
+                >
+                  {header.firmaBaulVigente
+                    ? "Firma vigente"
+                    : header.signatureVaultId
+                      ? "Firma vencida"
+                      : "Sin firma registrada"}
+                </span>
+                {header.firmaBaulVigente && header.firmaBaulVigenteHasta && (
+                  <p className="text-[10px] opacity-60" data-testid="rl-firma-vigencia">
+                    Válida hasta {formatFecha(header.firmaBaulVigenteHasta)}
+                  </p>
+                )}
+                {!header.firmaBaulVigente && (
+                  // La firma se carga y renueva en el Baúl de Firmas, que es su dueño (ADR-0025):
+                  // duplicar aquí el alta partiría la custodia en dos sitios.
+                  <p className="text-[10px] opacity-60">
+                    Actualízala en la sección «Baúl de Firmas» de esta pestaña.
+                  </p>
+                )}
+              </dd>
+            </div>
           </div>
           <Field label="Documento" value={`${header.documentType} ${header.documentNumber}`} />
           <Field label="Correo" value={header.email ?? "—"} />

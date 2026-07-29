@@ -34,6 +34,14 @@ public sealed class MandateSignerItem
     /// </summary>
     public string IdentityStatus { get; init; } = "none";
 
+    /// <summary>
+    /// HU #11060 — hasta cuándo es válida la identidad. Solo se informa cuando
+    /// <see cref="IdentityStatus"/> es <c>"valid"</c>; <c>null</c> en el resto de estados y también en
+    /// una aprobada sin caducidad registrada. La consola lo usa para informar la vigencia en curso en
+    /// vez de ofrecer una renovación que el backend rechazaría (reutiliza la vigente).
+    /// </summary>
+    public DateTimeOffset? IdentityValidUntil { get; init; }
+
     /// <summary>Cuenta de usuario de OT del mandatario (ADR-0036 §D9): cotejo del firmante al aprobar.</summary>
     public Guid? UserId { get; init; }
 

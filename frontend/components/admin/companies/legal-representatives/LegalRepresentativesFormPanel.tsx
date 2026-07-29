@@ -74,13 +74,23 @@ const EMPTY: FormState = {
   procedureTypeIds: [],
 };
 
-// La respuesta del backend proyecta las compañías del representante (NIT + razón social); el contacto
-// de cada compañía no se proyecta, así que al editar se precargan NIT y nombre y el resto queda en
-// blanco. Si por compatibilidad el detalle no trae `companies`, cae a la compañía primaria denormalizada.
+// HU #11058 — la precarga tiene que traer TODAS las compañías del representante y el contacto COMPLETO
+// de cada una. El guardado reenvía esta lista y el backend hace upsert con lo que reciba: un campo que
+// llegue en blanco se persiste como null. Antes solo se precargaban NIT y razón social, así que cada
+// edición del representante borraba el correo, la dirección, la ciudad y el teléfono de sus compañías.
+// Si por compatibilidad la respuesta no trae `companies`, cae a la compañía primaria denormalizada
+// (que no proyecta contacto: es el camino legado y el backend siempre envía `companies`).
 function fromItem(item: LegalRepresentativeItem): FormState {
   const companies: CompanyRow[] =
     item.companies && item.companies.length > 0
-      ? item.companies.map((c) => ({ ...EMPTY_COMPANY, nit: c.nit, name: c.name }))
+      ? item.companies.map((c) => ({
+          nit: c.nit,
+          name: c.name,
+          email: c.email ?? "",
+          address: c.address ?? "",
+          city: c.city ?? "",
+          phone: c.phone ?? "",
+        }))
       : [{ ...EMPTY_COMPANY, nit: item.companyDocumentNumber, name: item.companyName }];
   return {
     companies,

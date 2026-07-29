@@ -66,7 +66,10 @@ public sealed record ActorRepresentanteLegal(
     string? NumeroDocumento,
     string? NombreCompleto,
     string? Email,
-    string? Telefono);
+    string? Telefono,
+    // HU #11061 — mecanismo de firma ELEGIDO por el gestor cuando el representante tiene el baúl y la
+    // identidad vigentes a la vez. null = sin elección ⇒ precedencia del baúl (HU #11031).
+    string? MecanismoFirma = null);
 
 /// <summary>
 /// Mandante / poderdante de una parte (contrato de integración con terceros: <c>principal_mandante</c>).
@@ -557,9 +560,11 @@ public sealed class PutActorsHandler(
         var nombre = Clean(rl.NombreCompleto);
         var email = Clean(rl.Email);
         var telefono = Clean(rl.Telefono);
+        var mecanismo = MecanismoFirma.Normalizar(rl.MecanismoFirma);
         return tipo is null && numero is null && nombre is null && email is null && telefono is null
+            && mecanismo is null
             ? null
-            : new ActorRepresentanteLegal(tipo, numero, nombre, email, telefono);
+            : new ActorRepresentanteLegal(tipo, numero, nombre, email, telefono, mecanismo);
     }
 
     private sealed record ActorMetadata(

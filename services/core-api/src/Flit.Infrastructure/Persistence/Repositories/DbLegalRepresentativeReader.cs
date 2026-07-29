@@ -1,5 +1,6 @@
 using Flit.Admin.Domain.Common;
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
+using Flit.Admin.Domain.Identity;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Microsoft.EntityFrameworkCore;
 
@@ -340,6 +341,13 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             .GroupBy(p => p.RepresentativeId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<Guid>)[.. g.Select(x => x.ProcedureTypeId)]);
 
+        // HU #11059 — vigencia de identidad y de firma del baúl por representante, en lote. La consola
+        // necesita distinguir "vigente" de "vencida" para poder ofrecer la renovación; el booleano
+        // HasSignatureOrIdentity no daba para eso. Dos consultas para TODAS las filas (sin N+1).
+        var vigenciaIdentidad = await LoadIdentityVigenciaAsync(repIds, cancellationToken)
+            .ConfigureAwait(false);
+        var vigenciaFirma = await LoadFirmaBaulVigenciaAsync(rows, cancellationToken).ConfigureAwait(false);
+
         // Historial de escrituras por compañía (solo en el detalle, que proyecta un ÚNICO representante:
         // rows[0]). Feature #10929: la escritura es DEL representante, así que se filtran a las que ÉL
         // asoció (RepresentativeId == rows[0].Id); las legadas (RepresentativeId null) NO aparecen en el
@@ -366,17 +374,33 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
                     .Select(cid =>
                     {
                         var c = companies[cid];
-                        var summary = new LegalRepresentativeCompanySummary(c.Id, c.DocumentNumber, c.Name);
+                        // HU #11058 — el contacto viaja en el resumen para que la edición lo precargue.
+                        // Sin él el formulario reenviaba estos campos en blanco y el upsert los borraba.
+                        var summary = new LegalRepresentativeCompanySummary(c.Id, c.DocumentNumber, c.Name)
+                        {
+                            Email = c.Email,
+                            Address = c.Address,
+                            City = c.City,
+                            Phone = c.Phone,
+                        };
                         return deedsByCompany.TryGetValue(cid, out var deeds)
                             ? summary with { Deeds = deeds }
                             : summary;
                     }),
             ];
 
+            var identidad = vigenciaIdentidad.GetValueOrDefault(
+                r.Id, new AdminIdentityVigencia.Resultado(AdminIdentityVigencia.None, null));
+            var firma = vigenciaFirma.GetValueOrDefault(FirmaKey(r));
+
             return new LegalRepresentativeItem
             {
                 Id = r.Id,
                 TenantId = r.TenantId,
+                IdentityStatus = identidad.Status,
+                IdentityValidUntil = identidad.ValidUntil,
+                FirmaBaulVigente = firma is not null,
+                FirmaBaulVigenteHasta = firma,
                 RepresentedCompanyId = r.RepresentedCompanyId,
                 CompanyDocumentNumber = company?.DocumentNumber ?? string.Empty,
                 CompanyName = company?.Name ?? string.Empty,
@@ -399,6 +423,94 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             };
         })];
     }
+
+    /// <summary>
+    /// HU #11059 — vigencia de la identidad por representante, con el mismo cálculo que el mandatario
+    /// del OT (<see cref="AdminIdentityVigencia"/>). Una consulta para todos los ids.
+    /// </summary>
+    private async Task<Dictionary<Guid, AdminIdentityVigencia.Resultado>> LoadIdentityVigenciaAsync(
+        List<Guid> representativeIds,
+        CancellationToken cancellationToken)
+    {
+        if (representativeIds.Count == 0)
+        {
+            return [];
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var rows = await _context.AdminIdentityValidations
+            .AsNoTracking()
+            .Where(v => v.SubjectType == AdminIdentitySubjectTypes.LegalRepresentative
+                && representativeIds.Contains(v.SubjectRef))
+            .Select(v => new { v.SubjectRef, v.Status, v.ValidUntil })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.SubjectRef)
+            .ToDictionary(
+                g => g.Key,
+                g => AdminIdentityVigencia.Resumir(
+                    g.Select(r => new AdminIdentityVigencia.Entrada(r.Status, r.ValidUntil)), now));
+    }
+
+    /// <summary>
+    /// Llave del baúl para un representante. La firma es de la PERSONA en el tenant (HU #10932), no de
+    /// la compañía: se llavea por (tenant, tipo de documento, documento), igual que
+    /// <c>FindActiveByDocumentAsync</c>, que es lo que consume el guardado.
+    /// </summary>
+    private static (Guid TenantId, string DocumentType, string DocumentNumber) FirmaKey(
+        CompanyLegalRepresentativeEntity r) => (r.TenantId, r.DocumentType, r.DocumentNumber);
+
+    /// <summary>
+    /// HU #11059 — hasta cuándo es vigente la firma del baúl de cada representante, o ausencia si no
+    /// tiene ninguna vigente hoy. Mismo criterio que <c>SignatureVault.EstaVigente</c>: activa y
+    /// <c>hoy</c> dentro de [VigenciaDesde, VigenciaHasta] por día calendario de Colombia (UTC-5).
+    /// Una sola consulta para todos los representantes proyectados.
+    /// </summary>
+    private async Task<Dictionary<(Guid, string, string), DateOnly?>> LoadFirmaBaulVigenciaAsync(
+        List<CompanyLegalRepresentativeEntity> rows,
+        CancellationToken cancellationToken)
+    {
+        if (rows.Count == 0)
+        {
+            return [];
+        }
+
+        var tenantIds = rows.Select(r => r.TenantId).Distinct().ToList();
+        var documentos = rows.Select(r => r.DocumentNumber).Distinct().ToList();
+        var hoy = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaUtcOffset).DateTime);
+
+        // El filtro por tenant + documento se hace en SQL; el cotejo del tipo de documento se cierra en
+        // memoria, porque una tupla compuesta no se traduce a un IN de PostgreSQL.
+        var firmas = await _context.SignatureVault
+            .AsNoTracking()
+            .Where(v => tenantIds.Contains(v.TenantId)
+                && documentos.Contains(v.DocumentNumber)
+                && v.Estado == SignatureVaultEstadoActiva
+                && v.VigenciaDesde <= hoy
+                && v.VigenciaHasta >= hoy)
+            .Select(v => new { v.TenantId, v.DocumentType, v.DocumentNumber, v.VigenciaHasta })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var result = new Dictionary<(Guid, string, string), DateOnly?>();
+        foreach (var f in firmas)
+        {
+            var key = (f.TenantId, f.DocumentType, f.DocumentNumber);
+            // Con varias firmas vigentes manda la que caduca más tarde.
+            if (!result.TryGetValue(key, out var actual) || actual is null || f.VigenciaHasta > actual)
+            {
+                result[key] = f.VigenciaHasta;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>Estado "activa" del baúl (ADR-0025): las revocadas no cuentan como vigentes.</summary>
+    private const string SignatureVaultEstadoActiva = "activa";
+
 
     /// <summary>
     /// Carga el historial de escrituras (activas y vencidas) de un conjunto de compañías del tenant,

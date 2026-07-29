@@ -304,12 +304,24 @@ export interface ConsultationProvidersConfig {
  * el actor es jurídico (NIT). Se captura manualmente o se autopobla desde el RUNT y viaja embebido
  * en actor.metadata (sin columnas nuevas). No es un actor de primera clase.
  */
+/**
+ * HU #11061 — mecanismo con el que se plasma la firma del representante legal. `'baul'` = firma
+ * precargada del baúl; `'identidad'` = sello de la validación biométrica.
+ */
+export type MecanismoFirma = 'baul' | 'identidad';
+
 export interface RepresentanteLegal {
   tipoDocumento?: ActorDocumentType;
   numeroDocumento?: string;
   nombreCompleto?: string;
   email?: string;
   telefono?: string;
+  /**
+   * HU #11061 — mecanismo de firma ELEGIDO cuando el representante tiene el baúl y la identidad
+   * vigentes a la vez. Ausente = sin elección explícita ⇒ el backend aplica la precedencia del baúl
+   * (HU #11031), que es el comportamiento previo.
+   */
+  mecanismoFirma?: MecanismoFirma;
 }
 
 export interface ProcedureActor {
