@@ -28,7 +28,7 @@ public sealed class PlatePreassignPolicyTests
         {
             await SeedRouteAsync(seed, company, office);
             await new PlateRangeRepository(seed).CreateRangeAsync(company, office, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
-            SeedInstance(seed, instance, company, "matricula_inicial", office, plate: "ABC100");
+            SeedInstance(seed, instance, company, "matricula_inicial", office, plate: "ABC100", plateSource: "user");
             await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -39,6 +39,53 @@ public sealed class PlatePreassignPolicyTests
         decision.Decision.Should().Be(PlateRouteDecision.Asignado);
         var detail = await ctx.PlateRangeDetails.FirstAsync(d => d.Plate == "ABC100", TestContext.Current.CancellationToken);
         detail.ProcedureInstanceId.Should().Be(instance);
+    }
+
+    [Fact]
+    public async Task Decide_PlacaDelRunt_SinInventario_Asignado()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var instance = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            await SeedRouteAsync(seed, company, office);
+            // Placa RUNT que NO está en el rango del OT: no debe caer a preasignado ni a estándar.
+            SeedInstance(seed, instance, company, "matricula_inicial", office, plate: "RUNT99", plateSource: "consultation");
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var policy = new PlatePreassignPolicy(ctx, new PlateRangeRepository(ctx));
+        var result = await policy.DecideAsync(company, instance, TestContext.Current.CancellationToken);
+
+        result.Decision.Should().Be(PlateRouteDecision.Asignado);
+        result.Reason.Should().Be(PlateRouteReason.PlateFromConsultation);
+    }
+
+    [Fact]
+    public async Task Decide_PlacaDelRunt_ConSkipToTerminado_Terminado()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var instance = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            await SeedRouteAsync(seed, company, office, skipToTerminado: true);
+            SeedInstance(seed, instance, company, "matricula_inicial", office, plate: "RUNT01", plateSource: "consultation");
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var policy = new PlatePreassignPolicy(ctx, new PlateRangeRepository(ctx));
+        var result = await policy.DecideAsync(company, instance, TestContext.Current.CancellationToken);
+
+        result.Decision.Should().Be(PlateRouteDecision.Terminado);
+        result.Reason.Should().Be(PlateRouteReason.PlateFromConsultationSkipToTerminado);
     }
 
     [Fact]
@@ -113,7 +160,7 @@ public sealed class PlatePreassignPolicyTests
     }
 
     [Fact]
-    public async Task Decide_RutaNoActiva_Standard()
+    public async Task Decide_RutaNoActiva_ConPlacaUsuario_Asignado()
     {
         var db = NewDbName();
         var company = Guid.NewGuid();
@@ -122,17 +169,86 @@ public sealed class PlatePreassignPolicyTests
 
         await using (var seed = NewContext(db))
         {
-            // Sin flag/grant/allow: la ruta no está activa.
-            SeedInstance(seed, instance, company, "matricula_inicial", office, plate: "ABC100");
+            // Sin flag/grant/allow: placa completa igual entra a Asignado (no al OT a aprobar).
+            SeedInstance(seed, instance, company, "matricula_inicial", office, plate: "ABC100", plateSource: "user");
             await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         await using var ctx = NewContext(db);
         var policy = new PlatePreassignPolicy(ctx, new PlateRangeRepository(ctx));
         var result = await policy.DecideAsync(company, instance, TestContext.Current.CancellationToken);
-        result.Decision.Should().Be(PlateRouteDecision.Standard);
-        // La compañía no tiene el flag → estándar sin fricción (no bloqueo).
-        result.Reason.Should().Be(PlateRouteReason.PreassignNotEnabled);
+        result.Decision.Should().Be(PlateRouteDecision.Asignado);
+        result.Reason.Should().Be(PlateRouteReason.PlateReserved);
+    }
+
+    [Fact]
+    public async Task Decide_PlacaCompleta_SkipOff_NuncaTerminado()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var instance = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            await SeedRouteAsync(seed, company, office, skipToTerminado: false);
+            SeedInstance(seed, instance, company, "matricula_inicial", office, plate: "QXU040", plateSource: "consultation");
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var policy = new PlatePreassignPolicy(ctx, new PlateRangeRepository(ctx));
+        var result = await policy.DecideAsync(company, instance, TestContext.Current.CancellationToken);
+
+        result.Decision.Should().Be(PlateRouteDecision.Asignado);
+        result.Decision.Should().NotBe(PlateRouteDecision.Terminado);
+        result.Reason.Should().Be(PlateRouteReason.PlateFromConsultation);
+    }
+
+    [Fact]
+    public async Task Decide_PlacaUsuario_SinInventario_ConPreasignacion_Asignado()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var instance = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            await SeedRouteAsync(seed, company, office);
+            // Placa con valor pero fuera del inventario: sigue siendo placa completa → Asignado.
+            SeedInstance(seed, instance, company, "matricula_inicial", office, plate: "ZZZ999", plateSource: "user");
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var policy = new PlatePreassignPolicy(ctx, new PlateRangeRepository(ctx));
+        var result = await policy.DecideAsync(company, instance, TestContext.Current.CancellationToken);
+
+        result.Decision.Should().Be(PlateRouteDecision.Asignado);
+    }
+
+    [Fact]
+    public async Task Decide_PlacaDelRunt_SinPreasignacionCompania_Asignado()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var instance = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            // Sin preasignación activa: la placa RUNT igual debe ir a Asignado (no al OT a aprobar).
+            SeedInstance(seed, instance, company, "matricula_inicial", office, plate: "QXU040", plateSource: "consultation");
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var policy = new PlatePreassignPolicy(ctx, new PlateRangeRepository(ctx));
+        var result = await policy.DecideAsync(company, instance, TestContext.Current.CancellationToken);
+
+        result.Decision.Should().Be(PlateRouteDecision.Asignado);
+        result.Reason.Should().Be(PlateRouteReason.PlateFromConsultation);
     }
 
     [Fact] // HU #10806 — la compañía SÍ tiene preasignación activa pero el OT está mal configurado
@@ -162,11 +278,16 @@ public sealed class PlatePreassignPolicyTests
         result.Reason.Should().Be(PlateRouteReason.PreassignMisconfigured);
     }
 
-    private static async Task SeedRouteAsync(FlitDbContext ctx, Guid company, Guid office)
+    private static async Task SeedRouteAsync(
+        FlitDbContext ctx, Guid company, Guid office, bool skipToTerminado = false)
     {
         ctx.TenantOperationalPolicies.Add(new TenantOperationalPolicy
         {
-            Id = Guid.NewGuid(), TenantId = company, PlatePreassignEnabled = true, CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(),
+            TenantId = company,
+            PlatePreassignEnabled = true,
+            PlateFlowSkipToTerminado = skipToTerminado,
+            CreatedAt = DateTimeOffset.UtcNow,
         });
         ctx.TenantTransitOfficeGrants.Add(new TenantTransitOfficeGrant
         {
@@ -180,7 +301,13 @@ public sealed class PlatePreassignPolicyTests
     }
 
     private static void SeedInstance(
-        FlitDbContext ctx, Guid instanceId, Guid company, string modalidad, Guid office, string? plate)
+        FlitDbContext ctx,
+        Guid instanceId,
+        Guid company,
+        string modalidad,
+        Guid office,
+        string? plate,
+        string plateSource = "user")
     {
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
@@ -201,7 +328,7 @@ public sealed class PlatePreassignPolicyTests
             ctx.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
             {
                 Id = Guid.NewGuid(), ProcedureInstanceId = instanceId, TenantId = company,
-                FieldKey = "plate", ValueText = plate,
+                FieldKey = "plate", ValueText = plate, Source = plateSource,
             });
         }
     }

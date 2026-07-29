@@ -29,6 +29,12 @@ public sealed class OtClientProcedureResponse
     /// al asignar; no obliga (puede asignar una placa que termine en otro dígito).</summary>
     public string? PlatePreferredLastDigit { get; init; }
 
+    /// <summary>Check opcional del gestor; badge en dashboard OT solo si PlateFlowStatus = terminado.</summary>
+    public bool SoatPagado { get; init; }
+
+    /// <summary>Check opcional del gestor; badge en dashboard OT solo si PlateFlowStatus = terminado.</summary>
+    public bool ImpuestoDepartamentalPagado { get; init; }
+
     public Guid? TransitOfficeId { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
@@ -77,6 +83,8 @@ internal static class OtClientProcedureMapper
             PlateFlowStatus = procedure.PlateFlowStatus,
             SoatEstado = procedure.SoatEstado,
             PlatePreferredLastDigit = procedure.PlatePreferredLastDigit,
+            SoatPagado = procedure.SoatPagado,
+            ImpuestoDepartamentalPagado = procedure.ImpuestoDepartamentalPagado,
             TransitOfficeId = procedure.TransitOfficeId,
             CreatedAt = procedure.CreatedAt,
             SubmittedAt = procedure.SubmittedAt,

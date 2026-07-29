@@ -80,10 +80,7 @@ SET external_refs = pt.external_refs || jsonb_build_object(
     )
 )
 WHERE pt.code IN (
-    'TRASPASO',           -- migración SeedProcedureTypes (33333333-…), family VEHICULAR
-    'TRASPASO_STANDARD',  -- 15-tramites-traspaso-dev-seed.sql — tipología MVP del motor
-    'TRASPASO_SIMPLE',    -- 04-HU10151-seeds-minimos.sql, family TRASPASO
-    'TRASPASO_LEASING'    -- ídem. Es un traspaso: el leasing NO cambia el tipoTramite Quipux
+    'TRASPASO_STANDARD'   -- tipo canónico del wizard (CreateProcedureInstanceHandler)
   )
   AND pt.external_refs -> 'quipux' IS DISTINCT FROM jsonb_build_object(
         'familia',            'TRASPASO',
@@ -127,9 +124,7 @@ SET external_refs = pt.external_refs || jsonb_build_object(
     )
 )
 WHERE pt.code IN (
-    'MATRICULA_INICIAL',       -- migración SeedProcedureTypes (44444444-…), family VEHICULAR
-    'MATRICULA_NUEVA',         -- 04-HU10151-seeds-minimos.sql, family MATRICULAS
-    'MATRICULA_REACTIVACION'   -- ídem
+    'MATRICULA_NUEVA'     -- tipo canónico del wizard (CreateProcedureInstanceHandler)
   )
   AND pt.external_refs -> 'quipux' IS DISTINCT FROM jsonb_build_object(
         'familia',            'MATRICULA',

@@ -28,6 +28,12 @@ public sealed class TenantSettings
     /// </summary>
     public bool PlatePreassignEnabled { get; init; }
 
+    /// <summary>
+    /// Omite Asignado (checks gestor) cuando hay placa completa al radicar → Terminado
+    /// (<c>plate_flow_skip_to_terminado</c>).
+    /// </summary>
+    public bool PlateFlowSkipToTerminado { get; init; }
+
     /// <summary>Canal de enrutamiento de notificaciones (<c>notification_channel</c>).</summary>
     public required NotificationChannel NotificationChannel { get; init; }
 
@@ -77,6 +83,7 @@ public sealed class TenantSettings
         OnlyOwnVehicles = false,
         SignatureVaultEnabled = false,
         PlatePreassignEnabled = false,
+        PlateFlowSkipToTerminado = false,
         NotificationChannel = NotificationChannel.FlitSmtp,
         NotificationTarget = NotificationTarget.Radicador,
         PaymentMethods = [],
