@@ -64,12 +64,15 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                 // HU #11033 — membrete institucional FLIT (HU #10856), igual que los certificados
                 // generados: bandas arriba y abajo, contenido dentro del margen FLIT.
                 FlitLetterhead.ApplyTo(page);
-                page.DefaultTextStyle(t => t.FontSize(11).FontFamily(FlitDocumentTheme.FontRegular));
+                // HU #11034 — cuerpo 9pt y espaciado corto: con 11pt el contrato se pasaba a una segunda
+                // hoja y las firmas quedaban solas. El texto legal es largo y no se puede recortar, así
+                // que lo que se ajusta es la caja tipográfica.
+                page.DefaultTextStyle(t => t.FontSize(9).FontFamily(FlitDocumentTheme.FontRegular));
 
                 FlitLetterhead.Content(page).Column(col =>
                 {
-                    col.Spacing(8);
-                    col.Item().AlignCenter().Text(t => t.Span("Contrato Privado de Mandato").Bold().FontSize(14));
+                    col.Spacing(3);
+                    col.Item().AlignCenter().Text(t => t.Span("Contrato Privado de Mandato").Bold().FontSize(12));
 
                     foreach (var p in parrafos)
                         RenderParrafo(col, p);
@@ -237,7 +240,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         // Sabaneta: mandatario institucional ⇒ solo firma el MANDANTE (+ bloque de identificación).
         if (variante == MandatoVariante.Sabaneta)
         {
-            col.Item().PaddingTop(40).Column(sig =>
+            col.Item().PaddingTop(16).Column(sig =>
             {
                 sig.Item().Text(t => t.Span("MANDANTE").Bold());
                 RenderFirmaSlot(sig, tramite, parte?.Rol, "_______________________________");
@@ -249,8 +252,9 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         }
 
         // Genérica / Bello: firman MANDANTE y MANDATARIO.
+        // HU #11034 — separación reducida para que las firmas quepan en la misma hoja que el cuerpo.
         var mandatario = MandatarioTexto(data.Mandatario);
-        col.Item().PaddingTop(40).Row(row =>
+        col.Item().PaddingTop(16).Row(row =>
         {
             row.RelativeItem().Column(sig =>
             {
@@ -293,7 +297,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         }
         else
         {
-            sig.Item().PaddingTop(28).Text("____________________________");
+            sig.Item().PaddingTop(18).Text("____________________________");
         }
     }
 
@@ -308,7 +312,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         }
         else
         {
-            sig.Item().PaddingTop(28).Text(underline);
+            sig.Item().PaddingTop(18).Text(underline);
         }
     }
 
@@ -350,9 +354,12 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         "MANDANTE",
     ];
 
+    // HU #11034 — párrafos JUSTIFICADOS y compactos: el contrato debe caber en una sola hoja, firmas
+    // incluidas, y el texto justificado es lo que espera un documento legal.
     private static void RenderParrafo(ColumnDescriptor col, string texto) =>
-        col.Item().PaddingTop(4).Text(t =>
+        col.Item().PaddingTop(2).Text(t =>
         {
+            t.Justify();
             foreach (var (segment, bold) in SplitKeywords(texto, MandatoKeywords))
             {
                 var span = t.Span(segment);

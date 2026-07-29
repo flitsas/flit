@@ -96,7 +96,15 @@ public sealed class GenerarConsolidadoHandler(
         // los documentos en caliente (con fecha vigente) y luego se consolida. Best-effort: si la
         // regeneración falla (p. ej. falta el organismo), se consolida con los documentos existentes.
         if (!instance.ConsolidadoWizardVigente && hotDocsRegenerator is not null)
+        {
             await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct);
+            // HU #11034 — el regenerador ACTUALIZA la instancia (invalida consolidados), y un trigger de
+            // base de datos sube su row_version, que es token de concurrencia. Sin releer, el guardado
+            // final del consolidado viajaba con la versión vieja y Postgres afectaba 0 filas:
+            // DbUpdateConcurrencyException. Es el mismo motivo por el que se relee tras la cascada de la
+            // HU #11029; a esta llamada, anterior, le faltaba.
+            instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+        }
 
         // HU #10522 (RF27/41) — el consolidado ya no rechaza otras modalidades: matrícula y traspaso
         // conservan su orden; cualquier otra modalidad usa el orden genérico (ver ConsolidadoOrderingResolver).
@@ -110,7 +118,7 @@ public sealed class GenerarConsolidadoHandler(
                 return (null, SubmitGate.FurRequerido);
 
             var errorFur = await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct);
-            instance = await repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct) ?? instance;
+            instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
             if (!TieneFur(instance))
                 return (null, errorFur ?? SubmitGate.FurRequerido);
         }
@@ -120,7 +128,7 @@ public sealed class GenerarConsolidadoHandler(
         if (improntaGenerator is not null && userId is { } operador && !TieneImpronta(instance))
         {
             await improntaGenerator.TryGenerateAsync(id, tenantId, operador, ct).ConfigureAwait(false);
-            instance = await repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct) ?? instance;
+            instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
         }
 
         // HU #11017 — los documentos obligatorios faltantes YA NO bloquean (antes: documentos_incompletos).
@@ -215,6 +223,20 @@ public sealed class GenerarConsolidadoHandler(
         var dto = new ConsolidadoDocumentDto(newAttachment.Id, doc.Tipo, doc.Filename, stored.Sha256);
         return (new GenerarConsolidadoResult(
             dto, Regenerado: true, Incompleto: faltantes.Count > 0, DocumentosFaltantes: faltantes), null);
+    }
+
+    /// <summary>
+    /// Relee la instancia con el rastreo LIMPIO tras un paso de la cascada (HU #11029/#11034). Es
+    /// obligatorio después de cualquier handler que guarde sobre la misma instancia: deja atrás los
+    /// adjuntos borrados que siguen colgando de las colecciones ya cargadas y, sobre todo, recoge el
+    /// <c>row_version</c> nuevo —token de concurrencia que un trigger sube en cada UPDATE—, sin el cual
+    /// el guardado final afecta 0 filas y revienta con DbUpdateConcurrencyException.
+    /// </summary>
+    private async Task<ProcedureInstance> ReloadAsync(
+        Guid id, Guid tenantId, ProcedureInstance fallback, CancellationToken ct)
+    {
+        repo.ResetTracking();
+        return await repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct).ConfigureAwait(false) ?? fallback;
     }
 
     private static bool TieneFur(ProcedureInstance instance) =>
