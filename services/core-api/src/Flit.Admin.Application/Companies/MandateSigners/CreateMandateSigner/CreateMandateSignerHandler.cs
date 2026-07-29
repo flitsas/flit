@@ -85,6 +85,11 @@ public sealed class CreateMandateSignerHandler
 
         // HU #10911 — envío de validación de identidad al registrar (best-effort). Un fallo del
         // proveedor NO revierte el alta: el mandatario queda creado y el reenvío queda disponible.
+        // HU #11000 — se APALANCA la identidad de la PERSONA en vez de arrancar siempre una validación
+        // nueva: EnsureAsync reutiliza la aprobada y vigente del mismo documento (aunque se haya validado
+        // como representante legal u otro mandatario), la ancla a este mandatario y solo envía el correo
+        // cuando no hay ninguna vigente.
+        var identity = MandateSignerIdentityOutcome.NotAttempted;
         if (_identityService is not null && email is not null)
         {
             try
@@ -98,14 +103,19 @@ public sealed class CreateMandateSignerHandler
                     documentNumber,
                     email,
                     command.CreatedBy);
-                await _identityService.SendAsync(descriptor, cancellationToken).ConfigureAwait(false);
+                var result = await _identityService
+                    .EnsureAsync(descriptor, cancellationToken).ConfigureAwait(false);
+                identity = result.Reused
+                    ? MandateSignerIdentityOutcome.Reused
+                    : MandateSignerIdentityOutcome.Sent;
             }
             catch (AdminIdentityProviderException)
             {
                 // Best-effort: el alta ya está persistida; el reenvío manual queda disponible.
+                identity = MandateSignerIdentityOutcome.Failed;
             }
         }
 
-        return CreateMandateSignerResult.Success(signerId, integrityHash);
+        return CreateMandateSignerResult.Success(signerId, integrityHash, identity);
     }
 }

@@ -38,7 +38,10 @@ public sealed class TramiteLifecycleService(
     ISignatureVaultPolicy? vaultPolicy = null,
     IMandateRequirementPolicy? mandatePolicy = null,
     IMandateSignerDirectory? mandateDirectory = null,
-    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null) : ITramiteLifecycleService
+    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null,
+    // HU #10970 — se añade AL FINAL, después de los parámetros que traía develop, para no desplazar
+    // ninguna posición existente (varios call sites pasan estos opcionales por posición).
+    TramiteValidationPolicy? validationPolicy = null) : ITramiteLifecycleService
 {
     // ADR-0036 (HU #10912/#10916) — config de mandato del OT (plantilla / exige a PN). Default seguro
     // (NUNCA resuelve ⇒ solo PJ, plantilla genérica) en tests que no lo ejercitan.
@@ -47,6 +50,11 @@ public sealed class TramiteLifecycleService(
     // ADR-0036 §D9 (HU #10916) — directorio de mandatarios del OT para resolver el firmante al aprobar.
     // Default seguro (NUNCA resuelve candidatos) en tests que no lo ejercitan.
     private readonly IMandateSignerDirectory _mandateDirectory = mandateDirectory ?? NullMandateSignerDirectory.Instance;
+
+    // HU #10970 — modo por ambiente de CF-03 en el gate de radicación. Sin inyectar ⇒ bloqueo duro
+    // (comportamiento previo a esta historia).
+    private readonly TramiteValidationPolicy _validationPolicy =
+        validationPolicy ?? TramiteValidationPolicy.BlockAll;
 
     // HU #10548 — si el OT destino deshabilita la validación de identidad, el gate no la exige.
     // Default permisivo (siempre exige) cuando no hay política cableada (tests).
@@ -530,6 +538,12 @@ public sealed class TramiteLifecycleService(
     /// </summary>
     private async Task<string?> EvaluarEstadoVehiculoRegistralAsync(ProcedureInstance instance, CancellationToken ct)
     {
+        // HU #10970 — fuera del modo block el gate no corta la transición. A diferencia del preflight,
+        // aquí no hay semáforo donde dejar un warn: una transición se permite o no, así que warn y off
+        // se comportan igual (no bloquear). La señal en amarillo la sigue dando el preflight.
+        if (_validationPolicy.VehicleRegistrationState != TramiteValidationMode.Block)
+            return null;
+
         if (TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) != TramiteModalidadEntrada.MatriculaInicial)
             return null;
 

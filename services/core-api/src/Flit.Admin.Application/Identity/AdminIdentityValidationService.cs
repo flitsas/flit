@@ -45,6 +45,43 @@ public sealed class AdminIdentityValidationService(
         return await StartNewAsync(subject, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<AdminIdentityValidationResult> EnsureAsync(
+        AdminIdentitySubjectDescriptor subject,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(subject);
+
+        var now = timeProvider.GetUtcNow();
+
+        // 1) El propio sujeto ya está validado y vigente: nada que enviar.
+        var own = await repository
+            .FindLatestBySubjectAsync(subject.TenantId, subject.SubjectType, subject.SubjectRef, cancellationToken)
+            .ConfigureAwait(false);
+        if (own is not null && own.EsAprobadaVigente(now))
+        {
+            return new AdminIdentityValidationResult(own, Reused: true);
+        }
+
+        // 2) La PERSONA ya validó en otro sujeto (p. ej. como representante legal): se apalanca esa
+        // identidad anclándola también a este sujeto, sin pedirle otra validación biométrica.
+        var byDocument = await repository
+            .FindLatestApprovedByDocumentAsync(
+                subject.TenantId, subject.DocumentType, subject.DocumentNumber, cancellationToken)
+            .ConfigureAwait(false);
+        if (byDocument is not null && byDocument.EsAprobadaVigente(now))
+        {
+            await subjectLinker
+                .LinkAsync(
+                    subject.TenantId, subject.SubjectType, subject.SubjectRef, byDocument.Id,
+                    subject.ActorBy, cancellationToken)
+                .ConfigureAwait(false);
+            return new AdminIdentityValidationResult(byDocument, Reused: true);
+        }
+
+        // 3) Sin identidad vigente por ningún lado: se inicia una nueva (el proveedor manda el correo).
+        return await StartNewAsync(subject, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<bool> ApproveAsync(
         Guid tenantId,
         Guid validationId,

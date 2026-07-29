@@ -25,6 +25,11 @@ export interface MandateSigner {
   userId: string | null;
   /** Validación de identidad admin vigente vinculada (ADR-0034/0036): `null` = sin validar. */
   identityValidationRef: string | null;
+  /**
+   * Estado de la validación de identidad (HU #10994): `"valid"` (aprobada y vigente),
+   * `"expired"` (vencida/rechazada ⇒ se puede renovar), `"pending"` (enviada/en proceso) o `"none"`.
+   */
+  identityStatus: "valid" | "expired" | "pending" | "none";
   /** Firma del baúl vinculada (ADR-0025), si está resuelta. */
   signatureVaultId: string | null;
   registeredAt: string;
@@ -58,6 +63,13 @@ export interface MandateSignerInput {
 export interface MandateSignerSaved {
   id: string;
   integrityHash: string;
+  /**
+   * Desenlace de la validación de identidad disparada por el alta (HU #11000): `"sent"` (correo
+   * enviado), `"reused"` (la persona ya tenía identidad vigente y se apalancó), `"failed"` (el
+   * proveedor falló; el mandatario quedó creado) o `"notattempted"` (se registró sin correo).
+   * Solo viaja en el POST de alta.
+   */
+  identity?: "sent" | "reused" | "failed" | "notattempted";
 }
 
 /** Resultado de iniciar/reenviar la validación de identidad del mandatario (ADR-0036, HU #10911). */

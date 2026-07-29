@@ -128,10 +128,16 @@ public sealed class RunPreflightPreviewHandler(
     IConsultationTenantOverrideProvider overrideProvider,
     IConsultationRestrictionPolicy restrictionPolicy,
     IPreflightPreviewStore previewStore,
-    IConsultationBlockingPolicy? blockingPolicy = null)
+    IConsultationBlockingPolicy? blockingPolicy = null,
+    TramiteValidationPolicy? validationPolicy = null)
 {
     private readonly IConsultationBlockingPolicy _blockingPolicy =
         blockingPolicy ?? NullConsultationBlockingPolicy.Instance;
+
+    // HU #10970 — mismos modos por ambiente que RunPreflightHandler: el paso 1 del wizard no puede
+    // divergir del preflight que se persiste al crear el trámite. Sin inyectar ⇒ bloqueo duro.
+    private readonly TramiteValidationPolicy _validationPolicy =
+        validationPolicy ?? TramiteValidationPolicy.BlockAll;
 
     public async Task<(PreflightPreviewDto? Result, string? Error, Guid? ExistingProcedureInstanceId, VehicleStateBlock? VehicleState)> HandleAsync(
         PreflightPreviewRequest request,
@@ -159,10 +165,16 @@ public sealed class RunPreflightPreviewHandler(
         // CF-01 PRIMERO, antes de gastar la consulta externa: la duplicidad se decide solo con la llave
         // de la familia (VIN o placa), que ya tenemos. Consultar el RUNT para luego descartar el
         // resultado por duplicidad quemaba una consulta de pago en cada intento y retrasaba el aviso.
-        var duplicateBeforeQuery = await FindDuplicateActiveProcedureAsync(
-            modalidad.Value, request.TenantId, vin, plate, ct);
-        if (duplicateBeforeQuery is not null)
-            return (null, InitialProcedureValidationGate.DuplicateActiveProcedure, duplicateBeforeQuery, null);
+        // HU #10970 — este atajo solo tiene sentido en modo block (es el único que descarta la corrida).
+        // En warn/off la consulta externa se hace igual, así que la duplicidad se evalúa más abajo, una
+        // sola vez, junto con el resto de los checks.
+        if (_validationPolicy.DuplicateActiveProcedure == TramiteValidationMode.Block)
+        {
+            var duplicateBeforeQuery = await FindDuplicateActiveProcedureAsync(
+                modalidad.Value, request.TenantId, vin, plate, ct);
+            if (duplicateBeforeQuery is not null)
+                return (null, InitialProcedureValidationGate.DuplicateActiveProcedure, duplicateBeforeQuery, null);
+        }
 
         var tenantOverride = await overrideProvider.GetAsync(request.TenantId, ct);
         // Sin OT elegido todavía (se selecciona más adelante en el wizard): ambas políticas caen a su
@@ -218,15 +230,25 @@ public sealed class RunPreflightPreviewHandler(
 
         RunPreflightHandler.AplicarPoliticaDeBloqueo(checks, blockingRules);
 
-        vehicleStateBlock ??= RunPreflightHandler.EndurecerEstadoVehiculoMatricula(checks, modalidad);
+        vehicleStateBlock ??= RunPreflightHandler.EndurecerEstadoVehiculoMatricula(
+            checks, modalidad, _validationPolicy.VehicleRegistrationState);
         if (vehicleStateBlock is not null)
             return (null, VehicleStatePolicy.ErrorCode, null, vehicleStateBlock);
 
         // Segunda pasada: la llave pudo ocuparse mientras corría la consulta externa (otro operador
         // abriendo el mismo VIN/placa). Barato (solo BD) y cierra la ventana de carrera.
-        var duplicateId = await FindDuplicateActiveProcedureAsync(modalidad.Value, request.TenantId, vin, plate, ct);
-        if (duplicateId is not null)
-            return (null, InitialProcedureValidationGate.DuplicateActiveProcedure, duplicateId, null);
+        // HU #10970 — en modo off no se evalúa; en modo warn el hallazgo va como check amarillo.
+        if (_validationPolicy.DuplicateActiveProcedure != TramiteValidationMode.Off)
+        {
+            var duplicateId = await FindDuplicateActiveProcedureAsync(modalidad.Value, request.TenantId, vin, plate, ct);
+            if (duplicateId is not null)
+            {
+                if (_validationPolicy.DuplicateActiveProcedure == TramiteValidationMode.Block)
+                    return (null, InitialProcedureValidationGate.DuplicateActiveProcedure, duplicateId, null);
+
+                checks.Add(RunPreflightHandler.BuildDuplicidadCheck(duplicateId.Value));
+            }
+        }
 
         // El endurecimiento de `estado_vehiculo` puede haber reescrito checks del tramo del vehículo:
         // se guardan los ya reescritos para que el snapshot persistido al crear sea idéntico al visto.
@@ -275,7 +297,11 @@ public sealed class RunPreflightPreviewHandler(
         if (conflicto is null)
             return null;
 
-        if (conflicto.Code == VinConflictCode.TramiteMatriculaCompletada)
+        // HU #10970 — mismo criterio que RunPreflightHandler.DetectVinConflictoTraspasoAsync: fuera de
+        // modo block, la matrícula APROBADA degrada al check informativo de la HU #10538 en vez de
+        // bloquear.
+        if (conflicto.Code == VinConflictCode.TramiteMatriculaCompletada
+            && _validationPolicy.VehicleRegistrationState == TramiteValidationMode.Block)
         {
             return new VehicleStateBlock(
                 VehicleStatePolicy.VehicleStatusAprobadoFlit,

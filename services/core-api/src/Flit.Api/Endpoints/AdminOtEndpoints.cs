@@ -939,10 +939,12 @@ public static class AdminOtEndpoints
             TransitOfficeId = scopedOfficeId,
         }, cancellationToken).ConfigureAwait(false);
 
-        // Regeneración del mandato con el firmante resuelto (el generado en preparado llevaba placeholders).
-        // Best-effort: un fallo aquí NO revierte la aprobación ya persistida.
-        if (result.Status == ApproveOtClientProcedureStatus.Approved
-            && decision.Outcome == MandatoApprovalOutcome.Resolved)
+        // HU #10996 — regenerar los documentos en caliente (FUR, mandato, trámite virtual y certificados)
+        // SIEMPRE que se apruebe, no solo cuando hubo un mandatario que resolver: así el consolidado y los
+        // formularios reflejan las firmas y la documentación actualizada al aprobar. La regeneración del FUR
+        // invalida además los consolidados (se rehacen en la próxima consulta). Best-effort: un fallo aquí
+        // NO revierte la aprobación ya persistida.
+        if (result.Status == ApproveOtClientProcedureStatus.Approved)
         {
             try
             {

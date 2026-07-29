@@ -42,8 +42,13 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
     CreateProcedureInstanceHandler createHandler,
     PatchFieldValuesHandler patchHandler,
     RunPreflightHandler preflightHandler,
-    IPreflightPreviewStore previewStore)
+    IPreflightPreviewStore previewStore,
+    TramiteValidationPolicy? validationPolicy = null)
 {
+    // HU #10970 — mismo modo por ambiente que el resto del flujo. Sin inyectar ⇒ bloqueo duro.
+    private readonly TramiteValidationPolicy _validationPolicy =
+        validationPolicy ?? TramiteValidationPolicy.BlockAll;
+
     public async Task<(CreateFromConsultaResult? Result, string? Error, Guid? ExistingProcedureInstanceId, VehicleStateBlock? VehicleState)> HandleAsync(
         CreateFromConsultaRequest request,
         CancellationToken ct = default)
@@ -63,9 +68,15 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
 
         // CF-01 antes de persistir: si la llave se ocupó mientras el operador revisaba el paso 1, se
         // bloquea SIN dejar registro (el objetivo de CF-02 es justamente no crear trámites inservibles).
-        var duplicateId = await FindDuplicateAsync(modalidad.Value, request.TenantId, vin, plate, ct);
-        if (duplicateId is not null)
-            return (null, InitialProcedureValidationGate.DuplicateActiveProcedure, duplicateId, null);
+        // HU #10970 — solo en modo block. En warn/off el trámite SÍ se crea y es el preflight de abajo
+        // (que aplica el mismo modo) el que deja el check amarillo o no deja nada; así el paso 1→2 no
+        // diverge del semáforo que se persiste.
+        if (_validationPolicy.DuplicateActiveProcedure == TramiteValidationMode.Block)
+        {
+            var duplicateId = await FindDuplicateAsync(modalidad.Value, request.TenantId, vin, plate, ct);
+            if (duplicateId is not null)
+                return (null, InitialProcedureValidationGate.DuplicateActiveProcedure, duplicateId, null);
+        }
 
         var (summary, createError) = await createHandler.HandleAsync(
             new CreateProcedureInstanceRequest(

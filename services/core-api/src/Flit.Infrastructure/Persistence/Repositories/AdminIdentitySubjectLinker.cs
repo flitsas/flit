@@ -35,8 +35,45 @@ internal sealed class AdminIdentitySubjectLinker : IAdminIdentitySubjectLinker
         {
             AdminIdentitySubjectTypes.LegalRepresentative =>
                 LinkLegalRepresentativeAsync(tenantId, subjectRef, validationRef, actorBy, cancellationToken),
+            AdminIdentitySubjectTypes.MandateSigner =>
+                LinkMandateSignerAsync(subjectRef, validationRef, actorBy, cancellationToken),
             _ => Task.FromResult(false),
         };
+    }
+
+    /// <summary>
+    /// Ancla la identidad aprobada al mandatario (HU #11000): setea <c>identity_validation_ref</c> en
+    /// <c>admin.mandate_signers</c>. La tabla NO tiene RLS (se acota por organismo de tránsito, no por
+    /// tenant), así que la escritura es directa y no necesita <see cref="TenantRlsScope"/> — el control de
+    /// acceso lo hace el endpoint (SuperAdmin / ot_admin). Idempotente: si ya apunta a la misma validación
+    /// no reescribe. La validación viene del bloque agnóstico ya anclado al tenant del OT, así que el id
+    /// del mandatario basta como llave.
+    /// </summary>
+    private async Task<bool> LinkMandateSignerAsync(
+        Guid mandateSignerId,
+        Guid validationRef,
+        Guid? actorBy,
+        CancellationToken cancellationToken)
+    {
+        var entity = await _context.MandateSigners
+            .FirstOrDefaultAsync(s => s.Id == mandateSignerId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (entity is null)
+        {
+            return false;
+        }
+
+        if (entity.IdentityValidationRef == validationRef)
+        {
+            return true;
+        }
+
+        entity.IdentityValidationRef = validationRef;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedBy = actorBy;
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
     private Task<bool> LinkLegalRepresentativeAsync(

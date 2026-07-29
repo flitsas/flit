@@ -106,6 +106,16 @@ services:
       FASECOLDA_LIST_CODE_API_PATH: ${FASECOLDA_LIST_CODE_API_PATH:-/api/listacodigosid/consultabycodigo}
       FASECOLDA_API_GRANT_TYPE: ${FASECOLDA_API_GRANT_TYPE:-password}
       FASECOLDA_API_SECONDS_TIMEOUT: ${FASECOLDA_API_SECONDS_TIMEOUT:-55}
+      # HU #10970 — modo por AMBIENTE de las validaciones transversales del ciclo de vida:
+      #   · CF-01 duplicidad de trámite en curso (409 DUPLICATE_ACTIVE_PROCEDURE)
+      #   · CF-03 precondición registral / vehículo ya matriculado (422 VEHICLE_STATE_INVALID_FOR_TYPE)
+      # Valores: block (bloquea) | warn (no bloquea, deja el check amarillo) | off (no evalúa).
+      # Este compose es el MISMO en DEV, QA y PDN y los tres corren con ASPNETCORE_ENVIRONMENT=Development,
+      # así que el ambiente se distingue por el .env del VPS, NO por appsettings.{Environment}.json.
+      # Default block en los tres: si el .env no define la variable, la regla sigue bloqueando (fail-safe).
+      # Matriz acordada: DEV warn/warn · QA block/warn · PDN block/block (local va por appsettings.Development.json).
+      TramiteValidations__DuplicateActiveProcedure__Mode: ${TRAMITE_VALIDATION_DUPLICATE_MODE:-block}
+      TramiteValidations__VehicleRegistrationState__Mode: ${TRAMITE_VALIDATION_VEHICLE_STATE_MODE:-block}
       # SMTP — vars ya presentes en el .env del VPS
       Smtp__Host: ${SMTP_HOST:-}
       Smtp__Port: ${SMTP_PORT:-587}
@@ -172,6 +182,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:${CORE_ICT_PORT:-4020}
+      Urls: http://0.0.0.0:${CORE_ICT_PORT:-4020}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
       # gRPC hacia core-api (orquestación + consultas): puerto interno dedicado HTTP/2.
       CoreApiGrpc__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}

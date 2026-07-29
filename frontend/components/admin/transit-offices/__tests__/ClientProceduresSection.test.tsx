@@ -140,6 +140,7 @@ describe("ClientProceduresSection — HU #10220", () => {
       email: null,
       userId: null,
       identityValidationRef: null,
+      identityStatus: "none" as const,
       signatureVaultId: null,
       registeredAt: "2026-07-01T00:00:00Z",
       isActive: true,

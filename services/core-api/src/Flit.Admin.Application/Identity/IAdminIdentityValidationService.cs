@@ -52,6 +52,19 @@ public interface IAdminIdentityValidationService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// APALANCA la identidad de la persona al registrar un sujeto NUEVO (HU #11000). Precedencia:
+    /// 1) el propio sujeto ya tiene una aprobada y vigente ⇒ se reutiliza;
+    /// 2) la PERSONA (mismo tipo+número de documento en el tenant) tiene una aprobada y vigente en otro
+    ///    sujeto ⇒ se ancla esa validación al sujeto nuevo y NO se envía correo;
+    /// 3) en cualquier otro caso ⇒ se inicia una validación nueva (envía el correo).
+    /// <see cref="AdminIdentityValidationResult.Reused"/> distingue 1 y 2 de 3. Lanza
+    /// <see cref="AdminIdentityProviderException"/> solo en el caso 3 si el proveedor falla.
+    /// </summary>
+    Task<AdminIdentityValidationResult> EnsureAsync(
+        AdminIdentitySubjectDescriptor subject,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Aprueba la validación en <paramref name="now"/>: estampa <c>valid_until</c> (30 días) +
     /// <paramref name="certificateHash"/> y VINCULA la validación al sujeto
     /// (<c>LegalRepresentative.LinkIdentity</c>). Idempotente. <c>false</c> si la validación no existe.
