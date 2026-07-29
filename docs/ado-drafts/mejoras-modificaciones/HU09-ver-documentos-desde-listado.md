@@ -4,9 +4,10 @@
 |-------|-------|
 | Tipo | `[FRONTEND]` |
 | Story Points | 5 |
-| Estado | Pendiente |
+| Estado | **Implementada y verificada** (Active en ADO, pendiente de PR) |
 | Feature padre | [FEATURE.md](FEATURE.md) |
-| ADO ID | _pendiente de registro_ |
+| ADO ID | **#11054** |
+| Commit | `2af73838` |
 | Ajuste origen | `modificaciones.txt:15` |
 | Bloquea a | HU12 (la columna de acciones la incluye) |
 

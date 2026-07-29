@@ -4,9 +4,10 @@
 |-------|-------|
 | Tipo | `[FRONTEND]` |
 | Story Points | 8 |
-| Estado | Pendiente |
+| Estado | **Implementada y verificada** (Active en ADO, pendiente de PR) |
 | Feature padre | [FEATURE.md](FEATURE.md) |
-| ADO ID | _pendiente de registro_ |
+| ADO ID | **#11057** |
+| Commit | `2af73838` |
 | Ajuste origen | `modificaciones.txt:51-70` |
 | Depende de | HU11 (datos), HU09 (ver documentos), HU10 (consolidado) |
 
@@ -69,9 +70,13 @@ Diferencias a resolver:
 - **Nuevas:** Firmado (vendedor), Firmado (comprador), Fecha de actualización, Gestor, Fuente.
 - **Renombrar** para consistencia: *Organismo* → **Secretaría**; *Creado* → **Fecha de creación**;
   *Modalidad* → **Trámite / Modalidad**; *Vendedor* → **Propietario / vendedor**.
-- **A decidir con el negocio:** el listado pedido no incluye *Vehículo*, *Paso* ni *Estado*. El
-  negocio dijo "visualizar **mínimo** esta información", así que se conservan salvo indicación
-  contraria; *Compañía* queda cubierta por *Gestor*.
+- **Decidido con el PO:** se **conservan** *Vehículo*, *Paso* y *Estado* (el negocio dijo "visualizar
+  **mínimo** esta información"; además *Estado* y *Paso* son los chips que orientan qué hacer con cada
+  trámite, quitarlos sería una regresión funcional). Resultado: **17 columnas**.
+- *Compañía* queda cubierta por *Gestor* ⇒ **se eliminó la columna dedicada del SuperAdmin**. No se
+  pierde el dato: era la misma razón social que ahora encabeza *Gestor* (empresa + persona), y ahí la
+  ven todos los perfiles. Lo delató un test al encontrar el nombre de la empresa dos veces en la misma
+  fila. El **filtro** por compañía del SuperAdmin sigue intacto.
 
 ## ⚠️ Riesgos
 

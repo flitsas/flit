@@ -4,8 +4,9 @@
 > `FLIT - EVOLUTION\Sprint 3`, estado `New`, asignadas a Juan Felipe Montoya Garcia, con descripción,
 > criterios de aceptación en Gherkin, story points y vínculo padre-hijo verificados (20 hijos).
 >
-> **Pendiente manual:** el PAT devuelve `403 Forbidden` al escribir `System.Tags` **del Feature**
-> (las HUs sí quedaron con `DOR`). Hay que añadir a mano al #11045: `DOR; adopcion-ia; fase-1-diseño`.
+> **Tags aplicados** (2026-07-29): `adopcion-ia; DOR; fase-1-diseño`. El `403 Forbidden` inicial no
+> era una limitación del PAT sobre los Features: el script enviaba `fase-1-diseno` **sin tilde**, un
+> tag que no existe en el proyecto, y el PAT aplica tags existentes pero no crea nuevos.
 
 | Campo | Valor |
 |-------|-------|
@@ -91,10 +92,10 @@ No generan HU (verificado contra código):
 | [HU06](HU06-bloqueo-regeneracion-aprobado.md) | #11051 | BACKEND | 5 | Bloqueo de regeneración documental con el trámite aprobado | **Implementada y verificada** (`db22eb0d`) |
 | [HU07](HU07-consolidado-unico-disparador.md) | #11052 | FRONTEND | 3 | Consolidado como único disparador de generación en el paso FUR | **Implementada y verificada** (`298111f4`) |
 | [HU08](HU08-aviso-estado-real.md) | #11053 | FRONTEND | 3 | Aviso del detalle del trámite acorde al estado real | **Implementada y verificada** (`0efe1b33`) |
-| [HU09](HU09-ver-documentos-desde-listado.md) | #11054 | FRONTEND | 5 | Ver los documentos del expediente desde el listado de trámites | New |
-| [HU10](HU10-consolidado-en-tabla.md) | #11055 | FRONTEND | 3 | Acceso al PDF consolidado desde la tabla de trámites | New |
-| [HU11](HU11-resumen-listado-ampliado.md) | #11056 | BACKEND | 5 | Resumen del listado con actualización, gestor, fuente y firma por parte | New |
-| [HU12](HU12-columnas-tabla-tramites.md) | #11057 | FRONTEND | 8 | Rediseño de columnas de la tabla de trámites | New |
+| [HU09](HU09-ver-documentos-desde-listado.md) | #11054 | FRONTEND | 5 | Ver los documentos del expediente desde el listado de trámites | **Implementada y verificada** (`2af73838`) |
+| [HU10](HU10-consolidado-en-tabla.md) | #11055 | FRONTEND | 3 | Acceso al PDF consolidado desde la tabla de trámites | **Implementada y verificada** (`2af73838`) |
+| [HU11](HU11-resumen-listado-ampliado.md) | #11056 | BACKEND | 5 | Resumen del listado con actualización, gestor, fuente y firma por parte | **Implementada y verificada** (`baf8b100`) |
+| [HU12](HU12-columnas-tabla-tramites.md) | #11057 | FRONTEND | 8 | Rediseño de columnas de la tabla de trámites | **Implementada y verificada** (`2af73838`) |
 | [HU13](HU13-precarga-companias-rl.md) | #11058 | FULLSTACK | 5 | Precarga de las compañías asociadas al editar un representante legal | New |
 | [HU14](HU14-renovar-identidad-firma-rl.md) | #11059 | FULLSTACK | 5 | Renovación de identidad o firma del baúl vencidas de un representante legal | New |
 | [HU15](HU15-renovar-identidad-mandatario.md) | #11060 | FULLSTACK | 5 | Renovación de la identidad vencida del mandatario del OT | New |
@@ -109,11 +110,13 @@ No generan HU (verificado contra código):
 
 ## Orden de ejecución
 
-1. **Usabilidad** — HU19, HU21 *(hechas, pendientes de verificar)*.
-2. **Generación documental** — HU06 → HU07 → HU08 (el guard de backend antes de ocultar botones).
-3. **Documentos generados** — HU01, HU02, HU04 en paralelo → HU03 → HU05 (después de HU06).
-4. **Trámites** — HU11 → HU12; HU09 y HU10 en paralelo desde el inicio.
-5. **Compañías** — HU13, HU17, HU18 → HU14, HU15 → HU16 (después de HU01).
+1. **Usabilidad** — HU19, HU21 ✅
+2. **Generación documental** — HU06 → HU07 → HU08 (el guard de backend antes de ocultar botones) ✅
+3. **Documentos generados** — HU01, HU02, HU04 en paralelo → HU03 → HU05 (después de HU06) ✅
+4. **Trámites** — HU11 → HU12; HU09 y HU10 en paralelo desde el inicio ✅
+5. **Compañías** — HU13, HU17, HU18 → HU14, HU15 → HU16 (después de HU01) — **pendiente**
+
+**Progreso: 14/20 HUs · 59/86 SP.** Falta solo el bloque de compañías (#11058–#11063).
 
 ## Trazabilidad al registrar en ADO
 

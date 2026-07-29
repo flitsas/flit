@@ -4,9 +4,10 @@
 |-------|-------|
 | Tipo | `[BACKEND]` |
 | Story Points | 5 |
-| Estado | Pendiente |
+| Estado | **Implementada y verificada** (Active en ADO, pendiente de PR) |
 | Feature padre | [FEATURE.md](FEATURE.md) |
-| ADO ID | _pendiente de registro_ |
+| ADO ID | **#11056** |
+| Commit | `baf8b100` |
 | Ajuste origen | `modificaciones.txt:51-70` |
 | Bloquea a | HU12, HU10 |
 
@@ -57,7 +58,7 @@ Contrato actual: `InstanceSummary` — `frontend/lib/api/types/procedure-runtime
 | Firmado por parte | ✖ solo `signaturePending` agregado | Firmas por parte (`listFirmas`) / estado biométrico por rol |
 | Consolidado generado (para HU10) | ✖ | Marca `consolidado_maestro_vigente` / adjunto de tipo consolidado |
 
-## Mapeo de la columna Fuente (propuesta a confirmar)
+## Mapeo de la columna Fuente (CONFIRMADO por el PO)
 
 El DDL fija el dominio real: `40-ICT-procedure-external-ref.sql:4` documenta
 `origin varchar(20) -- 'ict' | null = plataforma`, y el único productor de `'ict'` es
@@ -67,13 +68,15 @@ FLIT 1.0 (`GetStatusHistoryQuery.cs:58`).
 
 | Valor | Fuente a mostrar |
 |-------|------------------|
-| `null` | Dashboard |
-| `'ict'` | Integración |
-| Trámite con envío Quipux asociado | QX |
-| `migration_v1` | Migrado |
+| `origin` null | Dashboard |
+| `origin = 'ict'` | Integración |
+| `is_migrated` | Migrado (gana sobre `origin`: es una foto de V1) |
 
-El negocio anotó *"solo la que esté activa actualmente"*, coherente con que hoy convivan Dashboard e
-Integración.
+**QX queda fuera** (decisión del PO): no existe un origen Quipux, y acoplar el listado de trámites al
+módulo Quipux para marcar "tiene envío" costaría una consulta más y crearía trámites que son
+Integración **y** QX a la vez. Si algún día aparece un originador Quipux se añade un código a
+`TramiteFuente` y un caso en `Desde`; el resto del listado no cambia. Coherente con la nota del
+negocio, *"solo la que esté activa actualmente"*.
 
 ## Archivos previstos
 
