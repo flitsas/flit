@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Herramienta de verificación visual de los documentos generados (HU #11034/#11035). NO forma parte
+    de Flit.slnx a propósito: no se compila ni se publica con la solución, y el CI (que construye la
+    solución) la ignora. Se ejecuta a mano cuando se tocan los generadores de PDF.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!--
+      El repo activa AOT por defecto (Directory.Build.props, ADR-0002 §2), lo que deshabilita la
+      serialización JSON por reflexión: sin esto, el cargador del manifiesto del FUR falla al arrancar.
+      Esta utilidad no se publica ni se despliega, así que aquí AOT no aporta nada.
+    -->
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+    <!-- Utilidad de diagnóstico: los analizadores de estilo del repo no aplican aquí. -->
+    <NoWarn>$(NoWarn);CA1852;CA1305;CA1707;CA1861</NoWarn>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <RunAnalyzers>false</RunAnalyzers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Flit.Infrastructure/Flit.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
