@@ -79,13 +79,13 @@ public sealed class IniciarPrevalidacionHandler(
             ? PersonTypes.Natural
             : input.PersonType.Trim().ToLowerInvariant();
 
+        // CF-01/D1 (ADR-0036, Feature #11004) — la prevalidación standalone SOLO admite persona natural;
+        // la validación de actores jurídicos queda exclusiva del flujo de trámite (IdentitySubjectResolver
+        // sobre ProcedureInstanceActor, sin cambios). Guard evaluado ANTES del upsert de Person para no
+        // crear/actualizar un registro que de todas formas se rechaza. No es solo un cambio de UI: cierra
+        // la puerta trasera server-side aunque el body llegue directo a la API con personType=juridical.
         if (personType == PersonTypes.Juridical)
-        {
-            if (string.IsNullOrWhiteSpace(input.LegalRepDocumentType)
-                || string.IsNullOrWhiteSpace(input.LegalRepDocumentNumber)
-                || string.IsNullOrWhiteSpace(input.LegalRepName))
-                return (null, "datos_representante_requerido");
-        }
+            return (null, "prevalidacion_solo_natural");
 
         // ── 2. Upsert de la entidad persona ─────────────────────────────────────
         var person = await personRepo.FindOrCreateAsync(

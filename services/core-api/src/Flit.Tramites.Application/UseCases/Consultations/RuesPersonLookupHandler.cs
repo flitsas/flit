@@ -68,10 +68,9 @@ public sealed class RuesPersonLookupHandler(
         var ctx = new ConsultationContext(instanceId, tenantId, "RUES_ACTOR_JURIDICAL", fieldValues);
         var result = await provider.ConsultAsync(ctx, ct);
 
-        // HU #10856 — persistir los campos RUES en field_values (como el RUNT) para que el certificado
-        // RUES los muestre. Solo en borrador: fuera de draft el trigger de la BD bloquea la escritura, así
-        // que se omite (el autopoblado del actor y la caché HU #10878 siguen funcionando).
-        if (string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase)
+        // Persistencia de campos RUES: solo cuando el expediente admite edición (borrador o
+        // rechazado+subsanación). Fuera de eso el trigger de BD bloquea field_values.
+        if (TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva)
             && result.HydratedFields.Count > 0)
         {
             UpsertHydrated(instance, tenantId, result.HydratedFields);

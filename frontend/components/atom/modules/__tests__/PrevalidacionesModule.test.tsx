@@ -13,6 +13,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { UserEvent } from '@testing-library/user-event';
+
+/** Abre el menú Acciones de una fila y elige un ítem (p. ej. Editar, Ver proceso). */
+async function chooseRowAction(user: UserEvent, persona: string, item: RegExp) {
+  await user.click(screen.getByRole('button', { name: new RegExp(`acciones de prevalidación de ${persona}`, 'i') }));
+  await user.click(screen.getByRole('menuitem', { name: item }));
+}
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 const mocks = vi.hoisted(() => ({
@@ -20,6 +27,8 @@ const mocks = vi.hoisted(() => ({
   createPrevalidacion: vi.fn(),
   editPrevalidacion: vi.fn(),
   resendPrevalidacion: vi.fn(),
+  getBiometricAuditByValidation: vi.fn(),
+  getPrevalidacionDetail: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -28,6 +37,8 @@ vi.mock('@/lib/api/tramites-client', () => ({
     createPrevalidacion: mocks.createPrevalidacion,
     editPrevalidacion: mocks.editPrevalidacion,
     resendPrevalidacion: mocks.resendPrevalidacion,
+    getBiometricAuditByValidation: mocks.getBiometricAuditByValidation,
+    getPrevalidacionDetail: mocks.getPrevalidacionDetail,
   },
   TramitesApiError: class TramitesApiError extends Error {
     constructor(
@@ -70,6 +81,7 @@ const EDITABLE: TenantBiometricValidation = {
   daysRemaining: null,
   captureUrl: '/api/v1/public/biometric/tok-1',
   linkExpiresAt: '2026-07-25T10:00:00Z',
+  email: 'ana.rios@old.com', // CF-05 (HU #11006)
 };
 
 const TRAMITE_ROW: TenantBiometricValidation = {
@@ -163,6 +175,7 @@ describe('PrevalidacionesModule (HU #10944)', () => {
   it('AC3: una validación de un trámite se muestra en solo lectura, sin acciones de editar/reenviar', async () => {
     mocks.listTenantBiometricValidations.mockResolvedValueOnce(listResponse([TRAMITE_ROW]));
 
+    const user = userEvent.setup();
     render(<PrevalidacionesModule />);
 
     await waitFor(() => {
@@ -170,8 +183,9 @@ describe('PrevalidacionesModule (HU #10944)', () => {
     });
 
     expect(screen.getByText(/solo lectura \(pertenece a un trámite\)/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /editar prevalidación de camilo trámite/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /reenviar validación de camilo trámite/i })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /acciones de prevalidación de camilo trámite/i }));
+    expect(screen.queryByRole('menuitem', { name: /^editar$/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /^reenviar$/i })).toBeNull();
   });
 
   it('AC3: el tipo y número de documento aparecen deshabilitados con la razón al editar', async () => {
@@ -181,7 +195,7 @@ describe('PrevalidacionesModule (HU #10944)', () => {
     render(<PrevalidacionesModule />);
 
     await waitFor(() => expect(screen.getByText('Ana Ríos')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /editar prevalidación de ana ríos/i }));
+    await chooseRowAction(user, 'ana ríos', /^editar$/i);
 
     const docType = screen.getByLabelText(/tipo de documento/i) as HTMLInputElement;
     const docNum = screen.getByLabelText(/número de documento/i) as HTMLInputElement;
@@ -203,9 +217,9 @@ describe('PrevalidacionesModule (HU #10944)', () => {
     await waitFor(() => expect(screen.getByText('Luisa Aprobada')).toBeInTheDocument());
 
     expect(screen.getByText(/identidad aprobada: no editable ni reenviable/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /editar prevalidación de luisa aprobada/i })).toBeNull();
-
-    await user.click(screen.getByRole('button', { name: /crear nueva prevalidación para luisa aprobada/i }));
+    await user.click(screen.getByRole('button', { name: /acciones de prevalidación de luisa aprobada/i }));
+    expect(screen.queryByRole('menuitem', { name: /^editar$/i })).toBeNull();
+    await user.click(screen.getByRole('menuitem', { name: /nueva prevalidación/i }));
 
     // Se abre el formulario de creación precargado con documento y nombre de la misma persona.
     expect((screen.getByLabelText(/número de documento/i) as HTMLInputElement).value).toBe('1020304050');
@@ -226,7 +240,7 @@ describe('PrevalidacionesModule (HU #10944)', () => {
     render(<PrevalidacionesModule />);
 
     await waitFor(() => expect(screen.getByText('Ana Ríos')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /editar prevalidación de ana ríos/i }));
+    await chooseRowAction(user, 'ana ríos', /^editar$/i);
 
     const emailInput = screen.getByLabelText(/nuevo correo electrónico/i);
     await user.type(emailInput, 'ana.rios@new.com');
@@ -263,7 +277,7 @@ describe('PrevalidacionesModule (HU #10944)', () => {
     render(<PrevalidacionesModule />);
 
     await waitFor(() => expect(screen.getByText('Ana Ríos')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /editar prevalidación de ana ríos/i }));
+    await chooseRowAction(user, 'ana ríos', /^editar$/i);
 
     const nameInput = screen.getByLabelText(/^nombre$/i);
     await user.clear(nameInput);
@@ -299,7 +313,7 @@ describe('PrevalidacionesModule (HU #10944)', () => {
     render(<PrevalidacionesModule />);
 
     await waitFor(() => expect(screen.getByText('Ana Ríos')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /reenviar validación de ana ríos/i }));
+    await chooseRowAction(user, 'ana ríos', /^reenviar$/i);
 
     expect(screen.getByRole('alertdialog', { name: /reenviar validación/i })).toBeInTheDocument();
 
@@ -327,7 +341,7 @@ describe('PrevalidacionesModule (HU #10944)', () => {
     render(<PrevalidacionesModule />);
 
     await waitFor(() => expect(screen.getByText('Ana Ríos')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /reenviar validación de ana ríos/i }));
+    await chooseRowAction(user, 'ana ríos', /^reenviar$/i);
     await user.click(screen.getByRole('button', { name: /confirmar reenvío/i }));
 
     await waitFor(() => {
@@ -336,10 +350,10 @@ describe('PrevalidacionesModule (HU #10944)', () => {
     await user.click(screen.getByRole('button', { name: /cerrar/i }));
 
     await waitFor(() => {
-      const resendBtn = screen.getByRole('button', { name: /reenviar validación de ana ríos/i });
-      expect(resendBtn).toBeDisabled();
+      expect(screen.getByText(/disponible en \d+ min\./i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/disponible en \d+ min\./i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /acciones de prevalidación de ana ríos/i }));
+    expect(screen.getByRole('menuitem', { name: /^reenviar$/i })).toBeDisabled();
   });
 
   it('AC5: un 429 de tope agotado deshabilita "Reenviar" con el mensaje del backend', async () => {
@@ -357,7 +371,7 @@ describe('PrevalidacionesModule (HU #10944)', () => {
     render(<PrevalidacionesModule />);
 
     await waitFor(() => expect(screen.getByText('Ana Ríos')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /reenviar validación de ana ríos/i }));
+    await chooseRowAction(user, 'ana ríos', /^reenviar$/i);
     await user.click(screen.getByRole('button', { name: /confirmar reenvío/i }));
 
     await waitFor(() => {
@@ -366,9 +380,10 @@ describe('PrevalidacionesModule (HU #10944)', () => {
     await user.click(screen.getByRole('button', { name: /cancelar/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /reenviar validación de ana ríos/i })).toBeDisabled();
+      expect(screen.getByText(/se agotó el tope de 3 reenvíos/i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/se agotó el tope de 3 reenvíos/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /acciones de prevalidación de ana ríos/i }));
+    expect(screen.getByRole('menuitem', { name: /^reenviar$/i })).toBeDisabled();
   });
 
   // ── AC6 — errores del backend traducidos a mensajes accionables ────────────
@@ -384,7 +399,7 @@ describe('PrevalidacionesModule (HU #10944)', () => {
     render(<PrevalidacionesModule />);
 
     await waitFor(() => expect(screen.getByText('Ana Ríos')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /editar prevalidación de ana ríos/i }));
+    await chooseRowAction(user, 'ana ríos', /^editar$/i);
     await user.type(screen.getByLabelText(/^nombre$/i), ' corregido');
     await user.click(screen.getByRole('button', { name: /guardar cambios/i }));
 
@@ -410,7 +425,7 @@ describe('PrevalidacionesModule (HU #10944)', () => {
     render(<PrevalidacionesModule />);
 
     await waitFor(() => expect(screen.getByText('Ana Ríos')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: /editar prevalidación de ana ríos/i }));
+    await chooseRowAction(user, 'ana ríos', /^editar$/i);
     await user.type(screen.getByLabelText(/nuevo correo electrónico/i), 'nuevo@correo.com');
     await user.click(screen.getByRole('button', { name: /guardar y reenviar/i }));
 
@@ -418,6 +433,186 @@ describe('PrevalidacionesModule (HU #10944)', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(/la identidad ya está aprobada/i);
     });
     expect(screen.getByText(/usa la acción "nueva prevalidación"/i)).toBeInTheDocument();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HU #11006 (Feature #11004) — CF-02, CF-04, CF-05
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('PrevalidacionesModule (HU #11006 — CF-02/CF-04/CF-05)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('CF-02: consulta el listado con standalone=true directo, sin fallback client-side', async () => {
+    mocks.listTenantBiometricValidations.mockResolvedValueOnce(listResponse([EDITABLE]));
+
+    render(<PrevalidacionesModule />);
+
+    await waitFor(() => {
+      expect(mocks.listTenantBiometricValidations).toHaveBeenCalledWith(
+        expect.objectContaining({ standalone: true }),
+      );
+    });
+  });
+
+  it('filtra por persona: envía name al backend tras el debounce', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricValidations.mockResolvedValue(listResponse([EDITABLE]));
+
+    render(<PrevalidacionesModule />);
+    await screen.findByText('Ana Ríos');
+
+    await user.type(screen.getByLabelText(/buscar por persona/i), 'Ana');
+
+    await waitFor(() => {
+      expect(mocks.listTenantBiometricValidations).toHaveBeenCalledWith(
+        expect.objectContaining({ standalone: true, name: 'Ana' }),
+      );
+    });
+  });
+
+  it('filtra por estado de inmediato', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricValidations.mockResolvedValue(listResponse([EDITABLE]));
+
+    render(<PrevalidacionesModule />);
+    await screen.findByText('Ana Ríos');
+
+    await user.selectOptions(screen.getByLabelText(/^estado$/i), 'aprobado');
+
+    await waitFor(() => {
+      expect(mocks.listTenantBiometricValidations).toHaveBeenCalledWith(
+        expect.objectContaining({ standalone: true, status: 'aprobado' }),
+      );
+    });
+  });
+
+  it('CF-04: muestra el documento completo, sin enmascarar', async () => {
+    mocks.listTenantBiometricValidations.mockResolvedValueOnce(listResponse([EDITABLE]));
+
+    render(<PrevalidacionesModule />);
+
+    await waitFor(() => {
+      expect(screen.getByText('CC 1020304050')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/••••/)).not.toBeInTheDocument();
+  });
+
+  it('CF-05: muestra la columna Correo con el valor del backend', async () => {
+    mocks.listTenantBiometricValidations.mockResolvedValueOnce(listResponse([EDITABLE]));
+
+    render(<PrevalidacionesModule />);
+
+    await waitFor(() => {
+      expect(screen.getByText('ana.rios@old.com')).toBeInTheDocument();
+    });
+  });
+
+  it('CF-05: muestra "—" cuando el backend aún no envía email (BE en curso), sin romper la fila', async () => {
+    mocks.listTenantBiometricValidations.mockResolvedValueOnce(
+      listResponse([{ ...EDITABLE, email: null }]),
+    );
+
+    render(<PrevalidacionesModule />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Ana Ríos')).toBeInTheDocument();
+    });
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('AC3: respuesta vacía con standalone=true muestra el estado vacío, sin fallback a mostrar filas de trámite', async () => {
+    mocks.listTenantBiometricValidations.mockResolvedValueOnce(listResponse([]));
+
+    render(<PrevalidacionesModule />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/no hay prevalidaciones aún/i)).toBeInTheDocument();
+    });
+    // No debe aparecer ninguna fila (el bug preexistente de HU #10869/#10944 caía a "mostrar todas").
+    expect(screen.queryByRole('list', { name: /prevalidaciones de identidad/i })).toBeNull();
+  });
+
+  // ── HU #11007/#11008 — proceso en modal (tabla compacta, sin tracking inline) ────────────────
+  it('AC1/AC2 (HU #11007/#11008): "Proceso" abre el modal y carga audit por validationId', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricValidations.mockResolvedValueOnce(listResponse([EDITABLE]));
+    mocks.getPrevalidacionDetail.mockResolvedValueOnce({
+      id: EDITABLE.id,
+      partyRole: null,
+      name: EDITABLE.name,
+      documentType: EDITABLE.documentType,
+      documentNumber: EDITABLE.documentNumber,
+      email: EDITABLE.email,
+      status: 'enviado',
+      intentos: 0,
+      maxIntentos: 3,
+      score: null,
+      expiresAt: '2026-07-25T10:00:00Z',
+      validatedAt: null,
+      expired: false,
+      provider: 'kyverum',
+      captureUrl: EDITABLE.captureUrl,
+    });
+    mocks.getBiometricAuditByValidation.mockResolvedValueOnce({
+      validationId: EDITABLE.id,
+      events: [],
+      referencedFromOtherProcedure: false,
+    });
+
+    render(<PrevalidacionesModule />);
+    await screen.findByText('Ana Ríos');
+
+    await chooseRowAction(user, 'ana ríos', /ver proceso/i);
+
+    expect(await screen.findByRole('dialog', { name: /proceso de prevalidación/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.getPrevalidacionDetail).toHaveBeenCalledWith(EDITABLE.id);
+      expect(mocks.getBiometricAuditByValidation).toHaveBeenCalledWith(EDITABLE.id);
+    });
+  });
+
+  // ── HU #11008 (Feature #11004, CF-06) — modal de proceso con poll ─────────────────────────────
+  it('AC1 (HU #11008): "Proceso" abre el modal y consulta el detalle por id', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricValidations.mockResolvedValueOnce(listResponse([EDITABLE]));
+    mocks.getPrevalidacionDetail.mockResolvedValueOnce({
+      id: EDITABLE.id,
+      partyRole: null,
+      name: EDITABLE.name,
+      documentType: EDITABLE.documentType,
+      documentNumber: EDITABLE.documentNumber,
+      email: EDITABLE.email,
+      status: 'enviado',
+      intentos: 0,
+      maxIntentos: 3,
+      score: null,
+      expiresAt: '2026-07-25T10:00:00Z',
+      validatedAt: null,
+      expired: false,
+      provider: 'kyverum',
+      captureUrl: EDITABLE.captureUrl,
+    });
+    mocks.getBiometricAuditByValidation.mockResolvedValue({
+      validationId: EDITABLE.id,
+      events: [],
+      referencedFromOtherProcedure: false,
+    });
+
+    render(<PrevalidacionesModule />);
+    await screen.findByText('Ana Ríos');
+
+    await chooseRowAction(user, 'ana ríos', /ver proceso/i);
+
+    expect(await screen.findByRole('dialog', { name: /proceso de prevalidación/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.getPrevalidacionDetail).toHaveBeenCalledWith(EDITABLE.id);
+    });
+
+    await user.click(screen.getByRole('button', { name: /cerrar proceso/i }));
+    expect(screen.queryByRole('dialog', { name: /proceso de prevalidación/i })).toBeNull();
   });
 });
 

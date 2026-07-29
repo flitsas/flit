@@ -13,8 +13,9 @@ using Xunit;
 namespace Flit.Tramites.Application.Tests.UseCases.Persons;
 
 /// <summary>
-/// Tests unitarios de <see cref="IniciarPrevalidacionHandler"/> — HU #10866 (CF-01, Feature #10864).
-/// Cobertura de AC1 (persona natural standalone sin trámite) y AC2 (persona jurídica, sujeto = RL).
+/// Tests unitarios de <see cref="IniciarPrevalidacionHandler"/> — HU #10866 (Feature #10864) +
+/// HU #11005 (CF-01/D1, ADR-0036, Feature #11004). Cobertura de AC1 (persona natural standalone sin
+/// trámite) y del guard CF-01 que rechaza persona jurídica ANTES de tocar Person (422 en el endpoint).
 /// </summary>
 public sealed class IniciarPrevalidacionHandlerTests
 {
@@ -230,92 +231,50 @@ public sealed class IniciarPrevalidacionHandlerTests
         result.Should().BeNull();
     }
 
-    // ── AC2: persona jurídica — sujeto es el representante legal ─────────────────
+    // ── CF-01/D1 (ADR-0036, Feature #11004): rechazo server-side de persona jurídica ────
 
     [Fact]
-    public async Task AC2_Juridical_SubjectIsLegalRepresentative_NotNit()
+    public async Task CF01_Juridical_ReturnsPrevalidacionSoloNatural_Returns422()
     {
         var ct = TestContext.Current.CancellationToken;
-        var person = StubPerson(
-            personType: PersonTypes.Juridical,
-            legalRepDocType: "CC", legalRepDocNum: "55667788",
-            legalRepName: "Ana García", legalRepEmail: "ana@empresa.com");
-        person.DocumentType = "NIT";
-        person.DocumentNumber = "900123456";
-        person.FullName = "Empresa SAS";
-        person.Email = "empresa@example.com";
-
         var handler = BuildHandler(isKyverum: false);
         var req = JuridicalRequest();
 
         var (result, error) = await handler.HandleAsync(_tenantId, req, ct);
 
-        error.Should().BeNull();
-
-        _procedureRepo.Received(1).Add(Arg.Is<ProcedureInstanceBiometricValidation>(v =>
-            v.DocumentType == "CC"
-            && v.DocumentNumber == "55667788"
-            && v.Name == "Ana García"
-            && v.ProcedureInstanceId == null));
+        error.Should().Be("prevalidacion_solo_natural");
+        result.Should().BeNull();
     }
 
     [Fact]
-    public async Task AC2_Juridical_Kyverum_CallsProviderWithLegalRepDocument()
+    public async Task CF01_Juridical_RejectedBeforeTouchingPerson_NoUpsertNoAdd()
     {
         var ct = TestContext.Current.CancellationToken;
-        var person = StubPerson(
-            personType: PersonTypes.Juridical,
-            legalRepDocType: "CC", legalRepDocNum: "55667788",
-            legalRepName: "Ana García", legalRepEmail: "ana@empresa.com");
-        person.DocumentType = "NIT";
-        person.DocumentNumber = "900123456";
-
-        StubKyverumOk();
-        var handler = BuildHandler(isKyverum: true);
+        var handler = BuildHandler(isKyverum: false);
 
         await handler.HandleAsync(_tenantId, JuridicalRequest(), ct);
 
-        await _kyverum.Received(1).StartVerificationAsync(
-            Arg.Is<KyverumVerifyStartRequest>(r =>
-                r.TipoDoc == "CC"
-                && r.Documento == "55667788"
-                && r.Nombre == "Ana García"
-                && r.ProcedureInstanceId == null),
-            ct);
+        // Guard evaluado ANTES del upsert de Person (ADR-0036): no debe crear/actualizar el registro
+        // de una persona jurídica que de todas formas se va a rechazar.
+        await _personRepo.DidNotReceive().FindOrCreateAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(),
+            Arg.Any<CancellationToken>());
+        _procedureRepo.DidNotReceive().Add(Arg.Any<ProcedureInstanceBiometricValidation>());
     }
 
     [Fact]
-    public async Task AC2_Juridical_LegalRepEmail_UsedWhenProvided()
+    public async Task CF01_Juridical_Kyverum_AlsoRejected_NoProviderCall()
     {
         var ct = TestContext.Current.CancellationToken;
-        StubPerson(personType: PersonTypes.Juridical,
-            legalRepDocType: "CC", legalRepDocNum: "55667788",
-            legalRepName: "Ana García", legalRepEmail: "ana@empresa.com");
-        var handler = BuildHandler(isKyverum: false);
+        var handler = BuildHandler(isKyverum: true);
 
         var (result, error) = await handler.HandleAsync(_tenantId, JuridicalRequest(), ct);
 
-        error.Should().BeNull();
-        _procedureRepo.Received(1).Add(Arg.Is<ProcedureInstanceBiometricValidation>(v =>
-            v.Email == "ana@empresa.com"));
-    }
-
-    [Fact]
-    public async Task AC2_Juridical_FallsBackToCompanyEmail_WhenNoLegalRepEmail()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var person = StubPerson(personType: PersonTypes.Juridical,
-            legalRepDocType: "CC", legalRepDocNum: "55667788",
-            legalRepName: "Ana García", legalRepEmail: null);
-        person.Email = "empresa@example.com";
-        var handler = BuildHandler(isKyverum: false);
-        var req = JuridicalRequest(rlEmail: null);
-
-        var (result, error) = await handler.HandleAsync(_tenantId, req, ct);
-
-        error.Should().BeNull();
-        _procedureRepo.Received(1).Add(Arg.Is<ProcedureInstanceBiometricValidation>(v =>
-            v.Email == "empresa@example.com"));
+        error.Should().Be("prevalidacion_solo_natural");
+        result.Should().BeNull();
+        await _kyverum.DidNotReceive().StartVerificationAsync(
+            Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
     }
 
     // ── Guards de validación ──────────────────────────────────────────────────────
@@ -337,15 +296,17 @@ public sealed class IniciarPrevalidacionHandlerTests
     }
 
     [Fact]
-    public async Task DatosRepresentanteRequerido_WhenJuridicalWithoutRL()
+    public async Task PrevalidacionSoloNatural_WhenJuridicalWithoutRL_StillRejectedByCF01First()
     {
+        // CF-01 (ADR-0036): el guard de persona natural se evalúa ANTES que cualquier chequeo de datos
+        // del representante legal — jurídica se rechaza siempre, tenga o no datos de RL completos.
         var ct = TestContext.Current.CancellationToken;
         var handler = BuildHandler();
         var req = new IniciarPrevalidacionRequest("NIT", "900123456", "Empresa SAS", "emp@x.com", PersonTypes.Juridical);
 
         var (result, error) = await handler.HandleAsync(_tenantId, req, ct);
 
-        error.Should().Be("datos_representante_requerido");
+        error.Should().Be("prevalidacion_solo_natural");
         result.Should().BeNull();
     }
 

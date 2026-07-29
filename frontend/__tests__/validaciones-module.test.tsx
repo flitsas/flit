@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   listStuckIdentityValidations: vi.fn(),
   requeueStuckIdentityValidation: vi.fn(),
   requeueAllStuckIdentityValidations: vi.fn(),
+  getBiometricAuditByValidation: vi.fn(),
+  getPrevalidacionDetail: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -21,6 +23,8 @@ vi.mock('@/lib/api/tramites-client', () => ({
     listStuckIdentityValidations: mocks.listStuckIdentityValidations,
     requeueStuckIdentityValidation: mocks.requeueStuckIdentityValidation,
     requeueAllStuckIdentityValidations: mocks.requeueAllStuckIdentityValidations,
+    getBiometricAuditByValidation: mocks.getBiometricAuditByValidation,
+    getPrevalidacionDetail: mocks.getPrevalidacionDetail,
   },
 }));
 
@@ -47,6 +51,7 @@ const ROW_APROBADA: TenantBiometricValidation = {
   // Aprobada: no hay enlace vigente que reenviar (el backend lo devuelve null en estados terminales).
   captureUrl: null,
   linkExpiresAt: '2026-06-21T15:30:00Z',
+  email: 'ana.compradora@correo.co', // CF-05 (HU #11006)
 };
 
 const ROW_RECHAZADA: TenantBiometricValidation = {
@@ -69,6 +74,7 @@ const ROW_RECHAZADA: TenantBiometricValidation = {
   daysRemaining: null,
   captureUrl: null,
   linkExpiresAt: null,
+  email: null, // CF-05 (HU #11006) — BE aún no lo envía para esta fila (fixture de borde)
 };
 
 /** CF-05 (HU #10886, AC2) — validación EN CURSO: es la única que trae enlace vigente. */
@@ -92,6 +98,7 @@ const ROW_EN_PROCESO: TenantBiometricValidation = {
   daysRemaining: null,
   captureUrl: 'https://capture.kyverum.co/kyv_123',
   linkExpiresAt: '2026-06-23T09:00:00Z',
+  email: 'carlos.vendedor@correo.co', // CF-05 (HU #11006)
 };
 
 const FULL: TenantBiometricValidationsResponse = {
@@ -191,12 +198,32 @@ describe('Validaciones — datos y accesibilidad', () => {
     expect(link.getAttribute('aria-label')).toMatch(/trámite trm-2026-000001/i);
   });
 
-  it('enmascara el documento (no muestra el número completo)', async () => {
+  it('CF-04 (HU #11006): muestra el documento completo en la tabla, sin enmascarar', async () => {
     render(<Validaciones />);
 
-    // 1020304050 → ••••4050; el número completo NO aparece.
-    expect(await screen.findByText('CC ••••4050')).toBeInTheDocument();
-    expect(screen.queryByText(/1020304050/)).not.toBeInTheDocument();
+    expect(await screen.findByText('CC 1020304050')).toBeInTheDocument();
+    expect(screen.queryByText(/CC ••••4050/)).not.toBeInTheDocument();
+  });
+
+  it('CF-05 (HU #11006): muestra la columna Correo con el valor del backend y "—" si aún no llega', async () => {
+    render(<Validaciones />);
+
+    await screen.findByText('TRM-2026-000001');
+    expect(screen.getByText('ana.compradora@correo.co')).toBeInTheDocument();
+
+    // ROW_RECHAZADA no trae email todavía (BE en curso, HU #11005) — se muestra "—" sin romper la fila.
+    const rechazadaLink = screen.getByRole('link', { name: /validación de luis vendedor/i });
+    expect(rechazadaLink.getAttribute('aria-label')).toMatch(/correo —/i);
+  });
+
+  it('AC5 (HU #11006, CF-03, regresión): Validaciones sigue listando ambos tipos, sin enviar standalone', async () => {
+    render(<Validaciones />);
+
+    await waitFor(() => {
+      expect(mocks.listTenantBiometricValidations).toHaveBeenCalled();
+    });
+    const lastArg = mocks.listTenantBiometricValidations.mock.calls.at(-1)?.[0];
+    expect(lastArg).not.toHaveProperty('standalone');
   });
 
   it('muestra el motivo de rechazo sanitizado en la fila rechazada', async () => {
@@ -575,6 +602,7 @@ describe('Validaciones — paginación', () => {
   // otros medios, con su estado y su expiración.
   describe('enlace de validación vigente', () => {
     it('ofrece "Copiar enlace" con la expiración en las validaciones en curso', async () => {
+      const user = userEvent.setup();
       mocks.listTenantBiometricValidations.mockResolvedValue({
         ...FULL,
         validations: [ROW_EN_PROCESO],
@@ -584,11 +612,9 @@ describe('Validaciones — paginación', () => {
       render(<Validaciones />);
       await screen.findByText('TRM-2026-000003');
 
-      const boton = screen.getByRole('button', {
-        name: /Copiar enlace de validación de Carlos Vendedor/i,
-      });
-      expect(boton).toHaveAttribute('title', 'https://capture.kyverum.co/kyv_123');
       expect(screen.getByText(/^Vence /)).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /acciones de validación de carlos vendedor/i }));
+      expect(screen.getByRole('menuitem', { name: /copiar enlace/i })).toBeInTheDocument();
       // El estado sigue mostrándose (la fila y el KPI comparten la etiqueta).
       expect(screen.getAllByText('En proceso').length).toBeGreaterThan(0);
     });
@@ -611,13 +637,15 @@ describe('Validaciones — paginación', () => {
       render(<Validaciones />);
       await screen.findByText('TRM-2026-000003');
 
-      await user.click(screen.getByRole('button', { name: /Copiar enlace de validación/i }));
+      await user.click(screen.getByRole('button', { name: /acciones de validación de carlos vendedor/i }));
+      await user.click(screen.getByRole('menuitem', { name: /copiar enlace/i }));
 
       expect(writeText).toHaveBeenCalledWith('https://capture.kyverum.co/kyv_123');
-      expect(await screen.findByText('Copiado')).toBeInTheDocument();
+      expect(await screen.findByText('Enlace copiado')).toBeInTheDocument();
     });
 
     it('no ofrece enlace cuando la validación ya está en estado terminal', async () => {
+      const user = userEvent.setup();
       mocks.listTenantBiometricValidations.mockResolvedValue({
         ...FULL,
         validations: [ROW_APROBADA],
@@ -627,7 +655,51 @@ describe('Validaciones — paginación', () => {
       render(<Validaciones />);
       await screen.findByText('TRM-2026-000001');
 
-      expect(screen.queryByRole('button', { name: /Copiar enlace/i })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /acciones de validación de ana compradora/i }));
+      expect(screen.queryByRole('menuitem', { name: /copiar enlace/i })).not.toBeInTheDocument();
+    });
+  });
+});
+
+// HU #11007/#11008 — proceso en panel lateral (tabla compacta).
+describe('Validaciones — proceso de identidad (HU #11007/#11008)', () => {
+  it('AC1: "Ver proceso" abre el panel y consulta audit por validationId, sin depender del trámite', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricValidations.mockResolvedValue(FULL);
+    mocks.getPrevalidacionDetail.mockResolvedValue({
+      id: ROW_APROBADA.id,
+      partyRole: ROW_APROBADA.partyRole,
+      name: ROW_APROBADA.name,
+      documentType: ROW_APROBADA.documentType,
+      documentNumber: ROW_APROBADA.documentNumber,
+      email: ROW_APROBADA.email,
+      status: ROW_APROBADA.status,
+      intentos: 1,
+      maxIntentos: 3,
+      score: ROW_APROBADA.score,
+      expiresAt: '2026-07-28T10:00:00Z',
+      validatedAt: ROW_APROBADA.validatedAt,
+      expired: false,
+      provider: ROW_APROBADA.provider,
+      captureUrl: null,
+    });
+    mocks.getBiometricAuditByValidation.mockResolvedValue({
+      validationId: ROW_APROBADA.id,
+      events: [],
+      referencedFromOtherProcedure: false,
+    });
+
+    render(<Validaciones />);
+    await screen.findByText('TRM-2026-000001');
+
+    const [primerMenu] = screen.getAllByRole('button', { name: /acciones de validación/i });
+    await user.click(primerMenu);
+    await user.click(screen.getByRole('menuitem', { name: /ver proceso/i }));
+
+    expect(await screen.findByRole('dialog', { name: /proceso de validación/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.getPrevalidacionDetail).toHaveBeenCalledWith(ROW_APROBADA.id);
+      expect(mocks.getBiometricAuditByValidation).toHaveBeenCalledWith(ROW_APROBADA.id);
     });
   });
 });

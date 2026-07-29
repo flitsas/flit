@@ -28,17 +28,19 @@ const ESTADO_SUBSANACION: InstanceStatus = 'subsanacion';
 const ESTADO_RECHAZADO: InstanceStatus = 'rechazado';
 
 /**
- * Motivo del rechazo del Organismo de Tránsito: `reason` de la última transición A `rechazado`
- * (entregado→rechazado). Es la guía de QUÉ corregir cuando el operador subsana un trámite
- * rechazado (HU #10870 — la subsanación la inicia el operador, no el OT). `null` si no hay un
- * rechazo con motivo en el historial.
+ * Motivo del rechazo del Organismo de Tránsito: `reason` de la última transición REAL a
+ * `rechazado` (p. ej. entregado→rechazado). Excluye `rechazado→rechazado` (activar subsanación),
+ * para no mostrar textos del operador. `null` si no hay un rechazo con motivo en el historial.
  */
 export function latestRejectionReason(
   history: StatusHistory[] | null | undefined,
 ): string | null {
   if (!history || history.length === 0) return null;
   const entries = history.filter(
-    (h) => h.toStatus === ESTADO_RECHAZADO && !!h.reason?.trim(),
+    (h) =>
+      h.toStatus === ESTADO_RECHAZADO &&
+      h.fromStatus !== ESTADO_RECHAZADO &&
+      !!h.reason?.trim(),
   );
   if (entries.length === 0) return null;
   const latest = entries.reduce((a, b) =>
@@ -48,15 +50,18 @@ export function latestRejectionReason(
 }
 
 /**
- * Última entrada del historial que transiciona el trámite A `subsanacion` (por `changedAt`
- * descendente). `null` si el trámite nunca pasó por subsanación (no debería ocurrir cuando el
- * status actual es `subsanacion`, pero el parseo es defensivo).
+ * Última entrada del historial con observación de subsanación: legado `toStatus=subsanacion`,
+ * o `rechazado`/`rechazado` con metadata de checklist/motivo estructurado.
  */
 export function latestSubsanacionEntry(
   history: StatusHistory[] | null | undefined,
 ): StatusHistory | null {
   if (!history || history.length === 0) return null;
-  const entries = history.filter((h) => h.toStatus === ESTADO_SUBSANACION);
+  const entries = history.filter((h) => {
+    if (h.toStatus === ESTADO_SUBSANACION) return true;
+    if (h.toStatus === ESTADO_RECHAZADO && parseSubsanacionObservation(h.metadata)) return true;
+    return false;
+  });
   if (entries.length === 0) return null;
   return entries.reduce((latest, current) =>
     new Date(current.changedAt).getTime() >= new Date(latest.changedAt).getTime() ? current : latest,

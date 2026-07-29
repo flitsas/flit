@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatFecha } from '@/lib/format/date';
 import { useRouter } from 'next/navigation';
-import { ArrowLeftRight, Car, Search, Star, X } from 'lucide-react';
+import { AlertCircle, ArrowLeftRight, Car, Search, Star, X } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
@@ -174,6 +174,8 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
 
   // Paginación client-side (1-based).
   const [page, setPage] = useState(1);
+  /** Popover de motivo OT / subsanación abierto (un solo id a la vez). */
+  const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -454,6 +456,9 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           onPageChange={setPage}
           hasActiveFilters={hasActiveFilters}
           showCompania={isAdmin}
+          openPopoverId={openPopoverId}
+          onTogglePopover={(id) => setOpenPopoverId((prev) => (prev === id ? null : id))}
+          onClosePopover={() => setOpenPopoverId(null)}
           onRetry={() => void load()}
           onClearFilters={clearFilters}
           onTogglePriority={handleTogglePriority}
@@ -482,6 +487,9 @@ function TableBody({
   onPageChange,
   hasActiveFilters,
   showCompania,
+  openPopoverId,
+  onTogglePopover,
+  onClosePopover,
   onRetry,
   onClearFilters,
   onTogglePriority,
@@ -497,6 +505,9 @@ function TableBody({
   onPageChange: (page: number) => void;
   hasActiveFilters: boolean;
   showCompania: boolean;
+  openPopoverId: string | null;
+  onTogglePopover: (id: string) => void;
+  onClosePopover: () => void;
   onRetry: () => void;
   onClearFilters: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
@@ -611,6 +622,9 @@ function TableBody({
               item={item}
               showCompania={showCompania}
               gridCols={gridCols}
+              popoverOpen={openPopoverId === item.id}
+              onTogglePopover={onTogglePopover}
+              onClosePopover={onClosePopover}
               onTogglePriority={onTogglePriority}
               onOpen={onOpen}
             />
@@ -693,12 +707,18 @@ function TramiteRow({
   item,
   showCompania,
   gridCols,
+  popoverOpen,
+  onTogglePopover,
+  onClosePopover,
   onTogglePriority,
   onOpen,
 }: {
   item: InstanceSummary;
   showCompania: boolean;
   gridCols: string;
+  popoverOpen: boolean;
+  onTogglePopover: (id: string) => void;
+  onClosePopover: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
   onOpen: (id: string, tenantId: string) => void;
 }) {
@@ -709,6 +729,31 @@ function TramiteRow({
   const chip = async?.chip ?? estadoChip(item.estado);
   const isDraft = item.estado === 'borrador';
   const actionLabel = async?.ready ? 'Radicar' : isDraft ? 'Continuar' : 'Ver';
+  const motivoRechazo = item.ultimoRechazoMotivo?.trim() || null;
+  const subsanacionCount = item.subsanacionCount ?? 0;
+  const enSubsanacion = !!item.subsanacionActiva;
+  const showRejectPopover =
+    !!motivoRechazo || enSubsanacion || subsanacionCount > 0;
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const iconColor = enSubsanacion ? '#b45309' : '#c2410c';
+
+  useEffect(() => {
+    if (!popoverOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClosePopover();
+    };
+    const onPointer = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        onClosePopover();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onPointer);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onPointer);
+    };
+  }, [popoverOpen, onClosePopover]);
 
   return (
     <li>
@@ -799,8 +844,85 @@ function TramiteRow({
             {stepLabel(item)}
           </span>
         </span>
-        <span className="block">
+        <span className="relative flex min-w-0 items-center gap-1.5">
           <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+          {showRejectPopover ? (
+            <div ref={popoverRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTogglePopover(item.id);
+                }}
+                aria-expanded={popoverOpen}
+                aria-haspopup="dialog"
+                aria-label={`Ver detalle de rechazo / subsanación de ${item.referenceNumber}`}
+                title="Ver motivo del OT y subsanación"
+                className="rounded-md p-0.5 transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00]"
+              >
+                <AlertCircle
+                  className="h-3.5 w-3.5"
+                  style={{ color: iconColor }}
+                  aria-hidden="true"
+                />
+              </button>
+              {popoverOpen ? (
+                <div
+                  role="dialog"
+                  aria-label={`Detalle de rechazo de ${item.referenceNumber}`}
+                  className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-white p-3 shadow-lg dark:bg-[#162744]"
+                  style={{ borderColor: 'rgba(255,78,0,0.28)' }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {motivoRechazo ? (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[#c2410c]">
+                        Motivo del OT
+                      </p>
+                      <p className="mt-1 text-sm text-[#162744] dark:text-white/90 whitespace-pre-wrap">
+                        {motivoRechazo}
+                      </p>
+                    </div>
+                  ) : null}
+                  {enSubsanacion || subsanacionCount > 0 ? (
+                    <div
+                      className={`flex flex-wrap gap-1.5 ${motivoRechazo ? 'mt-2.5 border-t pt-2.5' : ''}`}
+                      style={
+                        motivoRechazo
+                          ? { borderColor: 'rgba(223,229,237,0.8)' }
+                          : undefined
+                      }
+                    >
+                      {enSubsanacion ? (
+                        <span
+                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
+                          style={{
+                            background: 'rgba(245,158,11,0.12)',
+                            color: '#b45309',
+                            borderColor: 'rgba(245,158,11,0.3)',
+                          }}
+                        >
+                          En subsanación
+                        </span>
+                      ) : null}
+                      {subsanacionCount > 0 ? (
+                        <span
+                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
+                          style={{
+                            background: 'rgba(99,102,241,0.10)',
+                            color: '#4f46e5',
+                            borderColor: 'rgba(99,102,241,0.28)',
+                          }}
+                        >
+                          Subsanado ×{subsanacionCount}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </span>
         <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
           {item.organismoTransito ?? '—'}

@@ -15,11 +15,9 @@ public static class TramiteEstado
     public const string Rechazado = "rechazado";
 
     /// <summary>
-    /// HU #10870 — subsanación: reabre la edición de un trámite entregado/rechazado SIN volver a
-    /// borrador, conservando el historial. Es "en proceso" (no libera la llave de duplicidad, ver
-    /// <see cref="EstadosEnProceso"/>) y editable (ver
-    /// <c>Flit.Tramites.Application.UseCases.ProcedureInstances.PatchFieldValuesHandler</c> y el
-    /// trigger <c>tramites.trg_field_value_immutable</c>).
+    /// LEGACY — ya no es un estado de negocio activo. La subsanación vive como flag
+    /// <c>subsanacion_activa</c> sobre <see cref="Rechazado"/>. Se conserva la constante para
+    /// leer historial / filas migradas pendientes. No forma parte de <see cref="Todos"/>.
     /// </summary>
     public const string Subsanacion = "subsanacion";
 
@@ -29,20 +27,18 @@ public static class TramiteEstado
 
     /// <summary>Todos los estados válidos (para validación de entrada y checks DDL).</summary>
     public static readonly IReadOnlyList<string> Todos =
-        [Borrador, Anulado, Preparado, Entregado, Aprobado, Rechazado, Subsanacion];
+        [Borrador, Anulado, Preparado, Entregado, Aprobado, Rechazado];
 
     /// <summary>Estados FINALES (RF04): sin transiciones posteriores ni edición de datos.</summary>
     public static readonly IReadOnlyList<string> Finales = [Aprobado, Anulado];
 
     /// <summary>
     /// Estados "en proceso" (CF-01, HU #10876): activan el bloqueo de duplicidad de trámite por
-    /// familia (Matrícula Inicial → VIN, Traspaso → placa, ver
-    /// <c>Flit.Tramites.Domain.Tramites.Services.DuplicateActiveProcedurePolicy</c>). Los estados finales de este enum
-    /// (<see cref="Aprobado"/>, <see cref="Rechazado"/>, <see cref="Anulado"/>) NO cuentan como "en
-    /// proceso" y LIBERAN la llave. <see cref="Subsanacion"/> (HU #10870) SÍ cuenta: el trámite sigue
-    /// activo mientras se corrige para re-radicarse.
+    /// familia. Los estados finales (<see cref="Aprobado"/>, <see cref="Rechazado"/>,
+    /// <see cref="Anulado"/>) NO cuentan por sí solos. Un <see cref="Rechazado"/> con
+    /// <c>subsanacion_activa</c> SÍ cuenta (ver <see cref="EstaEnProceso"/>).
     /// </summary>
-    public static readonly IReadOnlyList<string> EstadosEnProceso = [Borrador, Preparado, Entregado, Subsanacion];
+    public static readonly IReadOnlyList<string> EstadosEnProceso = [Borrador, Preparado, Entregado];
 
     /// <summary>¿<paramref name="estado"/> es un estado de negocio conocido?</summary>
     public static bool EsValido(string? estado) =>
@@ -51,4 +47,31 @@ public static class TramiteEstado
     /// <summary>¿<paramref name="estado"/> es final (RF04)? Aprobado y Anulado son inmutables.</summary>
     public static bool EsFinal(string? estado) =>
         estado is Aprobado or Anulado;
+
+    /// <summary>
+    /// ¿El trámite está "en proceso" para duplicidad (CF-01)? Incluye el legado
+    /// <see cref="Subsanacion"/> y <see cref="Rechazado"/> con flag de subsanación activa.
+    /// </summary>
+    public static bool EstaEnProceso(string? estado, bool subsanacionActiva = false) =>
+        estado is not null
+        && (EstadosEnProceso.Contains(estado, StringComparer.OrdinalIgnoreCase)
+            || string.Equals(estado, Subsanacion, StringComparison.OrdinalIgnoreCase)
+            || (string.Equals(estado, Rechazado, StringComparison.OrdinalIgnoreCase) && subsanacionActiva));
+
+    /// <summary>
+    /// ¿Se pueden editar datos del expediente (campos, actores, adjuntos, etc.)?
+    /// Editable en <see cref="Borrador"/>, en <see cref="Rechazado"/> con subsanación activa,
+    /// o (legacy) en <see cref="Subsanacion"/>.
+    /// </summary>
+    public static bool PermiteEdicionDatos(string? status, bool subsanacionActiva = false) =>
+        string.Equals(status, Borrador, StringComparison.OrdinalIgnoreCase)
+        || (string.Equals(status, Rechazado, StringComparison.OrdinalIgnoreCase) && subsanacionActiva)
+        || string.Equals(status, Subsanacion, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// ¿La re-radicación selectiva (gates por diff de snapshot) aplica a esta transición a entregado?
+    /// </summary>
+    public static bool EsReRadicacionSubsanacion(string? from, bool subsanacionActiva) =>
+        string.Equals(from, Subsanacion, StringComparison.OrdinalIgnoreCase)
+        || (string.Equals(from, Rechazado, StringComparison.OrdinalIgnoreCase) && subsanacionActiva);
 }

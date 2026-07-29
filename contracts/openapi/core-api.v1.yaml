@@ -3201,6 +3201,15 @@ paths:
           description: Datos inválidos o incompletos.
         "409":
           description: Ya existe una prevalidación activa o en proceso para este documento.
+        "422":
+          description: >
+            prevalidacion_solo_natural (CF-01/D1, Feature #11004, ADR-0036) — la prevalidación standalone
+            solo admite persona natural; la validación de personas jurídicas se realiza dentro de un
+            trámite. Se rechaza server-side aunque el body envíe personType=juridical directo a la API.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "502":
           description: El proveedor rechazó la solicitud (error definitivo).
         "503":
@@ -3328,6 +3337,14 @@ paths:
           required: false
           description: Filas por página. El cliente elige de 10 en 10 hasta 50; fuera de rango se acota.
           schema: { type: integer, minimum: 10, maximum: 50, default: 20 }
+        - name: standalone
+          in: query
+          required: false
+          description: >
+            HU #10867 / CF-02 (Feature #11004): true = solo prevalidaciones standalone (sin trámite,
+            instanceId=null); false = solo validaciones ligadas a un trámite; omitido = todas (comportamiento
+            actual del submódulo Validaciones — CF-03, no cambia).
+          schema: { type: boolean }
       responses:
         "200":
           description: Validaciones del tenant + KPIs.
@@ -3345,6 +3362,44 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/tramites/biometric-validations/{id}:
+    get:
+      operationId: getPrevalidacionDetail
+      tags: [Tramites, Identidad, Prevalidacion]
+      summary: Detalle de una validación de identidad por id (tenant-scoped) — CF-06, Feature #11004
+      description: >
+        Devuelve el estado actual de UNA validación (standalone o de trámite) para poll de detalle.
+        Mismo DTO que usa el listado por-instancia (BiometricValidationDto): estado, intentos, enlace de
+        captura vigente, vigencia. Reemplaza la necesidad de un instanceId para prevalidaciones standalone.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Detalle de la validación.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiometricValidationDto"
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe o pertenece a otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     patch:
       operationId: editarPrevalidacionIdentidad
       tags: [Tramites, Identidad, Prevalidacion]
@@ -3448,6 +3503,47 @@ paths:
           description: proveedor_error — el proveedor rechazó el reenvío (error definitivo).
         "503":
           description: proveedor_no_disponible — el proveedor no está disponible (error transitorio).
+
+  /api/v1/tramites/biometric-validations/{validationId}/audit:
+    get:
+      operationId: getIdentityAuditByValidation
+      tags: [Tramites, Identidad]
+      summary: Bitácora de una validación de identidad, sin depender de instancia — CF-07, Feature #11004
+      description: >
+        Equivalente a GET /instances/{id}/biometric/{validationId}/audit pero SIN instanceId: sirve tanto
+        para prevalidaciones standalone como de trámite. Autorización: cualquier usuario autenticado del
+        tenant (D2, ADR-0036 — no restringido a SuperAdmin). Respuesta saneada, sin secretos ni PII cruda
+        (mismo criterio que el endpoint por-instancia).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: validationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Bitácora de la validación.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityAuditResponse"
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: No existe o pertenece a otro tenant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/tramites/identity-validation/stuck:
     get:
@@ -7462,20 +7558,28 @@ components:
             Para mock proviene del scorer; para Kyverum se deriva de las coincidencias del payload.
     TenantBiometricValidationDto:
       type: object
-      required: [id, instanceId, referenceNumber, modalidad, name, documentType, documentNumber, status, provider, expired, createdAt]
+      required: [id, name, documentType, documentNumber, status, provider, expired, createdAt, email, attempts, maxAttempts, resendCount]
       description: Fila de la vista transversal del submódulo de Validaciones (HU #10234).
       properties:
         id: { type: string, format: uuid }
         instanceId:
           type: string
           format: uuid
-          description: Instancia (trámite) a la que pertenece la validación (para navegar).
+          nullable: true
+          description: >
+            Instancia (trámite) a la que pertenece la validación (para navegar). Null para
+            prevalidaciones standalone (HU #10865/#10867).
         referenceNumber:
           type: string
-          description: Referencia del trámite (p.ej. TRM-2026-000007).
+          nullable: true
+          description: >
+            Referencia del trámite (p.ej. TRM-2026-000007). Null para prevalidaciones standalone.
         modalidad:
           type: string
-          description: Modalidad de entrada del trámite (matricula_inicial | traspaso).
+          nullable: true
+          description: >
+            Modalidad de entrada del trámite (matricula_inicial | traspaso). Null para prevalidaciones
+            standalone.
         partyRole: { type: string, nullable: true }
         name: { type: string }
         documentType: { type: string }
@@ -7496,6 +7600,27 @@ components:
           description: Motivo de rechazo SANITIZADO (sin PII), solo con status=rechazado.
         createdAt: { type: string, format: date-time }
         validatedAt: { type: string, format: date-time, nullable: true }
+        email:
+          type: string
+          format: email
+          description: >
+            CF-05 (Feature #11004) — correo de la validación. Vista autenticada del gestor del tenant
+            (D3): completo, sin enmascarar. Solo visible en Validaciones y Prevalidaciones — no en
+            exports/Dashboard.
+        attempts:
+          type: integer
+          description: Intentos ya realizados (CF-06, Feature #11004).
+        maxAttempts:
+          type: integer
+          description: Tope de intentos permitidos.
+        resendCount:
+          type: integer
+          description: Veces que se reenvió la validación (HU #10943).
+        lastResentAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Momento del último reenvío. Null si nunca se ha reenviado.
         validUntil:
           type: string
           format: date-time
@@ -7541,6 +7666,41 @@ components:
         total:
           type: integer
           description: Total de filas del conjunto filtrado completo (para calcular el nº de páginas).
+    IdentityAuditEventDto:
+      type: object
+      required: [occurredAt, stage, outcome]
+      description: Una fila de la bitácora de identidad, expuesta a la API (sin secretos ni PII).
+      properties:
+        occurredAt: { type: string, format: date-time }
+        stage:
+          type: string
+          description: >
+            send|send_response|send_error|webhook_received|webhook_not_verifiable|
+            webhook_signature_invalid|webhook_applied|reconcile
+        outcome: { type: string }
+        httpStatus: { type: integer, nullable: true }
+        signaturePresent: { type: boolean, nullable: true }
+        secretPresent: { type: boolean, nullable: true }
+        decryptOk: { type: boolean, nullable: true }
+        providerStatus: { type: string, nullable: true }
+        errorType: { type: string, nullable: true }
+        message: { type: string, nullable: true }
+    IdentityAuditResponse:
+      type: object
+      required: [validationId, events]
+      description: >
+        Respuesta de la bitácora (CF-07, Feature #11004). referencedFromOtherProcedure = true cuando la
+        identidad está reutilizada de OTRO trámite del mismo cliente (solo aplica al endpoint por-instancia;
+        el endpoint por-validationId no tiene ese contexto y siempre reporta false).
+      properties:
+        validationId: { type: string, format: uuid }
+        referencedFromOtherProcedure:
+          type: boolean
+          default: false
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/IdentityAuditEventDto"
     IniciarKyverumVerifyResult:
       type: object
       required: [validation, captureUrl]

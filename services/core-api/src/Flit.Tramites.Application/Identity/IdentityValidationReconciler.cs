@@ -76,6 +76,20 @@ public static class IdentityValidationReconciler
                 return true;
 
             default:
+                // Worker/poll: si el webhook ya agotó Attempts pero Kyverum aún reporta en_proceso/otro,
+                // terminalizar para no dejar prevalidaciones/trámites colgados en "en proceso".
+                if (v.Status is not (BiometricEstados.Aprobado or BiometricEstados.Rechazado or BiometricEstados.Expirado)
+                    && v.MaxAttempts > 0
+                    && v.Attempts >= v.MaxAttempts)
+                {
+                    return await applier.ApplyAsync(
+                        v,
+                        new IdentityValidationTerminalResult(
+                            false, status.Status, status.RawPayloadSanitized, status.Score),
+                        now,
+                        ct);
+                }
+
                 return false; // enviado / en_proceso / desconocido: aún pendiente.
         }
     }

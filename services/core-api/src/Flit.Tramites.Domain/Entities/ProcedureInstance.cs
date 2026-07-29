@@ -54,6 +54,19 @@ public sealed class ProcedureInstance
     public bool Prioritario { get; set; }
 
     /// <summary>
+    /// Subsanación activa sobre un trámite en <c>rechazado</c>: reabre la edición SIN cambiar el
+    /// status de negocio. Al re-radicar (<c>rechazado → entregado</c>) se apaga. Columna por migración
+    /// SQL cruda (tabla ExcludeFromMigrations).
+    /// </summary>
+    public bool SubsanacionActiva { get; set; }
+
+    /// <summary>
+    /// Cuántas veces se ha activado la subsanación en este expediente (contador monotónico).
+    /// Columna por migración SQL cruda (tabla ExcludeFromMigrations).
+    /// </summary>
+    public int SubsanacionCount { get; set; }
+
+    /// <summary>
     /// Feature #10701 / HU #10706 — marca de vigencia del expediente consolidado maestro. En
     /// <c>true</c> el <c>consolidado_maestro</c> persistido refleja el estado actual del expediente:
     /// el botón único "Ver consolidado" lo muestra tal cual (sin regenerar). Cualquier cambio

@@ -45,14 +45,20 @@ export function SubsanacionPanel({
 }: SubsanacionPanelProps) {
   const entry = useMemo(() => latestSubsanacionEntry(statusHistory), [statusHistory]);
   const observation = useMemo(() => parseSubsanacionObservation(entry?.metadata), [entry]);
-  // HU #10870 — cuando la subsanación la inicia el operador desde `rechazado`, la guía de QUÉ
-  // corregir es el motivo del rechazo del Organismo de Tránsito (transición entregado→rechazado),
-  // no una observación estructurada (que ya no existe en este flujo).
+  // Guía de QUÉ corregir: checklist OT si existe; si no, motivo del rechazo OT
+  // (entregado→rechazado). No usar reason/motivo de activaciones rechazado→rechazado.
   const rejectionReason = useMemo(() => latestRejectionReason(statusHistory), [statusHistory]);
-  const motivo =
-    observation?.motivo?.trim() || rejectionReason || entry?.reason?.trim() || FALLBACK_MOTIVO;
   const items = useMemo(() => observation?.items ?? [], [observation]);
   const hasChecklist = items.length > 0;
+  const legacySubsanacionReason =
+    entry?.toStatus === 'subsanacion' && entry.fromStatus !== 'rechazado'
+      ? entry.reason?.trim()
+      : null;
+  const motivo =
+    (hasChecklist ? observation?.motivo?.trim() : null) ||
+    rejectionReason ||
+    legacySubsanacionReason ||
+    FALLBACK_MOTIVO;
 
   const [resolved, setResolved] = useState<ReadonlySet<number>>(() => new Set());
   const [submitting, setSubmitting] = useState(false);

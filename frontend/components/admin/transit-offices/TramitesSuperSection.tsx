@@ -193,7 +193,9 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
     }
     setActing(true);
     try {
-      const updated = await approveOtClientProcedure(approveTarget.id);
+      const updated = await approveOtClientProcedure(approveTarget.id, undefined, {
+        transitOfficeId,
+      });
       const next = procedures.filter((p) => p.id !== updated.id);
       setProcedures(next);
       setListStatus(next.length === 0 ? "empty" : "ready");
@@ -212,9 +214,11 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
     }
     setActing(true);
     try {
-      const updated = await rejectOtClientProcedure(rejectTarget.id, {
-        reason: rejectReason.trim(),
-      });
+      const updated = await rejectOtClientProcedure(
+        rejectTarget.id,
+        { reason: rejectReason.trim() },
+        { transitOfficeId },
+      );
       const next = procedures.filter((p) => p.id !== updated.id);
       setProcedures(next);
       setListStatus(next.length === 0 ? "empty" : "ready");

@@ -101,7 +101,7 @@ public sealed class ConsultarEstadoQuipuxHandlerTests
 
         captured.Should().NotBeNull();
         // AC2 — destino 'subsanacion', NO 'rechazado': el trámite sigue vivo para corregirse.
-        captured!.ToStatus.Should().Be(TramiteEstado.Subsanacion);
+        captured!.ToStatus.Should().Be(TramiteEstado.Rechazado);
         captured.Reason.Should().Be("Documentación incompleta");
         captured.Metadata.Should().NotBeNullOrWhiteSpace();
         var observation = SubsanacionObservation.FromJson(captured.Metadata);
@@ -171,7 +171,7 @@ public sealed class ConsultarEstadoQuipuxHandlerTests
         await _sut.HandleAsync(new ConsultarEstadoQuipuxCommand { SubmissionId = submissionId }, ct);
 
         captured.Should().NotBeNull();
-        captured!.ToStatus.Should().Be(TramiteEstado.Subsanacion);
+        captured!.ToStatus.Should().Be(TramiteEstado.Rechazado);
         captured.Reason.Should().Be("Rechazado por el organismo de tránsito vía Quipux (sin descripción).");
         var observation = SubsanacionObservation.FromJson(captured.Metadata);
         observation.Should().NotBeNull();

@@ -70,13 +70,18 @@ public static class AttachmentRules
         !string.IsNullOrWhiteSpace(tipo) && SoatEvidenceTipos.Contains(tipo.Trim());
 
     /// <summary>
-    /// ¿Se permite cargar este tipo de adjunto en este estado? Regla general: solo <c>borrador</c>
-    /// (inmutabilidad). Excepción de la ruta de placa (HU #10785): la evidencia de SOAT se puede cargar
-    /// con el trámite <c>entregado</c> y el sub-estado interno de placa en <c>asignado</c>, para
-    /// desbloquear la aprobación del OT.
+    /// ¿Se permite cargar este tipo de adjunto en este estado? Regla general: editable como
+    /// borrador (<see cref="TramiteEstado.PermiteEdicionDatos"/> — borrador, rechazado+flag, o
+    /// legado <c>subsanacion</c>). Excepción de la ruta de placa (HU #10785): la evidencia de SOAT
+    /// se puede cargar con el trámite <c>entregado</c> y el sub-estado interno de placa en
+    /// <c>asignado</c>, para desbloquear la aprobación del OT.
     /// </summary>
-    public static bool AllowsUploadInState(string status, string? plateFlowStatus, string? tipo) =>
-        string.Equals(status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase)
+    public static bool AllowsUploadInState(
+        string status,
+        string? plateFlowStatus,
+        string? tipo,
+        bool subsanacionActiva = false) =>
+        TramiteEstado.PermiteEdicionDatos(status, subsanacionActiva)
         || (string.Equals(status, TramiteEstado.Entregado, StringComparison.OrdinalIgnoreCase)
             && string.Equals(plateFlowStatus, PlateFlowStatus.Asignado, StringComparison.OrdinalIgnoreCase)
             && IsSoatEvidenceTipo(tipo));
@@ -145,7 +150,7 @@ public sealed class UploadAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo))
+        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo, instance.SubsanacionActiva))
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -212,7 +217,7 @@ public sealed class PresignAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo))
+        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo, instance.SubsanacionActiva))
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -253,7 +258,7 @@ public sealed class RegisterAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo))
+        if (!AttachmentRules.AllowsUploadInState(instance.Status, instance.PlateFlowStatus, input.Tipo, instance.SubsanacionActiva))
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -322,7 +327,7 @@ public sealed class RegisterIntegrationAttachmentHandler(IProcedureInstanceRepos
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return (registered, ["not_found"]);
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (registered, ["not_draft"]);
 
         // Dedup por sha256 (idempotencia): arranca con lo ya presente en la instancia y va agregando los
@@ -462,7 +467,7 @@ public sealed class DeleteAttachmentHandler(
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
             return "not_found";
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return "not_draft";
 
         var attachment = instance.Attachments.FirstOrDefault(a => a.Id == attachmentId);

@@ -120,7 +120,7 @@ public sealed class RunPreflightHandler(
         if (instance is null)
             return (null, "not_found", null, null);
 
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft", null, null);
 
         var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
@@ -280,7 +280,7 @@ public sealed class RunPreflightHandler(
 
             var existentes = await repo.FindTramitesByVinAsync(tenantId, vinNorm, instance.Id, ct);
             return DuplicateActiveProcedurePolicy.FindActiveDuplicate(
-                existentes.Select(e => (e.Id, e.Estado)).ToList());
+                existentes.Select(e => (e.Id, e.Estado, e.SubsanacionActiva)).ToList());
         }
 
         if (modalidad == TramiteModalidadEntrada.Traspaso)
@@ -291,7 +291,7 @@ public sealed class RunPreflightHandler(
 
             var existentes = await repo.FindTramitesByPlacaAsync(tenantId, placaNorm, instance.Id, ct);
             return DuplicateActiveProcedurePolicy.FindActiveDuplicate(
-                existentes.Select(e => (e.Id, e.Estado)).ToList());
+                existentes.Select(e => (e.Id, e.Estado, e.SubsanacionActiva)).ToList());
         }
 
         return null;

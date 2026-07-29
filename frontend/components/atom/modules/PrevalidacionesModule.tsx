@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, Clock, Copy, ExternalLink, Lock, Pencil, Plus, RotateCcw, ScanFace, Send, ShieldAlert } from 'lucide-react';
+import { AlertCircle, Clock, Copy, ExternalLink, ListTree, Lock, Pencil, Plus, RotateCcw, ScanFace, Send, ShieldAlert } from 'lucide-react';
+import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ModuleTitle } from './ModuleTitle';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { tramitesClient, TramitesApiError } from '@/lib/api/tramites-client';
@@ -9,8 +10,8 @@ import type {
   BiometricEstado,
   EditarPrevalidacionResult,
   IniciarPrevalidacionResult,
-  PrevalidacionPersonType,
   TenantBiometricValidation,
+  TenantBiometricValidationFilters,
   TenantBiometricValidationsResponse,
 } from '@/lib/api/types/procedure-runtime';
 import { PrevalidacionForm, PrevalidacionSuccessPanel } from './PrevalidacionForm';
@@ -20,14 +21,21 @@ import {
   PrevalidacionResendResultPanel,
   type RateLimitInfo,
 } from './PrevalidacionEditForm';
+import { PrevalidacionDetailDrawer } from './PrevalidacionDetailDrawer';
+import {
+  EMPTY_PREVALIDACIONES_FILTERS,
+  hasActivePrevalidacionesFilters,
+  PrevalidacionesFilterToolbar,
+  type PrevalidacionesUiFilters,
+} from './PrevalidacionesFilterToolbar';
 
 /**
  * Módulo "Prevalidaciones de Identidad" (HU #10868 — Feature #10864 CF-01; ampliado por HU #10944,
- * CF-03, con las acciones Editar/Reenviar). Pantalla dedicada para crear prevalidaciones standalone
- * (sin trámite) y ver/gestionar el estado de las existentes. Reutiliza el endpoint
- * GET /biometric-validations con filtro standalone=true para mostrar solo las prevalidaciones sin
- * trámite. Cuando el BE todavía no soporte el filtro, muestra todas y nota el comportamiento
- * contract-first.
+ * CF-03, con las acciones Editar/Reenviar; y por HU #11006, Feature #11004, CF-02/CF-04/CF-05).
+ * Pantalla dedicada para crear prevalidaciones standalone (sin trámite) y ver/gestionar el estado de
+ * las existentes. Consume GET /biometric-validations con `standalone=true` (el backend ya soporta el
+ * filtro — CF-02): solo prevalidaciones sin trámite, sin fallback client-side que mezcle filas de
+ * trámite.
  *
  * 4 estados obligatorios FLIT: vacío, cargando, error, lleno. WCAG 2.1 AA.
  */
@@ -56,7 +64,6 @@ interface PrefillNueva {
   documentType?: string;
   documentNumber?: string;
   name?: string;
-  personType?: PrevalidacionPersonType;
 }
 
 /** Resultado de un reenvío (automático al editar el correo, o manual) para el panel de éxito. */
@@ -74,14 +81,25 @@ function formatFecha(iso: string | null | undefined): string {
   return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
 }
 
-function maskDoc(tipoDoc: string, documento: string): string {
-  const tail = documento.length > 4 ? documento.slice(-4) : documento;
-  const masked = documento.length > 4 ? `••••${tail}` : tail;
-  return `${tipoDoc} ${masked}`.trim();
-}
-
 const GRID_COLS =
-  'minmax(0,1.4fr) minmax(0,1.1fr) minmax(0,0.9fr) minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.6fr)';
+  'minmax(0,1.4fr) minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,0.9fr) minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.6fr)';
+
+const FILTER_DEBOUNCE_MS = 300;
+
+function buildApiFilters(f: PrevalidacionesUiFilters): TenantBiometricValidationFilters {
+  const text = (s: string) => (s.trim() === '' ? undefined : s.trim());
+  return {
+    standalone: true,
+    name: text(f.name),
+    documentType: text(f.documentType),
+    documentNumber: text(f.documentNumber),
+    status: f.status || undefined,
+    vigenciaEstado: f.vigenciaEstado || undefined,
+    createdFrom: f.createdFrom ? `${f.createdFrom}T00:00:00` : undefined,
+    createdTo: f.createdTo ? `${f.createdTo}T23:59:59` : undefined,
+    rejectionReason: f.status === 'rechazado' ? text(f.rejectionReason) : undefined,
+  };
+}
 
 export function PrevalidacionesModule() {
   const [validations, setValidations] = useState<TenantBiometricValidation[] | null>(null);
@@ -89,9 +107,20 @@ export function PrevalidacionesModule() {
   const [fetching, setFetching] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
+  const [filters, setFilters] = useState<PrevalidacionesUiFilters>(EMPTY_PREVALIDACIONES_FILTERS);
+  const [applied, setApplied] = useState<PrevalidacionesUiFilters>(EMPTY_PREVALIDACIONES_FILTERS);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appliedRef = useRef(applied);
+  useEffect(() => {
+    appliedRef.current = applied;
+  }, [applied]);
+
   const [showForm, setShowForm] = useState(false);
   const [prefillNueva, setPrefillNueva] = useState<PrefillNueva | undefined>(undefined);
   const [successResult, setSuccessResult] = useState<IniciarPrevalidacionResult | null>(null);
+
+  // HU #11008 (Feature #11004, CF-06) — drawer de detalle con poll (D4: mismo panel, sin ruta).
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   // HU #10944 — edición, reenvío manual y resultado de reenvío.
   const [editingRow, setEditingRow] = useState<TenantBiometricValidation | null>(null);
@@ -112,23 +141,17 @@ export function PrevalidacionesModule() {
 
   const reqIdRef = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (
+    uiFilters: PrevalidacionesUiFilters = appliedRef.current,
+    opts?: { background?: boolean },
+  ) => {
     const reqId = ++reqIdRef.current;
-    setFetching(true);
+    if (!opts?.background) setFetching(true);
     try {
       const res: TenantBiometricValidationsResponse =
-        await tramitesClient.listTenantBiometricValidations(
-          { standalone: true } as Parameters<typeof tramitesClient.listTenantBiometricValidations>[0],
-        );
+        await tramitesClient.listTenantBiometricValidations(buildApiFilters(uiFilters));
       if (reqId !== reqIdRef.current) return;
-      // HU #10869: filter client-side if backend doesn't support standalone param yet
-      const standalone = res.validations.filter((v) => v.instanceId === null);
-      // HU #10944 (AC3/D12) — fix de bug preexistente (HU #10869): el fallback comparaba el MISMO
-      // filtro dos veces (nunca mostraba nada distinto). Ahora, si no hay ninguna standalone, cae a
-      // TODAS las filas devueltas (tal como ya decía el comentario original) para que una validación
-      // ligada a un trámite pueda renderizarse en modo solo lectura (defensa en profundidad, D11/D12)
-      // en vez de desaparecer silenciosamente.
-      setValidations(standalone.length > 0 ? standalone : res.validations);
+      setValidations(res.validations);
       setError(null);
     } catch (err) {
       if (reqId !== reqIdRef.current) return;
@@ -142,18 +165,61 @@ export function PrevalidacionesModule() {
   }, []);
 
   useEffect(() => {
-    // `load()` arranca con setFetching(true), y llamarlo directo en el cuerpo del efecto dispara
-    // react-hooks/set-state-in-effect (setState síncrono dentro del efecto → renders en cascada).
-    // Se difiere a un microtask: el setState ocurre ya en un callback, que es justo el patrón que
-    // recomienda la regla. Comportamiento observable idéntico — la carga sigue siendo inmediata.
-    void Promise.resolve().then(load);
+    void Promise.resolve().then(() => load(EMPTY_PREVALIDACIONES_FILTERS));
   }, [load]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const handleFilterChange = (patch: Partial<PrevalidacionesUiFilters>, immediate?: boolean) => {
+    const next = { ...filters, ...patch };
+    setFilters(next);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (immediate) {
+      setApplied(next);
+      void load(next);
+      return;
+    }
+    debounceRef.current = setTimeout(() => {
+      setApplied(next);
+      void load(next);
+    }, FILTER_DEBOUNCE_MS);
+  };
+
+  const handleClearFilters = () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setFilters(EMPTY_PREVALIDACIONES_FILTERS);
+    setApplied(EMPTY_PREVALIDACIONES_FILTERS);
+    void load(EMPTY_PREVALIDACIONES_FILTERS);
+  };
+
+  // Poll en vivo del listado (con filtros vigentes): cada 5s si hay filas en proceso;
+  // si no, cada 15s para no depender de un botón Actualizar.
+  const hasInFlight = (validations ?? []).some(
+    (v) =>
+      v.status === 'en_proceso' ||
+      v.status === 'enviado' ||
+      v.status === 'pendiente_envio',
+  );
+  useEffect(() => {
+    if (!hasLoadedOnce) return;
+    const ms = hasInFlight ? 5_000 : 15_000;
+    const tick = () => {
+      if (document.hidden) return;
+      void load(appliedRef.current, { background: true });
+    };
+    const id = window.setInterval(tick, ms);
+    return () => window.clearInterval(id);
+  }, [hasLoadedOnce, hasInFlight, load]);
 
   const handleSuccess = (result: IniciarPrevalidacionResult) => {
     setShowForm(false);
     setPrefillNueva(undefined);
     setSuccessResult(result);
-    void load();
+    void load(appliedRef.current);
   };
 
   const handleCloseSuccess = () => {
@@ -206,7 +272,7 @@ export function PrevalidacionesModule() {
     } else {
       setLiveMessage('Datos de la prevalidación actualizados. No hubo cambio de correo, no se reenvió.');
     }
-    void load();
+    void load(appliedRef.current);
   };
 
   const handleConfirmResend = async () => {
@@ -229,7 +295,7 @@ export function PrevalidacionesModule() {
           ? `La validación quedó encolada para reenviarse a ${result.validation.email}.`
           : `Validación reenviada a ${result.validation.email}.`,
       );
-      void load();
+      void load(appliedRef.current);
     } catch (err) {
       if (err instanceof TramitesApiError) {
         setResendConfirmError(err.message);
@@ -244,6 +310,7 @@ export function PrevalidacionesModule() {
 
   const initialLoading = !hasLoadedOnce && validations === null && error === null;
   const isEmpty = validations !== null && validations.length === 0 && !fetching;
+  const filtersActive = hasActivePrevalidacionesFilters(applied);
 
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
@@ -269,6 +336,15 @@ export function PrevalidacionesModule() {
         }
       />
 
+      {!initialLoading && (
+        <PrevalidacionesFilterToolbar
+          filters={filters}
+          onChange={handleFilterChange}
+          onClearFilters={handleClearFilters}
+          resultCount={validations?.length ?? 0}
+        />
+      )}
+
       {/* Estado: Error */}
       {error && (
         <div
@@ -283,7 +359,7 @@ export function PrevalidacionesModule() {
             <p className="opacity-80">{error}</p>
             <button
               type="button"
-              onClick={() => void load()}
+              onClick={() => void load(appliedRef.current)}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{ background: '#FF4E00' }}
             >
@@ -313,25 +389,44 @@ export function PrevalidacionesModule() {
         </div>
       )}
 
-      {/* Estado: Vacío */}
+      {/* Estado: Vacío / sin resultados de filtro */}
       {isEmpty && !error && (
         <div className="flex-1 min-h-0 grid place-items-center rounded-2xl border">
           <div className="text-center max-w-md px-6 py-12">
             <ScanFace className="mx-auto h-10 w-10 opacity-30" aria-hidden="true" />
-            <p className="mt-3 text-sm font-semibold">No hay prevalidaciones aún.</p>
-            <p className="mt-1 text-xs opacity-70">
-              Crea la primera prevalidación de identidad para adelantar la verificación biométrica sin
-              necesidad de un trámite en curso.
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowForm(true)}
-              className="mt-4 flex items-center gap-2 mx-auto rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
-              style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Nueva prevalidación
-            </button>
+            {filtersActive ? (
+              <>
+                <p className="mt-3 text-sm font-semibold">Sin resultados para estos filtros.</p>
+                <p className="mt-1 text-xs opacity-70">
+                  Prueba otro nombre, documento o estado, o limpia los filtros.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleClearFilters}
+                  className="mt-4 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  style={{ color: '#557EFF' }}
+                >
+                  Limpiar filtros
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="mt-3 text-sm font-semibold">No hay prevalidaciones aún.</p>
+                <p className="mt-1 text-xs opacity-70">
+                  Crea la primera prevalidación de identidad para adelantar la verificación biométrica sin
+                  necesidad de un trámite en curso.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowForm(true)}
+                  className="mt-4 flex items-center gap-2 mx-auto rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
+                  style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  Nueva prevalidación
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -339,7 +434,7 @@ export function PrevalidacionesModule() {
       {/* Estado: Lleno (tabla) */}
       {!initialLoading && !isEmpty && validations !== null && validations.length > 0 && (
         <div className="overflow-x-auto shrink-0">
-          <div className="min-w-[920px]">
+          <div className="min-w-[1020px]">
             <div
               className="sticky top-0 z-10 grid gap-2 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl"
               style={{ background: '#DFE5ED', color: '#162744', gridTemplateColumns: GRID_COLS }}
@@ -347,6 +442,7 @@ export function PrevalidacionesModule() {
             >
               <div>Persona</div>
               <div>Documento</div>
+              <div>Correo</div>
               <div>Estado</div>
               <div>Creada</div>
               <div>Aprobada</div>
@@ -366,11 +462,22 @@ export function PrevalidacionesModule() {
                     setResendConfirmRow(row);
                   }}
                   onNewFor={handleNewFor}
+                  onViewDetail={() => setDetailId(v.id)}
                 />
               ))}
             </ul>
           </div>
         </div>
+      )}
+
+      {/* Drawer: detalle con poll + tracking embebido (HU #11008, CF-06) */}
+      {detailId && (
+        <PrevalidacionDetailDrawer
+          validationId={detailId}
+          onClose={() => setDetailId(null)}
+          onStatusChanged={() => void load(appliedRef.current, { background: true })}
+          title="Proceso de prevalidación"
+        />
       )}
 
       {/* Modal: formulario de creación (también usado para "Nueva prevalidación" precargada, D9/borde) */}
@@ -472,6 +579,7 @@ function PrevalidacionRow({
   onEdit,
   onResendClick,
   onNewFor,
+  onViewDetail,
 }: {
   row: TenantBiometricValidation;
   now: number;
@@ -479,6 +587,7 @@ function PrevalidacionRow({
   onEdit: (row: TenantBiometricValidation) => void;
   onResendClick: (row: TenantBiometricValidation) => void;
   onNewFor: (row: TenantBiometricValidation) => void;
+  onViewDetail: () => void;
 }) {
   const meta = ESTADO_META[r.status] ?? ESTADO_META.enviado;
   const [copied, setCopied] = useState(false);
@@ -507,130 +616,129 @@ function PrevalidacionRow({
     resendDisabledReason = `Disponible en ${minsLeft} min.`;
   }
 
+  const emailLabel = r.email ?? '—';
   const ariaLabel =
-    `Prevalidación de ${r.name}, documento ${maskDoc(r.documentType, r.documentNumber)}, ` +
-    `estado ${meta.label}` +
-    (r.validatedAt ? `, aprobada` : '') +
-    (isTramite ? ', solo lectura, pertenece a un trámite' : '') +
-    `.`;
+    `Prevalidación de ${r.name}, documento ${r.documentType} ${r.documentNumber}, ` +
+    `correo ${emailLabel}, estado ${meta.label}` +
+    (r.rejectionReason ? `, motivo: ${r.rejectionReason}` : '');
+
+  const actionItems: ActionsMenuItem[] = [
+    {
+      key: 'proceso',
+      label: 'Ver proceso',
+      icon: ListTree,
+      onSelect: onViewDetail,
+    },
+  ];
+
+  if (r.captureUrl) {
+    actionItems.push({
+      key: 'copiar',
+      label: copied ? 'Enlace copiado' : 'Copiar enlace',
+      icon: Copy,
+      onSelect: () => {
+        void copiar();
+      },
+    });
+    actionItems.push({
+      key: 'abrir',
+      label: 'Abrir captura',
+      icon: ExternalLink,
+      onSelect: () => {
+        window.open(r.captureUrl!, '_blank', 'noopener,noreferrer');
+      },
+    });
+  }
+
+  if (!isTramite && isApproved) {
+    actionItems.push({
+      key: 'nueva',
+      label: 'Nueva prevalidación',
+      icon: Plus,
+      onSelect: () => onNewFor(r),
+    });
+  } else if (!isTramite && !isApproved) {
+    actionItems.push({
+      key: 'editar',
+      label: 'Editar',
+      icon: Pencil,
+      onSelect: () => onEdit(r),
+    });
+    actionItems.push({
+      key: 'reenviar',
+      label: 'Reenviar',
+      icon: resendDisabledReason ? Clock : Send,
+      onSelect: () => onResendClick(r),
+      disabled: resendDisabledReason !== null,
+      disabledReason: resendDisabledReason ?? undefined,
+    });
+  }
 
   return (
-    <li
-      className="grid gap-2 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
-      style={{ gridTemplateColumns: GRID_COLS }}
-      aria-label={ariaLabel}
-    >
-      <div className="min-w-0">
-        <span className="block font-medium truncate">{r.name}</span>
-        {r.partyRole && (
-          <span className="block text-[10px] opacity-60">{r.partyRole}</span>
-        )}
-      </div>
-      <div className="min-w-0 font-mono text-[11px] opacity-80 truncate">
-        {maskDoc(r.documentType, r.documentNumber)}
-      </div>
-      <div>
-        <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} />
-        {r.status === 'rechazado' && r.rejectionReason && (
-          <span className="mt-0.5 block text-[10px] opacity-70 truncate" title={r.rejectionReason}>
-            {r.rejectionReason}
-          </span>
-        )}
-      </div>
-      <div className="text-[10px] leading-tight opacity-80">{formatFecha(r.createdAt)}</div>
-      <div className="text-[10px] leading-tight opacity-80">
-        {r.validatedAt ? formatFecha(r.validatedAt) : '—'}
-      </div>
-      <div>
-        {r.captureUrl ? (
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => void copiar()}
-              className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold transition hover:border-[#557EFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ color: '#557EFF' }}
-              aria-label={`Copiar enlace de prevalidación de ${r.name}`}
-            >
-              <Copy className="h-3 w-3" aria-hidden="true" />
-              {copied ? 'Copiado' : 'Copiar'}
-            </button>
-            <a
-              href={r.captureUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center rounded-lg border px-2 py-1 text-[10px] font-semibold text-[#557EFF] transition hover:border-[#557EFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              aria-label={`Abrir enlace de prevalidación de ${r.name}`}
-            >
-              <ExternalLink className="h-3 w-3" aria-hidden="true" />
-            </a>
-          </div>
-        ) : (
-          <span className="opacity-60">—</span>
-        )}
-      </div>
-      <div>
-        {isTramite ? (
-          <span className="inline-flex items-center gap-1 text-[10px] opacity-60">
-            <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
-            Solo lectura (pertenece a un trámite)
-          </span>
-        ) : isApproved ? (
-          <div className="flex flex-col items-start gap-1">
+    <li className="rounded-xl bg-white dark:bg-[#0B0F14] border text-xs" aria-label={ariaLabel}>
+      <div
+        className="grid gap-2 items-center px-4 py-3"
+        style={{ gridTemplateColumns: GRID_COLS }}
+      >
+        <div className="min-w-0">
+          <span className="block font-medium truncate">{r.name}</span>
+          {r.partyRole && (
+            <span className="block text-[10px] opacity-60">{r.partyRole}</span>
+          )}
+        </div>
+        <div className="min-w-0 font-mono text-[11px] opacity-80 truncate">
+          {r.documentType} {r.documentNumber}
+        </div>
+        <div className="min-w-0 text-[11px] opacity-80 truncate" title={emailLabel}>
+          {emailLabel}
+        </div>
+        <div>
+          <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} />
+          {r.status === 'rechazado' && r.rejectionReason && (
+            <span className="mt-0.5 block text-[10px] opacity-70 truncate" title={r.rejectionReason}>
+              {r.rejectionReason}
+            </span>
+          )}
+        </div>
+        <div className="text-[10px] leading-tight opacity-80">{formatFecha(r.createdAt)}</div>
+        <div className="text-[10px] leading-tight opacity-80">
+          {r.validatedAt ? formatFecha(r.validatedAt) : '—'}
+        </div>
+        <div className="min-w-0 text-[10px] leading-tight opacity-80">
+          {r.captureUrl ? (
+            <span title={r.captureUrl}>Disponible</span>
+          ) : (
+            <span className="opacity-50">—</span>
+          )}
+        </div>
+        <div className="flex flex-col items-start gap-1">
+          <ActionsMenu
+            ariaLabel={`Acciones de prevalidación de ${r.name}`}
+            items={actionItems}
+          />
+          {isTramite && (
+            <span className="inline-flex items-center gap-1 text-[10px] opacity-60">
+              <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
+              Solo lectura (pertenece a un trámite)
+            </span>
+          )}
+          {!isTramite && isApproved && (
             <span className="inline-flex items-center gap-1 text-[10px] opacity-70">
               <ShieldAlert className="h-3 w-3 shrink-0" aria-hidden="true" />
               Identidad aprobada: no editable ni reenviable.
             </span>
-            <button
-              type="button"
-              onClick={() => onNewFor(r)}
-              className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold text-[#557EFF] transition hover:border-[#557EFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              aria-label={`Crear nueva prevalidación para ${r.name}`}
-            >
-              <Plus className="h-3 w-3" aria-hidden="true" />
-              Nueva prevalidación
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-start gap-1">
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => onEdit(r)}
-                className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold transition hover:border-[#557EFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                style={{ color: '#557EFF' }}
-                aria-label={`Editar prevalidación de ${r.name}`}
-              >
-                <Pencil className="h-3 w-3" aria-hidden="true" />
-                Editar
-              </button>
-              <button
-                type="button"
-                onClick={() => onResendClick(r)}
-                disabled={resendDisabledReason !== null}
-                aria-disabled={resendDisabledReason !== null}
-                aria-label={
-                  resendDisabledReason
-                    ? `Reenviar validación de ${r.name}, no disponible: ${resendDisabledReason}`
-                    : `Reenviar validación de ${r.name}`
-                }
-                title={resendDisabledReason ?? undefined}
-                className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold transition hover:border-[#557EFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 disabled:hover:border-transparent"
-                style={{ color: resendDisabledReason ? undefined : '#557EFF' }}
-              >
-                {resendDisabledReason ? (
-                  <Clock className="h-3 w-3" aria-hidden="true" />
-                ) : (
-                  <Send className="h-3 w-3" aria-hidden="true" />
-                )}
-                Reenviar
-              </button>
-            </div>
-            {resendDisabledReason && (
-              <span className="text-[10px] opacity-60">{resendDisabledReason}</span>
-            )}
-          </div>
-        )}
+          )}
+          {!isTramite && !isApproved && resendDisabledReason && (
+            <span className="text-[10px] opacity-60">{resendDisabledReason}</span>
+          )}
+          {copied && (
+            <span className="text-[10px] font-semibold" style={{ color: '#557EFF' }} role="status" aria-live="polite">
+              Enlace copiado
+            </span>
+          )}
+        </div>
       </div>
     </li>
   );
 }
+

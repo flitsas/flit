@@ -36,12 +36,9 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
             return (null, "ot_traspaso_no_modificable");
         }
 
-        // HU #10870 (AC1) — subsanación reabre la edición COMPLETA del trámite (entregado/rechazado
-        // → subsanacion) SIN pasar por borrador: se trata igual que borrador para el PATCH. Fuera de
-        // borrador/subsanacion, tras el envío solo se permiten claves de organismo de tránsito
-        // (generación diferida del FUR); cualquier otro campo sigue bloqueado en not_draft. El trigger
-        // de BD (trg_field_value_immutable) impone la misma regla a nivel de dato.
-        if (instance.Status != TramiteEstado.Borrador && instance.Status != TramiteEstado.Subsanacion)
+        // Subsanación (flag sobre rechazado) o borrador: edición completa. Fuera de eso, tras el
+        // envío solo se permiten claves de organismo de tránsito (generación diferida del FUR).
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
         {
             var blocked = request.Items.Where(i =>
                 !IsPostSubmitTransitOfficeKey(i.FieldKey)).ToList();

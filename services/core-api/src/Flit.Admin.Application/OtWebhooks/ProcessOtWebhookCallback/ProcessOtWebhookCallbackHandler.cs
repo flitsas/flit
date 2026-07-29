@@ -202,7 +202,7 @@ public sealed class ProcessOtWebhookCallbackHandler
         var result = await _clientProcedureRepository
             .ObserveAsync(
                 otTenantId, procedureInstanceId, reason, items: [], observedBy: null,
-                OtTransitionSource.QuipuxWebhook, cancellationToken)
+                OtTransitionSource.QuipuxWebhook, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         return result is not null;
     }

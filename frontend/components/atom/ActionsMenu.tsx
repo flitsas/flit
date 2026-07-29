@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { MoreVertical, type LucideIcon } from "lucide-react";
 
 // Menú de acciones accesible "⋯ Acciones" (HU #10194 — consolidación de config OT en
@@ -8,6 +9,9 @@ import { MoreVertical, type LucideIcon } from "lucide-react";
 // (aria-haspopup="menu", aria-expanded, aria-controls) + panel `role="menu"` con
 // `role="menuitem"` navegable por teclado (flechas, Home/End, Escape, cierre al perder
 // foco/clic fuera). Cada ítem puede deshabilitarse con un motivo (tooltip + aria-disabled).
+//
+// El panel se portaliza a `document.body` con posición fixed: así no lo tapa la fila
+// siguiente (stacking) ni lo recorta un `overflow-x-auto` del contenedor de la tabla.
 export interface ActionsMenuItem {
   key: string;
   label: string;
@@ -27,12 +31,48 @@ export interface ActionsMenuProps {
   className?: string;
 }
 
+type MenuCoords = { top: number; left: number; minWidth: number };
+
 export function ActionsMenu({ items, ariaLabel, triggerLabel = "Acciones", className = "" }: ActionsMenuProps) {
   const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<MenuCoords | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const menuId = useId();
+
+  const updateCoords = () => {
+    const btn = buttonRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const menuWidth = Math.max(240, rect.width);
+    // Alinea el borde derecho del menú con el del botón (como absolute right-0).
+    const left = Math.min(
+      Math.max(8, rect.right - menuWidth),
+      window.innerWidth - menuWidth - 8,
+    );
+    setCoords({
+      top: rect.bottom + 4,
+      left,
+      minWidth: menuWidth,
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (!open) {
+      // Coordenadas solo importan con el menú abierto; al cerrar se limpian fuera del effect
+      // (ver setOpen(false) handlers) para no disparar set-state-in-effect.
+      return;
+    }
+    updateCoords();
+    const onReposition = () => updateCoords();
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
+    return () => {
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -47,6 +87,7 @@ export function ActionsMenu({ items, ariaLabel, triggerLabel = "Acciones", class
         return;
       }
       setOpen(false);
+      setCoords(null);
     };
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
@@ -55,6 +96,7 @@ export function ActionsMenu({ items, ariaLabel, triggerLabel = "Acciones", class
 
   const close = (refocusTrigger = true) => {
     setOpen(false);
+    setCoords(null);
     if (refocusTrigger) {
       buttonRef.current?.focus();
     }
@@ -96,12 +138,57 @@ export function ActionsMenu({ items, ariaLabel, triggerLabel = "Acciones", class
         close();
         break;
       case "Tab":
-        setOpen(false);
+        close(false);
         break;
       default:
         break;
     }
   };
+
+  const menu =
+    open &&
+    coords &&
+    typeof document !== "undefined" &&
+    createPortal(
+      <div
+        ref={menuRef}
+        id={menuId}
+        role="menu"
+        aria-label={ariaLabel}
+        onKeyDown={onMenuKeyDown}
+        style={{ top: coords.top, left: coords.left, minWidth: coords.minWidth }}
+        className="fixed z-[200] rounded-xl border bg-white p-1 shadow-lg dark:bg-[#0B0F14]"
+      >
+        {items.map((item, i) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.key}
+              ref={(el) => {
+                itemRefs.current[i] = el;
+              }}
+              type="button"
+              role="menuitem"
+              disabled={item.disabled}
+              aria-disabled={item.disabled || undefined}
+              title={item.disabled ? (item.disabledReason ?? item.label) : item.label}
+              onClick={() => {
+                if (item.disabled) {
+                  return;
+                }
+                close();
+                item.onSelect();
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition hover:bg-[#557EFF]/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              {Icon && <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </div>,
+      document.body,
+    );
 
   return (
     <div className={`relative inline-block text-left ${className}`}>
@@ -113,51 +200,18 @@ export function ActionsMenu({ items, ariaLabel, triggerLabel = "Acciones", class
         aria-controls={open ? menuId : undefined}
         aria-label={ariaLabel}
         title={ariaLabel}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setOpen((o) => {
+            if (o) setCoords(null);
+            return !o;
+          });
+        }}
         className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition hover:bg-[#557EFF]/10"
       >
         <MoreVertical className="h-3.5 w-3.5" aria-hidden="true" />
         {triggerLabel}
       </button>
-
-      {open && (
-        <div
-          ref={menuRef}
-          id={menuId}
-          role="menu"
-          aria-label={ariaLabel}
-          onKeyDown={onMenuKeyDown}
-          className="absolute right-0 z-20 mt-1 min-w-[240px] rounded-xl border bg-white p-1 shadow-lg dark:bg-[#0B0F14]"
-        >
-          {items.map((item, i) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.key}
-                ref={(el) => {
-                  itemRefs.current[i] = el;
-                }}
-                type="button"
-                role="menuitem"
-                disabled={item.disabled}
-                aria-disabled={item.disabled || undefined}
-                title={item.disabled ? (item.disabledReason ?? item.label) : item.label}
-                onClick={() => {
-                  if (item.disabled) {
-                    return;
-                  }
-                  close();
-                  item.onSelect();
-                }}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition hover:bg-[#557EFF]/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                {Icon && <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {menu}
     </div>
   );
 }

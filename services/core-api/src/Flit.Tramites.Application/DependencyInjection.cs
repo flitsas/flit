@@ -56,6 +56,7 @@ public static class DependencyInjection
         // (ProcedureStateChangeOutboxPublisher, InfrastructureExtensions).
         services.AddScoped<ITramiteLifecycleService, TramiteLifecycleService>();
         services.AddScoped<TransitionProcedureInstanceHandler>();
+        services.AddScoped<StartSubsanacionHandler>();
         services.AddScoped<GetActorsHandler>();
         services.AddScoped<PutActorsHandler>();
         // HU #10955 (AC2/AC3/AC4/AC5) — lookup de datos de contacto ya conocidos (ciudad/email/
@@ -130,6 +131,9 @@ public static class DependencyInjection
         // el correo) y reenviar manualmente una prevalidación standalone.
         services.AddScoped<UseCases.Persons.EditarPrevalidacionHandler>();
         services.AddScoped<UseCases.Persons.ReenviarPrevalidacionHandler>();
+        // CF-06 (Feature #11004, ADR-0036) — detalle de UNA validación por id (poll), tenant-scoped,
+        // sirve tanto a standalone como a trámite.
+        services.AddScoped<UseCases.Persons.GetPrevalidacionDetailHandler>();
 
         // Kyverum Verify (HU #10233): iniciar validación remota + procesar webhook firmado. El cliente
         // HTTP, el protector de secretos y el publisher de eventos se registran en Infraestructura.
@@ -179,6 +183,8 @@ public static class DependencyInjection
         services.AddScoped<DescargarCertificadoIdentidadHandler>();
         // Bitácora de solo lectura del ciclo de una validación (diagnóstico desde la API).
         services.AddScoped<GetIdentityAuditHandler>();
+        // CF-07 (Feature #11004, ADR-0036) — misma bitácora, sin depender de instanceId (standalone + trámite).
+        services.AddScoped<GetIdentityAuditByValidationHandler>();
 
         // Portal público de participantes + consent Ley 1581 (Slice 7 Part B). Magic-link con token
         // hasheado (solo SHA-256 en BD); el portal agrega/encadena biométrica y firma reusando los

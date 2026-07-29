@@ -36,9 +36,9 @@ public sealed class SetCurrentStepProcedureInstanceHandler(IProcedureInstanceRep
         if (instance is null)
             return (null, NotFound);
 
-        // El avance solo se persiste mientras el trámite es editable (borrador). Fuera de ahí el
-        // wizard es de solo lectura y el punto de retoma ya no aplica.
-        if (instance.Status != TramiteEstado.Borrador)
+        // El avance se persiste mientras el trámite es editable (borrador o rechazado con
+        // subsanación activa). Fuera de ahí el wizard es de solo lectura.
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, NotDraft);
 
         // AC1 — solo se puede avanzar de paso una vez que la consulta del vehículo está completa.

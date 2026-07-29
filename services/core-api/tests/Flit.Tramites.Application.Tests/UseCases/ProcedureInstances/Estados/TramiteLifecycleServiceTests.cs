@@ -393,85 +393,87 @@ public sealed class TramiteLifecycleServiceTests
         i.Status.Should().Be(TramiteEstado.Borrador);
     }
 
-    // ── HU #10870 — subsanación sin volver a borrador ─────────────────────────────
+    // ── Subsanación por flag (rechazado + subsanacion_activa → entregado) ─────
 
-    [Theory]
-    [InlineData("entregado")]
-    [InlineData("rechazado")]
-    public async Task Ac1_EntregadoORechazado_PasaASubsanacion_SinMotivoObligatorio(string desde)
+    [Fact]
+    public async Task Subsanacion_NoEsTransicionDeEstado_DesdeEntregadoORechazado()
     {
-        var i = Wire(desde);
-
-        var outcome = await Transition(i, TramiteEstado.Subsanacion);
-
-        outcome.Success.Should().BeTrue();
-        i.Status.Should().Be(TramiteEstado.Subsanacion);
-        _recorder.Records.Should().ContainSingle(r =>
-            r.FromStatus == desde && r.ToStatus == TramiteEstado.Subsanacion);
+        foreach (var desde in new[] { TramiteEstado.Entregado, TramiteEstado.Rechazado })
+        {
+            var i = Wire(desde);
+            var outcome = await Transition(i, TramiteEstado.Subsanacion);
+            outcome.Success.Should().BeFalse();
+            outcome.ErrorCode.Should().Be(TramiteEstadoErrores.EstadoDesconocido);
+            i.Status.Should().Be(desde);
+        }
     }
 
     [Fact]
-    public async Task Ac2_Subsanacion_ReRadica_ConservandoElHistorialPrevio()
+    public async Task Ac2_RechazadoConFlag_ReRadicaAEntregado_YApagaFlag()
     {
-        var i = Wire(TramiteEstado.Entregado);
+        var i = Wire(TramiteEstado.Rechazado);
+        i.SubsanacionActiva = true;
+        i.SubsanacionCount = 1;
 
-        // Primero pasa a subsanación (corrección post-entrega)...
-        var aSubsanacion = await Transition(i, TramiteEstado.Subsanacion);
-        aSubsanacion.Success.Should().BeTrue();
-
-        // ...y luego se re-radica: vuelve a 'entregado' SIN pasar por borrador/preparado.
         var reRadicado = await Transition(i, TramiteEstado.Entregado);
 
         reRadicado.Success.Should().BeTrue();
         i.Status.Should().Be(TramiteEstado.Entregado);
-        // AC2 — el historial conserva AMBAS transiciones (no se sobrescribe la anterior).
-        _recorder.Records.Should().HaveCount(2);
+        i.SubsanacionActiva.Should().BeFalse();
         _recorder.Records.Should().ContainSingle(r =>
-            r.FromStatus == TramiteEstado.Entregado && r.ToStatus == TramiteEstado.Subsanacion);
-        _recorder.Records.Should().ContainSingle(r =>
-            r.FromStatus == TramiteEstado.Subsanacion && r.ToStatus == TramiteEstado.Entregado);
+            r.FromStatus == TramiteEstado.Rechazado && r.ToStatus == TramiteEstado.Entregado);
     }
 
-    [Fact] // HU #10871 — el servicio de ciclo de vida es agnóstico del shape: solo pasa el Metadata del
-           // command al recorder (el checklist HÍBRIDO lo arma el caller, p. ej. RejectOtClientProcedureHandler).
+    [Fact]
+    public async Task RechazadoSinFlag_NoPuedePasarAEntregado()
+    {
+        var i = Wire(TramiteEstado.Rechazado);
+        i.SubsanacionActiva = false;
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.TransicionNoPermitida);
+        i.Status.Should().Be(TramiteEstado.Rechazado);
+    }
+
+    [Fact]
     public async Task Ac1_Metadata_SePasaVerbatimAlRecorder()
     {
-        var i = Wire(TramiteEstado.Entregado);
+        var i = Wire(TramiteEstado.Rechazado);
+        i.SubsanacionActiva = true;
         const string metadata = "{\"motivo\":\"x\",\"items\":[{\"campo\":\"factura\",\"detalle\":\"falta\"}]}";
 
         var outcome = await _sut.TransitionAsync(
             new TramiteTransitionCommand(
-                i.Id, i.TenantId, TramiteEstado.Subsanacion, "x", null, Metadata: metadata),
+                i.Id, i.TenantId, TramiteEstado.Entregado, "x", null, Metadata: metadata),
             TestContext.Current.CancellationToken);
 
         outcome.Success.Should().BeTrue();
         _recorder.Records.Should().ContainSingle(r => r.Metadata == metadata);
     }
 
-    [Fact] // HU #10871 — sin Metadata, el command lo pasa como null (el recorder real degrada a '{}').
+    [Fact]
     public async Task Metadata_PorDefecto_EsNull()
     {
-        var i = Wire(TramiteEstado.Entregado);
+        var i = Wire(TramiteEstado.Rechazado);
+        i.SubsanacionActiva = true;
 
-        var outcome = await Transition(i, TramiteEstado.Subsanacion);
+        var outcome = await Transition(i, TramiteEstado.Entregado);
 
         outcome.Success.Should().BeTrue();
         _recorder.Records.Should().ContainSingle(r => r.Metadata == null);
     }
 
     [Fact]
-    public async Task Subsanacion_NoAdmiteVolverABorradorNiPreparado()
+    public async Task RechazadoConFlag_PuedeAnularOVolverABorrador()
     {
-        // Alcance de HU #10870: subsanacion SOLO re-radica (→ entregado); no bifurca a borrador ni
-        // preparado (eso seguiría el camino clásico rechazado→borrador si se necesitara).
-        var i = Wire(TramiteEstado.Subsanacion);
+        var i = Wire(TramiteEstado.Rechazado);
+        i.SubsanacionActiva = true;
 
         var aBorrador = await Transition(i, TramiteEstado.Borrador);
-        var aPreparado = await Transition(i, TramiteEstado.Preparado);
-
-        aBorrador.ErrorCode.Should().Be(TramiteEstadoErrores.TransicionNoPermitida);
-        aPreparado.ErrorCode.Should().Be(TramiteEstadoErrores.TransicionNoPermitida);
-        i.Status.Should().Be(TramiteEstado.Subsanacion);
+        aBorrador.Success.Should().BeTrue();
+        i.SubsanacionActiva.Should().BeFalse();
     }
 
     // HU #10518 — enforcement runtime: con grant, el OT debe estar OPERATIVO para entregar.
@@ -690,12 +692,20 @@ public sealed class TramiteLifecycleServiceTests
     private static string BaselineMetadata(Dictionary<string, string?> fieldSnapshot, string? motivo = null) =>
         new SubsanacionObservation { Motivo = motivo, FieldSnapshot = fieldSnapshot }.ToJson();
 
+    private ProcedureInstance WireEnSubsanacion(bool conGates = false)
+    {
+        var i = Wire(TramiteEstado.Rechazado, conGates);
+        i.SubsanacionActiva = true;
+        i.SubsanacionCount = 1;
+        return i;
+    }
+
     [Fact]
     public async Task Ac1_Reradicar_SoloVinCambio_NoReevaluaGateDePreparacion()
     {
         // Sin conGates: sin attachments ni biométrica — si el gate de preparación (RF03) corriera,
         // fallaría por documentos incompletos. Solo el VIN cambió → SOLO se re-evalúa VehicleState.
-        var i = Wire(TramiteEstado.Subsanacion);
+        var i = WireEnSubsanacion();
         ConVin(i, "1HGCM82633A004352");
         _repo.FindTramitesByVinAsync(i.TenantId, "1HGCM82633A004352", i.Id, Arg.Any<CancellationToken>())
             .Returns(new List<VinTramiteExistente>());
@@ -713,7 +723,7 @@ public sealed class TramiteLifecycleServiceTests
     {
         // El VIN corregido SÍ se re-valida contra duplicidad (CF-03): sigue siendo un gate "de lo
         // corregido" cuando el campo cambiado es justamente el vin.
-        var i = Wire(TramiteEstado.Subsanacion);
+        var i = WireEnSubsanacion();
         ConVin(i, "1HGCM82633A004352");
         _repo.FindTramitesByVinAsync(i.TenantId, "1HGCM82633A004352", i.Id, Arg.Any<CancellationToken>())
             .Returns(new List<VinTramiteExistente>
@@ -734,7 +744,7 @@ public sealed class TramiteLifecycleServiceTests
     {
         // "color" no es el vin: cae en el bucket PreparationGate (HU #10872) — SIN attachments, el
         // gate de documentos SÍ bloquea (prueba que la re-evaluación selectiva realmente se disparó).
-        var i = Wire(TramiteEstado.Subsanacion);
+        var i = WireEnSubsanacion();
         i.FieldValues.Add(new ProcedureInstanceFieldValue
         {
             Id = Guid.NewGuid(),
@@ -758,7 +768,7 @@ public sealed class TramiteLifecycleServiceTests
     {
         // Snapshot idéntico al estado actual (nada cambió): el diff es vacío → ninguna categoría de
         // gate de corrección corre; solo el gate final de entrega (siempre incondicional).
-        var i = Wire(TramiteEstado.Subsanacion);
+        var i = WireEnSubsanacion();
         ConVin(i, "1HGCM82633A004352");
         _repo.GetLatestSubsanacionMetadataAsync(i.Id, i.TenantId, Arg.Any<CancellationToken>())
             .Returns(BaselineMetadata(new Dictionary<string, string?> { ["vin"] = "1HGCM82633A004352" }));
@@ -774,9 +784,9 @@ public sealed class TramiteLifecycleServiceTests
     public async Task Ac1_Reradicar_SinSnapshotBase_SoloReevaluaVehicleState_PreservaComportamientoPrevio()
     {
         // Fail-safe (dato legado anterior a HU #10872, sin GetLatestSubsanacionMetadataAsync
-        // configurado → null): el gate de preparación NUNCA corrió para subsanacion→entregado antes
+        // configurado → null): el gate de preparación NUNCA corrió para re-radicación antes
         // de esta HU — se preserva, así que sin attachments/biométrica igual puede re-radicarse.
-        var i = Wire(TramiteEstado.Subsanacion);
+        var i = WireEnSubsanacion();
 
         var outcome = await Transition(i, TramiteEstado.Entregado);
 
@@ -789,7 +799,7 @@ public sealed class TramiteLifecycleServiceTests
         // conGates:true ya deja attachments + biométrica APROBADA/VIGENTE del comprador — el gate de
         // preparación (disparado por el cambio de "color", no identidad) los REUTILIZA sin exigir una
         // nueva biométrica ni una consulta cross-trámite (AC2: "no se vuelven a solicitar").
-        var i = Wire(TramiteEstado.Subsanacion, conGates: true);
+        var i = WireEnSubsanacion(conGates: true);
         i.FieldValues.Add(new ProcedureInstanceFieldValue
         {
             Id = Guid.NewGuid(),

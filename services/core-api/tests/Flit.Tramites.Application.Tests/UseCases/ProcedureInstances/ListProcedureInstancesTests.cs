@@ -248,6 +248,87 @@ public sealed class ListProcedureInstancesTests
         result.Single(x => x.TenantId == tenantB).CompaniaNombre.Should().Be("Empresa B");
     }
 
+    [Fact]
+    public async Task HandleAsync_RechazadoConSubsanacion_MapeaMotivoYFlags()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var instanceId = Guid.NewGuid();
+        var older = DateTimeOffset.UtcNow.AddDays(-2);
+        var newer = DateTimeOffset.UtcNow.AddHours(-1);
+
+        var instance = new ProcedureInstance
+        {
+            Id = instanceId,
+            TenantId = tenantId,
+            ReferenceNumber = "TRM-2026-000020",
+            Status = TramiteEstado.Rechazado,
+            ModalidadEntrada = TramiteModalidadEntradaCodes.Traspaso,
+            SubsanacionActiva = true,
+            SubsanacionCount = 2,
+            CreatedAt = DateTimeOffset.UtcNow,
+            StatusHistory =
+            {
+                new ProcedureInstanceStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    ProcedureInstanceId = instanceId,
+                    TenantId = tenantId,
+                    FromStatus = TramiteEstado.Entregado,
+                    ToStatus = TramiteEstado.Rechazado,
+                    Reason = "Motivo antiguo",
+                    ChangedAt = older,
+                    ChangedBy = Guid.NewGuid(),
+                },
+                new ProcedureInstanceStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    ProcedureInstanceId = instanceId,
+                    TenantId = tenantId,
+                    FromStatus = TramiteEstado.Entregado,
+                    ToStatus = TramiteEstado.Rechazado,
+                    Reason = "  Documentación incompleta  ",
+                    ChangedAt = newer,
+                    ChangedBy = Guid.NewGuid(),
+                },
+                // Activación de subsanación (rechazado→rechazado): NO debe reemplazar el motivo OT.
+                new ProcedureInstanceStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    ProcedureInstanceId = instanceId,
+                    TenantId = tenantId,
+                    FromStatus = TramiteEstado.Rechazado,
+                    ToStatus = TramiteEstado.Rechazado,
+                    Reason = "Subsanación iniciada por el operador",
+                    ChangedAt = newer.AddMinutes(5),
+                    ChangedBy = Guid.NewGuid(),
+                },
+                new ProcedureInstanceStatusHistory
+                {
+                    Id = Guid.NewGuid(),
+                    ProcedureInstanceId = instanceId,
+                    TenantId = tenantId,
+                    FromStatus = TramiteEstado.Rechazado,
+                    ToStatus = TramiteEstado.Entregado,
+                    Reason = "Re-radicación",
+                    ChangedAt = newer.AddMinutes(30),
+                    ChangedBy = Guid.NewGuid(),
+                },
+            },
+        };
+
+        _repo.ListWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
+            .Returns([instance]);
+
+        var result = await _sut.HandleAsync(tenantId, isSuperAdmin: false, ct);
+
+        var m = result.Single();
+        m.Estado.Should().Be(TramiteEstado.Rechazado);
+        m.SubsanacionActiva.Should().BeTrue();
+        m.SubsanacionCount.Should().Be(2);
+        m.UltimoRechazoMotivo.Should().Be("Documentación incompleta");
+    }
+
     // HU #11020 — el dashboard necesita los DOS actores del traspaso para identificar el trámite.
     [Fact]
     public async Task HandleAsync_Traspaso_ExponeVendedorYComprador()

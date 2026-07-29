@@ -133,7 +133,7 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
         var instance = await repo.GetByIdWithBiometricsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft");
 
         // Idempotencia por parte: una validación activa o aprobada bloquea recrear.

@@ -310,11 +310,11 @@ public interface IProcedureInstanceRepository
 
     /// <summary>
     /// HU #10872 (AC1) — <c>metadata</c> (jsonb, deserializable con
-    /// <c>SubsanacionObservation.FromJson</c>) del registro MÁS RECIENTE de
-    /// <c>procedure_instance_status_history</c> con <c>to_status = 'subsanacion'</c> para la instancia:
-    /// el snapshot baseline de field values contra el que <c>TramiteLifecycleService</c> computa el
-    /// DIFF al re-radicar (<c>subsanacion → entregado</c>). <c>null</c> si el trámite nunca entró a
-    /// subsanación (fail-safe del caller: re-evalúa todos los gates).
+    /// <c>SubsanacionObservation.FromJson</c>) del registro MÁS RECIENTE de historial con
+    /// snapshot de field values (activación de subsanación, observación OT, o legado
+    /// <c>to_status = 'subsanacion'</c>): baseline del DIFF al re-radicar
+    /// (<c>rechazado → entregado</c>). <c>null</c> si no hay baseline (fail-safe del caller:
+    /// re-evalúa todos los gates).
     /// </summary>
     Task<string?> GetLatestSubsanacionMetadataAsync(Guid instanceId, Guid tenantId, CancellationToken ct = default);
 

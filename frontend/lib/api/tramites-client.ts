@@ -1145,6 +1145,11 @@ export const tramitesClient = {
     add('venceEnDias', filters.venceEnDias);
     add('page', filters.page);
     add('pageSize', filters.pageSize);
+    // CF-02 (Feature #11004, HU #11006) — boolean explícito: no reutiliza `add()` (string|number) para
+    // no perder `false` (que sí debe viajar como filtro "solo ligadas a trámite").
+    if (filters.standalone !== undefined) {
+      params.set('standalone', String(filters.standalone));
+    }
 
     const query = params.toString();
     const res = await request<TenantBiometricValidationsResponse>(
@@ -1338,6 +1343,26 @@ export const tramitesClient = {
       `/api/v1/tramites/instances/${instanceId}/biometric/${validationId}/audit`,
       { headers: tenantHeader(tenantId) },
     ),
+
+  // GET la misma bitácora, SIN depender de instancia (CF-07, Feature #11004, HU #11007): sirve tanto
+  // a prevalidaciones standalone como a validaciones de trámite. Visible para cualquier rol del módulo
+  // (D2 — no restringido a SuperAdmin); el saneo lo sigue haciendo el backend.
+  getBiometricAuditByValidation: (
+    validationId: string,
+    tenantId?: string,
+  ): Promise<IdentityAuditResponse> =>
+    request<IdentityAuditResponse>(
+      `/api/v1/tramites/biometric-validations/${validationId}/audit`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
+  // GET detalle de UNA validación por id (CF-06, Feature #11004, HU #11008): tenant-scoped, sirve
+  // tanto a prevalidaciones standalone como a validaciones de trámite. Mismo DTO que el estado por-
+  // instancia (BiometricValidationDto); pensado para poll (patrón KyverumPendingView, 5s).
+  getPrevalidacionDetail: (id: string, tenantId?: string): Promise<BiometricValidation> =>
+    request<BiometricValidation>(`/api/v1/tramites/biometric-validations/${id}`, {
+      headers: tenantHeader(tenantId),
+    }),
 
   // ── Firma electrónica (Slice 7A) — lado gestor autenticado ──────────
   // POST solicitar firma de una parte de la compraventa. Solo traspaso
@@ -1537,6 +1562,13 @@ export const tramitesClient = {
     }
     return (await res.json()) as InstanceSummary;
   },
+
+  /** Activa subsanación sobre rechazado (flag; no cambia status). */
+  startSubsanacion: (instanceId: string, tenantId?: string) =>
+    request<InstanceSummary>(
+      `/api/v1/tramites/instances/${instanceId}/subsanar`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
 };
 
 /** N 03 — copy UX por código de error del endpoint de transición (title del ProblemDetails). */

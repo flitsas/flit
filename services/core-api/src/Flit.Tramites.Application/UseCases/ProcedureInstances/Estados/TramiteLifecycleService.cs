@@ -106,6 +106,16 @@ public sealed class TramiteLifecycleService(
                 TramiteEstadoErrores.TransicionNoPermitida,
                 $"La transición de '{from}' a '{command.ToStatus}' no está permitida.");
 
+        // Rechazado → entregado solo con subsanación activa (flag). Sin flag no se re-radica.
+        if (string.Equals(from, TramiteEstado.Rechazado, StringComparison.OrdinalIgnoreCase)
+            && command.ToStatus == TramiteEstado.Entregado
+            && !instance.SubsanacionActiva)
+        {
+            return TramiteTransitionOutcome.Fail(
+                TramiteEstadoErrores.TransicionNoPermitida,
+                "Solo se puede re-radicar a entregado cuando la subsanación está activa.");
+        }
+
         // RF05 — anular/rechazar exigen motivo explícito para el historial.
         if (command.ToStatus is TramiteEstado.Anulado or TramiteEstado.Rechazado
             && string.IsNullOrWhiteSpace(command.Reason))
@@ -113,12 +123,13 @@ public sealed class TramiteLifecycleService(
                 TramiteEstadoErrores.MotivoRequerido,
                 $"Debe indicar el motivo para pasar el trámite a '{command.ToStatus}'.");
 
-        // HU #10872 (AC1) — re-radicación selectiva: subsanacion→entregado NO re-evalúa TODOS los
-        // gates de negocio, solo los que dependen de los campos corregidos desde que el trámite entró
-        // a subsanación (más el gate final de entrega, EvaluarEntregaAsync, que SIEMPRE corre más
-        // abajo). Vacío/AllGates fuera de este escenario para que las demás transiciones (borrador→
-        // preparado, preparado→entregado) mantengan el comportamiento incondicional de siempre.
-        var affectedGates = from == TramiteEstado.Subsanacion && command.ToStatus == TramiteEstado.Entregado
+        // Re-radicación selectiva: desde subsanación (flag sobre rechazado, o legado status
+        // subsanacion) → entregado. Solo re-evalúa gates afectados por el diff del snapshot.
+        var isSubsanacionReradicacion =
+            TramiteEstado.EsReRadicacionSubsanacion(from, instance.SubsanacionActiva)
+            && command.ToStatus == TramiteEstado.Entregado;
+
+        var affectedGates = isSubsanacionReradicacion
             ? await ResolveSubsanacionAffectedGatesAsync(instance, command.TenantId, ct).ConfigureAwait(false)
             : SubsanacionGateMap.AllGates;
 
@@ -127,8 +138,8 @@ public sealed class TramiteLifecycleService(
         // SOLO fuente FLIT (bloqueo duro por repo, sin IO externo al RUNT en este gate — la fuente RUNT
         // ya se validó de forma DURA en el preflight, AC1/AC3): si OTRO trámite del mismo VIN llegó a
         // 'aprobado' mientras este seguía en curso, esta relectura lo atrapa antes de preparar/entregar.
-        // HU #10872 (AC1) — al re-radicar desde subsanación, SOLO si el VIN fue uno de los campos
-        // corregidos (o no hay snapshot base: fail-safe).
+        // Al re-radicar desde subsanación, SOLO si el VIN fue uno de los campos corregidos (o no hay
+        // snapshot base: fail-safe).
         if (command.ToStatus is TramiteEstado.Preparado or TramiteEstado.Entregado
             && affectedGates.Contains(SubsanacionGateMap.VehicleState))
         {
@@ -137,13 +148,11 @@ public sealed class TramiteLifecycleService(
                 return TramiteTransitionOutcome.Fail(VehicleStatePolicy.ErrorCode, vehicleStateDetail);
         }
 
-        // RF03/R10 — gate de preparación (identidad aprobada/vigente + documentos + impronta + prenda
-        // del traspaso): SIEMPRE en borrador→preparado; en subsanacion→entregado SOLO si el diff de
-        // campos corregidos toca el bucket PreparationGate (HU #10872 AC1) — la resolución de identidad
-        // (IdentityApprovalResolver) reutiliza validaciones vigentes sin solicitar nada nuevo (AC2).
+        // RF03/R10 — gate de preparación: SIEMPRE en borrador→preparado; en re-radicación de
+        // subsanación SOLO si el diff toca PreparationGate.
         var debeEvaluarGatePreparacion =
             (from == TramiteEstado.Borrador && command.ToStatus == TramiteEstado.Preparado)
-            || (from == TramiteEstado.Subsanacion && command.ToStatus == TramiteEstado.Entregado
+            || (isSubsanacionReradicacion
                 && affectedGates.Contains(SubsanacionGateMap.PreparationGate));
 
         if (debeEvaluarGatePreparacion)
@@ -183,7 +192,15 @@ public sealed class TramiteLifecycleService(
             // fija el sub-estado interno de placa (preasignado Flujo B / asignado Flujo A / null estándar).
             // Los gates de entrega (EvaluarEntregaAsync) ya corrieron y promovieron el OT elegido.
             instance.PlateFlowStatus = command.PlateFlowStatus;
+
+            // Cierra la ventana de edición de subsanación al re-radicar.
+            if (instance.SubsanacionActiva)
+                instance.SubsanacionActiva = false;
         }
+
+        // Si se anula o se vuelve a borrador, apagar el flag de subsanación.
+        if (command.ToStatus is TramiteEstado.Anulado or TramiteEstado.Borrador)
+            instance.SubsanacionActiva = false;
 
         // Feature #10701 / HU #10860 — un cambio de estado invalida los consolidados persistidos
         // (maestro y wizard): el expediente cambió, así que la próxima generación debe regenerarlos

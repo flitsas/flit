@@ -331,8 +331,10 @@ public sealed class GenerarFurHandler(
         // escritura — el adjunto vigente se conserva (no se trata como huérfano) para dejar fija la que
         // entró al registro. En estados previos a la entrega (borrador/preparado) se re-resuelve normal.
         // Si no hay escritura previa y el trámite ya está entregado, simplemente no se adjunta ninguna.
+        // Congelado tras entrega: fuera de edición (borrador / rechazado+subsanación) y de
+        // preparado no se re-resuelve la escritura — se conserva la que entró al registro.
         var tramiteYaEntregado =
-            !string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase)
+            !TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva)
             && !string.Equals(instance.Status, TramiteEstado.Preparado, StringComparison.OrdinalIgnoreCase);
         var deedIdPorTipo = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         if (!tramiteYaEntregado)
@@ -519,9 +521,9 @@ public sealed class GenerarFurHandler(
             SellosIdentidad: sellosIdentidad,
             TienePrenda: tienePrenda,
             AcreedorPrenda: acreedorPrenda,
-            // ADR-0036 (HU #10914/#10915) — las firmas del mandato/solicitud virtual solo aparecen en
-            // estado distinto de borrador (punto 18 del requerimiento).
-            FirmasVisibles: !string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase),
+            // ADR-0036 (HU #10914/#10915) — las firmas del mandato/solicitud virtual solo aparecen
+            // fuera de edición (borrador o rechazado en subsanación).
+            FirmasVisibles: !TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva),
             TemplateFormat: templateFormat)
         {
             // HU #11030 — tenant contra el que se resuelve el baúl del mandatario.

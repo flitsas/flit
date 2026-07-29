@@ -160,12 +160,15 @@ internal sealed class KyverumVerifyClient(
 
             // OJO: Kyverum reporta `result` (aprobado/closedAt) tras CADA intento, no solo al agotar los 3.
             // Por eso un `result.aprobado=false` NO es terminal por sí solo → se mapea a `rechazado_intento` y
-            // el reconciliador CUENTA los intentos (dedup por validadoAt) para decidir si ya se agotaron.
+            // el reconciliador decide con el conteo de intentos del webhook.
+            // Excepción: el status top-level `rechazado` indica validación CERRADA en Kyverum (agotó
+            // reintentos) → mapear a `rechazado` TERMINAL (no `rechazado_intento`), para no depender solo
+            // del conteo local cuando el GET llega después del cierre.
             string effectiveStatus;
-            if (payload.Result?.Aprobado is { } aprobado)
+            if (string.Equals(payload.Status, "rechazado", StringComparison.OrdinalIgnoreCase))
+                effectiveStatus = "rechazado";
+            else if (payload.Result?.Aprobado is { } aprobado)
                 effectiveStatus = aprobado ? "aprobado" : "rechazado_intento";
-            else if (string.Equals(payload.Status, "rechazado", StringComparison.OrdinalIgnoreCase))
-                effectiveStatus = "rechazado_intento";
             else
                 effectiveStatus = payload.Status!; // en_proceso/enviado/aprobado/expirado (compat)
 

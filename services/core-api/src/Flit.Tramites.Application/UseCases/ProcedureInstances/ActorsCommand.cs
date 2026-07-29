@@ -137,11 +137,8 @@ public sealed class PutActorsHandler(
         if (instance is null)
             return (null, "not_found");
 
-        // HU #10870 (AC1) — subsanación reabre la edición COMPLETA del trámite (entregado/rechazado
-        // → subsanacion) SIN pasar por borrador: los actores se editan igual que en borrador. Mismo
-        // criterio que PatchFieldValuesHandler y el trigger de BD (trg_field_value_immutable). Fuera
-        // de borrador/subsanacion, el PUT de actores sigue bloqueado.
-        if (instance.Status != TramiteEstado.Borrador && instance.Status != TramiteEstado.Subsanacion)
+        // Subsanación (flag sobre rechazado) o borrador: actores editables. Fuera de eso, bloqueado.
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft");
 
         var inputs = request.Actors ?? [];

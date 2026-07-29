@@ -137,14 +137,14 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
 
             var existentes = await repo.FindTramitesByVinAsync(tenantId, vinNorm, Guid.Empty, ct);
             return DuplicateActiveProcedurePolicy.FindActiveDuplicate(
-                existentes.Select(e => (e.Id, e.Estado)).ToList());
+                existentes.Select(e => (e.Id, e.Estado, e.SubsanacionActiva)).ToList());
         }
 
         if (modalidad == TramiteModalidadEntrada.Traspaso && !string.IsNullOrEmpty(plate))
         {
             var existentes = await repo.FindTramitesByPlacaAsync(tenantId, plate, Guid.Empty, ct);
             return DuplicateActiveProcedurePolicy.FindActiveDuplicate(
-                existentes.Select(e => (e.Id, e.Estado)).ToList());
+                existentes.Select(e => (e.Id, e.Estado, e.SubsanacionActiva)).ToList());
         }
 
         return null;

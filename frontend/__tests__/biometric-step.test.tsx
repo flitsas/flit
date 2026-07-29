@@ -296,6 +296,45 @@ describe('BiometricStep — AC5 (expiración)', () => {
   });
 });
 
+describe('BiometricStep — CF-08 (Feature #11004, HU #11009): historial completo por parte', () => {
+  it('con 2+ validaciones muestra TODAS en el historial, no solo la vigente/más reciente', async () => {
+    // La tarjeta de acción sigue mostrando solo la más reciente (RECHAZADA es previa a EN_PROCESO,
+    // que queda como la vigente en_proceso). Ambas deben ser visibles en el historial.
+    mocks.getBiometricState.mockResolvedValue({
+      validations: [RECHAZADA, EN_PROCESO],
+      provider: 'kyverum',
+    });
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    expect(await screen.findByText(/Historial de validaciones \(2\)/)).toBeInTheDocument();
+    // Cada ítem del historial trae su propio "Ver tracking" (bitácora por validationId).
+    expect(screen.getAllByRole('button', { name: /ver tracking/i })).toHaveLength(2);
+    // La tarjeta de acción arriba sigue mostrando solo el estado de la vigente (en_proceso).
+    expect(
+      await screen.findByText(/Esperando validación de Ana Comprador/),
+    ).toBeInTheDocument();
+  });
+
+  it('etiqueta "Vigente" solo la última validación de la parte', async () => {
+    mocks.getBiometricState.mockResolvedValue({
+      validations: [RECHAZADA, EN_PROCESO],
+      provider: 'kyverum',
+    });
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await screen.findByText(/Historial de validaciones \(2\)/);
+    expect(screen.getAllByText('Vigente')).toHaveLength(1);
+  });
+
+  it('con una sola validación (sin historial real) no muestra la sección', async () => {
+    mocks.getBiometricState.mockResolvedValue({ validations: [APROBADA], provider: 'mock' });
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await screen.findByText('Identidad verificada — 95/100');
+    expect(screen.queryByText(/Historial de validaciones/)).not.toBeInTheDocument();
+  });
+});
+
 describe('BiometricStep — AC8 (estado de carga)', () => {
   it('muestra un placeholder accesible (role=status) hasta que llega la primera respuesta', async () => {
     let resolveState: (v: { validations: BiometricValidation[]; provider: string }) => void = () => {};

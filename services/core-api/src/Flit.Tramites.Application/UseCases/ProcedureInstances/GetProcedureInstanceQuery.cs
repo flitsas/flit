@@ -58,7 +58,11 @@ public sealed record ProcedureInstanceDetailDto(
     string? PlateFlowStatus = null,
     // HU #10879 — paso actual persistido del wizard (Key del paso). Prima como punto de retoma al
     // reabrir el borrador (AC2); null = el frontend cae al paso derivado de los gates. Opcional (default null).
-    string? CurrentStep = null);
+    string? CurrentStep = null,
+    /// <summary>Subsanación activa sobre rechazado (edición sin cambiar status).</summary>
+    bool SubsanacionActiva = false,
+    /// <summary>Veces que se activó la subsanación en este expediente.</summary>
+    int SubsanacionCount = 0);
 
 public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository repo)
 {
@@ -101,7 +105,9 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
                 .ToList(),
             e.DraftFinalizedAt,
             e.PlateFlowStatus,
-            e.CurrentStep);
+            e.CurrentStep,
+            e.SubsanacionActiva,
+            e.SubsanacionCount);
 
     /// <summary>
     /// HU #10871 — recorta el metadata jsonb persistido en <c>procedure_instance_status_history</c> al

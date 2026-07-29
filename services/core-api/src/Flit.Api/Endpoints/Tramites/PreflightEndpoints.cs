@@ -27,7 +27,7 @@ internal static class PreflightEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede correr preflight en estado borrador."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede correr preflight en borrador o con subsanación activa."),
                 // CF-01 (HU #10876) — duplicidad de trámite EN PROCESO por familia (VIN en Matrícula
                 // Inicial, placa en Traspaso). El id del trámite existente viaja en las extensions
                 // RFC7807 para que el frontend pueda ofrecer "continuar el trámite existente".

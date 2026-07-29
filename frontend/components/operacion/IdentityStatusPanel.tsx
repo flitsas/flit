@@ -1,15 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import {
-  AlertCircle,
-  AlertTriangle,
-  Bell,
-  Clock,
-  RefreshCw,
-  ShieldCheck,
-  XCircle,
-} from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AlertCircle, AlertTriangle, Clock, XCircle } from 'lucide-react';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
@@ -22,25 +14,23 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 
 /**
- * HU #10875 (Feature #10863) — Vista consolidada de identidad por trámite con alertas.
+ * HU #10875 + CF-08 (Feature #11004, HU #11009).
  *
- * AC1: un solo panel con el estado de identidad de TODOS los actores del trámite (comprador y, en
- * traspaso, vendedor — mismo universo de partes que `ProcedureActor.rol`/`BiometricParte`).
- *
- * AC2: alertas/recordatorios in-app POR PULL (badges por actor + banner de resumen), SIN campana ni
- * notificación push — la decisión de alcance cerrada de HU #10873 descarta esa infraestructura. Se
- * consume `GET /instances/{id}/identity-validation/alerts`, que clasifica cada validación en
- * `rechazada` | `expirada` | `por_vencer` | `atascada` y marca `requiresResendReminder`.
- *
- * Complementa (no reemplaza) `BiometricStep`: ese paso ofrece la ACCIÓN de iniciar/reintentar una
- * parte dentro del paso "Identidad"/"FUR" del wizard; este panel da la VISIBILIDAD consolidada +
- * las alertas, visible sin importar en qué paso está el operador.
+ * Mismo patrón que `EstadoTimelinePanel`: disclosure colapsado por defecto
+ * ("▸ Historial de identidad"), carga al abrir, lista cada proceso (aprobación /
+ * rechazo) con fecha. En vivo mientras el panel está abierto y hay procesos
+ * no terminales. Sin botón Actualizar.
  */
 
 const PARTE_LABEL: Record<BiometricParte, string> = {
   comprador: 'Comprador',
   vendedor: 'Vendedor',
 };
+
+function parteLabel(role: string | null | undefined, fallback?: string | null): string {
+  if (role === 'comprador' || role === 'vendedor') return PARTE_LABEL[role];
+  return fallback?.trim() || 'Actor';
+}
 
 const ALERT_META: Record<
   IdentityValidationAlertKind,
@@ -72,37 +62,47 @@ const ESTADO_TONE: Record<string, StatusTone> = {
   error_envio: 'danger',
 };
 
-interface ActorIdentityRow {
-  parte: BiometricParte;
-  label: string;
-  actor: ProcedureActor | null;
-  validation: BiometricValidation | null;
-  alert: IdentityValidationAlert | null;
+const POLL_MS = 5_000;
+
+function isOpenValidation(v: BiometricValidation): boolean {
+  return !(v.status === 'aprobado' || v.status === 'rechazado' || v.status === 'expirado' || v.expired);
 }
 
-/**
- * AC1 — la fuente de "todos los actores" es SIEMPRE `getActors` (lo que el gestor ya guardó en el
- * paso de actores), no una lista asumida por modalidad: con el trámite recién creado y sin actores
- * capturados, el panel debe mostrar el estado VACÍO real. Cada actor se empareja con su validación
- * más reciente (misma regla parte↔validación que `BiometricStep`) y, si existe, con su alerta.
- */
-function buildRows(
+function isOutcomeValidation(v: BiometricValidation): boolean {
+  return v.status === 'aprobado' || v.status === 'rechazado';
+}
+
+interface OutcomeRow {
+  validation: BiometricValidation;
+  actorLabel: string;
+  actorName: string | null;
+  vigente: boolean;
+}
+
+function buildOutcomeRows(
   modalidad: WizardModalidad,
   actors: ProcedureActor[],
   validations: BiometricValidation[],
-  alerts: IdentityValidationAlert[],
-): ActorIdentityRow[] {
-  return actors.map((actor) => {
+): OutcomeRow[] {
+  const rows: OutcomeRow[] = [];
+  for (const actor of actors) {
     const parte = actor.rol;
     const matches = validations.filter((v) =>
       modalidad === 'traspaso'
         ? v.partyRole === parte
         : v.partyRole === null || v.partyRole === 'comprador',
     );
-    const validation = matches.length > 0 ? matches[matches.length - 1] : null;
-    const alert = validation ? (alerts.find((al) => al.id === validation.id) ?? null) : null;
-    return { parte, label: PARTE_LABEL[parte], actor, validation, alert };
-  });
+    const vigenteId = matches.length > 0 ? matches[matches.length - 1]!.id : null;
+    for (const v of matches.filter(isOutcomeValidation)) {
+      rows.push({
+        validation: v,
+        actorLabel: PARTE_LABEL[parte],
+        actorName: actor.nombreCompleto || v.name || null,
+        vigente: v.id === vigenteId,
+      });
+    }
+  }
+  return rows;
 }
 
 export function IdentityStatusPanel({
@@ -110,20 +110,22 @@ export function IdentityStatusPanel({
   modalidad,
 }: {
   instanceId: string | null;
-  /** Opcional: si no se pasa, el panel resuelve la modalidad solo (getWizardState). Así es
-   *  autosuficiente y se puede montar fuera del wizard (p. ej. en el detalle del trámite). */
   modalidad?: WizardModalidad;
 }) {
+  const [open, setOpen] = useState(false);
   const [actors, setActors] = useState<ProcedureActor[] | null>(null);
   const [validations, setValidations] = useState<BiometricValidation[] | null>(null);
   const [alerts, setAlerts] = useState<IdentityValidationAlert[] | null>(null);
   const [wizardModalidad, setWizardModalidad] = useState<WizardModalidad | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const fetchingRef = useRef(false);
+  const loadedOnceRef = useRef(false);
 
-  const load = useCallback(async () => {
-    if (!instanceId) return;
-    setLoading(true);
+  const load = useCallback(async (opts?: { background?: boolean }) => {
+    if (!instanceId || fetchingRef.current) return;
+    fetchingRef.current = true;
+    if (!opts?.background) setLoading(true);
     setError(null);
     try {
       const [wizardRes, actorsRes, biometricRes, alertsRes] = await Promise.all([
@@ -136,136 +138,215 @@ export function IdentityStatusPanel({
       setActors(actorsRes);
       setValidations(biometricRes.validations);
       setAlerts(alertsRes.alerts);
+      loadedOnceRef.current = true;
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'No se pudo cargar el estado de identidad.',
+        err instanceof Error ? err.message : 'No se pudo cargar el historial de identidad.',
       );
     } finally {
-      setLoading(false);
+      fetchingRef.current = false;
+      if (!opts?.background) setLoading(false);
     }
   }, [instanceId]);
 
-  // Carga inicial: setLoading/setError se disparan de inmediato para pintar el skeleton (mismo
-  // patrón que el resto del repo).
+  // Carga perezosa al abrir (mismo espíritu que EstadoTimelinePanel).
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
+    if (!open || !instanceId) return;
+    if (!loadedOnceRef.current) {
+      void load();
+    }
+  }, [open, instanceId, load]);
 
-  // Trámite aún sin crear (paso 1 diferido, HU #10883): no hay instancia que consultar.
+  const needsLive = open && validations != null && validations.some(isOpenValidation);
+
+  useEffect(() => {
+    if (!instanceId || !needsLive) return;
+    const tick = () => {
+      if (document.hidden) return;
+      void load({ background: true });
+    };
+    const timer = setInterval(tick, POLL_MS);
+    return () => clearInterval(timer);
+  }, [instanceId, needsLive, load]);
+
   if (!instanceId) return null;
 
-  // AC1/AC2 — 4 estados de UI: cargando (skeleton), error (role="alert" + reintentar), vacío
-  // (sin actores todavía) y lleno (tarjetas por actor + banner de alertas cuando aplica).
   const hasData = actors !== null && validations !== null && alerts !== null;
-  const initialLoading = loading && !hasData && error === null;
-  // Modalidad efectiva: prop (si el padre la pasa) o la resuelta por getWizardState; traspaso por
-  // defecto (empareja por party_role, el caso más común).
+  const initialLoading = open && loading && !hasData && error === null;
   const effModalidad = modalidad ?? wizardModalidad ?? 'traspaso';
-  const rows = hasData ? buildRows(effModalidad, actors, validations, alerts) : [];
-  const accionables = rows.filter((r) => r.alert?.alertKind);
-  const reminders = rows.filter((r) => r.alert?.requiresResendReminder && !r.alert.alertKind);
+  const outcomes = hasData ? buildOutcomeRows(effModalidad, actors, validations) : [];
+  const accionables =
+    hasData
+      ? alerts.filter((a) => a.alertKind != null)
+      : [];
+  const reminders =
+    hasData
+      ? alerts.filter((a) => a.requiresResendReminder && !a.alertKind)
+      : [];
 
   return (
     <section
-      className="shrink-0 space-y-3 rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
-      aria-label="Estado de identidad de los actores del trámite"
+      style={{
+        margin: '16px auto 0',
+        maxWidth: 960,
+        padding: '0 16px',
+      }}
+      aria-label="Historial de identidad del trámite"
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4" style={{ color: '#557EFF' }} aria-hidden="true" />
-          <h2 className="text-xs font-bold">Identidad de los actores</h2>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <button
           type="button"
-          onClick={() => void load()}
-          disabled={loading}
-          className="flex items-center gap-1.5 text-[11px] font-semibold opacity-70 disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          aria-label="Actualizar estado de identidad"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#475569',
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+            padding: 0,
+          }}
         >
-          <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
-          Actualizar
+          {open ? '▾' : '▸'} Historial de identidad
         </button>
+        {open && needsLive && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+            style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+            role="status"
+            aria-live="polite"
+          >
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" aria-hidden />
+            En vivo
+          </span>
+        )}
       </div>
 
-      {error && (
+      {open ? (
         <div
-          className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
-          role="alert"
-          aria-live="polite"
+          style={{
+            marginTop: 12,
+            background: '#fff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 12,
+            padding: 16,
+          }}
+          className="dark:bg-[#0B0F14]"
         >
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <div className="space-y-1">
-            <p className="font-semibold">No se pudo cargar el estado de identidad.</p>
-            <p className="opacity-80">{error}</p>
-            <button
-              type="button"
-              onClick={() => void load()}
-              className="mt-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ background: '#FF4E00' }}
+          {error && (
+            <div
+              className="flex items-start gap-2 rounded-xl border p-3 text-xs"
+              style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+              role="alert"
+              aria-live="polite"
             >
-              Reintentar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {initialLoading && <PanelSkeleton />}
-
-      {!initialLoading && !error && hasData && rows.length === 0 && (
-        <p className="text-[11px] opacity-60">
-          No hay actores registrados en este trámite todavía.
-        </p>
-      )}
-
-      {!initialLoading && !error && rows.length > 0 && (
-        <>
-          {(accionables.length > 0 || reminders.length > 0) && (
-            <AlertsBanner accionables={accionables} reminders={reminders} />
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <div className="space-y-1">
+                <p className="font-semibold">No se pudo cargar el historial de identidad.</p>
+                <p className="opacity-80">{error}</p>
+                <button
+                  type="button"
+                  onClick={() => void load()}
+                  className="mt-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-white"
+                  style={{ background: '#FF4E00' }}
+                >
+                  Reintentar
+                </button>
+              </div>
+            </div>
           )}
-          <ul className="grid gap-2 sm:grid-cols-2" aria-label="Actores del trámite">
-            {rows.map((row) => (
-              <ActorIdentityCard key={row.parte} row={row} />
-            ))}
-          </ul>
-        </>
-      )}
+
+          {initialLoading && (
+            <div role="status" aria-live="polite" aria-busy="true" className="space-y-2">
+              <span className="sr-only">Cargando historial de identidad…</span>
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-10 animate-pulse rounded-lg bg-black/5 dark:bg-white/5" aria-hidden />
+              ))}
+            </div>
+          )}
+
+          {!initialLoading && !error && hasData && actors.length === 0 && (
+            <p className="text-[11px] opacity-60">
+              No hay actores registrados en este trámite todavía.
+            </p>
+          )}
+
+          {!initialLoading && !error && hasData && actors.length > 0 && (
+            <div className="space-y-3 text-xs">
+              {(accionables.length > 0 || reminders.length > 0) && (
+                <AlertsBanner alerts={accionables} reminders={reminders} />
+              )}
+
+              {outcomes.length === 0 ? (
+                <p className="text-[11px] opacity-60">
+                  Aún no hay aprobaciones ni rechazos registrados.
+                </p>
+              ) : (
+                <ol className="space-y-2" aria-label="Aprobaciones y rechazos de identidad">
+                  {outcomes.map((row, index) => {
+                    const v = row.validation;
+                    const label = ESTADO_LABEL[v.status] ?? v.status;
+                    const tone = ESTADO_TONE[v.status] ?? 'neutral';
+                    const when =
+                      v.status === 'aprobado' ? v.validatedAt : v.validatedAt ?? v.expiresAt;
+                    return (
+                      <li
+                        key={v.id}
+                        className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-2 last:border-0 last:pb-0 dark:border-white/10"
+                      >
+                        <div className="min-w-0 space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-semibold opacity-70">{index + 1}.</span>
+                            <StatusBadge label={label} tone={tone} />
+                            <span className="font-semibold text-[#162744] dark:text-white">
+                              {row.actorLabel}
+                            </span>
+                            {row.vigente && (
+                              <span
+                                className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold"
+                                style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+                              >
+                                Vigente
+                              </span>
+                            )}
+                          </div>
+                          {row.actorName && (
+                            <p className="truncate text-[11px] opacity-70" title={row.actorName}>
+                              {row.actorName}
+                            </p>
+                          )}
+                          {v.status === 'rechazado' && v.rejectionReason && (
+                            <p className="truncate text-[10.5px] opacity-60" title={v.rejectionReason}>
+                              {v.rejectionReason}
+                            </p>
+                          )}
+                        </div>
+                        <time
+                          className="shrink-0 text-[11px] font-medium opacity-65"
+                          dateTime={when ?? undefined}
+                        >
+                          {formatFecha(when)}
+                        </time>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }
 
-/** Estado de carga (4 estados de UI): placeholder accesible mientras llega la primera respuesta. */
-function PanelSkeleton() {
-  return (
-    <div
-      className="grid gap-2 sm:grid-cols-2"
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-    >
-      <span className="sr-only">Cargando estado de identidad…</span>
-      {[0, 1].map((i) => (
-        <div
-          key={i}
-          className="h-16 animate-pulse rounded-xl bg-black/5 dark:bg-white/5"
-          aria-hidden="true"
-        />
-      ))}
-    </div>
-  );
-}
-
-/**
- * AC2 — banner de resumen: agrupa las alertas accionables (rechazada/expirada/por_vencer/atascada) y
- * los recordatorios de reenvío que NO son ya una alerta (para no duplicar el mensaje de la misma parte).
- */
 function AlertsBanner({
-  accionables,
+  alerts,
   reminders,
 }: {
-  accionables: ActorIdentityRow[];
-  reminders: ActorIdentityRow[];
+  alerts: IdentityValidationAlert[];
+  reminders: IdentityValidationAlert[];
 }) {
   return (
     <div
@@ -280,19 +361,27 @@ function AlertsBanner({
     >
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       <div className="space-y-1">
-        {accionables.length > 0 && (
+        {alerts.length > 0 && (
           <p className="font-semibold">
-            {accionables.length} validación{accionables.length === 1 ? '' : 'es'} de identidad
-            requiere{accionables.length === 1 ? '' : 'n'} atención:{' '}
-            {accionables
-              .map((r) => `${r.label} (${ALERT_META[r.alert!.alertKind!].label})`)
+            {alerts.length} validación{alerts.length === 1 ? '' : 'es'} requiere
+            {alerts.length === 1 ? '' : 'n'} atención:{' '}
+            {alerts
+              .map((a) => {
+                const parte = parteLabel(a.partyRole, a.name);
+                const kind = a.alertKind ? ALERT_META[a.alertKind].label : 'Atención';
+                return `${parte} (${kind})`;
+              })
               .join(', ')}
             .
           </p>
         )}
         {reminders.length > 0 && (
           <p className="opacity-90">
-            Recordatorio: reenvía el enlace de captura a {reminders.map((r) => r.label).join(', ')}.
+            Recordatorio: reenvía el enlace de captura
+            {reminders.some((r) => r.partyRole)
+              ? ` a ${reminders.map((r) => parteLabel(r.partyRole, r.name)).join(', ')}`
+              : ''}
+            .
           </p>
         )}
       </div>
@@ -300,55 +389,9 @@ function AlertsBanner({
   );
 }
 
-function ActorIdentityCard({ row }: { row: ActorIdentityRow }) {
-  const { label, actor, validation, alert } = row;
-  const status = validation?.status ?? null;
-  const statusLabel = status ? (ESTADO_LABEL[status] ?? status) : 'Sin iniciar';
-  const statusTone: StatusTone = status ? (ESTADO_TONE[status] ?? 'neutral') : 'neutral';
-  const alertMeta = alert?.alertKind ? ALERT_META[alert.alertKind] : null;
-  const AlertIcon = alertMeta?.icon;
-  const soloRecordatorio = !alertMeta && !!alert?.requiresResendReminder;
-  const nombre = actor?.nombreCompleto || validation?.name || null;
-
-  const ariaLabel =
-    `${label}${nombre ? `: ${nombre}` : ''}, identidad: ${statusLabel}` +
-    (alertMeta ? `, alerta: ${alertMeta.label}` : '') +
-    (soloRecordatorio ? ', recordatorio de reenvío pendiente' : '');
-
-  return (
-    <li
-      className="space-y-2 rounded-xl border p-3 text-xs"
-      style={alertMeta ? { borderColor: `var(--badge-${alertMeta.tone}-border)` } : undefined}
-      aria-label={ariaLabel}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-bold">{label}</span>
-        <StatusBadge label={statusLabel} tone={statusTone} />
-      </div>
-      <p className="truncate opacity-80" title={nombre ?? undefined}>
-        {nombre ?? 'Sin datos de la parte todavía.'}
-      </p>
-      {alertMeta && AlertIcon && (
-        <div
-          className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[10.5px] font-semibold"
-          style={{
-            background: `var(--badge-${alertMeta.tone}-bg)`,
-            color: `var(--badge-${alertMeta.tone}-fg)`,
-          }}
-        >
-          <AlertIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
-          {alertMeta.label}
-        </div>
-      )}
-      {soloRecordatorio && (
-        <div
-          className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[10.5px] font-semibold"
-          style={{ background: 'var(--badge-info-bg)', color: 'var(--badge-info-fg)' }}
-        >
-          <Bell className="h-3 w-3 shrink-0" aria-hidden="true" />
-          Recordatorio: reenviar enlace de captura
-        </div>
-      )}
-    </li>
-  );
+function formatFecha(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
 }

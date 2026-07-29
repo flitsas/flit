@@ -234,9 +234,8 @@ public sealed class ConsultarEstadoQuipuxHandler
         var fieldValues = await _instances.GetFieldValuesAsync(
             submission.ProcedureInstanceId, submission.TenantId, cancellationToken);
 
-        // HU #10871 (AC2) — checklist HÍBRIDO de metadata: solo `motivo` (Quipux no entrega un
-        // checklist estructurado por campo; `items` queda vacío). El destino es `subsanacion`, no
-        // `rechazado`: la secretaría observó, pero el trámite sigue vivo para corregirse.
+        // Checklist HÍBRIDO en metadata; destino `rechazado`. El operador activa edición con
+        // POST /subsanar (flag). El snapshot sirve de baseline del diff de re-radicación.
         var metadata = new SubsanacionObservation
         {
             Motivo = motivo,
@@ -244,7 +243,7 @@ public sealed class ConsultarEstadoQuipuxHandler
         }.ToJson();
 
         var (ok, error) = await TransicionarAsync(
-            submission, TramiteEstado.Subsanacion, motivo, metadata, cancellationToken);
+            submission, TramiteEstado.Rechazado, motivo, metadata, cancellationToken);
 
         if (!ok)
         {

@@ -12,4 +12,5 @@ public sealed record PlacaTramiteExistente(
     string Estado,
     string Placa,
     string? Vin = null,
-    DateTimeOffset? FechaRegistro = null);
+    DateTimeOffset? FechaRegistro = null,
+    bool SubsanacionActiva = false);

@@ -7,9 +7,10 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
 /// Fila de la tabla transversal del submódulo de Validaciones: una validación biométrica con el
-/// trámite al que pertenece (para navegar) y los datos que la vista del gestor necesita. NO incluye
-/// email ni la URL de captura (vista de monitoreo, no de gestión de la captura). El documento viaja
-/// completo (vista autenticada del gestor del tenant); la FE lo enmascara al pintarlo.
+/// trámite al que pertenece (para navegar) y los datos que la vista del gestor necesita. Documento y
+/// correo viajan completos (vista autenticada del gestor del tenant, D3/CF-05, Feature #11004); la FE
+/// decide si enmascara al pintarlos. NO incluye la URL de captura salvo cuando está vigente (ver
+/// <see cref="EnlaceVigente"/> más abajo, HU #10886).
 /// </summary>
 public sealed record TenantBiometricValidationDto(
     Guid Id,
@@ -30,6 +31,15 @@ public sealed record TenantBiometricValidationDto(
     string? RejectionReason,
     DateTimeOffset CreatedAt,
     DateTimeOffset? ValidatedAt,
+    // CF-05 (Feature #11004, ADR-0036) — correo de la validación. Vista autenticada del gestor del
+    // tenant: viaja completo, sin enmascarar (D3). Revierte la omisión intencional de HU #10234.
+    string Email,
+    // CF-06/tracking (Feature #11004) — intentos y reenvíos, para que Validaciones/Prevalidaciones
+    // muestren el mismo dato que ya usa el detalle/BiometricValidationDto, sin llamada adicional.
+    int Attempts,
+    int MaxAttempts,
+    int ResendCount,
+    DateTimeOffset? LastResentAt,
     // Vigencia de la identidad APROBADA (30 días calendario desde la aprobación): fecha de fin de
     // vigencia y días que le restan. Null cuando no hay aprobación (ValidatedAt) → no aplica vigencia.
     DateTimeOffset? ValidUntil,
@@ -138,6 +148,11 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
             IniciarBiometriaHandler.ExtractMotivoRechazo(v),
             v.CreatedAt,
             v.ValidatedAt,
+            v.Email,
+            v.Attempts,
+            v.MaxAttempts,
+            v.ResendCount,
+            v.LastResentAt,
             // Vigencia (HU #10350): la fecha de fin se PERSISTE (la estampa el código al aprobar) y se lee
             // de la columna; los días restantes NO se persisten — se calculan al vuelo contra HOY, así que
             // siempre van frescos sin job ni columna materializada.
