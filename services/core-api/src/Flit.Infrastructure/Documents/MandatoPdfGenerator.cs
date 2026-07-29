@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Tramites.Catalog;
@@ -60,11 +61,12 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         {
             doc.Page(page =>
             {
-                page.Size(PageSizes.A4);
-                page.Margin(2, Unit.Centimetre);
-                page.DefaultTextStyle(t => t.FontSize(11).FontFamily(Fonts.Arial));
+                // HU #11033 — membrete institucional FLIT (HU #10856), igual que los certificados
+                // generados: bandas arriba y abajo, contenido dentro del margen FLIT.
+                FlitLetterhead.ApplyTo(page);
+                page.DefaultTextStyle(t => t.FontSize(11).FontFamily(FlitDocumentTheme.FontRegular));
 
-                page.Content().Column(col =>
+                FlitLetterhead.Content(page).Column(col =>
                 {
                     col.Spacing(8);
                     col.Item().AlignCenter().Text(t => t.Span("Contrato Privado de Mandato").Bold().FontSize(14));
