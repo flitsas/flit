@@ -326,6 +326,32 @@ describe('FirmaFurStep — consolidado como único disparador (HU #11052)', () =
     ).toBeInTheDocument();
   });
 
+  // HU #11050 (AC3) — lo que la cascada no pudo generar se avisa. Importa porque el gestor ya no tiene
+  // botones para generar documento por documento: sin aviso, el documento faltaría en silencio.
+  it('avisa qué documento de la cascada no se pudo generar, y el consolidado sí se entrega', async () => {
+    mocks.getAttachments.mockResolvedValue([]);
+    mocks.generarConsolidado.mockResolvedValue({
+      attachmentId: 'att-consolidado',
+      tipo: 'consolidado',
+      filename: 'consolidado.pdf',
+      sha256: 'cns123',
+      regenerado: true,
+      incompleto: false,
+      documentosFaltantes: [],
+      avisosCascada: ['impronta: provider_unavailable'],
+    });
+    const user = userEvent.setup();
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    await screen.findByRole('region', { name: 'Generación del FUR' });
+
+    await user.click(screen.getByRole('button', { name: 'Generar expediente consolidado' }));
+
+    const aviso = await screen.findByRole('alert');
+    expect(aviso).toHaveTextContent(/Expediente consolidado generado/i);
+    expect(aviso).toHaveTextContent(/No se pudo generar/i);
+    expect(aviso).toHaveTextContent(/proveedor no está disponible/i);
+  });
+
   // AC3 — trámite aprobado: ninguna acción de generación, solo consulta y descarga.
   it('en trámite aprobado no ofrece generar y lo explica', async () => {
     mocks.getAttachments.mockResolvedValue([FUR_DOC]);

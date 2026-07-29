@@ -554,4 +554,83 @@ public sealed class ConsolidadoHandlerTests
         consolidados.Should().ContainSingle();
         consolidados[0].Id.Should().Be(result!.Document.AttachmentId);
     }
+
+    // ── HU #11050 (AC3) — los fallos de la cascada se informan, no se descartan ──────────────────
+
+    private sealed class FailingRegenerator(string error) : IExpedienteHotDocumentsRegenerator
+    {
+        public Task<string?> RegenerateHotDocumentsAsync(Guid id, Guid tenantId, CancellationToken ct = default)
+            => Task.FromResult<string?>(error);
+    }
+
+    private sealed class FailingImprontaGenerator(string error) : IImprontaAutoGenerator
+    {
+        public Task<string?> TryGenerateAsync(Guid id, Guid tenantId, Guid userId, CancellationToken ct = default)
+            => Task.FromResult<string?>(error);
+    }
+
+    [Fact]
+    public async Task HandleAsync_CascadaFalla_ConsolidaYAvisaQueDocumentoNoSeGenero()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.ConsolidadoWizardVigente = false;
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var handler = new GenerarConsolidadoHandler(
+            _repo, _merger, _storage, null, new FailingRegenerator("organismo_requerido"));
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, TestContext.Current.CancellationToken);
+
+        // AC1/AC2: el consolidado se entrega igual…
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        // …y AC3: se informa qué no se pudo generar y por qué.
+        result!.AvisosCascada.Should().ContainSingle()
+            .Which.Should().Contain("documentos_del_expediente").And.Contain("organismo_requerido");
+    }
+
+    [Fact]
+    public async Task HandleAsync_ImprontaFalla_ConsolidaYAvisa()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "impronta"));
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var handler = new GenerarConsolidadoHandler(
+            _repo, _merger, _storage, null, null, new FailingImprontaGenerator("provider_unavailable"));
+
+        var (result, error) = await handler.HandleAsync(
+            id, tenantId, Guid.NewGuid(), TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        result!.AvisosCascada.Should().ContainSingle()
+            .Which.Should().Contain("impronta").And.Contain("provider_unavailable");
+    }
+
+    [Fact]
+    public async Task HandleAsync_CascadaSinFallos_NoDevuelveAvisos()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.ConsolidadoWizardVigente = false;
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, new FakeRegenerator());
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        result!.AvisosCascada.Should().BeNull();
+    }
 }

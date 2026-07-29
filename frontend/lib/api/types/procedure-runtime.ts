@@ -1235,6 +1235,12 @@ export interface GenerarConsolidadoResult {
    */
   incompleto?: boolean;
   documentosFaltantes?: string[] | null;
+  /**
+   * HU #11050 (AC3) — documentos de la cascada que NO se pudieron generar, con su motivo
+   * (`"impronta: provider_unavailable"`). Antes el fallo se descartaba en silencio y el consolidado
+   * salía sin ese documento sin que el gestor supiera por qué. No bloquea: el consolidado se entrega.
+   */
+  avisosCascada?: string[] | null;
 }
 
 // ── Participantes del portal (Slice 7B) — lado gestor autenticado ───

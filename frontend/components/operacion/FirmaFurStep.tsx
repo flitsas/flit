@@ -1565,6 +1565,30 @@ const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad', 'certi
  */
 const FUR_OBSERVACIONES_MAX = 300;
 
+/**
+ * HU #11050 (AC3) — traduce un aviso de la cascada (`"impronta: provider_unavailable"`) a algo que el
+ * gestor entienda. El backend manda `documento: motivo`; aquí se nombra el documento con su etiqueta
+ * conocida y se explica el motivo cuando es uno de los previsibles.
+ */
+function consolidadoAvisoLabel(aviso: string): string {
+  const [documento, motivo = ''] = aviso.split(':').map((s) => s.trim());
+  const nombre =
+    documento === 'documentos_del_expediente'
+      ? 'algunos documentos del expediente'
+      : documentLabel(documento);
+  const causa =
+    motivo.includes('organismo_requerido')
+      ? ' (falta el organismo de tránsito)'
+      : motivo.includes('provider_unavailable')
+        ? ' (el proveedor no está disponible; vuelve a generar el expediente en unos minutos)'
+        : motivo.includes('provider_validation')
+          ? ' (el proveedor rechazó los datos del trámite)'
+          : motivo
+            ? ` (${motivo})`
+            : '';
+  return `${nombre}${causa}`;
+}
+
 function FurSection({
   instanceId,
   modalidad,
@@ -1648,13 +1672,23 @@ function FurSection({
       // como incompleto se avisa qué falta, en vez de dejar al gestor con un expediente que el
       // organismo rechazará sin explicación.
       const generado = await tramitesClient.generarConsolidado(instanceId);
+      const avisos: string[] = [];
       if (generado?.incompleto) {
         const faltantes = (generado.documentosFaltantes ?? []).map(documentLabel).join(', ');
-        setConsolidadoError(
+        avisos.push(
           faltantes
-            ? `Consolidado generado, pero faltan documentos obligatorios: ${faltantes}.`
-            : 'Consolidado generado, pero faltan documentos obligatorios.',
+            ? `Faltan documentos obligatorios: ${faltantes}.`
+            : 'Faltan documentos obligatorios.',
         );
+      }
+      // HU #11050 (AC3) — documentos que la cascada no pudo generar. Importa desde que el gestor ya no
+      // tiene botones para generarlos a mano (HU #11052): sin este aviso, el documento simplemente no
+      // aparecería en el expediente y no habría forma de saber por qué.
+      for (const aviso of generado?.avisosCascada ?? []) {
+        avisos.push(`No se pudo generar ${consolidadoAvisoLabel(aviso)}.`);
+      }
+      if (avisos.length > 0) {
+        setConsolidadoError(`Expediente consolidado generado. ${avisos.join(' ')}`);
       }
       await load();
       onRefresh?.();
