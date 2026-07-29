@@ -63,16 +63,15 @@ public sealed class V1ProcedureKind
     };
 
     /// <summary>
-    /// Matrícula inicial. El tipo destino <c>MATRICULA_INICIAL</c> corresponde a la tipología
-    /// <c>matricula_inicial</c> del catálogo de V2 (5 pasos, un solo adquirente), que es la que
-    /// resuelve el wizard para <c>modalidad_entrada = matricula_inicial</c>.
+    /// Matrícula inicial. El tipo destino <c>MATRICULA_NUEVA</c> es el canónico del wizard
+    /// (<c>modalidad_entrada = matricula_inicial</c> → <c>CreateProcedureInstanceHandler</c>).
     /// </summary>
     public static readonly V1ProcedureKind Registration = new()
     {
         Nombre = "matrícula inicial",
         CliName = "registration",
         Tables = V1SourceTables.Registration,
-        ProcedureTypeCode = "MATRICULA_INICIAL",
+        ProcedureTypeCode = "MATRICULA_NUEVA",
         StateMap = RegistrationStateMap.Instance,
         AttachmentMap = RegistrationAttachmentMap.Instance,
         IdentityPolicy = IdentityAttachmentPolicy.Registration,

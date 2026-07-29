@@ -9,14 +9,15 @@ namespace Flit.Infrastructure.OtRules;
 
 /// <summary>
 /// Decide la ruta de preasignación de placa al radicar (HU #10608, Feature #10587). Solo matrícula
-/// inicial; exige preasignación activa (flag de la compañía + grant + allow_plate_preassign del OT).
-/// Con placa elegida y disponible la reserva y aterriza en <c>asignado</c> (Flujo A); sin rango/placa,
-/// <c>preasignado</c> (Flujo B). Patrón de <see cref="RnmcRequirementPolicy"/>.
+/// inicial. Placa del RUNT (<c>source=consultation</c>) → Flujo A (Asignado / Terminado según skip),
+/// sin exigir preasignación ni inventario. Con preasignación activa: placa de rango reservada →
+/// Flujo A; sin placa → <c>preasignado</c> (Flujo B). Patrón de <see cref="RnmcRequirementPolicy"/>.
 /// </summary>
 internal sealed class PlatePreassignPolicy : IPlatePreassignPolicy
 {
     private const string OfficeFieldKey = "transit_office_id";
     private const string PlateFieldKey = "plate";
+    private const string ConsultationSource = "consultation";
 
     private readonly FlitDbContext _context;
     private readonly IPlateRangeRepository _plateRepo;
@@ -51,21 +52,30 @@ internal sealed class PlatePreassignPolicy : IPlatePreassignPolicy
                 .ConfigureAwait(false);
 
             if (modalidad is null)
-                return (Found: false, Modalidad: (string?)null, Office: (string?)null, Plate: (string?)null);
+            {
+                return (
+                    Found: false,
+                    Modalidad: (string?)null,
+                    Office: (string?)null,
+                    Plate: (string?)null,
+                    PlateSource: (string?)null);
+            }
 
             var fields = await _context.ProcedureInstanceFieldValues
                 .AsNoTracking()
                 .Where(f => f.ProcedureInstanceId == instanceId
                     && (f.FieldKey == OfficeFieldKey || f.FieldKey == PlateFieldKey))
-                .Select(f => new { f.FieldKey, f.ValueText })
+                .Select(f => new { f.FieldKey, f.ValueText, f.Source })
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false);
 
+            var plateField = fields.FirstOrDefault(f => f.FieldKey == PlateFieldKey);
             return (
                 Found: true,
                 Modalidad: modalidad.ModalidadEntrada,
                 Office: fields.FirstOrDefault(f => f.FieldKey == OfficeFieldKey)?.ValueText,
-                Plate: fields.FirstOrDefault(f => f.FieldKey == PlateFieldKey)?.ValueText);
+                Plate: plateField?.ValueText,
+                PlateSource: plateField?.Source);
         }, cancellationToken).ConfigureAwait(false);
 
         // HU #10806 (Parte C) — distinguir "instancia no legible" (0 filas: binario/scope incorrecto) de
@@ -89,33 +99,67 @@ internal sealed class PlatePreassignPolicy : IPlatePreassignPolicy
             return PlateRouteResult.NoOffice;
         }
 
-        // HU #10806 — distinguir "compañía sin preasignación" (estándar) de "compañía activa pero OT
-        // mal configurado" (bloquear), en vez del antiguo bool que degradaba en silencio en ambos casos.
+        var plate = snapshot.Plate;
+        var hasFullPlate = !string.IsNullOrWhiteSpace(plate);
+        var plateFromRunt = hasFullPlate
+            && string.Equals(snapshot.PlateSource, ConsultationSource, StringComparison.OrdinalIgnoreCase);
+
+        // Placa completa (RUNT o elegida): Flujo A. Skip OFF → Asignado; Skip ON → Terminado.
+        // No exige preasignación activa ni que la placa exista en inventario (el OT no aprueba aún).
+        if (hasFullPlate)
+        {
+            if (!plateFromRunt)
+            {
+                // Best-effort: si está en el rango del OT, reservarla. Si no, igual Flujo A.
+                _ = await _plateRepo
+                    .TryReservePlateAsync(tenantId, officeId, plate!, instanceId, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            return await ResolveFlujoAAsync(tenantId, fromConsultation: plateFromRunt, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        // Sin placa: Flujo B solo si la ruta de preasignación está activa; si no, estándar.
         var eligibility = await _plateRepo
             .EvaluateAssignmentEligibilityAsync(tenantId, officeId, cancellationToken)
             .ConfigureAwait(false);
-        switch (eligibility)
+        return eligibility switch
         {
-            case PlateAssignmentEligibility.CompanyDisabled:
-                return PlateRouteResult.NotEnabled;
-            case PlateAssignmentEligibility.Misconfigured:
-                return PlateRouteResult.Misconfigured;
+            PlateAssignmentEligibility.CompanyDisabled => PlateRouteResult.NotEnabled,
+            PlateAssignmentEligibility.Misconfigured => PlateRouteResult.Misconfigured,
+            _ => PlateRouteResult.NoPlate,
+        };
+    }
+
+    /// <summary>
+    /// Flujo A: Asignado, o Terminado si la compañía tiene <c>plate_flow_skip_to_terminado</c>.
+    /// </summary>
+    private async Task<PlateRouteResult> ResolveFlujoAAsync(
+        Guid tenantId,
+        bool fromConsultation,
+        CancellationToken cancellationToken)
+    {
+        var skipToTerminado = await ReadInTenantScopeAsync(
+            tenantId,
+            async () => await _context.TenantOperationalPolicies
+                .AsNoTracking()
+                .Where(p => p.TenantId == tenantId)
+                .Select(p => (bool?)p.PlateFlowSkipToTerminado)
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false) == true,
+            cancellationToken).ConfigureAwait(false);
+
+        if (fromConsultation)
+        {
+            return skipToTerminado
+                ? PlateRouteResult.FromConsultationSkipToTerminado
+                : PlateRouteResult.FromConsultation;
         }
 
-        var plate = snapshot.Plate;
-        if (!string.IsNullOrWhiteSpace(plate))
-        {
-            var reserved = await _plateRepo
-                .TryReservePlateAsync(tenantId, officeId, plate, instanceId, cancellationToken)
-                .ConfigureAwait(false);
-            if (reserved)
-            {
-                return PlateRouteResult.Reserved;
-            }
-        }
-
-        // Ruta activa pero sin placa disponible elegida → se envía al OT para que asigne (Flujo B).
-        return PlateRouteResult.NoPlate;
+        return skipToTerminado
+            ? PlateRouteResult.ReservedSkipToTerminado
+            : PlateRouteResult.Reserved;
     }
 
     /// <summary>

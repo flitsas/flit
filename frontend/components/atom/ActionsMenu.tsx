@@ -29,11 +29,25 @@ export interface ActionsMenuProps {
   /** Texto visible del botón. Por defecto "Acciones". */
   triggerLabel?: string;
   className?: string;
+  /**
+   * Muestra un punto de alerta en el disparador (p. ej. hay una acción pendiente).
+   * No cambia el menú; solo llama la atención visualmente.
+   */
+  attention?: boolean;
+  /** Tooltip / título extra cuando `attention` es true. */
+  attentionHint?: string;
 }
 
 type MenuCoords = { top: number; left: number; minWidth: number };
 
-export function ActionsMenu({ items, ariaLabel, triggerLabel = "Acciones", className = "" }: ActionsMenuProps) {
+export function ActionsMenu({
+  items,
+  ariaLabel,
+  triggerLabel = "Acciones",
+  className = "",
+  attention = false,
+  attentionHint,
+}: ActionsMenuProps) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<MenuCoords | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -198,18 +212,28 @@ export function ActionsMenu({ items, ariaLabel, triggerLabel = "Acciones", class
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        aria-label={ariaLabel}
-        title={ariaLabel}
+        aria-label={attention && attentionHint ? `${ariaLabel}. ${attentionHint}` : ariaLabel}
+        title={attention && attentionHint ? attentionHint : ariaLabel}
         onClick={() => {
           setOpen((o) => {
             if (o) setCoords(null);
             return !o;
           });
         }}
-        className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition hover:bg-[#557EFF]/10"
+        className={`relative inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition hover:bg-[#557EFF]/10 ${
+          attention
+            ? "border-amber-400/70 bg-amber-50 text-[#92400e] hover:bg-amber-100/80 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/15"
+            : ""
+        }`}
       >
         <MoreVertical className="h-3.5 w-3.5" aria-hidden="true" />
         {triggerLabel}
+        {attention ? (
+          <span className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5" aria-hidden="true">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-white dark:ring-[#162744]" />
+          </span>
+        ) : null}
       </button>
       {menu}
     </div>

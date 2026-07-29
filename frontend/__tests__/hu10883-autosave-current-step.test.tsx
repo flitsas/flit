@@ -76,7 +76,7 @@ import { TramiteWizard } from '@/components/operacion/TramiteWizard';
 
 const CONFIG: ProcedureConfiguration = {
   id: 'type-1',
-  code: 'MATRICULA_INICIAL',
+  code: 'MATRICULA_NUEVA',
   name: 'Matrícula inicial',
   family: 'MATRICULAS',
   publishedAt: '2026-06-18T00:00:00Z',

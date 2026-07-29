@@ -113,6 +113,8 @@ export interface SettingsForm {
   onlyOwnVehicles: boolean;
   baulFirmasActivo: boolean;
   preasignacionPlacaActiva: boolean;
+  /** Con placa completa → Terminado directo (omite Asignado). */
+  plateFlowSkipToTerminado: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
   notificationTarget: NotificationTarget;
   metodosRecaudo: string[];
@@ -137,6 +139,7 @@ export function formFromSettings(settings: TenantSettings): SettingsForm {
     onlyOwnVehicles: settings.switchesMatricula.onlyOwnVehicles,
     baulFirmasActivo: settings.baulFirmasActivo,
     preasignacionPlacaActiva: settings.preasignacionPlacaActiva,
+    plateFlowSkipToTerminado: settings.plateFlowSkipToTerminado ?? false,
     enrutamientoSMTP: settings.enrutamientoSMTP,
     notificationTarget: settings.notificationTarget,
     metodosRecaudo: [...settings.metodosRecaudo],
@@ -172,6 +175,7 @@ export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
     },
     baulFirmasActivo: form.baulFirmasActivo,
     preasignacionPlacaActiva: form.preasignacionPlacaActiva,
+    plateFlowSkipToTerminado: form.plateFlowSkipToTerminado,
     enrutamientoSMTP: form.enrutamientoSMTP,
     notificationTarget: form.notificationTarget,
     metodosRecaudo: [...form.metodosRecaudo],
@@ -247,6 +251,12 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
     module: "Configuración Empresa",
     label: "Preasignación de placa activa",
     describe: (_i, c) => onOff(c.preasignacionPlacaActiva),
+  },
+  {
+    key: "plateFlowSkipToTerminado",
+    module: "Configuración Empresa",
+    label: "Omitir proceso del gestor (placa → Terminado)",
+    describe: (_i, c) => onOff(c.plateFlowSkipToTerminado),
   },
   {
     key: "enrutamientoSMTP",

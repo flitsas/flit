@@ -110,21 +110,24 @@ export function estadoChipStyle(value: string | null | undefined): EstadoChipSty
 }
 
 /**
- * Sub-estado INTERNO de la ruta de placa (Feature #10587 / HU #10785), ORTOGONAL al estado del
- * trámite: mientras avanza, el trámite permanece en `entregado`. Se muestra como un badge secundario
- * junto al chip de estado. `null` = trámite sin ruta de placa.
+ * Sub-estado INTERNO de la ruta de placa. Ortogonal a `entregado`.
+ * UI: Sin asignar / Asignado / Terminado.
  */
-export type PlateFlowStatus = 'preasignado' | 'asignado';
+export type PlateFlowStatus = 'preasignado' | 'asignado' | 'terminado';
 
-export const PLATE_FLOW_STATUSES: readonly PlateFlowStatus[] = ['preasignado', 'asignado'] as const;
+export const PLATE_FLOW_STATUSES: readonly PlateFlowStatus[] = [
+  'preasignado',
+  'asignado',
+  'terminado',
+] as const;
 
-/** Etiqueta del badge secundario (describe el progreso de la placa, no el estado del trámite). */
+/** Etiqueta del badge secundario. */
 export const PLATE_FLOW_LABELS: Record<PlateFlowStatus, string> = {
-  preasignado: 'En cola del OT',
-  asignado: 'Con placa',
+  preasignado: 'Sin asignar',
+  asignado: 'Asignado',
+  terminado: 'Terminado',
 };
 
-/** Colores del badge de sub-estado: preasignado = cian (en cola del OT); asignado = índigo (con placa). */
 export const PLATE_FLOW_CHIP_STYLES: Record<PlateFlowStatus, EstadoChipStyle> = {
   preasignado: {
     bg: 'rgba(6,182,212,0.12)',
@@ -135,6 +138,11 @@ export const PLATE_FLOW_CHIP_STYLES: Record<PlateFlowStatus, EstadoChipStyle> = 
     bg: 'rgba(99,102,241,0.12)',
     color: '#4f46e5',
     border: 'rgba(99,102,241,0.3)',
+  },
+  terminado: {
+    bg: 'rgba(16,185,129,0.12)',
+    color: '#047857',
+    border: 'rgba(16,185,129,0.3)',
   },
 };
 
@@ -153,26 +161,29 @@ export function plateFlowChipStyle(value: string | null | undefined): EstadoChip
 }
 
 /**
- * HU #10804 (Feature #10587) — ¿el OT puede DECIDIR (Aprobar/Rechazar) este trámite?
- *
- * - Ruta estándar (sin sub-estado de placa): sí, como siempre.
- * - Ruta de placa: solo cuando la placa está `asignado` **y** el SOAT está `vigente`. Mientras esté
- *   `preasignado` (falta asignar placa) o `asignado` sin SOAT vigente (el gestor aún no validó por
- *   RUNT ni cargó el PDF), Aprobar y Rechazar se ocultan juntos. Espeja el gate DURO del backend
- *   (SoatGate), que de todos modos rechazaría la aprobación por API.
+ * ¿El OT puede DECIDIR (Aprobar/Rechazar)?
+ * - Ruta estándar (sin sub-estado): sí.
+ * - Ruta de placa: solo en `terminado`.
  */
 export function puedeDecidirOt(
   plateFlowStatus: string | null | undefined,
-  soatEstado: string | null | undefined,
+  _soatEstado?: string | null | undefined,
 ): boolean {
-  if (!esPlateFlowStatus(plateFlowStatus)) return true; // ruta estándar
-  return plateFlowStatus === 'asignado' && soatEstado === 'vigente';
+  if (!esPlateFlowStatus(plateFlowStatus)) return true;
+  return plateFlowStatus === 'terminado';
 }
 
-/** ¿El trámite está en ruta de placa `asignado` pero aún sin SOAT vigente (esperando al gestor)? */
+/** ¿El gestor aún debe procesar (Asignado → Terminado)? */
+export function esperandoProcesoDelGestor(
+  plateFlowStatus: string | null | undefined,
+): boolean {
+  return plateFlowStatus === 'asignado';
+}
+
+/** @deprecated Usar esperandoProcesoDelGestor — se mantiene por compat de tests. */
 export function esperandoSoatDelGestor(
   plateFlowStatus: string | null | undefined,
-  soatEstado: string | null | undefined,
+  _soatEstado?: string | null | undefined,
 ): boolean {
-  return plateFlowStatus === 'asignado' && soatEstado !== 'vigente';
+  return esperandoProcesoDelGestor(plateFlowStatus);
 }

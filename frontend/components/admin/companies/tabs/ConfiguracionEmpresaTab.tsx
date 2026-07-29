@@ -70,6 +70,14 @@ export function ConfiguracionEmpresaTab({
         onChange={(v) => onChange({ preasignacionPlacaActiva: v })}
       />
 
+      <ToggleSwitch
+        id="plateFlowSkipToTerminado"
+        label="Omitir proceso del gestor (placa → Terminado)"
+        description="Si al radicar ya hay placa completa o del rango, el trámite pasa directo a Terminado (sin paso Asignado ni checks del gestor). Si está desactivado, el gestor debe procesar Asignado → Terminado antes de que el OT apruebe."
+        checked={form.plateFlowSkipToTerminado}
+        onChange={(v) => onChange({ plateFlowSkipToTerminado: v })}
+      />
+
       <div>
         <label htmlFor="enrutamientoSMTP" className="mb-1 block text-xs font-semibold">
           Enrutamiento de notificaciones
