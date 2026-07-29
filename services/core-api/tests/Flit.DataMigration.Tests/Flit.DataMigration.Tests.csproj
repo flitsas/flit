@@ -28,8 +28,16 @@
   <ItemGroup>
     <!--
       Los .golden.txt son la salida EXACTA que el migrador imprimía ANTES del refactor.
-      Se generaron una sola vez con el código previo (ver ConsoleReportGoldenTests) y a
-      partir de ahí son un invariante: si un cambio obliga a editarlos, el cambio está mal.
+      Se generaron una sola vez con el código previo (ver ConsoleReportGoldenTests).
+
+      Regla: un REFACTOR nunca debe obligar a editarlos. Si al reorganizar código un golden
+      empieza a fallar, lo que está mal es el refactor, no el golden.
+
+      Lo único que justifica editarlos es un cambio DELIBERADO de comportamiento (p. ej. el
+      PR #202 cambió el tipo destino de la matrícula de MATRICULA_INICIAL a MATRICULA_NUEVA).
+      En ese caso se edita en un commit APARTE, con el motivo y el PR de origen en el mensaje,
+      para que nadie pueda tapar una regresión reescribiendo la prueba y llamándolo
+      "actualizar el golden".
     -->
     <None Update="Fixtures/*.golden.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
