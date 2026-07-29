@@ -54,6 +54,12 @@ public sealed class AbortDraftHandler(
             await repository.MarkAbortedAsync(
                 master.Id, tenantId.Value, observation ?? string.Empty,
                 master.ManagerUser, master.ManagerMail, master.CompanyManagerDocument, ct);
+
+            // Paridad v1 (abortProcess/WithNews): avisar al gestor. Como este pre-trámite NO pasó por
+            // core-api, el Plano C no dispara ningún webhook; se encola aquí. Tras MarkAborted para no
+            // notificar una anulación que no se persistió.
+            await repository.EnqueueAbortWebhookAsync(
+                master.Id, tenantId.Value, observation ?? string.Empty, ct);
             return (true, null);
         }
 

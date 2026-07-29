@@ -98,6 +98,34 @@ public sealed class PreTramiteRepository(IctDbContext db) : IPreTramiteRepositor
             return 0;
         }, ct);
 
+    public Task EnqueueAbortWebhookAsync(
+        Guid masterId,
+        Guid tenantId,
+        string observation,
+        CancellationToken ct = default) =>
+        InTenantTransactionAsync(tenantId, async () =>
+        {
+            // Solo para pre-trámites NO materializados: para los materializados el webhook lo emite core-api
+            // por el Plano C (IctStateCallbackService encola la fila al recibir el callback de 'anulado').
+            // Aquí NO hay trámite en core-api, así que se encola directo, en la MISMA forma que ese callback
+            // (INSERT ... SELECT del master para tomar manager_id_transaction/transaction_type/url_web_hook).
+            // La observation vuelve al mismo gestor que la envió → sí viaja como mensaje (a diferencia del
+            // timeline). status_validation=6 (Anulado); el Job 5 la entrega con vocabulario v2.
+            var message = string.IsNullOrWhiteSpace(observation)
+                ? "Trámite anulado por el gestor"
+                : "ANULADO: " + observation;
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO ict.external_integration_webhook_master
+                    (id_transaction, tenant_id, manager_id_transaction, transaction_type, status_validation,
+                     message_validation, ict_estado, target_url)
+                SELECT m.id, m.tenant_id, m.manager_id_transaction, m.transaction_type, 6,
+                       {message}, 'anulado', m.url_web_hook
+                FROM ict.external_integration_master m
+                WHERE m.id = {masterId} AND m.tenant_id = {tenantId}
+                """, ct);
+            return 0;
+        }, ct);
+
     public Task RecordTimelineEventAsync(
         Guid masterId,
         Guid tenantId,
