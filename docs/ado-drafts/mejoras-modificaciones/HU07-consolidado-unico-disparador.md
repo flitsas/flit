@@ -4,11 +4,12 @@
 |-------|-------|
 | Tipo | `[FRONTEND]` |
 | Story Points | 3 |
-| Estado | Pendiente |
+| Estado | **Implementada y verificada** (Active en ADO, pendiente de PR) |
 | Feature padre | [FEATURE.md](FEATURE.md) |
-| ADO ID | _pendiente de registro_ |
+| ADO ID | **#11052** |
+| Commit | `298111f4` |
 | Ajuste origen | `modificaciones.txt:49` |
-| Depende de | HU05 (cascada completa), HU06 (guard por estado) |
+| Depende de | HU06 (guard por estado) — HU05 no era bloqueante, ver abajo |
 
 ## Descripción
 
@@ -53,7 +54,34 @@ parte del ajuste no requiere trabajo.
 seguir visibles, y el texto explicativo de la sección debe dejar de prometer generación por pasos
 (`:1810-1816` describe hoy el flujo antiguo).
 
-## Archivos previstos
+## Implementación (commit `298111f4`)
+
+| Cambio | Detalle |
+|--------|---------|
+| Botón "Generar FUR / certificado" | Retirado; `handleGenerate` y sus estados eliminados |
+| Botón "Generar Improntas" | Retirado; `ImprontaSection` queda como aviso informativo y desaparece cuando ya hay impronta |
+| Botón del consolidado | Único disparador. Renombrado a "Generar / Re-generar expediente consolidado" |
+| Guardado previo | `handleGenerateConsolidado` hereda el `guardarCampos()` que hacía el botón del FUR |
+| Textos | La sección ya no promete generación por pasos; explica que todo sale con el consolidado |
+| Estado final | Con `aprobado`/`anulado` no se ofrece generar; se explica que la documentación es definitiva |
+
+**HU05 no era bloqueante como suponía el plan.** La cascada de backend ya cubre FUR e impronta
+(HU #10860 / #11017), que son los dos únicos documentos que tenían botón en el paso. Mandato y
+solicitud virtual no se generan desde el wizard, y la firma de compraventa ya se había retirado en la
+HU #11019. Por eso esta HU pudo cerrarse antes que HU05, que sigue siendo necesaria para que esos
+documentos entren en la cascada.
+
+**Riesgo aceptado:** la cascada de impronta es best-effort y depende de Kyverum RUNT. Sin botón manual,
+un fallo del proveedor se reintenta volviendo a generar el consolidado (la cascada se re-dispara), así
+que no se pierde capacidad; pero el reintento ya no es explícito.
+
+## Verificación
+
+`npx tsc --noEmit` y `eslint` limpios · suite `firma-fur-step` **31/31**, con los tests de generación
+manual reescritos sobre el comportamiento nuevo (incluye el orden guardar-antes-de-generar y el caso de
+trámite aprobado).
+
+## Archivos
 
 - `frontend/components/operacion/FirmaFurStep.tsx`
-- Tests: `frontend/__tests__/firma-fur-step.test.tsx`
+- `frontend/__tests__/firma-fur-step.test.tsx`

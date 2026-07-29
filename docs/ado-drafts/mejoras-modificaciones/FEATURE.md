@@ -89,8 +89,8 @@ No generan HU (verificado contra código):
 | [HU04](HU04-fecha-sin-hora-certificados.md) | #11049 | BACKEND | 3 | Fecha AÑO/MES/DÍA sin hora en los certificados del consolidado | New |
 | [HU05](HU05-cascada-consolidado-completa.md) | #11050 | BACKEND | 5 | Cascada del consolidado extendida a compraventa, mandato y solicitud virtual | New |
 | [HU06](HU06-bloqueo-regeneracion-aprobado.md) | #11051 | BACKEND | 5 | Bloqueo de regeneración documental con el trámite aprobado | **Implementada y verificada** (`db22eb0d`) |
-| [HU07](HU07-consolidado-unico-disparador.md) | #11052 | FRONTEND | 3 | Consolidado como único disparador de generación en el paso FUR | Active — en curso |
-| [HU08](HU08-aviso-estado-real.md) | #11053 | FRONTEND | 3 | Aviso del detalle del trámite acorde al estado real | Active — en curso |
+| [HU07](HU07-consolidado-unico-disparador.md) | #11052 | FRONTEND | 3 | Consolidado como único disparador de generación en el paso FUR | **Implementada y verificada** (`298111f4`) |
+| [HU08](HU08-aviso-estado-real.md) | #11053 | FRONTEND | 3 | Aviso del detalle del trámite acorde al estado real | **Implementada y verificada** (`0efe1b33`) |
 | [HU09](HU09-ver-documentos-desde-listado.md) | #11054 | FRONTEND | 5 | Ver los documentos del expediente desde el listado de trámites | New |
 | [HU10](HU10-consolidado-en-tabla.md) | #11055 | FRONTEND | 3 | Acceso al PDF consolidado desde la tabla de trámites | New |
 | [HU11](HU11-resumen-listado-ampliado.md) | #11056 | BACKEND | 5 | Resumen del listado con actualización, gestor, fuente y firma por parte | New |

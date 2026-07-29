@@ -4,9 +4,10 @@
 |-------|-------|
 | Tipo | `[FRONTEND]` |
 | Story Points | 3 |
-| Estado | Pendiente |
+| Estado | **Implementada y verificada** (Active en ADO, pendiente de PR) |
 | Feature padre | [FEATURE.md](FEATURE.md) |
-| ADO ID | _pendiente de registro_ |
+| ADO ID | **#11053** |
+| Commit | `0efe1b33` |
 | Ajuste origen | `modificaciones.txt:42` |
 | Depende de | HU06, HU07 (el mensaje debe reflejar lo que el estado permite) |
 
@@ -56,8 +57,31 @@ El flag que lo dispara es `fullReadOnly`, que agrupa `entregado`, `aprobado`, `r
 2. El banner de borrador finalizado (`:750-767`) sí distingue su estado; el nuevo aviso debe convivir
    con él y con `SubsanacionPanel` sin solaparse.
 
-## Archivos previstos
+## Implementación (commit `0efe1b33`)
+
+Se extrae el aviso a `ReadOnlyStateNotice` con una tabla `READ_ONLY_NOTICE` por estado, en vez del
+texto fijo que se imprimía para cualquier estado no editable:
+
+| Estado | Mensaje | ¿Menciona generar? |
+|--------|---------|--------------------|
+| `entregado` | Enviado a tránsito — solo visualización | Sí (es cierto en este estado) |
+| `aprobado` | Trámite aprobado — documentación definitiva | No; dice explícitamente que ya no se regenera |
+| `rechazado` | Trámite rechazado — remite al motivo | No |
+| `anulado` | Trámite anulado — quedó sin efecto | No |
+| `preparado` | Borrador preparado — se puede radicar | No |
+
+Con fallback para cualquier estado no contemplado. Se conservan el banner propio del borrador
+finalizado y el `SubsanacionPanel`: un rechazado **con** subsanación activa no es solo-lectura, así que
+no llega a este aviso.
+
+## Verificación
+
+`npx tsc --noEmit` y `eslint` limpios · suite del wizard **50/50** (4 tests nuevos, uno por estado, que
+además comprueban que no se anuncia lo que el estado no permite) · `hu10874-subsanacion-wizard` sigue
+en verde. El test preexistente que asertaba `/solo visualización/i` no requirió cambios: el mensaje de
+`entregado` conserva esa expresión.
+
+## Archivos
 
 - `frontend/components/operacion/TramiteWizard.tsx`
-- Tests: `frontend/__tests__/tramite-wizard.test.tsx` (hoy `:333` asevera el texto "solo
-  visualización" — habrá que actualizarlo), `frontend/__tests__/hu10874-subsanacion-wizard.test.tsx`
+- `frontend/__tests__/tramite-wizard.test.tsx`
