@@ -152,7 +152,8 @@ export interface ActorsValidation {
 }
 
 /**
- * Valida requeridos + email + (traspaso) vendedor≠comprador por doc/email.
+ * Valida requeridos + formato de email + (traspaso) vendedor≠comprador por DOCUMENTO.
+ * El correo compartido entre las partes no bloquea desde la HU #11019.
  * Pura: sin estado, testeable de forma aislada. Ciudad/dirección son opcionales.
  */
 export function validateActors(
