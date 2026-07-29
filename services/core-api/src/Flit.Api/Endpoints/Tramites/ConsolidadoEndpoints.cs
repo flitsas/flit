@@ -21,10 +21,18 @@ internal static class ConsolidadoEndpoints
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             HttpContext http,
             GenerarConsolidadoHandler handler,
+            GeneracionDocumentalGestorGuard estadoGuard,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            // HU #11051 — con el trámite aprobado o anulado el expediente es definitivo: el gestor no lo
+            // regenera. El OT sí sigue regenerándolo tras aprobar, por su propia ruta (AdminOtEndpoints),
+            // que NO pasa por este gate.
+            var estadoError = await estadoGuard.CheckAsync(id, tenantId.Value, ct);
+            if (estadoError is not null)
+                return GeneracionEstadoProblem.From(estadoError);
 
             // HU #11017 - el usuario habilita la generacion en cascada de la impronta (el proveedor la exige).
             var (result, error) = await handler.HandleAsync(id, tenantId.Value, ResolveUserId(http.User), ct);

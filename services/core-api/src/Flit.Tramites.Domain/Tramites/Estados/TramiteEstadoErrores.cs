@@ -56,6 +56,13 @@ public static class TramiteEstadoErrores
     public const string PrendaDocumentoRequerido = "prenda_documento_requerido";
 
     /// <summary>
+    /// HU #11051 — el gestor pidió generar o regenerar documentación de un trámite en estado final
+    /// (aprobado/anulado), cuya documentación ya es definitiva (409). No aplica a la regeneración
+    /// interna del sistema (aprobación del OT, asignación de placa, identidad validada).
+    /// </summary>
+    public const string GeneracionBloqueadaEstadoFinal = "generacion_bloqueada_estado_final";
+
+    /// <summary>
     /// ADR-0036 §D9 (HU #10916) — al aprobar un trámite que exige mandato hay VARIOS mandatarios y
     /// ninguno cotejó con el usuario que aprueba: se debe elegir uno explícitamente (409, subsanable
     /// reintentando la transición con <c>mandateSignerId</c>).
