@@ -30,7 +30,10 @@ public sealed record ProcedureInstanceActorDto(
     string ActorType,
     string DocumentType,
     string DocumentNumber,
-    string FullName);
+    string FullName,
+    // HU #11014 — correo del actor para el expediente: cuando la identidad está apalancada o cubierta por
+    // el baúl no hay validación propia de la que leerlo. PII (Ley 1581): solo en respuestas autenticadas.
+    string? Email = null);
 
 public sealed record ProcedureInstanceDetailDto(
     Guid Id,
@@ -98,7 +101,7 @@ public sealed class GetProcedureInstanceHandler(IProcedureInstanceRepository rep
                     h.FromStatus, h.ToStatus, h.ChangedAt, h.Reason, BuildObservationMetadata(h.Metadata)))
                 .ToList(),
             e.Actors
-                .Select(a => new ProcedureInstanceActorDto(a.ActorType, a.DocumentType, a.DocumentNumber, a.FullName))
+                .Select(a => new ProcedureInstanceActorDto(a.ActorType, a.DocumentType, a.DocumentNumber, a.FullName, a.Email))
                 .ToList(),
             e.DraftFinalizedAt,
             e.PlateFlowStatus,

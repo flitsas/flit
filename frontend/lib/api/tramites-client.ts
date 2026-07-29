@@ -1093,6 +1093,25 @@ export const tramitesClient = {
     return res?.validations ?? [];
   },
 
+  /**
+   * HU #11014 — igual que `listBiometric` pero conservando la cobertura por firma del baúl, que el
+   * expediente necesita para rotular «firmado desde el baúl» en vez de hablar de un certificado de
+   * validación de identidad que no existe.
+   */
+  listBiometricExpediente: async (
+    instanceId: string,
+    tenantId?: string,
+  ): Promise<{ validations: BiometricValidation[]; firmaBaulPartes: string[] }> => {
+    const res = await request<BiometricValidationsResponse>(
+      `/api/v1/tramites/instances/${instanceId}/biometric`,
+      { headers: tenantHeader(tenantId) },
+    );
+    return {
+      validations: res?.validations ?? [],
+      firmaBaulPartes: res?.firmaBaulPartes ?? [],
+    };
+  },
+
   // HU #10234 — vista transversal del submódulo "Validaciones de Identidad": TODAS las validaciones
   // del tenant + KPIs. No es por-instancia. Devuelve { validations, stats }; default seguro si vacío.
   // HU #10348 — filtros opcionales: se serializan como query params; los vacíos/undefined no se envían

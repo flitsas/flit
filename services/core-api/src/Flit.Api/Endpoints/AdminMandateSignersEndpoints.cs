@@ -85,13 +85,15 @@ public static class AdminMandateSignersEndpoints
     private static async Task<IResult> ListAsync(
         Guid transitOfficeId,
         [FromServices] ListMandateSignersHandler handler,
+        [FromServices] Flit.Admin.Application.Identity.AdminIdentityMockOptions mockOptions,
         CancellationToken cancellationToken)
     {
         var result = await handler
             .HandleAsync(new ListMandateSignersQuery { TransitOfficeId = transitOfficeId }, cancellationToken)
             .ConfigureAwait(false);
 
-        return Results.Ok(new { data = result });
+        // HU #11028 — la consola solo ofrece "Simular validación" si el ambiente la tiene habilitada.
+        return Results.Ok(new { data = result, mockIdentityEnabled = mockOptions.Enabled });
     }
 
     private static async Task<IResult> ListCompaniesAsync(

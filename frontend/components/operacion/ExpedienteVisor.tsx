@@ -25,6 +25,11 @@ interface Props {
   vin: string;
   attachments: ProcedureAttachment[];
   biometric: BiometricValidation[];
+  /**
+   * HU #11014 — partes cuya identidad queda cubierta por la firma del baúl (ADR-0025 §4). Se rotulan
+   * como «firmado desde el baúl»: no hay validación biométrica ni certificado que mostrar.
+   */
+  firmaBaulPartes?: string[];
   orgTransito: { nombre?: string; ciudad?: string; codigo?: string };
 }
 
@@ -42,7 +47,11 @@ function D({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-/** Una parte es persona jurídica cuando su documento es NIT (HU #10856): valida el representante legal. */
+/**
+ * Una parte es persona jurídica cuando su documento es NIT (HU #10856): valida el representante legal.
+ * HU #11014 — mismo criterio que el wizard (`isJuridical` de ActorsForm), que además admite el tipo de
+ * persona explícito; aquí el detalle solo expone el documento, así que el NIT manda.
+ */
 function esPersonaJuridica(actor: Actor | null | undefined): boolean {
   return actor?.documentType === 'NIT';
 }
@@ -64,6 +73,7 @@ export default function ExpedienteVisor({
   vin,
   attachments,
   biometric,
+  firmaBaulPartes = [],
   orgTransito,
 }: Props) {
   const [mainTab, setMainTab] = useState<MainTab>('vehiculo');
@@ -210,7 +220,7 @@ export default function ExpedienteVisor({
                 <D label="Nombre" value={vendedor?.fullName} />
                 <D label="Tipo doc" value={vendedor?.documentType || 'CC'} />
                 <D label="Número" value={vendedor?.documentNumber} />
-                <D label="Email" value={vendedorBio?.email} />
+                <D label="Email" value={vendedorBio?.email || vendedor?.email || undefined} />
               </div>
             </div>
 
@@ -218,7 +228,12 @@ export default function ExpedienteVisor({
 
             <div>
               <SectionTitle>Validación de identidad</SectionTitle>
-              <IdentidadBlock bio={vendedorBio} instanceId={instanceId} certCache={certCache} />
+              <IdentidadBlock
+                bio={vendedorBio}
+                firmaBaul={firmaBaulPartes.includes('vendedor')}
+                instanceId={instanceId}
+                certCache={certCache}
+              />
             </div>
           </>
         )}
@@ -234,7 +249,7 @@ export default function ExpedienteVisor({
                 <D label="Nombre" value={comprador?.fullName} />
                 <D label="Tipo doc" value={comprador?.documentType || 'CC'} />
                 <D label="Número" value={comprador?.documentNumber} />
-                <D label="Email" value={compradorBio?.email} />
+                <D label="Email" value={compradorBio?.email || comprador?.email || undefined} />
               </div>
             </div>
 
@@ -242,7 +257,12 @@ export default function ExpedienteVisor({
 
             <div>
               <SectionTitle>Validación de identidad</SectionTitle>
-              <IdentidadBlock bio={compradorBio} instanceId={instanceId} certCache={certCache} />
+              <IdentidadBlock
+                bio={compradorBio}
+                firmaBaul={firmaBaulPartes.includes('comprador')}
+                instanceId={instanceId}
+                certCache={certCache}
+              />
             </div>
 
             {(orgTransito?.nombre || orgTransito?.codigo) && (
@@ -303,19 +323,24 @@ function RepresentanteLegalBlock({ bio }: { bio: BiometricValidation | null }) {
  */
 function IdentidadBlock({
   bio,
+  firmaBaul = false,
   instanceId,
   certCache,
 }: {
   bio: BiometricValidation | null;
+  /** HU #11014 — la identidad de la parte está cubierta por su firma del baúl (ADR-0025 §4). */
+  firmaBaul?: boolean;
   instanceId: string | null;
   certCache: React.RefObject<Map<string, string>>;
 }) {
   const estado = bio?.status;
-  const aprobado = estado === 'aprobado';
-  const rechazado = estado === 'rechazado';
-  const pendiente = estado === 'enviado' || estado === 'en_proceso';
+  const aprobado = !firmaBaul && estado === 'aprobado';
+  const rechazado = !firmaBaul && estado === 'rechazado';
+  const pendiente = !firmaBaul && (estado === 'enviado' || estado === 'en_proceso');
 
-  const { label, color } = aprobado
+  const { label, color } = firmaBaul
+    ? { label: 'Firmado desde el baúl de firmas', color: '#5B8A1F' }
+    : aprobado
     ? { label: 'Validada', color: '#5B8A1F' }
     : rechazado
       ? { label: 'Rechazada', color: '#FF4E00' }
@@ -323,7 +348,9 @@ function IdentidadBlock({
         ? { label: 'Pendiente', color: '#F9AC00' }
         : { label: 'Sin validación', color: '#9AA5B1' };
 
-  const validationId = bio?.id ?? null;
+  // HU #11014 — con firma del baúl NO hay validación biométrica ni certificado: se rotula como firmada
+  // desde el baúl y no se intenta descargar nada (antes hablaba de un certificado inexistente).
+  const validationId = firmaBaul ? null : (bio?.id ?? null);
   const [certUrl, setCertUrl] = useState<string | null>(
     () => (validationId ? (certCache.current.get(validationId) ?? null) : null),
   );
@@ -367,7 +394,7 @@ function IdentidadBlock({
           style={{ background: `color-mix(in srgb, ${color} 16%, transparent)`, color }}
           aria-hidden="true"
         >
-          {aprobado ? <Check className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+          {aprobado || firmaBaul ? <Check className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
         </span>
         <div>
           <p className="text-xs font-semibold" style={{ color }}>
@@ -378,6 +405,14 @@ function IdentidadBlock({
           )}
         </div>
       </div>
+
+      {/* HU #11014 — con firma del baúl no hay certificado del proveedor: se explica la fuente de la firma. */}
+      {firmaBaul && (
+        <p className="text-[11px] opacity-70" data-testid="identidad-firma-baul">
+          La identidad de esta parte se acredita con su firma registrada en el baúl de firmas; no
+          requiere validación biométrica ni certificado de identidad.
+        </p>
+      )}
 
       {/* Certificado de validación de identidad (visor perezoso). Solo cuando la validación está aprobada. */}
       {aprobado ? (

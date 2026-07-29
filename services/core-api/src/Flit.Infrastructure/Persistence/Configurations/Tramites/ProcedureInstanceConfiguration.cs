@@ -99,6 +99,14 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("plate_flow_status")
             .HasMaxLength(20);
 
+        // Migración V1→V2 — marca de trámite histórico importado (foto de solo lectura). Columna
+        // agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea
+        // para el modelo EF. Default false = trámite nativo de V2.
+        builder.Property(x => x.IsMigrated)
+            .HasColumnName("is_migrated")
+            .IsRequired()
+            .HasDefaultValue(false);
+
         // ADR-0036 §D9 (HU #10916) — mandatario que firma el mandato, resuelto al aprobar. Columna
         // agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea al
         // modelo EF. La FK a admin.mandate_signers (ON DELETE SET NULL) se declara en el DDL, no en EF

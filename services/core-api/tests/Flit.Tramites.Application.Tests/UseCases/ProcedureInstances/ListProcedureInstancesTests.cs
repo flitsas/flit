@@ -328,4 +328,76 @@ public sealed class ListProcedureInstancesTests
         m.SubsanacionCount.Should().Be(2);
         m.UltimoRechazoMotivo.Should().Be("Documentación incompleta");
     }
+
+    // HU #11020 — el dashboard necesita los DOS actores del traspaso para identificar el trámite.
+    [Fact]
+    public async Task HandleAsync_Traspaso_ExponeVendedorYComprador()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = new ProcedureInstance
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Guid.NewGuid(),
+            ReferenceNumber = "TR-1",
+            Status = TramiteEstado.Borrador,
+            ModalidadEntrada = "traspaso",
+            CreatedAt = DateTimeOffset.UtcNow,
+            Actors =
+            {
+                new ProcedureInstanceActor
+                {
+                    Id = Guid.NewGuid(),
+                    ActorType = "comprador",
+                    FullName = "Juan Comprador",
+                    DocumentNumber = "1020304050",
+                },
+                new ProcedureInstanceActor
+                {
+                    Id = Guid.NewGuid(),
+                    ActorType = "vendedor",
+                    FullName = "Ana Vendedora",
+                    DocumentNumber = "9998887776",
+                },
+            },
+        };
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+
+        var result = await _sut.HandleAsync(instance.TenantId, isSuperAdmin: false, ct);
+
+        result.Should().ContainSingle();
+        result[0].VendedorNombre.Should().Be("Ana Vendedora");
+        result[0].VendedorDocumento.Should().Be("9998887776");
+        result[0].CompradorNombre.Should().Be("Juan Comprador");
+    }
+
+    [Fact]
+    public async Task HandleAsync_MatriculaInicial_VendedorEnNull()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = new ProcedureInstance
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Guid.NewGuid(),
+            ReferenceNumber = "MI-1",
+            Status = TramiteEstado.Borrador,
+            ModalidadEntrada = "matricula_inicial",
+            CreatedAt = DateTimeOffset.UtcNow,
+            Actors =
+            {
+                new ProcedureInstanceActor
+                {
+                    Id = Guid.NewGuid(),
+                    ActorType = "comprador",
+                    FullName = "Juan Comprador",
+                    DocumentNumber = "1020304050",
+                },
+            },
+        };
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+
+        var result = await _sut.HandleAsync(instance.TenantId, isSuperAdmin: false, ct);
+
+        result[0].VendedorNombre.Should().BeNull();
+        result[0].VendedorDocumento.Should().BeNull();
+    }
 }

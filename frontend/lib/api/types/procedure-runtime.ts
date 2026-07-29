@@ -116,6 +116,12 @@ export interface InstanceSummary {
   vehiculoLinea: string | null;
   compradorNombre: string | null;
   compradorDocumento: string | null;
+  /**
+   * HU #11020 — parte SALIENTE del traspaso, para identificar el trámite desde el dashboard sin
+   * abrirlo. `null` en matrícula inicial (no hay vendedor).
+   */
+  vendedorNombre?: string | null;
+  vendedorDocumento?: string | null;
   organismoTransito: string | null;
   pasoActual: number;
   totalPasos: number;
@@ -190,6 +196,11 @@ export interface Actor {
   documentType: string;
   documentNumber: string;
   fullName: string;
+  /**
+   * HU #11014 — correo del actor. Respaldo del expediente cuando la identidad está apalancada o
+   * cubierta por el baúl y no hay validación propia de la que leerlo. PII (Ley 1581).
+   */
+  email?: string | null;
 }
 
 export interface ProcedureInstanceDetail {
@@ -892,6 +903,11 @@ export interface IniciarBiometriaResult {
 export interface BiometricValidationsResponse {
   validations: BiometricValidation[];
   provider: string;
+  /**
+   * HU #11014 (ADR-0025 §4) — partes cuya identidad queda cubierta por la FIRMA DEL BAÚL en vez de por
+   * una validación biométrica. Se rotulan como «firmado desde el baúl»: no hay certificado que mostrar.
+   */
+  firmaBaulPartes?: string[] | null;
 }
 
 /**
@@ -1213,6 +1229,12 @@ export interface ConsolidadoDocument {
 
 export interface GenerarConsolidadoResult {
   document: ConsolidadoDocument;
+  /**
+   * HU #11017 — el consolidado ya no se bloquea por documentos obligatorios faltantes: se genera y se
+   * marca. `incompleto` avisa al gestor y `documentosFaltantes` dice exactamente qué falta.
+   */
+  incompleto?: boolean;
+  documentosFaltantes?: string[] | null;
 }
 
 // ── Participantes del portal (Slice 7B) — lado gestor autenticado ───

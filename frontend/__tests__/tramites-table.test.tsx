@@ -39,6 +39,8 @@ function makeInstances(n: number): InstanceSummary[] {
       vehiculoLinea: 'Corolla',
       compradorNombre: `Comprador ${num}`,
       compradorDocumento: `100${num}`,
+      vendedorNombre: `Vendedor ${num}`,
+      vendedorDocumento: `200${num}`,
       organismoTransito: null,
       pasoActual: 2,
       totalPasos: 6,
@@ -376,5 +378,31 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
     // Abrir una fila navega con ?t=<tenant de la fila>.
     await userEvent.click(screen.getByText('AAA111'));
     expect(routerPush).toHaveBeenCalledWith('/tramites/a?t=ten-a');
+  });
+});
+
+// HU #11020 — el dashboard identifica el traspaso por sus DOS actores, sin abrir el trámite.
+describe('TramitesTable — actores del traspaso (HU #11020)', () => {
+  it('muestra las columnas Vendedor y Comprador con sus valores', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    expect(screen.getByText('Vendedor')).toBeInTheDocument();
+    expect(screen.getByText('Comprador')).toBeInTheDocument();
+    expect(screen.getByText('Vendedor 0001')).toBeInTheDocument();
+    expect(screen.getByText('Comprador 0001')).toBeInTheDocument();
+  });
+
+  it('en matrícula inicial (sin vendedor) la celda queda vacía sin romper la fila', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, modalidad: 'matricula_inicial', vendedorNombre: null, vendedorDocumento: null },
+    ]);
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    expect(screen.getByText('Comprador 0001')).toBeInTheDocument();
+    expect(screen.queryByText('Vendedor 0001')).toBeNull();
   });
 });

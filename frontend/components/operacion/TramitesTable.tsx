@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { formatFecha } from '@/lib/format/date';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, ArrowLeftRight, Car, Search, Star, X } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -80,14 +81,9 @@ function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean } | nu
   };
 }
 
+// HU #11018 — formato de negocio unico: AÑO/MES/DIA, sin hora.
 function shortDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('es-CO', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  return formatFecha(iso);
 }
 
 function vehiculo(item: InstanceSummary): string {
@@ -128,7 +124,9 @@ function stepLabel(item: InstanceSummary): string {
   return STEP_LABELS[item.modalidad]?.[item.pasoActual - 1] ?? '—';
 }
 
-const GRID_COLS = '1fr 1.3fr 1.2fr 1.2fr 0.9fr 1.4fr 1.1fr 1.3fr 0.9fr 1fr';
+// HU #11020 — se añade la columna Vendedor antes de Comprador (saliente → entrante), coherente con
+// el expediente y el resumen del último paso.
+const GRID_COLS = '1fr 1.2fr 1.2fr 1.1fr 1.1fr 0.9fr 1.3fr 1fr 1.2fr 0.9fr 1fr';
 // #1 — SuperAdmin: columna "Compañía" como primera columna (ve trámites de TODAS las empresas).
 const GRID_COLS_ADMIN = `1.2fr ${GRID_COLS}`;
 
@@ -237,6 +235,7 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           item.vin,
           item.referenceNumber,
           item.compradorNombre,
+          item.vendedorNombre,
           item.organismoTransito,
           item.companiaNombre,
         ]
@@ -603,6 +602,7 @@ function TableBody({
         >
           {showCompania && <div>Compañía</div>}
           <div>Placa</div>
+          <div>Vendedor</div>
           <div>Comprador</div>
           <div>VIN</div>
           <div>Vehículo</div>
@@ -811,6 +811,9 @@ function TramiteRow({
               {item.referenceNumber}
             </span>
           </span>
+        </span>
+        <span className="block text-[#162744] dark:text-white/90 truncate">
+          {item.vendedorNombre ?? '—'}
         </span>
         <span className="block text-[#162744] dark:text-white/90 truncate">
           {item.compradorNombre ?? '—'}

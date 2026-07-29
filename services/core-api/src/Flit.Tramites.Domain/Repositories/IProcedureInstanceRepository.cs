@@ -266,6 +266,15 @@ public interface IProcedureInstanceRepository
     Task SaveChangesAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// Olvida TODO lo rastreado por el contexto (HU #11029). Necesario cuando un flujo encadena varios
+    /// handlers que guardan sobre la misma instancia: los adjuntos borrados por el handler anterior
+    /// quedan como referencias muertas en las colecciones de navegación ya cargadas, y volver a
+    /// borrarlos o leerlos revienta con un error de concurrencia («se esperaba afectar 1 fila, se
+    /// afectaron 0») o intenta abrir del almacenamiento un archivo que ya no existe.
+    /// </summary>
+    void ResetTracking();
+
+    /// <summary>
     /// Persiste la unidad de trabajo protegiendo la concurrencia optimista de
     /// <c>procedure_instances.row_version</c> (RNF01, N 03): si otro proceso transicionó la
     /// instancia entre la carga y el commit, devuelve <c>false</c> SIN efectos parciales
@@ -333,4 +342,12 @@ public sealed record ProcedureInstanceStatusHistoryEntry(
     DateTimeOffset ChangedAt,
     Guid? ChangedByUserId,
     string? ChangedByName,
-    string? Reason);
+    string? Reason)
+{
+    /// <summary>
+    /// Metadata jsonb crudo del evento. En eventos de migración V1→V2 conserva el actor REAL de V1
+    /// (<c>usuario</c>/<c>usuario_rol</c>/<c>usuario_email</c>) y el marcador <c>origen=migration_v1</c>,
+    /// que la capa de aplicación usa para mostrar el usuario real en vez del sistema "Migración V1".
+    /// </summary>
+    public string? Metadata { get; init; }
+}

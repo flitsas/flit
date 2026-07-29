@@ -13,7 +13,8 @@ public sealed class AdminIdentityValidationService(
     IAdminIdentityValidationProvider provider,
     IAdminIdentityValidationRepository repository,
     IAdminIdentitySubjectLinker subjectLinker,
-    TimeProvider timeProvider) : IAdminIdentityValidationService
+    TimeProvider timeProvider,
+    IPersonIdentityLookup? personLookup = null) : IAdminIdentityValidationService
 {
     public Task<AdminIdentityValidationResult> SendAsync(
         AdminIdentitySubjectDescriptor subject,
@@ -80,6 +81,136 @@ public sealed class AdminIdentityValidationService(
 
         // 3) Sin identidad vigente por ningún lado: se inicia una nueva (el proveedor manda el correo).
         return await StartNewAsync(subject, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<AdminIdentityValidationResult?> LinkExistingAsync(
+        AdminIdentitySubjectDescriptor subject,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(subject);
+
+        var now = timeProvider.GetUtcNow();
+
+        // Si el propio sujeto ya la tiene vigente, no hay nada que vincular: se devuelve tal cual.
+        var own = await repository
+            .FindLatestBySubjectAsync(subject.TenantId, subject.SubjectType, subject.SubjectRef, cancellationToken)
+            .ConfigureAwait(false);
+        if (own is not null && own.EsAprobadaVigente(now))
+        {
+            return new AdminIdentityValidationResult(own, Reused: true);
+        }
+
+        var byDocument = await repository
+            .FindLatestApprovedByDocumentAsync(
+                subject.TenantId, subject.DocumentType, subject.DocumentNumber, cancellationToken)
+            .ConfigureAwait(false);
+        if (byDocument is not null && byDocument.EsAprobadaVigente(now))
+        {
+            await subjectLinker
+                .LinkAsync(
+                    subject.TenantId, subject.SubjectType, subject.SubjectRef, byDocument.Id,
+                    subject.ActorBy, cancellationToken)
+                .ConfigureAwait(false);
+
+            return new AdminIdentityValidationResult(byDocument, Reused: true);
+        }
+
+        // HU #11028 — la identidad de la persona casi nunca está en la tabla ADMIN: lo normal es que la
+        // haya validado dentro del trámite de una compañía (como comprador o vendedor). Se busca ahí,
+        // acotado a las compañías que operan con el organismo, y se ESPEJA como validación
+        // administrativa del sujeto conservando su fecha de aprobación, su vencimiento original y su
+        // certificado. Espejar (y no apuntar) es necesario porque el gate del mandato consulta las
+        // validaciones admin por sujeto; falsear la vigencia sería regalar 30 días nuevos.
+        if (personLookup is null || subject.TransitOfficeId is not { } transitOfficeId)
+            return null;
+
+        var origen = await personLookup
+            .FindVigenteInTransitOfficeAsync(
+                transitOfficeId, subject.DocumentType, subject.DocumentNumber, now, cancellationToken)
+            .ConfigureAwait(false);
+        if (origen is null)
+            return null;
+
+        var espejo = AdminIdentityValidation.Rehydrate(
+            Guid.NewGuid(),
+            subject.TenantId,
+            subject.SubjectType,
+            subject.SubjectRef,
+            subject.DocumentType,
+            subject.DocumentNumber,
+            subject.Name,
+            subject.Email,
+            AdminIdentityEstados.Aprobado,
+            origen.Provider,
+            captureUrl: null,
+            kyverumVerificationId: null,
+            webhookSecretEncrypted: null,
+            providerStatus: "aprobado",
+            providerPayload:
+                $"{{\"origen\":\"tramite\",\"validacion\":\"{origen.Id}\",\"tenant\":\"{origen.TenantId}\"}}",
+            certificateHash: origen.CertificateHash,
+            validatedAt: origen.ValidatedAt,
+            validUntil: origen.ValidUntil,
+            createdAt: now,
+            updatedAt: now);
+
+        await repository.AddAsync(espejo, cancellationToken).ConfigureAwait(false);
+        await subjectLinker
+            .LinkAsync(
+                subject.TenantId, subject.SubjectType, subject.SubjectRef, espejo.Id,
+                subject.ActorBy, cancellationToken)
+            .ConfigureAwait(false);
+
+        return new AdminIdentityValidationResult(espejo, Reused: true);
+    }
+
+    public async Task<AdminIdentityValidationResult> SimulateApprovedAsync(
+        AdminIdentitySubjectDescriptor subject,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(subject);
+
+        var now = timeProvider.GetUtcNow();
+
+        // Idempotente: con una identidad ya vigente (real o simulada) no se crea otra.
+        var own = await repository
+            .FindLatestBySubjectAsync(subject.TenantId, subject.SubjectType, subject.SubjectRef, cancellationToken)
+            .ConfigureAwait(false);
+        if (own is not null && own.EsAprobadaVigente(now))
+        {
+            return new AdminIdentityValidationResult(own, Reused: true);
+        }
+
+        var validationId = Guid.NewGuid();
+        var validation = AdminIdentityValidation.CreateSent(
+            subject.TenantId,
+            subject.SubjectType,
+            subject.SubjectRef,
+            subject.DocumentType,
+            subject.DocumentNumber,
+            subject.Name,
+            subject.Email,
+            AdminIdentityProviders.Mock,
+            captureUrl: null,
+            kyverumVerificationId: null,
+            webhookSecretEncrypted: null,
+            providerStatus: "simulada",
+            // Payload explícito: quien audite la fila sabe que NO hubo captura biométrica.
+            providerPayload: "{\"mock\":true,\"motivo\":\"validacion simulada para pruebas\"}",
+            now,
+            validationId);
+
+        // Certificado reconocible a simple vista: el sello del documento dirá MOCK-…, nunca una serie real.
+        validation.Approve(now, $"MOCK-{validationId:N}"[..24]);
+
+        await repository.AddAsync(validation, cancellationToken).ConfigureAwait(false);
+        await subjectLinker
+            .LinkAsync(
+                subject.TenantId, subject.SubjectType, subject.SubjectRef, validation.Id,
+                subject.ActorBy, cancellationToken)
+            .ConfigureAwait(false);
+
+        return new AdminIdentityValidationResult(validation, Reused: false);
     }
 
     public async Task<bool> ApproveAsync(

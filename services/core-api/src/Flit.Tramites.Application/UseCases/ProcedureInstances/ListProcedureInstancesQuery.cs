@@ -36,6 +36,10 @@ public sealed record InstanceSummaryDto(
     bool SignaturePending = false,            // traspaso: compraventa de alguna parte sin firmar
     bool CanSubmit = false,                   // gates de radicación satisfechos (mismo cómputo que el wizard)
     bool Prioritario = false,                 // HU #10536 — marcado prioritario (ordenamiento con primacía)
+                                              // HU #11020 — la parte SALIENTE del traspaso, para identificar el
+                                              // trámite en el dashboard sin abrirlo. null en matrícula inicial.
+    string? VendedorNombre = null,
+    string? VendedorDocumento = null,
     bool SubsanacionActiva = false,           // flag de edición sobre rechazado
     int SubsanacionCount = 0,                 // veces que se activó la subsanación
     string? UltimoRechazoMotivo = null);     // reason (texto libre) del último rechazo OT
@@ -50,6 +54,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     public const int MaxItems = 200;
 
     private const string BuyerActorType = "comprador";
+    private const string SellerActorType = "vendedor";
 
     /// <summary>
     /// Lista las instancias visibles para el caller. <paramref name="tenantId"/> <c>null</c> +
@@ -90,6 +95,9 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         var fv = e.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
         var buyer = e.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, BuyerActorType, StringComparison.OrdinalIgnoreCase));
+        // HU #11020 — el vendedor solo existe en traspaso; en matrícula queda null y la columna sale vacía.
+        var seller = e.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, SellerActorType, StringComparison.OrdinalIgnoreCase));
 
         var modalidad = TramiteModalidadEntradaCodes.FromCode(e.ModalidadEntrada)
                         ?? TramiteModalidadEntrada.MatriculaInicial;
@@ -122,6 +130,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             DeriveSignaturePending(e, modalidad),
             state.CanSubmit,
             e.Prioritario,
+            string.IsNullOrWhiteSpace(seller?.FullName) ? null : seller.FullName,
+            string.IsNullOrWhiteSpace(seller?.DocumentNumber) ? null : seller.DocumentNumber,
             e.SubsanacionActiva,
             e.SubsanacionCount,
             DeriveUltimoRechazoMotivo(e));

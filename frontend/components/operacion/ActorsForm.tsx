@@ -193,16 +193,13 @@ export function validateActors(
         vendedor.tipoDocumento === comprador.tipoDocumento &&
         vendedor.numeroDocumento.trim() !== '' &&
         vendedor.numeroDocumento.trim() === comprador.numeroDocumento.trim();
-      const sameEmail =
-        vendedor.email.trim() !== '' &&
-        vendedor.email.trim().toLowerCase() ===
-          comprador.email.trim().toLowerCase();
-      if (sameDoc || sameEmail) {
-        const msg =
-          'El vendedor y el comprador no pueden ser la misma persona (documento o correo coinciden).';
+      // HU #11019 — el CORREO COMPARTIDO ya no bloquea: es legítimo que ambas partes usen el mismo
+      // buzón (una empresa que gestiona por su contacto, un familiar que recibe por los dos). Lo que
+      // sigue prohibido es el mismo DOCUMENTO: ahí sí serían la misma persona.
+      if (sameDoc) {
         const ci = actors.indexOf(comprador);
-        if (sameDoc) byActor[ci].numeroDocumento = msg;
-        if (sameEmail) byActor[ci].email = msg;
+        byActor[ci].numeroDocumento =
+          'El vendedor y el comprador no pueden tener el mismo número de documento.';
       }
     }
   }
@@ -308,6 +305,18 @@ const RL_DOC_OPTIONS = DOC_OPTIONS.filter((o) => o.value !== 'NIT');
 /** ¿El actor debe consultarse como persona jurídica (RUES)? Jurídica explícita o documento NIT. */
 function isJuridical(actor: ProcedureActor): boolean {
   return actor.personType === 'juridical' || actor.tipoDocumento === 'NIT';
+}
+
+/**
+ * HU #11014 — deriva el tipo de persona del DOCUMENTO. El paso 1 siembra el documento del propietario
+ * (que en una empresa es un NIT) pero el actor nacía siempre 'natural', así que el paso del vendedor no
+ * cambiaba a persona jurídica ni pedía el representante legal. Con NIT el tipo es jurídica, sin
+ * excepción: el selector solo permite volver a natural cambiando también el documento (NIT → CC).
+ */
+function withDerivedPersonType(a: ProcedureActor): ProcedureActor {
+  return a.tipoDocumento === 'NIT' && a.personType !== 'juridical'
+    ? { ...a, personType: 'juridical' }
+    : a;
 }
 
 // ── HU #10886 — aviso de reenvío al editar el correo del sujeto de identidad ────────────────────
@@ -505,7 +514,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // pisa un documento ya escrito/persistido: solo siembra el campo vacío.
   const withOwnerSeed = (a: ProcedureActor): ProcedureActor =>
     ownerSeed && !a.numeroDocumento.trim()
-      ? { ...a, numeroDocumento: ownerSeed.numero, tipoDocumento: ownerSeed.tipo }
+      ? withDerivedPersonType({
+          ...a,
+          numeroDocumento: ownerSeed.numero,
+          tipoDocumento: ownerSeed.tipo,
+        })
       : a;
 
   // Rehidrata desde el backend cuando llegan actores cargados, respetando los
@@ -519,7 +532,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     setActors(
       roles.map((rol) => {
         const found = state.actors?.find((a) => a.rol === rol);
-        return withOwnerSeed(found ? { ...emptyActor(rol), ...found } : emptyActor(rol));
+        // HU #11014 — al rehidratar desde el backend también se deriva el tipo de persona: un actor
+        // persistido con NIT y personType 'natural' (creado antes de esta corrección) se corrige solo.
+        return withOwnerSeed(
+          found ? withDerivedPersonType({ ...emptyActor(rol), ...found }) : emptyActor(rol),
+        );
       }),
     );
   }

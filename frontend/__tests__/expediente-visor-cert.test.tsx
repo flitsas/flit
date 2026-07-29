@@ -88,3 +88,50 @@ describe('ExpedienteVisor — certificado de identidad (HU #10861)', () => {
     expect(tramitesClient.downloadBiometricCertificado).not.toHaveBeenCalled();
   });
 });
+
+describe('ExpedienteVisor — firma del baúl e identidad apalancada (HU #11014)', () => {
+  it('con firma del baúl rotula la fuente y no intenta descargar certificado', () => {
+    render(
+      <ExpedienteVisor
+        instanceId="inst-1"
+        fieldValues={[]}
+        comprador={comprador}
+        vendedor={null}
+        vin="VIN123"
+        attachments={[]}
+        biometric={[]}
+        firmaBaulPartes={['comprador']}
+        orgTransito={{}}
+      />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: /Comprador/ }));
+
+    expect(screen.getByText(/Firmado desde el baúl de firmas/i)).toBeInTheDocument();
+    expect(screen.getByTestId('identidad-firma-baul')).toBeInTheDocument();
+    expect(screen.queryByTestId('cert-iframe')).not.toBeInTheDocument();
+    expect(tramitesClient.downloadBiometricCertificado).not.toHaveBeenCalled();
+  });
+
+  it('sin validación propia muestra el correo del actor', () => {
+    const compradorConCorreo = {
+      ...comprador,
+      email: 'actor@empresa.co',
+    } as unknown as Actor;
+
+    render(
+      <ExpedienteVisor
+        instanceId="inst-1"
+        fieldValues={[]}
+        comprador={compradorConCorreo}
+        vendedor={null}
+        vin="VIN123"
+        attachments={[]}
+        biometric={[]}
+        orgTransito={{}}
+      />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: /Comprador/ }));
+
+    expect(screen.getByText('actor@empresa.co')).toBeInTheDocument();
+  });
+});
