@@ -672,6 +672,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     public Task SaveChangesAsync(CancellationToken ct) =>
         db.SaveChangesAsync(ct);
 
+    /// <summary>HU #11029 — ver <see cref="IProcedureInstanceRepository.ResetTracking"/>.</summary>
+    public void ResetTracking() => db.ChangeTracker.Clear();
+
     // N 03 (RNF01) — commit con guarda de concurrencia optimista: row_version es concurrency
     // token (lo incrementa el trigger tr_procedure_instances_row_version); si otro proceso
     // transicionó la instancia entre carga y commit, EF lanza DbUpdateConcurrencyException y
