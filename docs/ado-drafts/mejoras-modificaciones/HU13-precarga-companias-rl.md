@@ -4,9 +4,10 @@
 |-------|-------|
 | Tipo | `[FULLSTACK]` |
 | Story Points | 5 |
-| Estado | Pendiente |
+| Estado | **Implementada y verificada** (Active en ADO, pendiente de PR) |
 | Feature padre | [FEATURE.md](FEATURE.md) |
-| ADO ID | _pendiente de registro_ |
+| ADO ID | **#11058** |
+| Commit | `5354d155` |
 | Ajuste origen | `modificaciones.txt:7` |
 
 ## Descripción
@@ -44,11 +45,20 @@ Escenario: representante sin compañías
   que ampliarlo (de ahí el tipo FULLSTACK). El lookup por NIT del wizard ya expone datos por
   representante (`FindRepresentativeByNitResponse`), pero el de administración es otro camino.
 
-## Riesgo
+## Riesgo — CONFIRMADO, con un matiz
 
-**Pérdida silenciosa de datos:** si el formulario hoy envía la lista de compañías y la precarga está
-incompleta, un guardado normal puede estar **borrando asociaciones**. Comprobarlo antes de tocar la UI
-y, si se confirma, tratarlo como corrección de defecto (y revisar si hay datos ya afectados en DEV).
+El riesgo era real pero **no donde lo suponía el plan**:
+
+- Las **asociaciones** ya se conservaban: `DbLegalRepresentativeReader` proyecta el puente completo
+  (`LegalRepresentativeCompanies`) y el formulario ya precargaba `companies[]`.
+- Lo que se perdía era el **contacto de cada compañía**. El formulario mapeaba solo `nit` y `name`
+  (dejando email/dirección/ciudad/teléfono en blanco), y `UpsertRepresentedCompanyAsync` →
+  `RepresentedCompany.UpdateDetails` normaliza los vacíos a `null`. Resultado: **cada edición de un
+  representante borraba el contacto de todas sus compañías**. El propio comentario del formulario
+  documentaba la carencia sin advertir la consecuencia.
+
+⇒ Tratado como corrección de defecto. **Pendiente de negocio:** revisar si hay datos ya afectados
+en DEV.
 
 ## Archivos previstos
 

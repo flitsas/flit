@@ -96,12 +96,12 @@ No generan HU (verificado contra código):
 | [HU10](HU10-consolidado-en-tabla.md) | #11055 | FRONTEND | 3 | Acceso al PDF consolidado desde la tabla de trámites | **Implementada y verificada** (`2af73838`) |
 | [HU11](HU11-resumen-listado-ampliado.md) | #11056 | BACKEND | 5 | Resumen del listado con actualización, gestor, fuente y firma por parte | **Implementada y verificada** (`baf8b100`) |
 | [HU12](HU12-columnas-tabla-tramites.md) | #11057 | FRONTEND | 8 | Rediseño de columnas de la tabla de trámites | **Implementada y verificada** (`2af73838`) |
-| [HU13](HU13-precarga-companias-rl.md) | #11058 | FULLSTACK | 5 | Precarga de las compañías asociadas al editar un representante legal | New |
-| [HU14](HU14-renovar-identidad-firma-rl.md) | #11059 | FULLSTACK | 5 | Renovación de identidad o firma del baúl vencidas de un representante legal | New |
-| [HU15](HU15-renovar-identidad-mandatario.md) | #11060 | FULLSTACK | 5 | Renovación de la identidad vencida del mandatario del OT | New |
-| [HU16](HU16-seleccion-firma-tramite.md) | #11061 | FULLSTACK | 5 | Selección de la firma que se registra en el trámite | New |
-| [HU17](HU17-titulo-compania-configuracion.md) | #11062 | FRONTEND | 2 | Identificación de la compañía en el administrador de configuración | New |
-| [HU18](HU18-carga-escrituras-intuitiva.md) | #11063 | FRONTEND | 5 | Carga y actualización de escrituras por compañía más intuitiva | New |
+| [HU13](HU13-precarga-companias-rl.md) | #11058 | FULLSTACK | 5 | Precarga de las compañías asociadas al editar un representante legal | **Implementada y verificada** (`5354d155`) |
+| [HU14](HU14-renovar-identidad-firma-rl.md) | #11059 | FULLSTACK | 5 | Renovación de identidad o firma del baúl vencidas de un representante legal | **Implementada y verificada** (`5354d155`) |
+| [HU15](HU15-renovar-identidad-mandatario.md) | #11060 | FULLSTACK | 5 | Renovación de la identidad vencida del mandatario del OT | **Implementada y verificada** (`5354d155`) |
+| [HU16](HU16-seleccion-firma-tramite.md) | #11061 | FULLSTACK | 5 | Selección de la firma que se registra en el trámite | **Implementada y verificada** (`5354d155`) |
+| [HU17](HU17-titulo-compania-configuracion.md) | #11062 | FRONTEND | 2 | Identificación de la compañía en el administrador de configuración | **Implementada y verificada** (`5354d155`) |
+| [HU18](HU18-carga-escrituras-intuitiva.md) | #11063 | FRONTEND | 5 | Carga y actualización de escrituras por compañía más intuitiva | **Implementada y verificada** (`5354d155`) |
 | [HU19](HU19-area-clickeable-iconos.md) | #11064 | FRONTEND | 3 | Área clickeable de los botones de icono en las tablas | **Implementada y verificada** (`4605c4c0`) |
 | [HU20](HU20-correo-repetible-DESCARTADA.md) | — | — | 0 | Correo repetible entre comprador y vendedor | **Descartada — ya resuelta en `develop`; NO se registró en ADO** |
 | [HU21](HU21-orden-identidad-vendedor-primero.md) | #11065 | FRONTEND | 3 | Vendedor antes que comprador en el resumen de identidad | **Implementada y verificada** (`c2c60902`) |
@@ -114,9 +114,13 @@ No generan HU (verificado contra código):
 2. **Generación documental** — HU06 → HU07 → HU08 (el guard de backend antes de ocultar botones) ✅
 3. **Documentos generados** — HU01, HU02, HU04 en paralelo → HU03 → HU05 (después de HU06) ✅
 4. **Trámites** — HU11 → HU12; HU09 y HU10 en paralelo desde el inicio ✅
-5. **Compañías** — HU13, HU17, HU18 → HU14, HU15 → HU16 (después de HU01) — **pendiente**
+5. **Compañías** — HU13, HU17 → HU14, HU15 → HU16 → HU18 ✅
 
-**Progreso: 14/20 HUs · 59/86 SP.** Falta solo el bloque de compañías (#11058–#11063).
+**Progreso: 20/20 HUs · 86/86 SP — las 20 HUs implementadas y verificadas.**
+
+Pendiente para cerrar el Feature: verificación **visual** de los documentos generados y de las
+pantallas nuevas, renombre de la rama y **PR a `develop`** (gate humano de merge). El `Closed` del
+Feature es exclusivo del PO.
 
 ## Trazabilidad al registrar en ADO
 

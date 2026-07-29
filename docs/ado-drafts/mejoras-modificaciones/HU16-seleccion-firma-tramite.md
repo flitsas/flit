@@ -4,9 +4,10 @@
 |-------|-------|
 | Tipo | `[FULLSTACK]` |
 | Story Points | 5 |
-| Estado | Pendiente |
+| Estado | **Implementada y verificada** (Active en ADO, pendiente de PR) |
 | Feature padre | [FEATURE.md](FEATURE.md) |
-| ADO ID | _pendiente de registro_ |
+| ADO ID | **#11061** |
+| Commit | `5354d155` |
 | Ajuste origen | `modificaciones.txt:13` |
 | Depende de | HU01 (define cómo se plasma cada mecanismo) |
 | Posible schema | Sí — ver abajo |
@@ -62,13 +63,21 @@ añade el sello de identidad. Esa regla es hoy **implícita y global**. Al intro
 - Los generadores (`MandatoPdfGenerator`, `SolicitudVirtualPdfGenerator`, compraventa, FUR) deben leer
   el mecanismo elegido del contexto del documento, no deducirlo.
 
-## Schema (evaluar en Fase 2b)
+## Schema — NO hizo falta
 
-Persistir la elección probablemente exige una columna nueva (p. ej. `signature_mechanism` en el actor
-del trámite o en `procedure_instances`). Si se confirma: migración con `Up`/`Down`, validación con
-`db-schema-validator` (veredicto `OK_TO_MERGE_DB`) **antes** del PR, y ADR si introduce una entidad
-nueva. Alternativa sin schema: derivarlo de un `field_value`, pero conviene un campo tipado por ser
-dato de firma.
+El plan estimaba una columna nueva (`signature_mechanism`) con migración y `db-schema-validator`.
+**No fue necesario:** `procedure_instance_actors.metadata` (jsonb) ya persiste el representante legal
+elegido (HU #10937) a través de `ActorMetadata.RepresentanteLegal`. El mecanismo es un dato **de ese
+representante**, así que se añadió al mismo record: viaja por el camino que ya lo lleva hasta los
+generadores, está tipado en la capa de aplicación (`MecanismoFirma` normaliza y descarta valores
+desconocidos) y no exige DDL. Tampoco se recurrió a un `field_value` suelto.
+
+## Dónde va el guard (una sola costura)
+
+`FurCommand.ResolveVaultSignaturesAsync` es el **único** punto donde se resuelve la imagen de la firma
+del baúl. FUR, mandato, solicitud de trámite virtual y compraventa consumen todos `FirmaImagenes` de
+ese mismo ensamblado (`MandatoPdfGenerator.FirmaBaulDe` y equivalentes), así que un guard ahí honra la
+elección en los cuatro documentos sin tocar ningún generador.
 
 ## ⚠️ Antecedente a vigilar
 

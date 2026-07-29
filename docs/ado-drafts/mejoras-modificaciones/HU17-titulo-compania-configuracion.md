@@ -4,9 +4,10 @@
 |-------|-------|
 | Tipo | `[FRONTEND]` |
 | Story Points | 2 |
-| Estado | Pendiente |
+| Estado | **Implementada y verificada** (Active en ADO, pendiente de PR) |
 | Feature padre | [FEATURE.md](FEATURE.md) |
-| ADO ID | _pendiente de registro_ |
+| ADO ID | **#11062** |
+| Commit | `5354d155` |
 | Ajuste origen | `modificaciones.txt:33` |
 
 ## Descripción

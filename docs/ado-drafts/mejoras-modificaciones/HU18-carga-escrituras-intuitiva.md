@@ -4,9 +4,10 @@
 |-------|-------|
 | Tipo | `[FRONTEND]` |
 | Story Points | 5 |
-| Estado | Pendiente |
+| Estado | **Implementada y verificada** (Active en ADO, pendiente de PR) |
 | Feature padre | [FEATURE.md](FEATURE.md) |
-| ADO ID | _pendiente de registro_ |
+| ADO ID | **#11063** |
+| Commit | `5354d155` |
 | Ajuste origen | `modificaciones.txt:35` |
 
 ## Descripción
@@ -52,12 +53,23 @@ recorrido. Hoy el alta/edición vive **dentro del detalle del representante**, e
 "Representantes legales" (decisión de los ajustes de la HU #10929), que es justo lo que el negocio
 describe como poco intuitivo.
 
-## Punto a decidir con el PO
+## Alcance — DECIDIDO con el PO
 
-El ajuste dice "que sea más intuitivo" sin especificar. Propuesta a validar antes de implementar:
-acceso directo a escrituras desde la propia pestaña (sin entrar al detalle del representante),
-arrastrar y soltar el PDF, chip de vigencia con días restantes reutilizando el de `ActiveDeedsCollapse`
-y reemplazo en un paso conservando histórico. **Conviene mostrar una maqueta antes de codificar.**
+El ajuste decía "que sea más intuitivo" sin especificar. El PO eligió, sobre maqueta, la
+**sección propia de escrituras**: tercera sección de la pestaña, hermana de Representantes y Baúl.
+
+- Tabla por compañía: razón social + NIT · escritura · vigencia · estado + días restantes · acciones.
+- Chip de días restantes **reutilizando** `deedVigenciaTone`/`deedVigenciaLabel` de
+  `ActiveDeedsCollapse` (mismos umbrales que el wizard: ≤7 rojo, ≤30 ámbar).
+- Las compañías **sin escritura se listan igual**, con acceso directo a cargarla: son justo las que hay
+  que resolver.
+- Reemplazo en un paso (el histórico lo conserva el backend). Alta general con selector de compañía
+  solo cuando hay más de una.
+- El detalle del representante **conserva** su vista de escrituras: responde a otra pregunta
+  ("qué escrituras asoció ESTE representante"), no a "qué compañías están al día".
+
+Descartado por ahora: arrastrar y soltar el PDF (el panel de carga existente ya funciona y añadirlo
+habría duplicado el componente).
 
 ## Archivos previstos
 
