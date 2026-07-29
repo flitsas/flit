@@ -67,7 +67,8 @@ public sealed class IdentityCertificatePdfGenerator : IIdentityCertificateGenera
                     });
 
                     col.Item().PaddingTop(10)
-                        .Text($"Documento generado por FLIT el {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm} UTC.")
+                        // HU #11049 — AÑO/MES/DÍA sin hora (sin hora, el sufijo UTC ya no aporta).
+                        .Text($"Documento generado por FLIT el {FlitDocumentDate.Format(DateTimeOffset.UtcNow)}.")
                         .FontSize(7).FontColor(Colors.Grey.Medium);
                 });
             });
