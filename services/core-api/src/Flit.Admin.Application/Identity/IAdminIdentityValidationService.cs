@@ -65,6 +65,29 @@ public interface IAdminIdentityValidationService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// VINCULA al sujeto una identidad que la PERSONA ya validó (HU #11028). A diferencia de
+    /// <see cref="EnsureAsync"/>, NUNCA inicia una validación nueva ni envía correo: si no hay ninguna
+    /// aprobada y vigente para ese documento devuelve <c>null</c> y el llamador lo informa. Es la acción
+    /// del botón «Vincular validación existente»: sirve para el mandatario que ya validó como
+    /// representante legal o en otro organismo.
+    /// </summary>
+    Task<AdminIdentityValidationResult?> LinkExistingAsync(
+        AdminIdentitySubjectDescriptor subject,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// SIMULA una validación aprobada y vigente para el sujeto (HU #11028), sin pasar por el proveedor.
+    /// Existe para poder probar la firma del mandato en ambientes donde nadie puede completar una
+    /// biométrica real. Queda registrada con <see cref="AdminIdentityProviders.Mock"/> y un certificado
+    /// reconocible, así que jamás se confunde con una identidad real.
+    /// <para><b>El llamador debe haber verificado que la simulación está habilitada</b>
+    /// (<see cref="AdminIdentityMockOptions"/>): este método no conoce la configuración del ambiente.</para>
+    /// </summary>
+    Task<AdminIdentityValidationResult> SimulateApprovedAsync(
+        AdminIdentitySubjectDescriptor subject,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Aprueba la validación en <paramref name="now"/>: estampa <c>valid_until</c> (30 días) +
     /// <paramref name="certificateHash"/> y VINCULA la validación al sujeto
     /// (<c>LegalRepresentative.LinkIdentity</c>). Idempotente. <c>false</c> si la validación no existe.

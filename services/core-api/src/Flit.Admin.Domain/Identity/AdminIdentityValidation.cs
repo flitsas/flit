@@ -275,6 +275,13 @@ public static class AdminIdentityProviders
 {
     /// <summary>Kyverum Verify: captura remota + notificación por correo (reuso HU #10233).</summary>
     public const string Kyverum = "kyverum";
+
+    /// <summary>
+    /// Validación SIMULADA en ambientes de prueba (HU #11028). Se registra con este proveedor para que
+    /// una identidad simulada sea siempre distinguible de una real en la base de datos, en la UI y en
+    /// el sello de los documentos. Solo se crea con la simulación habilitada por configuración.
+    /// </summary>
+    public const string Mock = "mock";
 }
 
 /// <summary>Tipos de sujeto anclables a una validación de identidad administrativa (agnóstico).</summary>

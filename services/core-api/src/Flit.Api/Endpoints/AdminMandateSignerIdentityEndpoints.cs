@@ -53,6 +53,30 @@ public static class AdminMandateSignerIdentityEndpoints
             .Produces(StatusCodes.Status502BadGateway)
             .Produces(StatusCodes.Status503ServiceUnavailable);
 
+        // POST /link — vincula una identidad que la PERSONA ya validó (HU #11028). NO envía correo ni
+        // crea validaciones: 409 si esa persona no tiene ninguna aprobada y vigente.
+        group.MapPost("/link", LinkAsync)
+            .WithName("AdminMandateSignerIdentityLink")
+            .WithSummary("Vincula al mandatario una validación de identidad ya existente y vigente")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // POST /mock — SIMULA una validación aprobada (HU #11028). Solo en ambientes con la simulación
+        // habilitada por configuración; en cualquier otro responde 403. Es el mecanismo para probar la
+        // firma del mandato donde nadie puede completar una biométrica real.
+        group.MapPost("/mock", MockAsync)
+            .WithName("AdminMandateSignerIdentityMock")
+            .WithSummary("Simula una validación de identidad aprobada (solo ambientes de prueba)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
         return app;
     }
 
@@ -75,6 +99,124 @@ public static class AdminMandateSignerIdentityEndpoints
         [FromServices] IAdminIdentityValidationService service,
         CancellationToken cancellationToken) =>
         RunAsync(transitOfficeId, id, httpContext, reader, otStatus, service, resend: true, cancellationToken);
+
+    private static async Task<IResult> LinkAsync(
+        Guid transitOfficeId,
+        Guid id,
+        HttpContext httpContext,
+        [FromServices] IMandateSignerReader reader,
+        [FromServices] ITransitOfficeOperationalStatusReader otStatus,
+        [FromServices] IAdminIdentityValidationService service,
+        CancellationToken cancellationToken)
+    {
+        var (descriptor, error) = await BuildDescriptorAsync(
+            transitOfficeId, id, httpContext, reader, otStatus, requireEmail: false, cancellationToken)
+            .ConfigureAwait(false);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var result = await service.LinkExistingAsync(descriptor!, cancellationToken).ConfigureAwait(false);
+        if (result is null)
+        {
+            // Nada que vincular: la persona no tiene identidad aprobada y vigente en este tenant.
+            return Results.Json(
+                new { error = "sin_identidad_vigente" },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
+        return Results.Ok(ToResponse(result));
+    }
+
+    private static async Task<IResult> MockAsync(
+        Guid transitOfficeId,
+        Guid id,
+        HttpContext httpContext,
+        [FromServices] IMandateSignerReader reader,
+        [FromServices] ITransitOfficeOperationalStatusReader otStatus,
+        [FromServices] IAdminIdentityValidationService service,
+        [FromServices] AdminIdentityMockOptions mockOptions,
+        CancellationToken cancellationToken)
+    {
+        // Guarda de ambiente ANTES de tocar nada: una identidad simulada satisface el gate que habilita
+        // la firma del mandato, así que fuera de un ambiente de prueba esto no debe existir.
+        if (!mockOptions.Enabled)
+        {
+            return Results.Json(
+                new { error = "simulacion_deshabilitada" },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        var (descriptor, error) = await BuildDescriptorAsync(
+            transitOfficeId, id, httpContext, reader, otStatus, requireEmail: false, cancellationToken)
+            .ConfigureAwait(false);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var result = await service.SimulateApprovedAsync(descriptor!, cancellationToken).ConfigureAwait(false);
+        return Results.Ok(ToResponse(result));
+    }
+
+    /// <summary>
+    /// Arma el descriptor AGNÓSTICO del mandatario validando OT y alta de tenant. <paramref name="requireEmail"/>
+    /// distingue las acciones que mandan correo (send/resend) de las que no (link/mock): vincular una
+    /// identidad ya validada no necesita buzón.
+    /// </summary>
+    private static async Task<(AdminIdentitySubjectDescriptor? Descriptor, IResult? Error)> BuildDescriptorAsync(
+        Guid transitOfficeId,
+        Guid id,
+        HttpContext httpContext,
+        IMandateSignerReader reader,
+        ITransitOfficeOperationalStatusReader otStatus,
+        bool requireEmail,
+        CancellationToken cancellationToken)
+    {
+        var signer = await reader.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+        if (signer is null || signer.TransitOfficeId != transitOfficeId)
+        {
+            return (null, Results.NotFound(new { error = $"No existe el mandatario {id} en este organismo." }));
+        }
+
+        if (requireEmail && string.IsNullOrWhiteSpace(signer.Email))
+        {
+            return (null, Results.Json(
+                new { errors = new[] { new { field = "email", code = "email_requerido", message = "El mandatario no tiene correo para enviar la validación de identidad." } } },
+                statusCode: StatusCodes.Status422UnprocessableEntity));
+        }
+
+        var status = await otStatus.GetByIdAsync(transitOfficeId, cancellationToken).ConfigureAwait(false);
+        if (status is null || !status.HasTenant || status.TenantId is null)
+        {
+            return (null, Results.Json(new { error = "ot_sin_alta" }, statusCode: StatusCodes.Status422UnprocessableEntity));
+        }
+
+        var descriptor = new AdminIdentitySubjectDescriptor(
+            status.TenantId.Value,
+            AdminIdentitySubjectTypes.MandateSigner,
+            signer.Id,
+            signer.FullName,
+            signer.DocumentType,
+            signer.DocumentNumber,
+            // Sin correo (link/mock) se usa un marcador: el agregado exige el campo pero no se notifica a nadie.
+            string.IsNullOrWhiteSpace(signer.Email) ? "sin-correo@flit.local" : signer.Email!,
+            ResolveUserId(httpContext.User));
+
+        return (descriptor, null);
+    }
+
+    /// <summary>Respuesta común de las acciones de identidad. NUNCA expone documento ni correo (PII).</summary>
+    private static object ToResponse(AdminIdentityValidationResult result) => new
+    {
+        id = result.Validation.Id,
+        status = result.Validation.Status,
+        captureUrl = result.Validation.CaptureUrl,
+        validUntil = result.Validation.ValidUntil,
+        reused = result.Reused,
+        provider = result.Validation.Provider,
+    };
 
     private static async Task<IResult> RunAsync(
         Guid transitOfficeId,
