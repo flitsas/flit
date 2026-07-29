@@ -722,6 +722,32 @@ function PrevalidacionRow({
               Solo lectura (pertenece a un trámite)
             </span>
           )}
+          {(r.referenceNumber || (r.linkedProcedures && r.linkedProcedures.length > 0)) && (
+            <div className="text-[10px] leading-snug opacity-80 space-y-0.5" aria-label="Trámites vinculados">
+              <span className="font-semibold opacity-70">Trámites:</span>
+              {r.referenceNumber && (
+                <a
+                  href={`/tramites/${r.instanceId}`}
+                  className="block truncate underline"
+                  style={{ color: '#557EFF' }}
+                  title={r.referenceNumber}
+                >
+                  {r.referenceNumber}
+                </a>
+              )}
+              {(r.linkedProcedures ?? []).map((lp) => (
+                <a
+                  key={lp.instanceId}
+                  href={`/tramites/${lp.instanceId}`}
+                  className="block truncate underline"
+                  style={{ color: '#557EFF' }}
+                  title={`${lp.referenceNumber} (${lp.status})`}
+                >
+                  {lp.referenceNumber}
+                </a>
+              ))}
+            </div>
+          )}
           {!isTramite && isApproved && (
             <span className="inline-flex items-center gap-1 text-[10px] opacity-70">
               <ShieldAlert className="h-3 w-3 shrink-0" aria-hidden="true" />

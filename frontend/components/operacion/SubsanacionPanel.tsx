@@ -19,6 +19,13 @@ interface SubsanacionPanelProps {
   error: string | null;
   /** Re-radicado con éxito (AC2): el padre decide navegación/toast. */
   onReradicado: () => void;
+  /**
+   * Feature #11066 — si hay cambios sin Guardar, se bloquea Re-radicar.
+   * El padre (wizard) indica dirty tras editar fields/docs.
+   */
+  hasUnsavedChanges?: boolean;
+  /** Persiste cambios pendientes antes de re-radicar (informativo + obligatorio). */
+  onSaveBeforeReradicar?: () => Promise<boolean>;
 }
 
 const FALLBACK_MOTIVO =
@@ -42,6 +49,8 @@ export function SubsanacionPanel({
   loading,
   error,
   onReradicado,
+  hasUnsavedChanges = false,
+  onSaveBeforeReradicar,
 }: SubsanacionPanelProps) {
   const entry = useMemo(() => latestSubsanacionEntry(statusHistory), [statusHistory]);
   const observation = useMemo(() => parseSubsanacionObservation(entry?.metadata), [entry]);
@@ -79,6 +88,27 @@ export function SubsanacionPanel({
 
   const handleReradicar = async () => {
     if (!instanceId || submitting) return;
+    if (hasUnsavedChanges) {
+      if (onSaveBeforeReradicar) {
+        setSubmitting(true);
+        setSubmitError(null);
+        try {
+          const ok = await onSaveBeforeReradicar();
+          if (!ok) {
+            setSubmitError('Guarda los cambios antes de re-radicar.');
+            setSubmitting(false);
+            return;
+          }
+        } catch {
+          setSubmitError('No se pudieron guardar los cambios. Intenta de nuevo.');
+          setSubmitting(false);
+          return;
+        }
+      } else {
+        setSubmitError('Hay cambios sin guardar. Usa Guardar y luego re-radica.');
+        return;
+      }
+    }
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -206,9 +236,11 @@ export function SubsanacionPanel({
           className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
           style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
           title={
-            hasChecklist && !allResolved
-              ? 'Marca todos los ítems del checklist como corregidos para re-radicar'
-              : 'Re-radica el trámite al organismo de tránsito'
+            hasUnsavedChanges
+              ? 'Hay cambios sin guardar: se pedirá Guardar antes de re-radicar'
+              : hasChecklist && !allResolved
+                ? 'Marca todos los ítems del checklist como corregidos para re-radicar'
+                : 'Re-radica el trámite al organismo de tránsito'
           }
         >
           {submitting ? (
@@ -221,6 +253,12 @@ export function SubsanacionPanel({
             </>
           )}
         </button>
+        {hasUnsavedChanges && (
+          <p className="mt-2 text-[11px] opacity-70">
+            Hay cambios sin guardar. Guarda antes de re-radicar (o el botón intentará guardar al
+            confirmar).
+          </p>
+        )}
       </div>
     </section>
   );

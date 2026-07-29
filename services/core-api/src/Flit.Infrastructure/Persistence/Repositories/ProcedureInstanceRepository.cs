@@ -1,5 +1,6 @@
 using System.Globalization;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.ReadModels;
 using Flit.Tramites.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -327,6 +328,56 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 keys.Add(BiometricRules.IdentidadKey(v.TenantId, v.DocumentType, v.DocumentNumber));
 
         return keys;
+    }
+
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<LinkedProcedureSummary>>> ListLinkedProceduresByIdentityDocumentsAsync(
+        Guid tenantId,
+        IReadOnlyCollection<(string DocumentType, string DocumentNumber)> documents,
+        CancellationToken ct = default)
+    {
+        if (documents.Count == 0)
+            return new Dictionary<string, IReadOnlyList<LinkedProcedureSummary>>();
+
+        var requestedKeys = documents
+            .Select(d => BiometricRules.IdentidadKey(tenantId, d.DocumentType, d.DocumentNumber))
+            .ToHashSet(StringComparer.Ordinal);
+
+        var documentNumbers = documents
+            .Select(d => d.DocumentNumber.Trim())
+            .Where(n => n.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (documentNumbers.Count == 0)
+            return new Dictionary<string, IReadOnlyList<LinkedProcedureSummary>>();
+
+        var rows = await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => v.TenantId == tenantId
+                && v.ProcedureInstanceId != null
+                && v.ProcedureInstance != null
+                && v.ProcedureInstance.DeletedAt == null
+                && documentNumbers.Contains(v.DocumentNumber))
+            .Select(v => new
+            {
+                v.DocumentType,
+                v.DocumentNumber,
+                InstanceId = v.ProcedureInstanceId!.Value,
+                v.ProcedureInstance!.ReferenceNumber,
+                v.ProcedureInstance.Status,
+            })
+            .ToListAsync(ct);
+
+        return rows
+            .Where(r => requestedKeys.Contains(BiometricRules.IdentidadKey(tenantId, r.DocumentType, r.DocumentNumber)))
+            .GroupBy(r => BiometricRules.IdentidadKey(tenantId, r.DocumentType, r.DocumentNumber))
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<LinkedProcedureSummary>)g
+                    .DistinctBy(r => r.InstanceId)
+                    .OrderBy(r => r.ReferenceNumber, StringComparer.OrdinalIgnoreCase)
+                    .Select(r => new LinkedProcedureSummary(r.InstanceId, r.ReferenceNumber, r.Status))
+                    .ToList());
     }
 
     public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(

@@ -1554,16 +1554,8 @@ function ImprontaSection({
       await load();
       onRefresh?.();
 
-      // Descarga automática al equipo del usuario (además de quedar cargada en el trámite).
-      const { blob, filename } = await tramitesClient.downloadAttachment(instanceId, result.attachmentId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename || result.filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      // Feature #11066 — la impronta queda en el trámite; NO se descarga automáticamente.
+      // El operador la descarga desde el listado de adjuntos si la necesita.
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
       setError(
@@ -1762,7 +1754,7 @@ function FurSection({
       // HU #11017 — el consolidado se genera aunque falten documentos obligatorios: si vuelve marcado
       // como incompleto se avisa qué falta, en vez de dejar al gestor con un expediente que el
       // organismo rechazará sin explicación.
-      const generado = await tramitesClient.generarConsolidado(instanceId);
+      const generado = await tramitesClient.generarConsolidado(instanceId, undefined, true);
       if (generado?.incompleto) {
         const faltantes = (generado.documentosFaltantes ?? []).map(documentLabel).join(', ');
         setConsolidadoError(
@@ -2174,11 +2166,13 @@ function DownloadButton({
       const { blob, filename } = await tramitesClient.downloadAttachment(
         instanceId,
         d.id,
+        undefined,
+        d.filename,
       );
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = filename || d.filename;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();

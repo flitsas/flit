@@ -351,6 +351,8 @@ export function TramiteWizard(props: Props) {
   // shell dispara save() vía ref desde el footer "Guardar y continuar".
   const stepFormRef = useRef<WizardStepFormHandle>(null);
   const [continuing, setContinuing] = useState(false);
+  /** Feature #11066 — cambios locales pendientes de Guardar (docs/forms). */
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Preflight local (semáforo) para los pasos consulta/validación.
   const [preflight, setPreflight] = useState<PreflightSnapshot | null>(null);
@@ -477,9 +479,25 @@ export function TramiteWizard(props: Props) {
     setSubmitting(true);
     setSubmitError(null);
     try {
+      // Feature #11066 — antes de pasar a preparado: generar en cascada FUR + docs calientes +
+      // impronta (si aplica) + consolidado (force, desde cero), mismo comportamiento que el botón
+      // de consolidado pero automático.
+      try {
+        await tramitesClient.generarConsolidado(instanceId, undefined, true);
+      } catch (genErr) {
+        setSubmitError(
+          genErr instanceof Error
+            ? `No se pudieron generar los documentos al preparar: ${genErr.message}`
+            : 'No se pudieron generar los documentos al preparar.',
+        );
+        return;
+      }
       await tramitesClient.transitionInstance(instanceId, 'preparado');
       setInstanceStatus('preparado');
-      show('Trámite preparado: validaciones completas, listo para radicar.', 'success');
+      show(
+        'Trámite preparado: documentos generados y listo para radicar.',
+        'success',
+      );
       await refresh();
     } catch (err) {
       setSubmitError(
@@ -774,6 +792,19 @@ export function TramiteWizard(props: Props) {
           statusHistory={statusHistory}
           loading={instanceDetailLoading}
           error={instanceDetailError}
+          hasUnsavedChanges={hasUnsavedChanges}
+          onSaveBeforeReradicar={async () => {
+            if (!stepFormRef.current?.save) {
+              setHasUnsavedChanges(false);
+              return true;
+            }
+            const ok = await stepFormRef.current.save();
+            if (ok) {
+              setHasUnsavedChanges(false);
+              await refresh();
+            }
+            return ok;
+          }}
           onReradicado={() => {
             telemetry.trackComplete();
             show('Trámite re-radicado a tránsito correctamente.', 'success');
@@ -922,6 +953,43 @@ export function TramiteWizard(props: Props) {
             >
               <ChevronLeft className="h-3 w-3" /> Anterior
             </button>
+            {/* Feature #11066 — Guardar informativo (borrador / subsanación): persiste sin avanzar. */}
+            {!fullReadOnly && !draftFinalized && (isSavableStep || inSubsanacion) && instanceId && (
+              <button
+                type="button"
+                onClick={() => {
+                  void (async () => {
+                    if (!stepFormRef.current?.save) {
+                      setHasUnsavedChanges(false);
+                      show('No hay cambios pendientes en este paso.', 'success');
+                      return;
+                    }
+                    setContinuing(true);
+                    try {
+                      const ok = await stepFormRef.current.save();
+                      if (ok) {
+                        setHasUnsavedChanges(false);
+                        await refresh();
+                        show(
+                          inSubsanacion
+                            ? 'Cambios guardados. Ya puedes re-radicar cuando termines.'
+                            : 'Cambios guardados en el borrador.',
+                          'success',
+                        );
+                      }
+                    } finally {
+                      setContinuing(false);
+                    }
+                  })();
+                }}
+                disabled={continuing}
+                className="px-4 py-2 rounded-xl text-xs font-semibold border disabled:opacity-50"
+                style={{ borderColor: '#557EFF', color: '#557EFF' }}
+                title="Guarda la información editada sin avanzar de paso"
+              >
+                {continuing ? 'Guardando…' : 'Guardar'}
+              </button>
+            )}
             {/* Acción derecha del footer según el modo (HU #10350 + N 03 dos pasos):
                 · Preparado: "Radicar a tránsito" (preparado→entregado) en el paso de decisión.
                 · Solo visualización (otros estados no editables): sin acciones, solo se recorre.
@@ -2011,7 +2079,10 @@ function StepBody({
         <div className="space-y-4">
           <DocumentChecklist
             instanceId={instanceId}
-            onChanged={onRefresh}
+            onChanged={() => {
+              setHasUnsavedChanges(true);
+              onRefresh?.();
+            }}
             hideHeader
             modalidad={modalidad}
           />

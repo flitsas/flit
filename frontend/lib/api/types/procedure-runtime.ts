@@ -910,6 +910,12 @@ export interface BiometricValidationsResponse {
   firmaBaulPartes?: string[] | null;
 }
 
+export interface LinkedProcedureRef {
+  instanceId: string;
+  referenceNumber: string;
+  status: string;
+}
+
 /**
  * Espejo de TenantBiometricValidationDto (HU #10234): fila de la vista transversal del submódulo
  * "Validaciones de Identidad". Incluye el trámite al que pertenece (para navegar). Sin email ni
@@ -957,6 +963,11 @@ export interface TenantBiometricValidation {
    * en paralelo) — se muestra "—" sin romper la tabla.
    */
   email: string | null;
+  /**
+   * Feature #11066 — otros trámites del tenant con la misma identidad documental
+   * (excluye el trámite primario `instanceId` si existe).
+   */
+  linkedProcedures?: LinkedProcedureRef[];
 }
 
 /** KPIs agregados del submódulo de Validaciones (espejo de BiometricValidationStatsDto). */

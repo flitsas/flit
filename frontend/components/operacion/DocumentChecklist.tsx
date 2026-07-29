@@ -508,7 +508,7 @@ export function DocumentChecklist({
     instanceId,
     { modalidad },
   );
-  const { checklist, attachments, uploadingTipo, analyzingTipo, deletingId, ocrResults } =
+  const { checklist, attachments, uploadingTipos, analyzingTipos, deletingId, ocrResults } =
     state;
 
   const attachmentByTipo = new Map<string, ProcedureAttachment>();
@@ -568,6 +568,8 @@ export function DocumentChecklist({
       const { blob, filename, mimetype } = await tramitesClient.downloadAttachment(
         instanceId,
         previewAttachment.id,
+        undefined,
+        previewAttachment.filename,
       );
       const objectUrl = URL.createObjectURL(new Blob([blob], { type: mimetype }));
       const a = document.createElement('a');
@@ -667,8 +669,8 @@ export function DocumentChecklist({
                 key={item.key}
                 item={item}
                 attachment={attachment}
-                uploading={uploadingTipo === tipo}
-                analyzing={analyzingTipo === tipo}
+                uploading={uploadingTipos.has(tipo)}
+                analyzing={analyzingTipos.has(tipo)}
                 deleting={!!attachment && deletingId === attachment.id}
                 ocr={ocrResults[tipo]}
                 onUpload={(file) =>

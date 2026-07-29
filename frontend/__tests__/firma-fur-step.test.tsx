@@ -245,34 +245,20 @@ describe('FirmaFurStep — generar impronta', () => {
     expect(screen.queryByRole('button', { name: 'Generar Improntas' })).not.toBeInTheDocument();
   });
 
-  it('genera la impronta, la adjunta, dispara la descarga y muestra el radicado', async () => {
+  it('genera la impronta, la adjunta y muestra el radicado (sin descarga automática)', async () => {
     mocks.getAttachments.mockResolvedValue([]);
-    const clickSpy = vi.fn();
-    const origCreate = document.createElement.bind(document);
-    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-      const el = origCreate(tag) as HTMLElement;
-      if (tag === 'a') (el as HTMLAnchorElement).click = clickSpy;
-      return el;
-    });
-    globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock');
-    globalThis.URL.revokeObjectURL = vi.fn();
     const onRefresh = vi.fn();
     const user = userEvent.setup();
-    try {
-      render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" onRefresh={onRefresh} />);
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" onRefresh={onRefresh} />);
 
-      const button = await screen.findByRole('button', { name: 'Generar Improntas' });
-      mocks.getAttachments.mockResolvedValue([IMPRONTA_DOC]);
-      await user.click(button);
+    const button = await screen.findByRole('button', { name: 'Generar Improntas' });
+    mocks.getAttachments.mockResolvedValue([IMPRONTA_DOC]);
+    await user.click(button);
 
-      await waitFor(() => expect(mocks.generarImpronta).toHaveBeenCalledWith(INSTANCE));
-      expect(await screen.findByText(/radicado IMPR-TEST0001/)).toBeInTheDocument();
-      await waitFor(() => expect(mocks.downloadAttachment).toHaveBeenCalledWith(INSTANCE, 'att-impronta'));
-      expect(clickSpy).toHaveBeenCalled();
-      expect(onRefresh).toHaveBeenCalled();
-    } finally {
-      vi.mocked(document.createElement).mockRestore();
-    }
+    await waitFor(() => expect(mocks.generarImpronta).toHaveBeenCalledWith(INSTANCE));
+    expect(await screen.findByText(/radicado IMPR-TEST0001/)).toBeInTheDocument();
+    expect(mocks.downloadAttachment).not.toHaveBeenCalled();
+    expect(onRefresh).toHaveBeenCalled();
   });
 
   it('maneja el 409 organismo_requerido con un mensaje específico', async () => {
@@ -438,7 +424,14 @@ describe('FirmaFurStep — descarga de documentos', () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
     const docList = await screen.findByRole('list', { name: 'Documentos generados' });
     await user.click(within(docList).getByRole('button', { name: /Descargar/ }));
-    await waitFor(() => expect(mocks.downloadAttachment).toHaveBeenCalledWith(INSTANCE, 'att-fur'));
+    await waitFor(() =>
+      expect(mocks.downloadAttachment).toHaveBeenCalledWith(
+        INSTANCE,
+        'att-fur',
+        undefined,
+        'fur.txt',
+      ),
+    );
     expect(clickSpy).toHaveBeenCalled();
     vi.mocked(document.createElement).mockRestore();
   });

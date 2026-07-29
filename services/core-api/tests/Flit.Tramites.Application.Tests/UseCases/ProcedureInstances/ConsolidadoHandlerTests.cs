@@ -335,6 +335,29 @@ public sealed class ConsolidadoHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_ForceTrue_InvalidaCacheYRegenera()
+    {
+        // Feature #11066 — force=true salta la caché del wizard, invalida flags y reconstruye el PDF.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.ConsolidadoWizardVigente = true;
+        AddAttachment(instance, "consolidado", "consolidado.pdf", "%PDF-cons");
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, userId: null, force: true, CancellationToken.None);
+
+        error.Should().BeNull();
+        result!.Regenerado.Should().BeTrue();
+        instance.ConsolidadoWizardVigente.Should().BeTrue();
+        _storage.Saved.Should().NotBeEmpty();
+        await _repo.Received().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task HandleAsync_WizardInvalidado_RegeneraEnCascadaYMarcaVigente()
     {
         // HU #10860 (cascada β): al estar invalidado, se regeneran primero los documentos en caliente

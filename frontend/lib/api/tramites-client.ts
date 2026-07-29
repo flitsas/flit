@@ -784,6 +784,7 @@ export const tramitesClient = {
     instanceId: string,
     attachmentId: string,
     tenantId?: string,
+    fallbackFilename?: string,
   ): Promise<{ blob: Blob; filename: string; mimetype: string }> => {
     const res = await fetch(
       apiUrl(`/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}/download`),
@@ -809,7 +810,7 @@ export const tramitesClient = {
     } catch {
       // raw no era URI-encoded; se usa tal cual.
     }
-    return { blob, filename: filename || attachmentId, mimetype };
+    return { blob, filename: filename || fallbackFilename || attachmentId, mimetype };
   },
 
   // GET URL presignada de previsualización inline (ADR-0029). TTL ~10 min.
@@ -1430,9 +1431,10 @@ export const tramitesClient = {
 
   // POST generar expediente consolidado (matrícula inicial). Fusiona FUR + adjuntos.
   // 409 fur_requerido | documentos_incompletos | modalidad_no_soportada.
-  generarConsolidado: (instanceId: string, tenantId?: string) =>
+  // Feature #11066 — `force=true` invalida caché y regenera desde cero (sin duplicar).
+  generarConsolidado: (instanceId: string, tenantId?: string, force = false) =>
     request<GenerarConsolidadoResult>(
-      `/api/v1/tramites/instances/${instanceId}/consolidado`,
+      `/api/v1/tramites/instances/${instanceId}/consolidado${force ? '?force=true' : ''}`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),

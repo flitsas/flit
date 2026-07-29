@@ -63,16 +63,28 @@ public sealed class GenerarConsolidadoHandler(
         Guid id,
         Guid tenantId,
         CancellationToken ct = default) =>
-        HandleAsync(id, tenantId, userId: null, ct);
+        HandleAsync(id, tenantId, userId: null, force: false, ct);
 
     /// <param name="userId">
     /// Operador que pide el consolidado. Necesario solo para generar la impronta en cascada (el
     /// proveedor la exige); sin él, la impronta faltante simplemente no se autogenera.
     /// </param>
+    public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        Guid? userId,
+        CancellationToken ct = default) =>
+        HandleAsync(id, tenantId, userId, force: false, ct);
+
+    /// <param name="force">
+    /// Feature #11066 — cuando es <c>true</c>, invalida el consolidado vigente y lo regenera desde cero
+    /// (FUR en cascada, adjuntos, fusión), en lugar de servir el PDF cacheado.
+    /// </param>
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         Guid? userId,
+        bool force,
         CancellationToken ct = default)
     {
         // Grafo de checklist (incluye Attachments): permite que el gate "gestor manda" (matriz +
@@ -94,9 +106,19 @@ public sealed class GenerarConsolidadoHandler(
 
         // HU #10860 (ADR-0032) — caché explícita del expediente del wizard: si está vigente y el
         // consolidado persistido existe, se sirve sin regenerar (espejo del maestro, Feature #10701).
+        // Feature #11066 — `force=true` invalida y salta el atajo de caché para reconstruir desde cero.
         var consolidadoVigente = instance.Attachments
             .FirstOrDefault(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
-        if (instance.ConsolidadoWizardVigente && consolidadoVigente is not null)
+        if (force && (instance.ConsolidadoWizardVigente || consolidadoVigente is not null))
+        {
+            instance.InvalidarConsolidados();
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+            instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+            consolidadoVigente = instance.Attachments
+                .FirstOrDefault(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!force && instance.ConsolidadoWizardVigente && consolidadoVigente is not null)
         {
             var vigenteDto = new ConsolidadoDocumentDto(
                 consolidadoVigente.Id, consolidadoVigente.Tipo, consolidadoVigente.Filename, consolidadoVigente.Sha256);
