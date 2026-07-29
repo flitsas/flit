@@ -320,6 +320,8 @@ internal static class ProcedureInstanceEndpoints
                 // N 03 — el submit radica vía TramiteLifecycleService; códigos del contrato ADR-0022.
                 TramiteEstadoErrores.EstadoFinal => Results.Problem(statusCode: 422, title: TramiteEstadoErrores.EstadoFinal, detail: "El trámite está en estado final y no admite radicación."),
                 TramiteEstadoErrores.TransicionNoPermitida => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.TransicionNoPermitida, detail: "La instancia ya fue entregada o su estado no permite radicar."),
+                // ICT (servicio v1 pauseDraftProcess) — el trámite está pausado y no avanza hasta reanudarlo.
+                TramiteEstadoErrores.TramitePausado => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.TramitePausado, detail: "El trámite está pausado: reanúdelo antes de radicar."),
                 TramiteEstadoErrores.ConflictoConcurrencia => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia, detail: "El trámite fue modificado por otro proceso. Recargue e intente de nuevo."),
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
                 TramiteEstadoErrores.DocumentosIncompletos => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.DocumentosIncompletos, detail: "Faltan documentos obligatorios para radicar."),

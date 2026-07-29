@@ -148,6 +148,13 @@ export interface InstanceSummary {
   subsanacionCount?: number;
   /** Motivo (texto libre) del último rechazo del OT; null si no hay rechazo con motivo. */
   ultimoRechazoMotivo?: string | null;
+  /**
+   * ICT (servicio v1 pauseDraftProcess / bandera starts_procedure_in_paused): el trámite está pausado
+   * y no avanza (la radicación se bloquea) hasta reanudarlo. Default false para trámites de plataforma.
+   */
+  isPaused?: boolean;
+  /** Nota informativa mostrada cuando el trámite está pausado (origen ICT). null si no está pausado. */
+  pausedObservation?: string | null;
 }
 
 /** Respuesta de GET /instances. */

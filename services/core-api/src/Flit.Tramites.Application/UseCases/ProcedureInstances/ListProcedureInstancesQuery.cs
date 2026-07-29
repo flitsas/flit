@@ -42,7 +42,12 @@ public sealed record InstanceSummaryDto(
     string? VendedorDocumento = null,
     bool SubsanacionActiva = false,           // flag de edición sobre rechazado
     int SubsanacionCount = 0,                 // veces que se activó la subsanación
-    string? UltimoRechazoMotivo = null);     // reason (texto libre) del último rechazo OT
+    string? UltimoRechazoMotivo = null,      // reason (texto libre) del último rechazo OT
+                                              // ICT (servicio v1 pauseDraftProcess / bandera starts_procedure_in_paused):
+                                              // el trámite está pausado y no avanza; la observación es informativa (dashboard).
+                                              // TODO(ICT-PAUSE-UI) cerrado por el lado del backend con estos dos campos.
+    bool IsPaused = false,
+    string? PausedObservation = null);
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -134,7 +139,10 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             string.IsNullOrWhiteSpace(seller?.DocumentNumber) ? null : seller.DocumentNumber,
             e.SubsanacionActiva,
             e.SubsanacionCount,
-            DeriveUltimoRechazoMotivo(e));
+            DeriveUltimoRechazoMotivo(e),
+            e.IsPaused,
+            // Solo tiene sentido mostrar la nota cuando está pausado; se limpia al reanudar de todos modos.
+            e.IsPaused ? e.PausedObservation : null);
     }
 
     /// <summary>

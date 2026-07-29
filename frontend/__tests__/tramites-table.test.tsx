@@ -406,3 +406,26 @@ describe('TramitesTable — actores del traspaso (HU #11020)', () => {
     expect(screen.queryByText('Vendedor 0001')).toBeNull();
   });
 });
+
+describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_paused)', () => {
+  it('muestra el badge "Pausado" con la observación en el label cuando isPaused', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, isPaused: true, pausedObservation: 'En espera de liquidación' },
+    ]);
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    const badge = screen.getByLabelText('Trámite pausado: En espera de liquidación');
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveTextContent('Pausado');
+  });
+
+  it('no muestra el badge "Pausado" cuando el trámite no está pausado (default)', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1)); // isPaused undefined ⇒ sin badge
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    expect(screen.queryByText('Pausado')).toBeNull();
+  });
+});

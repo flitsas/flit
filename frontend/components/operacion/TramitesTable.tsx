@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatFecha } from '@/lib/format/date';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, ArrowLeftRight, Car, Search, Star, X } from 'lucide-react';
+import { AlertCircle, ArrowLeftRight, Car, Pause, Search, Star, X } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
@@ -846,6 +846,22 @@ function TramiteRow({
         </span>
         <span className="relative flex min-w-0 items-center gap-1.5">
           <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+          {/* ICT (pauseDraftProcess / starts_procedure_in_paused): el trámite está pausado y no avanza.
+              La observación (informativa) va en el tooltip. Badge neutro (paleta existente, sin colores nuevos). */}
+          {item.isPaused ? (
+            <span
+              className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-[#162744]/20 bg-[#162744]/[0.06] px-2 py-0.5 text-[10px] font-semibold text-[#162744]/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
+              title={item.pausedObservation ?? 'Trámite pausado'}
+              aria-label={
+                item.pausedObservation
+                  ? `Trámite pausado: ${item.pausedObservation}`
+                  : 'Trámite pausado'
+              }
+            >
+              <Pause className="h-3 w-3" aria-hidden="true" />
+              Pausado
+            </span>
+          ) : null}
           {showRejectPopover ? (
             <div ref={popoverRef} className="relative shrink-0">
               <button

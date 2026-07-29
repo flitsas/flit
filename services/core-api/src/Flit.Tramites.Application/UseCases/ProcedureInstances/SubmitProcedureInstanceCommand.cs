@@ -44,6 +44,14 @@ public sealed class SubmitProcedureInstanceHandler(
         if (TramiteEstado.EsFinal(instance.Status))
             return (null, TramiteEstadoErrores.EstadoFinal);
 
+        // ICT (paridad v1 pauseDraftProcess / starts_procedure_in_paused): un trámite PAUSADO no avanza.
+        // v1 bloqueaba con ForbiddenError salir de Borrador estando pausado; aquí se corta la radicación
+        // (manual o auto-encadenada tras identidad) en el mismo punto. La anulación va por AbortDraft y NO
+        // pasa por aquí, así que un trámite pausado sí se puede anular. is_paused default false ⇒ los
+        // trámites de plataforma nunca entran en esta rama.
+        if (instance.IsPaused)
+            return (null, TramiteEstadoErrores.TramitePausado);
+
         // La resolución de identidad por persona (HU #10350, #87) y los gates OT viven en
         // TramiteLifecycleService — este orquestador solo encadena las transiciones.
         if (instance.Status == TramiteEstado.Borrador)
