@@ -38,7 +38,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         ArgumentNullException.ThrowIfNull(data);
 
         var tramite = data.Tramite;
-        var parte = tramite.Radicador;
+        // HU #11030 — el mandato lo otorga quien VENDE (en matrícula, el radicador).
+        var parte = tramite.Mandante;
         var esJuridica = parte?.EsJuridica ?? false;
         var variante = MandatoTemplateResolver.Resolve(data.TemplateCode);
 
@@ -260,9 +261,17 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             row.RelativeItem().Column(sig =>
             {
                 sig.Item().Text(t => t.Span("MANDATARIO").Bold());
-                sig.Item().PaddingTop(28).Text("____________________________");
+                // HU #11030 — la firma del mandatario no se pintaba nunca: siempre salía la línea vacía
+                // aunque tuviera firma en el baúl o identidad validada. Misma precedencia que el mandante.
+                RenderFirmaMandatario(sig, data.Mandatario);
                 sig.Item().Text(t => t.Span(mandatario.Nombre).FontSize(10));
                 sig.Item().Text(t => t.Span($"C.C. {mandatario.Documento}").FontSize(10));
+                if (!string.IsNullOrWhiteSpace(data.Mandatario?.SelloIdentidad))
+                {
+                    foreach (var line in data.Mandatario!.SelloIdentidad!.Split(
+                                 '\n', StringSplitOptions.RemoveEmptyEntries))
+                        sig.Item().Text(t => t.Span(line.Trim()).FontSize(6).Light());
+                }
             });
         });
     }
@@ -270,6 +279,22 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     // HU #10997 — pinta la firma del MANDANTE según el mecanismo aplicable: imagen del baúl de firmas si
     // el trámite la resolvió para el rol (persona jurídica ⇒ representante legal), o la línea en blanco para
     // firma manuscrita en su ausencia. La llave del diccionario es el rol de la parte radicadora.
+    /// <summary>
+    /// Espacio de firma del MANDATARIO (HU #11030): imagen del baúl si la tiene; si no, la línea. El
+    /// sello de identidad, cuando lo hay, lo pinta el llamador bajo los datos del firmante.
+    /// </summary>
+    private static void RenderFirmaMandatario(ColumnDescriptor sig, MandatarioFirmante? mandatario)
+    {
+        if (mandatario?.FirmaImagen is { Length: > 0 } imagen)
+        {
+            sig.Item().PaddingTop(4).Height(32).Image(imagen).FitHeight();
+        }
+        else
+        {
+            sig.Item().PaddingTop(28).Text("____________________________");
+        }
+    }
+
     private static void RenderFirmaSlot(ColumnDescriptor sig, FurDocumentData tramite, string? rol, string underline)
     {
         if (rol is not null

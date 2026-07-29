@@ -516,7 +516,11 @@ public sealed class GenerarFurHandler(
             // ADR-0036 (HU #10914/#10915) — las firmas del mandato/solicitud virtual solo aparecen en
             // estado distinto de borrador (punto 18 del requerimiento).
             FirmasVisibles: !string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase),
-            TemplateFormat: templateFormat);
+            TemplateFormat: templateFormat)
+        {
+            // HU #11030 — tenant contra el que se resuelve el baúl del mandatario.
+            TenantIdParaFirmas = instance.TenantId,
+        };
     }
 
     /// <summary>
@@ -527,6 +531,48 @@ public sealed class GenerarFurHandler(
     /// imagen. NUNCA rompe el FUR: cualquier fallo de lectura se registra como warning y la parte cae al sello
     /// de texto. Devuelve null en ambos diccionarios si ninguna parte tiene firma de baúl.
     /// </summary>
+    /// <summary>
+    /// Firma del MANDATARIO para el contrato de mandato (HU #11030): imagen del baúl si la tiene
+    /// vigente, y si no el sello de su validación de identidad. Best-effort: cualquier fallo deja la
+    /// línea de firma en blanco, nunca rompe la generación del mandato.
+    /// </summary>
+    private async Task<(byte[]? Firma, string? Sello)> ResolveMandatarioFirmaAsync(
+        FurDocumentData data, MandateSignerCandidate signer, CancellationToken ct)
+    {
+        var tipoDoc = string.IsNullOrWhiteSpace(signer.TipoDocumento) ? "CC" : signer.TipoDocumento!.Trim();
+
+        try
+        {
+            var match = await _vaultPolicy
+                .ResolveAsync(data.TenantIdParaFirmas, tipoDoc, signer.Documento.Trim(), ct)
+                .ConfigureAwait(false);
+
+            if (match is not null && !string.IsNullOrWhiteSpace(match.StoragePath))
+            {
+                var stream = await storage.OpenReadAsync(match.StoragePath, ct).ConfigureAwait(false);
+                if (stream is not null)
+                {
+                    await using (stream.ConfigureAwait(false))
+                    {
+                        using var ms = new MemoryStream();
+                        await stream.CopyToAsync(ms, ct).ConfigureAwait(false);
+                        if (ms.Length > 0)
+                            return (ms.ToArray(), null);
+                    }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            GenerarFurLog.FirmaBaulNoDisponible(logger, ex, data.ProcedureInstanceId);
+        }
+
+        // Sin firma del baúl: sello con el certificado de su identidad vigente, si lo hay.
+        return signer.IdentityVigente && !string.IsNullOrWhiteSpace(signer.CertificadoIdentidad)
+            ? (null, $"Validación de identidad\nFirma {signer.CertificadoIdentidad}")
+            : (null, null);
+    }
+
     private async Task<(IReadOnlyDictionary<string, byte[]>? Images, IReadOnlyDictionary<string, FirmaBaulMetadata>? Metadata)> ResolveVaultSignaturesAsync(
         ProcedureInstance instance, bool esTraspaso, CancellationToken ct)
     {
@@ -664,7 +710,9 @@ public sealed class GenerarFurHandler(
             return null;
 
         var config = await _mandatePolicy.ResolveAsync(transitOfficeCode, ct);
-        var esJuridica = data.Radicador?.EsJuridica ?? false;
+        // HU #11030 — quien otorga el mandato es el MANDANTE (el vendedor en traspaso): su naturaleza es
+        // la que decide si el trámite exige mandato, no la de quien radica.
+        var esJuridica = data.Mandante?.EsJuridica ?? false;
         var exigeMandato = esJuridica || (config?.RequiresForNaturalPerson ?? false);
         if (!exigeMandato)
             return null;
@@ -676,7 +724,13 @@ public sealed class GenerarFurHandler(
         {
             var signer = await _mandateDirectory.GetByIdAsync(signerId, ct).ConfigureAwait(false);
             if (signer is not null)
-                mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento);
+            {
+                // HU #11030 — la firma del mandatario no se pintaba nunca: el contrato salía con la línea
+                // en blanco aunque el mandatario tuviera firma en el baúl o identidad validada. Misma
+                // precedencia que el resto de documentos: imagen del baúl > sello de identidad > línea.
+                var (firma, sello) = await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
+                mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento, firma, sello);
+            }
         }
 
         var mandatoData = new MandatoData(

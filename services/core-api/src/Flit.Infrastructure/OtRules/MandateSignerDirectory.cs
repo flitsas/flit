@@ -43,7 +43,7 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
                 && c.CompanyTenantId == companyTenantId
                 && c.IsActive
                 && s.IsActive
-            select new { s.Id, s.FullName, s.DocumentNumber, s.UserId })
+            select new { s.Id, s.FullName, s.DocumentNumber, s.UserId, s.SignatureVaultId, s.DocumentType })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -58,7 +58,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
         return
         [
             .. signers.Select(s => new MandateSignerCandidate(
-                s.Id, s.FullName, s.DocumentNumber, s.UserId, vigentes.Contains(s.Id))),
+                s.Id, s.FullName, s.DocumentNumber, s.UserId, vigentes.ContainsKey(s.Id),
+                s.SignatureVaultId, s.DocumentType, vigentes.GetValueOrDefault(s.Id))),
         ];
     }
 
@@ -72,7 +73,7 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 
         var signer = await _context.MandateSigners.AsNoTracking()
             .Where(s => s.Id == mandateSignerId && s.IsActive)
-            .Select(s => new { s.Id, s.FullName, s.DocumentNumber, s.UserId })
+            .Select(s => new { s.Id, s.FullName, s.DocumentNumber, s.UserId, s.SignatureVaultId, s.DocumentType })
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -83,7 +84,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 
         var vigentes = await LoadVigentIdentitiesAsync([signer.Id], cancellationToken).ConfigureAwait(false);
         return new MandateSignerCandidate(
-            signer.Id, signer.FullName, signer.DocumentNumber, signer.UserId, vigentes.Contains(signer.Id));
+            signer.Id, signer.FullName, signer.DocumentNumber, signer.UserId, vigentes.ContainsKey(signer.Id),
+            signer.SignatureVaultId, signer.DocumentType, vigentes.GetValueOrDefault(signer.Id));
     }
 
     /// <summary>
@@ -91,25 +93,33 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
     /// el futuro). La tabla tiene RLS por tenant (anclada al OT) y el directorio corre en el tenant
     /// gestora ⇒ lectura con <c>row_security = off</c>. En proveedor no relacional (tests) corre directo.
     /// </summary>
-    private async Task<HashSet<Guid>> LoadVigentIdentitiesAsync(
+    private async Task<Dictionary<Guid, string?>> LoadVigentIdentitiesAsync(
         IReadOnlyList<Guid> signerIds, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
 
-        async Task<List<Guid>> QueryAsync() => await _context.AdminIdentityValidations
-            .AsNoTracking()
-            .Where(v => v.SubjectType == AdminIdentitySubjectTypes.MandateSigner
-                && signerIds.Contains(v.SubjectRef)
-                && v.Status == AprobadoStatus
-                && (v.ValidUntil == null || v.ValidUntil > now))
-            .Select(v => v.SubjectRef)
-            .Distinct()
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+        // HU #11030 — además de la vigencia se trae el certificado, que alimenta el sello de firma del
+        // mandato cuando el mandatario no tiene firma en el baúl.
+        async Task<List<(Guid SubjectRef, string? Certificado)>> QueryAsync() =>
+            [.. (await _context.AdminIdentityValidations
+                .AsNoTracking()
+                .Where(v => v.SubjectType == AdminIdentitySubjectTypes.MandateSigner
+                    && signerIds.Contains(v.SubjectRef)
+                    && v.Status == AprobadoStatus
+                    && (v.ValidUntil == null || v.ValidUntil > now))
+                .OrderByDescending(v => v.ValidatedAt)
+                .Select(v => new { v.SubjectRef, v.CertificateHash })
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+                .Select(x => (x.SubjectRef, x.CertificateHash))];
+
+        static Dictionary<Guid, string?> ToMap(List<(Guid SubjectRef, string? Certificado)> rows) =>
+            rows.GroupBy(r => r.SubjectRef)
+                .ToDictionary(g => g.Key, g => g.Select(r => r.Certificado).FirstOrDefault(c => c is not null));
 
         if (!_context.Database.IsRelational())
         {
-            return [.. await QueryAsync().ConfigureAwait(false)];
+            return ToMap(await QueryAsync().ConfigureAwait(false));
         }
 
         // Si ya existe una transacción activa (p. ej. el scope de tenant del cliente que abre
@@ -123,7 +133,7 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             await _context.Database
                 .ExecuteSqlRawAsync("SET LOCAL row_security = off", cancellationToken)
                 .ConfigureAwait(false);
-            return [.. await QueryAsync().ConfigureAwait(false)];
+            return ToMap(await QueryAsync().ConfigureAwait(false));
         }
 
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -142,6 +152,6 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             }
         }).ConfigureAwait(false);
 
-        return [.. vigentes];
+        return ToMap(vigentes);
     }
 }

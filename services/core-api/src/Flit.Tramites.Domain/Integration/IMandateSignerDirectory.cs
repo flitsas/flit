@@ -9,7 +9,13 @@ namespace Flit.Tramites.Domain.Integration;
 /// mandatario sin identidad vigente NO puede firmar (se exige validar antes de aprobar).
 /// </summary>
 public sealed record MandateSignerCandidate(
-    Guid Id, string Nombre, string Documento, Guid? UserId, bool IdentityVigente = true);
+    Guid Id, string Nombre, string Documento, Guid? UserId, bool IdentityVigente = true,
+    // HU #11030 — insumos de la FIRMA del mandatario en el contrato de mandato, con la misma
+    // precedencia que el resto de documentos: firma del baúl si la tiene, y si no el certificado de su
+    // validación de identidad vigente. Sin ninguno, el PDF deja la línea en blanco.
+    Guid? SignatureVaultId = null,
+    string? TipoDocumento = null,
+    string? CertificadoIdentidad = null);
 
 /// <summary>
 /// Puerto para consultar los mandatarios registrados por el OT para una compañía gestora (ADR-0036,

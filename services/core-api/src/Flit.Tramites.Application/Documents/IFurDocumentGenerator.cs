@@ -112,6 +112,23 @@ public sealed record FurDocumentData(
     public DocumentParte? Radicador => Partes.FirstOrDefault(p =>
         string.Equals(p.Rol, "comprador", StringComparison.OrdinalIgnoreCase))
         ?? (Partes.Count > 0 ? Partes[0] : null);
+
+    /// <summary>
+    /// Parte que otorga el MANDATO (HU #11030): en un traspaso es quien VENDE el vehículo —es su empresa
+    /// la que apodera al mandatario para adelantar el trámite—, y en matrícula inicial no hay vendedor,
+    /// así que es la parte radicadora. Antes el mandato se emitía siempre a nombre del radicador, de modo
+    /// que en un traspaso nombraba al comprador como mandante: el documento apoderaba a la parte
+    /// equivocada.
+    /// </summary>
+    /// <summary>
+    /// Tenant contra el que se resuelven las firmas del baúl (HU #11030). El baúl es por tenant; el
+    /// ensamblador lo fija desde la instancia del trámite.
+    /// </summary>
+    public Guid TenantIdParaFirmas { get; init; }
+
+    public DocumentParte? Mandante =>
+        Partes.FirstOrDefault(p => string.Equals(p.Rol, "vendedor", StringComparison.OrdinalIgnoreCase))
+        ?? Radicador;
 }
 
 /// <summary>Un documento generado, listo para persistir vía IAttachmentStorage.</summary>
@@ -151,12 +168,20 @@ public interface ISolicitudVirtualGenerator
 /// gestora. <c>null</c> mientras el trámite está en <i>preparado</i> y aún no se ha elegido/filtrado el
 /// firmante (se regenera al aprobar, HU #10916): el PDF pinta placeholders y no muestra el bloque de firmas.
 /// </summary>
-public sealed record MandatarioFirmante(string? Nombre, string? Documento);
+public sealed record MandatarioFirmante(
+    string? Nombre,
+    string? Documento,
+    // HU #11030 — firma del MANDATARIO con la misma precedencia que el resto de documentos: imagen del
+    // baúl si la tiene, y si no el sello de su validación de identidad. Sin ninguna, el PDF deja la
+    // línea en blanco (comportamiento previo).
+    byte[]? FirmaImagen = null,
+    string? SelloIdentidad = null);
 
 /// <summary>
 /// Datos para el <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). El MANDANTE es la parte que
-/// radica (<see cref="FurDocumentData.Radicador"/>): persona natural a nombre propio, o el representante
-/// legal en nombre de la empresa. El MANDATARIO depende del OT: institucional fijo (Sabaneta UT-SETSA /
+/// otorga el poder (<see cref="FurDocumentData.Mandante"/>): el VENDEDOR en un traspaso —su empresa es
+/// la que apodera— y el radicador en matrícula inicial. Persona natural a nombre propio, o el
+/// representante legal en nombre de la empresa. El MANDATARIO depende del OT: institucional fijo (Sabaneta UT-SETSA /
 /// Bello UT-MAB, tomado de <see cref="InstitutionalMandataryName"/>/<see cref="InstitutionalMandataryNit"/>)
 /// o el firmante persona (<see cref="Mandatario"/>) de la plantilla genérica/Bello.
 /// <para><b>Texto legal:</b> transcrito de las plantillas legacy de FLIT 1.0; queda marcado para
