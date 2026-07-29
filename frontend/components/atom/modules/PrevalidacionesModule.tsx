@@ -111,7 +111,9 @@ export function PrevalidacionesModule() {
   const [applied, setApplied] = useState<PrevalidacionesUiFilters>(EMPTY_PREVALIDACIONES_FILTERS);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appliedRef = useRef(applied);
-  appliedRef.current = applied;
+  useEffect(() => {
+    appliedRef.current = applied;
+  }, [applied]);
 
   const [showForm, setShowForm] = useState(false);
   const [prefillNueva, setPrefillNueva] = useState<PrefillNueva | undefined>(undefined);

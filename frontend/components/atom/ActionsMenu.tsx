@@ -60,7 +60,8 @@ export function ActionsMenu({ items, ariaLabel, triggerLabel = "Acciones", class
 
   useLayoutEffect(() => {
     if (!open) {
-      setCoords(null);
+      // Coordenadas solo importan con el menú abierto; al cerrar se limpian fuera del effect
+      // (ver setOpen(false) handlers) para no disparar set-state-in-effect.
       return;
     }
     updateCoords();
@@ -86,6 +87,7 @@ export function ActionsMenu({ items, ariaLabel, triggerLabel = "Acciones", class
         return;
       }
       setOpen(false);
+      setCoords(null);
     };
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
@@ -94,6 +96,7 @@ export function ActionsMenu({ items, ariaLabel, triggerLabel = "Acciones", class
 
   const close = (refocusTrigger = true) => {
     setOpen(false);
+    setCoords(null);
     if (refocusTrigger) {
       buttonRef.current?.focus();
     }
@@ -135,7 +138,7 @@ export function ActionsMenu({ items, ariaLabel, triggerLabel = "Acciones", class
         close();
         break;
       case "Tab":
-        setOpen(false);
+        close(false);
         break;
       default:
         break;
@@ -197,7 +200,12 @@ export function ActionsMenu({ items, ariaLabel, triggerLabel = "Acciones", class
         aria-controls={open ? menuId : undefined}
         aria-label={ariaLabel}
         title={ariaLabel}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setOpen((o) => {
+            if (o) setCoords(null);
+            return !o;
+          });
+        }}
         className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition hover:bg-[#557EFF]/10"
       >
         <MoreVertical className="h-3.5 w-3.5" aria-hidden="true" />

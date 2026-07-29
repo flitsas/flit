@@ -52,6 +52,7 @@ export function IdentityValidationTrackingPanel({
   // Carga inicial si defaultOpen; re-sync cuando el padre hace poll (refreshKey).
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: setState ocurre tras el await
     void loadAudit();
   }, [open, refreshKey, loadAudit]);
 

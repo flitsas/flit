@@ -40,6 +40,10 @@ public sealed class SubmitProcedureInstanceHandler(
         if (instance is null)
             return (null, "not_found");
 
+        // RF04 — estados finales (aprobado/anulado) son inmutables.
+        if (TramiteEstado.EsFinal(instance.Status))
+            return (null, TramiteEstadoErrores.EstadoFinal);
+
         // La resolución de identidad por persona (HU #10350, #87) y los gates OT viven en
         // TramiteLifecycleService — este orquestador solo encadena las transiciones.
         if (instance.Status == TramiteEstado.Borrador)

@@ -92,6 +92,7 @@ export function PrevalidacionDetailDrawer({
   }, [validationId, onStatusChanged]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset al cambiar validationId + fetch async
     setDetail(null);
     setError(null);
     failedRef.current = false;

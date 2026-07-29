@@ -27,6 +27,11 @@ const PARTE_LABEL: Record<BiometricParte, string> = {
   vendedor: 'Vendedor',
 };
 
+function parteLabel(role: string | null | undefined, fallback?: string | null): string {
+  if (role === 'comprador' || role === 'vendedor') return PARTE_LABEL[role];
+  return fallback?.trim() || 'Actor';
+}
+
 const ALERT_META: Record<
   IdentityValidationAlertKind,
   { label: string; tone: StatusTone; icon: typeof AlertCircle }
@@ -362,7 +367,7 @@ function AlertsBanner({
             {alerts.length === 1 ? '' : 'n'} atención:{' '}
             {alerts
               .map((a) => {
-                const parte = a.partyRole ? PARTE_LABEL[a.partyRole] : a.name ?? 'Actor';
+                const parte = parteLabel(a.partyRole, a.name);
                 const kind = a.alertKind ? ALERT_META[a.alertKind].label : 'Atención';
                 return `${parte} (${kind})`;
               })
@@ -374,7 +379,7 @@ function AlertsBanner({
           <p className="opacity-90">
             Recordatorio: reenvía el enlace de captura
             {reminders.some((r) => r.partyRole)
-              ? ` a ${reminders.map((r) => (r.partyRole ? PARTE_LABEL[r.partyRole] : r.name)).join(', ')}`
+              ? ` a ${reminders.map((r) => parteLabel(r.partyRole, r.name)).join(', ')}`
               : ''}
             .
           </p>
