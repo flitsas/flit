@@ -485,4 +485,54 @@ public sealed class ConsolidadoHandlerTests
         // El proveedor exige el operador: sin usuario no se intenta (y el consolidado igual sale).
         impronta.Calls.Should().Be(0);
     }
+
+    // ── HU #11035 — el consolidado NO se duplica al regenerar ───────────────────────────────────
+
+    [Fact]
+    public async Task HandleAsync_RegenerarDosVeces_DejaUnUnicoConsolidado()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (primero, error1) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+        error1.Should().BeNull();
+
+        // Segunda generación: el expediente vuelve a invalidarse (lo que hace cualquier cambio del
+        // trámite) y se regenera. El adjunto previo debe REEMPLAZARSE, no acumularse.
+        instance.ConsolidadoWizardVigente = false;
+        var (segundo, error2) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+        error2.Should().BeNull();
+
+        instance.Attachments.Count(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase))
+            .Should().Be(1);
+        segundo!.Document.AttachmentId.Should().NotBe(primero!.Document.AttachmentId);
+    }
+
+    [Fact]
+    public async Task HandleAsync_ConVariosConsolidadosPrevios_LosReemplazaTodos()
+    {
+        // Defensa ante datos ya duplicados (p. ej. por un doble clic anterior): la regeneración deja
+        // el expediente con UN solo consolidado, no con los viejos más el nuevo.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        AddAttachment(instance, "consolidado", "consolidado-1.pdf", "%PDF-1");
+        AddAttachment(instance, "consolidado", "consolidado-2.pdf", "%PDF-2");
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var consolidados = instance.Attachments
+            .Where(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        consolidados.Should().ContainSingle();
+        consolidados[0].Id.Should().Be(result!.Document.AttachmentId);
+    }
 }

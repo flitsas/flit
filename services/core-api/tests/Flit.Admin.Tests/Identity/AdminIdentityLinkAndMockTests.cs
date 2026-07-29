@@ -20,6 +20,8 @@ public sealed class AdminIdentityLinkAndMockTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    private static readonly Guid Organismo = Guid.Parse("0ff1ce00-0000-4000-8000-00000000ee09");
+
     private static AdminIdentitySubjectDescriptor Descriptor() => new(
         Tenant,
         AdminIdentitySubjectTypes.MandateSigner,
@@ -28,7 +30,8 @@ public sealed class AdminIdentityLinkAndMockTests
         "CC",
         "123456789",
         "juan@x.co",
-        ActorBy: null);
+        ActorBy: null,
+        TransitOfficeId: Organismo);
 
     private static AdminIdentityValidation IdentidadDeLaPersona(DateTimeOffset aprobadaEn)
     {
@@ -40,12 +43,23 @@ public sealed class AdminIdentityLinkAndMockTests
         return v;
     }
 
-    private static (AdminIdentityValidationService Service, FakeProvider Provider, FakeLinker Linker, FakeRepository Repo) Sut()
+    private static (AdminIdentityValidationService Service, FakeProvider Provider, FakeLinker Linker, FakeRepository Repo) Sut(
+        IPersonIdentityLookup? personLookup = null)
     {
         var provider = new FakeProvider();
         var repo = new FakeRepository();
         var linker = new FakeLinker();
-        return (new AdminIdentityValidationService(provider, repo, linker, new FixedTimeProvider(Now)), provider, linker, repo);
+        return (
+            new AdminIdentityValidationService(provider, repo, linker, new FixedTimeProvider(Now), personLookup),
+            provider, linker, repo);
+    }
+
+    private sealed class FakePersonLookup(PersonIdentitySnapshot? snapshot) : IPersonIdentityLookup
+    {
+        public Task<PersonIdentitySnapshot?> FindVigenteInTransitOfficeAsync(
+            Guid transitOfficeId, string documentType, string documentNumber, DateTimeOffset now,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(snapshot);
     }
 
     // ── Vincular ────────────────────────────────────────────────────────────────────────────
@@ -91,6 +105,53 @@ public sealed class AdminIdentityLinkAndMockTests
         var result = await service.LinkExistingAsync(Descriptor(), Ct);
 
         result.Should().BeNull();
+        linker.Links.Should().BeEmpty();
+    }
+
+    // El caso REAL reportado: la persona validó su identidad DENTRO de un trámite de una compañía,
+    // así que no hay nada en la tabla de identidad administrativa y el link devolvía 409.
+    [Fact]
+    public async Task Link_ConIdentidadValidadaEnUnTramite_LaEspejaConservandoVigenciaYCertificado()
+    {
+        var origenId = Guid.NewGuid();
+        var tenantCompania = Guid.NewGuid();
+        var aprobadaEn = Now.AddDays(-8);
+        var venceEn = Now.AddDays(22);
+        var (service, provider, linker, repo) = Sut(new FakePersonLookup(
+            new PersonIdentitySnapshot(origenId, tenantCompania, "kyverum", "firma-del-tramite", aprobadaEn, venceEn)));
+
+        var result = await service.LinkExistingAsync(Descriptor(), Ct);
+
+        result.Should().NotBeNull();
+        result!.Reused.Should().BeTrue();
+        provider.StartCalls.Should().Be(0);
+
+        // Se espeja como validación admin del mandatario, SIN regalar vigencia nueva.
+        var espejo = repo.Store.Values.Should().ContainSingle().Subject;
+        espejo.SubjectType.Should().Be(AdminIdentitySubjectTypes.MandateSigner);
+        espejo.SubjectRef.Should().Be(Mandatario);
+        espejo.TenantId.Should().Be(Tenant);
+        espejo.ValidatedAt.Should().Be(aprobadaEn);
+        espejo.ValidUntil.Should().Be(venceEn);
+        espejo.CertificateHash.Should().Be("firma-del-tramite");
+        espejo.EsAprobadaVigente(Now).Should().BeTrue();
+        // Trazabilidad del origen.
+        espejo.ProviderPayload.Should().Contain(origenId.ToString());
+        linker.Links.Should().ContainSingle(l => l.ValidationRef == espejo.Id);
+    }
+
+    [Fact]
+    public async Task Link_SinOrganismoEnElDescriptor_NoBuscaEnTramites()
+    {
+        var (service, _, linker, repo) = Sut(new FakePersonLookup(
+            new PersonIdentitySnapshot(Guid.NewGuid(), Guid.NewGuid(), "kyverum", "x", Now.AddDays(-1), Now.AddDays(29))));
+
+        var sinOrganismo = Descriptor() with { TransitOfficeId = null };
+        var result = await service.LinkExistingAsync(sinOrganismo, Ct);
+
+        // Sin perímetro no se busca: evita mirar identidades fuera del organismo.
+        result.Should().BeNull();
+        repo.Store.Should().BeEmpty();
         linker.Links.Should().BeEmpty();
     }
 

@@ -78,7 +78,15 @@ public static class FurFieldMapper
             dict["vehicle_buyer_address"] = Text(DisplayOrDash(comprador.Address));
             dict["vehicle_buyer_city"] = Text(DisplayOrDash(comprador.City));
             dict["vehicle_buyer_phone"] = Text(DisplayOrDash(comprador.Phone));
-            SetSignature(dict, "vehicle_buyer_signature", data, comprador.Rol, IdentidadOrSello(data, "comprador", ["comprador"]));
+            // HU #11035 — el sello del comprador baja 4pt (el campo declara 8pt, frente a 6,5pt del
+            // propietario): con la reducción uniforme de 2pt seguía saliéndose del recuadro.
+            SetSignature(
+                dict,
+                "vehicle_buyer_signature",
+                data,
+                comprador.Rol,
+                IdentidadOrSello(data, "comprador", ["comprador"]),
+                selloFontSizeDelta: -4);
             MarkDocType(dict, comprador.Documento, comprador.DocumentType, "vehicle_buyer");
         }
         else
@@ -112,12 +120,18 @@ public static class FurFieldMapper
         return dict;
     }
 
+    /// <param name="selloFontSizeDelta">
+    /// Ajuste de cuerpo del SELLO de identidad respecto al manifiesto (HU #11031/#11035). El campo del
+    /// comprador declara 8pt frente a los 6,5pt del propietario, así que necesita bajar más para que el
+    /// bloque de cuatro líneas quepa en su recuadro.
+    /// </param>
     private static void SetSignature(
         Dictionary<string, FurFieldValue> dict,
         string fieldId,
         FurDocumentData data,
         string? rol,
-        string fallbackText)
+        string fallbackText,
+        double selloFontSizeDelta = -2)
     {
         if (!string.IsNullOrWhiteSpace(rol)
             && data.FirmaImagenes is not null
@@ -137,7 +151,7 @@ public static class FurFieldMapper
             && !string.IsNullOrWhiteSpace(selloIdentidad)
             && string.Equals(selloIdentidad, fallbackText, StringComparison.Ordinal);
 
-        dict[fieldId] = new FurFieldValue(Val(fallbackText), FontSizeDelta: esSelloIdentidad ? -2 : 0);
+        dict[fieldId] = new FurFieldValue(Val(fallbackText), FontSizeDelta: esSelloIdentidad ? selloFontSizeDelta : 0);
     }
 
     private static string? TryBuildFirmaBaulSidecar(

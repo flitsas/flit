@@ -227,7 +227,7 @@ public sealed class FurManifestGuardTests
         vehicle_buyer_second_last_name=Text:159.5,451.2,112.7,14.1,7.7,Left
         vehicle_buyer_name=Text:274.7,451.4,93.7,14.1,7.7,Left
         vehicle_buyer_document_type_c=cb:33.2,486.5,9.9
-        vehicle_buyer_document_type_nit=cb:64.7,486.4,9.9
+        vehicle_buyer_document_type_nit=cb:64.7,481.4,9.9
         vehicle_buyer_document_type_nn=cb:91.6,486.4,9.9
         vehicle_buyer_document_type_p=cb:121.2,486.5,9.9
         vehicle_buyer_document_type_ce=cb:154.2,486.4,9.9
