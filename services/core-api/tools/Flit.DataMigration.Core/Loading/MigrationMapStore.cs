@@ -1,9 +1,28 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.DataMigration.V1.Loading;
 
 /// <summary>Destino en V2 de un trámite ya migrado (para enlazar sus adjuntos).</summary>
 public sealed record TramiteTarget(Guid V2Id, Guid TenantId);
+
+/// <summary>
+/// Todo lo que la libreta sabe de un trámite ya migrado.
+/// <para>
+/// Lo consume el host HTTP para responder «este trámite ya estaba migrado, en este lote y con
+/// este estado» en vez de un silencio que se lea como un no-op. Reintentar una lista de ids
+/// siempre fue inofensivo —los loaders devuelven <c>Skipped</c>—, pero sin esto no había forma
+/// de distinguir «ya estaba» de «no hice nada».
+/// </para>
+/// </summary>
+public sealed record MigrationMapEntry(
+    Guid V2Id,
+    Guid TenantId,
+    string BatchId,
+    string FinalStatus,
+    IReadOnlyList<string> Warnings,
+    DateTimeOffset MigratedAt);
 
 /// <summary>
 /// La "libreta" de la migración: qué registro de V1 quedó como qué registro de V2.
@@ -75,6 +94,49 @@ public sealed class MigrationMapStore(Flit.Infrastructure.Persistence.FlitDbCont
 
         return new TramiteTarget(v2Id.Value, tenants[0]);
     }
+
+    /// <summary>
+    /// La fila completa de <c>migration_map</c>, o <c>null</c> si el trámite nunca se migró.
+    /// <para>
+    /// Una SOLA consulta escalar: <c>json_build_object(...)::text</c> devuelve un <c>text</c>, que
+    /// es el patrón que EF mapea sin fricción (alias <c>"Value"</c>). Un tipo compuesto en
+    /// <c>SqlQueryRaw</c> choca con la convención snake_case del DbContext — la misma razón por la
+    /// que <see cref="FindTargetAsync"/> usa dos escalares. Aquí serían seis viajes.
+    /// </para>
+    /// <para>
+    /// El cast es <c>::text</c> y no el equivalente <c>#&gt;&gt; '{}'</c> a propósito:
+    /// <c>SqlQueryRaw</c> interpreta la plantilla con semántica de <c>string.Format</c>, así que
+    /// unas llaves literales en el SQL se toman por un marcador de posición y revientan.
+    /// </para>
+    /// </summary>
+    public async Task<MigrationMapEntry?> FindEntryAsync(
+        string v1Table, long v1Id, CancellationToken cancellationToken)
+    {
+        var rows = await db.Database
+            .SqlQueryRaw<string>(
+                """
+                SELECT json_build_object(
+                           'v2Id',        v2_id,
+                           'tenantId',    tenant_id,
+                           'batchId',     batch_id,
+                           'finalStatus', final_status,
+                           'warnings',    warnings,
+                           'migratedAt',  migrated_at)::text AS "Value"
+                FROM migration.migration_map
+                WHERE v1_table = {0} AND v1_id = {1}
+                """,
+                v1Table, v1Id)
+            .ToListAsync(cancellationToken);
+
+        return rows.Count == 0 ? null : JsonSerializer.Deserialize<MigrationMapEntry>(rows[0], EntryJson);
+    }
+
+    /// <summary>camelCase para casar con las claves del <c>json_build_object</c> de arriba.</summary>
+    private static readonly JsonSerializerOptions EntryJson = new(JsonSerializerDefaults.Web)
+    {
+        // warnings es jsonb: llega como array real, no como cadena escapada.
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
+    };
 
     public async Task RecordAsync(
         string v1Table,

@@ -1,0 +1,12 @@
+═══════════════════════════════════════════════════════════════
+  Migración Flit V1 → V2 · MATRÍCULA INICIAL · instancia 2 (adjuntos cargados)
+═══════════════════════════════════════════════════════════════
+  Modo      : REAL (escribe en V2)
+  Tipo      : registration-attachments
+  Tabla V1  : vehicle_registration_master
+  Tipo V2   : MATRICULA_INICIAL
+  Lote      : dev-20260729-ola-1
+  Trámites  : 11 → 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, …
+  Origen V1 : pdn_copy_updated @ localhost:5432
+  Destino V2: flitdev_backup_updated @ localhost:5432
+

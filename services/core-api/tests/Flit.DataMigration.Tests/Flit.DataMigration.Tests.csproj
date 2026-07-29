@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- OutputType=Exe lo exige xunit.v3. Igual que Flit.Admin.Tests. -->
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Flit.DataMigration.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+    <!-- Los tests no fallan el build por analizadores de estilo. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../tools/Flit.DataMigration.V1/Flit.DataMigration.V1.csproj" />
+    <ProjectReference Include="../../tools/Flit.DataMigration.Api/Flit.DataMigration.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Los .golden.txt son la salida EXACTA que el migrador imprimía ANTES del refactor.
+      Se generaron una sola vez con el código previo (ver ConsoleReportGoldenTests) y a
+      partir de ahí son un invariante: si un cambio obliga a editarlos, el cambio está mal.
+    -->
+    <None Update="Fixtures/*.golden.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

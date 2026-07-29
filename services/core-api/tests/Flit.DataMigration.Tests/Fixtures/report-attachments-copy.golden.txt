@@ -1,0 +1,37 @@
+── Configuración de adjuntos ──────────────────────────────────
+  Modo      : Copy (descarga del origen y sube al destino)
+  Origen    : https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/api/v1/files
+  Destino   : https://devfilemanager.flitsas.online/api/v1/files
+  Identidad : las imágenes sueltas se omiten donde hay carta selfie que las contiene.
+
+── Resultado por trámite ──────────────────────────────────────
+  ✓ V1 #201  Migrated
+      → V2 44444444-4444-4000-8000-000000000000
+      → 8 adjunto(s) · 1 ya migrados · 2 fallidos · 3 excluidos (PDF generados) · 3 imágenes en la carta selfie
+  ◇ V1 #202  Simulated
+      → V2 55555555-5555-4000-8000-000000000000
+      → 5 adjunto(s) · 0 ya migrados · 0 fallidos · 0 excluidos (PDF generados) · 0 imágenes en la carta selfie
+      ⚠ id_attach_cedula: el origen respondió 500.
+  · V1 #203  NoAttachments
+  ✗ V1 #204  Skipped
+      → V2 66666666-6666-4000-8000-000000000000
+      motivo: Todos los adjuntos ya estaban migrados.
+  ✗ V1 #205  NotMigrated
+      motivo: No existe en la copia de V1.
+
+── Reconciliación ─────────────────────────────────────────────
+  adjuntos copiados      13
+  ya migrados (saltados) 1
+  fallidos               2
+  excluidos (PDF gen.)   3
+  imágenes en la carta   3
+    ↳ estas imágenes NO quedan en V2 por esta vía: dependen de que se corra
+      la instancia -documents, que es quien trae la carta selfie.
+
+  ⚠ 2 columna(s) de adjunto de V1 sin declarar en el mapa:
+      · id_attach_certificado_tradicion
+      · id_attach_paz_y_salvo
+    Vienen vacías en este lote, pero si traen dato NO se migrarán.
+    Decídelas en V1AttachmentMap: mapeadas a un 'tipo' o excluidas a propósito.
+
+◇ DRY-RUN: nada se escribió en V2 ni se subió al destino. Todo se revirtió.
