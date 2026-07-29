@@ -100,8 +100,8 @@ internal static class ProcedureInstanceEndpoints
             ListProcedureInstancesHandler handler,
             CancellationToken ct) =>
         {
-            var (tenantId, isSuperAdmin) = ResolveTenantContext(http);
-            var items = await handler.HandleAsync(tenantId, isSuperAdmin, ct);
+            var (tenantId, _) = ResolveTenantContext(http);
+            var items = await handler.HandleAsync(tenantId, ct);
             return Results.Ok(new { items });
         }).WithName("ListProcedureInstances");
 

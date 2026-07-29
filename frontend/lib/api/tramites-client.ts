@@ -410,6 +410,15 @@ export const tramitesClient = {
       signaturePending: item.signaturePending ?? false,
       canSubmit: item.canSubmit ?? false,
       prioritario: item.prioritario ?? false,
+      // HU #11056 — mismo criterio: un backend que aún no exponga estas columnas deja la tabla
+      // funcionando. `fuente` cae a 'dashboard' (el origen por defecto), y los estados de firma a
+      // null = "no aplica", que es la lectura conservadora: no inventa una firma pendiente.
+      updatedAt: item.updatedAt ?? null,
+      gestorNombre: item.gestorNombre ?? null,
+      fuente: item.fuente ?? 'dashboard',
+      firmaVendedorEstado: item.firmaVendedorEstado ?? null,
+      firmaCompradorEstado: item.firmaCompradorEstado ?? null,
+      consolidadoAttachmentId: item.consolidadoAttachmentId ?? null,
     }));
   },
 

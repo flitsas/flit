@@ -42,7 +42,20 @@ public sealed record InstanceSummaryDto(
     string? VendedorDocumento = null,
     bool SubsanacionActiva = false,           // flag de edición sobre rechazado
     int SubsanacionCount = 0,                 // veces que se activó la subsanación
-    string? UltimoRechazoMotivo = null);     // reason (texto libre) del último rechazo OT
+    string? UltimoRechazoMotivo = null,      // reason (texto libre) del último rechazo OT
+                                              // HU #11056 — columnas de seguimiento del listado. Todo se DERIVA del grafo que ya
+                                              // carga ListWithSummaryGraphAsync; lo único que cuesta una consulta extra es el
+                                              // nombre del gestor (resuelto en lote, nunca por fila).
+    DateTimeOffset? UpdatedAt = null,         // última modificación; null si nunca se modificó tras crearse
+    string? GestorNombre = null,              // persona que radica (created_by_user_id → DisplayName)
+    string Fuente = TramiteFuente.Dashboard,  // dashboard | integracion | migrado (ver TramiteFuente)
+                                              // Estado de firma de la compraventa POR PARTE. null en matrícula inicial (no hay
+                                              // compraventa) y, en el vendedor, cuando la modalidad no lo contempla.
+    string? FirmaVendedorEstado = null,
+    string? FirmaCompradorEstado = null,
+                                              // Expediente consolidado del wizard (adjunto tipo 'consolidado') ya generado. El
+                                              // id viaja para que la fila lo previsualice sin consultar los adjuntos (HU #11055).
+    Guid? ConsolidadoAttachmentId = null);
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -57,20 +70,30 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     private const string SellerActorType = "vendedor";
 
     /// <summary>
-    /// Lista las instancias visibles para el caller. <paramref name="tenantId"/> <c>null</c> +
-    /// <paramref name="isSuperAdmin"/> = TODAS las compañías (#1, el superadmin ve todo); en ese caso
-    /// se resuelve el nombre de compañía por fila. Un usuario de compañía siempre llega con su
-    /// <paramref name="tenantId"/> (resuelto del JWT por el middleware) y sin nombre de compañía.
+    /// Lista las instancias visibles para el caller. <paramref name="tenantId"/> <c>null</c> = TODAS
+    /// las compañías (#1, el superadmin ve todo); un usuario de compañía siempre llega con su
+    /// <paramref name="tenantId"/>, resuelto del JWT por el middleware.
+    /// <para>
+    /// HU #11056 — el nombre de compañía ya no depende de si el caller es superadmin: la columna
+    /// "Gestor" lo necesita en los dos listados. El aislamiento por compañía lo sigue garantizando
+    /// <paramref name="tenantId"/>, que es lo único que llega al <c>WHERE</c>.
+    /// </para>
     /// </summary>
     public async Task<IReadOnlyList<InstanceSummaryDto>> HandleAsync(
-        Guid? tenantId, bool isSuperAdmin, CancellationToken ct = default)
+        Guid? tenantId, CancellationToken ct = default)
     {
         var instances = await repo.ListWithSummaryGraphAsync(tenantId, MaxItems, ct);
 
-        // Solo el listado multi-tenant del superadmin necesita el nombre de compañía por fila.
-        IReadOnlyDictionary<Guid, string> nombres = isSuperAdmin
-            ? await repo.GetTenantNamesAsync(instances.Select(i => i.TenantId).ToList(), ct)
-            : EmptyNames;
+        // HU #11056 — la razón social se resuelve SIEMPRE, no solo para el superadmin: la columna
+        // "Gestor" es «empresa – persona» también para un usuario de compañía. Para un solo tenant la
+        // consulta trae una fila (los ids van distintos), así que el coste es el mismo de antes.
+        IReadOnlyDictionary<Guid, string> nombres =
+            await repo.GetTenantNamesAsync(instances.Select(i => i.TenantId).ToList(), ct) ?? EmptyNames;
+
+        // Nombre de la persona que radica, en lote por los created_by_user_id del listado (sin N+1).
+        IReadOnlyDictionary<Guid, string> gestores =
+            await repo.GetUserDisplayNamesAsync(instances.Select(i => i.CreatedByUserId).ToList(), ct)
+            ?? EmptyNames;
 
         // Identidad PER-PERSONA (documento) para los chips/progreso: se referencia la identidad vigente de
         // la persona en N trámites sin clonar (HU #10350). Una sola consulta para TODOS los tenants del
@@ -83,14 +106,18 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             .Select(e => ToSummary(
                 e,
                 IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now),
-                nombres.GetValueOrDefault(e.TenantId)))
+                nombres.GetValueOrDefault(e.TenantId),
+                gestores.GetValueOrDefault(e.CreatedByUserId)))
             .ToList();
     }
 
     private static readonly IReadOnlyDictionary<Guid, string> EmptyNames = new Dictionary<Guid, string>();
 
     internal static InstanceSummaryDto ToSummary(
-        ProcedureInstance e, IReadOnlySet<string> identidadAprobadaPartes, string? companiaNombre = null)
+        ProcedureInstance e,
+        IReadOnlySet<string> identidadAprobadaPartes,
+        string? companiaNombre = null,
+        string? gestorNombre = null)
     {
         var fv = e.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
         var buyer = e.Actors.FirstOrDefault(a =>
@@ -134,8 +161,54 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             string.IsNullOrWhiteSpace(seller?.DocumentNumber) ? null : seller.DocumentNumber,
             e.SubsanacionActiva,
             e.SubsanacionCount,
-            DeriveUltimoRechazoMotivo(e));
+            DeriveUltimoRechazoMotivo(e),
+            e.UpdatedAt,
+            string.IsNullOrWhiteSpace(gestorNombre) ? null : gestorNombre.Trim(),
+            TramiteFuente.Desde(e.Origin, e.IsMigrated),
+            DeriveFirmaParte(e, modalidad, SellerActorType),
+            DeriveFirmaParte(e, modalidad, BuyerActorType),
+            DeriveConsolidadoAttachmentId(e));
     }
+
+    /// <summary>
+    /// HU #11056 — estado de la firma de la compraventa de UNA parte, para las dos columnas "Firmado"
+    /// del listado. <c>null</c> en matrícula inicial: no hay compraventa que firmar, así que la columna
+    /// se presenta como no aplicable en vez de como pendiente (que sería una alarma falsa).
+    /// Sin fila de firma ⇒ <see cref="FirmaParteEstados.NoSolicitada"/>; con fila, su estado tal cual.
+    /// Si hubiera más de una fila para la parte se toma la más reciente (la vigente).
+    /// </summary>
+    private static string? DeriveFirmaParte(
+        ProcedureInstance e, TramiteModalidadEntrada modalidad, string parte)
+    {
+        if (modalidad != TramiteModalidadEntrada.Traspaso)
+            return null;
+
+        var firma = e.Signatures
+            .Where(s => string.Equals(s.Parte, parte, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(s.DocTipo, SignatureDocTipos.Compraventa, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(s => s.SolicitadoAt)
+            .ThenByDescending(s => s.CreatedAt)
+            .FirstOrDefault();
+
+        return firma?.Estado ?? FirmaParteEstados.NoSolicitada;
+    }
+
+    /// <summary>
+    /// HU #11055 — adjunto del expediente consolidado del wizard (tipo <c>consolidado</c>) ya generado,
+    /// o <c>null</c> si no existe. El id viaja en el resumen para que la fila lo previsualice con el
+    /// endpoint de URL prefirmada sin consultar los adjuntos del trámite (una petición por fila).
+    /// <para>
+    /// Es el consolidado del GESTOR, no el <c>consolidado_maestro</c> del organismo de tránsito: son
+    /// dos documentos distintos y el listado de operación muestra el primero.
+    /// </para>
+    /// </summary>
+    private static Guid? DeriveConsolidadoAttachmentId(ProcedureInstance e) =>
+        e.Attachments
+            .Where(a => string.Equals(a.Tipo, ConsolidadoAttachmentTipo, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(a => a.UploadedAt)
+            .FirstOrDefault()?.Id;
+
+    private const string ConsolidadoAttachmentTipo = "consolidado";
 
     /// <summary>
     /// Motivo (texto libre) de la última transición REAL a <c>rechazado</c> (p. ej. entregado→rechazado

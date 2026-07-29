@@ -148,7 +148,37 @@ export interface InstanceSummary {
   subsanacionCount?: number;
   /** Motivo (texto libre) del último rechazo del OT; null si no hay rechazo con motivo. */
   ultimoRechazoMotivo?: string | null;
+  // ── HU #11056 — columnas de seguimiento del listado ──────────────────────────────
+  /** Última modificación del trámite; null si no se ha modificado desde que se creó. */
+  updatedAt?: string | null;
+  /** Persona que radica (nombre visible del usuario creador); null si no se pudo resolver. */
+  gestorNombre?: string | null;
+  /** Fuente por la que entró el trámite. Ver `TramiteFuente` en backend. */
+  fuente?: TramiteFuente | null;
+  /**
+   * Estado de la firma de la compraventa de cada parte. `null` = NO APLICA (matrícula inicial no
+   * tiene compraventa) — distinto de `'no_solicitada'`, que es "aplica y aún no se pidió".
+   */
+  firmaVendedorEstado?: FirmaParteEstado | null;
+  firmaCompradorEstado?: FirmaParteEstado | null;
+  /**
+   * HU #11055 — adjunto del expediente consolidado del gestor, si ya está generado. `null` = no
+   * generado ⇒ la fila NO ofrece la acción (el botón no dispara generación).
+   */
+  consolidadoAttachmentId?: string | null;
 }
+
+/** Fuente por la que el trámite entró a FLIT (HU #11056). No existe fuente "QX": Quipux es salida. */
+export type TramiteFuente = 'dashboard' | 'integracion' | 'migrado';
+
+/** Estado de firma de una parte: los de la máquina de firma más la ausencia de solicitud. */
+export type FirmaParteEstado =
+  | 'no_solicitada'
+  | 'pendiente_envio'
+  | 'enviada'
+  | 'firmada'
+  | 'rechazada'
+  | 'cancelada';
 
 /** Respuesta de GET /instances. */
 export interface InstancesResponse {

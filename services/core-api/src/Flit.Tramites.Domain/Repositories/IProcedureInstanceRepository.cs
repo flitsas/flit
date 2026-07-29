@@ -82,6 +82,15 @@ public interface IProcedureInstanceRepository
     Task<IReadOnlyDictionary<Guid, string>> GetTenantNamesAsync(
         IReadOnlyCollection<Guid> tenantIds, CancellationToken ct = default);
 
+    /// <summary>
+    /// HU #11056 — resuelve el nombre visible de cada usuario indicado, para la columna "Gestor" del
+    /// listado (la persona que radica, <c>created_by_user_id</c>). Devuelve un mapa id→nombre en UNA
+    /// consulta (<c>WHERE id IN …</c>): la columna no debe costar una petición por fila. Los ids sin
+    /// usuario o con nombre vacío se omiten, y la columna cae al identificador de la fila.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetUserDisplayNamesAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
+
     /// <summary>Carga la instancia con sus validaciones biométricas (Slice 6).</summary>
     Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 

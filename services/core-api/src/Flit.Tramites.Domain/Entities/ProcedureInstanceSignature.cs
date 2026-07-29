@@ -54,6 +54,18 @@ public static class SignatureEstados
     public const string Cancelada = "cancelada";
 }
 
+/// <summary>
+/// HU #11056 — estado de firma de UNA parte para el listado de trámites. Son los de
+/// <see cref="SignatureEstados"/> más <see cref="NoSolicitada"/>, que no es un estado persistido sino
+/// la ausencia de fila: la firma de esa parte todavía no se ha solicitado. Se distingue de
+/// <see cref="SignatureEstados.PendienteEnvio"/> (ya solicitada, sin enviar al proveedor) porque para
+/// el gestor son acciones distintas.
+/// </summary>
+public static class FirmaParteEstados
+{
+    public const string NoSolicitada = "no_solicitada";
+}
+
 /// <summary>Tipos de documento firmable.</summary>
 public static class SignatureDocTipos
 {

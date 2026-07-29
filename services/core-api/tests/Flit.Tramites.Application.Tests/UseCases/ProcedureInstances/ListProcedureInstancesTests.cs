@@ -27,7 +27,7 @@ public sealed class ListProcedureInstancesTests
         _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct)
             .Returns([]);
 
-        var result = await _sut.HandleAsync(Guid.NewGuid(), isSuperAdmin: false, ct);
+        var result = await _sut.HandleAsync(Guid.NewGuid(), ct);
 
         result.Should().BeEmpty();
     }
@@ -87,12 +87,14 @@ public sealed class ListProcedureInstancesTests
         _repo.ListWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
             .Returns([matriculaParcial, traspasoSubmitted]);
 
-        var result = await _sut.HandleAsync(tenantId, isSuperAdmin: false, ct);
+        var result = await _sut.HandleAsync(tenantId, ct);
 
         result.Should().HaveCount(2);
-        // Usuario de compañía: no se resuelve el nombre de compañía (columna oculta en el front).
-        result.Should().OnlyContain(x => x.CompaniaNombre == null);
-        await _repo.DidNotReceive().GetTenantNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
+        // HU #11056 — la razón social se resuelve también para un usuario de compañía (la columna
+        // "Gestor" la necesita). Que la columna "Compañía" siga siendo solo del superadmin lo decide
+        // el frontend por JWT, no la ausencia del dato.
+        await _repo.Received(1).GetTenantNamesAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
 
         var m = result.Single(x => x.ReferenceNumber == "TRM-2026-000001");
         m.Modalidad.Should().Be("matricula_inicial");
@@ -149,7 +151,7 @@ public sealed class ListProcedureInstancesTests
         _repo.ListWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
             .Returns([instance]);
 
-        var result = await _sut.HandleAsync(tenantId, isSuperAdmin: false, ct);
+        var result = await _sut.HandleAsync(tenantId, ct);
 
         var m = result.Single();
         m.DraftFinalizedAt.Should().Be(finalizadoAt);
@@ -187,7 +189,7 @@ public sealed class ListProcedureInstancesTests
         _repo.ListWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
             .Returns([instance]);
 
-        var result = await _sut.HandleAsync(tenantId, isSuperAdmin: false, ct);
+        var result = await _sut.HandleAsync(tenantId, ct);
 
         result.Single().IdentityValidationStatus.Should().Be(BiometricEstados.Aprobado);
     }
@@ -211,7 +213,7 @@ public sealed class ListProcedureInstancesTests
         _repo.ListWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
             .Returns([instance]);
 
-        var result = await _sut.HandleAsync(tenantId, isSuperAdmin: false, ct);
+        var result = await _sut.HandleAsync(tenantId, ct);
 
         var m = result.Single();
         m.DraftFinalizedAt.Should().BeNull();
@@ -241,7 +243,7 @@ public sealed class ListProcedureInstancesTests
         _repo.GetTenantNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
             .Returns(new Dictionary<Guid, string> { [tenantA] = "Empresa A", [tenantB] = "Empresa B" });
 
-        var result = await _sut.HandleAsync(tenantId: null, isSuperAdmin: true, ct);
+        var result = await _sut.HandleAsync(tenantId: null, ct: ct);
 
         result.Should().HaveCount(2);
         result.Single(x => x.TenantId == tenantA).CompaniaNombre.Should().Be("Empresa A");
@@ -320,7 +322,7 @@ public sealed class ListProcedureInstancesTests
         _repo.ListWithSummaryGraphAsync(tenantId, ListProcedureInstancesHandler.MaxItems, ct)
             .Returns([instance]);
 
-        var result = await _sut.HandleAsync(tenantId, isSuperAdmin: false, ct);
+        var result = await _sut.HandleAsync(tenantId, ct);
 
         var m = result.Single();
         m.Estado.Should().Be(TramiteEstado.Rechazado);
@@ -362,7 +364,7 @@ public sealed class ListProcedureInstancesTests
         };
         _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
 
-        var result = await _sut.HandleAsync(instance.TenantId, isSuperAdmin: false, ct);
+        var result = await _sut.HandleAsync(instance.TenantId, ct);
 
         result.Should().ContainSingle();
         result[0].VendedorNombre.Should().Be("Ana Vendedora");
@@ -395,9 +397,227 @@ public sealed class ListProcedureInstancesTests
         };
         _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
 
-        var result = await _sut.HandleAsync(instance.TenantId, isSuperAdmin: false, ct);
+        var result = await _sut.HandleAsync(instance.TenantId, ct);
 
         result[0].VendedorNombre.Should().BeNull();
         result[0].VendedorDocumento.Should().BeNull();
+    }
+
+    // ── HU #11056 — columnas de seguimiento del listado ───────────────────────────────
+
+    /// <summary>Traspaso base para los casos de firma/fuente/gestor; sin firmas ni adjuntos.</summary>
+    private static ProcedureInstance Traspaso(Guid tenantId, string reference = "TRM-2026-000100") => new()
+    {
+        Id = Guid.NewGuid(),
+        TenantId = tenantId,
+        ReferenceNumber = reference,
+        Status = TramiteEstado.Borrador,
+        ModalidadEntrada = TramiteModalidadEntradaCodes.Traspaso,
+        CreatedAt = DateTimeOffset.UtcNow.AddDays(-1),
+    };
+
+    private static ProcedureInstanceSignature Firma(string parte, string estado, int horasAtras = 1) => new()
+    {
+        Id = Guid.NewGuid(),
+        Parte = parte,
+        DocTipo = SignatureDocTipos.Compraventa,
+        Estado = estado,
+        SolicitadoAt = DateTimeOffset.UtcNow.AddHours(-horasAtras),
+        CreatedAt = DateTimeOffset.UtcNow.AddHours(-horasAtras),
+    };
+
+    [Fact]
+    public async Task HandleAsync_ProyectaUpdatedAt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var actualizado = DateTimeOffset.UtcNow.AddHours(-3);
+        var instance = Traspaso(Guid.NewGuid());
+        instance.UpdatedAt = actualizado;
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+
+        var result = await _sut.HandleAsync(instance.TenantId, ct);
+
+        result[0].UpdatedAt.Should().Be(actualizado);
+    }
+
+    [Fact]
+    public async Task HandleAsync_SinModificar_UpdatedAtEnNull()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Traspaso(Guid.NewGuid());
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+
+        var result = await _sut.HandleAsync(instance.TenantId, ct);
+
+        result[0].UpdatedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleAsync_ResuelveGestorEnLote()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var a = Traspaso(tenantId, "TRM-2026-000101");
+        var b = Traspaso(tenantId, "TRM-2026-000102");
+        a.CreatedByUserId = userId;
+        b.CreatedByUserId = userId;
+
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([a, b]);
+        _repo.GetTenantNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [tenantId] = "Empresa A" });
+        _repo.GetUserDisplayNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
+            .Returns(new Dictionary<Guid, string> { [userId] = "Ana Gestora" });
+
+        var result = await _sut.HandleAsync(tenantId, ct);
+
+        result.Should().OnlyContain(x => x.GestorNombre == "Ana Gestora");
+        result.Should().OnlyContain(x => x.CompaniaNombre == "Empresa A");
+        // Dos filas del mismo gestor ⇒ UNA sola consulta de nombres (sin N+1).
+        await _repo.Received(1).GetUserDisplayNamesAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_GestorDesconocido_QuedaEnNull()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Traspaso(Guid.NewGuid());
+        instance.CreatedByUserId = Guid.NewGuid();
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+
+        var result = await _sut.HandleAsync(instance.TenantId, ct);
+
+        result[0].GestorNombre.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(null, false, TramiteFuente.Dashboard)]
+    [InlineData("ict", false, TramiteFuente.Integracion)]
+    [InlineData("ICT", false, TramiteFuente.Integracion)]
+    [InlineData(null, true, TramiteFuente.Migrado)]
+    // La migración gana sobre el origen: un trámite importado es una foto de V1.
+    [InlineData("ict", true, TramiteFuente.Migrado)]
+    public async Task HandleAsync_DerivaFuente(string? origin, bool isMigrated, string esperada)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Traspaso(Guid.NewGuid());
+        instance.Origin = origin;
+        instance.IsMigrated = isMigrated;
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+
+        var result = await _sut.HandleAsync(instance.TenantId, ct);
+
+        result[0].Fuente.Should().Be(esperada);
+    }
+
+    [Fact]
+    public async Task HandleAsync_FirmaPorParte_DistingueVendedorYComprador()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Traspaso(Guid.NewGuid());
+        instance.Signatures.Add(Firma("vendedor", SignatureEstados.Firmada));
+        instance.Signatures.Add(Firma("comprador", SignatureEstados.Enviada));
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+
+        var result = await _sut.HandleAsync(instance.TenantId, ct);
+
+        result[0].FirmaVendedorEstado.Should().Be(SignatureEstados.Firmada);
+        result[0].FirmaCompradorEstado.Should().Be(SignatureEstados.Enviada);
+        // El agregado histórico sigue coherente: falta una parte por firmar.
+        result[0].SignaturePending.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task HandleAsync_SinFirmaSolicitada_ReportaNoSolicitada()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Traspaso(Guid.NewGuid());
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+
+        var result = await _sut.HandleAsync(instance.TenantId, ct);
+
+        result[0].FirmaVendedorEstado.Should().Be(FirmaParteEstados.NoSolicitada);
+        result[0].FirmaCompradorEstado.Should().Be(FirmaParteEstados.NoSolicitada);
+    }
+
+    [Fact]
+    public async Task HandleAsync_VariasFirmasDeLaMismaParte_TomaLaMasReciente()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Traspaso(Guid.NewGuid());
+        instance.Signatures.Add(Firma("vendedor", SignatureEstados.Cancelada, horasAtras: 5));
+        instance.Signatures.Add(Firma("vendedor", SignatureEstados.Firmada, horasAtras: 1));
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+
+        var result = await _sut.HandleAsync(instance.TenantId, ct);
+
+        result[0].FirmaVendedorEstado.Should().Be(SignatureEstados.Firmada);
+    }
+
+    [Fact]
+    public async Task HandleAsync_MatriculaInicial_FirmaPorParteEnNull()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = new ProcedureInstance
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Guid.NewGuid(),
+            ReferenceNumber = "MI-2",
+            Status = TramiteEstado.Borrador,
+            ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+
+        var result = await _sut.HandleAsync(instance.TenantId, ct);
+
+        // No aplica (no hay compraventa) ≠ pendiente: la columna se muestra como no aplicable.
+        result[0].FirmaVendedorEstado.Should().BeNull();
+        result[0].FirmaCompradorEstado.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleAsync_ConsolidadoGenerado_ExponeElAdjuntoDelGestor()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Traspaso(Guid.NewGuid());
+        var consolidadoId = Guid.NewGuid();
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            Tipo = "consolidado_maestro",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = consolidadoId,
+            Tipo = "consolidado",
+            UploadedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+        });
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+
+        var result = await _sut.HandleAsync(instance.TenantId, ct);
+
+        // El consolidado del gestor, NO el consolidado_maestro del organismo de tránsito.
+        result[0].ConsolidadoAttachmentId.Should().Be(consolidadoId);
+    }
+
+    [Fact]
+    public async Task HandleAsync_SinConsolidado_NoExponeAdjunto()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Traspaso(Guid.NewGuid());
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            Tipo = "fur",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+
+        var result = await _sut.HandleAsync(instance.TenantId, ct);
+
+        result[0].ConsolidadoAttachmentId.Should().BeNull();
     }
 }

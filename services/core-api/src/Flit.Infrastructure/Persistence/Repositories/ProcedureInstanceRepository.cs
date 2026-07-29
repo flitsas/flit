@@ -259,6 +259,27 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return rows.ToDictionary(r => r.Id, r => r.LegalName);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> GetUserDisplayNamesAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct)
+    {
+        if (userIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var distinct = userIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (distinct.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var rows = await db.Users
+            .Where(u => distinct.Contains(u.Id))
+            .Select(u => new { u.Id, u.DisplayName })
+            .ToListAsync(ct);
+
+        // Un usuario sin nombre visible no aporta a la columna: se omite y la fila cae al fallback.
+        return rows
+            .Where(r => !string.IsNullOrWhiteSpace(r.DisplayName))
+            .ToDictionary(r => r.Id, r => r.DisplayName);
+    }
+
     public Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .Include(x => x.BiometricValidations)
