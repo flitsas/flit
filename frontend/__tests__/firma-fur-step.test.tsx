@@ -319,15 +319,19 @@ describe('FirmaFurStep — generar FUR', () => {
     expect(onRefresh).toHaveBeenCalled();
   });
 
-  it('maneja el 409 biometria_gate con un mensaje explicativo', async () => {
-    mocks.generarFur.mockRejectedValue(new Error('409 Conflict: biometria_gate'));
+  // HU #11017 — la identidad dejo de bloquear la generacion del FUR (HU #10463): el backend ya no
+  // emite `biometria_gate`. Un 409 sin codigo conocido cae al mensaje generico, que apunta al
+  // organismo de transito, la unica restriccion que queda.
+  it('un 409 sin codigo conocido cae al mensaje generico del organismo', async () => {
+    mocks.generarFur.mockRejectedValue(new Error('409 Conflict: algo_inesperado'));
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
     await screen.findByRole('region', { name: 'Generación del FUR' });
     await user.click(screen.getByRole('button', { name: 'Generar FUR / certificado' }));
     expect(
-      await screen.findByText(/Falta validar identidad/),
+      await screen.findByText(/selecciona el organismo de tránsito/i),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Falta validar identidad/)).toBeNull();
   });
 
   it('maneja el 409 organismo_requerido', async () => {

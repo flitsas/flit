@@ -1738,14 +1738,16 @@ function FurSection({
       onRefresh?.();
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
+      // HU #11017 — la identidad dejó de bloquear la generación del FUR en HU #10463 (el documento sale
+      // con el sello "NO FIRMADO"), así que el backend ya no emite `biometria_gate` y ese mensaje solo
+      // podía confundir. La ÚNICA restricción que queda es el organismo de tránsito, que es un dato
+      // imprescindible del formulario: sin él no hay FUR que llenar.
       setError(
-        msg.includes('biometria_gate')
-          ? 'Falta validar identidad: primero debe aprobarse la biométrica requerida de las partes.'
-          : msg.includes('organismo_requerido')
-            ? 'Selecciona el organismo de tránsito antes de generar el FUR.'
-            : msg.startsWith('409')
-              ? 'No se pudo generar el FUR: revisa la identidad y el organismo de tránsito.'
-              : 'No se pudo generar el FUR.',
+        msg.includes('organismo_requerido')
+          ? 'Selecciona el organismo de tránsito antes de generar el FUR.'
+          : msg.startsWith('409')
+            ? 'No se pudo generar el FUR: selecciona el organismo de tránsito e inténtalo de nuevo.'
+            : 'No se pudo generar el FUR.',
       );
     } finally {
       setGenerating(false);
