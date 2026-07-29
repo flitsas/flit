@@ -4,11 +4,11 @@ namespace Flit.Tramites.Domain.Tramites.Estados;
 /// Máquina de estados del ciclo de vida del trámite (N 03, RF02). Pura. Opera sobre los
 /// estados de negocio de <see cref="TramiteEstado"/> (los persistidos en
 /// <c>procedure_instances.status</c>). <c>aprobado</c> y <c>anulado</c> son terminales (RF04).
-/// Reemplaza la máquina interna de 14 estados de TRAM-12a (ADR-0022).
-/// HU #10870 — <c>subsanacion</c> reabre la edición de un trámite <c>entregado</c>/<c>rechazado</c>
-/// SIN pasar por <c>borrador</c>; re-radicar (<c>subsanacion → entregado</c>) conserva el historial
-/// (cada transición agrega una fila nueva, nunca lo sobrescribe — ver
-/// <c>Flit.Tramites.Application.UseCases.ProcedureInstances.Estados.TramiteTransitionRecorder</c>).
+/// <para>
+/// La subsanación NO es un estado: se activa con flag sobre <c>rechazado</c>. Re-radicar
+/// (<c>rechazado → entregado</c>) solo es válida cuando <c>subsanacion_activa</c> (validado en
+/// <c>TramiteLifecycleService</c>).
+/// </para>
 /// </summary>
 public static class TramiteStateMachine
 {
@@ -20,10 +20,10 @@ public static class TramiteStateMachine
             // trámite entra a la decisión del OT siempre desde 'entregado'. El progreso de placa
             // (preasignado/asignado) es un sub-estado interno ortogonal (ver PlateFlowStateMachine).
             [TramiteEstado.Preparado] = [TramiteEstado.Entregado],
-            [TramiteEstado.Entregado] = [TramiteEstado.Aprobado, TramiteEstado.Rechazado, TramiteEstado.Subsanacion],
-            [TramiteEstado.Rechazado] = [TramiteEstado.Borrador, TramiteEstado.Anulado, TramiteEstado.Subsanacion],
-            // HU #10870 (AC2) — re-radicar: subsanacion → entregado, SIN pasar por borrador/preparado.
-            [TramiteEstado.Subsanacion] = [TramiteEstado.Entregado],
+            [TramiteEstado.Entregado] = [TramiteEstado.Aprobado, TramiteEstado.Rechazado],
+            // Rechazado → entregado: re-radicación tras activar subsanación (flag). El lifecycle
+            // exige subsanacion_activa; sin el flag la transición se rechaza.
+            [TramiteEstado.Rechazado] = [TramiteEstado.Borrador, TramiteEstado.Anulado, TramiteEstado.Entregado],
             [TramiteEstado.Aprobado] = [],
             [TramiteEstado.Anulado] = [],
         };

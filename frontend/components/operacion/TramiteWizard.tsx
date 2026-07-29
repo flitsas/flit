@@ -313,12 +313,15 @@ export function TramiteWizard(props: Props) {
   //  • Preparado: solo lectura, con la acción "Radicar a tránsito" (preparado→entregado) en el
   //    paso de decisión.
   //  • Solo visualización (Track C): estados posteriores (entregado, aprobado, rechazado, anulado).
-  // HU #10874 (AC1) — subsanación (HU #10870) reabre la edición COMPLETA, igual que borrador: no
-  // cuenta como solo-lectura ni como "borrador finalizado".
+  // Subsanación: flag sobre rechazado (o legado status `subsanacion`) reabre la edición COMPLETA.
+  const inSubsanacion =
+    estadoTramite === 'subsanacion' ||
+    (estadoTramite === 'rechazado' && !!wizard?.subsanacionActiva);
   const fullReadOnly =
-    !!estadoTramite && estadoTramite !== 'borrador' && estadoTramite !== 'subsanacion';
+    !!estadoTramite &&
+    estadoTramite !== 'borrador' &&
+    !inSubsanacion;
   const draftFinalized = estadoTramite === 'borrador' && !!draftFinalizedAt;
-  const inSubsanacion = estadoTramite === 'subsanacion';
   // Captura de datos deshabilitada en todos los modos no-editables (provider de solo lectura).
   const editLocked = fullReadOnly || draftFinalized;
   // Navegación: en visualización pura solo se recorren los pasos completos; en borrador finalizado

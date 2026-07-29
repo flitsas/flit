@@ -159,7 +159,7 @@ internal static class ProcedureInstanceEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden modificar field_values en estado borrador"),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden modificar field_values en borrador o con subsanación activa."),
                 // B11 (HU #10659) — en traspaso el OT proviene del RUNT y no puede modificarse.
                 "ot_traspaso_no_modificable" => Results.Problem(statusCode: 409, title: "Conflict", detail: "En un traspaso el organismo de tránsito proviene del RUNT y no puede modificarse."),
                 "unknown_field" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "field_key no corresponde a ningún campo del tipo de trámite."),
@@ -294,7 +294,7 @@ internal static class ProcedureInstanceEndpoints
             return error switch
             {
                 SetCurrentStepProcedureInstanceHandler.NotFound => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                SetCurrentStepProcedureInstanceHandler.NotDraft => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede persistir el avance de un trámite en estado borrador."),
+                SetCurrentStepProcedureInstanceHandler.NotDraft => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede persistir el avance en borrador o con subsanación activa."),
                 SetCurrentStepProcedureInstanceHandler.VehiculoNoConsultado => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe completar la consulta del vehículo antes de avanzar de paso."),
                 SetCurrentStepProcedureInstanceHandler.StepInvalid => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El paso indicado no corresponde a un paso del wizard de este trámite."),
                 _ => Results.Ok(result)
@@ -348,13 +348,37 @@ internal static class ProcedureInstanceEndpoints
             };
         }).WithName("SubmitProcedureInstance");
 
+        // Activa subsanación sobre rechazado (flag, sin cambiar status). Solo permitido en rechazado.
+        group.MapPost("/instances/{id:guid}/subsanar", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
+            StartSubsanacionHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ResolveUserId(http.User), ct: ct);
+            return error switch
+            {
+                null => Results.Ok(result),
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "not_rechazado" => Results.Problem(
+                    statusCode: 409, title: "Conflict",
+                    detail: "Solo un trámite en estado rechazado puede iniciar subsanación."),
+                TramiteEstadoErrores.ConflictoConcurrencia => Results.Problem(
+                    statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia,
+                    detail: "El trámite fue modificado por otro proceso. Recargue e intente de nuevo."),
+                _ => Results.Problem(statusCode: 422, title: error, detail: "No se pudo iniciar la subsanación."),
+            };
+        }).WithName("StartSubsanacionProcedureInstance");
+
         // N 03 (RF01–RF05) — transición explícita de estado del ciclo de vida. Body: toStatus
-        // (borrador|anulado|preparado|entregado|aprobado|rechazado|subsanacion|preasignado|asignado)
-        // + reason (obligatorio para anulado/rechazado). subsanacion (HU #10870): entregado/rechazado
-        // → subsanacion reabre la edición sin volver a borrador; el re-radicado (subsanacion→entregado)
-        // usa este mismo endpoint o POST /submit (ambos delegan en TramiteLifecycleService). preasignado/
-        // asignado = ruta de preasignación de placa (Feature #10587). Errores: ProblemDetails con
-        // title = código de error (ADR-0022).
+        // (borrador|anulado|preparado|entregado|aprobado|rechazado)
+        // + reason (obligatorio para anulado/rechazado). La subsanación ya no es un estado: se activa
+        // con POST /subsanar sobre rechazado; el re-radicado es rechazado→entregado vía submit.
+        // Errores: ProblemDetails con title = código de error (ADR-0022).
         group.MapPost("/instances/{id:guid}/transition", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,

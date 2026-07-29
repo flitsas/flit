@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   listStuckIdentityValidations: vi.fn(),
   requeueStuckIdentityValidation: vi.fn(),
   requeueAllStuckIdentityValidations: vi.fn(),
+  getBiometricAuditByValidation: vi.fn(),
+  getPrevalidacionDetail: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -21,6 +23,8 @@ vi.mock('@/lib/api/tramites-client', () => ({
     listStuckIdentityValidations: mocks.listStuckIdentityValidations,
     requeueStuckIdentityValidation: mocks.requeueStuckIdentityValidation,
     requeueAllStuckIdentityValidations: mocks.requeueAllStuckIdentityValidations,
+    getBiometricAuditByValidation: mocks.getBiometricAuditByValidation,
+    getPrevalidacionDetail: mocks.getPrevalidacionDetail,
   },
 }));
 
@@ -598,6 +602,7 @@ describe('Validaciones — paginación', () => {
   // otros medios, con su estado y su expiración.
   describe('enlace de validación vigente', () => {
     it('ofrece "Copiar enlace" con la expiración en las validaciones en curso', async () => {
+      const user = userEvent.setup();
       mocks.listTenantBiometricValidations.mockResolvedValue({
         ...FULL,
         validations: [ROW_EN_PROCESO],
@@ -607,11 +612,9 @@ describe('Validaciones — paginación', () => {
       render(<Validaciones />);
       await screen.findByText('TRM-2026-000003');
 
-      const boton = screen.getByRole('button', {
-        name: /Copiar enlace de validación de Carlos Vendedor/i,
-      });
-      expect(boton).toHaveAttribute('title', 'https://capture.kyverum.co/kyv_123');
       expect(screen.getByText(/^Vence /)).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /acciones de validación de carlos vendedor/i }));
+      expect(screen.getByRole('menuitem', { name: /copiar enlace/i })).toBeInTheDocument();
       // El estado sigue mostrándose (la fila y el KPI comparten la etiqueta).
       expect(screen.getAllByText('En proceso').length).toBeGreaterThan(0);
     });
@@ -634,13 +637,15 @@ describe('Validaciones — paginación', () => {
       render(<Validaciones />);
       await screen.findByText('TRM-2026-000003');
 
-      await user.click(screen.getByRole('button', { name: /Copiar enlace de validación/i }));
+      await user.click(screen.getByRole('button', { name: /acciones de validación de carlos vendedor/i }));
+      await user.click(screen.getByRole('menuitem', { name: /copiar enlace/i }));
 
       expect(writeText).toHaveBeenCalledWith('https://capture.kyverum.co/kyv_123');
-      expect(await screen.findByText('Copiado')).toBeInTheDocument();
+      expect(await screen.findByText('Enlace copiado')).toBeInTheDocument();
     });
 
     it('no ofrece enlace cuando la validación ya está en estado terminal', async () => {
+      const user = userEvent.setup();
       mocks.listTenantBiometricValidations.mockResolvedValue({
         ...FULL,
         validations: [ROW_APROBADA],
@@ -650,7 +655,51 @@ describe('Validaciones — paginación', () => {
       render(<Validaciones />);
       await screen.findByText('TRM-2026-000001');
 
-      expect(screen.queryByRole('button', { name: /Copiar enlace/i })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /acciones de validación de ana compradora/i }));
+      expect(screen.queryByRole('menuitem', { name: /copiar enlace/i })).not.toBeInTheDocument();
+    });
+  });
+});
+
+// HU #11007/#11008 — proceso en panel lateral (tabla compacta).
+describe('Validaciones — proceso de identidad (HU #11007/#11008)', () => {
+  it('AC1: "Ver proceso" abre el panel y consulta audit por validationId, sin depender del trámite', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricValidations.mockResolvedValue(FULL);
+    mocks.getPrevalidacionDetail.mockResolvedValue({
+      id: ROW_APROBADA.id,
+      partyRole: ROW_APROBADA.partyRole,
+      name: ROW_APROBADA.name,
+      documentType: ROW_APROBADA.documentType,
+      documentNumber: ROW_APROBADA.documentNumber,
+      email: ROW_APROBADA.email,
+      status: ROW_APROBADA.status,
+      intentos: 1,
+      maxIntentos: 3,
+      score: ROW_APROBADA.score,
+      expiresAt: '2026-07-28T10:00:00Z',
+      validatedAt: ROW_APROBADA.validatedAt,
+      expired: false,
+      provider: ROW_APROBADA.provider,
+      captureUrl: null,
+    });
+    mocks.getBiometricAuditByValidation.mockResolvedValue({
+      validationId: ROW_APROBADA.id,
+      events: [],
+      referencedFromOtherProcedure: false,
+    });
+
+    render(<Validaciones />);
+    await screen.findByText('TRM-2026-000001');
+
+    const [primerMenu] = screen.getAllByRole('button', { name: /acciones de validación/i });
+    await user.click(primerMenu);
+    await user.click(screen.getByRole('menuitem', { name: /ver proceso/i }));
+
+    expect(await screen.findByRole('dialog', { name: /proceso de validación/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.getPrevalidacionDetail).toHaveBeenCalledWith(ROW_APROBADA.id);
+      expect(mocks.getBiometricAuditByValidation).toHaveBeenCalledWith(ROW_APROBADA.id);
     });
   });
 });

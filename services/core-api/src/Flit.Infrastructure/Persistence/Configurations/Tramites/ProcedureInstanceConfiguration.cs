@@ -64,6 +64,17 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         builder.HasIndex(x => new { x.TenantId, x.Prioritario, x.CreatedAt })
             .HasDatabaseName("ix_procedure_instances_prioritario");
 
+        // Subsanación por flag (no estado): editable en rechazado mientras el flag esté activo.
+        builder.Property(x => x.SubsanacionActiva)
+            .HasColumnName("subsanacion_activa")
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.Property(x => x.SubsanacionCount)
+            .HasColumnName("subsanacion_count")
+            .IsRequired()
+            .HasDefaultValue(0);
+
         // Feature #10701 — vigencia del consolidado maestro. Columna agregada por migración SQL
         // cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea para el modelo EF. La baja
         // a false cualquier transición de estado o el adjuntar la LT; la sube a true la generación.

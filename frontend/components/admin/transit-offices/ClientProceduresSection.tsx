@@ -96,7 +96,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const scope = transitOfficeId ? { transitOfficeId } : undefined;
 
   // El SuperAdmin supervisa la cola pero la decisión aprobar/rechazar es del OT admin
-  // (los endpoints approve/reject no soportan el override de organismo del SuperAdmin).
+  // (los endpoints approve/reject YA soportan el override de organismo del SuperAdmin vía
+  // ?transitOfficeId=; en esta bandeja OT nativa el SuperAdmin no decide, solo supervisa).
   const [superAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
 
   const isReadOnly = Boolean(

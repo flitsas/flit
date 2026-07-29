@@ -111,7 +111,8 @@ public sealed class GetProcedureInstanceTests
             TenantId = tenantId,
             ProcedureTypeId = Guid.NewGuid(),
             ReferenceNumber = "TRM-2026-000002",
-            Status = TramiteEstado.Subsanacion,
+            Status = TramiteEstado.Rechazado,
+            SubsanacionActiva = true,
             CreatedAt = DateTimeOffset.UtcNow,
             StatusHistory =
             {
@@ -119,7 +120,7 @@ public sealed class GetProcedureInstanceTests
                 {
                     Id = Guid.NewGuid(),
                     FromStatus = TramiteEstado.Entregado,
-                    ToStatus = TramiteEstado.Subsanacion,
+                    ToStatus = TramiteEstado.Rechazado,
                     ChangedAt = DateTimeOffset.UtcNow,
                     Reason = "Documento ilegible",
                     Metadata = rawMetadata,
@@ -132,7 +133,7 @@ public sealed class GetProcedureInstanceTests
         var (result, error) = await _sut.HandleAsync(instance.Id, tenantId, ct);
 
         error.Should().BeNull();
-        var entry = result!.StatusHistory.Should().ContainSingle(h => h.ToStatus == TramiteEstado.Subsanacion).Subject;
+        var entry = result!.StatusHistory.Should().ContainSingle(h => h.ToStatus == TramiteEstado.Rechazado).Subject;
         entry.Metadata.Should().NotBeNullOrWhiteSpace();
         entry.Metadata.Should().Contain("Documento ilegible");
         entry.Metadata.Should().Contain("cedula_comprador");

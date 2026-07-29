@@ -14,6 +14,9 @@ public sealed class ApproveOtClientProcedureCommand
     /// Se persiste en <c>procedure_instances.mandate_signer_id</c> en el mismo save que la aprobación.
     /// </summary>
     public Guid? MandateSignerId { get; init; }
+
+    /// <summary>Override de organismo para SuperAdmin (mismo contrato que list/consolidado).</summary>
+    public Guid? TransitOfficeId { get; init; }
 }
 
 public enum ApproveOtClientProcedureStatus

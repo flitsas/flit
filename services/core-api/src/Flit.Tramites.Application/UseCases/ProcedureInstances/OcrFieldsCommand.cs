@@ -91,10 +91,9 @@ public sealed class PersistOcrFieldsHandler(IProcedureInstanceRepository repo)
         if (instance is null)
             return (null, "not_found");
 
-        // Misma puerta que PatchFieldValuesHandler: fuera de borrador/subsanación el trigger de la BD
-        // rechazaría la escritura, así que se corta antes con un error de dominio limpio.
-        if (!string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(instance.Status, TramiteEstado.Subsanacion, StringComparison.OrdinalIgnoreCase))
+        // Misma puerta que PatchFieldValuesHandler: fuera de borrador/subsanación activa el trigger
+        // de la BD rechazaría la escritura.
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
         {
             return (null, "not_draft");
         }

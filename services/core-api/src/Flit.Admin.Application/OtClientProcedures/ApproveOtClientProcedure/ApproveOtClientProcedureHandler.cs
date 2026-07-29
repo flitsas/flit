@@ -38,7 +38,11 @@ public sealed class ApproveOtClientProcedureHandler
         }
 
         var existing = await _repository
-            .GetByIdAsync(command.OtTenantId, command.ProcedureInstanceId, cancellationToken)
+            .GetByIdAsync(
+                command.OtTenantId,
+                command.ProcedureInstanceId,
+                command.TransitOfficeId,
+                cancellationToken)
             .ConfigureAwait(false);
 
         if (existing is null)
@@ -57,6 +61,7 @@ public sealed class ApproveOtClientProcedureHandler
             command.ApprovedBy,
             OtTransitionSource.OtAdmin,
             command.MandateSignerId,
+            command.TransitOfficeId,
             cancellationToken).ConfigureAwait(false);
 
         return updated is null

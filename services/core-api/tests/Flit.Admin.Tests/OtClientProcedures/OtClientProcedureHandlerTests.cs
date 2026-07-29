@@ -169,13 +169,13 @@ public sealed class OtClientProcedureHandlerTests
         }, TestContext.Current.CancellationToken);
 
         result.Status.Should().Be(RejectOtClientProcedureStatus.Rejected);
-        result.Procedure!.Status.Should().Be(TramiteEstado.Subsanacion);
+        result.Procedure!.Status.Should().Be(TramiteEstado.Rechazado);
 
         await using var verify = NewContext(db);
         var history = await verify.ProcedureInstanceStatusHistories
             .SingleAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
         history.FromStatus.Should().Be(TramiteEstado.Entregado);
-        history.ToStatus.Should().Be(TramiteEstado.Subsanacion);
+        history.ToStatus.Should().Be(TramiteEstado.Rechazado);
         history.Reason.Should().Be(reason);
         history.Metadata.Should().Contain("factura").And.Contain("plate").And.Contain(OtTransitionSource.OtAdmin);
     }
@@ -228,15 +228,15 @@ public sealed class OtClientProcedureHandlerTests
         var updated = await repo.ObserveAsync(
             OtTenant, procedureId, "Revisar el checklist",
             [new OtProcedureObservationItem { Campo = "aduana", Detalle = "Documento vencido" }],
-            Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+            Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
         updated.Should().NotBeNull();
-        updated!.Status.Should().Be(TramiteEstado.Subsanacion);
+        updated!.Status.Should().Be(TramiteEstado.Rechazado);
 
         await using var verify = NewContext(db);
         var history = await verify.ProcedureInstanceStatusHistories
             .SingleAsync(h => h.ProcedureInstanceId == procedureId, cancellationToken: TestContext.Current.CancellationToken);
-        history.ToStatus.Should().Be(TramiteEstado.Subsanacion);
+        history.ToStatus.Should().Be(TramiteEstado.Rechazado);
         history.ChangedBy.Should().Be(Approver);
         history.Metadata.Should().Contain("aduana").And.Contain("Documento vencido").And.Contain("Revisar el checklist");
     }
@@ -269,7 +269,7 @@ public sealed class OtClientProcedureHandlerTests
         var updated = await repo.ObserveAsync(
             OtTenant, procedureId, "Corregir el VIN",
             [new OtProcedureObservationItem { Campo = "vin", Detalle = "No coincide con el RUNT" }],
-            Approver, OtTransitionSource.OtAdmin, TestContext.Current.CancellationToken);
+            Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
         updated.Should().NotBeNull();
 
@@ -407,7 +407,7 @@ public sealed class OtClientProcedureHandlerTests
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher());
         var updated = await repo.RejectAsync(
             OtTenant, procedureId, "Rechazado vía integración Quipux", rejectedBy: null,
-            OtTransitionSource.QuipuxWebhook, TestContext.Current.CancellationToken);
+            OtTransitionSource.QuipuxWebhook, cancellationToken: TestContext.Current.CancellationToken);
 
         updated.Should().NotBeNull();
         await using var verify = NewContext(db);

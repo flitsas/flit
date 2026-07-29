@@ -49,7 +49,11 @@ public sealed class RejectOtClientProcedureHandler
         }
 
         var existing = await _repository
-            .GetByIdAsync(command.OtTenantId, command.ProcedureInstanceId, cancellationToken)
+            .GetByIdAsync(
+                command.OtTenantId,
+                command.ProcedureInstanceId,
+                command.TransitOfficeId,
+                cancellationToken)
             .ConfigureAwait(false);
 
         if (existing is null)
@@ -62,9 +66,7 @@ public sealed class RejectOtClientProcedureHandler
             return RejectOtClientProcedureResult.InvalidState();
         }
 
-        // HU #10871 (AC1) — con ítems del checklist: observación subsanable (entregado→subsanacion)
-        // con el checklist HÍBRIDO (motivo + items) en metadata. Sin ítems: rechazo definitivo
-        // (comportamiento previo a esta HU, entregado→rechazado), sin cambios.
+        // Con ítems del checklist: observación (rechazado + metadata). Sin ítems: rechazo definitivo.
         var items = command.Request.Items?.Where(i => i is not null).ToList()
             ?? [];
 
@@ -76,6 +78,7 @@ public sealed class RejectOtClientProcedureHandler
                 items,
                 command.RejectedBy,
                 OtTransitionSource.OtAdmin,
+                command.TransitOfficeId,
                 cancellationToken).ConfigureAwait(false)
             : await _repository.RejectAsync(
                 command.OtTenantId,
@@ -83,6 +86,7 @@ public sealed class RejectOtClientProcedureHandler
                 command.Request.Reason.Trim(),
                 command.RejectedBy,
                 OtTransitionSource.OtAdmin,
+                command.TransitOfficeId,
                 cancellationToken).ConfigureAwait(false);
 
         return updated is null

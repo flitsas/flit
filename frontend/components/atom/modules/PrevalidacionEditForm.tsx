@@ -10,21 +10,12 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 
 /**
- * Formulario de edición de una prevalidación STANDALONE (HU #10944 — Feature #10864, CF-03).
+ * Formulario de edición de una prevalidación STANDALONE (HU #10944 — Feature #10864, CF-03;
+ * CF-01 Feature #11004: solo persona natural — sin representante legal).
  *
- * Solo `nombre` y `correo` (titular) y, opcionalmente, `nombre`/`correo` del representante legal
- * son editables (D7). El tipo/número de documento se muestran DESHABILITADOS con la razón visible
- * (definen la identidad) — nunca se envían al backend desde esta pantalla.
- *
- * Límite de contrato conocido (documentado, no inventado): el listado tenant-wide
- * (`TenantBiometricValidationDto` / GET /biometric-validations) no expone el correo actual ni si
- * la persona es jurídica (personType/legalRep* no viajan en esa fila). Por eso el campo de correo
- * arranca VACÍO ("dejar en blanco = no cambiarlo", igual semántica que el backend) y la sección de
- * representante legal es SIEMPRE un bloque opcional (no condicionado a un personType que el
- * frontend no puede conocer con los contratos actuales): si la persona es natural, el backend
- * ignora legalRepName/legalRepEmail sin efecto (ver EditarPrevalidacionHandler, D7/D8). Se
- * recomienda al architecture-agent sumar personType/email a la fila del listado en una futura
- * ampliación de contrato para precargar estos campos.
+ * Solo `nombre` y `correo` del titular son editables (D7). El tipo/número de documento se muestran
+ * DESHABILITADOS con la razón visible (definen la identidad) — nunca se envían al backend desde esta
+ * pantalla. El correo arranca vacío ("dejar en blanco = no cambiarlo").
  */
 export interface PrevalidacionEditFormProps {
   row: TenantBiometricValidation;
@@ -69,19 +60,14 @@ export function PrevalidacionEditForm({
 }: PrevalidacionEditFormProps) {
   const [name, setName] = useState(row.name);
   const [email, setEmail] = useState('');
-  const [showLegalRep, setShowLegalRep] = useState(false);
-  const [legalRepName, setLegalRepName] = useState('');
-  const [legalRepEmail, setLegalRepEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [offerNueva, setOfferNueva] = useState(false);
 
   const emailTrim = email.trim();
-  const legalRepEmailTrim = legalRepEmail.trim();
   const emailInvalid = emailTrim !== '' && !EMAIL_RE.test(emailTrim);
-  const legalRepEmailInvalid = legalRepEmailTrim !== '' && !EMAIL_RE.test(legalRepEmailTrim);
-  const willResend = emailTrim !== '' || legalRepEmailTrim !== '';
-  const hasErrors = emailInvalid || legalRepEmailInvalid;
+  const willResend = emailTrim !== '';
+  const hasErrors = emailInvalid;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,8 +81,6 @@ export function PrevalidacionEditForm({
       const nameTrim = name.trim();
       if (nameTrim !== '' && nameTrim !== row.name) body.name = nameTrim;
       if (emailTrim !== '') body.email = emailTrim;
-      if (legalRepName.trim() !== '') body.legalRepName = legalRepName.trim();
-      if (legalRepEmailTrim !== '') body.legalRepEmail = legalRepEmailTrim;
 
       const result = await tramitesClient.editPrevalidacion(row.id, body);
       onSaved(result);
@@ -222,64 +206,6 @@ export function PrevalidacionEditForm({
                 <p id="pv-edit-email-err" className="mt-1 text-[11px] text-[#FF4E00]" role="alert">
                   Correo inválido
                 </p>
-              )}
-            </div>
-
-            {/* Representante legal — opcional, siempre disponible (no hay señal de personType en el listado) */}
-            <div>
-              <button
-                type="button"
-                onClick={() => setShowLegalRep((v) => !v)}
-                className="text-xs font-semibold text-[#557EFF] underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
-                aria-expanded={showLegalRep}
-                aria-controls="pv-edit-legalrep-fieldset"
-              >
-                {showLegalRep ? 'Ocultar' : 'Editar'} representante legal (solo persona jurídica)
-              </button>
-              {showLegalRep && (
-                <fieldset id="pv-edit-legalrep-fieldset" className="mt-2 space-y-3 rounded-xl border border-[#DDE5F0] p-4">
-                  <legend className="px-1 text-xs font-semibold text-[#162744] dark:text-white">
-                    Representante legal
-                  </legend>
-                  <p className="text-[11px] opacity-70">
-                    Solo aplica si esta prevalidación es de una persona jurídica; si es persona
-                    natural, estos campos se ignoran.
-                  </p>
-                  <div>
-                    <label htmlFor="pv-edit-rl-name" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
-                      Nombre del representante legal
-                    </label>
-                    <input
-                      id="pv-edit-rl-name"
-                      type="text"
-                      value={legalRepName}
-                      onChange={(e) => setLegalRepName(e.target.value)}
-                      disabled={submitting}
-                      className={fieldClass}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="pv-edit-rl-email" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
-                      Correo del representante legal
-                    </label>
-                    <input
-                      id="pv-edit-rl-email"
-                      type="email"
-                      value={legalRepEmail}
-                      onChange={(e) => setLegalRepEmail(e.target.value)}
-                      disabled={submitting}
-                      placeholder="Déjalo en blanco para no cambiarlo"
-                      className={fieldClass}
-                      aria-describedby={legalRepEmailInvalid ? 'pv-edit-rl-email-err' : undefined}
-                      aria-invalid={legalRepEmailInvalid}
-                    />
-                    {legalRepEmailInvalid && (
-                      <p id="pv-edit-rl-email-err" className="mt-1 text-[11px] text-[#FF4E00]" role="alert">
-                        Correo inválido
-                      </p>
-                    )}
-                  </div>
-                </fieldset>
               )}
             </div>
 

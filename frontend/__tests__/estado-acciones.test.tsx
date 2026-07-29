@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 const mocks = vi.hoisted(() => ({
   getWizardState: vi.fn(),
   transitionInstance: vi.fn(),
+  startSubsanacion: vi.fn(),
   // #10611/#10785 — el componente lee la instancia para el soat_estado y el sub-estado de placa.
   getInstance: vi.fn(),
 }));
@@ -18,7 +19,11 @@ vi.mock('@/lib/api/tramites-client', () => ({
 
 import { EstadoAcciones } from '@/components/operacion/EstadoAcciones';
 
-const wizardWith = (status: string, allowedTransitions: string[]) => ({
+const wizardWith = (
+  status: string,
+  allowedTransitions: string[],
+  extras: { subsanacionActiva?: boolean } = {},
+) => ({
   modalidad: 'matricula_inicial',
   tipologiaCodigo: 'matricula_inicial',
   totalSteps: 5,
@@ -27,13 +32,19 @@ const wizardWith = (status: string, allowedTransitions: string[]) => ({
   status,
   allowedTransitions,
   steps: [],
+  subsanacionActiva: extras.subsanacionActiva ?? false,
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.transitionInstance.mockResolvedValue({ id: 'inst-1', status: 'anulado' });
+  mocks.startSubsanacion.mockResolvedValue({ id: 'inst-1', status: 'rechazado' });
   // Instancia mínima: sin ruta de placa (plateFlowStatus null) → no se pinta el panel de SOAT.
-  mocks.getInstance.mockResolvedValue({ fieldValues: [], plateFlowStatus: null });
+  mocks.getInstance.mockResolvedValue({
+    fieldValues: [],
+    plateFlowStatus: null,
+    subsanacionActiva: false,
+  });
 });
 
 describe('EstadoAcciones — el backend manda', () => {
@@ -46,38 +57,73 @@ describe('EstadoAcciones — el backend manda', () => {
     expect(screen.queryByRole('button', { name: 'Subsanar' })).not.toBeInTheDocument();
   });
 
-  it('rechazado: ofrece Anular y Subsanar (subsanación por el operador, sin volver a borrador)', async () => {
-    mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['subsanacion', 'anulado']));
+  it('rechazado: ofrece Anular y Subsanar (flag; sin volver a borrador)', async () => {
+    mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['anulado', 'borrador']));
+    mocks.getInstance.mockResolvedValue({
+      fieldValues: [],
+      plateFlowStatus: null,
+      status: 'rechazado',
+      subsanacionActiva: false,
+    });
     render(<EstadoAcciones instanceId="inst-1" />);
 
     expect(await screen.findByText('Rechazado')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Anular trámite' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Subsanar' })).toBeInTheDocument();
-    // La subsanación reemplaza a "Volver a borrador": ya no se ofrece esa vuelta.
     expect(screen.queryByRole('button', { name: 'Volver a borrador' })).not.toBeInTheDocument();
   });
 
-  it('subsanar: acción DIRECTA — transiciona a subsanacion sin pedir motivo, con motivo por defecto', async () => {
-    mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['subsanacion', 'anulado']));
-    mocks.transitionInstance.mockResolvedValue({ id: 'inst-1', status: 'subsanacion' });
+  it('rechazado con subsanación activa: no muestra Subsanar; sí badge', async () => {
+    mocks.getWizardState.mockResolvedValue(
+      wizardWith('rechazado', ['anulado', 'borrador'], { subsanacionActiva: true }),
+    );
+    mocks.getInstance.mockResolvedValue({
+      fieldValues: [],
+      plateFlowStatus: null,
+      status: 'rechazado',
+      subsanacionActiva: true,
+    });
+    render(<EstadoAcciones instanceId="inst-1" />);
+
+    expect(await screen.findByText('Rechazado')).toBeInTheDocument();
+    expect(await screen.findByText('En subsanación')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Subsanar' })).not.toBeInTheDocument();
+  });
+
+  it('subsanar: acción DIRECTA — POST /subsanar sin pedir motivo', async () => {
+    mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['anulado', 'borrador']));
+    mocks.getInstance.mockResolvedValue({
+      fieldValues: [],
+      plateFlowStatus: null,
+      status: 'rechazado',
+      subsanacionActiva: false,
+    });
     const onChanged = vi.fn();
     const user = userEvent.setup();
     render(<EstadoAcciones instanceId="inst-1" onChanged={onChanged} />);
 
     await user.click(await screen.findByRole('button', { name: 'Subsanar' }));
 
-    // No abre el panel de motivo: transiciona directo con el motivo por defecto por debajo.
-    await waitFor(() =>
-      expect(mocks.transitionInstance).toHaveBeenCalledWith(
-        'inst-1',
-        'subsanacion',
-        'Subsanación iniciada por el operador',
-      ),
-    );
+    await waitFor(() => expect(mocks.startSubsanacion).toHaveBeenCalledWith('inst-1'));
+    expect(mocks.transitionInstance).not.toHaveBeenCalled();
     expect(onChanged).toHaveBeenCalledTimes(1);
     expect(
       screen.queryByRole('button', { name: /Confirmar: Subsanar/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it('entregado: NO ofrece Subsanar (solo en rechazado)', async () => {
+    mocks.getWizardState.mockResolvedValue(wizardWith('entregado', ['aprobado', 'rechazado']));
+    mocks.getInstance.mockResolvedValue({
+      fieldValues: [],
+      plateFlowStatus: null,
+      status: 'entregado',
+      subsanacionActiva: false,
+    });
+    render(<EstadoAcciones instanceId="inst-1" />);
+
+    expect(await screen.findByText('Entregado')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Subsanar' })).not.toBeInTheDocument();
   });
 
   it('estado final (aprobado, sin transiciones): no pinta ningún botón de acción', async () => {
@@ -115,8 +161,14 @@ describe('EstadoAcciones — el backend manda', () => {
   });
 
   it('un error del API (p. ej. conflicto de concurrencia) se muestra como alerta', async () => {
-    mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['subsanacion', 'anulado']));
-    mocks.transitionInstance.mockRejectedValue(
+    mocks.getWizardState.mockResolvedValue(wizardWith('rechazado', ['anulado', 'borrador']));
+    mocks.getInstance.mockResolvedValue({
+      fieldValues: [],
+      plateFlowStatus: null,
+      status: 'rechazado',
+      subsanacionActiva: false,
+    });
+    mocks.startSubsanacion.mockRejectedValue(
       new Error('El trámite fue modificado por otro usuario, recarga e intenta de nuevo.'),
     );
     const user = userEvent.setup();
@@ -124,7 +176,6 @@ describe('EstadoAcciones — el backend manda', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Subsanar' }));
 
-    // Acción directa: el error del API se muestra sin pasar por el panel de confirmación.
     expect(await screen.findByRole('alert')).toHaveTextContent(/modificado por otro usuario/i);
   });
 });

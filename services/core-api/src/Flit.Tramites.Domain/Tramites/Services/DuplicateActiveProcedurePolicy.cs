@@ -12,8 +12,9 @@ namespace Flit.Tramites.Domain.Tramites.Services;
 /// </list>
 /// El resto de tipos de trámite permite múltiples instancias en proceso simultáneas (sin bloqueo).
 /// <para>
-/// "En proceso" = <see cref="TramiteEstado.EstadosEnProceso"/> (borrador/preparado/entregado). Los
-/// estados finales (<see cref="TramiteEstado.Aprobado"/>, <see cref="TramiteEstado.Rechazado"/>,
+/// "En proceso" = <see cref="TramiteEstado.EstaEnProceso"/> (borrador/preparado/entregado, legado
+/// <c>subsanacion</c>, o <c>rechazado</c> con flag de subsanación activa). Los estados finales
+/// (<see cref="TramiteEstado.Aprobado"/>, <see cref="TramiteEstado.Rechazado"/> sin flag,
 /// <see cref="TramiteEstado.Anulado"/>) NO cuentan y LIBERAN el bloqueo (AC4).
 /// </para>
 /// <para>
@@ -30,13 +31,14 @@ public static class DuplicateActiveProcedurePolicy
     /// (candidato al bloqueo 409), o <c>null</c> si ninguno está en proceso (llave libre — permite
     /// crear/continuar el trámite).
     /// </summary>
-    public static Guid? FindActiveDuplicate(IReadOnlyList<(Guid Id, string Estado)> existentes)
+    public static Guid? FindActiveDuplicate(
+        IReadOnlyList<(Guid Id, string Estado, bool SubsanacionActiva)> existentes)
     {
         ArgumentNullException.ThrowIfNull(existentes);
 
         foreach (var t in existentes)
         {
-            if (TramiteEstado.EstadosEnProceso.Contains(t.Estado, StringComparer.OrdinalIgnoreCase))
+            if (TramiteEstado.EstaEnProceso(t.Estado, t.SubsanacionActiva))
                 return t.Id;
         }
 

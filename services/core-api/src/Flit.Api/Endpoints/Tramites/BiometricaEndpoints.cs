@@ -39,7 +39,7 @@ internal static class BiometricaEndpoints
                     "datos_incompletos" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Completa nombre, tipo de documento, documento y email."),
                     "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor o vacío)."),
                     "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                    "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en estado borrador."),
+                    "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en borrador o con subsanación activa."),
                     "actor_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Captura el actor de la parte antes de iniciar la validación de identidad."),
                     "biometria_activa" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe una biométrica activa o aprobada para esta parte."),
                     "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor de validación de identidad rechazó la solicitud."),
@@ -56,7 +56,7 @@ internal static class BiometricaEndpoints
                 "datos_incompletos" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Completa nombre, tipo de documento, documento y email."),
                 "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor o vacío)."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en estado borrador."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en borrador o con subsanación activa."),
                 "biometria_activa" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe una biométrica activa o aprobada para esta parte."),
                 _ => Results.Created($"/api/v1/tramites/instances/{id}/biometric/{result!.Validation.Id}", result),
             };
@@ -342,8 +342,10 @@ internal static class BiometricaEndpoints
             {
                 "datos_incompletos" => Results.Problem(statusCode: 400, title: "Bad Request",
                     detail: "Completa tipo de documento, número de documento, nombre y correo."),
-                "datos_representante_requerido" => Results.Problem(statusCode: 400, title: "Bad Request",
-                    detail: "Para persona jurídica se requieren tipo, número y nombre del representante legal."),
+                // CF-01/D1 (ADR-0036, Feature #11004) — la prevalidación standalone solo admite persona
+                // natural; la validación de personas jurídicas queda exclusiva del flujo de trámite.
+                "prevalidacion_solo_natural" => Results.Problem(statusCode: 422, title: "Unprocessable Entity",
+                    detail: "La prevalidación solo admite persona natural. Para personas jurídicas, valida la identidad dentro de un trámite."),
                 "prevalidacion_activa" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "Ya existe una prevalidación activa para este documento."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
@@ -446,6 +448,47 @@ internal static class BiometricaEndpoints
         .WithName("ReenviarPrevalidacionIdentidad")
         .Produces<ReenviarPrevalidacionResult>(StatusCodes.Status200OK)
         .Produces<ReenviarPrevalidacionResult>(StatusCodes.Status202Accepted);
+
+        // GET detalle de UNA validación de identidad por id (CF-06, Feature #11004, ADR-0036): tenant-scoped,
+        // sirve tanto para prevalidaciones standalone (sin instanceId) como para validaciones de trámite.
+        // Mismo DTO que el listado por-instancia (BiometricValidationDto), pensado para poll de detalle.
+        group.MapGet("/biometric-validations/{id:guid}", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetPrevalidacionDetailHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(tenantId.Value, id, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada.")
+                : Results.Ok(result);
+        })
+        .WithName("GetPrevalidacionDetail")
+        .Produces<BiometricValidationDto>(StatusCodes.Status200OK);
+
+        // GET bitácora de una validación de identidad SIN depender de instancia (CF-07, Feature #11004,
+        // ADR-0036): equivalente al endpoint por-instancia, mismo query/saneamiento, pero sirve tanto a
+        // prevalidaciones standalone como a validaciones de trámite. Autorización genérica del módulo
+        // (D2 — cualquier usuario autenticado del tenant, NO restringido a SuperAdmin).
+        group.MapGet("/biometric-validations/{validationId:guid}/audit", async (
+            Guid validationId,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetIdentityAuditByValidationHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(tenantId.Value, validationId, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada.")
+                : Results.Ok(result);
+        })
+        .WithName("GetIdentityAuditByValidation")
+        .Produces<IdentityAuditResponse>(StatusCodes.Status200OK);
 
         // POST asegurar identidad de una parte (HU #10350): reutiliza una validación vigente de la
         // persona (clonándola) o responde que requiere validación, para que el front la dispare sin clic.

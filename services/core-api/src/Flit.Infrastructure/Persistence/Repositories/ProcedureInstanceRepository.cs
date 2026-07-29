@@ -41,6 +41,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             {
                 i.Id,
                 i.Status,
+                i.SubsanacionActiva,
                 i.CompletedAt,
                 i.SubmittedAt,
                 i.CreatedAt,
@@ -68,7 +69,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 Placa: r.Placa,
                 Vin: vinNormalizado,
                 Secretaria: r.Secretaria,
-                FechaRegistro: r.CompletedAt ?? r.SubmittedAt ?? r.CreatedAt))
+                FechaRegistro: r.CompletedAt ?? r.SubmittedAt ?? r.CreatedAt,
+                SubsanacionActiva: r.SubsanacionActiva))
             .ToList();
     }
 
@@ -96,6 +98,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             {
                 i.Id,
                 i.Status,
+                i.SubsanacionActiva,
                 i.CompletedAt,
                 i.SubmittedAt,
                 i.CreatedAt,
@@ -115,7 +118,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 r.Status,
                 Placa: placaNormalizada,
                 Vin: r.Vin,
-                FechaRegistro: r.CompletedAt ?? r.SubmittedAt ?? r.CreatedAt))
+                FechaRegistro: r.CompletedAt ?? r.SubmittedAt ?? r.CreatedAt,
+                SubsanacionActiva: r.SubsanacionActiva))
             .ToList();
     }
 
@@ -226,6 +230,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Include(x => x.PreflightSnapshots)
             .Include(x => x.BiometricValidations)
             .Include(x => x.Signatures)
+            .Include(x => x.StatusHistory)
             .Where(x => x.DeletedAt == null);
 
         if (tenantId is { } tid)
@@ -734,18 +739,31 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Where(f => f.ProcedureInstanceId == instanceId && f.TenantId == tenantId)
             .ToListAsync(ct);
 
-    // HU #10872 (AC1) — snapshot baseline (metadata del hito MÁS RECIENTE a 'subsanacion') para el
-    // diff que TramiteLifecycleService computa al re-radicar. Mismo patrón de orden que
-    // GetStatusHistoryPageAsync (changed_at desc, desempate por Id).
-    public Task<string?> GetLatestSubsanacionMetadataAsync(Guid instanceId, Guid tenantId, CancellationToken ct) =>
-        db.ProcedureInstanceStatusHistories.AsNoTracking()
+    // Baseline del diff de re-radicación: metadata MÁS RECIENTE que trae fieldSnapshot
+    // (activación de subsanación, observación OT, o legado to_status='subsanacion').
+    // Metadata es jsonb: NO usar string.Contains en LINQ (EF emite LIKE/`~~` sobre jsonb →
+    // Postgres 42883). Se traen candidatos recientes y el filtro "fieldSnapshot" es en memoria.
+    public async Task<string?> GetLatestSubsanacionMetadataAsync(
+        Guid instanceId, Guid tenantId, CancellationToken ct)
+    {
+        var candidates = await db.ProcedureInstanceStatusHistories.AsNoTracking()
             .Where(h => h.ProcedureInstanceId == instanceId
                 && h.TenantId == tenantId
-                && h.ToStatus == TramiteEstado.Subsanacion)
+                && h.Metadata != null
+                && (h.ToStatus == TramiteEstado.Subsanacion
+                    || h.ToStatus == TramiteEstado.Rechazado))
             .OrderByDescending(h => h.ChangedAt)
             .ThenByDescending(h => h.Id)
             .Select(h => h.Metadata)
-            .FirstOrDefaultAsync(ct);
+            .Take(30)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return candidates.FirstOrDefault(m =>
+            !string.IsNullOrWhiteSpace(m)
+            && (m.Contains("fieldSnapshot", StringComparison.Ordinal)
+                || SubsanacionObservation.FromJson(m)?.FieldSnapshot is not null));
+    }
 
     // HU #10955 (AC2/AC3/AC5) — lookup de datos de contacto ya conocidos de una persona, a través de
     // TODOS sus trámites (no eliminados) del tenant. Tenant explícito en el WHERE (AC5); el actor de

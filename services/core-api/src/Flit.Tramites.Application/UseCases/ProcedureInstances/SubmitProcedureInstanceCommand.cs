@@ -52,6 +52,11 @@ public sealed class SubmitProcedureInstanceHandler(
             if (!preparado.Success)
                 return (null, preparado.ErrorCode);
         }
+        else if (!(instance.Status == TramiteEstado.Preparado
+                  || TramiteEstado.EsReRadicacionSubsanacion(instance.Status, instance.SubsanacionActiva)))
+        {
+            return (null, TramiteEstadoErrores.TransicionNoPermitida);
+        }
 
         // Feature #10587 / HU #10785 / HU #10806 — ruta de preasignación de placa (solo matrícula
         // inicial con la ruta activa). El status SIEMPRE queda en 'entregado' (máquina == develop); lo

@@ -44,7 +44,7 @@ public sealed class GenerarImprontaAttachmentHandler(
         var instance = await repo.GetByIdWithFurGraphAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft");
         if (instance.Attachments.Any(a => string.Equals(a.Tipo, "impronta", StringComparison.OrdinalIgnoreCase)))
             return (null, "impronta_ya_existe");

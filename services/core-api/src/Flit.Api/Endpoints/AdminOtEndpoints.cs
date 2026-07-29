@@ -869,6 +869,8 @@ public static class AdminOtEndpoints
         MandatoApprovalHandler mandatoApproval,
         GenerarFurHandler furHandler,
         ILoggerFactory loggerFactory,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
         if (!TryResolveTenantId(httpContext.User, out var tenantId))
@@ -876,6 +878,16 @@ public static class AdminOtEndpoints
             return Results.Json(
                 new { error = "Token inválido: falta claim tenant_id" },
                 statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
         }
 
         var approvingUserId = ResolveUserId(httpContext.User);
@@ -886,7 +898,7 @@ public static class AdminOtEndpoints
         // firmante en el scope RLS del cliente. 3) 409 si hay que elegir. 4) Aprobar (persiste el
         // firmante en el mismo save). 5) Regenerar el mandato con el firmante (best-effort).
         var procedure = await otRepository
-            .GetByIdAsync(tenantId, id, cancellationToken)
+            .GetByIdAsync(tenantId, id, scopedOfficeId, cancellationToken)
             .ConfigureAwait(false);
         if (procedure is null)
         {
@@ -924,6 +936,7 @@ public static class AdminOtEndpoints
             ProcedureInstanceId = id,
             ApprovedBy = approvingUserId,
             MandateSignerId = decision.MandateSignerId,
+            TransitOfficeId = scopedOfficeId,
         }, cancellationToken).ConfigureAwait(false);
 
         // Regeneración del mandato con el firmante resuelto (el generado en preparado llevaba placeholders).
@@ -963,6 +976,8 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         RejectOtClientProcedureRequest request,
         RejectOtClientProcedureHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
         if (!TryResolveTenantId(httpContext.User, out var tenantId))
@@ -972,11 +987,22 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
         var result = await handler.HandleAsync(new RejectOtClientProcedureCommand
         {
             OtTenantId = tenantId,
             ProcedureInstanceId = id,
             RejectedBy = ResolveUserId(httpContext.User),
+            TransitOfficeId = scopedOfficeId,
             Request = request,
         }, cancellationToken).ConfigureAwait(false);
 

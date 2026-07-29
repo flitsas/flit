@@ -161,8 +161,7 @@ public sealed class KyverumWebhookHandlerTests
         var v = Seed();
         v.MaxAttempts = 3;
         v.Attempts = 2; // ya se usaron 2; este es el 3º y último
-        _kyverum.GetStatusAsync(v.KyverumVerificationId!, v.PartyRole, Arg.Any<CancellationToken>())
-            .Returns(new KyverumVerifyStatus("rechazado_intento", 0, "{\"validado_at\":\"t3\"}", AttemptAt: "t3", Motivo: "rostro no visible"));
+        // Con intentos agotados el handler terminaliza SIN consultar GetStatus (determinista).
         var body = Body(aprobado: false);
 
         var (_, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, Sign(body)), ct);
@@ -170,6 +169,25 @@ public sealed class KyverumWebhookHandlerTests
         error.Should().BeNull();
         v.Attempts.Should().Be(3);
         v.Status.Should().Be(BiometricEstados.Rechazado); // intentos agotados → rechazo terminal
+        await _kyverum.DidNotReceive().GetStatusAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Webhook_RejectedAttempt_Redelivery_WhenAlreadyExhausted_TerminalizesWithoutRecount()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed();
+        v.MaxAttempts = 3;
+        v.Attempts = 3; // ya agotados pero quedó en_proceso (reconcile falló en un ciclo previo)
+        v.LastAttemptAt = AttemptClosedAt;
+        var body = Body(aprobado: false); // redelivery: no recuenta
+
+        var (result, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, Sign(body)), ct);
+
+        error.Should().BeNull();
+        result.Should().Be("ok");
+        v.Attempts.Should().Be(3);
+        v.Status.Should().Be(BiometricEstados.Rechazado);
     }
 
     [Fact]

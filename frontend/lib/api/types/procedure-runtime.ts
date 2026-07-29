@@ -136,6 +136,12 @@ export interface InstanceSummary {
   tenantId: string;
   /** Razón social de la compañía; solo presente en el listado multi-tenant del SuperAdmin. */
   companiaNombre: string | null;
+  /** Subsanación activa sobre rechazado (edición sin cambiar status). */
+  subsanacionActiva?: boolean;
+  /** Veces que se activó la subsanación en este expediente. */
+  subsanacionCount?: number;
+  /** Motivo (texto libre) del último rechazo del OT; null si no hay rechazo con motivo. */
+  ultimoRechazoMotivo?: string | null;
 }
 
 /** Respuesta de GET /instances. */
@@ -204,6 +210,10 @@ export interface ProcedureInstanceDetail {
    * frontend cae al paso derivado de los gates (comportamiento previo).
    */
   currentStep?: string | null;
+  /** Subsanación activa sobre rechazado (edición sin cambiar status). */
+  subsanacionActiva?: boolean;
+  /** Veces que se activó la subsanación en este expediente. */
+  subsanacionCount?: number;
   fieldValues: FieldValue[];
   statusHistory: StatusHistory[];
   actors: Actor[];
@@ -681,6 +691,10 @@ export interface WizardState {
    * al paso DERIVADO de los gates (comportamiento previo, sin regresión).
    */
   persistedCurrentStep?: string | null;
+  /** Subsanación activa sobre rechazado (edición sin cambiar status). */
+  subsanacionActiva?: boolean;
+  /** Veces que se activó la subsanación en este expediente. */
+  subsanacionCount?: number;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──

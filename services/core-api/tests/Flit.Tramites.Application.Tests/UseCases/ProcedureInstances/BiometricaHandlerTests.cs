@@ -716,6 +716,39 @@ public sealed class BiometricaHandlerTests
     }
 
     [Fact]
+    public async Task ListTenant_MapsEmailAndAttemptsFields()
+    {
+        // CF-05 (Feature #11004, ADR-0036) — el DTO del listado tenant ahora expone Email/Attempts/
+        // MaxAttempts/ResendCount/LastResentAt (antes el email se omitía a propósito, HU #10234).
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var handler = new ListTenantBiometricValidationsHandler(_repo);
+        var lastResentAt = DateTimeOffset.UtcNow.AddHours(-1);
+
+        var row = TenantVal(tenant, BiometricEstados.EnProceso);
+        row.Email = "ana@x.com";
+        row.Attempts = 2;
+        row.MaxAttempts = 3;
+        row.ResendCount = 1;
+        row.LastResentAt = lastResentAt;
+
+        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new List<ProcedureInstanceBiometricValidation> { row });
+        _repo.CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new Dictionary<string, int>());
+
+        var (result, error) = await handler.HandleAsync(tenant, ct: ct);
+
+        error.Should().BeNull();
+        var dto = result!.Validations.Single();
+        dto.Email.Should().Be("ana@x.com");
+        dto.Attempts.Should().Be(2);
+        dto.MaxAttempts.Should().Be(3);
+        dto.ResendCount.Should().Be(1);
+        dto.LastResentAt.Should().Be(lastResentAt);
+    }
+
+    [Fact]
     public async Task ListTenant_ComputesExpiredFlagLikeDto()
     {
         var ct = TestContext.Current.CancellationToken;

@@ -11,15 +11,9 @@ import {
 import type { PlateFlowStatus } from '@/lib/api/types/procedure-runtime';
 
 /**
- * N 03 — acciones de transición de estado del trámite en el detalle. El backend manda:
- * solo se pintan botones para los destinos que devuelve `allowedTransitions` del wizard
- * (la máquina de estados); los gates de cada transición los valida el POST /transition.
- *
  * Política de UI: `anulado` → "Anular trámite" (destructivo, motivo OBLIGATORIO);
- * `subsanacion` (desde rechazado) → "Subsanar" (HU #10870/#10872): reabre la edición COMPLETA
- * en sitio (como borrador) SIN devolver el trámite a `borrador`; al terminar, el wizard lo
- * re-radica directo a `entregado`. `preparado`/`entregado` no tienen botón propio (flujo
- * radicar del wizard) y `aprobado`/`rechazado` son decisión del Organismo de Tránsito.
+ * Subsanar solo en `rechazado` y sin flag activo → POST /subsanar (activa edición sin
+ * cambiar el status). Al terminar, el wizard re-radica directo a `entregado`.
  */
 
 interface AccionConfig {
@@ -27,26 +21,26 @@ interface AccionConfig {
   label: string;
   destructive: boolean;
   motivoRequerido: boolean;
-  /** Ejecuta la transición directo, sin abrir el panel de motivo (p. ej. "Subsanar"). */
+  /** Ejecuta la acción directo, sin abrir el panel de motivo (p. ej. "Subsanar"). */
   directo?: boolean;
   /** Motivo que viaja por debajo cuando la acción es `directo` (o si el operador no escribe uno). */
   motivoPorDefecto?: string;
+  /** Acción especial: activar flag de subsanación (no es transición de estado). */
+  subsanar?: boolean;
 }
 
 const ACCIONES: AccionConfig[] = [
   { toStatus: 'anulado', label: 'Anular trámite', destructive: true, motivoRequerido: true },
-  // HU #10870/#10872 — subsanación por el operador: reabre la edición en sitio (como borrador)
-  // sin pasar por `borrador`; el wizard cierra re-radicando directo a `entregado`. Es una acción
-  // DIRECTA: no pide motivo al operador (solo aplica a subsanación) y envía un motivo por defecto.
-  {
-    toStatus: 'subsanacion',
-    label: 'Subsanar',
-    destructive: false,
-    motivoRequerido: false,
-    directo: true,
-    motivoPorDefecto: 'Subsanación iniciada por el operador',
-  },
 ];
+
+const ACCION_SUBSANAR: AccionConfig = {
+  toStatus: 'rechazado',
+  label: 'Subsanar',
+  destructive: false,
+  motivoRequerido: false,
+  directo: true,
+  subsanar: true,
+};
 
 export function EstadoAcciones({
   instanceId,
@@ -56,6 +50,7 @@ export function EstadoAcciones({
   onChanged?: () => void;
 }) {
   const [status, setStatus] = useState<string | null>(null);
+  const [subsanacionActiva, setSubsanacionActiva] = useState(false);
   // Feature #10587 / HU #10785 — sub-estado interno de placa (ortogonal al status; el trámite sigue
   // en 'entregado'). Gobierna el badge secundario y el panel de SOAT.
   const [plateFlowStatus, setPlateFlowStatus] = useState<PlateFlowStatus | null>(null);
@@ -73,15 +68,16 @@ export function EstadoAcciones({
         if (!active) return;
         setStatus(w?.status ?? null);
         setAllowed(w?.allowedTransitions ?? []);
+        setSubsanacionActiva(!!w?.subsanacionActiva);
       })
       .catch(() => {});
-    // Lee el sub-estado de placa para pintar el badge secundario (el trámite sigue en 'entregado').
-    // El registro del SOAT vive ahora en el paso FUR (SoatSection), no en este panel.
     tramitesClient
       .getInstance(instanceId)
       .then((d) => {
         if (!active) return;
         setPlateFlowStatus(d?.plateFlowStatus ?? null);
+        if (d?.subsanacionActiva != null) setSubsanacionActiva(!!d.subsanacionActiva);
+        if (d?.status) setStatus(d.status);
       })
       .catch(() => {});
     return () => {
@@ -91,7 +87,11 @@ export function EstadoAcciones({
 
   if (!status) return null;
 
-  const acciones = ACCIONES.filter((a) => allowed.includes(a.toStatus));
+  const acciones = [
+    ...ACCIONES.filter((a) => allowed.includes(a.toStatus)),
+    // Subsanar SOLO en rechazado y mientras el flag no esté activo.
+    ...(status === 'rechazado' && !subsanacionActiva ? [ACCION_SUBSANAR] : []),
+  ];
   const chip = estadoChipStyle(status);
 
   const ejecutar = async (accion: AccionConfig) => {
@@ -103,7 +103,12 @@ export function EstadoAcciones({
     setWorking(true);
     setError(null);
     try {
-      await tramitesClient.transitionInstance(instanceId, accion.toStatus, reason || undefined);
+      if (accion.subsanar) {
+        await tramitesClient.startSubsanacion(instanceId);
+        setSubsanacionActiva(true);
+      } else {
+        await tramitesClient.transitionInstance(instanceId, accion.toStatus, reason || undefined);
+      }
       setPending(null);
       setMotivo('');
       onChanged?.();
@@ -154,6 +159,22 @@ export function EstadoAcciones({
             }}
           >
             {plateFlowLabel(plateFlowStatus)}
+          </span>
+        ) : null}
+        {subsanacionActiva ? (
+          <span
+            title="Subsanación activa: el trámite permanece en Rechazado mientras se corrige"
+            style={{
+              background: 'rgba(245,158,11,0.12)',
+              color: '#b45309',
+              border: '1px solid rgba(245,158,11,0.3)',
+              borderRadius: 999,
+              padding: '2px 10px',
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            En subsanación
           </span>
         ) : null}
         {acciones.map((a) => (

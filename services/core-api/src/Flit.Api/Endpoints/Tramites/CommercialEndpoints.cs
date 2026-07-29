@@ -58,7 +58,7 @@ internal static class CommercialEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden editar datos comerciales en estado borrador."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden editar datos comerciales en borrador o con subsanación activa."),
                 "invalid_valor_venta" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "valorVenta debe ser mayor a cero."),
                 "invalid_causal" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "causal inválida (use COMPRAVENTA|DONACION|DACION_EN_PAGO|ADJUDICACION)."),
                 "invalid_tasa" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "tasaImpuesto no puede ser negativa."),

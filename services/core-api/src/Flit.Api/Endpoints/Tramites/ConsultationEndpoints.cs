@@ -32,7 +32,7 @@ internal static class ConsultationEndpoints
                 "template_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Consultation template not found."),
                 "provider_not_resolved" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El template de consulta no declara un proveedor."),
                 "provider_not_found" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El proveedor declarado no está registrado."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden hidratar field_values en estado borrador."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden hidratar field_values en borrador o con subsanación activa."),
                 _ => Results.Ok(result)
             };
         }).WithName("RunConsultation");

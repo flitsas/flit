@@ -35,7 +35,10 @@ public sealed record InstanceSummaryDto(
     string? IdentityValidationStatus = null,  // aprobado | en_proceso | rechazado | null (sin iniciar)
     bool SignaturePending = false,            // traspaso: compraventa de alguna parte sin firmar
     bool CanSubmit = false,                   // gates de radicación satisfechos (mismo cómputo que el wizard)
-    bool Prioritario = false);                // HU #10536 — marcado prioritario (ordenamiento con primacía)
+    bool Prioritario = false,                 // HU #10536 — marcado prioritario (ordenamiento con primacía)
+    bool SubsanacionActiva = false,           // flag de edición sobre rechazado
+    int SubsanacionCount = 0,                 // veces que se activó la subsanación
+    string? UltimoRechazoMotivo = null);     // reason (texto libre) del último rechazo OT
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -118,7 +121,27 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             DeriveIdentityStatus(e, modalidad, identidadAprobadaPartes),
             DeriveSignaturePending(e, modalidad),
             state.CanSubmit,
-            e.Prioritario);
+            e.Prioritario,
+            e.SubsanacionActiva,
+            e.SubsanacionCount,
+            DeriveUltimoRechazoMotivo(e));
+    }
+
+    /// <summary>
+    /// Motivo (texto libre) de la última transición REAL a <c>rechazado</c> (p. ej. entregado→rechazado
+    /// del OT/Quipux). Se excluyen entradas auditoría <c>rechazado→rechazado</c> (activar subsanación),
+    /// para no mostrar textos del operador como "Subsanación iniciada…".
+    /// </summary>
+    private static string? DeriveUltimoRechazoMotivo(ProcedureInstance e)
+    {
+        var latest = e.StatusHistory
+            .Where(h => string.Equals(h.ToStatus, TramiteEstado.Rechazado, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(h.FromStatus, TramiteEstado.Rechazado, StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(h.Reason))
+            .OrderByDescending(h => h.ChangedAt)
+            .ThenByDescending(h => h.Id)
+            .FirstOrDefault();
+        return latest?.Reason?.Trim();
     }
 
     /// <summary>Partes que llevan validación de identidad por modalidad (matrícula = solo comprador).</summary>

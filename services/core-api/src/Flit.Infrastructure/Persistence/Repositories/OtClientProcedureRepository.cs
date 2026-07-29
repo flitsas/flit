@@ -188,6 +188,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Guid? approvedBy,
         string source,
         Guid? mandateSignerId = null,
+        Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default) =>
         TransitionAsync(
             otTenantId,
@@ -197,7 +198,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             reason: null,
             source,
             cancellationToken,
-            mandateSignerId);
+            mandateSignerId,
+            transitOfficeIdOverride: transitOfficeIdOverride);
 
     public Task<OtClientProcedure?> RejectAsync(
         Guid otTenantId,
@@ -205,6 +207,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         string reason,
         Guid? rejectedBy,
         string source,
+        Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default) =>
         TransitionAsync(
             otTenantId,
@@ -213,10 +216,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             rejectedBy,
             reason,
             source,
-            cancellationToken);
+            cancellationToken,
+            transitOfficeIdOverride: transitOfficeIdOverride);
 
-    // HU #10871 (AC1) — observación subsanable: mismo mecanismo de TransitionAsync que aprobar/rechazar,
-    // pero el destino es 'subsanacion' y el metadata lleva el checklist HÍBRIDO (motivo + items).
+    // Observación subsanable: destino 'rechazado' con checklist HÍBRIDO (motivo + items).
     public Task<OtClientProcedure?> ObserveAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
@@ -224,16 +227,18 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         IReadOnlyList<OtProcedureObservationItem> items,
         Guid? observedBy,
         string source,
+        Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default) =>
         TransitionAsync(
             otTenantId,
             procedureInstanceId,
-            TramiteEstado.Subsanacion,
+            TramiteEstado.Rechazado,
             observedBy,
             reason,
             source,
             cancellationToken,
-            items: items);
+            items: items,
+            transitOfficeIdOverride: transitOfficeIdOverride);
 
     // La decisión del OT (aprobar/rechazar/observar) aplica SIEMPRE desde 'entregado' (máquina == develop).
     // La ruta de placa no cambia el status: su progreso vive en plate_flow_status (sub-estado interno,
@@ -247,10 +252,12 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         string source,
         CancellationToken cancellationToken,
         Guid? mandateSignerId = null,
-        IReadOnlyList<OtProcedureObservationItem>? items = null)
+        IReadOnlyList<OtProcedureObservationItem>? items = null,
+        Guid? transitOfficeIdOverride = null)
     {
         var accessible = await ExecuteOtScopedAsync(
             otTenantId,
+            transitOfficeIdOverride,
             transitOfficeId => FindAccessibleProcedureAsync(
                 transitOfficeId,
                 procedureInstanceId,
@@ -383,11 +390,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         now),
                     cancellationToken).ConfigureAwait(false);
 
-                // HU #10872 (AC1) — snapshot de field_values AL ENTRAR a subsanación: baseline del diff
-                // que la re-radicación (TramiteLifecycleService) computará para re-evaluar solo los
-                // gates de lo corregido. Solo se consulta cuando el destino ES subsanación.
+                // Snapshot de field_values al observar/rechazar con checklist: baseline del diff
+                // de re-radicación (también se recaptura al activar POST /subsanar).
                 IReadOnlyDictionary<string, string?>? fieldSnapshot = null;
-                if (targetStatus == TramiteEstado.Subsanacion)
+                if (items is not null)
                 {
                     var fieldValues = await _context.ProcedureInstanceFieldValues
                         .AsNoTracking()
@@ -410,7 +416,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     ChangedAt = now,
                     ChangedBy = resolvedChangedBy,
                     Reason = reason,
-                    Metadata = BuildStatusHistoryMetadata(otTenantId, source, targetStatus, reason, items, fieldSnapshot),
+                    Metadata = BuildStatusHistoryMetadata(otTenantId, source, reason, items, fieldSnapshot),
                 });
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -423,23 +429,17 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     }
 
     /// <summary>
-    /// HU #10871 (AC1) — shape del metadata de <c>procedure_instance_status_history</c>. Para
-    /// <c>subsanacion</c> agrega el checklist HÍBRIDO (<c>motivo</c> + <c>items</c>) MÁS el snapshot de
-    /// field_values (HU #10872 AC1, <paramref name="fieldSnapshot"/>) sobre el mismo shape de auditoría
-    /// (<c>ot_tenant_id</c>/<c>approver_tenant_id</c>/<c>source</c>) que ya usaban aprobar/rechazar;
-    /// para cualquier otro destino el shape queda IGUAL al de antes de esta HU (sin regresión de
-    /// contrato). Las claves <c>motivo</c>/<c>items</c>/<c>fieldSnapshot</c> son las que
-    /// <c>SubsanacionObservation.FromJson</c> deserializa.
+    /// Shape del metadata de <c>procedure_instance_status_history</c>. Con checklist/observación
+    /// agrega motivo + items + fieldSnapshot; sin ello, solo auditoría cross-tenant.
     /// </summary>
     private static string BuildStatusHistoryMetadata(
         Guid otTenantId,
         string source,
-        string targetStatus,
         string? reason,
         IReadOnlyList<OtProcedureObservationItem>? items,
         IReadOnlyDictionary<string, string?>? fieldSnapshot = null)
     {
-        if (targetStatus != TramiteEstado.Subsanacion)
+        if (items is null && fieldSnapshot is null)
         {
             return JsonSerializer.Serialize(new
             {

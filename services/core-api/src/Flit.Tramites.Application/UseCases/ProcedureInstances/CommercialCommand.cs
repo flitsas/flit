@@ -47,7 +47,7 @@ public sealed class PutCommercialHandler(IProcedureInstanceRepository repo)
         if (instance is null)
             return (null, "not_found");
 
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft");
 
         // Validación de forma. valorVenta es obligatorio (> 0) en el paso comercial.

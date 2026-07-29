@@ -66,6 +66,12 @@ public sealed record WizardStateDto(
     /// null, el frontend cae al paso DERIVADO de los gates (comportamiento previo, sin regresión).
     /// </summary>
     public string? PersistedCurrentStep { get; init; }
+
+    /// <summary>Subsanación activa sobre rechazado (edición sin cambiar status de negocio).</summary>
+    public bool SubsanacionActiva { get; init; }
+
+    /// <summary>Veces que se activó la subsanación en este expediente.</summary>
+    public int SubsanacionCount { get; init; }
 }
 
 /// <summary>
@@ -147,7 +153,7 @@ public sealed class GetWizardStateHandler(
             {
                 // HU #10879 — el paso persistido prima como punto de retoma también en el wizard dinámico.
                 var dynamicState = await BuildDynamicStateAsync(instance, snapshot, ct);
-                return (dynamicState with { PersistedCurrentStep = instance.CurrentStep }, null);
+                return (AnnotateInstanceFlags(dynamicState, instance), null);
             }
         }
 
@@ -190,14 +196,14 @@ public sealed class GetWizardStateHandler(
         // coincidan. Solo aplica a traspaso (única modalidad con concepto de prenda/gravamen).
         var prendaDocumentoOtRequerido = await PrendaDocumentoOtBlockeaAsync(instance, ct);
 
-        var state = ComputeState(
-            instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaDocumentoOtRequerido) with
-        {
-            IdentityValidationEnabled = identityRequired,
-            RnmcEnabled = rnmcEnabled,
-            // HU #10879 (AC2) — el paso persistido prima como punto de retoma al reabrir el borrador.
-            PersistedCurrentStep = instance.CurrentStep,
-        };
+        var state = AnnotateInstanceFlags(
+            ComputeState(
+                instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaDocumentoOtRequerido) with
+            {
+                IdentityValidationEnabled = identityRequired,
+                RnmcEnabled = rnmcEnabled,
+            },
+            instance);
         return (state, null);
     }
 
@@ -272,6 +278,28 @@ public sealed class GetWizardStateHandler(
             result.Blockers,
             instance.Status,
             TramiteStateMachine.TransitionsFrom(instance.Status));
+    }
+
+    /// <summary>
+    /// Adjunta flags de instancia (paso persistido, subsanación) y filtra transiciones UI:
+    /// <c>rechazado→entregado</c> no se expone como acción de transición (va por POST /submit
+    /// con flag activo).
+    /// </summary>
+    private static WizardStateDto AnnotateInstanceFlags(WizardStateDto state, ProcedureInstance instance)
+    {
+        var allowed = TramiteStateMachine.TransitionsFrom(instance.Status)
+            .Where(t => !(string.Equals(instance.Status, TramiteEstado.Rechazado, StringComparison.OrdinalIgnoreCase)
+                          && t == TramiteEstado.Entregado))
+            .ToList();
+
+        return state with
+        {
+            PersistedCurrentStep = instance.CurrentStep,
+            SubsanacionActiva = instance.SubsanacionActiva,
+            SubsanacionCount = instance.SubsanacionCount,
+            AllowedTransitions = allowed,
+            Status = instance.Status,
+        };
     }
 
     /// <summary>

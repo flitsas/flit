@@ -306,7 +306,7 @@ public sealed class RunPreflightPreviewHandler(
 
             var existentes = await repo.FindTramitesByVinAsync(tenantId, vinNorm, Guid.Empty, ct);
             return DuplicateActiveProcedurePolicy.FindActiveDuplicate(
-                existentes.Select(e => (e.Id, e.Estado)).ToList());
+                existentes.Select(e => (e.Id, e.Estado, e.SubsanacionActiva)).ToList());
         }
 
         if (modalidad == TramiteModalidadEntrada.Traspaso)
@@ -317,7 +317,7 @@ public sealed class RunPreflightPreviewHandler(
 
             var existentes = await repo.FindTramitesByPlacaAsync(tenantId, placaNorm, Guid.Empty, ct);
             return DuplicateActiveProcedurePolicy.FindActiveDuplicate(
-                existentes.Select(e => (e.Id, e.Estado)).ToList());
+                existentes.Select(e => (e.Id, e.Estado, e.SubsanacionActiva)).ToList());
         }
 
         return null;

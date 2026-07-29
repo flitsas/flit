@@ -12,20 +12,35 @@ public sealed class DuplicateActiveProcedurePolicyTests
     [Fact]
     public void FindActiveDuplicate_SinFilas_Null()
     {
-        DuplicateActiveProcedurePolicy.FindActiveDuplicate([]).Should().BeNull();
+        DuplicateActiveProcedurePolicy
+            .FindActiveDuplicate(Array.Empty<(Guid, string, bool)>())
+            .Should().BeNull();
     }
 
     [Theory]
     [InlineData(TramiteEstado.Borrador)]
     [InlineData(TramiteEstado.Preparado)]
     [InlineData(TramiteEstado.Entregado)]
-    // HU #10870 — subsanación sigue "en proceso": el trámite se está corrigiendo para re-radicarse,
-    // así que NO libera la llave de duplicidad (VIN/placa) mientras dura la corrección.
     [InlineData(TramiteEstado.Subsanacion)]
     public void FindActiveDuplicate_EstadoEnProceso_DevuelveId(string estado)
     {
         var id = Guid.NewGuid();
-        var existentes = new List<(Guid Id, string Estado)> { (id, estado) };
+        var existentes = new List<(Guid Id, string Estado, bool SubsanacionActiva)>
+        {
+            (id, estado, false),
+        };
+
+        DuplicateActiveProcedurePolicy.FindActiveDuplicate(existentes).Should().Be(id);
+    }
+
+    [Fact]
+    public void FindActiveDuplicate_RechazadoConSubsanacionActiva_DevuelveId()
+    {
+        var id = Guid.NewGuid();
+        var existentes = new List<(Guid Id, string Estado, bool SubsanacionActiva)>
+        {
+            (id, TramiteEstado.Rechazado, true),
+        };
 
         DuplicateActiveProcedurePolicy.FindActiveDuplicate(existentes).Should().Be(id);
     }
@@ -36,8 +51,10 @@ public sealed class DuplicateActiveProcedurePolicyTests
     [InlineData(TramiteEstado.Anulado)]
     public void FindActiveDuplicate_EstadoFinal_Null_LiberaLaLlave(string estado)
     {
-        // AC4: los estados finales (aprobado/rechazado/anulado) NO cuentan como "en proceso".
-        var existentes = new List<(Guid Id, string Estado)> { (Guid.NewGuid(), estado) };
+        var existentes = new List<(Guid Id, string Estado, bool SubsanacionActiva)>
+        {
+            (Guid.NewGuid(), estado, false),
+        };
 
         DuplicateActiveProcedurePolicy.FindActiveDuplicate(existentes).Should().BeNull();
     }
@@ -47,10 +64,10 @@ public sealed class DuplicateActiveProcedurePolicyTests
     {
         var idFinal = Guid.NewGuid();
         var idEnProceso = Guid.NewGuid();
-        var existentes = new List<(Guid Id, string Estado)>
+        var existentes = new List<(Guid Id, string Estado, bool SubsanacionActiva)>
         {
-            (idFinal, TramiteEstado.Rechazado),
-            (idEnProceso, TramiteEstado.Entregado),
+            (idFinal, TramiteEstado.Rechazado, false),
+            (idEnProceso, TramiteEstado.Entregado, false),
         };
 
         DuplicateActiveProcedurePolicy.FindActiveDuplicate(existentes).Should().Be(idEnProceso);

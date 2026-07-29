@@ -51,6 +51,9 @@ function makeInstances(n: number): InstanceSummary[] {
       prioritario: false,
       tenantId: '11111111-1111-1111-1111-111111111111',
       companiaNombre: null,
+      subsanacionActiva: false,
+      subsanacionCount: 0,
+      ultimoRechazoMotivo: null,
     } satisfies InstanceSummary;
   });
 }
@@ -276,9 +279,75 @@ function instance(over: Partial<InstanceSummary>): InstanceSummary {
     pasoActual: 1, totalPasos: 6, createdAt: '2026-06-18T00:00:00Z',
     draftFinalizedAt: null, identityValidationStatus: null,
     signaturePending: false, canSubmit: false, prioritario: false,
-    tenantId: 't', companiaNombre: null, ...over,
+    tenantId: 't', companiaNombre: null,
+    subsanacionActiva: false, subsanacionCount: 0, ultimoRechazoMotivo: null,
+    ...over,
   };
 }
+
+describe('TramitesTable — subsanación / motivo de rechazo', () => {
+  const [base] = makeInstances(1);
+
+  it('no muestra chips en la fila; el icono abre el popover con flags', async () => {
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...base,
+        id: 'sub-1',
+        placa: 'SUB001',
+        estado: 'rechazado',
+        subsanacionActiva: true,
+        subsanacionCount: 2,
+        ultimoRechazoMotivo: null,
+      },
+    ]);
+    render(<TramitesTable />);
+
+    const row = (await screen.findByText('SUB001')).closest('[role="button"]') as HTMLElement;
+    expect(within(row).queryByText('En subsanación')).not.toBeInTheDocument();
+    expect(within(row).queryByText('Subsanado ×2')).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /Ver detalle de rechazo \/ subsanación de TR-0001/,
+      }),
+    );
+    const dialog = screen.getByRole('dialog', { name: /Detalle de rechazo de TR-0001/ });
+    expect(within(dialog).getByText('En subsanación')).toBeInTheDocument();
+    expect(within(dialog).getByText('Subsanado ×2')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Motivo del OT')).not.toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('abre y cierra el popover con el motivo del OT sin abrir el trámite', async () => {
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...base,
+        id: 'rej-1',
+        placa: 'REJ001',
+        estado: 'rechazado',
+        subsanacionActiva: false,
+        subsanacionCount: 1,
+        ultimoRechazoMotivo: 'Falta certificado de tradición',
+      },
+    ]);
+    render(<TramitesTable />);
+
+    await screen.findByText('REJ001');
+    expect(screen.queryByText('Falta certificado de tradición')).not.toBeInTheDocument();
+
+    const trigger = screen.getByRole('button', {
+      name: /Ver detalle de rechazo \/ subsanación de TR-0001/,
+    });
+    await userEvent.click(trigger);
+    expect(screen.getByText('Motivo del OT')).toBeInTheDocument();
+    expect(screen.getByText('Falta certificado de tradición')).toBeInTheDocument();
+    expect(screen.getByText('Subsanado ×1')).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+
+    await userEvent.click(trigger);
+    expect(screen.queryByText('Falta certificado de tradición')).not.toBeInTheDocument();
+  });
+});
 
 describe('TramitesTable — SuperAdmin multi-tenant', () => {
   beforeEach(() => {

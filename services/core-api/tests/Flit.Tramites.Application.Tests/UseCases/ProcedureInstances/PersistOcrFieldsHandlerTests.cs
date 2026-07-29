@@ -262,7 +262,8 @@ public sealed class PersistOcrFieldsHandlerTests
     public async Task Subsanacion_SiAdmiteEscritura()
     {
         var ct = TestContext.Current.CancellationToken;
-        var instance = Instance(TramiteEstado.Subsanacion);
+        var instance = Instance(TramiteEstado.Rechazado);
+        instance.SubsanacionActiva = true;
 
         var (result, error) = await _sut.HandleAsync(_id, _tenantId, SoatOcr(("numero_poliza", "123")), ct);
 

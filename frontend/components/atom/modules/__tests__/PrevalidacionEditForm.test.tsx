@@ -87,16 +87,13 @@ describe('PrevalidacionEditForm (HU #10944)', () => {
     expect(screen.getByText(/no son editables porque definen la identidad/i)).toBeInTheDocument();
   });
 
-  it('la sección de representante legal está oculta por defecto y se puede mostrar', async () => {
-    const user = userEvent.setup();
+  it('CF-01: no ofrece campos de persona jurídica ni representante legal', () => {
     render(<PrevalidacionEditForm row={ROW} onClose={onClose} onSaved={onSaved} />);
 
+    expect(screen.queryByRole('button', { name: /representante legal/i })).toBeNull();
     expect(screen.queryByLabelText(/nombre del representante legal/i)).toBeNull();
-
-    await user.click(screen.getByRole('button', { name: /editar representante legal/i }));
-
-    expect(screen.getByLabelText(/nombre del representante legal/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/correo del representante legal/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/correo del representante legal/i)).toBeNull();
+    expect(screen.queryByText(/persona jurídica/i)).toBeNull();
   });
 
   it('rechaza un correo con formato inválido antes de llamar a la API', async () => {

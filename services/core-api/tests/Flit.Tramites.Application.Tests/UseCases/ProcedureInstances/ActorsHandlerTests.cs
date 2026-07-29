@@ -113,8 +113,10 @@ public sealed class ActorsHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, status: TramiteEstado.Rechazado);
+        instance.SubsanacionActiva = true;
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct)
-            .Returns(Instance(id, tenant, status: TramiteEstado.Subsanacion));
+            .Returns(instance);
 
         var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([Comprador()]), ct);
 

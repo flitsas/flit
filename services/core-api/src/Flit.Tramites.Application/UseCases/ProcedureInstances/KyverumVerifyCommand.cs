@@ -61,7 +61,7 @@ public sealed class IniciarKyverumVerifyHandler(
         var instance = await repo.GetByIdWithBiometricsAndActorsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft");
 
         var existing = instance.BiometricValidations.FirstOrDefault(v =>
@@ -403,6 +403,11 @@ public sealed class KyverumWebhookHandler(
                     SecretPresent: true, DecryptOk: true, ProviderStatus: payload.Evento, HttpStatus: 200,
                     Message: "Webhook de intento rechazado ya contado (redelivery): no se recuenta.",
                     Detail: $"attempt_key={attemptKey}"), ct);
+                // Si un ciclo anterior contó el último intento pero falló al reconciliar (GET Kyverum caído),
+                // la fila puede quedar en_proceso con Attempts >= MaxAttempts. Reintentamos terminalizar.
+                await repo.ReloadBiometricAsync(v, ct);
+                if (await TryTerminalizeExhaustedAttemptsAsync(v, payload, ct))
+                    return ("ok", null);
                 return ("ok", null);
             }
 
@@ -418,8 +423,12 @@ public sealed class KyverumWebhookHandler(
                 Message: $"Webhook de intento rechazado contado ({v.Attempts}/{v.MaxAttempts}). Se reconcilia contra el resultado.",
                 Detail: $"attempt_key={attemptKey}; conteo={v.Attempts}/{v.MaxAttempts}"), ct);
 
-            // Enriquece el motivo del último intento y, si el conteo YA agotó los intentos, terminaliza en
-            // rechazado. ApplyStatusAsync (vía ReconcileFromKyverumAsync) ya NO cuenta: decide con v.Attempts.
+            // Terminalización DETERMINISTA al agotar intentos: no depende de que GetStatusAsync devuelva
+            // `rechazado_intento` (si Kyverum ya cerró o el GET falla, antes quedaba en_proceso para siempre).
+            if (await TryTerminalizeExhaustedAttemptsAsync(v, payload, ct))
+                return ("ok", null);
+
+            // Aún quedan intentos → enriquecer motivo del último intento vía GET (sin volver a contar).
             return await ReconcileFromKyverumAsync(v, ct);
         }
 
@@ -440,6 +449,40 @@ public sealed class KyverumWebhookHandler(
             SecretPresent: true, DecryptOk: true, ProviderStatus: payload.Evento, HttpStatus: 200,
             Message: "Resultado aplicado desde el webhook (firma válida, aprobado)."), ct);
         return ("ok", null);
+    }
+
+    /// <summary>
+    /// Si el conteo de intentos ya agotó <see cref="ProcedureInstanceBiometricValidation.MaxAttempts"/>,
+    /// aplica rechazo terminal inmediatamente (sin depender de GetStatusAsync). Evita prevalidaciones/
+    /// trámites colgados en <c>en_proceso</c> tras fallar los N intentos de Kyverum cuando el GET falla
+    /// o ya no reporta <c>rechazado_intento</c>.
+    /// </summary>
+    private async Task<bool> TryTerminalizeExhaustedAttemptsAsync(
+        ProcedureInstanceBiometricValidation v, KyverumWebhookPayload payload, CancellationToken ct)
+    {
+        if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado or BiometricEstados.Expirado)
+            return false;
+        if (v.MaxAttempts <= 0 || v.Attempts < v.MaxAttempts)
+            return false;
+
+        var subject = SelectSubject(payload.Data?.Subjects, v.PartyRole);
+        var now = DateTimeOffset.UtcNow;
+        await applier.ApplyAsync(
+            v,
+            new IdentityValidationTerminalResult(
+                false, payload.Evento, Sanitize(payload, subject), subject?.Score),
+            now,
+            ct);
+        await repo.SaveChangesAsync(ct);
+
+        await audit.LogAsync(new IdentityValidationAuditEntry(
+            IdentityValidationAuditStages.WebhookApplied, BiometricEstados.Rechazado,
+            TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+            KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+            SecretPresent: true, DecryptOk: true, ProviderStatus: payload.Evento, HttpStatus: 200,
+            Message: $"Intentos agotados ({v.Attempts}/{v.MaxAttempts}): rechazo terminal aplicado desde el webhook.",
+            Detail: $"attempt_key={Truncate(FirstNonEmpty(payload.Data?.ClosedAt, payload.Ts, payload.RequestId), 40) ?? "<null>"}"), ct);
+        return true;
     }
 
     /// <summary>

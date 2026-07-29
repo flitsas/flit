@@ -43,9 +43,8 @@ const HISTORY_WITHOUT_METADATA: StatusHistory[] = [
   },
 ];
 
-// HU #10870 — flujo NUEVO (subsanación iniciada por el operador): el OT rechaza con motivo
-// (entregado→rechazado) y luego el operador pasa el trámite a subsanación (rechazado→subsanacion,
-// sin motivo ni metadata). La guía de qué corregir debe ser el motivo del rechazo del OT.
+// HU #10870 — flujo NUEVO (flag sobre rechazado): OT rechaza; operador activa subsanación
+// (rechazado→rechazado) sin reemplazar el motivo. La guía debe seguir siendo el del OT.
 const HISTORY_OPERATOR_DRIVEN: StatusHistory[] = [
   { fromStatus: 'preparado', toStatus: 'entregado', changedAt: '2026-07-01T10:05:00Z', reason: null },
   {
@@ -54,7 +53,17 @@ const HISTORY_OPERATOR_DRIVEN: StatusHistory[] = [
     changedAt: '2026-07-02T08:00:00Z',
     reason: 'Documentos ilegibles; vuelve a cargar la cédula del comprador.',
   },
-  { fromStatus: 'rechazado', toStatus: 'subsanacion', changedAt: '2026-07-02T09:00:00Z', reason: null },
+  {
+    fromStatus: 'rechazado',
+    toStatus: 'rechazado',
+    changedAt: '2026-07-02T09:00:00Z',
+    reason: 'Subsanación iniciada por el operador',
+    metadata: JSON.stringify({
+      motivo: 'Subsanación iniciada por el operador',
+      items: [],
+      fieldSnapshot: { vin: 'ABC' },
+    }),
+  },
 ];
 
 beforeEach(() => {

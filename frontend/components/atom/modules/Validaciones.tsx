@@ -11,11 +11,13 @@ import {
   Clock,
   Copy,
   ExternalLink,
+  ListTree,
   RotateCcw,
   ScanFace,
   ShieldCheck,
   XCircle,
 } from 'lucide-react';
+import { ActionsMenu } from '@/components/atom/ActionsMenu';
 import { ModuleTitle } from './ModuleTitle';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import {
@@ -24,6 +26,7 @@ import {
   hasActiveValidacionesFilters,
   type ValidacionesUiFilters,
 } from './ValidacionesFilterToolbar';
+import { PrevalidacionDetailDrawer } from './PrevalidacionDetailDrawer';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   BiometricEstado,
@@ -162,6 +165,8 @@ export function Validaciones() {
   const [stuck, setStuck] = useState<StuckIdentityValidationsResponse | null>(null);
   const [requeuing, setRequeuing] = useState<Set<string>>(() => new Set());
   const [requeuingAll, setRequeuingAll] = useState(false);
+  // Panel lateral de proceso/tracking (CF-06/07): tabla compacta + botón "Proceso".
+  const [processId, setProcessId] = useState<string | null>(null);
 
   // Paginación server-side (el listado ya NO se topa a 500; se navega por páginas).
   const [page, setPage] = useState(1);
@@ -450,7 +455,7 @@ export function Validaciones() {
       )}
 
       {!initialLoading && !isEmpty && validations !== null && (
-        <ValidacionesTable rows={validations} />
+        <ValidacionesTable rows={validations} onViewProcess={setProcessId} />
       )}
 
       {!initialLoading && validations !== null && validations.length > 0 && (
@@ -461,6 +466,15 @@ export function Validaciones() {
           disabled={fetching}
           onPageChange={handlePageChange}
           onPageSizeChange={handlePageSizeChange}
+        />
+      )}
+
+      {processId && (
+        <PrevalidacionDetailDrawer
+          validationId={processId}
+          onClose={() => setProcessId(null)}
+          onStatusChanged={() => void load(appliedRef.current, { background: true })}
+          title="Proceso de validación"
         />
       )}
     </div>
@@ -744,18 +758,19 @@ function ValidacionesSkeleton() {
  * permite truncar el contenido dentro de cada celda del grid.
  */
 const GRID_COLS =
-  'minmax(0,1.5fr) minmax(0,1.4fr) minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,1.2fr) minmax(0,0.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.4fr) minmax(0,1.2fr)';
+  'minmax(0,1.5fr) minmax(0,1.4fr) minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,1.2fr) minmax(0,0.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,0.9fr)';
 
 /** Tabla de validaciones reales. Cada fila enlaza al trámite de origen (vista del wizard). */
-function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
+function ValidacionesTable({
+  rows,
+  onViewProcess,
+}: {
+  rows: TenantBiometricValidation[];
+  onViewProcess: (id: string) => void;
+}) {
   return (
-    // Scroll horizontal en pantallas angostas. `shrink-0` es CLAVE: al ser overflow-x-auto este div es
-    // un contenedor de scroll y, como ítem flex, su min-height pasa a 0 → sin shrink-0 el flex del módulo
-    // lo colapsaría a casi nada (solo se vería la paginación).
     <div className="overflow-x-auto shrink-0">
-      <div className="min-w-[980px]">
-        {/* Cabecera decorativa: el lector de pantalla lee el aria-label completo de cada fila.
-            sticky → permanece visible al hacer scroll del módulo. */}
+      <div className="min-w-[1080px]">
         <div
           className="sticky top-0 z-10 grid gap-2 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl"
           style={{ background: '#DFE5ED', color: '#162744', gridTemplateColumns: GRID_COLS }}
@@ -771,10 +786,11 @@ function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
           <div>Aprobación</div>
           <div>Vigencia</div>
           <div>Enlace</div>
+          <div>Acciones</div>
         </div>
         <ul className="space-y-2 pt-2" aria-label="Validaciones de identidad">
           {rows.map((r) => (
-            <ValidacionRow key={r.id} row={r} />
+            <ValidacionRow key={r.id} row={r} onViewProcess={() => onViewProcess(r.id)} />
           ))}
         </ul>
       </div>
@@ -782,19 +798,22 @@ function ValidacionesTable({ rows }: { rows: TenantBiometricValidation[] }) {
   );
 }
 
-function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
+function ValidacionRow({
+  row: r,
+  onViewProcess,
+}: {
+  row: TenantBiometricValidation;
+  onViewProcess: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
   const meta = ESTADO_META[r.status] ?? ESTADO_META.enviado;
-  // HU #10869 — prevalidaciones standalone tienen modalidad null: mostrar "Prevalidación"
   const modalidad = r.modalidad
     ? (MODALIDAD_LABEL[r.modalidad] ?? r.modalidad)
     : 'Prevalidación';
   const provider = PROVIDER_LABEL[r.provider] ?? r.provider;
   const parte = r.partyRole ? ` (${r.partyRole})` : '';
   const vigencia = vigenciaBadge(r.daysRemaining);
-  // HU #10869 — referenceNumber null → mostrar "—" en el aria-label
   const refLabel = r.referenceNumber ?? '—';
-  // CF-05 (Feature #11004, HU #11006) — el backend aún puede no enviar `email` (HU #11005 en curso
-  // en paralelo): se muestra "—" sin romper la fila.
   const emailLabel = r.email ?? '—';
   const ariaLabel =
     `Validación de ${r.name}${parte}, trámite ${refLabel} (${modalidad}), ` +
@@ -807,14 +826,12 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
     (vigencia ? `, ${vigencia.label === 'Vencida' ? 'vigencia vencida' : `vigencia: ${vigencia.label} restantes`}` : '') +
     (r.instanceId ? '. Abrir trámite.' : '. Prevalidación standalone.');
 
-  // HU #10869 — si no hay instanceId (standalone), no envolver en <a> para no romper navegación
   const rowContent = (
     <div
-      className="grid gap-2 items-center px-4 py-3 text-xs"
+      className="grid gap-2 items-center px-4 py-2 text-xs"
       style={{ gridTemplateColumns: GRID_COLS }}
     >
       <div className="min-w-0">
-        {/* HU #10869 — referenceNumber null → badge "Prevalidación" en lugar del número */}
         {r.referenceNumber ? (
           <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: '#557EFF' }}>
             <span className="truncate">{r.referenceNumber}</span>
@@ -828,7 +845,6 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
             Prevalidación
           </span>
         )}
-        {/* HU #10869 — modalidad null → mostrar "—" */}
         <span className="block text-[10px] opacity-60">{r.modalidad ? modalidad : '—'}</span>
       </div>
       <div className="min-w-0">
@@ -874,91 +890,79 @@ function ValidacionRow({ row: r }: { row: TenantBiometricValidation }) {
           <span className="opacity-80">—</span>
         )}
       </div>
-      <div className="min-w-0 text-[10px] opacity-80" aria-hidden="true">
-        {r.captureUrl ? '' : '—'}
+      <div className="min-w-0 text-[10px] leading-tight opacity-80">
+        {r.captureUrl && r.linkExpiresAt ? (
+          <span title={r.captureUrl}>Vence {formatFechaCorta(r.linkExpiresAt)}</span>
+        ) : r.captureUrl ? (
+          <span title={r.captureUrl}>Vigente</span>
+        ) : (
+          <span>—</span>
+        )}
       </div>
+      <div className="min-w-0" aria-hidden="true" />
     </div>
   );
 
+  const copiarEnlace = async () => {
+    if (!r.captureUrl) return;
+    try {
+      await navigator.clipboard.writeText(r.captureUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* sin permiso de clipboard */
+    }
+  };
+
+  const actionItems = [
+    {
+      key: 'proceso',
+      label: 'Ver proceso',
+      icon: ListTree,
+      onSelect: onViewProcess,
+    },
+    ...(r.captureUrl
+      ? [
+          {
+            key: 'copiar',
+            label: 'Copiar enlace',
+            icon: Copy,
+            onSelect: () => {
+              void copiarEnlace();
+            },
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <li className="relative">
+    <li className="relative rounded-xl bg-white dark:bg-[#0B0F14] border hover:border-[#557EFF] transition">
       {r.instanceId ? (
         <a
           href={`/tramites/${r.instanceId}`}
           aria-label={ariaLabel}
-          className="block rounded-xl bg-white dark:bg-[#0B0F14] border hover:border-[#557EFF] transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="block focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           {rowContent}
         </a>
       ) : (
-        <div
-          className="rounded-xl bg-white dark:bg-[#0B0F14] border"
-          aria-label={ariaLabel}
-          role="listitem"
-        >
+        <div aria-label={ariaLabel} role="listitem">
           {rowContent}
         </div>
       )}
-      {r.captureUrl && (
-        <CopiarEnlaceValidacion
-          captureUrl={r.captureUrl}
-          expiresAt={r.linkExpiresAt}
-          persona={r.name}
+      {/* Acciones fuera del <a> al trámite: menú portalizado (ActionsMenu). */}
+      <div className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col items-end gap-0.5">
+        <ActionsMenu
+          ariaLabel={`Acciones de validación de ${r.name}`}
+          items={actionItems}
+          className="bg-white dark:bg-[#0B0F14]"
         />
-      )}
+        {copied && (
+          <span className="text-[10px] font-semibold" style={{ color: '#557EFF' }} role="status" aria-live="polite">
+            Enlace copiado
+          </span>
+        )}
+      </div>
     </li>
-  );
-}
-
-/**
- * CF-05 (HU #10886, AC2) — enlace de captura vigente de una validación, para reenviarlo por otros
- * medios (WhatsApp, llamada, etc.) cuando el correo no llega. Se posiciona sobre la última columna de
- * la fila y vive FUERA del enlace al trámite, para no anidar controles interactivos.
- */
-function CopiarEnlaceValidacion({
-  captureUrl,
-  expiresAt,
-  persona,
-}: {
-  captureUrl: string;
-  expiresAt: string | null;
-  persona: string;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const copiar = async () => {
-    try {
-      await navigator.clipboard.writeText(captureUrl);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Sin permiso de portapapeles (o contexto no seguro): el enlace sigue visible en el title
-      // para copiarlo a mano, así que no se interrumpe al operador con un error.
-    }
-  };
-
-  return (
-    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-right">
-      <button
-        type="button"
-        onClick={() => void copiar()}
-        title={captureUrl}
-        aria-label={`Copiar enlace de validación de ${persona}`}
-        className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold transition hover:border-[#557EFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ color: '#557EFF' }}
-      >
-        <Copy className="h-3 w-3" aria-hidden="true" />
-        {copied ? 'Copiado' : 'Copiar enlace'}
-      </button>
-      {expiresAt && (
-        <span className="mt-0.5 block text-[10px] opacity-60">
-          Vence {formatFechaCorta(expiresAt)}
-        </span>
-      )}
-      {/* Confirmación anunciada por lector de pantalla sin mover el foco (WCAG 2.1 AA). */}
-      <span className="sr-only" role="status" aria-live="polite">
-        {copied ? 'Enlace copiado al portapapeles.' : ''}
-      </span>
-    </div>
   );
 }

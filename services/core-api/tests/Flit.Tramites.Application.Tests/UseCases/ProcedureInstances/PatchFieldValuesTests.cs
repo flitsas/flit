@@ -119,7 +119,8 @@ public sealed class PatchFieldValuesTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        var instance = Instance(id, tenantId, TramiteEstado.Subsanacion);
+        var instance = Instance(id, tenantId, TramiteEstado.Rechazado);
+        instance.SubsanacionActiva = true;
         _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
         _repo.GetFormFieldIdByKeyAsync(Arg.Any<Guid>(), Arg.Any<string>(), ct).Returns((Guid?)null);
 
@@ -140,7 +141,8 @@ public sealed class PatchFieldValuesTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        var instance = Instance(id, tenantId, TramiteEstado.Subsanacion);
+        var instance = Instance(id, tenantId, TramiteEstado.Rechazado);
+        instance.SubsanacionActiva = true;
         var existing = new ProcedureInstanceFieldValue
         {
             Id = Guid.NewGuid(),
@@ -331,7 +333,9 @@ public sealed class PatchFieldValuesTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(TraspasoInstance(id, tenantId, TramiteEstado.Subsanacion));
+        var traspaso = TraspasoInstance(id, tenantId, TramiteEstado.Rechazado);
+        traspaso.SubsanacionActiva = true;
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(traspaso);
 
         var request = new PatchFieldValuesRequest(
             [new FieldValueInput(null, "transit_office_code", "11001000", null)]);
