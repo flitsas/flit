@@ -114,21 +114,30 @@ public sealed record FurDocumentData(
         ?? (Partes.Count > 0 ? Partes[0] : null);
 
     /// <summary>
-    /// Parte que otorga el MANDATO (HU #11030): en un traspaso es quien VENDE el vehículo —es su empresa
-    /// la que apodera al mandatario para adelantar el trámite—, y en matrícula inicial no hay vendedor,
-    /// así que es la parte radicadora. Antes el mandato se emitía siempre a nombre del radicador, de modo
-    /// que en un traspaso nombraba al comprador como mandante: el documento apoderaba a la parte
-    /// equivocada.
-    /// </summary>
-    /// <summary>
     /// Tenant contra el que se resuelven las firmas del baúl (HU #11030). El baúl es por tenant; el
     /// ensamblador lo fija desde la instancia del trámite.
     /// </summary>
     public Guid TenantIdParaFirmas { get; init; }
 
-    public DocumentParte? Mandante =>
+    /// <summary>
+    /// Parte que OTORGA: en un traspaso es quien VENDE el vehículo —el propietario actual, que apodera
+    /// para el trámite y a cuyo nombre se declara— y en matrícula inicial, donde no hay vendedor, es la
+    /// parte radicadora. Antes el mandato y la solicitud de trámite virtual se emitían siempre a nombre
+    /// del radicador, de modo que en un traspaso hablaban del COMPRADOR: apoderaban y declaraban por la
+    /// parte equivocada (HU #11030/#11032).
+    /// </summary>
+    public DocumentParte? Otorgante =>
         Partes.FirstOrDefault(p => string.Equals(p.Rol, "vendedor", StringComparison.OrdinalIgnoreCase))
         ?? Radicador;
+
+    /// <summary>Quien otorga el mandato (HU #11030). Ver <see cref="Otorgante"/>.</summary>
+    public DocumentParte? Mandante => Otorgante;
+
+    /// <summary>
+    /// Propietario que solicita el trámite virtual (HU #11032): el vendedor en traspaso —es su vehículo
+    /// el que se transfiere— y el radicador en matrícula inicial. Ver <see cref="Otorgante"/>.
+    /// </summary>
+    public DocumentParte? Propietario => Otorgante;
 }
 
 /// <summary>Un documento generado, listo para persistir vía IAttachmentStorage.</summary>

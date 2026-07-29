@@ -13,6 +13,10 @@ public static class DocumentLabels
         ["compraventa"] = "Contrato de compraventa",
         ["certificado_identidad"] = "Certificado de validación de identidad",
         ["certificado_identidad_vendedor"] = "Certificado de identidad (vendedor)",
+        // HU #11032 — las escrituras caían a la humanización genérica ("Escritura", "Escritura
+        // comprador") y el pie del consolidado no dejaba claro de qué parte era cada una.
+        ["escritura"] = "Escrituras del vendedor",
+        ["escritura_comprador"] = "Escrituras del comprador",
         ["certificado_rues"] = "Certificado RUES",
         ["certificado_rnmc"] = "Certificado RNMC",
         ["soat"] = "SOAT",

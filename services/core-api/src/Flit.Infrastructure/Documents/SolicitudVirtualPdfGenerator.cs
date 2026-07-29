@@ -27,7 +27,9 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
     {
         ArgumentNullException.ThrowIfNull(data);
 
-        var parte = data.Radicador;
+        // HU #11032 — la solicitud la firma el PROPIETARIO del vehículo: en un traspaso, quien vende.
+        // Antes salía a nombre del radicador (el comprador), declarando por la parte equivocada.
+        var parte = data.Propietario;
         var esJuridica = parte?.EsJuridica ?? false;
         var esTraspaso = string.Equals(
             data.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
@@ -208,6 +210,16 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
     // identidad está validada y hay sello para el rol (mismo patrón que la compraventa autogenerada).
     private static void RenderSello(ColumnDescriptor sig, FurDocumentData data, string? rol)
     {
+        // HU #11031 — PRIORIDAD DEL BAÚL: si la firma estampada vino del baúl, esa es la firma del
+        // documento y no se añade además el sello de la validación de identidad.
+        if (rol is not null
+            && data.FirmaImagenes is not null
+            && data.FirmaImagenes.TryGetValue(rol, out var firmaBaul)
+            && firmaBaul.Length > 0)
+        {
+            return;
+        }
+
         if (rol is not null
             && data.IdentidadValidada
             && data.SellosIdentidad is not null
