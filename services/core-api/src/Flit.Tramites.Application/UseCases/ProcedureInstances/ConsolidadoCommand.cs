@@ -51,6 +51,17 @@ public sealed class GenerarConsolidadoHandler(
         if (instance is null)
             return (null, "not_found");
 
+        // Migración V1→V2 — un trámite migrado es una FOTO de solo lectura: NO se regenera el
+        // consolidado. V1 ya trae su propio expediente consolidado (tipo 'consolidado', source=migration);
+        // regenerarlo aquí lo reemplazaría por uno nuevo del sistema, perdiendo el histórico.
+        //
+        // Va ANTES del caché y de la regeneración en cascada de HU #10860 a propósito: un trámite
+        // migrado llega con ConsolidadoWizardVigente en false (el default de la columna), así que si
+        // este guard fuera después, la cascada regeneraría el FUR y los documentos en caliente —
+        // exactamente lo que el modo foto existe para impedir.
+        if (instance.IsMigrated)
+            return (null, "migrado_solo_lectura");
+
         // HU #10860 (ADR-0032) — caché explícita del expediente del wizard: si está vigente y el
         // consolidado persistido existe, se sirve sin regenerar (espejo del maestro, Feature #10701).
         var consolidadoVigente = instance.Attachments

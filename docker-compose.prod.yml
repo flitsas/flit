@@ -75,6 +75,13 @@ services:
       ASPNETCORE_URLS: http://+:${CORE_API_PORT:-4003}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
       Cors__AllowedOrigins: ${CORS_ORIGIN:-https://dev.flitsas.online}
+      # File Manager: DONDE LEE V2 los binarios de los adjuntos. Sin esta variable
+      # cae al default de appsettings.json, que apunta a AWS pdn. Al pasar V2 a MinIO
+      # hay que definirla, y tiene que ser EXACTAMENTE la misma URL que recibe el
+      # migrador en FLITMIG_TargetFileManager__BaseUrl: si difieren, el migrador sube
+      # a un sitio y la API lee de otro, los adjuntos migrados existen en la tabla
+      # pero no abren. Falla en silencio.
+      FileManager__BaseUrl: ${FILE_MANAGER_BASE_URL:-https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/}
       # Login deshabilitado temporalmente: DevGenerate evita exigir llaves JWT
       # montadas. Para reactivar login, montar jwt-private/public.pem y quitar esto.
       Jwt__DevGenerate: "true"
@@ -200,6 +207,63 @@ services:
       retries: 3
       start_period: 40s
     restart: *restart
+    logging: *default-logging
+
+  # ── Migrador V1 -> V2 (herramienta de operacion, NO un servicio) ──────────
+  #
+  # Vive tras el perfil `migracion`, asi que `docker compose up` NO lo levanta.
+  # Se invoca a mano cuando toca migrar:
+  #
+  #   docker compose -f docker-compose.prod.yml --profile migracion run --rm \
+  #     migrador --tipo registration --ids-file /work/ids.txt --dry-run
+  #
+  # Los ids y los reportes se intercambian por el volumen ./migracion -> /work.
+  # Las credenciales salen del .env del VPS (ver .env.prod.example, bloque FLITMIG_).
+  migrador:
+    profiles: ["migracion"]
+    image: ghcr.io/flitsas/flitdev/core-api:${CORE_API_TAG:-latest}
+    entrypoint: ["dotnet", "/app/migrador/Flit.DataMigration.V1.dll"]
+    # content root = working_dir, para que .NET encuentre su appsettings.json
+    working_dir: /app/migrador
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Archivos de ids de entrada y reportes de salida. Se crea en el VPS.
+      - ./migracion:/work
+    environment:
+      # ── Bases de datos ──
+      # V1 es SOLO LECTURA: el migrador nunca escribe en el origen.
+      FLITMIG_ConnectionStrings__V1Source: ${FLITMIG_V1_SOURCE}
+      FLITMIG_ConnectionStrings__V2Target: ${FLITMIG_V2_TARGET:-${CONNECTION_STRING_CORE}}
+      # ── Lote y usuario ──
+      FLITMIG_Migration__BatchId: ${FLITMIG_BATCH_ID:-sin-lote}
+      FLITMIG_Migration__SystemUserEmail: ${FLITMIG_SYSTEM_USER_EMAIL:-migracion.v1@flitsas.io}
+      # NUNCA true en produccion: un NIT sin tenant es cuarentena, no algo que se
+      # cree solo. tenant_id es NOT NULL pero SIN foreign key, asi que la base no
+      # frena un id inventado y RLS esconderia los tramites de su dueño real.
+      FLITMIG_Migration__CreateTenantIfMissing: "false"
+      # ── Adjuntos (instancia 2) ──
+      # Copy porque V2 se pasa a MinIO: origen y destino son stores distintos.
+      # Reference solo valdria si V2 leyera del MISMO file-manager que V1.
+      FLITMIG_Attachments__Mode: ${FLITMIG_ATTACHMENTS_MODE:-Copy}
+      FLITMIG_SourceFileManager__BaseUrl: ${FLITMIG_SOURCE_FM_BASE_URL}
+      FLITMIG_SourceFileManager__FilesPath: ${FLITMIG_SOURCE_FM_FILES_PATH:-api/v1/files}
+      FLITMIG_SourceFileManager__AuthToken: ${FLITMIG_SOURCE_FM_AUTH_TOKEN:-}
+      # MISMA URL que FileManager__BaseUrl de core-api. Ver el comentario de arriba.
+      FLITMIG_TargetFileManager__BaseUrl: ${FILE_MANAGER_BASE_URL}
+      FLITMIG_TargetFileManager__FilesPath: ${FLITMIG_TARGET_FM_FILES_PATH:-api/v1/files}
+      FLITMIG_TargetFileManager__AuthToken: ${FLITMIG_TARGET_FM_AUTH_TOKEN:-}
+      # ── Documentos generados (instancia 3) ──
+      # API de V1 en pdn, con el endpoint de snapshot desplegado desde la rama -pdn.
+      # El token es de un usuario real de pdn y CADUCA EN ~12 h: hay que refrescarlo
+      # en el .env entre olas largas.
+      FLITMIG_V1Snapshot__BaseUrl: ${FLITMIG_V1_SNAPSHOT_BASE_URL:-}
+      FLITMIG_V1Snapshot__AuthToken: ${FLITMIG_V1_SNAPSHOT_AUTH_TOKEN:-}
+      FLITMIG_V1Snapshot__Include: ${FLITMIG_V1_SNAPSHOT_INCLUDE:-generated}
+      FLITMIG_V1Snapshot__Consolidated: ${FLITMIG_V1_SNAPSHOT_CONSOLIDATED:-auto}
+    # Sin restart: es un proceso de un solo uso, no un servicio. Si falla, se
+    # revisa el reporte y se vuelve a lanzar a mano.
+    restart: "no"
     logging: *default-logging
 
   # ── Flit.Gateway (API publica YARP: /api, /hubs, /ml) — GATEWAY_PORT ──────

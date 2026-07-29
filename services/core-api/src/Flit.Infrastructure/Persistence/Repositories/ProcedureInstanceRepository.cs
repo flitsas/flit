@@ -717,7 +717,10 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 h.ChangedAt,
                 h.ChangedBy,
                 db.Users.Where(u => u.Id == h.ChangedBy).Select(u => u.DisplayName).FirstOrDefault(),
-                h.Reason))
+                h.Reason)
+            {
+                Metadata = h.Metadata,
+            })
             .ToListAsync(ct);
 
         return (items, total);

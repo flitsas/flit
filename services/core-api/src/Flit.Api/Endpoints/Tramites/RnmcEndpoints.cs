@@ -28,9 +28,12 @@ internal static class RnmcEndpoints
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
-            return error is "not_found"
-                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
-                : Results.Ok(result);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "migrado_solo_lectura" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Trámite migrado (solo lectura): no se corren consultas RNMC."),
+                _ => Results.Ok(result),
+            };
         }).WithName("RunProcedureInstanceRnmc");
 
         // Devuelve el último resultado RNMC persistido (lista de checks por actor), o vacío.

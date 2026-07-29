@@ -40,6 +40,12 @@ public sealed class RunRnmcConsultHandler(
         if (instance is null)
             return (null, "not_found");
 
+        // Migración V1→V2 — un trámite migrado es una FOTO de solo lectura: NO se re-consulta ni se
+        // persisten field_values (rnmc_checks / rnmc_medida_pendiente). Además, en estado terminal el
+        // trigger de inmutabilidad rechazaría esa escritura con un 500. Se sale sin efectos.
+        if (instance.IsMigrated)
+            return (null, "migrado_solo_lectura");
+
         var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
         var fieldValues = instance.FieldValues
             .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);

@@ -65,6 +65,18 @@ public sealed class ProcedureInstance
     public bool ConsolidadoMaestroVigente { get; set; }
 
     /// <summary>
+    /// Migración V1→V2 (traspasos) — marca de "trámite histórico importado desde Flit V1". En
+    /// <c>true</c> el trámite es una FOTO de solo lectura: no se capturó paso a paso en V2, así que
+    /// no debe someterse al gating del wizard vivo (que exige datos —comercial, biométrica, FUR—
+    /// que la migración legítimamente no reconstruye). Cuando además está en estado terminal
+    /// (<see cref="Tramites.Estados.TramiteEstado.EsFinal"/>), el wizard reporta el expediente como
+    /// completo/solo-lectura para que el visor lo muestre íntegro (ver <c>GetWizardStateHandler.ComputeState</c>).
+    /// Default false (trámite nativo de V2). Columna agregada por migración SQL cruda (la tabla está
+    /// ExcludeFromMigrations); aquí solo se mapea al modelo EF. La setea el migrador Flit.DataMigration.V1.
+    /// </summary>
+    public bool IsMigrated { get; set; }
+
+    /// <summary>
     /// Origen del trámite y referencia externa del sistema originador. Para los trámites materializados
     /// por la integración con terceros (ICT): <c>Origin='ict'</c> y <c>ExternalRef</c> = id del pre-trámite
     /// (<c>ict.external_integration_master.id</c>). Sostienen la materialización IDEMPOTENTE: el índice
