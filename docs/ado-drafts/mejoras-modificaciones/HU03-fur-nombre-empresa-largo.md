@@ -4,9 +4,12 @@
 |-------|-------|
 | Tipo | `[BACKEND]` |
 | Story Points | 5 |
-| Estado | Pendiente |
+| Estado | **Implementada y verificada** (Active en ADO, pendiente de PR) |
 | Feature padre | [FEATURE.md](FEATURE.md) |
-| ADO ID | _pendiente de registro_ |
+| ADO ID | **#11048** |
+| Commit | `6f7fd6f7` |
+| Implementación | `FurTextFitter` (nuevo): si cabe con el cuerpo del manifiesto no se toca nada; si no, reduce cuerpo hasta el 65%, luego parte por palabras si el alto lo admite, y como último recurso trunca con elipsis. La medición se inyecta ⇒ 8 tests sin PdfSharpCore. **El manifiesto no se modifica** |
+| Geometría confirmada | El campo de nombre declara `w: 93.5`, `h: 14.4`, cuerpo `7.7` (manifiesto automotor); maquinaria y remolques `w: 120`, `h: 12`, cuerpo `7` |
 | Ajuste origen | `modificaciones.txt:3` (según aclaración del PO) |
 
 ## Aclaración del alcance

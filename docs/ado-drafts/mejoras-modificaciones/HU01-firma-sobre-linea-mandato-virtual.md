@@ -4,9 +4,11 @@
 |-------|-------|
 | Tipo | `[BACKEND]` |
 | Story Points | 5 |
-| Estado | Pendiente |
+| Estado | **Implementada y verificada** (Active en ADO, pendiente de PR) |
 | Feature padre | [FEATURE.md](FEATURE.md) |
-| ADO ID | _pendiente de registro_ |
+| ADO ID | **#11046** |
+| Commit | `c436b4bf` |
+| Implementación | `FlitFirmaBlock` (nuevo, compartido por los dos generadores) compone estampa → línea → datos. `ResolverEstampa` deja la prioridad del baúl (HU #11031) como función pura testeable. 3 tests sobre esa decisión |
 | Ajuste origen | `modificaciones.txt:19` y `:22` (describen el mismo cambio de posición) |
 | Bloquea a | HU16 (decide qué firma se plasma) |
 

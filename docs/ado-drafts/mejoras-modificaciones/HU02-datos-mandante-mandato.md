@@ -4,9 +4,11 @@
 |-------|-------|
 | Tipo | `[BACKEND]` |
 | Story Points | 3 |
-| Estado | Pendiente |
+| Estado | **Implementada y verificada** (Active en ADO, pendiente de PR) |
 | Feature padre | [FEATURE.md](FEATURE.md) |
-| ADO ID | _pendiente de registro_ |
+| ADO ID | **#11047** |
+| Commit | `c436b4bf` |
+| Implementación | `MandanteIdentificacion` pasa a EMPRESA/NIT/NOMBRE/documento/CELULAR/CORREO (persona natural sin EMPRESA ni NIT). 6 tests sobre orden, campos y dato ausente. **El mandatario no lleva contacto**: `MandatarioFirmante` no lo transporta y el contacto que el organismo necesita es el del mandante |
 | Ajuste origen | `modificaciones.txt:22-30` |
 
 ## Descripción

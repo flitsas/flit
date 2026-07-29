@@ -4,9 +4,10 @@
 |-------|-------|
 | Tipo | `[BACKEND]` |
 | Story Points | 5 |
-| Estado | Pendiente |
+| Estado | **Implementada y verificada** (Active en ADO, pendiente de PR) |
 | Feature padre | [FEATURE.md](FEATURE.md) |
-| ADO ID | _pendiente de registro_ |
+| ADO ID | **#11050** |
+| Commit | `3163fc19` |
 | Ajuste origen | `modificaciones.txt:49` |
 | Depende de | HU06 (no generar sobre trámites aprobados) |
 | Bloquea a | HU07 (ocultar botones exige que la cascada cubra todo) |
@@ -57,9 +58,39 @@ Distinguir tres situaciones y no confundirlas:
 2. **Aplicable y generable** → se genera y se incluye.
 3. **Aplicable pero con datos faltantes** → error explicable que nombra el documento (AC3).
 
-## Archivos previstos
+## Hallazgo: AC1 y AC2 ya se cumplían
+
+El plan asumía que había que extender la cascada a compraventa, mandato y solicitud virtual. **Ya
+estaban dentro.** `GenerarFurHandler` genera, junto al FUR:
+
+| Documento | Regla | Referencia |
+|-----------|-------|------------|
+| Compraventa | Siempre en traspaso | ADR-0035 |
+| Solicitud de trámite virtual | Siempre (natural y jurídica) | ADR-0036, HU #10914 |
+| Contrato de mandato | Condicional: jurídica siempre, natural según el OT | ADR-0036, HU #10915 |
+
+Y el consolidado lo invoca vía `IExpedienteHotDocumentsRegenerator`, que está registrado al propio
+`GenerarFurHandler`. Así que los documentos aplicables ya se generaban en cascada (AC1) y los no
+aplicables no rompían el consolidado (AC2).
+
+## Lo que sí faltaba: AC3
+
+El resultado de la regeneración **se descartaba** (`await` sin recoger el valor devuelto), así que un
+documento que no se podía generar simplemente no aparecía en el expediente y el gestor no tenía forma
+de saber por qué. Con la HU #11052 eso pasa de incómodo a crítico: ya no hay botones para generar
+documento por documento.
+
+`GenerarConsolidadoResult.AvisosCascada` devuelve `"documento: motivo"`, y el paso FUR lo traduce a
+lenguaje del gestor (proveedor no disponible, falta el organismo…). **No bloquea:** el consolidado se
+entrega igual, la misma decisión que tomó la HU #11017 con los documentos obligatorios faltantes.
+
+## Verificación
+
+3 tests de backend (fallo de la cascada, fallo de la impronta, sin fallos) + 1 de frontend ·
+`Consolidado` 37/37 · paso FUR 32/32.
+
+## Archivos
 
 - `services/core-api/src/Flit.Tramites.Application/UseCases/ProcedureInstances/ConsolidadoCommand.cs`
-- Puertos de generación análogos a `IImprontaAutoGenerator`
-- `services/core-api/src/Flit.Api/Endpoints/Tramites/ConsolidadoEndpoints.cs` (nuevos códigos de error)
-- Tests: `services/core-api/tests/Flit.Tramites.Application.Tests/UseCases/ProcedureInstances/`
+- `frontend/lib/api/types/procedure-runtime.ts`, `frontend/components/operacion/FirmaFurStep.tsx`
+- Tests: `ConsolidadoHandlerTests.cs`, `frontend/__tests__/firma-fur-step.test.tsx`

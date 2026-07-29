@@ -83,11 +83,11 @@ No generan HU (verificado contra código):
 
 | HU | ADO | Tipo | SP | Título | Estado |
 |----|-----|------|----|--------|--------|
-| [HU01](HU01-firma-sobre-linea-mandato-virtual.md) | #11046 | BACKEND | 5 | Estampa de firma sobre la línea en mandato y solicitud de trámite virtual | New |
-| [HU02](HU02-datos-mandante-mandato.md) | #11047 | BACKEND | 3 | Bloque de identificación completo del mandante en el mandato | New |
-| [HU03](HU03-fur-nombre-empresa-largo.md) | #11048 | BACKEND | 5 | Ajuste automático del nombre de empresa largo en el FUR | New |
-| [HU04](HU04-fecha-sin-hora-certificados.md) | #11049 | BACKEND | 3 | Fecha AÑO/MES/DÍA sin hora en los certificados del consolidado | New |
-| [HU05](HU05-cascada-consolidado-completa.md) | #11050 | BACKEND | 5 | Cascada del consolidado extendida a compraventa, mandato y solicitud virtual | New |
+| [HU01](HU01-firma-sobre-linea-mandato-virtual.md) | #11046 | BACKEND | 5 | Estampa de firma sobre la línea en mandato y solicitud de trámite virtual | **Implementada y verificada** (`c436b4bf`) |
+| [HU02](HU02-datos-mandante-mandato.md) | #11047 | BACKEND | 3 | Bloque de identificación completo del mandante en el mandato | **Implementada y verificada** (`c436b4bf`) |
+| [HU03](HU03-fur-nombre-empresa-largo.md) | #11048 | BACKEND | 5 | Ajuste automático del nombre de empresa largo en el FUR | **Implementada y verificada** (`6f7fd6f7`) |
+| [HU04](HU04-fecha-sin-hora-certificados.md) | #11049 | BACKEND | 3 | Fecha AÑO/MES/DÍA sin hora en los certificados del consolidado | **Implementada y verificada** (`b37f5310`) |
+| [HU05](HU05-cascada-consolidado-completa.md) | #11050 | BACKEND | 5 | Cascada del consolidado: avisos de lo que no se pudo generar (AC1/AC2 ya existían) | **Implementada y verificada** (`3163fc19`) |
 | [HU06](HU06-bloqueo-regeneracion-aprobado.md) | #11051 | BACKEND | 5 | Bloqueo de regeneración documental con el trámite aprobado | **Implementada y verificada** (`db22eb0d`) |
 | [HU07](HU07-consolidado-unico-disparador.md) | #11052 | FRONTEND | 3 | Consolidado como único disparador de generación en el paso FUR | **Implementada y verificada** (`298111f4`) |
 | [HU08](HU08-aviso-estado-real.md) | #11053 | FRONTEND | 3 | Aviso del detalle del trámite acorde al estado real | **Implementada y verificada** (`0efe1b33`) |

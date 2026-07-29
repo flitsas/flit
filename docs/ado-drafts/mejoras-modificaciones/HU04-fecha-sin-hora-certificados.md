@@ -4,9 +4,11 @@
 |-------|-------|
 | Tipo | `[BACKEND]` |
 | Story Points | 3 |
-| Estado | Pendiente |
+| Estado | **Implementada y verificada** (Active en ADO, pendiente de PR) |
 | Feature padre | [FEATURE.md](FEATURE.md) |
-| ADO ID | _pendiente de registro_ |
+| ADO ID | **#11049** |
+| Commit | `b37f5310` |
+| Implementación | `FlitDocumentDate` con `Format` (fechas tipadas) y `Normalize` (texto del proveedor, día primero, valor intacto si no se puede interpretar). Aplicado a RNMC, identidad, SOAT/RTM y RUES. Sin hora, el sufijo `UTC` se retira. 15 tests. **Fuera de alcance:** exportadores de Excel y resumen ejecutivo del módulo de analítica, que no van en el consolidado |
 | Ajuste origen | `modificaciones.txt:47` |
 
 ## Descripción
