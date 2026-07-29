@@ -15,7 +15,10 @@ public sealed record AdminIdentitySubjectDescriptor(
     string DocumentType,
     string DocumentNumber,
     string Email,
-    Guid? ActorBy);
+    Guid? ActorBy,
+    // HU #11028 — organismo del sujeto, cuando aplica (mandatario). Acota el perímetro de búsqueda de
+    // una identidad ya validada por la persona a las compañías que operan con ese organismo.
+    Guid? TransitOfficeId = null);
 
 /// <summary>
 /// Resultado de iniciar/reenviar una validación: la validación resultante + si el envío se reutilizó

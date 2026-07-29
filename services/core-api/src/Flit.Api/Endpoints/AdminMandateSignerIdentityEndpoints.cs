@@ -87,8 +87,9 @@ public static class AdminMandateSignerIdentityEndpoints
         [FromServices] IMandateSignerReader reader,
         [FromServices] ITransitOfficeOperationalStatusReader otStatus,
         [FromServices] IAdminIdentityValidationService service,
+        [FromServices] AdminIdentityMockOptions mockOptions,
         CancellationToken cancellationToken) =>
-        RunAsync(transitOfficeId, id, httpContext, reader, otStatus, service, resend: false, cancellationToken);
+        RunAsync(transitOfficeId, id, httpContext, reader, otStatus, service, mockOptions, resend: false, cancellationToken);
 
     private static Task<IResult> ResendAsync(
         Guid transitOfficeId,
@@ -97,8 +98,9 @@ public static class AdminMandateSignerIdentityEndpoints
         [FromServices] IMandateSignerReader reader,
         [FromServices] ITransitOfficeOperationalStatusReader otStatus,
         [FromServices] IAdminIdentityValidationService service,
+        [FromServices] AdminIdentityMockOptions mockOptions,
         CancellationToken cancellationToken) =>
-        RunAsync(transitOfficeId, id, httpContext, reader, otStatus, service, resend: true, cancellationToken);
+        RunAsync(transitOfficeId, id, httpContext, reader, otStatus, service, mockOptions, resend: true, cancellationToken);
 
     private static async Task<IResult> LinkAsync(
         Guid transitOfficeId,
@@ -202,7 +204,8 @@ public static class AdminMandateSignerIdentityEndpoints
             signer.DocumentNumber,
             // Sin correo (link/mock) se usa un marcador: el agregado exige el campo pero no se notifica a nadie.
             string.IsNullOrWhiteSpace(signer.Email) ? "sin-correo@flit.local" : signer.Email!,
-            ResolveUserId(httpContext.User));
+            ResolveUserId(httpContext.User),
+            transitOfficeId);
 
         return (descriptor, null);
     }
@@ -225,6 +228,7 @@ public static class AdminMandateSignerIdentityEndpoints
         IMandateSignerReader reader,
         ITransitOfficeOperationalStatusReader otStatus,
         IAdminIdentityValidationService service,
+        AdminIdentityMockOptions mockOptions,
         bool resend,
         CancellationToken cancellationToken)
     {
@@ -258,7 +262,8 @@ public static class AdminMandateSignerIdentityEndpoints
             signer.DocumentType,
             signer.DocumentNumber,
             signer.Email!,
-            ResolveUserId(httpContext.User));
+            ResolveUserId(httpContext.User),
+            transitOfficeId);
 
         try
         {
@@ -278,6 +283,16 @@ public static class AdminMandateSignerIdentityEndpoints
         }
         catch (AdminIdentityProviderException ex)
         {
+            // HU #11028 — en un ambiente de PRUEBA no hay proveedor con el que validar de verdad (sin
+            // API key, Kyverum responde error), así que el envío caía en 502 y no había manera de dejar
+            // al mandatario validado. Con la simulación habilitada se cae a una validación simulada:
+            // el objetivo del ambiente es poder probar la firma del mandato, no el correo.
+            if (mockOptions.Enabled)
+            {
+                var simulada = await service.SimulateApprovedAsync(descriptor, cancellationToken).ConfigureAwait(false);
+                return Results.Ok(ToResponse(simulada));
+            }
+
             // Transitorio (proveedor caído/timeout/5xx) → 503; definitivo (4xx) → 502. Sin filtrar secretos.
             var httpStatus = ex.Transient ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status502BadGateway;
             return Results.Json(

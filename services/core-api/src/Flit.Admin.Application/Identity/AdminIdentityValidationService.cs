@@ -13,7 +13,8 @@ public sealed class AdminIdentityValidationService(
     IAdminIdentityValidationProvider provider,
     IAdminIdentityValidationRepository repository,
     IAdminIdentitySubjectLinker subjectLinker,
-    TimeProvider timeProvider) : IAdminIdentityValidationService
+    TimeProvider timeProvider,
+    IPersonIdentityLookup? personLookup = null) : IAdminIdentityValidationService
 {
     public Task<AdminIdentityValidationResult> SendAsync(
         AdminIdentitySubjectDescriptor subject,
@@ -103,19 +104,64 @@ public sealed class AdminIdentityValidationService(
             .FindLatestApprovedByDocumentAsync(
                 subject.TenantId, subject.DocumentType, subject.DocumentNumber, cancellationToken)
             .ConfigureAwait(false);
-        if (byDocument is null || !byDocument.EsAprobadaVigente(now))
+        if (byDocument is not null && byDocument.EsAprobadaVigente(now))
         {
-            // Sin identidad vigente de esa persona: NO se inventa ni se envía nada.
-            return null;
+            await subjectLinker
+                .LinkAsync(
+                    subject.TenantId, subject.SubjectType, subject.SubjectRef, byDocument.Id,
+                    subject.ActorBy, cancellationToken)
+                .ConfigureAwait(false);
+
+            return new AdminIdentityValidationResult(byDocument, Reused: true);
         }
 
+        // HU #11028 — la identidad de la persona casi nunca está en la tabla ADMIN: lo normal es que la
+        // haya validado dentro del trámite de una compañía (como comprador o vendedor). Se busca ahí,
+        // acotado a las compañías que operan con el organismo, y se ESPEJA como validación
+        // administrativa del sujeto conservando su fecha de aprobación, su vencimiento original y su
+        // certificado. Espejar (y no apuntar) es necesario porque el gate del mandato consulta las
+        // validaciones admin por sujeto; falsear la vigencia sería regalar 30 días nuevos.
+        if (personLookup is null || subject.TransitOfficeId is not { } transitOfficeId)
+            return null;
+
+        var origen = await personLookup
+            .FindVigenteInTransitOfficeAsync(
+                transitOfficeId, subject.DocumentType, subject.DocumentNumber, now, cancellationToken)
+            .ConfigureAwait(false);
+        if (origen is null)
+            return null;
+
+        var espejo = AdminIdentityValidation.Rehydrate(
+            Guid.NewGuid(),
+            subject.TenantId,
+            subject.SubjectType,
+            subject.SubjectRef,
+            subject.DocumentType,
+            subject.DocumentNumber,
+            subject.Name,
+            subject.Email,
+            AdminIdentityEstados.Aprobado,
+            origen.Provider,
+            captureUrl: null,
+            kyverumVerificationId: null,
+            webhookSecretEncrypted: null,
+            providerStatus: "aprobado",
+            providerPayload:
+                $"{{\"origen\":\"tramite\",\"validacion\":\"{origen.Id}\",\"tenant\":\"{origen.TenantId}\"}}",
+            certificateHash: origen.CertificateHash,
+            validatedAt: origen.ValidatedAt,
+            validUntil: origen.ValidUntil,
+            createdAt: now,
+            updatedAt: now);
+
+        await repository.AddAsync(espejo, cancellationToken).ConfigureAwait(false);
         await subjectLinker
             .LinkAsync(
-                subject.TenantId, subject.SubjectType, subject.SubjectRef, byDocument.Id,
+                subject.TenantId, subject.SubjectType, subject.SubjectRef, espejo.Id,
                 subject.ActorBy, cancellationToken)
             .ConfigureAwait(false);
 
-        return new AdminIdentityValidationResult(byDocument, Reused: true);
+        return new AdminIdentityValidationResult(espejo, Reused: true);
     }
 
     public async Task<AdminIdentityValidationResult> SimulateApprovedAsync(
