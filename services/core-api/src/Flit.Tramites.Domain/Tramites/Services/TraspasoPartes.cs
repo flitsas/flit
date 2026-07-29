@@ -40,17 +40,19 @@ public static class TraspasoPartes
             MismoEmail: ve.Length > 0 && ce.Length > 0 && ve == ce);
     }
 
-    /// <summary>Mensaje accionable de duplicidad, o <c>null</c> si las partes son distintas (paridad <c>mensajePartesTraspasoDuplicadas</c>).</summary>
+    /// <summary>
+    /// Mensaje accionable de duplicidad, o <c>null</c> si las partes son distintas (paridad
+    /// <c>mensajePartesTraspasoDuplicadas</c>). HU #11019 — el CORREO COMPARTIDO ya no bloquea: es
+    /// legítimo que vendedor y comprador usen el mismo buzón (la empresa que gestiona por su contacto,
+    /// un familiar que recibe por ambos). El mismo DOCUMENTO sí sigue bloqueando: ahí serían la misma
+    /// persona. <see cref="PartesDuplicadas.MismoEmail"/> se conserva como dato para quien lo consulte.
+    /// </summary>
     public static string? MensajeDuplicadas(PartesDuplicadas dup)
     {
         ArgumentNullException.ThrowIfNull(dup);
-        return (dup.MismoDocumento, dup.MismoEmail) switch
-        {
-            (true, true) => "El vendedor y el comprador no pueden tener el mismo documento ni el mismo correo electrónico.",
-            (true, false) => "El vendedor y el comprador no pueden tener el mismo número de documento.",
-            (false, true) => "El vendedor y el comprador no pueden usar el mismo correo electrónico.",
-            _ => null,
-        };
+        return dup.MismoDocumento
+            ? "El vendedor y el comprador no pueden tener el mismo número de documento."
+            : null;
     }
 
     /// <summary>

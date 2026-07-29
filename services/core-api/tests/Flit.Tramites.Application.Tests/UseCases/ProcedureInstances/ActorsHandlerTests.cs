@@ -458,18 +458,19 @@ public sealed class ActorsHandlerTests
     }
 
     [Fact]
-    public async Task Put_Traspaso_SameEmail_ReturnsPartesDuplicadas()
+    // HU #11019 — el correo compartido entre vendedor y comprador ya NO es duplicidad: es legítimo que
+    // ambas partes usen el mismo buzón. El bloqueo se conserva solo para el mismo documento.
+    public async Task Put_Traspaso_SameEmail_EsAceptado()
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, modalidad: "traspaso"));
 
-        var (result, error) = await _put.HandleAsync(id, tenant,
+        var (_, error) = await _put.HandleAsync(id, tenant,
             new PutActorsRequest([Vendedor(email: "same@x.com"), Comprador(email: "SAME@x.com")]), ct);
 
-        error.Should().Be("partes_duplicadas");
-        result.Should().BeNull();
+        error.Should().NotBe("partes_duplicadas");
     }
 
     // ── Validación de forma ───────────────────────────────────────────────────

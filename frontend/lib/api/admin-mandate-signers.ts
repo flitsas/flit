@@ -79,6 +79,8 @@ export interface MandateSignerIdentityResult {
   captureUrl: string | null;
   validUntil: string | null;
   reused: boolean;
+  /** HU #11028 — `"mock"` cuando la validación fue simulada en un ambiente de prueba. */
+  provider?: string;
 }
 
 function base(transitOfficeId: string): string {
@@ -92,6 +94,21 @@ export async function fetchMandateSigners(
 ): Promise<MandateSigner[]> {
   const result = await apiFetch<{ data: MandateSigner[] }>(base(transitOfficeId), { signal });
   return result.data;
+}
+
+/**
+ * GET — igual que `fetchMandateSigners` pero conservando si el ambiente permite SIMULAR validaciones
+ * de identidad (HU #11028). La consola solo ofrece esa acción cuando el backend la habilita.
+ */
+export async function fetchMandateSignersWithFlags(
+  transitOfficeId: string,
+  signal?: AbortSignal,
+): Promise<{ signers: MandateSigner[]; mockIdentityEnabled: boolean }> {
+  const result = await apiFetch<{ data: MandateSigner[]; mockIdentityEnabled?: boolean }>(
+    base(transitOfficeId),
+    { signal },
+  );
+  return { signers: result.data, mockIdentityEnabled: result.mockIdentityEnabled === true };
 }
 
 /** GET /companies — compañías del OT con sus mandatarios asignados (RF34 + multiselect). */
@@ -154,6 +171,36 @@ export function sendMandateSignerIdentity(
 ): Promise<MandateSignerIdentityResult> {
   return apiFetch<MandateSignerIdentityResult>(
     `${base(transitOfficeId)}/${mandateSignerId}/identity/send`,
+    { method: "POST" },
+  );
+}
+
+/**
+ * POST /{signerId}/identity/link — vincula al mandatario una validación que la PERSONA ya hizo y sigue
+ * vigente (HU #11028). No envía correo ni crea nada: lanza ApiError 409 `sin_identidad_vigente` cuando
+ * esa persona no tiene ninguna identidad aprobada y vigente.
+ */
+export function linkMandateSignerIdentity(
+  transitOfficeId: string,
+  mandateSignerId: string,
+): Promise<MandateSignerIdentityResult> {
+  return apiFetch<MandateSignerIdentityResult>(
+    `${base(transitOfficeId)}/${mandateSignerId}/identity/link`,
+    { method: "POST" },
+  );
+}
+
+/**
+ * POST /{signerId}/identity/mock — SIMULA una validación aprobada (HU #11028). Solo disponible en
+ * ambientes de prueba: con la simulación deshabilitada el backend responde 403 `simulacion_deshabilitada`.
+ * La validación queda marcada como simulada (`provider: "mock"`), nunca se confunde con una real.
+ */
+export function mockMandateSignerIdentity(
+  transitOfficeId: string,
+  mandateSignerId: string,
+): Promise<MandateSignerIdentityResult> {
+  return apiFetch<MandateSignerIdentityResult>(
+    `${base(transitOfficeId)}/${mandateSignerId}/identity/mock`,
     { method: "POST" },
   );
 }

@@ -15,7 +15,10 @@ public sealed record AdminIdentitySubjectDescriptor(
     string DocumentType,
     string DocumentNumber,
     string Email,
-    Guid? ActorBy);
+    Guid? ActorBy,
+    // HU #11028 — organismo del sujeto, cuando aplica (mandatario). Acota el perímetro de búsqueda de
+    // una identidad ya validada por la persona a las compañías que operan con ese organismo.
+    Guid? TransitOfficeId = null);
 
 /// <summary>
 /// Resultado de iniciar/reenviar una validación: la validación resultante + si el envío se reutilizó
@@ -61,6 +64,29 @@ public interface IAdminIdentityValidationService
     /// <see cref="AdminIdentityProviderException"/> solo en el caso 3 si el proveedor falla.
     /// </summary>
     Task<AdminIdentityValidationResult> EnsureAsync(
+        AdminIdentitySubjectDescriptor subject,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// VINCULA al sujeto una identidad que la PERSONA ya validó (HU #11028). A diferencia de
+    /// <see cref="EnsureAsync"/>, NUNCA inicia una validación nueva ni envía correo: si no hay ninguna
+    /// aprobada y vigente para ese documento devuelve <c>null</c> y el llamador lo informa. Es la acción
+    /// del botón «Vincular validación existente»: sirve para el mandatario que ya validó como
+    /// representante legal o en otro organismo.
+    /// </summary>
+    Task<AdminIdentityValidationResult?> LinkExistingAsync(
+        AdminIdentitySubjectDescriptor subject,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// SIMULA una validación aprobada y vigente para el sujeto (HU #11028), sin pasar por el proveedor.
+    /// Existe para poder probar la firma del mandato en ambientes donde nadie puede completar una
+    /// biométrica real. Queda registrada con <see cref="AdminIdentityProviders.Mock"/> y un certificado
+    /// reconocible, así que jamás se confunde con una identidad real.
+    /// <para><b>El llamador debe haber verificado que la simulación está habilitada</b>
+    /// (<see cref="AdminIdentityMockOptions"/>): este método no conoce la configuración del ambiente.</para>
+    /// </summary>
+    Task<AdminIdentityValidationResult> SimulateApprovedAsync(
         AdminIdentitySubjectDescriptor subject,
         CancellationToken cancellationToken = default);
 

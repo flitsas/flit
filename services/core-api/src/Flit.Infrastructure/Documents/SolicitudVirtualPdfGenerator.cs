@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using QuestPDF;
@@ -27,13 +28,17 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
     {
         ArgumentNullException.ThrowIfNull(data);
 
-        var parte = data.Radicador;
+        // HU #11032 — la solicitud la firma el PROPIETARIO del vehículo: en un traspaso, quien vende.
+        // Antes salía a nombre del radicador (el comprador), declarando por la parte equivocada.
+        var parte = data.Propietario;
         var esJuridica = parte?.EsJuridica ?? false;
         var esTraspaso = string.Equals(
             data.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
         var tramite = esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL";
 
-        var ciudad = Val(data.Organismo.Ciudad, "___");
+        // HU #11016 — sin ciudad legible el encabezado es solo la fecha: antes se imprimía el código
+        // DIVIPOLA del organismo («25286, 28 de julio de 2026»), que parecía pegado a la fecha.
+        var ciudad = data.Organismo.Ciudad?.Trim();
         var fecha = FormatFechaEs(data.FechaTramite ?? DateTime.UtcNow.AddHours(-5));
         var ot = Val(data.Organismo.Nombre, "___");
         var placa = Val(data.Placa, "___");
@@ -42,14 +47,16 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
         {
             doc.Page(page =>
             {
-                page.Size(PageSizes.A4);
-                page.Margin(2, Unit.Centimetre);
-                page.DefaultTextStyle(t => t.FontSize(11).FontFamily(Fonts.Arial));
+                // HU #11033 — membrete institucional FLIT (HU #10856), igual que los certificados
+                // generados. Sustituye el A4 con márgenes sueltos por la página con bandas del
+                // membrete arriba y abajo, y el contenido dentro del margen FLIT.
+                FlitLetterhead.ApplyTo(page);
+                page.DefaultTextStyle(t => t.FontSize(11).FontFamily(FlitDocumentTheme.FontRegular));
 
-                page.Content().Column(col =>
+                FlitLetterhead.Content(page).Column(col =>
                 {
                     col.Spacing(8);
-                    col.Item().Text($"{ciudad}, {fecha}");
+                    col.Item().Text(string.IsNullOrEmpty(ciudad) ? fecha : $"{ciudad}, {fecha}");
                     col.Item().PaddingTop(10).AlignCenter().Text(t => t.Span("SOLICITUD TRÁMITE DE FORMA VIRTUAL").Bold());
 
                     RenderKeywordText(
@@ -206,6 +213,16 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
     // identidad está validada y hay sello para el rol (mismo patrón que la compraventa autogenerada).
     private static void RenderSello(ColumnDescriptor sig, FurDocumentData data, string? rol)
     {
+        // HU #11031 — PRIORIDAD DEL BAÚL: si la firma estampada vino del baúl, esa es la firma del
+        // documento y no se añade además el sello de la validación de identidad.
+        if (rol is not null
+            && data.FirmaImagenes is not null
+            && data.FirmaImagenes.TryGetValue(rol, out var firmaBaul)
+            && firmaBaul.Length > 0)
+        {
+            return;
+        }
+
         if (rol is not null
             && data.IdentidadValidada
             && data.SellosIdentidad is not null

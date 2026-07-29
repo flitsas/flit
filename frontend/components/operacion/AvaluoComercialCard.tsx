@@ -18,6 +18,11 @@ const SOURCE_LABELS: Record<string, string> = {
 interface Props {
   instanceId: string | null;
   disabled?: boolean;
+  /**
+   * HU #11019 — el valor de venta ya proviene de una sugerencia aceptada. Se sigue mostrando el avalúo
+   * y sus fuentes (información útil), pero sin los botones de aceptar/usar: ya no hay nada que elegir.
+   */
+  accepted?: boolean;
   /** Aplica el valor elegido al campo "Valor de venta". */
   onAccept: (value: number, source: string, sugerido: number | null) => void;
 }
@@ -27,7 +32,7 @@ interface Props {
  * aceptarlo. Nunca bloquea el paso: si una fuente falla o no tiene datos, se muestra su estado y
  * las demás siguen disponibles.
  */
-export function AvaluoComercialCard({ instanceId, disabled = false, onAccept }: Props) {
+export function AvaluoComercialCard({ instanceId, disabled = false, accepted = false, onAccept }: Props) {
   const [data, setData] = useState<SuggestedCommercialValue | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,12 +105,19 @@ export function AvaluoComercialCard({ instanceId, disabled = false, onAccept }: 
                 key={s.source}
                 source={s}
                 disabled={disabled}
+                accepted={accepted}
                 onUse={() => s.value != null && onAccept(s.value, s.source, sugerido)}
               />
             ))}
           </ul>
 
-          {sugerido != null && (
+          {sugerido != null && accepted && (
+            <p className="mt-3 text-right text-[11px] opacity-60" role="status">
+              Valor sugerido aceptado.
+            </p>
+          )}
+
+          {sugerido != null && !accepted && (
             <div className="flex justify-end mt-3">
               <button
                 type="button"
@@ -127,10 +139,13 @@ export function AvaluoComercialCard({ instanceId, disabled = false, onAccept }: 
 function SourceRow({
   source,
   disabled,
+  accepted,
   onUse,
 }: {
   source: AvaluoSource;
   disabled: boolean;
+  /** HU #11019 — con el valor ya aceptado la fila es informativa: sin botón «Usar». */
+  accepted: boolean;
   onUse: () => void;
 }) {
   const label = SOURCE_LABELS[source.source] ?? source.source;
@@ -151,7 +166,7 @@ function SourceRow({
       </div>
       <div className="flex items-center gap-3 shrink-0">
         <span className="text-xs font-mono">{ok ? formatCOP(source.value!) : '—'}</span>
-        {ok && (
+        {ok && !accepted && (
           <button
             type="button"
             disabled={disabled}

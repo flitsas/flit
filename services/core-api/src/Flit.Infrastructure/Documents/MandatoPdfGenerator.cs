@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Tramites.Catalog;
@@ -38,7 +39,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         ArgumentNullException.ThrowIfNull(data);
 
         var tramite = data.Tramite;
-        var parte = tramite.Radicador;
+        // HU #11030 — el mandato lo otorga quien VENDE (en matrícula, el radicador).
+        var parte = tramite.Mandante;
         var esJuridica = parte?.EsJuridica ?? false;
         var variante = MandatoTemplateResolver.Resolve(data.TemplateCode);
 
@@ -48,7 +50,9 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
 
         var placa = Val(tramite.Placa, "___");
         var ot = Val(tramite.Organismo.Nombre, "___");
-        var ciudad = Val(tramite.Organismo.Ciudad, "___");
+        // HU #11016 — la ciudad puede no venir (el field_value trae el código DIVIPOLA, que se descarta):
+        // en ese caso la cláusula de cierre no menciona ciudad en vez de imprimir un código o «___».
+        var ciudad = tramite.Organismo.Ciudad?.Trim() ?? string.Empty;
         var fecha = FormatFechaEs(tramite.FechaTramite ?? DateTime.UtcNow.AddHours(-5));
 
         var parrafos = BuildParrafos(data, parte, esJuridica, variante, nombreTramite, placa, ot, ciudad, fecha);
@@ -57,14 +61,18 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         {
             doc.Page(page =>
             {
-                page.Size(PageSizes.A4);
-                page.Margin(2, Unit.Centimetre);
-                page.DefaultTextStyle(t => t.FontSize(11).FontFamily(Fonts.Arial));
+                // HU #11033 — membrete institucional FLIT (HU #10856), igual que los certificados
+                // generados: bandas arriba y abajo, contenido dentro del margen FLIT.
+                FlitLetterhead.ApplyTo(page);
+                // HU #11034 — cuerpo 9pt y espaciado corto: con 11pt el contrato se pasaba a una segunda
+                // hoja y las firmas quedaban solas. El texto legal es largo y no se puede recortar, así
+                // que lo que se ajusta es la caja tipográfica.
+                page.DefaultTextStyle(t => t.FontSize(9).FontFamily(FlitDocumentTheme.FontRegular));
 
-                page.Content().Column(col =>
+                FlitLetterhead.Content(page).Column(col =>
                 {
-                    col.Spacing(8);
-                    col.Item().AlignCenter().Text(t => t.Span("Contrato Privado de Mandato").Bold().FontSize(14));
+                    col.Spacing(3);
+                    col.Item().AlignCenter().Text(t => t.Span("Contrato Privado de Mandato").Bold().FontSize(12));
 
                     foreach (var p in parrafos)
                         RenderParrafo(col, p);
@@ -120,7 +128,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             "mandato y en especial para representar, notificarse, recibir, impugnar, desistir, sustituir, reasumir, " +
             "pedir, conciliar o asumir obligaciones en nombre del MANDANTE.",
             SegundaObligaciones(),
-            $"Dicho contrato se firmó entre las partes el {fecha} en la ciudad de {ciudad}.",
+            CierreFirma(fecha, ciudad),
         ];
     }
 
@@ -156,7 +164,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             "indemne a la UT-SETSA de cualquier responsabilidad en los que se ve comprometido la confidencialidad y " +
             "divulgación de la información legalmente protegida mediante los parámetros y disposiciones de la ley " +
             "1581 del 2012 y demás normas que se dicten en la materia.",
-            $"Dicho contrato se firmó entre las partes el {fecha} en la ciudad de {ciudad}.",
+            CierreFirma(fecha, ciudad),
         ];
     }
 
@@ -218,6 +226,12 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         "se anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante la " +
         "autoridad competente de cualquier irregularidad que los mismos puedan contener.";
 
+    /// <summary>Cláusula de cierre: menciona la ciudad solo si se conoce (HU #11016).</summary>
+    private static string CierreFirma(string fecha, string ciudad) =>
+        string.IsNullOrEmpty(ciudad)
+            ? $"Dicho contrato se firmó entre las partes el {fecha}."
+            : $"Dicho contrato se firmó entre las partes el {fecha} en la ciudad de {ciudad}.";
+
     private static void RenderFirmas(
         ColumnDescriptor col, MandatoData data, DocumentParte? parte, bool esJuridica, MandatoVariante variante)
     {
@@ -226,7 +240,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         // Sabaneta: mandatario institucional ⇒ solo firma el MANDANTE (+ bloque de identificación).
         if (variante == MandatoVariante.Sabaneta)
         {
-            col.Item().PaddingTop(40).Column(sig =>
+            col.Item().PaddingTop(16).Column(sig =>
             {
                 sig.Item().Text(t => t.Span("MANDANTE").Bold());
                 RenderFirmaSlot(sig, tramite, parte?.Rol, "_______________________________");
@@ -238,8 +252,9 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         }
 
         // Genérica / Bello: firman MANDANTE y MANDATARIO.
+        // HU #11034 — separación reducida para que las firmas quepan en la misma hoja que el cuerpo.
         var mandatario = MandatarioTexto(data.Mandatario);
-        col.Item().PaddingTop(40).Row(row =>
+        col.Item().PaddingTop(16).Row(row =>
         {
             row.RelativeItem().Column(sig =>
             {
@@ -252,9 +267,17 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             row.RelativeItem().Column(sig =>
             {
                 sig.Item().Text(t => t.Span("MANDATARIO").Bold());
-                sig.Item().PaddingTop(28).Text("____________________________");
+                // HU #11030 — la firma del mandatario no se pintaba nunca: siempre salía la línea vacía
+                // aunque tuviera firma en el baúl o identidad validada. Misma precedencia que el mandante.
+                RenderFirmaMandatario(sig, data.Mandatario);
                 sig.Item().Text(t => t.Span(mandatario.Nombre).FontSize(10));
                 sig.Item().Text(t => t.Span($"C.C. {mandatario.Documento}").FontSize(10));
+                if (!string.IsNullOrWhiteSpace(data.Mandatario?.SelloIdentidad))
+                {
+                    foreach (var line in data.Mandatario!.SelloIdentidad!.Split(
+                                 '\n', StringSplitOptions.RemoveEmptyEntries))
+                        sig.Item().Text(t => t.Span(line.Trim()).FontSize(6).Light());
+                }
             });
         });
     }
@@ -262,6 +285,22 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     // HU #10997 — pinta la firma del MANDANTE según el mecanismo aplicable: imagen del baúl de firmas si
     // el trámite la resolvió para el rol (persona jurídica ⇒ representante legal), o la línea en blanco para
     // firma manuscrita en su ausencia. La llave del diccionario es el rol de la parte radicadora.
+    /// <summary>
+    /// Espacio de firma del MANDATARIO (HU #11030): imagen del baúl si la tiene; si no, la línea. El
+    /// sello de identidad, cuando lo hay, lo pinta el llamador bajo los datos del firmante.
+    /// </summary>
+    private static void RenderFirmaMandatario(ColumnDescriptor sig, MandatarioFirmante? mandatario)
+    {
+        if (mandatario?.FirmaImagen is { Length: > 0 } imagen)
+        {
+            sig.Item().PaddingTop(4).Height(32).Image(imagen).FitHeight();
+        }
+        else
+        {
+            sig.Item().PaddingTop(18).Text("____________________________");
+        }
+    }
+
     private static void RenderFirmaSlot(ColumnDescriptor sig, FurDocumentData tramite, string? rol, string underline)
     {
         if (rol is not null
@@ -273,14 +312,26 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         }
         else
         {
-            sig.Item().PaddingTop(28).Text(underline);
+            sig.Item().PaddingTop(18).Text(underline);
         }
     }
 
     // HU #10997 — sello de validación biométrica de identidad bajo la firma, solo si la identidad está
     // validada y hay sello para el rol (mismo patrón que la compraventa autogenerada).
+    /// <summary>¿La parte tiene firma del baúl estampada en este documento? (HU #11031)</summary>
+    private static bool TieneFirmaBaul(FurDocumentData tramite, string rol) =>
+        tramite.FirmaImagenes is not null
+        && tramite.FirmaImagenes.TryGetValue(rol, out var imagen)
+        && imagen.Length > 0;
+
     private static void RenderSello(ColumnDescriptor sig, FurDocumentData tramite, string? rol)
     {
+        // HU #11031 — PRIORIDAD DEL BAÚL: con firma del baúl vigente, esa es la firma del documento y
+        // no se añade además el sello de la validación de identidad. Antes se pintaban las dos cosas,
+        // dejando el documento como si la parte hubiera firmado de dos maneras distintas.
+        if (rol is not null && TieneFirmaBaul(tramite, rol))
+            return;
+
         if (rol is not null
             && tramite.IdentidadValidada
             && tramite.SellosIdentidad is not null
@@ -303,9 +354,12 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         "MANDANTE",
     ];
 
+    // HU #11034 — párrafos JUSTIFICADOS y compactos: el contrato debe caber en una sola hoja, firmas
+    // incluidas, y el texto justificado es lo que espera un documento legal.
     private static void RenderParrafo(ColumnDescriptor col, string texto) =>
-        col.Item().PaddingTop(4).Text(t =>
+        col.Item().PaddingTop(2).Text(t =>
         {
+            t.Justify();
             foreach (var (segment, bold) in SplitKeywords(texto, MandatoKeywords))
             {
                 var span = t.Span(segment);

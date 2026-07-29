@@ -6,8 +6,10 @@ import { useToast } from "@/components/admin/Toast";
 import { ShieldAlert, ShieldCheck } from "lucide-react";
 import {
   createMandateSigner,
-  fetchMandateSigners,
+  fetchMandateSignersWithFlags,
   fetchOtCompanies,
+  linkMandateSignerIdentity,
+  mockMandateSignerIdentity,
   inactivateMandateSigner,
   reactivateMandateSigner,
   resendMandateSignerIdentity,
@@ -34,21 +36,24 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<MandateSigner | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // HU #11028 — la simulación de identidad solo existe donde el ambiente la habilita.
+  const [mockEnabled, setMockEnabled] = useState(false);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const [signerList, companyList] = await Promise.all([
-          fetchMandateSigners(transitOfficeId, signal),
+        const [signerResult, companyList] = await Promise.all([
+          fetchMandateSignersWithFlags(transitOfficeId, signal),
           fetchOtCompanies(transitOfficeId, signal),
         ]);
         if (signal?.aborted) {
           return;
         }
-        setSigners(signerList);
+        setSigners(signerResult.signers);
+        setMockEnabled(signerResult.mockIdentityEnabled);
         setCompanies(companyList);
-        setStatus(signerList.length === 0 ? "empty" : "ready");
+        setStatus(signerResult.signers.length === 0 ? "empty" : "ready");
       } catch {
         if (!signal?.aborted) {
           setStatus("error");
@@ -115,6 +120,42 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
       await load();
     } catch {
       show("No se pudo enviar la validación de identidad.", "error");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // HU #11028 — vincula una identidad que la PERSONA ya validó (como representante legal, en otro
+  // organismo…). No envía correo: si no hay ninguna vigente, se dice y no se crea nada.
+  const handleLinkIdentity = async (signer: MandateSigner) => {
+    setBusyId(signer.id);
+    try {
+      await linkMandateSignerIdentity(transitOfficeId, signer.id);
+      show(`Identidad vigente vinculada a ${signer.fullName}.`, "success");
+      await load();
+    } catch (err) {
+      const conflicto = err instanceof Error && err.message.includes("409");
+      show(
+        conflicto
+          ? `${signer.fullName} no tiene una validación de identidad vigente que vincular.`
+          : "No se pudo vincular la validación de identidad.",
+        "error",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // HU #11028 — simula una validación aprobada para poder probar la firma del mandato en ambientes
+  // donde nadie puede completar una biométrica real. Queda marcada como simulada.
+  const handleMockIdentity = async (signer: MandateSigner) => {
+    setBusyId(signer.id);
+    try {
+      await mockMandateSignerIdentity(transitOfficeId, signer.id);
+      show(`Validación de identidad SIMULADA para ${signer.fullName} (solo pruebas).`, "success");
+      await load();
+    } catch {
+      show("No se pudo simular la validación de identidad.", "error");
     } finally {
       setBusyId(null);
     }
@@ -256,6 +297,33 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
                         >
                           {identityUi(signer.identityStatus).action}
                         </button>
+                        <button
+                          type="button"
+                          className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                          disabled={busyId === signer.id || signer.identityStatus === "valid"}
+                          title={
+                            signer.identityStatus === "valid"
+                              ? "El mandatario ya tiene una identidad validada y vigente."
+                              : "Vincula una validación de identidad que esta persona ya haya completado."
+                          }
+                          aria-label={`Vincular validación existente de ${signer.fullName}`}
+                          onClick={() => void handleLinkIdentity(signer)}
+                        >
+                          Vincular validación
+                        </button>
+                        {mockEnabled && (
+                          <button
+                            type="button"
+                            className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                            style={{ color: "#b45309", borderColor: "#f0c38e" }}
+                            disabled={busyId === signer.id || signer.identityStatus === "valid"}
+                            title="Crea una validación de identidad SIMULADA. Solo para ambientes de prueba."
+                            aria-label={`Simular validación de identidad de ${signer.fullName}`}
+                            onClick={() => void handleMockIdentity(signer)}
+                          >
+                            Simular validación
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold"

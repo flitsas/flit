@@ -1074,10 +1074,11 @@ public static class AdminOtEndpoints
         {
             "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
             "modalidad_no_soportada" => Results.Conflict(new { error = "modalidad_no_soportada" }),
+            // HU #11017 — el consolidado ya no rechaza por documentos obligatorios faltantes (se genera
+            // marcado como incompleto), así que ese código dejó de emitirse. `fur_requerido` solo llega
+            // cuando la regeneración en cascada tampoco pudo producirlo y no dio un motivo propio.
             Flit.Tramites.Application.UseCases.ProcedureInstances.SubmitGate.FurRequerido =>
                 Results.Conflict(new { error = "fur_requerido" }),
-            Flit.Tramites.Application.UseCases.ProcedureInstances.SubmitGate.DocumentosIncompletos =>
-                Results.Conflict(new { error = "documentos_incompletos" }),
             "sin_adjuntos" => Results.Conflict(new { error = "sin_adjuntos" }),
             "adjunto_no_disponible" => Results.Conflict(new { error = "adjunto_no_disponible" }),
             "mimetype_no_soportado" => Results.Conflict(new { error = "mimetype_no_soportado" }),

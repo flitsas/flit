@@ -132,6 +132,8 @@ public static class AdminInfrastructureExtensions
             AdminIdentityValidationRepository>();
         services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentitySubjectLinker,
             AdminIdentitySubjectLinker>();
+        // HU #11028 — identidad que la persona ya validó dentro de un trámite de las compañías del OT.
+        services.AddScoped<Flit.Admin.Application.Identity.IPersonIdentityLookup, PersonIdentityLookup>();
         services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentityValidationProvider,
             Flit.Infrastructure.Kyverum.KyverumAdminIdentityValidationProvider>();
 
