@@ -312,8 +312,20 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
 
     // HU #10997 — sello de validación biométrica de identidad bajo la firma, solo si la identidad está
     // validada y hay sello para el rol (mismo patrón que la compraventa autogenerada).
+    /// <summary>¿La parte tiene firma del baúl estampada en este documento? (HU #11031)</summary>
+    private static bool TieneFirmaBaul(FurDocumentData tramite, string rol) =>
+        tramite.FirmaImagenes is not null
+        && tramite.FirmaImagenes.TryGetValue(rol, out var imagen)
+        && imagen.Length > 0;
+
     private static void RenderSello(ColumnDescriptor sig, FurDocumentData tramite, string? rol)
     {
+        // HU #11031 — PRIORIDAD DEL BAÚL: con firma del baúl vigente, esa es la firma del documento y
+        // no se añade además el sello de la validación de identidad. Antes se pintaban las dos cosas,
+        // dejando el documento como si la parte hubiera firmado de dos maneras distintas.
+        if (rol is not null && TieneFirmaBaul(tramite, rol))
+            return;
+
         if (rol is not null
             && tramite.IdentidadValidada
             && tramite.SellosIdentidad is not null

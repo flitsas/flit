@@ -86,7 +86,7 @@ public static class FurOverlayRenderer
             case FurFieldType.Multiline:
             case FurFieldType.Text:
                 if (!string.IsNullOrWhiteSpace(value.Text))
-                    DrawText(gfx, field, value.Text!);
+                    DrawText(gfx, field, value.Text!, value.FontSizeDelta);
                 break;
         }
     }
@@ -101,14 +101,18 @@ public static class FurOverlayRenderer
     private static void DrawText(
         XGraphics gfx,
         FurFieldDefinition field,
-        string text)
+        string text,
+        double fontSizeDelta = 0)
     {
-        var font = CreateFont(field.FontSize, field.Bold);
+        // HU #11031 — cuerpo efectivo = el del manifiesto ± el ajuste que traiga el valor, con un
+        // mínimo legible. Lo usa el sello de identidad, que va 2pt por debajo del resto del campo.
+        var fontSize = Math.Max(3, field.FontSize + fontSizeDelta);
+        var font = CreateFont(fontSize, field.Bold);
         var lines = field.Type == FurFieldType.Multiline
             ? text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             : [text];
 
-        var lineHeight = field.FontSize * 1.25;
+        var lineHeight = fontSize * 1.25;
         for (var i = 0; i < lines.Length; i++)
         {
             var line = lines[i];
@@ -125,7 +129,7 @@ public static class FurOverlayRenderer
                 };
             }
 
-            var yBaseline = yTop + field.FontSize * 0.82;
+            var yBaseline = yTop + fontSize * 0.82;
             gfx.DrawString(line, font, XBrushes.Black, new XPoint(drawX, yBaseline));
         }
     }

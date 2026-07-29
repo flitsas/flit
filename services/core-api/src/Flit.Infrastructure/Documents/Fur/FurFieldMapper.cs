@@ -128,7 +128,16 @@ public static class FurFieldMapper
             return;
         }
 
-        dict[fieldId] = Text(fallbackText);
+        // HU #11031 — el sello de la validación de identidad se imprime 2pt más pequeño que el resto
+        // del campo: son cuatro líneas dentro del espacio de firma y con el cuerpo del manifiesto se
+        // salían del recuadro. El sello previo de firma electrónica conserva su tamaño.
+        var esSelloIdentidad = !string.IsNullOrWhiteSpace(rol)
+            && data.SellosIdentidad is not null
+            && data.SellosIdentidad.TryGetValue(rol, out var selloIdentidad)
+            && !string.IsNullOrWhiteSpace(selloIdentidad)
+            && string.Equals(selloIdentidad, fallbackText, StringComparison.Ordinal);
+
+        dict[fieldId] = new FurFieldValue(Val(fallbackText), FontSizeDelta: esSelloIdentidad ? -2 : 0);
     }
 
     private static string? TryBuildFirmaBaulSidecar(
