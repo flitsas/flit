@@ -27,7 +27,6 @@ import type {
   Actor,
   BiometricValidation,
   FieldValue,
-  FurDocument,
   InstanceStatus,
   Participant,
   ParticipantRol,
@@ -412,10 +411,11 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh, rnmcEnabled = f
         <FirmaSection instanceId={instanceId} onRefresh={onRefresh} />
       )}
       <ParticipantesSection instanceId={instanceId} />
-      <ImprontaSection instanceId={instanceId} onRefresh={handleDocumentGenerated} />
+      <ImprontaSection instanceId={instanceId} />
       <FurSection
         instanceId={instanceId}
         modalidad={modalidad}
+        status={detail?.status ?? 'borrador'}
         onRefresh={handleDocumentGenerated}
       />
 
@@ -1515,17 +1515,8 @@ function StatusChip({
  * muestra si aún no existe un adjunto tipo 'impronta' (cargado a mano o generado antes) — la
  * generación es idempotente por NO-regeneración en el backend.
  */
-function ImprontaSection({
-  instanceId,
-  onRefresh,
-}: {
-  instanceId: string | null;
-  onRefresh?: () => void;
-}) {
+function ImprontaSection({ instanceId }: { instanceId: string | null }) {
   const [attachment, setAttachment] = useState<ProcedureAttachment | null | undefined>(undefined);
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [radicado, setRadicado] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!instanceId) return;
@@ -1543,101 +1534,21 @@ function ImprontaSection({
     void load();
   }, [load]);
 
-  const handleGenerate = async () => {
-    if (!instanceId) return;
-    setGenerating(true);
-    setError(null);
-    setRadicado(null);
-    try {
-      const result = await tramitesClient.generarImpronta(instanceId);
-      setRadicado(result.radicado);
-      await load();
-      onRefresh?.();
-
-      // Descarga automática al equipo del usuario (además de quedar cargada en el trámite).
-      const { blob, filename } = await tramitesClient.downloadAttachment(instanceId, result.attachmentId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename || result.filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      setError(
-        msg.includes('organismo de tránsito')
-          ? 'Selecciona el organismo de tránsito antes de generar la impronta.'
-          : msg.includes('placa o el VIN')
-            ? 'Falta la placa o el VIN del vehículo para generar la impronta.'
-            : msg.includes('documento del propietario')
-              ? 'Falta el documento del propietario para generar la impronta.'
-              : msg.includes('ya existe un documento de impronta')
-                ? 'Ya existe una impronta cargada para este trámite.'
-                : msg.includes('operador')
-                  ? 'No se pudo resolver el operador que solicita la impronta.'
-                  : msg.includes('Kyverum RUNT')
-                    ? 'Kyverum RUNT no pudo generar la impronta. Intenta de nuevo en unos minutos.'
-                    : 'No se pudo generar la impronta.',
-      );
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  // Aún no se sabe si existe (carga inicial): no se muestra nada para evitar parpadeo del botón.
+  // Aún no se sabe si existe (carga inicial): no se muestra nada para evitar parpadeo.
   if (attachment === undefined) return null;
-  // Ya existía un adjunto de impronta ANTES de esta sesión (manual o generado antes): la sección
-  // no aparece. Si se acaba de generar en esta sesión (radicado con valor), se mantiene visible
-  // para mostrar el mensaje de éxito aunque el botón ya no se necesite.
-  if (attachment && radicado === null) return null;
+  // Ya hay impronta en el expediente: nada que anunciar (el documento se ve en el visor).
+  if (attachment) return null;
 
   return (
-    <section className="space-y-4" aria-label="Generación de la impronta">
+    <section className="space-y-4" aria-label="Impronta de motor y chasis">
       <div>
         <h4 className="text-sm font-bold">Impronta de motor y chasis</h4>
         <p className="text-xs opacity-70">
-          Genera el Certificado de Improntas Digitales (Kyverum RUNT) con los datos del trámite y
-          adjúntalo automáticamente al expediente. Se descargará también a tu equipo. Si ya tienes
-          tu propia impronta generada, puedes subirla manualmente en su lugar.
+          El Certificado de Improntas Digitales (Kyverum RUNT) se genera automáticamente al generar el
+          expediente consolidado, con los datos del trámite. Si ya tienes tu propia impronta, puedes
+          subirla manualmente en el paso de documentos.
         </p>
       </div>
-
-      {error && (
-        <div
-          className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
-          role="alert"
-          aria-live="polite"
-        >
-          {error}
-        </div>
-      )}
-
-      {radicado && !error && (
-        <div
-          className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#8CC63F', background: 'rgba(140,198,63,0.08)', color: '#5B8A1F' }}
-          role="status"
-          aria-live="polite"
-        >
-          Impronta generada (radicado {radicado}) y cargada al trámite. La descarga se inició en tu
-          navegador.
-        </div>
-      )}
-
-      {!attachment && (
-        <button
-          type="button"
-          onClick={() => void handleGenerate()}
-          disabled={generating || !instanceId}
-          className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-        >
-          {generating ? 'Generando…' : 'Generar Improntas'}
-        </button>
-      )}
     </section>
   );
 }
@@ -1657,19 +1568,19 @@ const FUR_OBSERVACIONES_MAX = 300;
 function FurSection({
   instanceId,
   modalidad,
+  status,
   onRefresh,
 }: {
   instanceId: string | null;
   modalidad: WizardModalidad;
+  /** Estado de negocio del trámite: en estado final no se ofrece generar (HU #11052/#11051). */
+  status: InstanceStatus;
   onRefresh?: () => void;
 }) {
   const [docs, setDocs] = useState<ProcedureAttachment[] | null>(null);
   const [consolidado, setConsolidado] = useState<ProcedureAttachment | null>(null);
-  const [generating, setGenerating] = useState(false);
   const [generatingConsolidado, setGeneratingConsolidado] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [consolidadoError, setConsolidadoError] = useState<string | null>(null);
-  const [lastResult, setLastResult] = useState<FurDocument[] | null>(null);
   // HU #10924 — plantilla de FUR que aplica según la clasificación del vehículo (backend = fuente de verdad).
   const [furFormat, setFurFormat] = useState<string | null>(null);
   // HU #10987 / #10988 (Feature #10972) — el recuadro OBSERVACIONES y la fecha del trámite del FUR
@@ -1724,41 +1635,15 @@ function FurSection({
     void load();
   }, [load]);
 
-  const handleGenerate = async () => {
-    if (!instanceId) return;
-    setGenerating(true);
-    setError(null);
-    try {
-      // HU #10987/#10988 — guardar antes de generar: si el gestor escribe y pulsa el botón sin que
-      // el textarea pierda el foco, el PDF saldría sin ese texto.
-      await guardarCampos();
-      const result = await tramitesClient.generarFur(instanceId);
-      setLastResult(result.documents);
-      await load();
-      onRefresh?.();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      // HU #11017 — la identidad dejó de bloquear la generación del FUR en HU #10463 (el documento sale
-      // con el sello "NO FIRMADO"), así que el backend ya no emite `biometria_gate` y ese mensaje solo
-      // podía confundir. La ÚNICA restricción que queda es el organismo de tránsito, que es un dato
-      // imprescindible del formulario: sin él no hay FUR que llenar.
-      setError(
-        msg.includes('organismo_requerido')
-          ? 'Selecciona el organismo de tránsito antes de generar el FUR.'
-          : msg.startsWith('409')
-            ? 'No se pudo generar el FUR: selecciona el organismo de tránsito e inténtalo de nuevo.'
-            : 'No se pudo generar el FUR.',
-      );
-    } finally {
-      setGenerating(false);
-    }
-  };
-
   const handleGenerateConsolidado = async () => {
     if (!instanceId) return;
     setGeneratingConsolidado(true);
     setConsolidadoError(null);
     try {
+      // HU #11052 — el consolidado es el ÚNICO disparador de generación, así que hereda el guardado
+      // previo que hacía el botón del FUR (HU #10987/#10988): si el gestor escribe la fecha o las
+      // observaciones y pulsa generar sin que el campo pierda el foco, el PDF saldría sin ese texto.
+      await guardarCampos();
       // HU #11017 — el consolidado se genera aunque falten documentos obligatorios: si vuelve marcado
       // como incompleto se avisa qué falta, en vez de dejar al gestor con un expediente que el
       // organismo rechazará sin explicación.
@@ -1776,21 +1661,28 @@ function FurSection({
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
       setConsolidadoError(
-        msg.includes('fur_requerido')
-          ? 'Genera el FUR antes de crear el consolidado.'
-          : msg.includes('documentos_incompletos')
-            ? 'Sube los documentos obligatorios antes de generar el consolidado.'
-            : msg.includes('modalidad_no_soportada')
-              ? 'El consolidado no está disponible para esta modalidad.'
-              : 'No se pudo generar el consolidado.',
+        // HU #11051 — el trámite aprobado/anulado ya no admite regeneración del gestor.
+        msg.includes('generacion_bloqueada_estado_final')
+          ? 'El trámite ya está aprobado o anulado: su documentación es definitiva y no se regenera.'
+          : msg.includes('organismo_requerido')
+            ? 'Selecciona el organismo de tránsito antes de generar el expediente.'
+            : msg.includes('fur_requerido')
+              ? 'No se pudo generar el FUR del expediente: revisa los datos del trámite e inténtalo de nuevo.'
+              : msg.includes('documentos_incompletos')
+                ? 'Sube los documentos obligatorios antes de generar el consolidado.'
+                : msg.includes('modalidad_no_soportada')
+                  ? 'El consolidado no está disponible para esta modalidad.'
+                  : 'No se pudo generar el consolidado.',
       );
     } finally {
       setGeneratingConsolidado(false);
     }
   };
 
-  const generated = (docs ?? []).length > 0 || (lastResult ?? []).length > 0;
+  const generated = (docs ?? []).length > 0;
   const consolidadoGenerated = consolidado !== null;
+  // HU #11052 (AC3) / HU #11051 — en estado final la documentación es definitiva: solo descarga.
+  const estadoFinal = status === 'aprobado' || status === 'anulado';
 
   return (
     <section className="space-y-4" aria-label="Generación del FUR">
@@ -1807,25 +1699,15 @@ function FurSection({
             </span>
           )}
         </div>
+        {/* HU #11052 — la generación ya no va documento por documento: el expediente consolidado es el
+            único disparador y produce en cascada lo que falte. Este texto explica dónde está el botón,
+            porque la sección conserva los datos que el gestor aporta al FUR. */}
         <p className="text-xs opacity-70">
-          Genera el FUR y el certificado de identidad (y, en traspaso, el
-          contrato de compraventa) con los datos del trámite. Este paso es
-          opcional para guardar o enviar el trámite: puedes generar los PDF
-          ahora o más adelante. Requiere biométrica aprobada y organismo
-          seleccionado.
+          El FUR, el certificado de identidad, la impronta y (en traspaso) el contrato de compraventa se
+          generan automáticamente al generar el expediente consolidado, con los datos del trámite.
+          Completa aquí abajo lo que el formulario necesita y genera el expediente cuando esté listo.
         </p>
       </div>
-
-      {error && (
-        <div
-          className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
-          role="alert"
-          aria-live="polite"
-        >
-          {error}
-        </div>
-      )}
 
       {/* HU #10987 / #10988 — datos del FUR que aporta el gestor. Antes de esta HU el recuadro
           OBSERVACIONES del formulario oficial era de solo-lectura automática y la fecha era la de
@@ -1875,20 +1757,6 @@ function FurSection({
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => void handleGenerate()}
-        disabled={generating || !instanceId}
-        className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-        style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-      >
-        {generating
-          ? 'Generando…'
-          : generated
-            ? 'Re-generar FUR / certificado'
-            : 'Generar FUR / certificado'}
-      </button>
-
       {generated && (
         <ul className="space-y-2" aria-label="Documentos generados">
           {(docs ?? []).map((d) => (
@@ -1917,10 +1785,10 @@ function FurSection({
           <div>
             <h5 className="text-xs font-bold">Expediente consolidado</h5>
             <p className="text-[11px] opacity-70">
-              Un solo PDF con el FUR, el certificado de identidad y los documentos
+              Un solo PDF con el FUR, el certificado de identidad, la impronta y los documentos
               cargados en el trámite
-              {modalidad === 'traspaso' ? ' (incluye el contrato de compraventa)' : ''}.
-              Opcional: puedes generarlo cuando el FUR esté listo.
+              {modalidad === 'traspaso' ? ' (incluye el contrato de compraventa)' : ''}. Al generarlo se
+              producen también los documentos que falten.
             </p>
           </div>
 
@@ -1935,19 +1803,28 @@ function FurSection({
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => void handleGenerateConsolidado()}
-            disabled={generatingConsolidado || !instanceId}
-            className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-            style={{ background: '#162744' }}
-          >
-            {generatingConsolidado
-              ? 'Generando consolidado…'
-              : consolidadoGenerated
-                ? 'Re-generar consolidado'
-                : 'Generar consolidado'}
-          </button>
+          {/* HU #11052 (AC3) / HU #11051 — en estado final la documentación es definitiva: no se
+              ofrece generar, solo consultar y descargar lo que ya existe. */}
+          {estadoFinal ? (
+            <p className="text-[11px] font-medium" style={{ color: '#557EFF' }} role="status">
+              El trámite ya está {status === 'aprobado' ? 'aprobado' : 'anulado'}: su documentación es
+              definitiva. Puedes consultarla y descargarla.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handleGenerateConsolidado()}
+              disabled={generatingConsolidado || !instanceId}
+              className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+              style={{ background: '#162744' }}
+            >
+              {generatingConsolidado
+                ? 'Generando expediente…'
+                : consolidadoGenerated
+                  ? 'Re-generar expediente consolidado'
+                  : 'Generar expediente consolidado'}
+            </button>
+          )}
 
           {consolidadoGenerated && consolidado && (
             <div
