@@ -37,6 +37,8 @@ public interface IReportingReadRepository
 
 public interface IExportJobRepository
 {
+    public const string ExportJobsChannel = "export_jobs_channel";
+
     Task<int> CountActiveJobsAsync(Guid ownerUserId, CancellationToken ct = default);
     Task<ExportJobDto> CreateAsync(
         Guid tenantId,
@@ -46,6 +48,14 @@ public interface IExportJobRepository
         string filtersJson,
         Guid? correlationId,
         CancellationToken ct = default);
+
+    /// <summary>Despierta al worker vía LISTEN/NOTIFY (además del trigger de INSERT).</summary>
+    Task NotifyChannelAsync(string channel, Guid jobId, CancellationToken ct = default);
+
+    /// <summary>Estima filas del export según report_type + filters (tope 50 000).</summary>
+    Task<long> EstimateRecordCountAsync(
+        Guid tenantId, string reportType, string filtersJson, CancellationToken ct = default);
+
     Task<ExportJobDto?> GetAsync(Guid jobId, CancellationToken ct = default);
     Task<IReadOnlyList<ExportJobDto>> ListByOwnerAsync(Guid ownerUserId, CancellationToken ct = default);
     Task<(string? StoragePath, Guid OwnerUserId, string Status)?> GetDownloadMetaAsync(

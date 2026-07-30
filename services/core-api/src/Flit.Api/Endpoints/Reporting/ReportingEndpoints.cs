@@ -237,6 +237,10 @@ public static class ReportingEndpoints
         return err switch
         {
             "export_limit_exceeded" => Results.Conflict(new { code = "EXPORT_LIMIT_EXCEEDED" }),
+            "export_limit_exceeded_records" => Results.Json(
+                new { code = "EXPORT_LIMIT_EXCEEDED_RECORDS" }, statusCode: StatusCodes.Status422UnprocessableEntity),
+            "date_range_too_wide" => Results.BadRequest(new { code = "DATE_RANGE_TOO_WIDE" }),
+            "invalid_range" => Results.BadRequest(new { code = "INVALID_RANGE" }),
             "invalid_report_type" => Results.BadRequest(new { code = "INVALID_REPORT_TYPE" }),
             "invalid_format" => Results.BadRequest(new { code = "INVALID_FORMAT" }),
             "invalid_filters" => Results.BadRequest(new { code = "INVALID_FILTERS" }),

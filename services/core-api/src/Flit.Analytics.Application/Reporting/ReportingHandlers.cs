@@ -155,6 +155,7 @@ public sealed class RequestExportHandler(IExportJobRepository repo)
     };
 
     public const int MaxPendingJobs = 3;
+    public const int MaxExportRecords = 50_000;
 
     public async Task<(ExportJobDto? Result, string? Error)> HandleAsync(
         RequestExportCommand cmd, CancellationToken ct = default)
@@ -162,22 +163,66 @@ public sealed class RequestExportHandler(IExportJobRepository repo)
         if (!Types.Contains(cmd.ReportType)) return (null, "invalid_report_type");
         if (!Formats.Contains(cmd.Format)) return (null, "invalid_format");
 
-        var active = await repo.CountActiveJobsAsync(cmd.OwnerUserId, ct).ConfigureAwait(false);
-        if (active >= MaxPendingJobs) return (null, "export_limit_exceeded");
-
         var filters = string.IsNullOrWhiteSpace(cmd.FiltersJson) ? "{}" : cmd.FiltersJson;
         try { using var _ = JsonDocument.Parse(filters); }
         catch (JsonException) { return (null, "invalid_filters"); }
 
+        var (from, to) = ExportFilterParser.TryParseDates(filters);
+        var (_, _, rangeError) = ReportingDateRange.Normalize(from, to);
+        if (rangeError is not null) return (null, rangeError);
+
+        var active = await repo.CountActiveJobsAsync(cmd.OwnerUserId, ct).ConfigureAwait(false);
+        if (active >= MaxPendingJobs) return (null, "export_limit_exceeded");
+
+        var estimated = await repo.EstimateRecordCountAsync(
+            cmd.TenantId, cmd.ReportType.ToLowerInvariant(), filters, ct).ConfigureAwait(false);
+        if (estimated > MaxExportRecords) return (null, "export_limit_exceeded_records");
+
+        var reportType = cmd.ReportType.ToLowerInvariant();
+        var format = cmd.Format.ToLowerInvariant();
         var job = await repo.CreateAsync(
             cmd.TenantId,
             cmd.OwnerUserId,
-            cmd.ReportType.ToLowerInvariant(),
-            cmd.Format.ToLowerInvariant(),
+            reportType,
+            format,
             filters,
             cmd.CorrelationId,
             ct).ConfigureAwait(false);
+
+        await repo.NotifyChannelAsync(IExportJobRepository.ExportJobsChannel, job.Id, ct)
+            .ConfigureAwait(false);
+
         return (job, null);
+    }
+}
+
+/// <summary>Extrae from/to del JSON de filtros de exportación (FE envía <c>from</c>/<c>to</c>).</summary>
+public static class ExportFilterParser
+{
+    public static (DateOnly? From, DateOnly? To) TryParseDates(string filtersJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(filtersJson) ? "{}" : filtersJson);
+            var root = doc.RootElement;
+            return (TryDate(root, "from") ?? TryDate(root, "dateFrom"),
+                    TryDate(root, "to") ?? TryDate(root, "dateTo"));
+        }
+        catch (JsonException)
+        {
+            return (null, null);
+        }
+    }
+
+    private static DateOnly? TryDate(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out var el) || el.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return null;
+        var raw = el.ValueKind == JsonValueKind.String ? el.GetString() : el.ToString();
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        if (DateOnly.TryParse(raw, out var d)) return d;
+        if (DateTimeOffset.TryParse(raw, out var dto)) return DateOnly.FromDateTime(dto.UtcDateTime);
+        return null;
     }
 }
 
@@ -202,6 +247,8 @@ public sealed class GetExportJobHandler(IExportJobRepository repo)
 
 public sealed class GetDownloadUrlHandler(IExportJobRepository repo, IExportFileStorage storage)
 {
+    public const int MaxDownloadTtlMinutes = 15;
+
     public async Task<(DownloadUrlDto? Result, string? Error)> HandleAsync(
         Guid jobId, Guid callerUserId, CancellationToken ct = default)
     {
@@ -214,6 +261,9 @@ public sealed class GetDownloadUrlHandler(IExportJobRepository repo, IExportFile
 
         var url = await storage.GetDownloadUrlAsync(meta.Value.StoragePath, ct).ConfigureAwait(false);
         if (url is null) return (null, "storage_unavailable");
-        return (new DownloadUrlDto(url.Value.Url, url.Value.ExpiresAt), null);
+
+        var maxExpiry = DateTimeOffset.UtcNow.AddMinutes(MaxDownloadTtlMinutes);
+        var expiresAt = url.Value.ExpiresAt > maxExpiry ? maxExpiry : url.Value.ExpiresAt;
+        return (new DownloadUrlDto(url.Value.Url, expiresAt), null);
     }
 }

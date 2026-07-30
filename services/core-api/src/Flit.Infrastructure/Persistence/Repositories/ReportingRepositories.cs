@@ -398,7 +398,7 @@ internal sealed class ReportingReadRepository(FlitDbContext context) : IReportin
     }
 }
 
-internal sealed class ExportJobRepository(FlitDbContext db) : IExportJobRepository
+internal sealed class ExportJobRepository(FlitDbContext db, IReportingReadRepository read) : IExportJobRepository
 {
     public Task<int> CountActiveJobsAsync(Guid ownerUserId, CancellationToken ct = default) =>
         db.ExportJobs.AsNoTracking()
@@ -433,6 +433,92 @@ internal sealed class ExportJobRepository(FlitDbContext db) : IExportJobReposito
         db.ExportJobs.Add(entity);
         await db.SaveChangesAsync(ct);
         return Map(entity);
+    }
+
+    public async Task NotifyChannelAsync(string channel, Guid jobId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(channel))
+            throw new ArgumentException("Channel is required.", nameof(channel));
+
+        await db.Database.OpenConnectionAsync(ct).ConfigureAwait(false);
+        var conn = (NpgsqlConnection)db.Database.GetDbConnection();
+        await using var cmd = new NpgsqlCommand("SELECT pg_notify(@channel, @payload)", conn);
+        cmd.Parameters.AddWithValue("channel", channel);
+        cmd.Parameters.AddWithValue("payload", jobId.ToString("D"));
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task<long> EstimateRecordCountAsync(
+        Guid tenantId, string reportType, string filtersJson, CancellationToken ct = default)
+    {
+        var (fromRaw, toRaw) = ExportFilterParser.TryParseDates(filtersJson);
+        var (from, to, err) = ReportingDateRange.Normalize(fromRaw, toRaw);
+        if (err is not null) return 0;
+
+        switch (reportType.ToLowerInvariant())
+        {
+            case "procedures":
+                return await EstimateProceduresAsync(tenantId, from, to, filtersJson, ct).ConfigureAwait(false);
+            case "consolidado":
+            {
+                var groupBy = TryJsonString(filtersJson, "groupBy") ?? "estado";
+                var page = await read.GetConsolidadoAsync(tenantId, from, to, groupBy, ct).ConfigureAwait(false);
+                return page.Items.Sum(i => (long)i.Total);
+            }
+            case "productivity":
+            {
+                var dimension = TryJsonString(filtersJson, "dimension") ?? "usuario";
+                var page = await read.GetProductivityAsync(tenantId, from, to, dimension, ct).ConfigureAwait(false);
+                return page.Items.Sum(i => (long)i.Total);
+            }
+            case "sla":
+            {
+                var page = await read.GetSlaAsync(tenantId, from, to, ct).ConfigureAwait(false);
+                return page.Items.Sum(i => (long)i.Total);
+            }
+            default:
+                return 0;
+        }
+    }
+
+    private async Task<long> EstimateProceduresAsync(
+        Guid tenantId, DateOnly from, DateOnly to, string filtersJson, CancellationToken ct)
+    {
+        Guid? office = null;
+        if (Guid.TryParse(TryJsonString(filtersJson, "transitOfficeId"), out var oid))
+            office = oid;
+
+        var filter = new ReportingProceduresFilter(
+            tenantId,
+            from,
+            to,
+            TryJsonString(filtersJson, "dateType") ?? "created_at",
+            office,
+            TryJsonString(filtersJson, "procedureType"),
+            TryJsonString(filtersJson, "status"),
+            TryJsonString(filtersJson, "search"),
+            "created_at",
+            "desc");
+
+        var page = await read.GetProceduresAsync(filter, 1, 1, ct).ConfigureAwait(false);
+        return page.TotalCount;
+    }
+
+    private static string? TryJsonString(string filtersJson, string name)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(filtersJson) ? "{}" : filtersJson);
+            if (!doc.RootElement.TryGetProperty(name, out var el)
+                || el.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+                return null;
+            var raw = el.ValueKind == JsonValueKind.String ? el.GetString() : el.ToString();
+            return string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     public async Task<ExportJobDto?> GetAsync(Guid jobId, CancellationToken ct = default)

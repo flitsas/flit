@@ -3,13 +3,11 @@ using Xunit;
 
 namespace Flit.Analytics.Application.Tests.Reporting;
 
-/// <summary>
-/// Uso de ejemplo: GetDownloadUrlHandler IDOR + TTL (HU #11108 AC3/AC6).
-/// </summary>
+/// <summary>HU #11106 — GetDownloadUrlHandler: ownership, TTL ≤15 min, IDOR.</summary>
 public sealed class GetDownloadUrlHandlerTests
 {
     [Fact]
-    public async Task Returns_forbidden_when_job_belongs_to_another_user()
+    public async Task Ac5_Returns_forbidden_when_job_belongs_to_another_user()
     {
         var owner = Guid.CreateVersion7();
         var caller = Guid.CreateVersion7();
@@ -29,7 +27,7 @@ public sealed class GetDownloadUrlHandlerTests
     }
 
     [Fact]
-    public async Task Returns_download_url_when_owner_and_completed()
+    public async Task Ac2_Returns_download_url_with_ttl_at_most_15_minutes()
     {
         var owner = Guid.CreateVersion7();
         var jobId = Guid.CreateVersion7();
@@ -37,16 +35,18 @@ public sealed class GetDownloadUrlHandlerTests
         {
             DownloadMeta = (jobId, "store/path", owner, "completed"),
         };
-        var expires = DateTimeOffset.UtcNow.AddMinutes(10);
-        var storage = new FakeExportFileStorage { Url = ("https://files.test/x", expires) };
+        var tooLong = DateTimeOffset.UtcNow.AddMinutes(60);
+        var storage = new FakeExportFileStorage { Url = ("https://files.test/x", tooLong) };
         var handler = new GetDownloadUrlHandler(repo, storage);
 
+        var before = DateTimeOffset.UtcNow;
         var (result, error) = await handler.HandleAsync(jobId, owner, TestContext.Current.CancellationToken);
 
         Assert.Null(error);
         Assert.NotNull(result);
         Assert.Equal("https://files.test/x", result!.DownloadUrl);
-        Assert.True(result.ExpiresAt <= DateTimeOffset.UtcNow.AddMinutes(15).AddSeconds(1));
+        Assert.True(result.ExpiresAt <= before.AddMinutes(15).AddSeconds(2));
+        Assert.True(result.ExpiresAt < tooLong);
         Assert.Equal(1, storage.Calls);
     }
 
@@ -66,9 +66,7 @@ public sealed class GetDownloadUrlHandlerTests
     }
 }
 
-/// <summary>
-/// Uso de ejemplo: listado solo del owner (HU #11108 AC2).
-/// </summary>
+/// <summary>Listado solo del owner (HU #11108).</summary>
 public sealed class GetExportJobHandlerListTests
 {
     [Fact]
