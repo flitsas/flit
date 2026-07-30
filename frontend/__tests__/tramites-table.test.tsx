@@ -8,6 +8,8 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 const mocks = vi.hoisted(() => ({
   listInstances: vi.fn(),
   setPriority: vi.fn(),
+  pauseInstance: vi.fn(),
+  pauseInstancesMassive: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -427,5 +429,80 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
 
     await screen.findByText('P0001');
     expect(screen.queryByText('Pausado')).toBeNull();
+  });
+
+  it('en un borrador ICT ofrece "Pausar" y al hacer clic llama a pauseInstance (optimista → Reanudar)', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, id: 'ict1', placa: 'ICT001', origin: 'ict', estado: 'borrador', isPaused: false },
+    ]);
+    mocks.pauseInstance.mockResolvedValue({ id: 'ict1', isPaused: true, pausedObservation: null });
+    render(<TramitesTable />);
+
+    const btn = await screen.findByRole('button', { name: /Pausar el trámite/ });
+    await userEvent.click(btn);
+
+    expect(mocks.pauseInstance).toHaveBeenCalledWith('ict1', true, null, undefined);
+    expect(
+      await screen.findByRole('button', { name: /Reanudar el trámite/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('un trámite de plataforma (sin origin ict) no ofrece pausa ni checkbox de selección', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([{ ...item, placa: 'PLT001', estado: 'borrador' }]);
+    render(<TramitesTable />);
+
+    await screen.findByText('PLT001');
+    expect(screen.queryByRole('button', { name: /Pausar el trámite/ })).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('al continuar un trámite PAUSADO abre un modal FLIT (no confirm nativo): cancelar no navega, confirmar sí', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, id: 'pz', referenceNumber: 'TR-PZ', placa: 'PZ0001', origin: 'ict', estado: 'borrador', isPaused: true },
+    ]);
+    render(<TramitesTable />);
+
+    const cont = await screen.findByRole('button', { name: 'Continuar trámite TR-PZ' });
+    await userEvent.click(cont);
+
+    // Modal de diseño FLIT (role=dialog), no window.confirm.
+    const dialog = await screen.findByRole('dialog', { name: /Trámite pausado/i });
+    expect(routerPush).not.toHaveBeenCalled();
+
+    // Cancelar cierra sin navegar.
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    expect(routerPush).not.toHaveBeenCalled();
+
+    // Reabrir y confirmar navega.
+    await userEvent.click(cont);
+    const dialog2 = await screen.findByRole('dialog', { name: /Trámite pausado/i });
+    await userEvent.click(within(dialog2).getByRole('button', { name: /Continuar de todos modos/ }));
+    expect(routerPush).toHaveBeenCalled();
+  });
+});
+
+describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
+  it('selecciona varios borradores ICT y los pausa en lote', async () => {
+    const [b] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...b, id: 'm1', placa: 'MAS001', origin: 'ict', estado: 'borrador' },
+      { ...b, id: 'm2', placa: 'MAS002', origin: 'ict', estado: 'borrador' },
+    ]);
+    mocks.pauseInstancesMassive.mockResolvedValue({ total: 2, processed: 2, detail: [] });
+    render(<TramitesTable />);
+
+    await screen.findByText('MAS001');
+    const checks = screen.getAllByRole('checkbox');
+    expect(checks).toHaveLength(2);
+
+    await userEvent.click(checks[0]);
+    await userEvent.click(checks[1]);
+    expect(screen.getByText('2 seleccionados')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Pausar' }));
+    expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(['m1', 'm2'], true, null, undefined);
   });
 });

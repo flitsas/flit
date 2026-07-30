@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatFecha } from '@/lib/format/date';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, ArrowLeftRight, Car, Pause, Search, Star, X } from 'lucide-react';
+import { AlertCircle, ArrowLeftRight, Car, Pause, Play, Search, Star, X } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
 import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
 import { StatusBadge } from '@/components/atom/StatusBadge';
+import { Modal } from '@/components/atom/Modal';
 import { EstadoFunnel } from './EstadoFunnel';
 import type {
   InstanceStatus,
@@ -126,7 +127,9 @@ function stepLabel(item: InstanceSummary): string {
 
 // HU #11020 — se añade la columna Vendedor antes de Comprador (saliente → entrante), coherente con
 // el expediente y el resumen del último paso.
-const GRID_COLS = '1fr 1.2fr 1.2fr 1.1fr 1.1fr 0.9fr 1.3fr 1fr 1.2fr 0.9fr 1fr';
+const GRID_COLS = '1fr 1.2fr 1.2fr 1.1fr 1.1fr 0.9fr 1.3fr 1fr 1.2fr 0.9fr 1.2fr';
+// ICT — ancho de la columna de selección (checkbox), primera columna de la tabla.
+const SELECT_COL = '2.25rem';
 // #1 — SuperAdmin: columna "Compañía" como primera columna (ve trámites de TODAS las empresas).
 const GRID_COLS_ADMIN = `1.2fr ${GRID_COLS}`;
 
@@ -176,6 +179,8 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
   const [page, setPage] = useState(1);
   /** Popover de motivo OT / subsanación abierto (un solo id a la vez). */
   const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
+  // ICT (paridad v1 pause-unpause-massive) — selección de trámites ICT para pausar/reanudar en lote.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -308,6 +313,75 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
       }
     },
     [isAdmin],
+  );
+
+  // ICT (paridad v1) — pausar/reanudar un trámite ICT con actualización optimista; revierte si falla.
+  // Solo aplica a borradores origin='ict' (el botón solo se muestra ahí). Al reanudar se limpia la nota.
+  const handleTogglePause = useCallback(
+    async (id: string, next: boolean, tenantId: string) => {
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === id
+            ? { ...it, isPaused: next, pausedObservation: next ? it.pausedObservation ?? null : null }
+            : it,
+        ),
+      );
+      try {
+        await tramitesClient.pauseInstance(id, next, null, isAdmin ? tenantId : undefined);
+      } catch {
+        setItems((prev) =>
+          prev.map((it) => (it.id === id ? { ...it, isPaused: !next } : it)),
+        );
+      }
+    },
+    [isAdmin],
+  );
+
+  // ICT (paridad v1 pause-unpause-massive) — selección múltiple para pausa/reanudación en lote.
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const handleBulkPause = useCallback(
+    async (paused: boolean) => {
+      if (selectedIds.size === 0) return;
+      // Optimista sobre las filas seleccionadas (solo tienen sentido las ICT en borrador).
+      setItems((prev) =>
+        prev.map((it) =>
+          selectedIds.has(it.id) && it.origin === 'ict' && it.estado === 'borrador'
+            ? { ...it, isPaused: paused, pausedObservation: paused ? it.pausedObservation ?? null : null }
+            : it,
+        ),
+      );
+      // El superadmin puede seleccionar trámites de varias compañías; el endpoint masivo se acota por
+      // X-Tenant-Id, así que se agrupa por tenant y se llama una vez por compañía.
+      const byTenant = new Map<string, string[]>();
+      for (const it of items) {
+        if (!selectedIds.has(it.id)) continue;
+        const arr = byTenant.get(it.tenantId) ?? [];
+        arr.push(it.id);
+        byTenant.set(it.tenantId, arr);
+      }
+      try {
+        await Promise.all(
+          Array.from(byTenant.entries()).map(([tenantId, ids]) =>
+            tramitesClient.pauseInstancesMassive(ids, paused, null, isAdmin ? tenantId : undefined),
+          ),
+        );
+      } catch {
+        void load(); // ante fallo parcial, refresca para reflejar el estado real del backend
+      } finally {
+        setSelectedIds(new Set());
+      }
+    },
+    [selectedIds, items, isAdmin, load],
   );
 
   const hasActiveFilters =
@@ -445,6 +519,40 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           </div>
         )}
 
+        {/* ICT (paridad v1 pause-unpause-massive) — barra de acción cuando hay trámites ICT seleccionados. */}
+        {selectedIds.size > 0 ? (
+          <div
+            role="region"
+            aria-label="Acciones masivas de pausa"
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.06] px-3 py-2 text-xs"
+          >
+            <span className="font-semibold text-[#162744] dark:text-white">
+              {`${selectedIds.size} seleccionado${selectedIds.size === 1 ? '' : 's'}`}
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleBulkPause(true)}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#162744]/20 px-2.5 py-1 font-semibold text-[#162744] transition hover:bg-[#162744]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
+            >
+              <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBulkPause(false)}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#557EFF]/40 px-2.5 py-1 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            >
+              <Play className="h-3.5 w-3.5" aria-hidden="true" /> Reanudar
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 font-semibold text-[#162744]/60 transition hover:text-[#162744] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:text-white/60 dark:hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" /> Limpiar
+            </button>
+          </div>
+        ) : null}
+
         <TableBody
           loading={loading}
           error={error}
@@ -462,6 +570,9 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           onRetry={() => void load()}
           onClearFilters={clearFilters}
           onTogglePriority={handleTogglePriority}
+          onTogglePause={handleTogglePause}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
           onOpen={(id, tenantId) =>
             router.push(
               isAdmin && tenantId
@@ -493,6 +604,9 @@ function TableBody({
   onRetry,
   onClearFilters,
   onTogglePriority,
+  onTogglePause,
+  selectedIds,
+  onToggleSelect,
   onOpen,
 }: {
   loading: boolean;
@@ -511,9 +625,12 @@ function TableBody({
   onRetry: () => void;
   onClearFilters: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
+  onTogglePause: (id: string, next: boolean, tenantId: string) => void;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
   onOpen: (id: string, tenantId: string) => void;
 }) {
-  const gridCols = showCompania ? GRID_COLS_ADMIN : GRID_COLS;
+  const gridCols = `${SELECT_COL} ${showCompania ? GRID_COLS_ADMIN : GRID_COLS}`;
   if (loading) {
     return (
       <div
@@ -589,7 +706,7 @@ function TableBody({
 
     return (
     <div className="overflow-x-auto">
-      <div className={showCompania ? 'min-w-[1340px]' : 'min-w-[1180px]'}>
+      <div className={showCompania ? 'min-w-[1376px]' : 'min-w-[1216px]'}>
         {/* Header */}
         <div
           className="grid items-center text-[11px] uppercase tracking-wider font-semibold rounded-xl px-4 py-3"
@@ -600,6 +717,8 @@ function TableBody({
           }}
           role="row"
         >
+          {/* Columna de selección (checkbox por fila); header vacío. */}
+          <div aria-hidden="true" />
           {showCompania && <div>Compañía</div>}
           <div>Placa</div>
           <div>Vendedor</div>
@@ -626,6 +745,9 @@ function TableBody({
               onTogglePopover={onTogglePopover}
               onClosePopover={onClosePopover}
               onTogglePriority={onTogglePriority}
+              onTogglePause={onTogglePause}
+              selected={selectedIds.has(item.id)}
+              onToggleSelect={onToggleSelect}
               onOpen={onOpen}
             />
           ))}
@@ -711,6 +833,9 @@ function TramiteRow({
   onTogglePopover,
   onClosePopover,
   onTogglePriority,
+  onTogglePause,
+  selected,
+  onToggleSelect,
   onOpen,
 }: {
   item: InstanceSummary;
@@ -720,8 +845,13 @@ function TramiteRow({
   onTogglePopover: (id: string) => void;
   onClosePopover: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
+  onTogglePause: (id: string, next: boolean, tenantId: string) => void;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
   onOpen: (id: string, tenantId: string) => void;
 }) {
+  // ICT (paridad v1) — solo los borradores originados por ICT son pausables/seleccionables.
+  const isIctDraft = item.origin === 'ict' && item.estado === 'borrador';
   // HU #10350 — un borrador finalizado muestra un chip async ("Pendiente validación"/"Pendiente
   // firma"/"Listo para radicar"); el resto usa el chip base de estado. `ready` promueve la acción a
   // "Radicar" cuando la identidad ya quedó aprobada y los gates están listos.
@@ -736,6 +866,17 @@ function TramiteRow({
     !!motivoRechazo || enSubsanacion || subsanacionCount > 0;
   const popoverRef = useRef<HTMLDivElement>(null);
   const iconColor = enSubsanacion ? '#b45309' : '#c2410c';
+
+  // ICT — abrir/continuar un trámite PAUSADO pide confirmación primero (modal FLIT, no confirm nativo):
+  // recordar reanudarlo para poder radicarlo.
+  const [confirmPauseOpen, setConfirmPauseOpen] = useState(false);
+  const handleOpen = () => {
+    if (item.isPaused) {
+      setConfirmPauseOpen(true);
+      return;
+    }
+    onOpen(item.id, item.tenantId);
+  };
 
   useEffect(() => {
     if (!popoverOpen) return;
@@ -760,17 +901,31 @@ function TramiteRow({
       <div
         role="button"
         tabIndex={0}
-        onClick={() => onOpen(item.id, item.tenantId)}
+        onClick={handleOpen}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            onOpen(item.id, item.tenantId);
+            handleOpen();
           }
         }}
         className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl border px-4 py-3 text-sm transition hover:border-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
         style={{ gridTemplateColumns: gridCols }}
         aria-label={`Abrir trámite ${item.referenceNumber}`}
       >
+        {/* ICT (paridad v1 pause-unpause-massive) — checkbox de selección: PRIMERA columna (antes de
+            Compañía). Solo borradores ICT; en el resto la celda va vacía para mantener la grilla. */}
+        <span className="flex items-center justify-start" onClick={(e) => e.stopPropagation()}>
+          {isIctDraft ? (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleSelect(item.id)}
+              aria-label={`Seleccionar el trámite ${item.referenceNumber} para pausar/reanudar en lote`}
+              title="Seleccionar para pausar/reanudar en lote"
+              className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#557EFF]"
+            />
+          ) : null}
+        </span>
         {showCompania && (
           <span className="block text-xs font-semibold text-[#162744]/90 dark:text-white/80 truncate">
             {item.companiaNombre ?? '—'}
@@ -844,24 +999,9 @@ function TramiteRow({
             {stepLabel(item)}
           </span>
         </span>
-        <span className="relative flex min-w-0 items-center gap-1.5">
+        <span className="relative flex min-w-0 flex-col items-start gap-1">
+          <span className="flex items-center gap-1.5">
           <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
-          {/* ICT (pauseDraftProcess / starts_procedure_in_paused): el trámite está pausado y no avanza.
-              La observación (informativa) va en el tooltip. Badge neutro (paleta existente, sin colores nuevos). */}
-          {item.isPaused ? (
-            <span
-              className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-[#162744]/20 bg-[#162744]/[0.06] px-2 py-0.5 text-[10px] font-semibold text-[#162744]/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
-              title={item.pausedObservation ?? 'Trámite pausado'}
-              aria-label={
-                item.pausedObservation
-                  ? `Trámite pausado: ${item.pausedObservation}`
-                  : 'Trámite pausado'
-              }
-            >
-              <Pause className="h-3 w-3" aria-hidden="true" />
-              Pausado
-            </span>
-          ) : null}
           {showRejectPopover ? (
             <div ref={popoverRef} className="relative shrink-0">
               <button
@@ -939,6 +1079,21 @@ function TramiteRow({
               ) : null}
             </div>
           ) : null}
+          </span>
+          {/* ICT — "Pausado" (solo texto, sin ícono): apilado bajo el estado; no invade Organismo. */}
+          {item.isPaused ? (
+            <span
+              className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#162744]/20 bg-[#162744]/[0.06] px-2 py-0.5 text-[10px] font-semibold text-[#162744]/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
+              title={item.pausedObservation ?? 'Trámite pausado'}
+              aria-label={
+                item.pausedObservation
+                  ? `Trámite pausado: ${item.pausedObservation}`
+                  : 'Trámite pausado'
+              }
+            >
+              Pausado
+            </span>
+          ) : null}
         </span>
         <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
           {item.organismoTransito ?? '—'}
@@ -946,12 +1101,36 @@ function TramiteRow({
         <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
           {shortDate(item.createdAt)}
         </span>
-        <span className="flex justify-end">
+        <span className="flex items-center justify-end gap-2">
+          {/* ICT (paridad v1 handleChangePausedState) — toggle pausar/reanudar (solo borradores ICT). */}
+          {isIctDraft ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePause(item.id, !item.isPaused, item.tenantId);
+              }}
+              aria-pressed={!!item.isPaused}
+              aria-label={
+                item.isPaused
+                  ? `Reanudar el trámite ${item.referenceNumber}`
+                  : `Pausar el trámite ${item.referenceNumber}`
+              }
+              title={item.isPaused ? 'Reanudar trámite' : 'Pausar trámite'}
+              className="shrink-0 rounded-md p-1 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            >
+              {item.isPaused ? (
+                <Play className="h-3.5 w-3.5" style={{ color: '#557EFF' }} aria-hidden="true" />
+              ) : (
+                <Pause className="h-3.5 w-3.5" style={{ color: '#162744', opacity: 0.45 }} aria-hidden="true" />
+              )}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onOpen(item.id, item.tenantId);
+              handleOpen();
             }}
             className="rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition"
             style={
@@ -965,6 +1144,41 @@ function TramiteRow({
           </button>
         </span>
       </div>
+      {/* ICT — confirmación FLIT (Modal con blur/overlay/CTA degradado) al continuar un trámite pausado. */}
+      <Modal
+        open={confirmPauseOpen}
+        onClose={() => setConfirmPauseOpen(false)}
+        title="Trámite pausado"
+        icon={Pause}
+        iconBg="#162744"
+        description={`Trámite ${item.referenceNumber}`}
+        size="sm"
+      >
+        <p className="text-sm text-[#162744]/80 dark:text-white/80">
+          Este trámite está <strong>pausado</strong>. Recuerda reanudarlo (despausarlo) para poder
+          radicarlo. ¿Deseas continuar de todos modos?
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setConfirmPauseOpen(false)}
+            className="rounded-full border border-[#DFE5ED] px-4 py-1.5 text-xs font-semibold text-[#162744] transition hover:bg-[#162744]/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmPauseOpen(false);
+              onOpen(item.id, item.tenantId);
+            }}
+            className="rounded-full px-4 py-1.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+          >
+            Continuar de todos modos
+          </button>
+        </div>
+      </Modal>
     </li>
   );
 }

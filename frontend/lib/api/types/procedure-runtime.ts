@@ -155,6 +155,11 @@ export interface InstanceSummary {
   isPaused?: boolean;
   /** Nota informativa mostrada cuando el trámite está pausado (origen ICT). null si no está pausado. */
   pausedObservation?: string | null;
+  /**
+   * Origen del trámite: 'ict' para los creados por la integración con terceros. Solo esos ofrecen la
+   * acción de pausar/reanudar en la UI (paridad v1). null/'' para trámites de plataforma.
+   */
+  origin?: string | null;
 }
 
 /** Respuesta de GET /instances. */

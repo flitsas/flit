@@ -47,7 +47,10 @@ public sealed record InstanceSummaryDto(
                                               // el trámite está pausado y no avanza; la observación es informativa (dashboard).
                                               // TODO(ICT-PAUSE-UI) cerrado por el lado del backend con estos dos campos.
     bool IsPaused = false,
-    string? PausedObservation = null);
+    string? PausedObservation = null,
+    // ICT — origen del trámite ('ict' para los creados por la integración). Habilita en la UI la acción
+    // de pausar/reanudar SOLO para esos; null/"" en trámites de plataforma (no se ofrece la acción).
+    string? Origin = null);
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -142,7 +145,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             DeriveUltimoRechazoMotivo(e),
             e.IsPaused,
             // Solo tiene sentido mostrar la nota cuando está pausado; se limpia al reanudar de todos modos.
-            e.IsPaused ? e.PausedObservation : null);
+            e.IsPaused ? e.PausedObservation : null,
+            e.Origin);
     }
 
     /// <summary>

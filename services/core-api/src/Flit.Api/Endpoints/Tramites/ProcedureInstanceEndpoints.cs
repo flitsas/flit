@@ -350,6 +350,54 @@ internal static class ProcedureInstanceEndpoints
             };
         }).WithName("SubmitProcedureInstance");
 
+        // ICT (paridad v1 handleChangePausedState) — pausar/reanudar un trámite ICT desde la UI de FLIT.
+        // Solo borradores originados por ICT (origin='ict'); un trámite pausado no radica (guard 409 en submit).
+        group.MapPut("/instances/{id:guid}/pause", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            PauseProcedureInstanceRequest body,
+            HttpContext http,
+            PauseProcedureInstanceHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (ok, error) = await handler.HandleAsync(
+                id, tenantId.Value, body.Paused, body.Observation, ResolveUserId(http.User), ct);
+            return error switch
+            {
+                null => Results.Ok(new { id, isPaused = body.Paused, pausedObservation = ok && body.Paused ? body.Observation : null }),
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "not_ict" => Results.Problem(statusCode: 409, title: "not_ict", detail: "Solo se pueden pausar/reanudar trámites originados por ICT."),
+                "not_borrador" => Results.Problem(statusCode: 409, title: "not_borrador", detail: "Solo se puede pausar/reanudar un trámite en borrador."),
+                _ => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se pudo cambiar el estado de pausa."),
+            };
+        }).WithName("PauseProcedureInstance");
+
+        // ICT (paridad v1 pause-unpause-massive) — pausar/reanudar en lote. Detalle por trámite.
+        group.MapPost("/instances/pause-massive", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            PauseProcedureInstancesBulkRequest body,
+            HttpContext http,
+            PauseProcedureInstanceHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+            if (body.Ids is null || body.Ids.Count == 0)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique al menos un trámite.");
+
+            var results = await handler.HandleBulkAsync(
+                body.Ids, tenantId.Value, body.Paused, body.Observation, ResolveUserId(http.User), ct);
+            return Results.Ok(new
+            {
+                total = results.Count,
+                processed = results.Count(r => r.Ok),
+                detail = results.Select(r => new { id = r.Id, ok = r.Ok, error = r.Error }),
+            });
+        }).WithName("PauseProcedureInstancesMassive");
+
         // Activa subsanación sobre rechazado (flag, sin cambiar status). Solo permitido en rechazado.
         group.MapPost("/instances/{id:guid}/subsanar", async (
             Guid id,
@@ -666,6 +714,16 @@ internal sealed record TransitionProcedureInstanceRequest(string? ToStatus, stri
 
 /// <summary>Body de PATCH /instances/{id}/priority (HU #10536). Prioritario = nuevo valor del flag.</summary>
 internal sealed record SetPriorityRequest(bool Prioritario);
+
+/// <summary>
+/// Body de PUT /instances/{id}/pause (paridad v1). <c>Paused</c> = nuevo estado (true=pausar,
+/// false=reanudar); <c>Observation</c> = nota informativa (se guarda solo al pausar; se limpia al reanudar).
+/// </summary>
+internal sealed record PauseProcedureInstanceRequest(bool Paused, string? Observation = null);
+
+/// <summary>Body de POST /instances/pause-massive (paridad v1 pause-unpause-massive).</summary>
+internal sealed record PauseProcedureInstancesBulkRequest(
+    IReadOnlyList<Guid> Ids, bool Paused, string? Observation = null);
 
 /// <summary>Body de PATCH /instances/{id}/current-step (HU #10879). Step = Key del paso del wizard.</summary>
 internal sealed record SetCurrentStepRequest(string? Step);
