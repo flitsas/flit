@@ -834,21 +834,22 @@ public static class DevelopmentAuthSeeder
     }
 
     /// <summary>
-    /// Feature #11076 — permisos reporting.* V2 y depreciación de reportes-detallados (ADR-0038).
-    /// Idempotente: crea slugs faltantes, concede a SuperAdmin/AdminCompany y desactiva el módulo legado.
+    /// Feature #11076 / HU #11105 — permisos reporting.* V2 (módulo reportes-v2) y depreciación detailed-report.*.
+    /// Idempotente: crea/actualiza slugs, concede a SuperAdmin/AdminCompany y desactiva legado.
     /// </summary>
     private static async Task SeedReportingV2PermissionsAsync(FlitDbContext db, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
+
         var module = await db.SecurityModules
-            .FirstOrDefaultAsync(m => m.Code == "reportes" && m.DeletedAt == null, ct);
+            .FirstOrDefaultAsync(m => m.Code == ReportingV2RbacCatalog.ModuleCode, ct);
         if (module is null)
         {
             module = new SecurityModule
             {
                 Id = Guid.CreateVersion7(),
-                Code = "reportes",
-                Name = "Reportes",
+                Code = ReportingV2RbacCatalog.ModuleCode,
+                Name = ReportingV2RbacCatalog.ModuleName,
                 SortOrder = 3,
                 IsActive = true,
                 CreatedAt = now,
@@ -856,95 +857,142 @@ public static class DevelopmentAuthSeeder
             db.SecurityModules.Add(module);
             await db.SaveChangesAsync(ct);
         }
-
-        var slugs = new (string Slug, string Name, string Route, string Method)[]
+        else
         {
-            ("reporting.read", "Ver reportes V2", "/api/v1/reporting/procedures", "GET"),
-            ("reporting.detail", "Ver detalle de trámite en reportes", "/api/v1/reporting/procedures/{id}", "GET"),
-            ("reporting.export", "Solicitar/listar exportaciones", "/api/v1/reporting/exports", "POST"),
-            ("reporting.export.download", "Descargar exportación", "/api/v1/reporting/exports/{id}/download-url", "GET"),
-            ("reporting.saved-queries.read", "Ver consultas guardadas", "/api/v1/reporting/saved-queries", "GET"),
-            ("reporting.saved-queries.write", "Gestionar consultas guardadas", "/api/v1/reporting/saved-queries", "POST"),
-            ("reporting.schedules.read", "Ver informes programados V2", "/api/v1/reporting/schedules", "GET"),
-            ("reporting.schedules.write", "Gestionar informes programados V2", "/api/v1/reporting/schedules", "POST"),
-            ("reporting.alerts.read", "Ver alertas V2", "/api/v1/reporting/alerts", "GET"),
-            ("reporting.alerts.write", "Gestionar alertas V2", "/api/v1/reporting/alerts", "POST"),
-            ("reporting.dashboard.preferences", "Preferencias de dashboard", "/api/v1/reporting/preferences", "GET"),
-            ("reporting.audit", "Auditoría operacional de trámites", "/api/v1/reporting/procedures/{id}/audit", "GET"),
-            ("reporting.consolidado", "Reporte consolidado/volumetría", "/api/v1/reporting/consolidado", "GET"),
-            ("reporting.productivity", "Reporte de productividad V2", "/api/v1/reporting/productivity", "GET"),
-            ("reporting.global", "Vista global multi-tenant", "/api/v1/reporting/*", "GET"),
-        };
-
-        var existingSlugs = await db.RbacActions
-            .Where(a => a.ModuleId == module.Id)
-            .Select(a => a.Slug)
-            .ToListAsync(ct);
-
-        var newActions = slugs
-            .Where(s => !existingSlugs.Contains(s.Slug))
-            .Select(s => new RbacAction
-            {
-                Id = Guid.CreateVersion7(),
-                ModuleId = module.Id,
-                Slug = s.Slug,
-                Name = s.Name,
-                HttpMethod = s.Method,
-                RoutePattern = s.Route,
-                IsActive = true,
-                CreatedAt = now,
-            })
-            .ToArray();
-
-        if (newActions.Length > 0)
-        {
-            db.RbacActions.AddRange(newActions);
-            await db.SaveChangesAsync(ct);
-
-            foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
-            {
-                var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
-                foreach (var role in roles)
-                {
-                    var existing = await db.RoleGrants
-                        .Where(g => g.RoleId == role.Id)
-                        .Select(g => g.PermissionId)
-                        .ToListAsync(ct);
-
-                    var grants = newActions
-                        .Where(a => !existing.Contains(a.Id))
-                        .Where(a => roleCode == "SuperAdmin" || a.Slug != "reporting.global")
-                        .Select(a => new RoleGrant
-                        {
-                            Id = Guid.CreateVersion7(),
-                            RoleId = role.Id,
-                            PermissionId = a.Id,
-                            CreatedAt = now,
-                        });
-                    db.RoleGrants.AddRange(grants);
-                }
-            }
-
+            module.Name = ReportingV2RbacCatalog.ModuleName;
+            module.IsActive = true;
+            module.UpdatedAt = now;
             await db.SaveChangesAsync(ct);
         }
 
-        // ADR-0038 big-bang: desactivar módulo y acciones de reportes-detallados.
+        var existingBySlug = await db.RbacActions
+            .Where(a => a.Slug.StartsWith("reporting.") || a.Slug.StartsWith("detailed-report."))
+            .ToDictionaryAsync(a => a.Slug, ct);
+
+        var createdOrUpdated = new List<RbacAction>();
+        foreach (var (slug, name, method, route, scope) in ReportingV2RbacCatalog.ReportingSlugs)
+        {
+            if (existingBySlug.TryGetValue(slug, out var action))
+            {
+                action.ModuleId = module.Id;
+                action.Name = name;
+                action.HttpMethod = method;
+                action.RoutePattern = route;
+                action.Scope = scope;
+                action.IsActive = true;
+                action.UpdatedAt = now;
+                createdOrUpdated.Add(action);
+            }
+            else
+            {
+                var created = new RbacAction
+                {
+                    Id = Guid.CreateVersion7(),
+                    ModuleId = module.Id,
+                    Slug = slug,
+                    Name = name,
+                    HttpMethod = method,
+                    RoutePattern = route,
+                    Scope = scope,
+                    IsActive = true,
+                    CreatedAt = now,
+                };
+                db.RbacActions.Add(created);
+                createdOrUpdated.Add(created);
+                existingBySlug[slug] = created;
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        // Grants SuperAdmin (todos) / AdminCompany (sin reporting.global)
+        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        {
+            var roles = await db.Roles.Where(r => r.Code == roleCode && r.DeletedAt == null).ToListAsync(ct);
+            foreach (var role in roles)
+            {
+                var existing = await db.RoleGrants
+                    .Where(g => g.RoleId == role.Id)
+                    .Select(g => g.PermissionId)
+                    .ToListAsync(ct);
+
+                var toGrant = createdOrUpdated
+                    .Where(a => !existing.Contains(a.Id))
+                    .Where(a => roleCode == "SuperAdmin" || a.Slug != "reporting.global")
+                    .Select(a => new RoleGrant
+                    {
+                        Id = Guid.CreateVersion7(),
+                        RoleId = role.Id,
+                        PermissionId = a.Id,
+                        CreatedAt = now,
+                    });
+                db.RoleGrants.AddRange(toGrant);
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        // AC3 — detailed-report.* inactivos (+ contenedor legado)
         var legacyModule = await db.SecurityModules
-            .FirstOrDefaultAsync(m => m.Code == "reportes-detallados" && m.DeletedAt == null, ct);
-        if (legacyModule is not null && legacyModule.IsActive)
+            .FirstOrDefaultAsync(m => m.Code == "reportes-detallados", ct);
+        if (legacyModule is null)
+        {
+            legacyModule = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "reportes-detallados",
+                Name = "Reportes Detallados (legado)",
+                SortOrder = 8,
+                IsActive = false,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(legacyModule);
+            await db.SaveChangesAsync(ct);
+        }
+        else if (legacyModule.IsActive)
         {
             legacyModule.IsActive = false;
             legacyModule.UpdatedAt = now;
-            var legacyActions = await db.RbacActions
-                .Where(a => a.ModuleId == legacyModule.Id && a.IsActive)
-                .ToListAsync(ct);
-            foreach (var action in legacyActions)
-            {
-                action.IsActive = false;
-                action.UpdatedAt = now;
-            }
-            await db.SaveChangesAsync(ct);
         }
+
+        foreach (var (slug, name, method, route) in ReportingV2RbacCatalog.LegacyDetailedReportSlugs)
+        {
+            RbacAction? legacyAction = existingBySlug.GetValueOrDefault(slug)
+                ?? await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == slug, ct);
+
+            if (legacyAction is not null)
+            {
+                legacyAction.ModuleId = legacyModule.Id;
+                legacyAction.IsActive = false;
+                legacyAction.UpdatedAt = now;
+            }
+            else
+            {
+                db.RbacActions.Add(new RbacAction
+                {
+                    Id = Guid.CreateVersion7(),
+                    ModuleId = legacyModule.Id,
+                    Slug = slug,
+                    Name = name,
+                    HttpMethod = method,
+                    RoutePattern = route,
+                    Scope = "tenant",
+                    IsActive = false,
+                    CreatedAt = now,
+                });
+            }
+        }
+
+        var otherLegacy = await db.RbacActions
+            .Where(a => a.IsActive && (a.Slug.StartsWith("detailed-report.") || a.Slug.StartsWith("reportes.detallados.")))
+            .ToListAsync(ct);
+        foreach (var action in otherLegacy)
+        {
+            action.IsActive = false;
+            action.UpdatedAt = now;
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>
