@@ -600,23 +600,33 @@ public sealed class ConsolidadoHandlerTests
         consolidados[0].Id.Should().Be(result!.Document.AttachmentId);
     }
 
-    // ── HU #11050 (AC3) — los fallos de la cascada se informan, no se descartan ──────────────────
+    // ── Feature #11066 — consolidado NO regenera docs en caliente; solo fusiona (FUR si falta) ──
 
     private sealed class FailingRegenerator(string error) : IExpedienteHotDocumentsRegenerator
     {
+        public int Calls { get; private set; }
         public Task<string?> RegenerateHotDocumentsAsync(Guid id, Guid tenantId, CancellationToken ct = default)
-            => Task.FromResult<string?>(error);
+        {
+            Calls++;
+            return Task.FromResult<string?>(error);
+        }
     }
 
     private sealed class FailingImprontaGenerator(string error) : IImprontaAutoGenerator
     {
+        public int Calls { get; private set; }
         public Task<string?> TryGenerateAsync(Guid id, Guid tenantId, Guid userId, CancellationToken ct = default)
-            => Task.FromResult<string?>(error);
+        {
+            Calls++;
+            return Task.FromResult<string?>(error);
+        }
     }
 
     [Fact]
-    public async Task HandleAsync_CascadaFalla_ConsolidaYAvisaQueDocumentoNoSeGenero()
+    public async Task HandleAsync_ExpedienteInvalidado_NoRegeneraHotDocs_SoloFusiona()
     {
+        // Feature #11066: con FUR ya persistido, invalidar el consolidado NO dispara regeneración
+        // en caliente (eso es de Preparar). Solo fusiona el expediente existente.
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         var instance = MatriculaInstance(id, tenantId);
@@ -625,22 +635,22 @@ public sealed class ConsolidadoHandlerTests
             _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
         _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
+        var regenerator = new FailingRegenerator("organismo_requerido");
         var handler = new GenerarConsolidadoHandler(
-            _repo, _merger, _storage, null, new FailingRegenerator("organismo_requerido"));
+            _repo, _merger, _storage, null, regenerator);
 
         var (result, error) = await handler.HandleAsync(id, tenantId, TestContext.Current.CancellationToken);
 
-        // AC1/AC2: el consolidado se entrega igual…
         error.Should().BeNull();
         result.Should().NotBeNull();
-        // …y AC3: se informa qué no se pudo generar y por qué.
-        result!.AvisosCascada.Should().ContainSingle()
-            .Which.Should().Contain("documentos_del_expediente").And.Contain("organismo_requerido");
+        regenerator.Calls.Should().Be(0);
+        result!.AvisosCascada.Should().BeNull();
     }
 
     [Fact]
-    public async Task HandleAsync_ImprontaFalla_ConsolidaYAvisa()
+    public async Task HandleAsync_ImprontaFalla_ConsolidaSinAvisosCascada()
     {
+        // Feature #11066: impronta best-effort; su fallo no bloquea ni publica avisos de cascada develop.
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         var instance = MatriculaInstance(id, tenantId);
@@ -649,19 +659,20 @@ public sealed class ConsolidadoHandlerTests
             _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
         _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
+        var impronta = new FailingImprontaGenerator("provider_unavailable");
         var handler = new GenerarConsolidadoHandler(
-            _repo, _merger, _storage, null, null, new FailingImprontaGenerator("provider_unavailable"));
+            _repo, _merger, _storage, null, null, impronta);
 
         var (result, error) = await handler.HandleAsync(
             id, tenantId, Guid.NewGuid(), TestContext.Current.CancellationToken);
 
         error.Should().BeNull();
-        result!.AvisosCascada.Should().ContainSingle()
-            .Which.Should().Contain("impronta").And.Contain("provider_unavailable");
+        impronta.Calls.Should().Be(1);
+        result!.AvisosCascada.Should().BeNull();
     }
 
     [Fact]
-    public async Task HandleAsync_CascadaSinFallos_NoDevuelveAvisos()
+    public async Task HandleAsync_SinFallos_NoDevuelveAvisos()
     {
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();

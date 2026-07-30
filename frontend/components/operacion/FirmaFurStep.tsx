@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Building2,
   Check,
@@ -39,6 +39,9 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
+/** Estado de la pre-generación del paquete al entrar al paso FUR (Feature #11066). */
+export type PaqueteDocsStatus = 'idle' | 'loading' | 'ready' | 'error';
+
 interface Props {
   instanceId: string | null;
   modalidad: WizardModalidad;
@@ -46,6 +49,11 @@ interface Props {
   onRefresh?: () => void;
   /** FEATURE 05 — el RNMC aplica al trámite: se consulta por actor y se muestra en el resumen. */
   rnmcEnabled?: boolean;
+  /**
+   * Feature #11066 — avisa al wizard si el paquete (FUR + impronta) ya se pre-generó al entrar
+   * al paso. La generación NO bloquea Preparar ni Guardar; Radicar sí exige consolidado completo.
+   */
+  onPaqueteStatusChange?: (status: PaqueteDocsStatus) => void;
 }
 
 const PARTE_LABEL: Record<SignatureParte, string> = {
@@ -195,7 +203,13 @@ function CopyLink({ link, label }: { link: string; label: string }) {
  * wizard tras cada acción y delega la verificación autoritativa al backend
  * (submit hard-gate). La firma de compraventa solo aplica a traspaso.
  */
-export function FirmaFurStep({ instanceId, modalidad, onRefresh, rnmcEnabled = false }: Props) {
+export function FirmaFurStep({
+  instanceId,
+  modalidad,
+  onRefresh,
+  rnmcEnabled = false,
+  onPaqueteStatusChange,
+}: Props) {
   // Solo lectura (Track C): sin acciones (organismo, firma, participantes, FUR);
   // se conserva la visualización (resumen, expediente, timeline, descargas).
   const readOnly = useWizardReadOnly();
@@ -217,6 +231,11 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh, rnmcEnabled = f
   // (cuando ya se capturó la fecha de expedición de cada actor), no en el pre-vuelo.
   const [rnmcChecks, setRnmcChecks] = useState<PreflightCheck[]>([]);
   const [rnmcLoading, setRnmcLoading] = useState(false);
+  // Feature #11066 — pre-generación del paquete al entrar al paso (antes de Preparar).
+  const [paqueteStatus, setPaqueteStatus] = useState<PaqueteDocsStatus>('idle');
+  const paqueteKickoffRef = useRef(false);
+  const onPaqueteStatusChangeRef = useRef(onPaqueteStatusChange);
+  onPaqueteStatusChangeRef.current = onPaqueteStatusChange;
 
   const loadDetail = useCallback(async () => {
     if (!instanceId) return;
@@ -334,6 +353,66 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh, rnmcEnabled = f
     onRefresh?.();
     void loadExpediente();
   }, [onRefresh, loadExpediente]);
+  // Feature #11066 — token para que Fur/Impronta re-listen adjuntos tras la pre-gen (sin
+  // refrescar el wizard: eso remonta el paso y puede adelantar el estado de negocio).
+  const [docsReloadToken, setDocsReloadToken] = useState(0);
+
+  // Feature #11066 — reporta al shell el estado del paquete (banner: no bloquea Preparar).
+  useEffect(() => {
+    onPaqueteStatusChangeRef.current?.(paqueteStatus);
+  }, [paqueteStatus]);
+
+  // Feature #11066 — al entrar al paso FUR (con organismo y en borrador/subsanación) pre-genera
+  // el paquete + impronta. Preparar/Guardar NO esperan a que termine; Radicar sí exige consolidado.
+  useEffect(() => {
+    if (!instanceId || readOnly || !organismoSelected || !detail) return;
+    if (detail.status !== 'borrador' && detail.status !== 'subsanacion') return;
+    if (paqueteKickoffRef.current) return;
+    paqueteKickoffRef.current = true;
+
+    let cancelled = false;
+    void (async () => {
+      setPaqueteStatus('loading');
+      try {
+        let atts: ProcedureAttachment[] = [];
+        try {
+          atts = await tramitesClient.getAttachments(instanceId);
+          if (!cancelled) setAttachments(atts);
+        } catch {
+          // Si falla el listado, intentamos generar de todas formas.
+        }
+
+        const hasFurDoc = atts.some((a) => a.tipo === 'fur');
+        const hasImpronta = atts.some((a) => a.tipo === 'impronta');
+
+        if (!hasFurDoc) {
+          await tramitesClient.generarFur(instanceId);
+        }
+
+        if (!hasImpronta) {
+          try {
+            await tramitesClient.generarImpronta(instanceId);
+          } catch {
+            // Best-effort: sin impronta no bloquea el paso ni Preparar.
+          }
+        }
+
+        if (cancelled) return;
+        setPaqueteStatus('ready');
+        // Solo adjuntos locales — no onRefresh del wizard (evita remount / cambio de estado).
+        void loadExpediente();
+        setDocsReloadToken((t) => t + 1);
+      } catch {
+        if (cancelled) return;
+        paqueteKickoffRef.current = false;
+        setPaqueteStatus('error');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [instanceId, readOnly, organismoSelected, detail, loadExpediente]);
 
   return (
     <div className="space-y-8">
@@ -411,12 +490,13 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh, rnmcEnabled = f
         <FirmaSection instanceId={instanceId} onRefresh={onRefresh} />
       )}
       <ParticipantesSection instanceId={instanceId} />
-      <ImprontaSection instanceId={instanceId} />
+      <ImprontaSection instanceId={instanceId} reloadToken={docsReloadToken} />
       <FurSection
         instanceId={instanceId}
         modalidad={modalidad}
         status={detail?.status ?? 'borrador'}
         onRefresh={handleDocumentGenerated}
+        reloadToken={docsReloadToken}
       />
 
       <ExpedienteTimeline statusHistory={detail?.statusHistory ?? []} />
@@ -1514,13 +1594,17 @@ function StatusChip({
 // ── Impronta integrada al trámite ────────────────────────────────────
 
 /**
- * Botón "Generar Impronta" del paso FUR: genera el Certificado de Improntas Digitales (Kyverum
- * RUNT) con los datos ya disponibles del trámite (placa/VIN, documento del propietario, organismo
- * de tránsito, operador) y lo adjunta al expediente (mismo flujo que una subida manual). Solo se
- * muestra si aún no existe un adjunto tipo 'impronta' (cargado a mano o generado antes) — la
- * generación es idempotente por NO-regeneración en el backend.
+ * Impronta en el paso FUR: Feature #11066 la pre-genera al entrar al paso (best-effort).
+ * Aquí solo se informa / descarga; sin botón manual de generación.
  */
-function ImprontaSection({ instanceId }: { instanceId: string | null }) {
+function ImprontaSection({
+  instanceId,
+  reloadToken = 0,
+}: {
+  instanceId: string | null;
+  /** Feature #11066 — se incrementa tras la pre-gen para reconsultar adjuntos. */
+  reloadToken?: number;
+}) {
   const [attachment, setAttachment] = useState<ProcedureAttachment | null | undefined>(undefined);
 
   const load = useCallback(async () => {
@@ -1537,23 +1621,35 @@ function ImprontaSection({ instanceId }: { instanceId: string | null }) {
     // load solo hace setState DESPUÉS del await (no es cascada síncrona).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [load]);
+  }, [load, reloadToken]);
 
   // Aún no se sabe si existe (carga inicial): no se muestra nada para evitar parpadeo.
   if (attachment === undefined) return null;
-  // Ya hay impronta en el expediente: nada que anunciar (el documento se ve en el visor).
-  if (attachment) return null;
-
+  // Ya hay impronta: descarga. Sin impronta: copy (pre-gen / consolidado la intentarán).
   return (
-    <section className="space-y-4" aria-label="Impronta de motor y chasis">
+    <section className="space-y-3" aria-label="Impronta de motor y chasis">
       <div>
         <h4 className="text-sm font-bold">Impronta de motor y chasis</h4>
         <p className="text-xs opacity-70">
-          El Certificado de Improntas Digitales (Kyverum RUNT) se genera automáticamente al generar el
-          expediente consolidado, con los datos del trámite. Si ya tienes tu propia impronta, puedes
-          subirla manualmente en el paso de documentos.
+          {attachment
+            ? 'Certificado de Improntas Digitales adjunto al expediente.'
+            : 'Se genera automáticamente al entrar a este paso (Kyverum RUNT) y al Preparar/consolidar. Si ya tienes una impronta propia, súbela en Documentos. No bloquea Preparar ni Guardar.'}
         </p>
       </div>
+      {attachment && (
+        <div
+          className="rounded-xl border p-3 flex items-center gap-3"
+          style={{ borderColor: '#8CC63F' }}
+        >
+          <FileText className="h-4 w-4 shrink-0" style={{ color: '#5B8A1F' }} aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold">
+              Impronta <span className="opacity-50 font-normal">· {attachment.filename}</span>
+            </p>
+          </div>
+          <DownloadButton instanceId={instanceId} attachment={attachment} />
+        </div>
+      )}
     </section>
   );
 }
@@ -1562,6 +1658,15 @@ function ImprontaSection({ instanceId }: { instanceId: string | null }) {
 
 /** Tipos de documento generados por el FUR. */
 const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad', 'certificado_identidad_vendedor', 'certificado_rnmc']);
+
+/** Feature #11066 — fecha local YYYY-MM-DD para precargar "Fecha del trámite". */
+function todayIsoDate(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 /**
  * HU #10987 — tope de las observaciones manuales. El recuadro OBSERVACIONES del FUR es un campo
@@ -1599,12 +1704,15 @@ function FurSection({
   modalidad,
   status,
   onRefresh,
+  reloadToken = 0,
 }: {
   instanceId: string | null;
   modalidad: WizardModalidad;
   /** Estado de negocio del trámite: en estado final no se ofrece generar (HU #11052/#11051). */
   status: InstanceStatus;
   onRefresh?: () => void;
+  /** Feature #11066 — se incrementa tras la pre-gen para reconsultar adjuntos. */
+  reloadToken?: number;
 }) {
   const [docs, setDocs] = useState<ProcedureAttachment[] | null>(null);
   const [consolidado, setConsolidado] = useState<ProcedureAttachment | null>(null);
@@ -1615,8 +1723,9 @@ function FurSection({
   // HU #10987 / #10988 (Feature #10972) — el recuadro OBSERVACIONES y la fecha del trámite del FUR
   // leían `fur_observations` y `fur_processing_date`, dos llaves que NADIE escribía: el gestor no
   // podía aportar observaciones y la fecha era la de generación, impuesta por un fallback silencioso.
+  // Feature #11066 — por defecto hoy; si el trámite ya tiene `fur_processing_date`, load() la respeta.
   const [observaciones, setObservaciones] = useState('');
-  const [fechaTramite, setFechaTramite] = useState('');
+  const [fechaTramite, setFechaTramite] = useState(todayIsoDate);
   const [savingCampos, setSavingCampos] = useState(false);
 
   const load = useCallback(async () => {
@@ -1631,7 +1740,19 @@ function FurSection({
       const valor = (key: string) =>
         detail?.fieldValues?.find((f) => f.fieldKey === key)?.valueText ?? '';
       setObservaciones(valor('fur_observations'));
-      setFechaTramite(valor('fur_processing_date').slice(0, 10));
+      const fechaGuardada = valor('fur_processing_date').slice(0, 10);
+      const fecha = fechaGuardada || todayIsoDate();
+      setFechaTramite(fecha);
+      // Si no había fecha persistida, guardamos la de hoy para que el paquete/FUR la usen.
+      if (!fechaGuardada) {
+        try {
+          await tramitesClient.patchFieldValues(instanceId, [
+            { formFieldId: null, fieldKey: 'fur_processing_date', valueText: fecha },
+          ]);
+        } catch {
+          // Best-effort: el input ya muestra hoy; el backend puede caer al fallback.
+        }
+      }
     } catch {
       // El listado de adjuntos y el formato son secundarios; el error de generar se muestra abajo.
     }
@@ -1662,7 +1783,7 @@ function FurSection({
     // load solo hace setState DESPUÉS del await (no es cascada síncrona).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [load]);
+  }, [load, reloadToken]);
 
   const handleGenerateConsolidado = async () => {
     if (!instanceId) return;
@@ -1740,13 +1861,15 @@ function FurSection({
             </span>
           )}
         </div>
-        {/* HU #11052 — la generación ya no va documento por documento: el expediente consolidado es el
-            único disparador y produce en cascada lo que falte. Este texto explica dónde está el botón,
-            porque la sección conserva los datos que el gestor aporta al FUR. */}
+        {/* Feature #11066 — al entrar al paso se pre-generan FUR (+ paquete) e impronta.
+            El botón de consolidado (HU #11052) fusiona el expediente ya persistido; no es cascada
+            caliente del paquete. Preparar/Guardar no esperan la pre-gen; Radicar sí exige consolidado. */}
         <p className="text-xs opacity-70">
-          El FUR, el certificado de identidad, la impronta y (en traspaso) el contrato de compraventa se
-          generan automáticamente al generar el expediente consolidado, con los datos del trámite.
-          Completa aquí abajo lo que el formulario necesita y genera el expediente cuando esté listo.
+          Al entrar a este paso se generan automáticamente el FUR
+          {modalidad === 'traspaso' ? ', el contrato de compraventa' : ''}, la solicitud de trámite
+          virtual, el mandato (si aplica) y los certificados. Aquí configuras fecha y observaciones;
+          cuando existan, puedes descargarlos abajo. Preparar no espera esta generación: si falla,
+          puedes regenerar el expediente consolidado después.
         </p>
       </div>
 
@@ -1769,8 +1892,8 @@ function FurSection({
             style={{ borderColor: '#DFE5ED' }}
           />
           <p className="text-[10px] opacity-60 mt-1">
-            Se estampa en el FUR y en el resto de documentos del trámite. Si la dejas vacía se usa la
-            fecha de hoy.
+            Se estampa en el FUR y en el resto de documentos del trámite. Por defecto es hoy; puedes
+            cambiarla si el trámite corresponde a otra fecha.
           </p>
         </div>
 
