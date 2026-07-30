@@ -43,6 +43,8 @@ public sealed record InstanceSummaryDto(
     bool SubsanacionActiva = false,           // flag de edición sobre rechazado
     int SubsanacionCount = 0,                 // veces que se activó la subsanación
     string? UltimoRechazoMotivo = null,      // reason (texto libre) del último rechazo OT
+    /// <summary>Sub-estado de placa (null | preasignado | asignado | terminado), ortogonal a Estado.</summary>
+    string? PlateFlowStatus = null,
                                               // HU #11056 — columnas de seguimiento del listado. Todo se DERIVA del grafo que ya
                                               // carga ListWithSummaryGraphAsync; lo único que cuesta una consulta extra es el
                                               // nombre del gestor (resuelto en lote, nunca por fila).
@@ -177,6 +179,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             e.SubsanacionActiva,
             e.SubsanacionCount,
             DeriveUltimoRechazoMotivo(e),
+            e.PlateFlowStatus,
             e.UpdatedAt,
             string.IsNullOrWhiteSpace(gestorNombre) ? null : gestorNombre.Trim(),
             TramiteFuente.Desde(e.Origin, e.IsMigrated),

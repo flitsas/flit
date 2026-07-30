@@ -7,8 +7,12 @@ import {
   AlertCircle,
   ArrowLeftRight,
   Car,
+  CheckCircle2,
+  Eye,
+  FileCheck,
   FileStack,
   FileText,
+  Play,
   Search,
   Star,
   X,
@@ -19,7 +23,7 @@ import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
 import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
 import { StatusBadge } from '@/components/atom/StatusBadge';
-import { RowActions } from '@/components/atom/RowActions';
+import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { EstadoFunnel } from './EstadoFunnel';
 import {
   AttachmentPreview,
@@ -33,6 +37,14 @@ import type {
   TramiteFuente,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+
+/** Texto corto y discreto del sub-estado de placa (debajo del chip de estado). */
+function plateFlowHint(status: string | null | undefined): string | null {
+  if (status === 'asignado') return 'Placa asignada por el OT';
+  if (status === 'preasignado') return 'Esperando placa del OT';
+  if (status === 'terminado') return 'Listo para el OT';
+  return null;
+}
 
 /**
  * Track A — vista completa del listado de "Trámites en curso": toolbar de
@@ -247,6 +259,42 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
   const [page, setPage] = useState(1);
   /** Popover de motivo OT / subsanación abierto (un solo id a la vez). */
   const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
+  /** Modal Procesar (Asignado → Terminado) desde la tabla. */
+  const [processTarget, setProcessTarget] = useState<InstanceSummary | null>(null);
+  const [soatPagado, setSoatPagado] = useState(false);
+  const [impuestoPagado, setImpuestoPagado] = useState(false);
+  const [processActing, setProcessActing] = useState(false);
+  const [processError, setProcessError] = useState<string | null>(null);
+
+  const openProcesar = (item: InstanceSummary) => {
+    setProcessTarget(item);
+    setSoatPagado(false);
+    setImpuestoPagado(false);
+    setProcessError(null);
+  };
+
+  const confirmProcesar = async () => {
+    if (!processTarget) return;
+    setProcessActing(true);
+    setProcessError(null);
+    try {
+      await tramitesClient.completePlateFlow(
+        processTarget.id,
+        { soatPagado, impuestoDepartamentalPagado: impuestoPagado },
+        isAdmin ? processTarget.tenantId : undefined,
+      );
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === processTarget.id ? { ...it, plateFlowStatus: 'terminado' } : it,
+        ),
+      );
+      setProcessTarget(null);
+    } catch (err) {
+      setProcessError(err instanceof Error ? err.message : 'No se pudo marcar como Terminado.');
+    } finally {
+      setProcessActing(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -551,6 +599,7 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           onRetry={() => void load()}
           onClearFilters={clearFilters}
           onTogglePriority={handleTogglePriority}
+          onProcesar={openProcesar}
           onOpen={(id, tenantId) =>
             router.push(
               isAdmin && tenantId
@@ -582,6 +631,79 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           },
         }}
       />
+
+      {processTarget && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="procesar-plate-title"
+        >
+          <div
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
+            style={{ border: '1px solid #DFE5ED' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="procesar-plate-title" className="text-lg font-semibold" style={{ color: '#162744' }}>
+              Procesar trámite
+            </h2>
+            <p className="mt-1 text-sm opacity-80">
+              {processTarget.referenceNumber}
+              {processTarget.placa ? ` · ${processTarget.placa}` : ''}
+            </p>
+            <p className="mt-2 text-xs opacity-70">
+              El OT ya asignó la placa. Marca los checks opcionales si aplican y pasa a Terminado
+              para que el OT pueda aprobar o rechazar.
+            </p>
+            <div className="mt-4 space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[#557EFF]"
+                  checked={soatPagado}
+                  onChange={(e) => setSoatPagado(e.target.checked)}
+                  disabled={processActing}
+                />
+                SOAT pagado
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[#557EFF]"
+                  checked={impuestoPagado}
+                  onChange={(e) => setImpuestoPagado(e.target.checked)}
+                  disabled={processActing}
+                />
+                Impuesto departamental pagado
+              </label>
+            </div>
+            {processError ? (
+              <p role="alert" className="mt-3 text-xs text-orange-700">
+                {processError}
+              </p>
+            ) : null}
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                onClick={() => setProcessTarget(null)}
+                disabled={processActing}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: '#557EFF' }}
+                disabled={processActing}
+                onClick={() => void confirmProcesar()}
+              >
+                {processActing ? 'Procesando…' : 'Marcar como Terminado'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -603,6 +725,7 @@ function TableBody({
   onRetry,
   onClearFilters,
   onTogglePriority,
+  onProcesar,
   onOpen,
   onVerDocumentos,
   onVerConsolidado,
@@ -622,6 +745,7 @@ function TableBody({
   onRetry: () => void;
   onClearFilters: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
+  onProcesar: (item: InstanceSummary) => void;
   onOpen: (id: string, tenantId: string) => void;
   onVerDocumentos: (item: InstanceSummary) => void;
   onVerConsolidado: (item: InstanceSummary) => void;
@@ -747,6 +871,7 @@ function TableBody({
               onTogglePopover={onTogglePopover}
               onClosePopover={onClosePopover}
               onTogglePriority={onTogglePriority}
+              onProcesar={onProcesar}
               onOpen={onOpen}
               onVerDocumentos={onVerDocumentos}
               onVerConsolidado={onVerConsolidado}
@@ -861,6 +986,7 @@ function TramiteRow({
   onTogglePopover,
   onClosePopover,
   onTogglePriority,
+  onProcesar,
   onOpen,
   onVerDocumentos,
   onVerConsolidado,
@@ -870,6 +996,7 @@ function TramiteRow({
   onTogglePopover: (id: string) => void;
   onClosePopover: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
+  onProcesar: (item: InstanceSummary) => void;
   onOpen: (id: string, tenantId: string) => void;
   onVerDocumentos: (item: InstanceSummary) => void;
   onVerConsolidado: (item: InstanceSummary) => void;
@@ -884,6 +1011,47 @@ function TramiteRow({
   const chip = async?.chip ?? estadoChip(item.estado);
   const isDraft = item.estado === 'borrador';
   const actionLabel = async?.ready ? 'Radicar' : isDraft ? 'Continuar' : 'Ver';
+  const actionIcon = async?.ready ? FileCheck : isDraft ? Play : Eye;
+  const plateHint = plateFlowHint(item.plateFlowStatus);
+  const puedeProcesar =
+    item.estado === 'entregado' && item.plateFlowStatus === 'asignado';
+  const actionItems: ActionsMenuItem[] = [
+    {
+      key: 'abrir',
+      label: actionLabel,
+      icon: actionIcon,
+      onSelect: () => onOpen(item.id, item.tenantId),
+    },
+    ...(puedeProcesar
+      ? [
+          {
+            key: 'procesar',
+            label: 'Procesar',
+            icon: CheckCircle2,
+            onSelect: () => onProcesar(item),
+          },
+        ]
+      : []),
+    // HU #11054 — documentos del expediente sin entrar al wizard.
+    {
+      key: 'documentos',
+      label: 'Ver documentos',
+      icon: FileText,
+      onSelect: () => onVerDocumentos(item),
+    },
+    // HU #11055 — el negocio pidió la acción "sólo visible si ya se encuentra generado": se OMITE
+    // cuando no hay consolidado, en vez de mostrarse deshabilitada. Así nunca dispara una generación.
+    ...(consolidadoDisponible
+      ? [
+          {
+            key: 'consolidado',
+            label: 'Ver consolidado',
+            icon: FileStack,
+            onSelect: () => onVerConsolidado(item),
+          },
+        ]
+      : []),
+  ];
   const motivoRechazo = item.ultimoRechazoMotivo?.trim() || null;
   const subsanacionCount = item.subsanacionCount ?? 0;
   const enSubsanacion = !!item.subsanacionActiva;
@@ -994,9 +1162,10 @@ function TramiteRow({
             {stepLabel(item)}
           </span>
         </span>
-        <span className="relative flex min-w-0 items-center gap-1.5">
-          <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
-          {showRejectPopover ? (
+        <span className="relative flex min-w-0 flex-col gap-0.5">
+          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+            {showRejectPopover ? (
             <div ref={popoverRef} className="relative shrink-0">
               <button
                 type="button"
@@ -1073,6 +1242,15 @@ function TramiteRow({
               ) : null}
             </div>
           ) : null}
+          </span>
+          {plateHint ? (
+            <span
+              className="text-[10px] leading-tight text-[#162744]/45 dark:text-white/40 truncate"
+              title={plateHint}
+            >
+              {plateHint}
+            </span>
+          ) : null}
         </span>
         <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
           {shortDate(item.createdAt)}
@@ -1099,47 +1277,22 @@ function TramiteRow({
           {FUENTE_LABEL[item.fuente ?? 'dashboard']}
         </span>
         {/* La fila entera navega al wizard, así que las acciones detienen la propagación en un
-            envoltorio: `RowActions` no recibe el evento, y así no hay que filtrarlo acción por acción. */}
+            envoltorio: el menú no recibe el evento y no hay que filtrarlo acción por acción.
+            Se conserva el `ActionsMenu` que introdujo el subflujo de placa (HU #11037): las acciones
+            de documentos y consolidado entran como ítems suyos, en vez de montar un segundo grupo de
+            botones en la misma celda. */}
         <span
-          className="flex items-center justify-end gap-1"
+          className="flex justify-end"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
-          <RowActions
-            actions={[
-              {
-                icon: FileText,
-                label: `Ver documentos del trámite ${item.referenceNumber}`,
-                onClick: () => onVerDocumentos(item),
-              },
-              // HU #11055 — el negocio pidió la acción "sólo visible si ya se encuentra generado":
-              // se OMITE cuando no hay consolidado, en vez de mostrarse deshabilitada. Así el botón
-              // nunca puede disparar una generación (que es justo lo que se quiso evitar).
-              ...(consolidadoDisponible
-                ? [
-                    {
-                      icon: FileStack,
-                      label: `Ver expediente consolidado del trámite ${item.referenceNumber}`,
-                      onClick: () => onVerConsolidado(item),
-                      tone: 'primary' as const,
-                    },
-                  ]
-                : []),
-            ]}
+          <ActionsMenu
+            ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
+            items={actionItems}
+            className="bg-white dark:bg-[#162744]"
+            attention={puedeProcesar}
+            attentionHint="Pendiente por procesar: el OT ya asignó la placa"
           />
-          <button
-            type="button"
-            onClick={() => onOpen(item.id, item.tenantId)}
-            className="rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition"
-            style={
-              isDraft
-                ? { background: 'linear-gradient(135deg,#557EFF,#00DBD5)', color: '#fff' }
-                : { border: '1px solid #DFE5ED', color: '#162744' }
-            }
-            aria-label={`${actionLabel} trámite ${item.referenceNumber}`}
-          >
-            {actionLabel}
-          </button>
         </span>
       </div>
     </li>

@@ -72,6 +72,16 @@ function makeInstances(n: number): InstanceSummary[] {
   });
 }
 
+/**
+ * Abre el menú de acciones de una fila. Desde HU #11037 las acciones de la fila viven dentro de un
+ * `ActionsMenu` (dropdown) en vez de botones sueltos: hay que abrirlo antes de buscar el ítem.
+ */
+async function abrirAcciones(referenceNumber = 'TR-0001') {
+  await userEvent.click(
+    screen.getByRole('button', { name: new RegExp(`Acciones del trámite ${referenceNumber}`) }),
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -168,8 +178,10 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
     expect(within(row).getByText('Pendiente validación')).toBeInTheDocument();
     // Accesible: el chip expone su estado por aria-label.
     expect(within(row).getByLabelText('Estado: Pendiente validación')).toBeInTheDocument();
-    // Aún no se puede radicar → la acción sigue siendo "Continuar".
-    expect(within(row).getByRole('button', { name: /Continuar/ })).toBeInTheDocument();
+    // Aún no se puede radicar → la acción sigue siendo "Continuar". Desde HU #11037 vive dentro del
+    // menú de acciones de la fila, así que hay que abrirlo.
+    await abrirAcciones();
+    expect(screen.getByRole('menuitem', { name: /Continuar/ })).toBeInTheDocument();
   });
 
   it('identidad aprobada con firma pendiente muestra "Pendiente firma"', async () => {
@@ -207,7 +219,9 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
 
     const row = (await screen.findByText('RDY001')).closest('[role="button"]') as HTMLElement;
     expect(within(row).getByText('Listo para radicar')).toBeInTheDocument();
-    expect(within(row).getByRole('button', { name: /Radicar trámite/ })).toBeInTheDocument();
+    // La acción vive dentro del menú de la fila desde HU #11037.
+    await abrirAcciones();
+    expect(screen.getByRole('menuitem', { name: /Radicar/ })).toBeInTheDocument();
   });
 });
 
@@ -529,9 +543,8 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Ver documentos del trámite TR-0001' }),
-    );
+    await abrirAcciones();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Ver documentos' }));
 
     expect(await screen.findByText('Documentos · TR-0001')).toBeInTheDocument();
     expect(await screen.findByText('FUR')).toBeInTheDocument();
@@ -546,9 +559,8 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Ver documentos del trámite TR-0001' }),
-    );
+    await abrirAcciones();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Ver documentos' }));
 
     expect(
       await screen.findByText(/aún no tiene documentos en el expediente/),
@@ -560,9 +572,10 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    expect(
-      screen.queryByRole('button', { name: /expediente consolidado/i }),
-    ).toBeNull();
+    await abrirAcciones();
+    // El item no existe en el menu: la accion se OMITE, no se muestra deshabilitada.
+    expect(screen.queryByRole('menuitem', { name: /consolidado/i })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'Ver documentos' })).toBeInTheDocument();
   });
 
   it('con el consolidado generado lo abre en el visor sin navegar', async () => {
@@ -577,11 +590,8 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    await userEvent.click(
-      screen.getByRole('button', {
-        name: 'Ver expediente consolidado del trámite TR-0001',
-      }),
-    );
+    await abrirAcciones();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Ver consolidado' }));
 
     expect(await screen.findByText('Expediente consolidado')).toBeInTheDocument();
     // Se abre con el id que trae el resumen: no se consultan los adjuntos del trámite.

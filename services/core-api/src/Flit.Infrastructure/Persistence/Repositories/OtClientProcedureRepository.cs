@@ -102,6 +102,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                         && f.FieldKey == PlatePreferredLastDigitFieldKey)
                                     .Select(f => f.ValueText)
                                     .FirstOrDefault(),
+                                SoatPagado = _context.ProcedureInstanceFieldValues
+                                    .Any(f => f.ProcedureInstanceId == p.Id
+                                        && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.SoatPagado
+                                        && f.ValueText == "true"),
+                                ImpuestoDepartamentalPagado = _context.ProcedureInstanceFieldValues
+                                    .Any(f => f.ProcedureInstanceId == p.Id
+                                        && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.ImpuestoDepartamentalPagado
+                                        && f.ValueText == "true"),
                                 TransitOfficeId = p.TransitOfficeId,
                                 CreatedAt = p.CreatedAt,
                                 SubmittedAt = p.SubmittedAt,
@@ -295,33 +303,12 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     return null;
                 }
 
-                // Feature #10587 / HU #10785 — gates de la ruta de placa en la aprobación del OT. El status
-                // global es 'entregado' (máquina == develop); el sub-flujo de placa vive en plate_flow_status:
-                //  · No se puede aprobar un trámite de la ruta de placa aún en 'preasignado' (sin placa): el
-                //    OT debe registrar la placa primero (AssignPlate → asignado).
-                //  · Gate DURO de SOAT (R06): con la placa 'asignado', el SOAT debe estar VIGENTE para aprobar
-                //    (no subsanable). 'vencido'/'unknown'/null/desconocido BLOQUEAN la aprobación.
-                if (targetStatus == TramiteEstado.Aprobado
-                    && entity.PlateFlowStatus == PlateFlowStatus.Preasignado)
+                // Sub-flujo de placa: el OT solo aprueba/rechaza en ruta estándar (null) o Terminado.
+                // Sin asignar (preasignado) y Asignado bloquean la decisión OT.
+                if ((targetStatus == TramiteEstado.Aprobado || targetStatus == TramiteEstado.Rechazado)
+                    && !PlateFlowStatus.PermiteDecisionOt(entity.PlateFlowStatus))
                 {
                     return null;
-                }
-
-                if (targetStatus == TramiteEstado.Aprobado
-                    && entity.PlateFlowStatus == PlateFlowStatus.Asignado)
-                {
-                    var soatEstado = await _context.ProcedureInstanceFieldValues
-                        .AsNoTracking()
-                        .Where(f => f.ProcedureInstanceId == procedureInstanceId
-                            && f.FieldKey == Flit.Tramites.Domain.Tramites.Services.SoatGate.FieldKey)
-                        .Select(f => f.ValueText)
-                        .FirstOrDefaultAsync(cancellationToken)
-                        .ConfigureAwait(false);
-
-                    if (Flit.Tramites.Domain.Tramites.Services.SoatGate.BlocksApproval(soatEstado))
-                    {
-                        return null;
-                    }
                 }
 
                 var resolvedChangedBy = await ResolveChangedByAsync(changedBy, cancellationToken)
@@ -678,6 +665,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 && f.FieldKey == PlatePreferredLastDigitFieldKey)
                             .Select(f => f.ValueText)
                             .FirstOrDefault(),
+                        SoatPagado = _context.ProcedureInstanceFieldValues
+                            .Any(f => f.ProcedureInstanceId == p.Id
+                                && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.SoatPagado
+                                && f.ValueText == "true"),
+                        ImpuestoDepartamentalPagado = _context.ProcedureInstanceFieldValues
+                            .Any(f => f.ProcedureInstanceId == p.Id
+                                && f.FieldKey == Flit.Tramites.Domain.Tramites.Estados.PlateFlowCheckFields.ImpuestoDepartamentalPagado
+                                && f.ValueText == "true"),
                         TransitOfficeId = p.TransitOfficeId,
                         CreatedAt = p.CreatedAt,
                         SubmittedAt = p.SubmittedAt,
@@ -912,6 +907,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 PlateFlowStatus = item.PlateFlowStatus,
                 SoatEstado = item.SoatEstado,
                 PlatePreferredLastDigit = item.PlatePreferredLastDigit,
+                SoatPagado = item.SoatPagado,
+                ImpuestoDepartamentalPagado = item.ImpuestoDepartamentalPagado,
                 TransitOfficeId = item.TransitOfficeId,
                 CreatedAt = item.CreatedAt,
                 SubmittedAt = item.SubmittedAt,

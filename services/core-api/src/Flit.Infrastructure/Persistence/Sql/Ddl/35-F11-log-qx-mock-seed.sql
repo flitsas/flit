@@ -27,16 +27,17 @@ INSERT INTO tramites.procedure_instances
     (id, tenant_id, procedure_type_id, reference_number, created_by_user_id,
      transit_office_id, status, modalidad_entrada, checklist_estado)
 SELECT
-    v.id, '0ad1c0de-0000-4000-8000-000000000008'::uuid, v.procedure_type_id, v.reference_number,
+    v.id, '0ad1c0de-0000-4000-8000-000000000008'::uuid, pt.id, v.reference_number,
     '22222222-2222-2222-2222-222222222222'::uuid, 'aaaaaaaa-0001-4000-8000-000000000001'::uuid,
     'entregado', v.modalidad, '{}'::jsonb
 FROM (VALUES
-    ('5eed0001-0000-4000-8000-000000000001'::uuid, '33333333-3333-3333-3333-333333333333'::uuid, 'QXSEED-001', 'traspaso'),
-    ('5eed0001-0000-4000-8000-000000000002'::uuid, '44444444-4444-4444-4444-444444444444'::uuid, 'QXSEED-002', 'matricula_inicial'),
-    ('5eed0001-0000-4000-8000-000000000003'::uuid, '33333333-3333-3333-3333-333333333333'::uuid, 'QXSEED-003', 'traspaso'),
-    ('5eed0001-0000-4000-8000-000000000004'::uuid, '44444444-4444-4444-4444-444444444444'::uuid, 'QXSEED-004', 'matricula_inicial'),
-    ('5eed0001-0000-4000-8000-000000000005'::uuid, '33333333-3333-3333-3333-333333333333'::uuid, 'QXSEED-005', 'traspaso')
-) AS v(id, procedure_type_id, reference_number, modalidad)
+    ('5eed0001-0000-4000-8000-000000000001'::uuid, 'TRASPASO_STANDARD', 'QXSEED-001', 'traspaso'),
+    ('5eed0001-0000-4000-8000-000000000002'::uuid, 'MATRICULA_NUEVA', 'QXSEED-002', 'matricula_inicial'),
+    ('5eed0001-0000-4000-8000-000000000003'::uuid, 'TRASPASO_STANDARD', 'QXSEED-003', 'traspaso'),
+    ('5eed0001-0000-4000-8000-000000000004'::uuid, 'MATRICULA_NUEVA', 'QXSEED-004', 'matricula_inicial'),
+    ('5eed0001-0000-4000-8000-000000000005'::uuid, 'TRASPASO_STANDARD', 'QXSEED-005', 'traspaso')
+) AS v(id, procedure_type_code, reference_number, modalidad)
+JOIN tramites.procedure_types pt ON pt.code = v.procedure_type_code
 WHERE EXISTS (SELECT 1 FROM identity.users u   WHERE u.id = '22222222-2222-2222-2222-222222222222')
   AND EXISTS (SELECT 1 FROM identity.tenants t WHERE t.id = '0ad1c0de-0000-4000-8000-000000000008')
   AND EXISTS (SELECT 1 FROM catalogs.transit_offices o WHERE o.id = 'aaaaaaaa-0001-4000-8000-000000000001')

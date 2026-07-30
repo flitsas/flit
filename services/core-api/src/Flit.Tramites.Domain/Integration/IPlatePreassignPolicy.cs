@@ -9,6 +9,12 @@ public enum PlateRouteDecision
     /// <summary>Flujo A: la compañía eligió una placa disponible → el trámite queda asignado.</summary>
     Asignado,
 
+    /// <summary>
+    /// Flujo A con parámetro compañía <c>plate_flow_skip_to_terminado</c>: placa reservada y se omite
+    /// el paso del gestor (checks) → aterriza en terminado.
+    /// </summary>
+    Terminado,
+
     /// <summary>Flujo B: sin rango/placa → el trámite se envía al OT para que asigne (preasignado).</summary>
     Preasignado,
 
@@ -34,10 +40,22 @@ public enum PlateRouteReason
     /// <summary>Compañía con preasignación activa pero OT mal configurado: bloquea la radicación.</summary>
     PreassignMisconfigured,
 
-    /// <summary>Placa elegida y reservada (Flujo A).</summary>
+    /// <summary>Placa elegida y reservada (Flujo A) → asignado.</summary>
     PlateReserved,
 
-    /// <summary>Sin placa (o reserva fallida): se envía al OT para que asigne (Flujo B).</summary>
+    /// <summary>Placa reservada y la compañía omite el paso gestor → terminado.</summary>
+    PlateReservedSkipToTerminado,
+
+    /// <summary>
+    /// Placa ya presente desde consulta RUNT (<c>source=consultation</c>): Flujo A sin exigir
+    /// reserva de inventario → asignado.
+    /// </summary>
+    PlateFromConsultation,
+
+    /// <summary>Placa RUNT + compañía omite el paso gestor → terminado.</summary>
+    PlateFromConsultationSkipToTerminado,
+
+    /// <summary>Sin placa (o reserva fallida de placa de usuario): se envía al OT para que asigne (Flujo B).</summary>
     NoPlate,
 }
 
@@ -49,6 +67,12 @@ public sealed record PlateRouteResult(PlateRouteDecision Decision, PlateRouteRea
     public static readonly PlateRouteResult NotEnabled = new(PlateRouteDecision.Standard, PlateRouteReason.PreassignNotEnabled);
     public static readonly PlateRouteResult Misconfigured = new(PlateRouteDecision.Blocked, PlateRouteReason.PreassignMisconfigured);
     public static readonly PlateRouteResult Reserved = new(PlateRouteDecision.Asignado, PlateRouteReason.PlateReserved);
+    public static readonly PlateRouteResult ReservedSkipToTerminado =
+        new(PlateRouteDecision.Terminado, PlateRouteReason.PlateReservedSkipToTerminado);
+    public static readonly PlateRouteResult FromConsultation =
+        new(PlateRouteDecision.Asignado, PlateRouteReason.PlateFromConsultation);
+    public static readonly PlateRouteResult FromConsultationSkipToTerminado =
+        new(PlateRouteDecision.Terminado, PlateRouteReason.PlateFromConsultationSkipToTerminado);
     public static readonly PlateRouteResult NoPlate = new(PlateRouteDecision.Preasignado, PlateRouteReason.NoPlate);
 }
 
