@@ -142,17 +142,15 @@ function stepLabel(item: InstanceSummary): string {
 }
 
 /**
- * HU #11057 — chip de firma de la compraventa POR PARTE (vendedor y comprador tienen columna propia).
- * `no_solicitada` no es lo mismo que `pendiente_envio`: la primera es "aún no se pidió", la segunda
- * "ya se pidió y falta enviarla al proveedor"; para el gestor son acciones distintas.
+ * HU #11057 — chip de "Firmado" POR PARTE (vendedor y comprador tienen columna propia).
+ *
+ * Ajuste del PO: la columna acredita a la parte por VALIDACIÓN DE IDENTIDAD o FIRMA DEL BAÚL, no por
+ * la firma electrónica de la compraventa. Solo hay tres estados válidos y son excluyentes.
  */
 const FIRMA_CHIP: Record<FirmaParteEstado, Chip> = {
-  firmada: { label: 'Firmada', bg: 'rgba(140,198,63,0.15)', color: '#5B8A1F', border: 'rgba(140,198,63,0.4)' },
-  enviada: { label: 'Enviada', bg: 'rgba(99,102,241,0.12)', color: '#4f46e5', border: 'rgba(99,102,241,0.3)' },
-  pendiente_envio: { label: 'Por enviar', bg: 'rgba(245,158,11,0.14)', color: '#b45309', border: 'rgba(245,158,11,0.35)' },
-  no_solicitada: { label: 'Sin solicitar', bg: 'rgba(22,39,68,0.06)', color: '#4b5563', border: 'rgba(22,39,68,0.18)' },
-  rechazada: { label: 'Rechazada', bg: 'rgba(255,78,0,0.10)', color: '#c2410c', border: 'rgba(255,78,0,0.3)' },
-  cancelada: { label: 'Cancelada', bg: 'rgba(22,39,68,0.06)', color: '#4b5563', border: 'rgba(22,39,68,0.18)' },
+  firmado: { label: 'Firmado', bg: 'rgba(140,198,63,0.15)', color: '#5B8A1F', border: 'rgba(140,198,63,0.4)' },
+  pendiente: { label: 'Pendiente', bg: 'rgba(245,158,11,0.14)', color: '#b45309', border: 'rgba(245,158,11,0.35)' },
+  rechazado: { label: 'Rechazado', bg: 'rgba(255,78,0,0.10)', color: '#c2410c', border: 'rgba(255,78,0,0.3)' },
 };
 
 /** HU #11057 — etiqueta de la columna Fuente. No hay "QX": Quipux es canal de salida, no de entrada. */
@@ -828,8 +826,8 @@ function Pagination({
 }
 
 /**
- * HU #11057 — celda de firma de una parte. `null` = NO APLICA (matrícula inicial no tiene
- * compraventa): se muestra un guion, no un chip de pendiente, para no dar una falsa alarma.
+ * HU #11057 — celda de "Firmado" de una parte. `null` = NO APLICA (el vendedor no existe en matrícula
+ * inicial): se muestra un guion, no un chip, para no dar una falsa alarma.
  */
 function FirmaCell({
   estado,
@@ -842,7 +840,7 @@ function FirmaCell({
     return (
       <span
         className="block text-xs text-[#162744]/40 dark:text-white/30"
-        title={`No aplica: este trámite no tiene compraventa que firme el ${parte}`}
+        title={`No aplica: este trámite no tiene ${parte}`}
       >
         —
       </span>

@@ -280,6 +280,39 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .ToDictionary(r => r.Id, r => r.DisplayName);
     }
 
+    public async Task<IReadOnlyDictionary<string, bool>> ListFirmaBaulVigenciaKeysAsync(
+        IReadOnlyCollection<Guid> tenantIds, DateOnly hoy, CancellationToken ct)
+    {
+        if (tenantIds.Count == 0)
+            return new Dictionary<string, bool>();
+
+        var distinct = tenantIds.Distinct().ToList();
+        var rows = await db.SignatureVault
+            .AsNoTracking()
+            .Where(v => distinct.Contains(v.TenantId))
+            .Select(v => new { v.TenantId, v.DocumentType, v.DocumentNumber, v.Estado, v.VigenciaDesde, v.VigenciaHasta })
+            .ToListAsync(ct);
+
+        var result = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var r in rows)
+        {
+            // Vigente = activa y hoy dentro de [desde, hasta] (ADR-0025): una revocada o fuera de rango
+            // existe pero ya no sirve, y esa diferencia es justo la que la columna necesita mostrar.
+            var vigente = string.Equals(r.Estado, SignatureVaultEstadoActiva, StringComparison.OrdinalIgnoreCase)
+                && r.VigenciaDesde <= hoy
+                && r.VigenciaHasta >= hoy;
+
+            var key = BiometricRules.IdentidadKey(r.TenantId, r.DocumentType, r.DocumentNumber);
+            // Con varias firmas de la misma persona, una vigente manda sobre las caducadas.
+            result[key] = result.TryGetValue(key, out var previa) ? previa || vigente : vigente;
+        }
+
+        return result;
+    }
+
+    /// <summary>Estado "activa" del baúl (ADR-0025): las revocadas no cuentan como vigentes.</summary>
+    private const string SignatureVaultEstadoActiva = "activa";
+
     public Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
             .Include(x => x.BiometricValidations)

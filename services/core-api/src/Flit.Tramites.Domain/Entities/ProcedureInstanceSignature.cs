@@ -55,15 +55,26 @@ public static class SignatureEstados
 }
 
 /// <summary>
-/// HU #11056 — estado de firma de UNA parte para el listado de trámites. Son los de
-/// <see cref="SignatureEstados"/> más <see cref="NoSolicitada"/>, que no es un estado persistido sino
-/// la ausencia de fila: la firma de esa parte todavía no se ha solicitado. Se distingue de
-/// <see cref="SignatureEstados.PendienteEnvio"/> (ya solicitada, sin enviar al proveedor) porque para
-/// el gestor son acciones distintas.
+/// Estado de "Firmado" de UNA parte en el listado de trámites.
+/// <para>
+/// Ajuste del PO sobre la HU #11056: la columna NO habla de la firma electrónica de la compraventa
+/// (<see cref="SignatureEstados"/>), sino de <b>cómo queda acreditada la parte</b> — por validación de
+/// identidad o por firma del baúl. Solo hay tres estados válidos, y son excluyentes.
+/// </para>
 /// </summary>
 public static class FirmaParteEstados
 {
-    public const string NoSolicitada = "no_solicitada";
+    /// <summary>La validación de identidad aún no se ha realizado (y no hay firma del baúl).</summary>
+    public const string Pendiente = "pendiente";
+
+    /// <summary>Identidad validada y aprobada, o firma del baúl vigente.</summary>
+    public const string Firmado = "firmado";
+
+    /// <summary>
+    /// Identidad rechazada, o firma del baúl ya vencida (típicamente porque el trámite llevaba mucho
+    /// tiempo en el mismo estado sin que el organismo lo aprobara).
+    /// </summary>
+    public const string Rechazado = "rechazado";
 }
 
 /// <summary>Tipos de documento firmable.</summary>

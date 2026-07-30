@@ -156,8 +156,8 @@ export interface InstanceSummary {
   /** Fuente por la que entró el trámite. Ver `TramiteFuente` en backend. */
   fuente?: TramiteFuente | null;
   /**
-   * Estado de la firma de la compraventa de cada parte. `null` = NO APLICA (matrícula inicial no
-   * tiene compraventa) — distinto de `'no_solicitada'`, que es "aplica y aún no se pidió".
+   * Cómo queda ACREDITADA cada parte: por validación de identidad o por firma del baúl. `null` = no
+   * aplica (el vendedor no existe en matrícula inicial).
    */
   firmaVendedorEstado?: FirmaParteEstado | null;
   firmaCompradorEstado?: FirmaParteEstado | null;
@@ -171,14 +171,15 @@ export interface InstanceSummary {
 /** Fuente por la que el trámite entró a FLIT (HU #11056). No existe fuente "QX": Quipux es salida. */
 export type TramiteFuente = 'dashboard' | 'integracion' | 'migrado';
 
-/** Estado de firma de una parte: los de la máquina de firma más la ausencia de solicitud. */
-export type FirmaParteEstado =
-  | 'no_solicitada'
-  | 'pendiente_envio'
-  | 'enviada'
-  | 'firmada'
-  | 'rechazada'
-  | 'cancelada';
+/**
+ * Cómo queda acreditada una parte en el listado. Son los ÚNICOS tres estados válidos:
+ * - `pendiente`: la validación de identidad no se ha realizado (y no hay firma del baúl).
+ * - `firmado`: identidad validada y aprobada, o firma del baúl vigente.
+ * - `rechazado`: identidad rechazada, o firma del baúl vencida.
+ *
+ * No habla de la firma electrónica de la compraventa: ese es otro eje (`signaturePending`).
+ */
+export type FirmaParteEstado = 'pendiente' | 'firmado' | 'rechazado';
 
 /** Respuesta de GET /instances. */
 export interface InstancesResponse {

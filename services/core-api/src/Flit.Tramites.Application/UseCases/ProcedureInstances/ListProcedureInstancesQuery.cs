@@ -49,8 +49,9 @@ public sealed record InstanceSummaryDto(
     DateTimeOffset? UpdatedAt = null,         // última modificación; null si nunca se modificó tras crearse
     string? GestorNombre = null,              // persona que radica (created_by_user_id → DisplayName)
     string Fuente = TramiteFuente.Dashboard,  // dashboard | integracion | migrado (ver TramiteFuente)
-                                              // Estado de firma de la compraventa POR PARTE. null en matrícula inicial (no hay
-                                              // compraventa) y, en el vendedor, cuando la modalidad no lo contempla.
+                                              // Cómo queda ACREDITADA cada parte (ajuste del PO): pendiente | firmado |
+                                              // rechazado, por validación de identidad o firma del baúl — NO por la firma
+                                              // electrónica de la compraventa. null = no aplica (vendedor en matrícula).
     string? FirmaVendedorEstado = null,
     string? FirmaCompradorEstado = null,
                                               // Expediente consolidado del wizard (adjunto tipo 'consolidado') ya generado. El
@@ -102,22 +103,36 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         IReadOnlySet<string> identidadKeys = await repo.ListVigenteApprovedIdentityKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
 
+        // Ajuste del PO sobre HU #11056 — las columnas "Firmado" acreditan por identidad O por firma del
+        // baúl, y tienen que distinguir «baúl vigente» de «baúl vencido». La ruta de lote de la identidad
+        // no consulta el baúl a propósito (evitar N+1), así que se trae en su propia consulta única.
+        var hoy = DateOnly.FromDateTime(now.ToOffset(ColombiaUtcOffset).DateTime);
+        IReadOnlyDictionary<string, bool> firmaBaul = await repo.ListFirmaBaulVigenciaKeysAsync(
+            instances.Select(i => i.TenantId).Distinct().ToList(), hoy, ct) ?? EmptyFirmaBaul;
+
         return instances
             .Select(e => ToSummary(
                 e,
                 IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now),
                 nombres.GetValueOrDefault(e.TenantId),
-                gestores.GetValueOrDefault(e.CreatedByUserId)))
+                gestores.GetValueOrDefault(e.CreatedByUserId),
+                firmaBaul))
             .ToList();
     }
 
     private static readonly IReadOnlyDictionary<Guid, string> EmptyNames = new Dictionary<Guid, string>();
 
+    private static readonly IReadOnlyDictionary<string, bool> EmptyFirmaBaul = new Dictionary<string, bool>();
+
+    /// <summary>Hora de Colombia (UTC-5, sin DST): la vigencia del baúl se cuenta por día calendario local.</summary>
+    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
+
     internal static InstanceSummaryDto ToSummary(
         ProcedureInstance e,
         IReadOnlySet<string> identidadAprobadaPartes,
         string? companiaNombre = null,
-        string? gestorNombre = null)
+        string? gestorNombre = null,
+        IReadOnlyDictionary<string, bool>? firmaBaulPorPersona = null)
     {
         var fv = e.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
         var buyer = e.Actors.FirstOrDefault(a =>
@@ -165,32 +180,65 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             e.UpdatedAt,
             string.IsNullOrWhiteSpace(gestorNombre) ? null : gestorNombre.Trim(),
             TramiteFuente.Desde(e.Origin, e.IsMigrated),
-            DeriveFirmaParte(e, modalidad, SellerActorType),
-            DeriveFirmaParte(e, modalidad, BuyerActorType),
+            DeriveFirmaParte(e, modalidad, SellerActorType, identidadAprobadaPartes, firmaBaulPorPersona ?? EmptyFirmaBaul),
+            DeriveFirmaParte(e, modalidad, BuyerActorType, identidadAprobadaPartes, firmaBaulPorPersona ?? EmptyFirmaBaul),
             DeriveConsolidadoAttachmentId(e));
     }
 
     /// <summary>
-    /// HU #11056 — estado de la firma de la compraventa de UNA parte, para las dos columnas "Firmado"
-    /// del listado. <c>null</c> en matrícula inicial: no hay compraventa que firmar, así que la columna
-    /// se presenta como no aplicable en vez de como pendiente (que sería una alarma falsa).
-    /// Sin fila de firma ⇒ <see cref="FirmaParteEstados.NoSolicitada"/>; con fila, su estado tal cual.
-    /// Si hubiera más de una fila para la parte se toma la más reciente (la vigente).
+    /// Estado de "Firmado" de UNA parte (ajuste del PO sobre la HU #11056). La columna acredita a la
+    /// parte por <b>validación de identidad o firma del baúl</b>, no por la firma electrónica de la
+    /// compraventa. Precedencia, en este orden:
+    /// <list type="number">
+    ///   <item><b>firmado</b> — identidad aprobada y vigente, o firma del baúl vigente. Lo positivo
+    ///   gana: una identidad aprobada acredita a la parte aunque su baúl esté caducado.</item>
+    ///   <item><b>rechazado</b> — identidad rechazada/expirada, o firma del baúl vencida.</item>
+    ///   <item><b>pendiente</b> — no hay nada hecho todavía.</item>
+    /// </list>
+    /// <c>null</c> = NO APLICA: la parte no existe en esta modalidad (el vendedor en matrícula inicial).
     /// </summary>
     private static string? DeriveFirmaParte(
-        ProcedureInstance e, TramiteModalidadEntrada modalidad, string parte)
+        ProcedureInstance e,
+        TramiteModalidadEntrada modalidad,
+        string parte,
+        IReadOnlySet<string> identidadAprobadaPartes,
+        IReadOnlyDictionary<string, bool> firmaBaulPorPersona)
     {
-        if (modalidad != TramiteModalidadEntrada.Traspaso)
+        // El vendedor solo existe en traspaso; el comprador siempre.
+        if (modalidad != TramiteModalidadEntrada.Traspaso
+            && string.Equals(parte, SellerActorType, StringComparison.OrdinalIgnoreCase))
             return null;
 
-        var firma = e.Signatures
-            .Where(s => string.Equals(s.Parte, parte, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(s.DocTipo, SignatureDocTipos.Compraventa, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(s => s.SolicitadoAt)
-            .ThenByDescending(s => s.CreatedAt)
-            .FirstOrDefault();
+        var actor = e.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
 
-        return firma?.Estado ?? FirmaParteEstados.NoSolicitada;
+        // Firma del baúl de la PERSONA que acredita a esta parte (el representante legal cuando el
+        // actor es jurídico), resuelta con la misma llave que la identidad.
+        bool? baulVigente = null;
+        if (actor is not null)
+        {
+            var subject = IdentitySubjectResolver.For(actor);
+            if (!string.IsNullOrWhiteSpace(subject.TipoDocumento)
+                && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
+            {
+                var key = BiometricRules.IdentidadKey(
+                    e.TenantId, subject.TipoDocumento, subject.NumeroDocumento);
+                if (firmaBaulPorPersona.TryGetValue(key, out var vigente))
+                    baulVigente = vigente;
+            }
+        }
+
+        if (identidadAprobadaPartes.Contains(parte) || baulVigente == true)
+            return FirmaParteEstados.Firmado;
+
+        // Rechazo explícito de la identidad de ESTA parte (las filas propias del trámite), o baúl caducado.
+        var rechazada = e.BiometricValidations.Any(v =>
+            string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+            && v.Status is BiometricEstados.Rechazado or BiometricEstados.Expirado);
+
+        return rechazada || baulVigente == false
+            ? FirmaParteEstados.Rechazado
+            : FirmaParteEstados.Pendiente;
     }
 
     /// <summary>

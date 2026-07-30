@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Download, FileText } from 'lucide-react';
+import { Download, Eye, FileText } from 'lucide-react';
 import { Modal } from '@/components/atom/Modal';
 import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import { ICON_BUTTON_HIT_AREA } from '@/components/atom/RowActions';
@@ -43,18 +43,26 @@ export function useAttachmentPreview(instanceId: string | null, tenantId?: strin
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /** Libera el objectURL anterior: son blobs en memoria del navegador. */
+  const revoke = useCallback(() => {
+    setUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+  }, []);
+
   const close = useCallback(() => {
+    revoke();
     setDoc(null);
-    setUrl(null);
     setError(null);
     setLoading(false);
-  }, []);
+  }, [revoke]);
 
   const open = useCallback(
     async (attachment: PreviewTarget) => {
       if (!instanceId) return;
       setDoc(attachment);
-      setUrl(null);
+      revoke();
       setError(null);
       setLoading(true);
       try {
@@ -63,15 +71,31 @@ export function useAttachmentPreview(instanceId: string | null, tenantId?: strin
           attachment.id,
           tenantId,
         );
-        setUrl(res?.url ?? null);
-        if (!res?.url) setError('El servidor no devolvió una URL de previsualización.');
+        if (!res?.url) {
+          setError('El servidor no devolvió una URL de previsualización.');
+          return;
+        }
+        // El file-manager sirve el objeto como binary/octet-stream y SIN Content-Disposition, así que
+        // un <iframe> apuntando a la URL prefirmada dispara la descarga en vez de mostrar el PDF. Se
+        // re-empaquetan los bytes como Blob con el mimetype real para forzar el render inline; es la
+        // misma técnica que ya usaba el módulo de OT (`OtDocumentosTab`).
+        const raw = await fetch(res.url).then((r) => {
+          if (!r.ok) throw new Error(String(r.status));
+          return r.blob();
+        });
+        const typed = attachment.mimetype ? new Blob([raw], { type: attachment.mimetype }) : raw;
+        setUrl(URL.createObjectURL(typed));
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'No se pudo abrir el documento.');
+        setError(
+          e instanceof Error && e.message
+            ? `No se pudo abrir el documento (${e.message}). Puedes descargarlo.`
+            : 'No se pudo abrir el documento. Puedes descargarlo.',
+        );
       } finally {
         setLoading(false);
       }
     },
-    [instanceId, tenantId],
+    [instanceId, tenantId, revoke],
   );
 
   /**
@@ -227,23 +251,25 @@ export function TramiteDocumentosModal({
                     {d.filename} · {formatFecha(d.uploadedAt)}
                   </p>
                 </div>
+                {/* Mismo par de botones de icono que el módulo de OT (`OtDocumentosTab`): ojo para
+                    previsualizar en azul de marca, flecha para descargar en color de texto. */}
                 <button
                   type="button"
                   onClick={() => void preview.open(d)}
-                  className="shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition hover:bg-[#557EFF]/10"
-                  style={{ borderColor: BLUE, color: BLUE }}
-                  aria-label={`Ver ${documentLabel(d.tipo)}`}
+                  className={`${ICON_BUTTON_HIT_AREA} shrink-0 rounded-lg border border-border p-1.5 text-[#557EFF] transition hover:bg-[#557EFF]/10`}
+                  aria-label={`Previsualizar ${documentLabel(d.tipo)}`}
+                  title="Previsualizar"
                 >
-                  Ver
+                  <Eye className="h-4 w-4" aria-hidden="true" />
                 </button>
                 <button
                   type="button"
                   onClick={() => void preview.download(d)}
-                  className={`${ICON_BUTTON_HIT_AREA} shrink-0 rounded-lg text-[#162744] transition hover:bg-[#557EFF]/10 dark:text-slate-200`}
+                  className={`${ICON_BUTTON_HIT_AREA} shrink-0 rounded-lg border border-border p-1.5 text-foreground transition hover:bg-[#557EFF]/10`}
                   aria-label={`Descargar ${documentLabel(d.tipo)}`}
-                  title={`Descargar ${documentLabel(d.tipo)}`}
+                  title="Descargar"
                 >
-                  <Download className="h-4 w-4" />
+                  <Download className="h-4 w-4" aria-hidden="true" />
                 </button>
               </li>
             ))}

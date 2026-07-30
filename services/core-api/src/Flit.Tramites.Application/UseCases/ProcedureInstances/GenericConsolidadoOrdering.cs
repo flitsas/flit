@@ -18,9 +18,15 @@ internal static class GenericConsolidadoOrdering
         "certificado_identidad_vendedor",
     ];
 
+    // Ningún expediente consolidado puede ser PARTE de otro: se excluyen los dos tipos.
+    // Faltaba `consolidado_maestro`, y por eso al aprobar el organismo de tránsito se duplicaba todo
+    // el expediente: la aprobación genera el maestro (que ya contiene TODOS los documentos) e invalida
+    // el consolidado del wizard, así que la siguiente regeneración lo mezclaba como un adjunto más y
+    // cada documento salía dos veces.
     private static readonly HashSet<string> Excluded = new(StringComparer.OrdinalIgnoreCase)
     {
         "consolidado",
+        "consolidado_maestro",
     };
 
     /// <summary>Orden genérico por defecto (documentos generados primero, resto por fecha).</summary>

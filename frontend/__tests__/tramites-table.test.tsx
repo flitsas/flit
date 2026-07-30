@@ -61,12 +61,12 @@ function makeInstances(n: number): InstanceSummary[] {
       subsanacionCount: 0,
       ultimoRechazoMotivo: null,
       // HU #11056 — columnas de seguimiento. Por defecto: sin modificar, sin gestor resuelto,
-      // origen plataforma, firmas sin solicitar y sin consolidado generado.
+      // origen plataforma, partes sin acreditar y sin consolidado generado.
       updatedAt: null,
       gestorNombre: null,
       fuente: 'dashboard',
-      firmaVendedorEstado: 'no_solicitada',
-      firmaCompradorEstado: 'no_solicitada',
+      firmaVendedorEstado: 'pendiente',
+      firmaCompradorEstado: 'pendiente',
       consolidadoAttachmentId: null,
     } satisfies InstanceSummary;
   });
@@ -476,20 +476,20 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     expect(within(rows).getByText('2026/07/20')).toBeInTheDocument();
   });
 
-  it('muestra el estado de firma de cada parte por separado', async () => {
+  it('muestra el estado de acreditación de cada parte por separado', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
-      { ...item, firmaVendedorEstado: 'firmada', firmaCompradorEstado: 'enviada' },
+      { ...item, firmaVendedorEstado: 'firmado', firmaCompradorEstado: 'rechazado' },
     ]);
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
     const rows = screen.getByRole('list', { name: 'Trámites en curso' });
-    expect(within(rows).getByText('Firmada')).toBeInTheDocument();
-    expect(within(rows).getByText('Enviada')).toBeInTheDocument();
+    expect(within(rows).getByText('Firmado')).toBeInTheDocument();
+    expect(within(rows).getByText('Rechazado')).toBeInTheDocument();
   });
 
-  it('en matrícula inicial las columnas de firma se presentan como no aplicables', async () => {
+  it('en matrícula inicial la columna del vendedor se presenta como no aplicable', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
       {
@@ -504,11 +504,9 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
 
     await screen.findByText('P0001');
     const rows = screen.getByRole('list', { name: 'Trámites en curso' });
-    // Ni "Sin solicitar" ni ningún chip de firma: no hay compraventa que firmar.
-    expect(within(rows).queryByText('Sin solicitar')).toBeNull();
-    expect(
-      within(rows).getAllByTitle(/No aplica: este trámite no tiene compraventa/),
-    ).toHaveLength(2);
+    // Sin chip de acreditación: el vendedor no existe y el comprador viene sin estado.
+    expect(within(rows).queryByText('Pendiente')).toBeNull();
+    expect(within(rows).getAllByTitle(/No aplica: este trámite no tiene/)).toHaveLength(2);
   });
 });
 

@@ -633,4 +633,78 @@ public sealed class ConsolidadoHandlerTests
         error.Should().BeNull();
         result!.AvisosCascada.Should().BeNull();
     }
+
+    // -- Ajuste del PO: el consolidado maestro NO puede entrar al consolidado del wizard -----------
+    //
+    // Al aprobar el organismo de transito se genera el `consolidado_maestro` (que YA contiene todos
+    // los documentos) y se invalida el consolidado del wizard. Como el orden solo excluia el tipo
+    // `consolidado`, la siguiente regeneracion mezclaba el maestro como un adjunto mas y cada
+    // documento del expediente salia DOS VECES.
+
+    [Fact]
+    public async Task Traspaso_ConConsolidadoMaestro_NoLoIncluyeYNoDuplicaDocumentos()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+
+        // Estado tras la aprobacion del OT: existe el maestro (con TODO el expediente dentro) y el
+        // consolidado del wizard previo.
+        AddAttachment(instance, "consolidado_maestro", "maestro.pdf", "%PDF-maestro");
+        AddAttachment(instance, "consolidado", "consolidado-previo.pdf", "%PDF-previo");
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, new FakeRegenerator());
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+
+        // El PDF resultante (el fake concatena los bytes de las partes, y cada parte es su filename) no
+        // lleva ni el maestro ni el consolidado previo, y cada documento aparece UNA sola vez.
+        var generado = ConsolidadoContent();
+        generado.Should().NotContain("maestro.pdf");
+        generado.Should().NotContain("consolidado-previo.pdf");
+        Ocurrencias(generado, "fur.pdf").Should().Be(1);
+        Ocurrencias(generado, "compraventa.pdf").Should().Be(1);
+        Ocurrencias(generado, "soat.pdf").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Matricula_ConConsolidadoMaestro_TampocoLoIncluye()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        AddAttachment(instance, "consolidado_maestro", "maestro.pdf", "%PDF-maestro");
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, new FakeRegenerator());
+
+        var (_, error) = await handler.HandleAsync(id, tenantId, TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        var generado = ConsolidadoContent();
+        generado.Should().NotContain("maestro.pdf");
+        Ocurrencias(generado, "fur.pdf").Should().Be(1);
+    }
+
+    private static int Ocurrencias(string texto, string aguja)
+    {
+        var total = 0;
+        var desde = 0;
+        while (true)
+        {
+            var i = texto.IndexOf(aguja, desde, StringComparison.Ordinal);
+            if (i < 0)
+                return total;
+            total++;
+            desde = i + aguja.Length;
+        }
+    }
 }

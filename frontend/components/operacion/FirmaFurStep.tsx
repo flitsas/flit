@@ -1055,10 +1055,14 @@ function FirmaSection({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h4 className="text-sm font-bold">Firma de la compraventa</h4>
+          {/* La firma del documento NO se captura aquí: se apalanca de lo que la parte ya acreditó.
+              Decirlo evita que el gestor busque un paso de firma que no existe. */}
           <p className="text-xs opacity-70">
-            Estado informativo de la firma electrónica por parte. La lógica
-            definitiva de firmas está pendiente de definición de negocio, por lo
-            que <strong>no bloquea</strong> preparar ni radicar el traspaso.
+            La firma de cada parte se apalanca de su{' '}
+            <strong>validación de identidad</strong> o de su{' '}
+            <strong>firma del baúl</strong>, según el mecanismo seleccionado al registrar el trámite.
+            El estado que ves aquí es informativo y <strong>no bloquea</strong> preparar ni radicar el
+            traspaso.
           </p>
         </div>
         {!readOnly && (
@@ -1693,20 +1697,22 @@ function FurSection({
       await load();
       onRefresh?.();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
+      const msg = (err instanceof Error ? err.message : '').trim();
       setConsolidadoError(
         // HU #11051 — el trámite aprobado/anulado ya no admite regeneración del gestor.
         msg.includes('generacion_bloqueada_estado_final')
           ? 'El trámite ya está aprobado o anulado: su documentación es definitiva y no se regenera.'
           : msg.includes('organismo_requerido')
-            ? 'Selecciona el organismo de tránsito antes de generar el expediente.'
+            ? 'El organismo de tránsito del trámite no está seleccionado o no está activo en el sistema. Verifícalo antes de generar el expediente.'
             : msg.includes('fur_requerido')
               ? 'No se pudo generar el FUR del expediente: revisa los datos del trámite e inténtalo de nuevo.'
               : msg.includes('documentos_incompletos')
                 ? 'Sube los documentos obligatorios antes de generar el consolidado.'
                 : msg.includes('modalidad_no_soportada')
                   ? 'El consolidado no está disponible para esta modalidad.'
-                  : 'No se pudo generar el consolidado.',
+                  // El cliente ya trae el `detail` del ProblemDetails: se muestra en vez de un genérico
+                  // que descarta justo el motivo. Sin mensaje (fallo de red) sí cae al genérico.
+                  : msg || 'No se pudo generar el consolidado. Revisa la conexión e inténtalo de nuevo.',
       );
     } finally {
       setGeneratingConsolidado(false);

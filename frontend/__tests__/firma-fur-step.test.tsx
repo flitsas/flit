@@ -622,8 +622,12 @@ describe('FirmaFurStep — firma no bloqueante en traspaso (B12, HU #10661)', ()
     const seccion = await screen.findByRole('region', { name: 'Firma de la compraventa' });
     // Copy alineado a ADR-0028: la firma no bloquea preparar/radicar.
     expect(within(seccion).getByText('no bloquea')).toBeInTheDocument();
+    // Ajuste del PO: además se explica DE DÓNDE sale la firma, para que el gestor no busque un paso
+    // de firma que no existe. Antes el copy decía "pendiente de definición de negocio".
+    expect(within(seccion).getByText(/validación de identidad/)).toBeInTheDocument();
+    expect(within(seccion).getByText(/firma del baúl/)).toBeInTheDocument();
     expect(
-      within(seccion).getByText(/pendiente de definición de negocio/),
+      within(seccion).getByText(/seleccionado al registrar el trámite/),
     ).toBeInTheDocument();
   });
 

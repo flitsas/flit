@@ -511,52 +511,152 @@ public sealed class ListProcedureInstancesTests
         result[0].Fuente.Should().Be(esperada);
     }
 
+    // -- Columnas "Firmado": acreditacion por identidad o baul (ajuste del PO) ---------
+    //
+    // La columna NO habla de la firma electronica de la compraventa: dice como queda ACREDITADA cada
+    // parte. Tres estados y nada mas: pendiente | firmado | rechazado.
+
+    /// <summary>Actor con documento propio, para que la llave del baul se pueda resolver.</summary>
+    private static ProcedureInstanceActor Actor(string rol, string tipoDoc = "CC", string doc = "123") => new()
+    {
+        Id = Guid.NewGuid(),
+        ActorType = rol,
+        DocumentType = tipoDoc,
+        DocumentNumber = doc,
+        FullName = rol + " de prueba",
+    };
+
+    private static ProcedureInstanceBiometricValidation Biometrica(string parte, string estado) => new()
+    {
+        Id = Guid.NewGuid(),
+        PartyRole = parte,
+        Status = estado,
+    };
+
     [Fact]
-    public async Task HandleAsync_FirmaPorParte_DistingueVendedorYComprador()
+    public async Task Firmado_SinNada_EsPendiente()
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Traspaso(Guid.NewGuid());
-        instance.Signatures.Add(Firma("vendedor", SignatureEstados.Firmada));
-        instance.Signatures.Add(Firma("comprador", SignatureEstados.Enviada));
+        instance.Actors.Add(Actor("vendedor", doc: "111"));
+        instance.Actors.Add(Actor("comprador", doc: "222"));
         _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
 
         var result = await _sut.HandleAsync(instance.TenantId, ct);
 
-        result[0].FirmaVendedorEstado.Should().Be(SignatureEstados.Firmada);
-        result[0].FirmaCompradorEstado.Should().Be(SignatureEstados.Enviada);
-        // El agregado histórico sigue coherente: falta una parte por firmar.
-        result[0].SignaturePending.Should().BeTrue();
+        result[0].FirmaVendedorEstado.Should().Be(FirmaParteEstados.Pendiente);
+        result[0].FirmaCompradorEstado.Should().Be(FirmaParteEstados.Pendiente);
     }
 
     [Fact]
-    public async Task HandleAsync_SinFirmaSolicitada_ReportaNoSolicitada()
+    public async Task Firmado_IdentidadAprobadaYVigente_EsFirmado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var instance = Traspaso(tenant);
+        instance.Actors.Add(Actor("vendedor", doc: "111"));
+        instance.Actors.Add(Actor("comprador", doc: "222"));
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+        // Identidad vigente de la PERSONA (por documento), como la resuelve el listado en lote.
+        _repo.ListVigenteApprovedIdentityKeysAsync(
+                Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new HashSet<string>
+            {
+                BiometricRules.IdentidadKey(tenant, "CC", "111"),
+                BiometricRules.IdentidadKey(tenant, "CC", "222"),
+            });
+
+        var result = await _sut.HandleAsync(tenant, ct);
+
+        result[0].FirmaVendedorEstado.Should().Be(FirmaParteEstados.Firmado);
+        result[0].FirmaCompradorEstado.Should().Be(FirmaParteEstados.Firmado);
+    }
+
+    [Fact]
+    public async Task Firmado_FirmaDelBaulVigente_EsFirmado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var instance = Traspaso(tenant);
+        instance.Actors.Add(Actor("vendedor", doc: "111"));
+        instance.Actors.Add(Actor("comprador", doc: "222"));
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+        _repo.ListFirmaBaulVigenciaKeysAsync(
+                Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), ct)
+            .Returns(new Dictionary<string, bool>
+            {
+                [BiometricRules.IdentidadKey(tenant, "CC", "111")] = true,
+            });
+
+        var result = await _sut.HandleAsync(tenant, ct);
+
+        result[0].FirmaVendedorEstado.Should().Be(FirmaParteEstados.Firmado);
+        // El comprador no tiene ni identidad ni baul: sigue pendiente.
+        result[0].FirmaCompradorEstado.Should().Be(FirmaParteEstados.Pendiente);
+    }
+
+    [Fact]
+    public async Task Firmado_FirmaDelBaulVencida_EsRechazado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var instance = Traspaso(tenant);
+        instance.Actors.Add(Actor("vendedor", doc: "111"));
+        _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+        _repo.ListFirmaBaulVigenciaKeysAsync(
+                Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), ct)
+            .Returns(new Dictionary<string, bool>
+            {
+                [BiometricRules.IdentidadKey(tenant, "CC", "111")] = false,
+            });
+
+        var result = await _sut.HandleAsync(tenant, ct);
+
+        result[0].FirmaVendedorEstado.Should().Be(FirmaParteEstados.Rechazado);
+    }
+
+    [Theory]
+    [InlineData(BiometricEstados.Rechazado)]
+    [InlineData(BiometricEstados.Expirado)]
+    public async Task Firmado_IdentidadRechazadaOExpirada_EsRechazado(string estado)
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Traspaso(Guid.NewGuid());
+        instance.Actors.Add(Actor("vendedor", doc: "111"));
+        instance.BiometricValidations.Add(Biometrica("vendedor", estado));
         _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
 
         var result = await _sut.HandleAsync(instance.TenantId, ct);
 
-        result[0].FirmaVendedorEstado.Should().Be(FirmaParteEstados.NoSolicitada);
-        result[0].FirmaCompradorEstado.Should().Be(FirmaParteEstados.NoSolicitada);
+        result[0].FirmaVendedorEstado.Should().Be(FirmaParteEstados.Rechazado);
     }
 
     [Fact]
-    public async Task HandleAsync_VariasFirmasDeLaMismaParte_TomaLaMasReciente()
+    public async Task Firmado_IdentidadAprobada_GanaSobreBaulVencido()
     {
         var ct = TestContext.Current.CancellationToken;
-        var instance = Traspaso(Guid.NewGuid());
-        instance.Signatures.Add(Firma("vendedor", SignatureEstados.Cancelada, horasAtras: 5));
-        instance.Signatures.Add(Firma("vendedor", SignatureEstados.Firmada, horasAtras: 1));
+        var tenant = Guid.NewGuid();
+        var instance = Traspaso(tenant);
+        instance.Actors.Add(Actor("vendedor", doc: "111"));
         _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
+        _repo.ListVigenteApprovedIdentityKeysAsync(
+                Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new HashSet<string> { BiometricRules.IdentidadKey(tenant, "CC", "111") });
+        _repo.ListFirmaBaulVigenciaKeysAsync(
+                Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), ct)
+            .Returns(new Dictionary<string, bool>
+            {
+                [BiometricRules.IdentidadKey(tenant, "CC", "111")] = false,
+            });
 
-        var result = await _sut.HandleAsync(instance.TenantId, ct);
+        var result = await _sut.HandleAsync(tenant, ct);
 
-        result[0].FirmaVendedorEstado.Should().Be(SignatureEstados.Firmada);
+        // Lo positivo manda: la parte esta acreditada por identidad, el baul caducado no la degrada.
+        result[0].FirmaVendedorEstado.Should().Be(FirmaParteEstados.Firmado);
     }
 
     [Fact]
-    public async Task HandleAsync_MatriculaInicial_FirmaPorParteEnNull()
+    public async Task Firmado_MatriculaInicial_ElVendedorNoAplica()
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = new ProcedureInstance
@@ -568,13 +668,14 @@ public sealed class ListProcedureInstancesTests
             ModalidadEntrada = TramiteModalidadEntradaCodes.MatriculaInicial,
             CreatedAt = DateTimeOffset.UtcNow,
         };
+        instance.Actors.Add(Actor("comprador", doc: "222"));
         _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
 
         var result = await _sut.HandleAsync(instance.TenantId, ct);
 
-        // No aplica (no hay compraventa) ≠ pendiente: la columna se muestra como no aplicable.
+        // El vendedor no existe en matricula: no aplica. El comprador SI tiene estado.
         result[0].FirmaVendedorEstado.Should().BeNull();
-        result[0].FirmaCompradorEstado.Should().BeNull();
+        result[0].FirmaCompradorEstado.Should().Be(FirmaParteEstados.Pendiente);
     }
 
     [Fact]

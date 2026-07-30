@@ -45,7 +45,22 @@ internal static class ConsolidadoEndpoints
                 "sin_adjuntos" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No hay adjuntos para consolidar."),
                 "adjunto_no_disponible" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Un adjunto del expediente no está disponible en almacenamiento."),
                 "mimetype_no_soportado" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Un adjunto tiene un formato no soportado para el consolidado."),
-                _ => Results.Created($"/api/v1/tramites/instances/{id}/attachments", result),
+                // Éxito SOLO cuando no hay error. El comodín anterior (`_ => Created`) trataba cualquier
+                // código NO MAPEADO como éxito y devolvía 201 con cuerpo nulo: el gestor veía la
+                // operación "correcta", sin consolidado y sin motivo. Es lo que pasaba con
+                // `organismo_requerido` (organismo de tránsito inactivo o sin seleccionar), que este
+                // switch no contemplaba aunque el generador del FUR sí lo devuelve.
+                null => Results.Created($"/api/v1/tramites/instances/{id}/attachments", result),
+                "organismo_requerido" => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "El organismo de tránsito del trámite no está seleccionado o no está activo "
+                        + "en el sistema. Verifícalo antes de generar el expediente consolidado."),
+                // Cualquier otro código viaja tal cual: es mejor un motivo técnico que un éxito falso.
+                _ => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: $"No se pudo generar el expediente consolidado: {error}."),
             };
         }).WithName("GenerarProcedureInstanceConsolidado");
 
