@@ -11,6 +11,7 @@ import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import type { AnalyticsCategory, CompanyListItem } from "@/lib/api/types";
 import { ModuleTitle } from "./ModuleTitle";
 import { ExportButtons } from "./_reportes/ExportButtons";
+import { ExportController } from "./_reportes/ExportController";
 import { defaultFilters, type ReportFilters } from "./_reportes/filters";
 import { GlobalFilters } from "./_reportes/GlobalFilters";
 import { ProcedureDetailPanel } from "./_reportes/ProcedureDetailPanel";
@@ -22,12 +23,30 @@ import { OrganismoTab } from "./_reportes/tabs/OrganismoTab";
 import { ProductividadTab } from "./_reportes/tabs/ProductividadTab";
 import { ResumenTab } from "./_reportes/tabs/ResumenTab";
 import { UsoTab } from "./_reportes/tabs/UsoTab";
+import { TramitesV2Tab } from "./_reportes/tabs/TramitesV2Tab";
+import { ConsolidadoTab, ProductividadV2Tab } from "./_reportes/tabs/ConsolidadoProductividadTabs";
+import { AuditoriaTab, SlaTab } from "./_reportes/tabs/SlaAuditoriaTabs";
 
-type TabId = "resumen" | "operacion" | "ot" | "uso" | "productividad";
+type TabId =
+  | "resumen"
+  | "operacion"
+  | "ot"
+  | "uso"
+  | "productividad"
+  | "tramites"
+  | "consolidado"
+  | "productividad-v2"
+  | "tiempos-sla"
+  | "auditoria";
 
 /** Pestañas + slug RBAC que las hace visibles (§3). SuperAdmin las ve todas. */
 const TAB_DEFS: ReadonlyArray<{ id: TabId; label: string; slug: string }> = [
   { id: "resumen", label: "Resumen general", slug: "reportes.resumen.read" },
+  { id: "tramites", label: "Trámites", slug: "reporting.read" },
+  { id: "consolidado", label: "Consolidado", slug: "reporting.consolidado" },
+  { id: "productividad-v2", label: "Productividad V2", slug: "reporting.productivity" },
+  { id: "tiempos-sla", label: "Tiempos / SLA", slug: "reporting.read" },
+  { id: "auditoria", label: "Auditoría", slug: "reporting.audit" },
   { id: "operacion", label: "Operación / Trámites", slug: "reportes.operacion.read" },
   { id: "ot", label: "Organismo de Tránsito", slug: "reportes.ot.read" },
   { id: "uso", label: "Uso del aplicativo", slug: "reportes.uso.read" },
@@ -42,7 +61,7 @@ const SCHEDULING_SLUG = "reportes.programacion.manage";
 const TAB_QUERY_PARAM = "reportesTab";
 
 /** Pestañas con exportaciones (Excel/PDF ejecutivo con los filtros activos). */
-const EXPORT_TABS: ReadonlyArray<TabId> = ["resumen", "operacion", "productividad"];
+const EXPORT_TABS: ReadonlyArray<TabId> = ["resumen", "operacion", "productividad", "tramites", "consolidado"];
 
 /** Segmento seleccionado en cualquier gráfica → detalle lateral (drill-down). */
 interface SelectedSegment {
@@ -64,7 +83,8 @@ export function Reportes() {
         (tab) =>
           isSuper ||
           permissions.includes(tab.slug) ||
-          (tab.id === "resumen" && permissions.includes(LEGACY_SLUG)),
+          (tab.id === "resumen" && permissions.includes(LEGACY_SLUG)) ||
+          (["tramites", "tiempos-sla"].includes(tab.id) && permissions.includes(LEGACY_SLUG)),
       ),
     [isSuper, permissions],
   );
@@ -161,7 +181,7 @@ export function Reportes() {
           </button>
         )}
         {activeTab && EXPORT_TABS.includes(activeTab) && (
-          <div className="ml-auto">
+          <div className="ml-auto flex flex-col items-end gap-2">
             <ExportButtons
               range={filters.range}
               tenantId={filters.tenantId || undefined}
@@ -169,6 +189,15 @@ export function Reportes() {
               status={segment?.status}
               disabled={!rangeValid}
             />
+            {(activeTab === "tramites" || activeTab === "consolidado") && (
+              <ExportController
+                reportType={activeTab === "tramites" ? "procedures" : "consolidado"}
+                from={filters.range.from}
+                to={filters.range.to}
+                tenantId={filters.tenantId || undefined}
+                disabled={!rangeValid}
+              />
+            )}
           </div>
         )}
       </div>
@@ -204,6 +233,41 @@ export function Reportes() {
           {activeTab === "ot" && <OrganismoTab filters={filters} needsCompany={needsCompany} />}
           {activeTab === "uso" && <UsoTab filters={filters} needsCompany={needsCompany} />}
           {activeTab === "productividad" && <ProductividadTab filters={filters} />}
+          {activeTab === "tramites" && (
+            <TramitesV2Tab
+              from={filters.range.from}
+              to={filters.range.to}
+              tenantId={filters.tenantId || undefined}
+            />
+          )}
+          {activeTab === "consolidado" && (
+            <ConsolidadoTab
+              from={filters.range.from}
+              to={filters.range.to}
+              tenantId={filters.tenantId || undefined}
+            />
+          )}
+          {activeTab === "productividad-v2" && (
+            <ProductividadV2Tab
+              from={filters.range.from}
+              to={filters.range.to}
+              tenantId={filters.tenantId || undefined}
+            />
+          )}
+          {activeTab === "tiempos-sla" && (
+            <SlaTab
+              from={filters.range.from}
+              to={filters.range.to}
+              tenantId={filters.tenantId || undefined}
+            />
+          )}
+          {activeTab === "auditoria" && (
+            <AuditoriaTab
+              from={filters.range.from}
+              to={filters.range.to}
+              tenantId={filters.tenantId || undefined}
+            />
+          )}
         </div>
       )}
 

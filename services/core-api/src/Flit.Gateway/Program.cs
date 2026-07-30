@@ -120,6 +120,9 @@ app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+// Feature #11076 / ADR-0039: obligatorio para que YARP negocie upgrade WebSocket
+// hacia ExportJobsHub (/hubs/export-jobs). Sin esto SignalR cae a long-polling.
+app.UseWebSockets();
 
 app.MapHealthEndpoints();
 app.MapReverseProxy();

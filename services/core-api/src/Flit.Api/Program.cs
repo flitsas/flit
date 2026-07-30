@@ -1,8 +1,11 @@
 using System.Text.Json;
+using Flit.Infrastructure.Reporting;
+using Microsoft.Extensions.Options;
 using Flit.Admin.Application;
 using Flit.Analytics.Application;
 using Flit.Api.Authorization;
 using Flit.Api.Endpoints.Analytics;
+using Flit.Api.Endpoints.Reporting;
 using Flit.Api.Endpoints;
 using Flit.Api.Endpoints.Public;
 using Flit.Api.Endpoints.SuperAdmin;
@@ -168,6 +171,47 @@ if (app.Configuration.GetValue("Database:AutoMigrate", true))
         MigrationLog.ApplyingMigrations(logger, pending.Count, migrationNames);
         db.Database.Migrate();
         MigrationLog.MigrationsApplied(logger);
+
+        // Feature #11076 (G3) — advertencia operativa post-migración:
+        // si la migración F11076 acaba de aplicarse, estima el tamaño de
+        // procedure_instance_status_history con pg_class.reltuples (O(1), sin
+        // table scan) y emite Warning si supera el umbral configurado.
+        //
+        // Por qué pg_class.reltuples y no COUNT(*):
+        //   COUNT(*) es O(n) y bloquearía startup en tablas grandes.
+        //   reltuples es una estimación (actualizada por ANALYZE/VACUUM) y puede
+        //   estar desfasada. Es suficiente como señal operativa de "tabla grande".
+        //   En tablas recién creadas devuelve ≤ 0 → GREATEST(0, reltuples) = 0 → sin warning.
+        //
+        // Coordinación multi-réplica: no se necesita. La migración entra en
+        //   __EFMigrationsHistory en la primera réplica; las demás no ejecutarán
+        //   Migrate() de nuevo (GetPendingMigrations() devolverá lista vacía).
+        //   Cada réplica que aplique la migración hace UNA lectura de pg_class.
+        if (pending.Any(p => p.Contains("F11076_ReportingV2", StringComparison.Ordinal)))
+        {
+            var safetyOpts = scope.ServiceProvider
+                .GetRequiredService<IOptions<ReportingMigrationSafetyOptions>>().Value;
+
+            var estimated = await db.Database
+                .SqlQuery<long>($"""
+                    SELECT GREATEST(0, reltuples::bigint)
+                    FROM pg_class c
+                    JOIN pg_namespace n ON n.oid = c.relnamespace
+                    WHERE n.nspname = 'tramites'
+                      AND c.relname = 'procedure_instance_status_history'
+                    """)
+                .FirstOrDefaultAsync();
+
+            if (estimated >= safetyOpts.StatusHistoryRowWarningThreshold)
+            {
+                MigrationLog.StatusHistoryLargeTableWarning(
+                    logger, estimated, safetyOpts.StatusHistoryRowWarningThreshold);
+            }
+            else
+            {
+                MigrationLog.StatusHistoryAlterSafe(logger, estimated);
+            }
+        }
     }
     else
     {
@@ -268,11 +312,13 @@ app.MapLegalRepresentativeConsumptionEndpoints();
 
 // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
 app.MapAnalyticsEndpoints();
-app.MapDetailedReportEndpoints(); // Feature #10813
+app.MapDetailedReportEndpoints(); // Feature #10813 (legado; deprecar en sprint+1)
+app.MapReportingV2Endpoints(); // Feature #11076
 app.MapReportSchedulesEndpoints(); // Reportes2 HU-D
 app.MapAlertRulesEndpoints(); // Reportes2 HU-D
 app.MapAnalyticsMetricsEndpoints(); // Reportes2 HU-B
 app.MapUsageEventsEndpoints(); // Reportes2 HU-A
+app.MapHub<Flit.Infrastructure.Hubs.ExportJobsHub>("/hubs/export-jobs"); // Feature #11076 / ADR-0037
 
 app.Run();
 
@@ -295,4 +341,25 @@ internal static partial class MigrationLog
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Base de datos al día: no hay migraciones pendientes.")]
     public static partial void NoPendingMigrations(ILogger logger);
+
+    /// <summary>
+    /// Feature #11076 (G3) — tamaño estimado de status_history supera el umbral operativo.
+    /// No bloquea el arranque ni altera el schema — es solo información para el equipo de infra.
+    /// La estimación proviene de <c>pg_class.reltuples</c> (actualizada por ANALYZE/VACUUM).
+    /// Acción recomendada: planificar REINDEX CONCURRENTLY si aplica; revisar estrategia de índices.
+    /// </summary>
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Feature #11076 (G3) — status_history tabla grande: ~{EstimatedRows:N0} filas (umbral {Threshold:N0}). "
+                + "El ALTER TABLE se aplicó determinista (PG17 O(1)). "
+                + "Verifique rendimiento y planifique mantenimiento de índices. "
+                + "Nota: pg_class.reltuples es estimación — ejecute ANALYZE para exactitud.")]
+    public static partial void StatusHistoryLargeTableWarning(
+        ILogger logger, long estimatedRows, long threshold);
+
+    /// <summary>
+    /// Feature #11076 (G3) — tamaño estimado de status_history dentro del umbral. Sin riesgo operativo.
+    /// </summary>
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Feature #11076 (G3) — status_history ~{EstimatedRows:N0} filas (dentro del umbral). ALTER aplicado con seguridad.")]
+    public static partial void StatusHistoryAlterSafe(ILogger logger, long estimatedRows);
 }

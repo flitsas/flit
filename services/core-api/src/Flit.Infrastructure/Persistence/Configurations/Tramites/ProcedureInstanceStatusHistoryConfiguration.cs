@@ -21,6 +21,13 @@ internal sealed class ProcedureInstanceStatusHistoryConfiguration : IEntityTypeC
         builder.Property(x => x.Reason).HasMaxLength(500);
         builder.Property(x => x.Metadata).HasColumnType("jsonb").IsRequired().HasDefaultValueSql("'{}'");
 
+        // Feature #11076 (G3): columnas de auditoría enriquecida — nullable, backfill NULL.
+        builder.Property(x => x.RoleIdAtTime).HasColumnName("role_id_at_time");
+        builder.Property(x => x.OrganizationIdAtTime).HasColumnName("organization_id_at_time");
+        builder.Property(x => x.OrganizationTypeAtTime)
+            .HasColumnName("organization_type_at_time")
+            .HasMaxLength(20);
+
         builder.HasIndex(x => new { x.TenantId, x.ProcedureInstanceId })
             .HasDatabaseName("ix_procedure_instance_status_history_tenant_id_instance");
 

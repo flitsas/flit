@@ -60,6 +60,14 @@ tags:
       radicaciones por placa/trámite/radicado y línea de tiempo de eventos con detalle
       técnico sanitizado y enmascarado. Solo lectura; permiso logqx.read (HU #10794,
       SuperAdmin bypassa).
+  - name: Reporting V2
+    description: >
+      Subsistema de Reportería Transaccional V2 (Feature #11076). Cubre consulta paginada
+      avanzada de trámites, consolidado/volumetría, productividad, tiempos/SLA, auditoría
+      de responsabilidad histórica, exportaciones asíncronas con LISTEN/NOTIFY + SignalR,
+      consultas guardadas y preferencias de dashboard. Todos los endpoints requieren JWT
+      y permiso RBAC del prefijo reporting.* (seed ejecutable; ver ADR-0037, ADR-0038,
+      ADR-0039). SuperAdmin accede a vista global con ?tenantId opcional.
 
 paths:
   /api/v1/auth/login:
@@ -5208,6 +5216,593 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ─── Reporting V2 — Feature #11076 ──────────────────────────────────────
+
+  /api/v1/reporting/procedures:
+    get:
+      tags: [Reporting V2]
+      operationId: reportingProceduresList
+      summary: Listado paginado de trámites V2
+      description: >
+        Consulta paginada avanzada de trámites con filtros de estado, tipo, OT, rango de fechas
+        (default 30 días, máximo 12 meses), placa/VIN/documento y sorting configurable.
+        Permiso: reporting.read. SuperAdmin puede incluir ?tenantId para vista global.
+        El campo personDocument solo se incluye con permiso reporting.detail o reporting.audit.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+          description: Inicio del rango (default hoy - 30 días)
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+          description: Fin del rango (default hoy; máximo from + 12 meses)
+        - name: dateType
+          in: query
+          schema:
+            type: string
+            enum: [created_at, updated_at, completed_at]
+            default: created_at
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [borrador, en_proceso, resuelto, rechazado, subsanacion]
+        - name: procedureType
+          in: query
+          schema: { type: string }
+        - name: tenantId
+          in: query
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin
+        - name: transitOfficeId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          schema: { type: string }
+          description: Búsqueda por placa, VIN o número de documento
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [created_at, status, procedure_type, elapsed_hours]
+            default: created_at
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 10, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: Página de trámites
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingProceduresPageResponse"
+        "400":
+          description: Filtros inválidos (DATE_RANGE_TOO_WIDE, DATE_RANGE_INVALID, REPORT_QUERY_INVALID)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingErrorResponse"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso reporting.read
+
+  /api/v1/reporting/procedures/{id}:
+    get:
+      tags: [Reporting V2]
+      operationId: reportingProcedureDetail
+      summary: Detalle de un trámite en el contexto de reportería
+      description: >
+        Devuelve el detalle completo del trámite incluyendo campos PII (personDocument)
+        cuando el caller tiene permiso reporting.detail. Respeta el scope tenant.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Detalle del trámite
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingProcedureDto"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso reporting.detail o trámite de otro tenant
+        "404":
+          description: Trámite no encontrado
+
+  /api/v1/reporting/procedures/{id}/audit:
+    get:
+      tags: [Reporting V2]
+      operationId: reportingProcedureAudit
+      summary: Historial de responsabilidad histórica del trámite
+      description: >
+        Devuelve la secuencia de eventos del trámite con el usuario, rol y organización
+        correspondientes al momento de cada evento. Si los campos históricos son NULL
+        (datos pre-migración), historyAvailable=false y el frontend muestra
+        "Historial no disponible". Permiso: reporting.audit.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Historial de eventos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditHistoryResponse"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso reporting.audit
+        "404":
+          description: Trámite no encontrado
+
+  /api/v1/reporting/consolidado:
+    get:
+      tags: [Reporting V2]
+      operationId: reportingConsolidado
+      summary: Reporte de consolidado y volumetría por tipo de trámite y OT
+      description: >
+        Agrupa trámites por tipo, OT y período (mensual). Permiso: reporting.consolidado.
+        SuperAdmin accede a todos los tenants; usuario de tenant solo ve los suyos.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: procedureType
+          in: query
+          schema: { type: string }
+        - name: tenantId
+          in: query
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin
+        - name: transitOfficeId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Datos de consolidado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsolidadoResponse"
+        "400":
+          description: Rango inválido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingErrorResponse"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso reporting.consolidado
+
+  /api/v1/reporting/productivity:
+    get:
+      tags: [Reporting V2]
+      operationId: reportingProductivity
+      summary: Reporte de productividad por actor y OT
+      description: >
+        Productividad de usuarios (radicadores/operadores) en el período. Permiso: reporting.productivity.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: tenantId
+          in: query
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin
+        - name: transitOfficeId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 10, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: Datos de productividad
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductividadResponse"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso reporting.productivity
+
+  /api/v1/reporting/sla:
+    get:
+      tags: [Reporting V2]
+      operationId: reportingSla
+      summary: Reporte de tiempos vs SLA configurable por tipo de trámite y OT
+      description: >
+        Compara los tiempos de resolución contra el SLA configurado en analytics.report_sla_config.
+        Si no hay configuración de SLA para el tipo/OT, el campo slaHours puede ser nulo.
+        Permiso: reporting.read.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: procedureType
+          in: query
+          schema: { type: string }
+        - name: tenantId
+          in: query
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin
+        - name: transitOfficeId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Datos de tiempos vs SLA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlaResponse"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso reporting.read
+
+  /api/v1/reporting/exports:
+    get:
+      tags: [Reporting V2]
+      operationId: reportingExportsList
+      summary: Lista mis exportaciones (jobs del usuario autenticado)
+      description: >
+        Devuelve los jobs de exportación del usuario autenticado en el tenant.
+        Ordenados por createdAt DESC. Permiso: reporting.export.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/ExportJobStatus"
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: Lista de jobs del usuario
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportJobsListResponse"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso reporting.export
+    post:
+      tags: [Reporting V2]
+      operationId: reportingExportsRequest
+      summary: Solicita una exportación asíncrona
+      description: >
+        Crea un job de exportación asíncrona. Devuelve 202 Accepted con el jobId.
+        El cliente debe suscribirse a /hubs/export-jobs (SignalR) para recibir
+        progreso y notificación de completado. Fallback: polling GET /exports/{id}.
+        Límites: máx 50 000 registros; máx 3 jobs pending por usuario (409 si se supera).
+        Permiso: reporting.export.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestExportRequest"
+      responses:
+        "202":
+          description: Job creado. El export se procesará en background.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportJobDto"
+        "400":
+          description: Filtros inválidos o rango de fechas fuera de límite
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingErrorResponse"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso reporting.export
+        "409":
+          description: Límite de jobs pending superado (EXPORT_LIMIT_EXCEEDED)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingErrorResponse"
+        "422":
+          description: Exportación supera el límite de registros (EXPORT_LIMIT_EXCEEDED_RECORDS)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingErrorResponse"
+
+  /api/v1/reporting/exports/{id}:
+    get:
+      tags: [Reporting V2]
+      operationId: reportingExportsGet
+      summary: Estado de un job de exportación
+      description: >
+        Devuelve el estado actual del job. Usar como fallback cuando SignalR no está disponible.
+        Solo el propietario del job puede consultarlo. Permiso: reporting.export.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Estado del job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportJobDto"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso o job de otro usuario (EXPORT_ACCESS_DENIED)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingErrorResponse"
+        "404":
+          description: Job no encontrado (EXPORT_NOT_FOUND)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingErrorResponse"
+
+  /api/v1/reporting/exports/{id}/download-url:
+    get:
+      tags: [Reporting V2]
+      operationId: reportingExportsDownloadUrl
+      summary: Obtiene URL de descarga temporal del archivo exportado
+      description: >
+        Genera una presigned URL de S3 con TTL ≤ 15 minutos para descargar el archivo.
+        Solo el propietario del job puede obtener la URL (validación de owner_user_id).
+        El archivo persiste en storage 30 días; solo la URL expira.
+        Si el job no está completado devuelve 422 (EXPORT_NOT_COMPLETED).
+        Permiso: reporting.export.download.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: URL de descarga temporal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportDownloadUrlResponse"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso o job de otro usuario (EXPORT_ACCESS_DENIED)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingErrorResponse"
+        "404":
+          description: Job no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingErrorResponse"
+        "422":
+          description: Job no completado (EXPORT_NOT_COMPLETED)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingErrorResponse"
+
+  /api/v1/reporting/saved-queries:
+    get:
+      tags: [Reporting V2]
+      operationId: reportingSavedQueriesList
+      summary: Lista consultas guardadas del usuario
+      description: "Permiso: reporting.saved-queries.read."
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Lista de consultas guardadas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedQueriesListResponse"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso
+    post:
+      tags: [Reporting V2]
+      operationId: reportingSavedQueriesCreate
+      summary: Crea una consulta guardada
+      description: "Permiso: reporting.saved-queries.write."
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavedQueryRequest"
+      responses:
+        "201":
+          description: Consulta guardada creada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedQueryDto"
+        "400":
+          description: Datos inválidos
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso
+
+  /api/v1/reporting/saved-queries/{id}:
+    put:
+      tags: [Reporting V2]
+      operationId: reportingSavedQueriesUpdate
+      summary: Actualiza una consulta guardada
+      description: "Permiso: reporting.saved-queries.write. Solo el propietario puede editar."
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavedQueryRequest"
+      responses:
+        "200":
+          description: Consulta actualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedQueryDto"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso o consulta de otro usuario
+        "404":
+          description: No encontrada
+    delete:
+      tags: [Reporting V2]
+      operationId: reportingSavedQueriesDelete
+      summary: Elimina una consulta guardada (soft delete)
+      description: "Permiso: reporting.saved-queries.write. Solo el propietario puede eliminar."
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Eliminada
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso o consulta de otro usuario
+        "404":
+          description: No encontrada
+
+  /api/v1/reporting/preferences:
+    get:
+      tags: [Reporting V2]
+      operationId: reportingPreferencesGet
+      summary: Obtiene preferencias de dashboard del usuario autenticado
+      description: >
+        Devuelve la configuración de visibilidad y orden de KPIs del usuario.
+        Si no hay preferencias guardadas, devuelve la configuración por defecto.
+        Permiso: reporting.dashboard.preferences.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Preferencias del dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardPreferencesDto"
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso
+    put:
+      tags: [Reporting V2]
+      operationId: reportingPreferencesPut
+      summary: Guarda preferencias de dashboard del usuario autenticado
+      description: "Permiso: reporting.dashboard.preferences."
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardPreferencesDto"
+      responses:
+        "200":
+          description: Preferencias guardadas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardPreferencesDto"
+        "400":
+          description: Datos inválidos (KPI ID desconocido)
+        "401":
+          description: No autenticado
+        "403":
+          description: Sin permiso
+
+  # ─── Fin Reporting V2 ────────────────────────────────────────────────────
+
   /api/v1/admin/improntas/generate:
     post:
       tags: [Admin · Improntas]
@@ -8703,3 +9298,311 @@ components:
             $ref: "#/components/schemas/AlertEventDto"
         totalCount: { type: integer }
       required: [items, totalCount]
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Reporting V2 — Feature #11076 (ADR-0037, ADR-0038, ADR-0039)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    ReportingProcedureDto:
+      type: object
+      description: Trámite en el contexto de reportería V2.
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        transitOfficeId: { type: string, format: uuid, nullable: true }
+        transitOfficeName: { type: string, nullable: true }
+        procedureType: { type: string, example: traspaso }
+        status:
+          type: string
+          enum: [borrador, en_proceso, resuelto, rechazado, subsanacion]
+        plate: { type: string, nullable: true }
+        vin: { type: string, nullable: true }
+        personDocument: { type: string, nullable: true, description: "Solo con permiso reporting.detail o reporting.audit" }
+        hasTransformation: { type: boolean }
+        isLeasing: { type: boolean }
+        category: { type: string, nullable: true }
+        companyName: { type: string, nullable: true }
+        elapsedHoursTotal: { type: number, format: float, nullable: true, description: "Horas transcurridas desde creación hasta ahora o hasta completado" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+      required: [id, tenantId, procedureType, status, hasTransformation, isLeasing, createdAt]
+
+    ReportingProceduresPageResponse:
+      type: object
+      description: Página de trámites para reportería V2. Rango máximo 12 meses; default 30 días.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportingProcedureDto"
+        totalCount: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+      required: [items, totalCount, page, pageSize]
+
+    AuditEventDto:
+      type: object
+      description: >
+        Evento del historial de responsabilidad de un trámite. historyAvailable=false indica
+        que los datos históricos de rol/organización no están disponibles (backfill NULL —
+        eventos anteriores a la migración de ADR-0037).
+      properties:
+        id: { type: string, format: uuid }
+        eventType: { type: string, example: status_changed }
+        fromStatus: { type: string, nullable: true }
+        toStatus: { type: string, nullable: true }
+        actorUserId: { type: string, format: uuid, nullable: true }
+        actorUserName: { type: string, nullable: true }
+        roleIdAtTime: { type: string, format: uuid, nullable: true }
+        roleNameAtTime: { type: string, nullable: true }
+        organizationIdAtTime: { type: string, format: uuid, nullable: true }
+        organizationNameAtTime: { type: string, nullable: true }
+        organizationTypeAtTime:
+          type: string
+          enum: [ot, empresa]
+          nullable: true
+        historyAvailable:
+          type: boolean
+          description: "false si los campos de responsabilidad histórica son NULL (datos pre-migración)"
+        occurredAt: { type: string, format: date-time }
+        notes: { type: string, nullable: true }
+      required: [id, eventType, historyAvailable, occurredAt]
+
+    AuditHistoryResponse:
+      type: object
+      properties:
+        procedureId: { type: string, format: uuid }
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEventDto"
+      required: [procedureId, events]
+
+    ConsolidadoItemDto:
+      type: object
+      description: Fila del reporte de consolidado/volumetría por tipo de trámite y OT.
+      properties:
+        procedureType: { type: string }
+        transitOfficeId: { type: string, format: uuid, nullable: true }
+        transitOfficeName: { type: string, nullable: true }
+        period: { type: string, example: "2026-07", description: "YYYY-MM para agrupación mensual" }
+        total: { type: integer }
+        completed: { type: integer }
+        rejected: { type: integer }
+        inProgress: { type: integer }
+        avgElapsedHours: { type: number, format: float, nullable: true }
+      required: [procedureType, period, total, completed, rejected, inProgress]
+
+    ConsolidadoResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConsolidadoItemDto"
+        totalCount: { type: integer }
+      required: [items, totalCount]
+
+    ProductividadItemDto:
+      type: object
+      description: Fila de productividad por actor/OT.
+      properties:
+        userId: { type: string, format: uuid }
+        userName: { type: string }
+        transitOfficeId: { type: string, format: uuid, nullable: true }
+        transitOfficeName: { type: string, nullable: true }
+        totalProcedures: { type: integer }
+        completedProcedures: { type: integer }
+        avgElapsedHours: { type: number, format: float, nullable: true }
+      required: [userId, userName, totalProcedures, completedProcedures]
+
+    ProductividadResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductividadItemDto"
+        totalCount: { type: integer }
+      required: [items, totalCount]
+
+    SlaItemDto:
+      type: object
+      description: Resultado de tiempos vs SLA por tipo de trámite y OT.
+      properties:
+        procedureType: { type: string }
+        transitOfficeId: { type: string, format: uuid, nullable: true }
+        transitOfficeName: { type: string, nullable: true }
+        slaHours: { type: integer, description: "SLA configurado en horas hábiles" }
+        avgElapsedHours: { type: number, format: float }
+        withinSlaCount: { type: integer }
+        exceedsSlaCount: { type: integer }
+        compliancePct: { type: number, format: float, description: "% de trámites dentro del SLA" }
+      required: [procedureType, slaHours, avgElapsedHours, withinSlaCount, exceedsSlaCount, compliancePct]
+
+    SlaResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SlaItemDto"
+        totalCount: { type: integer }
+      required: [items, totalCount]
+
+    ExportJobStatus:
+      type: string
+      enum: [pending, processing, completed, failed]
+      description: Estado del job de exportación asíncrona.
+
+    ExportJobDto:
+      type: object
+      description: >
+        Job de exportación asíncrona. El campo downloadUrl solo se incluye si
+        status=completed y se solicita explícitamente (endpoint /download-url separado
+        para generar la presigned URL on-demand con TTL ≤15 min).
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        ownerUserId: { type: string, format: uuid }
+        status:
+          $ref: "#/components/schemas/ExportJobStatus"
+        reportType:
+          type: string
+          enum: [procedures, consolidado, productivity, sla]
+        format:
+          type: string
+          enum: [excel, csv, pdf]
+        progressPct:
+          type: integer
+          minimum: 0
+          maximum: 100
+        fileSizeBytes: { type: integer, format: int64, nullable: true }
+        errorMessage: { type: string, nullable: true }
+        expiresAt: { type: string, format: date-time, description: "Fecha de expiración del registro (30 días)" }
+        startedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+      required: [id, tenantId, ownerUserId, status, reportType, format, progressPct, expiresAt, createdAt]
+
+    ExportJobsListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExportJobDto"
+        totalCount: { type: integer }
+      required: [items, totalCount]
+
+    RequestExportRequest:
+      type: object
+      description: >
+        Solicitud de exportación asíncrona. Los filtros replican los parámetros de
+        GET /reporting/procedures. Máximo 50 000 registros por export. Máximo 3 jobs
+        pending simultáneos por usuario (409 si se supera).
+      properties:
+        reportType:
+          type: string
+          enum: [procedures, consolidado, productivity, sla]
+        format:
+          type: string
+          enum: [excel, csv, pdf]
+        filters:
+          type: object
+          description: "Subconjunto de filtros de /reporting/procedures serializado"
+          properties:
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+            dateType:
+              type: string
+              enum: [created_at, updated_at, completed_at]
+              default: created_at
+            status:
+              type: string
+              enum: [borrador, en_proceso, resuelto, rechazado, subsanacion]
+              nullable: true
+            procedureType: { type: string, nullable: true }
+            tenantId: { type: string, format: uuid, nullable: true, description: "Solo SuperAdmin" }
+            transitOfficeId: { type: string, format: uuid, nullable: true }
+            search: { type: string, nullable: true }
+      required: [reportType, format]
+
+    ExportDownloadUrlResponse:
+      type: object
+      description: >
+        URL de descarga temporal del archivo de export. TTL ≤ 15 minutos (presigned S3).
+        Luego de la expiración se debe llamar nuevamente a este endpoint para obtener una URL fresca.
+        El archivo permanece en storage 30 días (lifecycle del file-manager); solo el URL expira.
+      properties:
+        downloadUrl: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
+      required: [downloadUrl, expiresAt]
+
+    SavedQueryDto:
+      type: object
+      description: Consulta guardada (filtros persistidos para reutilización).
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        filtersJson: { type: object, description: "Filtros serializados de /reporting/procedures" }
+        isShared: { type: boolean, default: false }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time, nullable: true }
+      required: [id, name, filtersJson, isShared, createdAt]
+
+    SavedQueriesListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SavedQueryDto"
+      required: [items]
+
+    SavedQueryRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 150 }
+        description: { type: string, maxLength: 500, nullable: true }
+        filtersJson: { type: object }
+        isShared: { type: boolean, default: false }
+      required: [name, filtersJson]
+
+    DashboardPreferencesDto:
+      type: object
+      description: >
+        Preferencias de dashboard del usuario (mostrar/ocultar/reordenar KPIs y gráficos).
+        No es constructor libre — solo se puede modificar la visibilidad y orden de los KPIs existentes.
+      properties:
+        visibleKpis:
+          type: array
+          items: { type: string }
+          description: "Lista ordenada de IDs de KPIs visibles"
+          example: ["totalTramites", "tramitesCompletados", "tiempoPromedio"]
+        hiddenCharts:
+          type: array
+          items: { type: string }
+          description: "IDs de gráficos ocultos por el usuario"
+      required: [visibleKpis, hiddenCharts]
+
+    ReportingErrorResponse:
+      type: object
+      description: Error estándar de Reporting V2.
+      properties:
+        code:
+          type: string
+          enum:
+            - EXPORT_LIMIT_EXCEEDED        # más de 3 jobs pending por usuario
+            - EXPORT_LIMIT_EXCEEDED_RECORDS # más de 50k registros solicitados
+            - DATE_RANGE_TOO_WIDE          # rango de fechas > 12 meses
+            - DATE_RANGE_INVALID           # from > to
+            - EXPORT_NOT_FOUND            # jobId no existe
+            - EXPORT_ACCESS_DENIED        # job pertenece a otro usuario (IDOR check)
+            - EXPORT_NOT_COMPLETED        # se solicitó download-url pero job no completado
+            - REPORT_QUERY_INVALID        # parámetros de filtro inválidos
+        message: { type: string }
+        details: { type: object, nullable: true }
+      required: [code, message]

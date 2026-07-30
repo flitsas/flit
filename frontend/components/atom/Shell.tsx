@@ -11,7 +11,6 @@ import {
   LayoutGrid,
   FileStack,
   BarChart3,
-  FileSpreadsheet,
   ShieldCheck,
   Users,
   HelpCircle,
@@ -39,7 +38,6 @@ export type ModuleId =
   | "dashboard"
   | "tramites"
   | "reportes"
-  | "reportes-detallados"
   | "validaciones"
   | "usuarios"
   | "ayuda"
@@ -52,7 +50,6 @@ const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
   { id: "tramites", label: "Trámites", icon: FileStack },
   { id: "reportes", label: "Reportes", icon: BarChart3 },
-  { id: "reportes-detallados", label: "Reportes Detallados", icon: FileSpreadsheet },
   { id: "validaciones", label: "Validaciones", icon: ShieldCheck },
   { id: "usuarios", label: "Usuarios y Permisos", icon: Users },
   { id: "ayuda", label: "Ayuda", icon: HelpCircle },

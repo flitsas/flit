@@ -60,6 +60,7 @@ public static class DevelopmentAuthSeeder
         await SeedBaseModulesAsync(db, cancellationToken);
         await SeedReportesPermissionsAsync(db, cancellationToken);
         await SeedDetailedReportPermissionsAsync(db, cancellationToken);
+        await SeedReportingV2PermissionsAsync(db, cancellationToken);
         await SeedLogQxPermissionsAsync(db, cancellationToken);
         await SeedIctLogsPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
@@ -882,6 +883,120 @@ public static class DevelopmentAuthSeeder
         }
 
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Feature #11076 — permisos reporting.* V2 y depreciación de reportes-detallados (ADR-0038).
+    /// Idempotente: crea slugs faltantes, concede a SuperAdmin/AdminCompany y desactiva el módulo legado.
+    /// </summary>
+    private static async Task SeedReportingV2PermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "reportes" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "reportes",
+                Name = "Reportes",
+                SortOrder = 3,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var slugs = new (string Slug, string Name, string Route, string Method)[]
+        {
+            ("reporting.read", "Ver reportes V2", "/api/v1/reporting/procedures", "GET"),
+            ("reporting.detail", "Ver detalle de trámite en reportes", "/api/v1/reporting/procedures/{id}", "GET"),
+            ("reporting.export", "Solicitar/listar exportaciones", "/api/v1/reporting/exports", "POST"),
+            ("reporting.export.download", "Descargar exportación", "/api/v1/reporting/exports/{id}/download-url", "GET"),
+            ("reporting.saved-queries.read", "Ver consultas guardadas", "/api/v1/reporting/saved-queries", "GET"),
+            ("reporting.saved-queries.write", "Gestionar consultas guardadas", "/api/v1/reporting/saved-queries", "POST"),
+            ("reporting.schedules.read", "Ver informes programados V2", "/api/v1/reporting/schedules", "GET"),
+            ("reporting.schedules.write", "Gestionar informes programados V2", "/api/v1/reporting/schedules", "POST"),
+            ("reporting.alerts.read", "Ver alertas V2", "/api/v1/reporting/alerts", "GET"),
+            ("reporting.alerts.write", "Gestionar alertas V2", "/api/v1/reporting/alerts", "POST"),
+            ("reporting.dashboard.preferences", "Preferencias de dashboard", "/api/v1/reporting/preferences", "GET"),
+            ("reporting.audit", "Auditoría operacional de trámites", "/api/v1/reporting/procedures/{id}/audit", "GET"),
+            ("reporting.consolidado", "Reporte consolidado/volumetría", "/api/v1/reporting/consolidado", "GET"),
+            ("reporting.productivity", "Reporte de productividad V2", "/api/v1/reporting/productivity", "GET"),
+            ("reporting.global", "Vista global multi-tenant", "/api/v1/reporting/*", "GET"),
+        };
+
+        var existingSlugs = await db.RbacActions
+            .Where(a => a.ModuleId == module.Id)
+            .Select(a => a.Slug)
+            .ToListAsync(ct);
+
+        var newActions = slugs
+            .Where(s => !existingSlugs.Contains(s.Slug))
+            .Select(s => new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = s.Slug,
+                Name = s.Name,
+                HttpMethod = s.Method,
+                RoutePattern = s.Route,
+                IsActive = true,
+                CreatedAt = now,
+            })
+            .ToArray();
+
+        if (newActions.Length > 0)
+        {
+            db.RbacActions.AddRange(newActions);
+            await db.SaveChangesAsync(ct);
+
+            foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+            {
+                var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
+                foreach (var role in roles)
+                {
+                    var existing = await db.RoleGrants
+                        .Where(g => g.RoleId == role.Id)
+                        .Select(g => g.PermissionId)
+                        .ToListAsync(ct);
+
+                    var grants = newActions
+                        .Where(a => !existing.Contains(a.Id))
+                        .Where(a => roleCode == "SuperAdmin" || a.Slug != "reporting.global")
+                        .Select(a => new RoleGrant
+                        {
+                            Id = Guid.CreateVersion7(),
+                            RoleId = role.Id,
+                            PermissionId = a.Id,
+                            CreatedAt = now,
+                        });
+                    db.RoleGrants.AddRange(grants);
+                }
+            }
+
+            await db.SaveChangesAsync(ct);
+        }
+
+        // ADR-0038 big-bang: desactivar módulo y acciones de reportes-detallados.
+        var legacyModule = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "reportes-detallados" && m.DeletedAt == null, ct);
+        if (legacyModule is not null && legacyModule.IsActive)
+        {
+            legacyModule.IsActive = false;
+            legacyModule.UpdatedAt = now;
+            var legacyActions = await db.RbacActions
+                .Where(a => a.ModuleId == legacyModule.Id && a.IsActive)
+                .ToListAsync(ct);
+            foreach (var action in legacyActions)
+            {
+                action.IsActive = false;
+                action.UpdatedAt = now;
+            }
+            await db.SaveChangesAsync(ct);
+        }
     }
 
     /// <summary>

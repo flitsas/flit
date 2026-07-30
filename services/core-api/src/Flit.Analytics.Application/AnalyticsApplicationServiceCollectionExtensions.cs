@@ -1,6 +1,7 @@
 using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.Queries;
 using Flit.Analytics.Application.Queries.Metrics;
+using Flit.Analytics.Application.Reporting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -17,6 +18,16 @@ public static class AnalyticsApplicationServiceCollectionExtensions
         services.AddScoped<ExportExecutivePdfHandler>();
         services.AddScoped<GetMonthlyTrendHandler>();
         services.AddScoped<GetDetailedProceduresHandler>(); // Feature #10813 HU #10815
+
+        // Feature #11076 — Reporting V2
+        services.AddScoped<GetReportingProceduresHandler>();
+        services.AddScoped<GetReportingAuditHandler>();
+        services.AddScoped<GetConsolidadoHandler>();
+        services.AddScoped<GetProductivityReportHandler>();
+        services.AddScoped<GetSlaReportHandler>();
+        services.AddScoped<RequestExportHandler>();
+        services.AddScoped<GetExportJobHandler>();
+        services.AddScoped<GetDownloadUrlHandler>();
 
         // Reportes2 HU-B — handlers de métricas (§4.2–§4.5 del contrato).
         services.AddScoped<GetOtMetricsHandler>();

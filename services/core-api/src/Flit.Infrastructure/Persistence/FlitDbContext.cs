@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Persistence.Entities.Admin;
+using Flit.Infrastructure.Persistence.Entities.Analytics;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Quipux;
@@ -16,6 +17,18 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     : DbContext(options), IDataProtectionKeyContext
 {
     public DbSet<Tenant> Tenants => Set<Tenant>();
+
+    // ── Reportería Transaccional V2 (Feature #11076, ADR-0037/0038/0039) ─────────
+    public DbSet<ExportJob> ExportJobs => Set<ExportJob>();
+
+    public DbSet<SavedQuery> SavedQueries => Set<SavedQuery>();
+
+    public DbSet<DashboardPreference> DashboardPreferences => Set<DashboardPreference>();
+
+    public DbSet<ReportSlaConfig> ReportSlaConfigs => Set<ReportSlaConfig>();
+
+    /// <summary>Catálogo global de festivos (A20 — sin tenant). Usado por SLA business hours.</summary>
+    public DbSet<HolidayCalendar> HolidayCalendars => Set<HolidayCalendar>();
 
     // Keyring de ASP.NET Data Protection persistido en Postgres (HU #10233): compartido entre
     // réplicas y estable entre reinicios, para poder descifrar el secreto HMAC del webhook Kyverum.

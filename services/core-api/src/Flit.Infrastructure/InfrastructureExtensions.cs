@@ -150,6 +150,17 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureExcelExporter, Documents.ProcedureExcelExporter>();
         services.AddSingleton<IExecutiveSummaryPdfGenerator, Documents.ExecutiveSummaryPdfGenerator>();
 
+        // Feature #11076 — Reporting V2 repositories + export jobs
+        services.AddScoped<Flit.Analytics.Application.Reporting.IReportingReadRepository, ReportingReadRepository>();
+        services.AddScoped<Flit.Analytics.Application.Reporting.IExportJobRepository, ExportJobRepository>();
+        services.AddScoped<Flit.Analytics.Application.Reporting.ISavedQueryRepository, SavedQueryRepository>();
+        services.AddScoped<Flit.Analytics.Application.Reporting.IDashboardPreferencesRepository, DashboardPreferencesRepository>();
+        services.Configure<Storage.ExportFileManagerOptions>(configuration.GetSection(Storage.ExportFileManagerOptions.SectionName));
+        services.AddScoped<Flit.Analytics.Application.Reporting.IExportFileStorage, Storage.FileManagerExportStorage>();
+        services.AddSignalR();
+        services.AddHostedService<Workers.ExportJobsChannelListener>();
+        services.AddHostedService<Workers.ExportJobsWorker>();
+
         // Reportes2 HU-D — informes programados + alertas por umbral (scheduler y repos).
         services.AddScoped<Flit.Analytics.Application.Scheduling.IReportScheduleRepository, ReportScheduleRepository>(); // Reportes2 HU-D
         services.AddScoped<Flit.Analytics.Application.Scheduling.IAlertRuleRepository, AlertRuleRepository>(); // Reportes2 HU-D
@@ -157,6 +168,7 @@ public static class InfrastructureExtensions
         services.AddHostedService<Analytics.Scheduling.AnalyticsSchedulerProcessor>(); // Reportes2 HU-D
 
         services.Configure<Telemetry.AnalyticsTelemetryOptions>(configuration.GetSection(Telemetry.AnalyticsTelemetryOptions.SectionName)); // Reportes2 HU-A
+        services.Configure<Reporting.ReportingMigrationSafetyOptions>(configuration.GetSection(Reporting.ReportingMigrationSafetyOptions.SectionName)); // Feature #11076
         services.AddSingleton<Telemetry.ChannelUsageEventQueue>(); // Reportes2 HU-A
         services.AddSingleton<Telemetry.IUsageEventQueue>(sp => sp.GetRequiredService<Telemetry.ChannelUsageEventQueue>()); // Reportes2 HU-A
         services.AddHostedService<Telemetry.UsageEventWriterProcessor>(); // Reportes2 HU-A
