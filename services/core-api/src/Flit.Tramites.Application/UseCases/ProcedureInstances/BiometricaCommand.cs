@@ -36,7 +36,12 @@ public sealed record BiometricValidationDto(
     string? RejectionReason = null,
     // Motivo del ÚLTIMO intento fallido MIENTRAS la validación sigue abierta (en_proceso): Kyverum permite
     // reintentar (p.ej. "El rostro no es completamente visible…"). Null si no hubo intento fallido o no aplica.
-    string? UltimoIntentoMotivo = null);
+    string? UltimoIntentoMotivo = null,
+    // HU #11069 — trámite primario + otros trámites del tenant con la misma identidad (detalle VID).
+    Guid? ProcedureInstanceId = null,
+    string? ReferenceNumber = null,
+    string? Modalidad = null,
+    IReadOnlyList<LinkedProcedureDto>? LinkedProcedures = null);
 
 /// <summary>Resultado de iniciar: incluye el token CRUDO (solo aquí) para construir el magic-link.</summary>
 public sealed record IniciarBiometriaResult(

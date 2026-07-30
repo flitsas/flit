@@ -12,7 +12,8 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 public sealed record LinkedProcedureDto(
     Guid InstanceId,
     string ReferenceNumber,
-    string Status);
+    string Status,
+    string Modalidad);
 
 /// <summary>
 /// Fila de la tabla transversal del submódulo de Validaciones: una validación biométrica con el
@@ -166,7 +167,7 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
         return summaries.ToDictionary(
             kv => kv.Key,
             kv => (IReadOnlyList<LinkedProcedureDto>)kv.Value
-                .Select(s => new LinkedProcedureDto(s.InstanceId, s.ReferenceNumber, s.Status))
+                .Select(s => new LinkedProcedureDto(s.InstanceId, s.ReferenceNumber, s.Status, s.Modalidad))
                 .ToList());
     }
 

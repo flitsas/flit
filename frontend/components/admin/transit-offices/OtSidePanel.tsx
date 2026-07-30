@@ -13,11 +13,9 @@ export interface OtSidePanelProps {
   footer?: ReactNode;
   disabled?: boolean;
   /**
-   * Clase de z-index del overlay (literal para el JIT de Tailwind). Por defecto `z-50`. Se sobreescribe
-   * cuando el panel se lanza DESDE un modal (`Modal` se portaliza a body con `z-[100]`): sin un z mayor,
-   * el panel quedaría por detrás del overlay del modal y parecería que "no abre".
+   * Ancho del drawer. `lg` para paneles de detalle densos (trámites clientes).
    */
-  zClassName?: string;
+  width?: "md" | "lg";
 }
 
 export function OtSidePanel({
@@ -29,10 +27,13 @@ export function OtSidePanel({
   footer,
   disabled = false,
   zClassName = "z-50",
+  width = "md",
 }: OtSidePanelProps) {
   if (!open) {
     return null;
   }
+
+  const maxW = width === "lg" ? "max-w-lg" : "max-w-md";
 
   return (
     <div className={`fixed inset-0 ${zClassName} flex justify-end`}>
@@ -44,7 +45,7 @@ export function OtSidePanel({
         disabled={disabled}
       />
       <aside
-        className="relative flex h-full w-full max-w-md flex-col border-l bg-card shadow-2xl"
+        className={`relative flex h-full w-full ${maxW} flex-col border-l bg-card shadow-2xl`}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}

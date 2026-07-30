@@ -16,6 +16,7 @@ import {
   validateRecipients,
 } from "./labels";
 import { RecipientsInput } from "./RecipientsInput";
+import { digitsOnly, sanitizeDecimalInput } from "@/lib/format/currency";
 
 interface AlertRuleFormProps {
   /** Regla a editar; undefined = crear. */
@@ -153,10 +154,11 @@ export function AlertRuleForm({ initial, onSubmit, onCancel }: AlertRuleFormProp
           <label htmlFor="alert-threshold" className={labelClass}>Umbral</label>
           <input
             id="alert-threshold"
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
             value={threshold}
-            onChange={(e) => setThreshold(e.target.value)}
+            onChange={(e) => setThreshold(sanitizeDecimalInput(e.target.value))}
             className={inputClass}
             placeholder="Ej. 25"
           />
@@ -165,11 +167,15 @@ export function AlertRuleForm({ initial, onSubmit, onCancel }: AlertRuleFormProp
           <label htmlFor="alert-window" className={labelClass}>Ventana de evaluación (minutos)</label>
           <input
             id="alert-window"
-            type="number"
-            min={5}
-            max={43200}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
             value={windowMinutes}
-            onChange={(e) => setWindowMinutes(Number(e.target.value))}
+            onChange={(e) => {
+              const raw = digitsOnly(e.target.value);
+              setWindowMinutes(raw === "" ? 5 : Number(raw));
+            }}
             className={inputClass}
             title="Periodo hacia atrás sobre el que se calcula la métrica."
           />
@@ -178,11 +184,15 @@ export function AlertRuleForm({ initial, onSubmit, onCancel }: AlertRuleFormProp
           <label htmlFor="alert-cooldown" className={labelClass}>Enfriamiento / cooldown (minutos)</label>
           <input
             id="alert-cooldown"
-            type="number"
-            min={5}
-            max={10080}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
             value={cooldownMinutes}
-            onChange={(e) => setCooldownMinutes(Number(e.target.value))}
+            onChange={(e) => {
+              const raw = digitsOnly(e.target.value);
+              setCooldownMinutes(raw === "" ? 5 : Number(raw));
+            }}
             className={inputClass}
             title="Tiempo mínimo entre disparos consecutivos de esta alerta."
           />

@@ -1586,6 +1586,13 @@ export const tramitesClient = {
       `/api/v1/tramites/instances/${instanceId}/subsanar`,
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
+
+  /** Cancela subsanación (apaga el flag; el trámite sigue en rechazado). */
+  cancelSubsanacion: (instanceId: string, tenantId?: string) =>
+    request<InstanceSummary>(
+      `/api/v1/tramites/instances/${instanceId}/cancelar-subsanacion`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
 };
 
 /** N 03 — copy UX por código de error del endpoint de transición (title del ProblemDetails). */

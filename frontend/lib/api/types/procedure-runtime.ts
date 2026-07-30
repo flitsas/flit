@@ -833,6 +833,11 @@ export interface BiometricValidation {
   // Motivo del ÚLTIMO intento fallido mientras la validación sigue ABIERTA (en_proceso): Kyverum permite
   // reintentar. Guía amigable de Kyverum (p.ej. "rostro no completamente visible"). Null si no aplica.
   ultimoIntentoMotivo?: string | null;
+  // HU #11069 — trámite primario + otros del tenant con la misma identidad (detalle VID).
+  procedureInstanceId?: string | null;
+  referenceNumber?: string | null;
+  modalidad?: string | null;
+  linkedProcedures?: LinkedProcedureRef[] | null;
 }
 
 /**
@@ -914,6 +919,8 @@ export interface LinkedProcedureRef {
   instanceId: string;
   referenceNumber: string;
   status: string;
+  /** Modalidad del trámite (traspaso / matricula_inicial). HU #11069. */
+  modalidad?: string | null;
 }
 
 /**

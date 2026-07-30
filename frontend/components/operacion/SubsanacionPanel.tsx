@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Loader2, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Loader2, RotateCcw, X } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { StatusHistory } from '@/lib/api/types/procedure-runtime';
 import {
@@ -20,28 +20,29 @@ interface SubsanacionPanelProps {
   /** Re-radicado con éxito (AC2): el padre decide navegación/toast. */
   onReradicado: () => void;
   /**
-   * Feature #11066 — si hay cambios sin Guardar, se bloquea Re-radicar.
-   * El padre (wizard) indica dirty tras editar fields/docs.
+   * Hay cambios locales sin guardar: Re-radicar permanece deshabilitado.
    */
   hasUnsavedChanges?: boolean;
-  /** Persiste cambios pendientes antes de re-radicar (informativo + obligatorio). */
-  onSaveBeforeReradicar?: () => Promise<boolean>;
+  /**
+   * Tras editar y Guardar y continuar al menos una vez (y sin dirty pendiente).
+   * Sin esto Re-radicar no se habilita (hay que modificar algo primero).
+   */
+  canReradicar?: boolean;
+  /**
+   * Cancela el sub-estado de subsanación (flag) cuando no hace falta corregir.
+   * Solo aplica a rechazado + subsanacionActiva.
+   */
+  onCancelSubsanacion?: () => Promise<void> | void;
+  /** Si false, no se muestra Cancelar (p. ej. estado legado `subsanacion`). */
+  showCancel?: boolean;
 }
 
 const FALLBACK_MOTIVO =
   'El organismo de tránsito devolvió el trámite para corrección. Revisa los datos y documentos antes de re-radicar.';
 
 /**
- * HU #10874 — panel de subsanación: muestra el motivo y el checklist de ítems a subsanar
- * (AC1) y ofrece "Re-radicar" (AC2) cuando el operador terminó de corregir. Vive dentro del
- * wizard (TramiteWizard) mientras el trámite está en estado `subsanacion`: en ese estado los
- * campos siguen siendo editables (igual que en `borrador`, HU #10870), así que este panel es un
- * complemento informativo/de acción, no un modo de solo lectura.
- *
- * 4 estados de UI: cargando (fetch del detalle en curso, a cargo del padre) · error (fetch
- * fallido) · vacío (sin checklist estructurado — degrada al motivo plano) · lleno (checklist con
- * ítems). Ver GAP documentado en `lib/tramites/subsanacion.ts`: el backend aún no expone
- * `metadata` en `GET /instances/{id}`, así que "vacío" es hoy el caso esperado en producción.
+ * HU #10874 — panel de subsanación: motivo + checklist + Re-radicar / Cancelar.
+ * Feature #11066 — Re-radicar solo tras edición guardada; Cancelar sale del flag.
  */
 export function SubsanacionPanel({
   instanceId,
@@ -50,12 +51,12 @@ export function SubsanacionPanel({
   error,
   onReradicado,
   hasUnsavedChanges = false,
-  onSaveBeforeReradicar,
+  canReradicar = false,
+  onCancelSubsanacion,
+  showCancel = false,
 }: SubsanacionPanelProps) {
   const entry = useMemo(() => latestSubsanacionEntry(statusHistory), [statusHistory]);
   const observation = useMemo(() => parseSubsanacionObservation(entry?.metadata), [entry]);
-  // Guía de QUÉ corregir: checklist OT si existe; si no, motivo del rechazo OT
-  // (entregado→rechazado). No usar reason/motivo de activaciones rechazado→rechazado.
   const rejectionReason = useMemo(() => latestRejectionReason(statusHistory), [statusHistory]);
   const items = useMemo(() => observation?.items ?? [], [observation]);
   const hasChecklist = items.length > 0;
@@ -71,11 +72,12 @@ export function SubsanacionPanel({
 
   const [resolved, setResolved] = useState<ReadonlySet<number>>(() => new Set());
   const [submitting, setSubmitting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // AC2 — "todas las observaciones resueltas": si no hay checklist estructurado no hay nada que
-  // marcar, así que no se bloquea el Re-radicar (el operador ya corrigió según el motivo).
   const allResolved = !hasChecklist || items.every((_, i) => resolved.has(i));
+  const reradicarEnabled =
+    !!instanceId && allResolved && canReradicar && !hasUnsavedChanges && !submitting && !cancelling;
 
   const toggleItem = (index: number) => {
     setResolved((prev) => {
@@ -87,44 +89,32 @@ export function SubsanacionPanel({
   };
 
   const handleReradicar = async () => {
-    if (!instanceId || submitting) return;
-    if (hasUnsavedChanges) {
-      if (onSaveBeforeReradicar) {
-        setSubmitting(true);
-        setSubmitError(null);
-        try {
-          const ok = await onSaveBeforeReradicar();
-          if (!ok) {
-            setSubmitError('Guarda los cambios antes de re-radicar.');
-            setSubmitting(false);
-            return;
-          }
-        } catch {
-          setSubmitError('No se pudieron guardar los cambios. Intenta de nuevo.');
-          setSubmitting(false);
-          return;
-        }
-      } else {
-        setSubmitError('Hay cambios sin guardar. Usa Guardar y luego re-radica.');
-        return;
-      }
-    }
+    if (!instanceId || submitting || !reradicarEnabled) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
-      // AC2 — Re-radicar = POST /instances/{id}/submit: desde `subsanacion` re-radica directo a
-      // `entregado` (SubmitProcedureInstanceHandler), re-evaluando solo los gates afectados.
       await tramitesClient.submitInstance(instanceId);
       onReradicado();
     } catch (err) {
-      // Errores de gate (422/409) del submit: el backend ya devuelve `detail` legible en español
-      // (ver ProcedureInstanceEndpoints.MapPost "/submit"); se muestra tal cual.
       setSubmitError(err instanceof Error ? err.message : 'No se pudo re-radicar el trámite.');
       setSubmitting(false);
     }
   };
 
-  // Estado: cargando.
+  const handleCancel = async () => {
+    if (!onCancelSubsanacion || cancelling || submitting) return;
+    setCancelling(true);
+    setSubmitError(null);
+    try {
+      await onCancelSubsanacion();
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : 'No se pudo cancelar la subsanación.',
+      );
+      setCancelling(false);
+    }
+  };
+
   if (loading) {
     return (
       <div
@@ -140,7 +130,6 @@ export function SubsanacionPanel({
     );
   }
 
-  // Estado: error al cargar el detalle de la instancia (motivo/checklist).
   if (error) {
     return (
       <div
@@ -155,8 +144,6 @@ export function SubsanacionPanel({
     );
   }
 
-  // Estados vacío (sin checklist estructurado) y lleno (con ítems) se resuelven dentro del mismo
-  // panel: el motivo SIEMPRE se muestra (con fallback); el checklist alterna su contenido.
   return (
     <section
       className="rounded-2xl p-4 border shrink-0 flex flex-col gap-3"
@@ -217,7 +204,8 @@ export function SubsanacionPanel({
         ) : (
           <p className="text-xs opacity-70">
             El organismo de tránsito no registró un checklist detallado; corrige los datos según el
-            motivo indicado arriba y pulsa Re-radicar cuando termines.
+            motivo indicado arriba, usa Guardar y continuar y luego Re-radicar. Si no hace falta
+            corregir, cancela la subsanación.
           </p>
         )}
       </div>
@@ -228,19 +216,21 @@ export function SubsanacionPanel({
         </p>
       )}
 
-      <div>
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => void handleReradicar()}
-          disabled={!instanceId || !allResolved || submitting}
+          disabled={!reradicarEnabled}
           className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
           style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
           title={
             hasUnsavedChanges
-              ? 'Hay cambios sin guardar: se pedirá Guardar antes de re-radicar'
-              : hasChecklist && !allResolved
-                ? 'Marca todos los ítems del checklist como corregidos para re-radicar'
-                : 'Re-radica el trámite al organismo de tránsito'
+              ? 'Hay cambios sin guardar: usa Guardar y continuar antes de re-radicar'
+              : !canReradicar
+                ? 'Edita y guarda al menos un cambio con Guardar y continuar para habilitar Re-radicar'
+                : hasChecklist && !allResolved
+                  ? 'Marca todos los ítems del checklist como corregidos para re-radicar'
+                  : 'Re-radica el trámite al organismo de tránsito'
           }
         >
           {submitting ? (
@@ -253,13 +243,43 @@ export function SubsanacionPanel({
             </>
           )}
         </button>
-        {hasUnsavedChanges && (
-          <p className="mt-2 text-[11px] opacity-70">
-            Hay cambios sin guardar. Guarda antes de re-radicar (o el botón intentará guardar al
-            confirmar).
-          </p>
+
+        {showCancel && onCancelSubsanacion && (
+          <button
+            type="button"
+            onClick={() => void handleCancel()}
+            disabled={submitting || cancelling}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border disabled:opacity-50"
+            style={{ borderColor: '#162744', color: '#162744' }}
+            title="Sale de la subsanación sin re-radicar (el trámite sigue rechazado)"
+          >
+            {cancelling ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Cancelando…
+              </>
+            ) : (
+              <>
+                <X className="h-3.5 w-3.5" aria-hidden="true" /> Cancelar
+              </>
+            )}
+          </button>
         )}
       </div>
+
+      {hasUnsavedChanges ? (
+        <p className="text-[11px] opacity-70">
+          Hay cambios sin guardar. Usa Guardar y continuar; después podrás re-radicar.
+        </p>
+      ) : !canReradicar ? (
+        <p className="text-[11px] opacity-70">
+          Edita lo necesario y pulsa Guardar y continuar para habilitar Re-radicar. Si no hace falta
+          corregir, usa Cancelar.
+        </p>
+      ) : (
+        <p className="text-[11px] opacity-70" role="status">
+          Cambios guardados. Ya puedes re-radicar.
+        </p>
+      )}
     </section>
   );
 }

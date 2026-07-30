@@ -7,4 +7,6 @@ namespace Flit.Tramites.Domain.ReadModels;
 public sealed record LinkedProcedureSummary(
     Guid InstanceId,
     string ReferenceNumber,
-    string Status);
+    string Status,
+    string Modalidad);
+

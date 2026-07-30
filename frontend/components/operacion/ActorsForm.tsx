@@ -1389,6 +1389,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <input
               id={`${index}-rl-telefono`}
               type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="tel"
               value={rl.telefono ?? ''}
               onChange={(e) => updateRepLegal(index, { telefono: e.target.value })}
               className={INPUT_BASE}
@@ -1620,6 +1623,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               <input
                 id="comprador-telefono"
                 type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="tel"
                 value={actor.telefono ?? ''}
                 onChange={(e) => {
                   markContactTouched(0, 'telefono');
@@ -1869,6 +1875,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   <input
                     id={`${prefix}-telefono`}
                     type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    autoComplete="tel"
                     value={actor.telefono ?? ''}
                     onChange={(e) => {
                       markContactTouched(index, 'telefono');

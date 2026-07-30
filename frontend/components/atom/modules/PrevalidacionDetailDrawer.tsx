@@ -19,6 +19,10 @@ import { QRCodeSVG } from 'qrcode.react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
+import {
+  AssociatedProceduresList,
+  buildAssociatedProcedures,
+} from '@/components/atom/modules/AssociatedProceduresList';
 import type { BiometricEstado, BiometricValidation } from '@/lib/api/types/procedure-runtime';
 
 /**
@@ -227,6 +231,19 @@ export function PrevalidacionDetailDrawer({
                   value={detail.score != null ? String(detail.score) : '—'}
                 />
               </div>
+
+              {/* HU #11069 — trámites asociados a la VID (enlace, id, tipo). */}
+              {(() => {
+                const associated = buildAssociatedProcedures({
+                  instanceId: detail.procedureInstanceId,
+                  referenceNumber: detail.referenceNumber,
+                  modalidad: detail.modalidad,
+                  linkedProcedures: detail.linkedProcedures,
+                });
+                return associated.length > 0 ? (
+                  <AssociatedProceduresList procedures={associated} collapsible />
+                ) : null;
+              })()}
 
               {detail.status === 'rechazado' && detail.rejectionReason && (
                 <p

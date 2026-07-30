@@ -18,6 +18,7 @@ import {
   validateRecipients,
 } from "./labels";
 import { RecipientsInput } from "./RecipientsInput";
+import { digitsOnly } from "@/lib/format/currency";
 
 interface ScheduleFormProps {
   /** Schedule a editar; undefined = crear. */
@@ -157,11 +158,15 @@ export function ScheduleForm({ initial, onSubmit, onCancel }: ScheduleFormProps)
             <label htmlFor="schedule-day-of-month" className={labelClass}>Día del mes (1-28)</label>
             <input
               id="schedule-day-of-month"
-              type="number"
-              min={1}
-              max={28}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="off"
               value={dayOfMonth}
-              onChange={(e) => setDayOfMonth(Number(e.target.value))}
+              onChange={(e) => {
+                const raw = digitsOnly(e.target.value);
+                setDayOfMonth(raw === "" ? 1 : Number(raw));
+              }}
               className={inputClass}
             />
           </div>

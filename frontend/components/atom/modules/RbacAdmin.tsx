@@ -17,6 +17,7 @@ import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { activeTone } from "@/components/atom/statusTones";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { ModuleTitle } from "./ModuleTitle";
+import { digitsOnly } from "@/lib/format/currency";
 
 const RBAC_TABS = [
   { id: "modules", label: "Módulos y Permisos" },
@@ -877,9 +878,12 @@ function CreateModuleModal({
             </label>
             <input
               id="mod-sort"
-              type="number"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="off"
               value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value)}
+              onChange={(e) => setSortOrder(digitsOnly(e.target.value))}
               placeholder="1"
               className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
             />

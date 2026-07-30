@@ -404,6 +404,32 @@ internal static class ProcedureInstanceEndpoints
             };
         }).WithName("StartSubsanacionProcedureInstance");
 
+        // Cancela la subsanación (apaga el flag) sobre rechazado. El status sigue en rechazado.
+        group.MapPost("/instances/{id:guid}/cancelar-subsanacion", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
+            CancelSubsanacionHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ResolveUserId(http.User), ct);
+            return error switch
+            {
+                null => Results.Ok(result),
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "not_rechazado" => Results.Problem(
+                    statusCode: 409, title: "Conflict",
+                    detail: "Solo un trámite en estado rechazado puede cancelar la subsanación."),
+                TramiteEstadoErrores.ConflictoConcurrencia => Results.Problem(
+                    statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia,
+                    detail: "El trámite fue modificado por otro proceso. Recargue e intente de nuevo."),
+                _ => Results.Problem(statusCode: 422, title: error, detail: "No se pudo cancelar la subsanación."),
+            };
+        }).WithName("CancelSubsanacionProcedureInstance");
+
         // N 03 (RF01–RF05) — transición explícita de estado del ciclo de vida. Body: toStatus
         // (borrador|anulado|preparado|entregado|aprobado|rechazado)
         // + reason (obligatorio para anulado/rechazado). La subsanación ya no es un estado: se activa

@@ -43,6 +43,30 @@ public sealed class OtClientProcedureResponse
 
     /// <summary>HU #10536 — trámite prioritario: se ordena con primacía en la bandeja del OT.</summary>
     public bool Prioritario { get; init; }
+
+    /// <summary>Detalle: actores (GET by id). Vacío en listados.</summary>
+    public IReadOnlyList<OtClientProcedureActorResponse> Actors { get; init; } = [];
+
+    public string? Placa { get; init; }
+    public string? Vin { get; init; }
+    public string? Marca { get; init; }
+    public string? Linea { get; init; }
+    public string? Modelo { get; init; }
+    public string? Color { get; init; }
+    public string? Clase { get; init; }
+    public string? Servicio { get; init; }
+    public string? Combustible { get; init; }
+}
+
+public sealed class OtClientProcedureActorResponse
+{
+    public string ActorType { get; init; } = string.Empty;
+    public string DocumentType { get; init; } = string.Empty;
+    public string DocumentNumber { get; init; } = string.Empty;
+    public string FullName { get; init; } = string.Empty;
+    public string? Email { get; init; }
+    public string? Phone { get; init; }
+    public string? PersonType { get; init; }
 }
 
 public sealed class RejectOtClientProcedureRequest
@@ -89,5 +113,24 @@ internal static class OtClientProcedureMapper
             CreatedAt = procedure.CreatedAt,
             SubmittedAt = procedure.SubmittedAt,
             Prioritario = procedure.Prioritario,
+            Actors = procedure.Actors.Select(a => new OtClientProcedureActorResponse
+            {
+                ActorType = a.ActorType,
+                DocumentType = a.DocumentType,
+                DocumentNumber = a.DocumentNumber,
+                FullName = a.FullName,
+                Email = a.Email,
+                Phone = a.Phone,
+                PersonType = a.PersonType,
+            }).ToList(),
+            Placa = procedure.Placa,
+            Vin = procedure.Vin,
+            Marca = procedure.Marca,
+            Linea = procedure.Linea,
+            Modelo = procedure.Modelo,
+            Color = procedure.Color,
+            Clase = procedure.Clase,
+            Servicio = procedure.Servicio,
+            Combustible = procedure.Combustible,
         };
 }

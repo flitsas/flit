@@ -744,8 +744,8 @@ public sealed class BiometricaHandlerTests
             {
                 [identityKey] =
                 [
-                    new LinkedProcedureSummary(primaryInstanceId, "TRM-2026-000001", TramiteEstado.Borrador),
-                    new LinkedProcedureSummary(linkedInstanceId, "TRM-2026-000099", TramiteEstado.Preparado),
+                    new LinkedProcedureSummary(primaryInstanceId, "TRM-2026-000001", TramiteEstado.Borrador, "traspaso"),
+                    new LinkedProcedureSummary(linkedInstanceId, "TRM-2026-000099", TramiteEstado.Preparado, "matricula_inicial"),
                 ],
             });
 
@@ -760,7 +760,7 @@ public sealed class BiometricaHandlerTests
         var dto = result!.Validations.Single();
         dto.LinkedProcedures.Should().ContainSingle()
             .Which.Should().BeEquivalentTo(new LinkedProcedureDto(
-                linkedInstanceId, "TRM-2026-000099", TramiteEstado.Preparado));
+                linkedInstanceId, "TRM-2026-000099", TramiteEstado.Preparado, "matricula_inicial"));
     }
 
     [Fact]

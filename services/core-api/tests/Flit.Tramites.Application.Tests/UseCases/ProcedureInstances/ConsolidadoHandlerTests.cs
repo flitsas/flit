@@ -358,13 +358,13 @@ public sealed class ConsolidadoHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_WizardInvalidado_RegeneraEnCascadaYMarcaVigente()
+    public async Task HandleAsync_WizardInvalidado_ConFurExistente_NoRegeneraHotDocs()
     {
-        // HU #10860 (cascada β): al estar invalidado, se regeneran primero los documentos en caliente
-        // (FUR) y luego se consolida; el flag queda en true.
+        // Feature #11066 — con FUR ya generado, el consolidado solo fusiona; NO vuelve a generar
+        // el paquete en caliente (certificados, mandato, etc.).
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
-        var instance = MatriculaInstance(id, tenantId); // ConsolidadoWizardVigente = false por defecto
+        var instance = MatriculaInstance(id, tenantId); // ConsolidadoWizardVigente = false; tiene FUR
         foreach (var att in instance.Attachments)
             _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
         _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
@@ -374,9 +374,31 @@ public sealed class ConsolidadoHandlerTests
         var (result, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
 
         error.Should().BeNull();
-        regenerator.Calls.Should().Be(1);
+        regenerator.Calls.Should().Be(0);
         result!.Regenerado.Should().BeTrue();
         instance.ConsolidadoWizardVigente.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task HandleAsync_ForceTrue_ConDocsExistentes_NoRegeneraHotDocs()
+    {
+        // Re-generar consolidado: invalida caché y reconstruye el PDF; no regenera documentos previos.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.ConsolidadoWizardVigente = true;
+        AddAttachment(instance, "consolidado", "consolidado.pdf", "%PDF-cons");
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var regenerator = new FakeRegenerator();
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, regenerator);
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, userId: null, force: true, CancellationToken.None);
+
+        error.Should().BeNull();
+        result!.Regenerado.Should().BeTrue();
+        regenerator.Calls.Should().Be(0);
     }
 
     [Fact]

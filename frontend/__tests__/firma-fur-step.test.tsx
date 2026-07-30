@@ -17,9 +17,11 @@ const mocks = vi.hoisted(() => ({
   invitarParticipante: vi.fn(),
   reinvitarParticipante: vi.fn(),
   generarFur: vi.fn(),
+  generarConsolidado: vi.fn(),
   generarImpronta: vi.fn(),
   getAttachments: vi.fn(),
   getInstance: vi.fn(),
+  getFurTemplateFormat: vi.fn(),
   listBiometric: vi.fn(),
   patchFieldValues: vi.fn(),
   submitInstance: vi.fn(),
@@ -37,9 +39,11 @@ vi.mock('@/lib/api/tramites-client', () => ({
     invitarParticipante: mocks.invitarParticipante,
     reinvitarParticipante: mocks.reinvitarParticipante,
     generarFur: mocks.generarFur,
+    generarConsolidado: mocks.generarConsolidado,
     generarImpronta: mocks.generarImpronta,
     getAttachments: mocks.getAttachments,
     getInstance: mocks.getInstance,
+    getFurTemplateFormat: mocks.getFurTemplateFormat,
     listBiometric: mocks.listBiometric,
     patchFieldValues: mocks.patchFieldValues,
     submitInstance: mocks.submitInstance,
@@ -90,6 +94,17 @@ const FUR_DOC: ProcedureAttachment = {
   mimetype: 'text/plain',
   sizeBytes: 100,
   sha256: 'abc123',
+  source: 'system',
+  uploadedAt: '2026-06-19T00:00:00Z',
+};
+
+const CONSOLIDADO_DOC: ProcedureAttachment = {
+  id: 'att-cons',
+  tipo: 'consolidado',
+  filename: 'consolidado.pdf',
+  mimetype: 'application/pdf',
+  sizeBytes: 300,
+  sha256: 'cons123',
   source: 'system',
   uploadedAt: '2026-06-19T00:00:00Z',
 };
@@ -156,6 +171,16 @@ beforeEach(() => {
   mocks.generarFur.mockResolvedValue({
     documents: [{ attachmentId: 'att-fur', tipo: 'fur', filename: 'fur.txt', sha256: 'abc123' }],
   });
+  mocks.generarConsolidado.mockResolvedValue({
+    document: {
+      attachmentId: 'att-cons',
+      tipo: 'consolidado',
+      filename: 'consolidado.pdf',
+      sha256: 'cons123',
+    },
+    regenerado: true,
+  });
+  mocks.getFurTemplateFormat.mockResolvedValue({ format: 'automotor' });
   mocks.generarImpronta.mockResolvedValue({
     attachmentId: 'att-impronta',
     filename: 'impronta.pdf',
@@ -231,104 +256,63 @@ describe('FirmaFurStep — invitar participante', () => {
   });
 });
 
-describe('FirmaFurStep — generar impronta', () => {
-  it('muestra el botón "Generar Improntas" cuando aún no hay adjunto tipo impronta', async () => {
+describe('FirmaFurStep — impronta (Feature #11066)', () => {
+  it('sin impronta: no muestra botón Generar (se genera al entrar al paso)', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    expect(await screen.findByRole('button', { name: 'Generar Improntas' })).toBeInTheDocument();
-  });
-
-  it('oculta el botón cuando ya existe un adjunto tipo impronta (manual o generado antes)', async () => {
-    mocks.getAttachments.mockResolvedValue([IMPRONTA_DOC]);
-    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByRole('region', { name: 'Generación del FUR' });
+    const section = await screen.findByRole('region', { name: 'Generación de la impronta' });
     expect(screen.queryByRole('button', { name: 'Generar Improntas' })).not.toBeInTheDocument();
+    expect(within(section).getByText(/Se genera automáticamente al entrar a este paso/i)).toBeInTheDocument();
   });
 
-  it('genera la impronta, la adjunta y muestra el radicado (sin descarga automática)', async () => {
-    mocks.getAttachments.mockResolvedValue([]);
-    const onRefresh = vi.fn();
-    const user = userEvent.setup();
-    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" onRefresh={onRefresh} />);
-
-    const button = await screen.findByRole('button', { name: 'Generar Improntas' });
+  it('con impronta existente muestra descarga y no el botón Generar', async () => {
     mocks.getAttachments.mockResolvedValue([IMPRONTA_DOC]);
-    await user.click(button);
-
-    await waitFor(() => expect(mocks.generarImpronta).toHaveBeenCalledWith(INSTANCE));
-    expect(await screen.findByText(/radicado IMPR-TEST0001/)).toBeInTheDocument();
-    expect(mocks.downloadAttachment).not.toHaveBeenCalled();
-    expect(onRefresh).toHaveBeenCalled();
-  });
-
-  it('maneja el 409 organismo_requerido con un mensaje específico', async () => {
-    mocks.getAttachments.mockResolvedValue([]);
-    mocks.generarImpronta.mockRejectedValue(
-      new Error('Debe seleccionar el organismo de tránsito antes de generar la impronta.'),
-    );
-    const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await user.click(await screen.findByRole('button', { name: 'Generar Improntas' }));
-    expect(
-      await screen.findByText(/Selecciona el organismo de tránsito antes de generar la impronta/),
-    ).toBeInTheDocument();
-  });
-
-  it('maneja el 409 identificador_vehiculo_requerido con un mensaje específico', async () => {
-    mocks.getAttachments.mockResolvedValue([]);
-    mocks.generarImpronta.mockRejectedValue(
-      new Error('Falta la placa o el VIN del vehículo para generar la impronta.'),
-    );
-    const user = userEvent.setup();
-    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await user.click(await screen.findByRole('button', { name: 'Generar Improntas' }));
-    expect(
-      await screen.findByText(/Falta la placa o el VIN del vehículo/),
-    ).toBeInTheDocument();
+    const section = await screen.findByRole('region', { name: 'Generación de la impronta' });
+    expect(screen.queryByRole('button', { name: 'Generar Improntas' })).not.toBeInTheDocument();
+    expect(within(section).getByText(/impronta\.pdf/i)).toBeInTheDocument();
+    expect(within(section).getByRole('button', { name: /Descargar/i })).toBeInTheDocument();
   });
 });
 
-describe('FirmaFurStep — generar FUR', () => {
-  it('genera el FUR y lista los documentos', async () => {
-    // getAttachments lo consumen Expediente y FUR; tras generar devolvemos el doc.
+describe('FirmaFurStep — FUR / consolidado (Feature #11066)', () => {
+  it('sin consolidado: no muestra Generar ni Re-generar; el paquete se pre-genera al entrar', async () => {
     mocks.getAttachments.mockResolvedValue([]);
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    const fur = await screen.findByRole('region', { name: 'Generación del FUR' });
+    expect(screen.queryByRole('button', { name: /Generar FUR/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Generar consolidado/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Re-generar consolidado/i })).not.toBeInTheDocument();
+    expect(within(fur).getByText(/Al entrar a este paso se generan automáticamente el FUR/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.generarFur).toHaveBeenCalledWith(INSTANCE);
+      expect(mocks.generarImpronta).toHaveBeenCalledWith(INSTANCE);
+    });
+  });
+
+  it('lista el FUR ya generado para descarga y no vuelve a generarFur', async () => {
+    mocks.getAttachments.mockResolvedValue([FUR_DOC]);
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    await screen.findByRole('region', { name: 'Generación del FUR' });
+    const furFilename = await screen.findByText(/· fur\.txt/);
+    expect(furFilename.closest('p')).toHaveTextContent('FUR · fur.txt');
+    await waitFor(() => expect(mocks.generarImpronta).toHaveBeenCalled());
+    expect(mocks.generarFur).not.toHaveBeenCalled();
+  });
+
+  it('con consolidado existente muestra Re-generar y lo invoca con force', async () => {
+    mocks.getAttachments.mockResolvedValue([FUR_DOC, CONSOLIDADO_DOC, IMPRONTA_DOC]);
     const onRefresh = vi.fn();
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" onRefresh={onRefresh} />);
-    await screen.findByRole('region', { name: 'Generación del FUR' });
-    mocks.getAttachments.mockResolvedValue([FUR_DOC]);
-    await user.click(screen.getByRole('button', { name: 'Generar FUR / certificado' }));
-    await waitFor(() => expect(mocks.generarFur).toHaveBeenCalledTimes(1));
-    // El nombre amigable ('FUR') y el filename van en nodos separados; se valida el <p> contenedor.
-    const furFilename = await screen.findByText(/· fur\.txt/);
-    expect(furFilename.closest('p')).toHaveTextContent('FUR · fur.txt');
+    const regen = await screen.findByRole('button', { name: 'Re-generar consolidado' });
+    expect(screen.queryByRole('button', { name: /^Generar consolidado$/ })).not.toBeInTheDocument();
+    await user.click(regen);
+    await waitFor(() =>
+      expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE, undefined, true),
+    );
     expect(onRefresh).toHaveBeenCalled();
-  });
-
-  // HU #11017 — la identidad dejo de bloquear la generacion del FUR (HU #10463): el backend ya no
-  // emite `biometria_gate`. Un 409 sin codigo conocido cae al mensaje generico, que apunta al
-  // organismo de transito, la unica restriccion que queda.
-  it('un 409 sin codigo conocido cae al mensaje generico del organismo', async () => {
-    mocks.generarFur.mockRejectedValue(new Error('409 Conflict: algo_inesperado'));
-    const user = userEvent.setup();
-    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Generación del FUR' });
-    await user.click(screen.getByRole('button', { name: 'Generar FUR / certificado' }));
-    expect(
-      await screen.findByText(/selecciona el organismo de tránsito/i),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/Falta validar identidad/)).toBeNull();
-  });
-
-  it('maneja el 409 organismo_requerido', async () => {
-    mocks.generarFur.mockRejectedValue(new Error('409 Conflict: organismo_requerido'));
-    const user = userEvent.setup();
-    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Generación del FUR' });
-    await user.click(screen.getByRole('button', { name: 'Generar FUR / certificado' }));
-    expect(
-      await screen.findByText(/Selecciona el organismo de tránsito/),
-    ).toBeInTheDocument();
+    expect(mocks.generarFur).not.toHaveBeenCalled();
   });
 });
 

@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Eye,
   FileCheck,
+  FileText,
   Play,
   Search,
   Star,
@@ -22,12 +23,21 @@ import { TramitesListToolbar } from './TramitesListToolbar';
 import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
+import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import { EstadoFunnel } from './EstadoFunnel';
 import type {
   InstanceStatus,
   InstanceSummary,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+
+/** Estados donde el menú Acciones ofrece "Ver consolidado". */
+const CONSOLIDADO_MENU_ESTADOS = new Set<InstanceStatus>([
+  'preparado',
+  'entregado',
+  'aprobado',
+  'rechazado',
+]);
 
 /** Texto corto y discreto del sub-estado de placa (debajo del chip de estado). */
 function plateFlowHint(status: string | null | undefined): string | null {
@@ -203,11 +213,139 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
   const [processActing, setProcessActing] = useState(false);
   const [processError, setProcessError] = useState<string | null>(null);
 
+  /** Feature #11066 — Ver consolidado desde menú Acciones (paridad OT). */
+  const [consolidadoActingId, setConsolidadoActingId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{
+    open: boolean;
+    title: string;
+    mimetype: string | null;
+    url: string | null;
+    loading: boolean;
+    error: string | null;
+    download: { instanceId: string; tenantId?: string; attachmentId: string; filename: string } | null;
+  }>({
+    open: false,
+    title: 'Consolidado',
+    mimetype: null,
+    url: null,
+    loading: false,
+    error: null,
+    download: null,
+  });
+
   const openProcesar = (item: InstanceSummary) => {
     setProcessTarget(item);
     setSoatPagado(false);
     setImpuestoPagado(false);
     setProcessError(null);
+  };
+
+  const closeConsolidadoPreview = () => {
+    setPreview((p) => {
+      if (p.url) URL.revokeObjectURL(p.url);
+      return {
+        open: false,
+        title: 'Consolidado',
+        mimetype: null,
+        url: null,
+        loading: false,
+        error: null,
+        download: null,
+      };
+    });
+  };
+
+  const openConsolidado = async (item: InstanceSummary) => {
+    const tenantId = isAdmin ? item.tenantId : undefined;
+    setConsolidadoActingId(item.id);
+    setPreview((p) => {
+      if (p.url) URL.revokeObjectURL(p.url);
+      return {
+        open: true,
+        title: `Consolidado — ${item.referenceNumber}`,
+        mimetype: 'application/pdf',
+        url: null,
+        loading: true,
+        error: null,
+        download: null,
+      };
+    });
+    try {
+      let attachmentId: string;
+      let filename: string;
+      let mimetype = 'application/pdf';
+
+      try {
+        const res = await tramitesClient.generarConsolidado(item.id, tenantId, true);
+        attachmentId = res.document.attachmentId;
+        filename = res.document.filename;
+      } catch {
+        const atts = await tramitesClient.getAttachments(item.id, tenantId);
+        const consol = atts.find((a) => a.tipo === 'consolidado');
+        if (!consol) {
+          setPreview((p) => ({
+            ...p,
+            loading: false,
+            error: 'El trámite aún no tiene consolidado generado.',
+          }));
+          return;
+        }
+        attachmentId = consol.id;
+        filename = consol.filename;
+        mimetype = consol.mimetype || 'application/pdf';
+      }
+
+      const { blob, filename: dlName, mimetype: dlMime } =
+        await tramitesClient.downloadAttachment(item.id, attachmentId, tenantId, filename);
+      const type =
+        dlMime?.startsWith('application/') || dlMime?.startsWith('image/')
+          ? dlMime
+          : mimetype;
+      const objectUrl = URL.createObjectURL(new Blob([blob], { type: type || 'application/pdf' }));
+      setPreview((p) => ({
+        ...p,
+        loading: false,
+        url: objectUrl,
+        mimetype: type || 'application/pdf',
+        download: {
+          instanceId: item.id,
+          tenantId,
+          attachmentId,
+          filename: dlName || filename,
+        },
+      }));
+    } catch {
+      setPreview((p) => ({
+        ...p,
+        loading: false,
+        error: 'No se pudo abrir el consolidado. Intenta de nuevo.',
+      }));
+    } finally {
+      setConsolidadoActingId(null);
+    }
+  };
+
+  const handlePreviewDownload = async () => {
+    const dl = preview.download;
+    if (!dl) return;
+    try {
+      const { blob, filename } = await tramitesClient.downloadAttachment(
+        dl.instanceId,
+        dl.attachmentId,
+        dl.tenantId,
+        dl.filename,
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setPreview((p) => ({ ...p, error: 'No se pudo descargar el consolidado.' }));
+    }
   };
 
   const confirmProcesar = async () => {
@@ -519,6 +657,8 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           onClearFilters={clearFilters}
           onTogglePriority={handleTogglePriority}
           onProcesar={openProcesar}
+          onVerConsolidado={(item) => void openConsolidado(item)}
+          consolidadoActingId={consolidadoActingId}
           onOpen={(id, tenantId) =>
             router.push(
               isAdmin && tenantId
@@ -601,6 +741,17 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           </div>
         </div>
       )}
+
+      <DocumentPreviewModal
+        open={preview.open}
+        onClose={closeConsolidadoPreview}
+        title={preview.title}
+        mimetype={preview.mimetype}
+        url={preview.url}
+        loading={preview.loading}
+        error={preview.error}
+        onDownload={preview.download ? () => void handlePreviewDownload() : undefined}
+      />
     </section>
   );
 }
@@ -624,6 +775,8 @@ function TableBody({
   onClearFilters,
   onTogglePriority,
   onProcesar,
+  onVerConsolidado,
+  consolidadoActingId,
   onOpen,
 }: {
   loading: boolean;
@@ -643,6 +796,8 @@ function TableBody({
   onClearFilters: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
   onProcesar: (item: InstanceSummary) => void;
+  onVerConsolidado: (item: InstanceSummary) => void;
+  consolidadoActingId: string | null;
   onOpen: (id: string, tenantId: string) => void;
 }) {
   const gridCols = showCompania ? GRID_COLS_ADMIN : GRID_COLS;
@@ -759,6 +914,8 @@ function TableBody({
               onClosePopover={onClosePopover}
               onTogglePriority={onTogglePriority}
               onProcesar={onProcesar}
+              onVerConsolidado={onVerConsolidado}
+              consolidadoActing={consolidadoActingId === item.id}
               onOpen={onOpen}
             />
           ))}
@@ -845,6 +1002,8 @@ function TramiteRow({
   onClosePopover,
   onTogglePriority,
   onProcesar,
+  onVerConsolidado,
+  consolidadoActing,
   onOpen,
 }: {
   item: InstanceSummary;
@@ -855,6 +1014,8 @@ function TramiteRow({
   onClosePopover: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
   onProcesar: (item: InstanceSummary) => void;
+  onVerConsolidado: (item: InstanceSummary) => void;
+  consolidadoActing: boolean;
   onOpen: (id: string, tenantId: string) => void;
 }) {
   // HU #10350 — un borrador finalizado muestra un chip async ("Pendiente validación"/"Pendiente
@@ -868,6 +1029,7 @@ function TramiteRow({
   const plateHint = plateFlowHint(item.plateFlowStatus);
   const puedeProcesar =
     item.estado === 'entregado' && item.plateFlowStatus === 'asignado';
+  const puedeVerConsolidado = CONSOLIDADO_MENU_ESTADOS.has(item.estado);
   const actionItems: ActionsMenuItem[] = [
     {
       key: 'abrir',
@@ -875,6 +1037,17 @@ function TramiteRow({
       icon: actionIcon,
       onSelect: () => onOpen(item.id, item.tenantId),
     },
+    ...(puedeVerConsolidado
+      ? [
+          {
+            key: 'consolidado',
+            label: consolidadoActing ? 'Abriendo consolidado…' : 'Ver consolidado',
+            icon: FileText,
+            disabled: consolidadoActing,
+            onSelect: () => onVerConsolidado(item),
+          },
+        ]
+      : []),
     ...(puedeProcesar
       ? [
           {

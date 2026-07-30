@@ -157,9 +157,9 @@ public interface IProcedureInstanceRepository
         IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
-    /// Feature #11066 — trámites del tenant que tienen validaciones biométricas con la misma identidad
-    /// (<paramref name="documents"/> = pares tipo+número). Devuelve un mapa por
-    /// <see cref="Entities.BiometricRules.IdentidadKey"/> con instancias distintas (id, referencia, estado).
+    /// Feature #11066 / HU #11069 — trámites del tenant asociados a la misma identidad
+    /// (<paramref name="documents"/> = pares tipo+número): por validación biométrica de la instancia
+    /// y/o por actores con ese documento. Mapa por <see cref="Entities.BiometricRules.IdentidadKey"/>.
     /// Solo lectura.
     /// </summary>
     Task<IReadOnlyDictionary<string, IReadOnlyList<LinkedProcedureSummary>>> ListLinkedProceduresByIdentityDocumentsAsync(

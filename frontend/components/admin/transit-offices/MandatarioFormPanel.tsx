@@ -15,6 +15,7 @@ import {
   type OtCompany,
 } from "@/lib/api/admin-mandate-signers";
 import { fetchOtUsers, type OtUserItem } from "@/lib/api/admin-ot-security";
+import { digitsOnly } from "@/lib/format/currency";
 
 export interface MandatarioFormPanelProps {
   open: boolean;
@@ -223,10 +224,12 @@ export function MandatarioFormPanel({
             <input
               id="ms-document"
               value={documentNumber}
-              onChange={(e) => setDocumentNumber(e.target.value)}
+              onChange={(e) => setDocumentNumber(digitsOnly(e.target.value))}
               className={OT_INPUT_CLS}
               placeholder="Número de documento"
               inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="off"
             />
           </div>
         </div>

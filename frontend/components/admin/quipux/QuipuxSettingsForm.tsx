@@ -19,6 +19,7 @@ import {
   type QuipuxSettings,
   type SaveQuipuxSettingsRequest,
 } from "@/lib/api/admin-quipux-settings";
+import { digitsOnly } from "@/lib/format/currency";
 
 // Valores por defecto de una fila nueva (espejan los DEFAULT del DDL y de QuipuxSettings).
 const DEFAULTS = {
@@ -301,9 +302,12 @@ export function QuipuxSettingsForm() {
           <input
             id="qx-consumer"
             type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
             value={form.consumerCode}
             disabled={saving}
-            onChange={(e) => set("consumerCode", e.target.value)}
+            onChange={(e) => set("consumerCode", digitsOnly(e.target.value))}
             className={`mt-1 font-mono ${OT_INPUT_CLS}`}
           />
         </Field>
@@ -416,9 +420,12 @@ export function QuipuxSettingsForm() {
             <input
               id="qx-officer-number"
               type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="off"
               value={form.officerDocumentNumber}
               disabled={saving}
-              onChange={(e) => set("officerDocumentNumber", e.target.value)}
+              onChange={(e) => set("officerDocumentNumber", digitsOnly(e.target.value))}
               placeholder="NIT de FLIT"
               className={`mt-1 font-mono ${OT_INPUT_CLS}`}
             />
@@ -584,8 +591,8 @@ function NumberField({
   id,
   label,
   value,
-  min,
-  max,
+  min: _min,
+  max: _max,
   disabled,
   onChange,
 }: {
@@ -597,16 +604,22 @@ function NumberField({
   disabled: boolean;
   onChange: (value: number) => void;
 }) {
+  void _min;
+  void _max;
   return (
     <Field id={id} label={label}>
       <input
         id={id}
-        type="number"
-        min={min}
-        max={max}
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        autoComplete="off"
         value={value}
         disabled={disabled}
-        onChange={(e) => onChange(toInt(e.target.value, value))}
+        onChange={(e) => {
+          const raw = digitsOnly(e.target.value);
+          onChange(raw === "" ? value : toInt(raw, value));
+        }}
         className={`mt-1 ${OT_INPUT_CLS}`}
       />
     </Field>

@@ -9,6 +9,7 @@ import type {
   SignatureVaultCreated,
   SignatureVaultInput,
 } from "@/lib/api/admin-signature-vault";
+import { sanitizeDocNumber } from "@/lib/validation/fieldRules";
 import { SignatureCapture } from "./SignatureCapture";
 
 // Tipos de documento de la persona — la firma del baúl es personal (HU #10930), por eso
@@ -178,7 +179,13 @@ export function SignatureVaultFormPanel({
           <select
             id="sv-doctype"
             value={form.documentType}
-            onChange={(e) => patch({ documentType: e.target.value })}
+            onChange={(e) => {
+              const documentType = e.target.value;
+              patch({
+                documentType,
+                documentNumber: sanitizeDocNumber(form.documentNumber, documentType),
+              });
+            }}
             className={OT_INPUT_CLS}
             style={errStyle("documentType")}
           >
@@ -198,11 +205,14 @@ export function SignatureVaultFormPanel({
           <input
             id="sv-docnumber"
             value={form.documentNumber}
-            onChange={(e) => patch({ documentNumber: e.target.value })}
+            onChange={(e) =>
+              patch({ documentNumber: sanitizeDocNumber(e.target.value, form.documentType) })
+            }
             className={OT_INPUT_CLS}
             style={errStyle("documentNumber")}
             placeholder="Número de documento del apoderado"
-            inputMode="numeric"
+            inputMode={form.documentType === "PAS" ? "text" : "numeric"}
+            autoComplete="off"
           />
           <FieldError message={fieldErrors.documentNumber} />
         </div>
