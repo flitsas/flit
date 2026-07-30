@@ -77,6 +77,26 @@ public static class IctAttachmentEndpoints
             };
         }).DisableAntiforgery();
 
+        // Cierre explícito del documento (paridad v1 closed=true, pero sin adjuntar un archivo más): a
+        // partir de aquí el pre-trámite deja de ESPERAR y, si cumple negocio + fuentes externas sin
+        // novedades, materializa a borrador. id = TransactionFlit (manager_id_transaction).
+        group.MapPost("/close/{id}", async (string id, CloseDocumentHandler handler, CancellationToken ct) =>
+        {
+            var (ok, error) = await handler.HandleAsync(id, ct);
+            if (ok)
+            {
+                return UploadJson(1, "Documento cerrado", StatusCodes.Status200OK);
+            }
+
+            return error switch
+            {
+                "not_found" => UploadJson(0, "Trámite no encontrado", StatusCodes.Status404NotFound),
+                "already_materialized" => UploadJson(0, "El trámite ya fue materializado", StatusCodes.Status409Conflict),
+                "unauthenticated" => UploadJson(0, "No autorizado", StatusCodes.Status401Unauthorized),
+                _ => UploadJson(0, "Estructura de petición inválida", StatusCodes.Status400BadRequest),
+            };
+        });
+
         group.MapGet("/{id}", async (
             string id,
             IPreTramiteRepository preTramites,

@@ -35,12 +35,15 @@ public sealed class IctStatusV2Query(IctDbContext db) : IIctStatusV2Query
             short externalValidation;
             Guid? procedureInstanceId;
             string comments;
+            bool closedDocument;
+            bool processWithoutAttachedDocuments;
 
             await using (var cmd = connection.CreateCommand())
             {
                 cmd.CommandText = """
                     SELECT process_status_id, business_validation, external_validation,
-                           procedure_instance_id, business_comments_validation
+                           procedure_instance_id, business_comments_validation,
+                           closed_document, process_without_attached_documents
                     FROM ict.external_integration_master
                     WHERE manager_id_transaction = @flit AND tenant_id = @tenant AND deleted_at IS NULL
                     LIMIT 1
@@ -59,6 +62,8 @@ public sealed class IctStatusV2Query(IctDbContext db) : IIctStatusV2Query
                 externalValidation = reader.GetInt16(2);
                 procedureInstanceId = await reader.IsDBNullAsync(3, ct) ? null : reader.GetGuid(3);
                 comments = await reader.IsDBNullAsync(4, ct) ? string.Empty : reader.GetString(4);
+                closedDocument = reader.GetBoolean(5);
+                processWithoutAttachedDocuments = reader.GetBoolean(6);
             }
 
             var ictEstado = IctEstado.Map(
@@ -66,6 +71,16 @@ public sealed class IctStatusV2Query(IctDbContext db) : IIctStatusV2Query
                 hasProcedureInstance: procedureInstanceId is not null,
                 businessValidated: businessValidation == 2,
                 externalStarted: externalValidation >= 1);
+
+            // Espera de adjuntos (paridad v1): mientras el documento no esté cerrado y no se haya declarado
+            // el waiver, el pre-trámite NO materializa (lo retiene el gate de SendToCoreApiJob). Se lo
+            // señalamos explícitamente al cliente para que sepa que debe cerrar el documento.
+            if (procedureInstanceId is null && !closedDocument && !processWithoutAttachedDocuments
+                && processStatusId is 1 or 2 && string.IsNullOrWhiteSpace(comments))
+            {
+                comments = "Pendiente de cierre de documentos: suba los adjuntos y envíe closed=true "
+                    + "(POST /api/v1/transact-attachments/close/{transactionFlit}) para continuar a borrador.";
+            }
 
             var tramiteStatus = procedureInstanceId is null
                 ? null

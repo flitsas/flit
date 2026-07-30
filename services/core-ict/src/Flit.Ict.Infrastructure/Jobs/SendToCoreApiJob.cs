@@ -20,6 +20,13 @@ namespace Flit.Ict.Infrastructure.Jobs;
 /// quedan source_query con is_data_queried=false). Así el borrador nunca se crea antes de validar las
 /// fuentes externas. Una novedad del orquestador deja process_status_id=4 (excluido por el filtro), de
 /// modo que aquí solo entran masters con negocio validado Y todas las fuentes consultadas y válidas.
+///
+/// ESPERA DE ADJUNTOS (paridad v1): además exige (closed_document = true OR
+/// process_without_attached_documents = true) — la misma cláusula del gate v1 getListSourceQuery
+/// (BackApiExternalTransact/.../sourceQueryRepository.ts). Con AMBAS banderas en false el pre-trámite NO
+/// materializa: se queda esperando indefinidamente a que el cliente CIERRE el documento (closed_document=
+/// true) tras subir los adjuntos, o a que declare el waiver (process_without_attached_documents=true). El
+/// cierre lo fija <c>CloseDocumentHandler</c> / el upload v1 con closed=true.
 /// </summary>
 public sealed class SendToCoreApiJob(
     IServiceScopeFactory scopeFactory,
@@ -102,10 +109,13 @@ public sealed class SendToCoreApiJob(
     }
 
     /// <summary>
-    /// Ids de masters listos para materializar: negocio+externo validados, sin materializar, y con el
-    /// orquestador terminado (ninguna source_query pendiente). El NOT EXISTS es el gate que impide crear
-    /// el borrador antes de consultar las fuentes. Un master sin fuentes (ninguna source_query) también
-    /// pasa (no hay nada que consultar). RLS la saltan los jobs (superusuario dev / BYPASSRLS prod).
+    /// Ids de masters listos para materializar: negocio+externo validados, sin materializar, con el
+    /// orquestador terminado (ninguna source_query pendiente) Y con el documento cerrado o el waiver de
+    /// adjuntos. El NOT EXISTS es el gate que impide crear el borrador antes de consultar las fuentes; la
+    /// cláusula (closed_document OR process_without_attached_documents) es el gate que impide crearlo antes
+    /// de que el cliente termine de subir los adjuntos (paridad v1 getListSourceQuery). Un master sin
+    /// fuentes (ninguna source_query) también pasa el NOT EXISTS. RLS la saltan los jobs (superusuario dev
+    /// / BYPASSRLS prod).
     /// </summary>
     private static async Task<List<Guid>> ReadReadyMasterIdsAsync(IctDbContext db, CancellationToken ct)
     {
@@ -124,6 +134,7 @@ public sealed class SendToCoreApiJob(
                 FROM ict.external_integration_master m
                 WHERE m.external_validation = 2 AND m.business_validation = 2
                   AND m.process_status_id = 2 AND m.procedure_instance_id IS NULL AND m.deleted_at IS NULL
+                  AND (m.closed_document = true OR m.process_without_attached_documents = true)
                   AND NOT EXISTS (
                       SELECT 1 FROM ict.external_integration_source_query sq
                       WHERE sq.eim_id = m.id AND sq.is_data_queried = false)
