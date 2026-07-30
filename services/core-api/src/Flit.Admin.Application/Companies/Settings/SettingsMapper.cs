@@ -18,6 +18,7 @@ internal static class SettingsMapper
         settings.RuntFailoverTimeoutMs,
         ToChoices(settings.ConsultationProviderConfig),
         settings.PlatePreassignEnabled,
+        settings.PlateFlowSkipToTerminado,
         new AvaluoProviderConfigDto(
             settings.AvaluoProviderConfig.Primary,
             settings.AvaluoProviderConfig.Enabled),

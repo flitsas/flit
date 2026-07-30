@@ -21,6 +21,12 @@ public sealed class TenantOperationalPolicy
     /// <summary>Preasignación de placa activa (Feature #10587).</summary>
     public bool PlatePreassignEnabled { get; set; }
 
+    /// <summary>
+    /// Con placa completa/rango al radicar, omite el paso gestor (Asignado) y aterriza en Terminado.
+    /// No afecta la ruta Sin asignar (preasignación por dígito).
+    /// </summary>
+    public bool PlateFlowSkipToTerminado { get; set; }
+
     public string NotificationChannel { get; set; } = "flit_smtp";
 
     public string NotificationTarget { get; set; } = "submitter";

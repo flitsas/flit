@@ -103,17 +103,18 @@ INSERT INTO tramites.procedure_instances
     (id, tenant_id, procedure_type_id, reference_number, status, transit_office_id,
      submitted_at, created_by_user_id, created_at)
 SELECT
-    v.id, v.tenant_id, v.procedure_type_id, v.reference_number, 'entregado',
+    v.id, v.tenant_id, pt.id, v.reference_number, 'entregado',
     'aaaaaaaa-0001-4000-8000-000000000001', now(),
     'ec4dddb9-ade5-43e8-b33b-c6036eba49d0', now()
 FROM (VALUES
     ('bbbbbbbb-0001-4000-8000-000000000010'::uuid, '0ad1c0de-0000-4000-8000-000000000001'::uuid,
-     '66666666-6666-6666-6666-666666666666'::uuid, 'OT-DEV-0001'),
+     'TRASPASO_STANDARD', 'OT-DEV-0001'),
     ('bbbbbbbb-0001-4000-8000-000000000011'::uuid, '0ad1c0de-0000-4000-8000-000000000002'::uuid,
-     '66666666-6666-6666-6666-666666666666'::uuid, 'OT-DEV-0002'),
+     'TRASPASO_STANDARD', 'OT-DEV-0002'),
     ('bbbbbbbb-0001-4000-8000-000000000012'::uuid, '0ad1c0de-0000-4000-8000-000000000001'::uuid,
-     '44444444-4444-4444-4444-444444444444'::uuid, 'OT-DEV-0003')
-) AS v(id, tenant_id, procedure_type_id, reference_number)
+     'MATRICULA_NUEVA', 'OT-DEV-0003')
+) AS v(id, tenant_id, procedure_type_code, reference_number)
+JOIN tramites.procedure_types pt ON pt.code = v.procedure_type_code
 WHERE EXISTS (
     SELECT 1 FROM identity.users u WHERE u.id = 'ec4dddb9-ade5-43e8-b33b-c6036eba49d0'
 )
@@ -189,15 +190,13 @@ VALUES
     ('e2222222-2222-4222-8222-222222222222', 'bbbbbbbb-0001-4000-8000-000000000001', 'REVISAR', 'Revisar', '#F59E0B', now())
 ON CONFLICT (tenant_id, code) DO NOTHING;
 
--- ─────────────────────────────────────────────────────────────────────────────
--- 11. Prelación documental (procedureTypeId usado en la UI de documentos OT)
--- ─────────────────────────────────────────────────────────────────────────────
+-- 11. Prelación documental (tipos canónicos por code — no UUIDs legacy SeedProcedureTypes)
 INSERT INTO admin.ot_document_precedence
     (id, tenant_id, procedure_type_id, document_type_id, sort_order, created_at)
 SELECT
     v.id,
     'bbbbbbbb-0001-4000-8000-000000000001',
-    '66666666-6666-6666-6666-666666666666',
+    pt.id,
     dt.id,
     v.sort_order,
     now()
@@ -207,6 +206,7 @@ FROM (VALUES
     ('f3333333-3333-4333-8333-333333333333'::uuid, 'TARJETA_PROPIEDAD', 3::smallint)
 ) AS v(id, doc_code, sort_order)
 JOIN tramites.document_types dt ON dt.code = v.doc_code
+JOIN tramites.procedure_types pt ON pt.code = 'TRASPASO_STANDARD'
 ON CONFLICT (tenant_id, procedure_type_id, document_type_id) DO NOTHING;
 
 COMMIT;

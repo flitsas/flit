@@ -40,6 +40,12 @@ public sealed class OtClientProcedure
     /// </summary>
     public string? PlatePreferredLastDigit { get; init; }
 
+    /// <summary>Checks opcionales del gestor (visibles en dashboard OT solo en Terminado).</summary>
+    public bool SoatPagado { get; init; }
+
+    /// <summary>Checks opcionales del gestor (visibles en dashboard OT solo en Terminado).</summary>
+    public bool ImpuestoDepartamentalPagado { get; init; }
+
     public Guid? TransitOfficeId { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
