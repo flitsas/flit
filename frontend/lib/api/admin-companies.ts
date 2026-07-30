@@ -31,6 +31,21 @@ export function fetchCompaniesIndex(
   return apiFetch<CompanyPagedResult>(`${base}/index`, { query: { ...params }, signal });
 }
 
+/**
+ * GET /{tenantId} — identidad de la compañía (HU #11062), para rotular la consola de configuración.
+ * Devuelve `null` si no existe: la pantalla sigue usable sin el encabezado en vez de romperse.
+ */
+export async function fetchCompany(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<CompanyListItem | null> {
+  try {
+    return await apiFetch<CompanyListItem>(`${base}/${tenantId}`, { signal });
+  } catch {
+    return null;
+  }
+}
+
 /** POST /api/v1/admin/companies — alta de compañía. Lanza ApiValidationError en 422. */
 export function createCompany(body: CreateCompanyRequest): Promise<CompanyListItem> {
   return apiFetch<CompanyListItem>(base, { method: "POST", body });

@@ -25,6 +25,8 @@ import { DeleteUserDialog } from "@/components/atom/modules/users/DeleteUserDial
 import { RestoreUserDialog } from "@/components/atom/modules/users/RestoreUserDialog";
 import { ResendInvitationButton } from "@/components/atom/modules/users/ResendInvitationButton";
 import { CancelInvitationDialog } from "@/components/atom/modules/users/CancelInvitationDialog";
+// HU19 — misma area clickeable minima que la columna de acciones unificada (RowActions).
+import { ICON_BUTTON_HIT_AREA } from "@/components/atom/RowActions";
 import { formatOtDate } from "./ot-utils";
 import {
   SuspendOrDeactivateModal,
@@ -264,7 +266,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                         title="Restaurar usuario"
                         aria-label={`Restaurar usuario ${u.fullName}`}
                         onClick={() => setRestoreTarget(u)}
-                        className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                        className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-blue-50`}
                         style={{ color: "#557EFF" }}
                       >
                         <RotateCcw className="h-4 w-4" />
@@ -337,7 +339,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                           title="Editar usuario"
                           aria-label={`Editar usuario ${u.fullName}`}
                           onClick={() => setEditTarget(u)}
-                          className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                          className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-blue-50`}
                           style={{ color: "#557EFF" }}
                         >
                           <Pencil className="h-4 w-4" />
@@ -352,7 +354,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                             title="Reactivar usuario"
                             aria-label={`Reactivar usuario ${u.fullName}`}
                             onClick={() => void handleUnsuspend(u.id)}
-                            className="p-1.5 rounded-lg transition hover:bg-green-50"
+                            className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-green-50`}
                             style={{ color: "#00DBD5" }}
                           >
                             <ShieldOff className="h-4 w-4" />
@@ -364,7 +366,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                               title="Suspender temporalmente"
                               aria-label={`Suspender temporalmente a ${u.fullName}`}
                               onClick={() => setSuspendTarget({ user: u, mode: "temporary" })}
-                              className="p-1.5 rounded-lg transition hover:bg-orange-50"
+                              className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-orange-50`}
                               style={{ color: "#FF4E00" }}
                             >
                               <Clock className="h-4 w-4" />
@@ -374,7 +376,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                               title="Desactivar indefinidamente"
                               aria-label={`Desactivar indefinidamente a ${u.fullName}`}
                               onClick={() => setSuspendTarget({ user: u, mode: "indefinite" })}
-                              className="p-1.5 rounded-lg transition hover:bg-red-50"
+                              className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-red-50`}
                               style={{ color: "#557EFF" }}
                             >
                               <Ban className="h-4 w-4" />
@@ -390,7 +392,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                           title="Eliminar usuario"
                           aria-label={`Eliminar usuario ${u.fullName}`}
                           onClick={() => setDeleteTarget(u)}
-                          className="p-1.5 rounded-lg transition hover:bg-red-50"
+                          className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-red-50`}
                           style={{ color: "#FF4E00" }}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -421,7 +423,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                           title="Cancelar invitación"
                           aria-label={`Cancelar invitación a ${u.fullName}`}
                           onClick={() => setCancelTarget(u)}
-                          className="p-1.5 rounded-lg transition hover:bg-red-50"
+                          className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-red-50`}
                           style={{ color: "#FF4E00" }}
                         >
                           <MailX className="h-4 w-4" />

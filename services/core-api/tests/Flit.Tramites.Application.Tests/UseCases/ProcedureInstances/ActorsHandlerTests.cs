@@ -7,6 +7,7 @@ using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
+using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
@@ -983,5 +984,51 @@ public sealed class ActorsHandlerTests
         previa.Status.Should().Be(BiometricEstados.EnProceso); // sin cambios: RL (sujeto) igual.
         await _kyverumClient.DidNotReceive().StartVerificationAsync(
             Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    // ── HU #11061: mecanismo de firma elegido ──────────────────────────────────
+
+    /// <summary>
+    /// El mecanismo elegido viaja en `actor.metadata`, junto al representante legal, y sobrevive el
+    /// round-trip de serialización: es lo que los generadores leen para respetar la elección.
+    /// </summary>
+    [Theory]
+    [InlineData("baul", "baul")]
+    [InlineData("identidad", "identidad")]
+    [InlineData("IDENTIDAD", "identidad")]   // se normaliza a minúsculas
+    [InlineData("  baul  ", "baul")]         // y se recorta
+    [InlineData("otra_cosa", null)]          // valor desconocido ⇒ sin elección explícita
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public async Task Put_PersistaMecanismoFirmaElegido(string? entrada, string? esperado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct)
+            .Returns(Instance(id, tenant, modalidad: "matricula_inicial"));
+
+        var rl = new ActorRepresentanteLegal("CC", "777", "Rep Legal", "rl@x.com", null, entrada);
+        var actor = new ActorInput("comprador", "NIT", "900123456", "ACME S.A.S.", "empresa@x.com", null,
+            PersonType: "juridical", RepresentanteLegal: rl);
+
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([actor]), ct);
+
+        error.Should().BeNull();
+        result!.Actors[0].RepresentanteLegal!.MecanismoFirma.Should().Be(esperado);
+    }
+
+    /// <summary>
+    /// Sin elección explícita se mantiene el comportamiento de la HU #11031: el baúl manda. Solo elegir
+    /// "identidad" desactiva el consumo del baúl.
+    /// </summary>
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("baul", true)]
+    [InlineData("no_es_un_mecanismo", true)]
+    [InlineData("identidad", false)]
+    public void ConsumeBaul_SoloLaEleccionDeIdentidadDesactivaElBaul(string? mecanismo, bool esperado)
+    {
+        MecanismoFirma.ConsumeBaul(mecanismo).Should().Be(esperado);
     }
 }

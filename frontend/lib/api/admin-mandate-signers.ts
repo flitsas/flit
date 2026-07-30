@@ -30,6 +30,11 @@ export interface MandateSigner {
    * `"expired"` (vencida/rechazada ⇒ se puede renovar), `"pending"` (enviada/en proceso) o `"none"`.
    */
   identityStatus: "valid" | "expired" | "pending" | "none";
+  /**
+   * HU #11060 — hasta cuándo es válida la identidad. Solo viene con `identityStatus: "valid"`; `null`
+   * en el resto de estados y también en una aprobación sin caducidad registrada.
+   */
+  identityValidUntil?: string | null;
   /** Firma del baúl vinculada (ADR-0025), si está resuelta. */
   signatureVaultId: string | null;
   registeredAt: string;

@@ -243,104 +243,74 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             col.Item().PaddingTop(16).Column(sig =>
             {
                 sig.Item().Text(t => t.Span("MANDANTE").Bold());
-                RenderFirmaSlot(sig, tramite, parte?.Rol, "_______________________________");
-                foreach (var line in MandanteIdentificacion(parte, esJuridica))
-                    sig.Item().Text(t => t.Span(line).FontSize(10));
-                RenderSello(sig, tramite, parte?.Rol);
+                RenderMandanteFirma(sig, tramite, parte, esJuridica);
             });
             return;
         }
 
         // Genérica / Bello: firman MANDANTE y MANDATARIO.
         // HU #11034 — separación reducida para que las firmas quepan en la misma hoja que el cuerpo.
-        var mandatario = MandatarioTexto(data.Mandatario);
         col.Item().PaddingTop(16).Row(row =>
         {
             row.RelativeItem().Column(sig =>
             {
                 sig.Item().Text(t => t.Span("MANDANTE").Bold());
-                RenderFirmaSlot(sig, tramite, parte?.Rol, "____________________________");
-                foreach (var line in MandanteIdentificacion(parte, esJuridica))
-                    sig.Item().Text(t => t.Span(line).FontSize(10));
-                RenderSello(sig, tramite, parte?.Rol);
+                RenderMandanteFirma(sig, tramite, parte, esJuridica);
             });
             row.RelativeItem().Column(sig =>
             {
                 sig.Item().Text(t => t.Span("MANDATARIO").Bold());
                 // HU #11030 — la firma del mandatario no se pintaba nunca: siempre salía la línea vacía
                 // aunque tuviera firma en el baúl o identidad validada. Misma precedencia que el mandante.
-                RenderFirmaMandatario(sig, data.Mandatario);
-                sig.Item().Text(t => t.Span(mandatario.Nombre).FontSize(10));
-                sig.Item().Text(t => t.Span($"C.C. {mandatario.Documento}").FontSize(10));
-                if (!string.IsNullOrWhiteSpace(data.Mandatario?.SelloIdentidad))
-                {
-                    foreach (var line in data.Mandatario!.SelloIdentidad!.Split(
-                                 '\n', StringSplitOptions.RemoveEmptyEntries))
-                        sig.Item().Text(t => t.Span(line.Trim()).FontSize(6).Light());
-                }
+                // HU #11046 — la estampa va SOBRE la línea, igual que el mandante.
+                FlitFirmaBlock.Render(
+                    sig,
+                    data.Mandatario?.FirmaImagen,
+                    data.Mandatario?.SelloIdentidad,
+                    MandatarioIdentificacion(data.Mandatario),
+                    FlitFirmaLinea.Underscores);
             });
         });
     }
 
-    // HU #10997 — pinta la firma del MANDANTE según el mecanismo aplicable: imagen del baúl de firmas si
-    // el trámite la resolvió para el rol (persona jurídica ⇒ representante legal), o la línea en blanco para
-    // firma manuscrita en su ausencia. La llave del diccionario es el rol de la parte radicadora.
     /// <summary>
-    /// Espacio de firma del MANDATARIO (HU #11030): imagen del baúl si la tiene; si no, la línea. El
-    /// sello de identidad, cuando lo hay, lo pinta el llamador bajo los datos del firmante.
+    /// Bloque de firma del MANDANTE (HU #11046): estampa (baúl o sello de identidad) sobre la línea y,
+    /// debajo, su identificación. La prioridad del baúl (HU #11031) la resuelve
+    /// <see cref="FlitFirmaBlock"/>.
     /// </summary>
-    private static void RenderFirmaMandatario(ColumnDescriptor sig, MandatarioFirmante? mandatario)
+    private static void RenderMandanteFirma(
+        ColumnDescriptor sig, FurDocumentData tramite, DocumentParte? parte, bool esJuridica)
     {
-        if (mandatario?.FirmaImagen is { Length: > 0 } imagen)
-        {
-            sig.Item().PaddingTop(4).Height(32).Image(imagen).FitHeight();
-        }
-        else
-        {
-            sig.Item().PaddingTop(18).Text("____________________________");
-        }
+        FlitFirmaBlock.Render(
+            sig,
+            FirmaBaulDe(tramite, parte?.Rol),
+            SelloIdentidadDe(tramite, parte?.Rol),
+            MandanteIdentificacion(parte, esJuridica),
+            FlitFirmaLinea.Underscores);
     }
 
-    private static void RenderFirmaSlot(ColumnDescriptor sig, FurDocumentData tramite, string? rol, string underline)
-    {
-        if (rol is not null
-            && tramite.FirmaImagenes is not null
-            && tramite.FirmaImagenes.TryGetValue(rol, out var imagen)
-            && imagen.Length > 0)
-        {
-            sig.Item().PaddingTop(4).Height(32).Image(imagen).FitHeight();
-        }
-        else
-        {
-            sig.Item().PaddingTop(18).Text(underline);
-        }
-    }
-
-    // HU #10997 — sello de validación biométrica de identidad bajo la firma, solo si la identidad está
-    // validada y hay sello para el rol (mismo patrón que la compraventa autogenerada).
-    /// <summary>¿La parte tiene firma del baúl estampada en este documento? (HU #11031)</summary>
-    private static bool TieneFirmaBaul(FurDocumentData tramite, string rol) =>
-        tramite.FirmaImagenes is not null
+    /// <summary>Imagen de la firma del baúl resuelta para el rol, o <c>null</c> si no tiene.</summary>
+    private static byte[]? FirmaBaulDe(FurDocumentData tramite, string? rol) =>
+        rol is not null
+        && tramite.FirmaImagenes is not null
         && tramite.FirmaImagenes.TryGetValue(rol, out var imagen)
-        && imagen.Length > 0;
+        && imagen.Length > 0
+            ? imagen
+            : null;
 
-    private static void RenderSello(ColumnDescriptor sig, FurDocumentData tramite, string? rol)
-    {
-        // HU #11031 — PRIORIDAD DEL BAÚL: con firma del baúl vigente, esa es la firma del documento y
-        // no se añade además el sello de la validación de identidad. Antes se pintaban las dos cosas,
-        // dejando el documento como si la parte hubiera firmado de dos maneras distintas.
-        if (rol is not null && TieneFirmaBaul(tramite, rol))
-            return;
+    /// <summary>Sello de validación biométrica del rol, solo si la identidad está validada.</summary>
+    private static string? SelloIdentidadDe(FurDocumentData tramite, string? rol) =>
+        rol is not null
+        && tramite.IdentidadValidada
+        && tramite.SellosIdentidad is not null
+        && tramite.SellosIdentidad.TryGetValue(rol, out var sello)
+        && !string.IsNullOrWhiteSpace(sello)
+            ? sello
+            : null;
 
-        if (rol is not null
-            && tramite.IdentidadValidada
-            && tramite.SellosIdentidad is not null
-            && tramite.SellosIdentidad.TryGetValue(rol, out var sello)
-            && !string.IsNullOrWhiteSpace(sello))
-        {
-            sig.Item().PaddingTop(2).Text(t => t.Span(sello).FontSize(6.5f).FontColor(Colors.Grey.Darken2));
-        }
-    }
+    // HU #11046 — la composición del bloque de firma (estampa sobre la línea, datos debajo) y la
+    // prioridad del baúl de la HU #11031 viven ahora en FlitFirmaBlock, compartido con la solicitud de
+    // trámite virtual. Aquí solo se resuelven los datos de cada firmante.
 
     // HU #10998 — palabras clave del mandato que se resaltan en negrita dentro del cuerpo (las partes
     // definidas y los encabezados de cláusula). Se ordenan por longitud descendente al tokenizar para que
@@ -401,20 +371,53 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             yield return (buffer.ToString(), false);
     }
 
-    private static IEnumerable<string> MandanteIdentificacion(DocumentParte? parte, bool esJuridica)
+    /// <summary>
+    /// Identificación del MANDANTE bajo su firma (HU #11047). El organismo de tránsito necesita poder
+    /// contactarlo y verificar su identidad sin abrir otro documento, así que el bloque lleva el orden y
+    /// los campos que pidió el negocio:
+    /// <code>
+    ///   EMPRESA: BANCOLOMBIA S.A.S          (solo persona jurídica)
+    ///   NIT: 890903938                      (solo persona jurídica)
+    ///   NOMBRE: Juan Felipe Montoya
+    ///   CÉDULA DE CIUDADANÍA: 1038409485
+    ///   CELULAR: 3112789718
+    ///   CORREO ELECTRÓNICO: correo@dominio
+    /// </code>
+    /// Antes imprimía NOMBRE/documento/EMPRESA/NIT —sin celular ni correo y en otro orden—, mientras el
+    /// bloque de la solicitud virtual (<see cref="SolicitudVirtualPdfGenerator"/>) ya traía el contacto.
+    /// En persona jurídica el nombre y el documento son los del REPRESENTANTE LEGAL, que es quien firma.
+    /// </summary>
+    internal static IEnumerable<string> MandanteIdentificacion(DocumentParte? parte, bool esJuridica)
     {
         if (esJuridica)
         {
-            yield return $"NOMBRE: {RlNombre(parte)}";
-            yield return $"{MapDoc(parte?.RepresentanteLegalTipoDoc).ToUpperInvariant()}: {RlDoc(parte)}";
             yield return $"EMPRESA: {Empresa(parte)}";
             yield return $"NIT: {Nit(parte)}";
+            yield return $"NOMBRE: {RlNombre(parte)}";
+            yield return $"{MapDoc(parte?.RepresentanteLegalTipoDoc).ToUpperInvariant()}: {RlDoc(parte)}";
         }
         else
         {
             yield return $"NOMBRE: {PnNombre(parte)}";
             yield return $"{MapDoc(parte?.DocumentType).ToUpperInvariant()}: {PnDoc(parte)}";
         }
+
+        yield return $"CELULAR: {Val(parte?.Phone, "___")}";
+        yield return $"CORREO ELECTRÓNICO: {Val(parte?.Email, "___")}";
+    }
+
+    /// <summary>
+    /// Identificación del MANDATARIO bajo su firma. Es siempre una persona natural (el firmante del OT),
+    /// así que no lleva empresa ni NIT. Se etiquetan los campos igual que en el bloque del mandante
+    /// (HU #11047), porque ambos van uno al lado del otro en la misma fila del documento.
+    /// <para>El contacto del mandatario NO se imprime: <c>MandatarioFirmante</c> no lo transporta, y el
+    /// dato de contacto que el organismo necesita es el del mandante (quien otorga el poder).</para>
+    /// </summary>
+    internal static IEnumerable<string> MandatarioIdentificacion(MandatarioFirmante? mandatario)
+    {
+        var (nombre, documento) = MandatarioTexto(mandatario);
+        yield return $"NOMBRE: {nombre}";
+        yield return $"CÉDULA DE CIUDADANÍA: {documento}";
     }
 
     private static (string Nombre, string Documento) MandatarioTexto(MandatarioFirmante? m) =>

@@ -64,6 +64,28 @@ public sealed class LegalRepresentativeItem
 
     /// <summary>¿Tiene firma del baúl o validación de identidad vinculada?</summary>
     public bool HasSignatureOrIdentity => SignatureVaultId is not null || IdentityValidationRef is not null;
+
+    /// <summary>
+    /// HU #11059 — vigencia de la identidad del representante, con la MISMA semántica y el mismo
+    /// cálculo que el mandatario del OT (<see cref="Identity.AdminIdentityVigencia"/>):
+    /// <c>"valid"</c> | <c>"expired"</c> (⇒ renovar) | <c>"pending"</c> | <c>"none"</c>. Antes el detalle
+    /// solo sabía si HABÍA firma o identidad (<see cref="HasSignatureOrIdentity"/>), un booleano que no
+    /// distingue una identidad vigente de una vencida, así que no había forma de ofrecer la renovación.
+    /// </summary>
+    public string IdentityStatus { get; init; } = Identity.AdminIdentityVigencia.None;
+
+    /// <summary>Hasta cuándo es válida la identidad; solo con <see cref="IdentityStatus"/> <c>"valid"</c>.</summary>
+    public DateTimeOffset? IdentityValidUntil { get; init; }
+
+    /// <summary>
+    /// HU #11059 — vigencia de la FIRMA del baúl del representante: <c>true</c> si tiene una firma
+    /// registrada y vigente hoy. La firma y la identidad vencen por separado, así que la consola tiene
+    /// que poder decir "la firma está vencida" sin hablar de la identidad.
+    /// </summary>
+    public bool FirmaBaulVigente { get; init; }
+
+    /// <summary>Hasta cuándo es válida la firma del baúl; <c>null</c> si no tiene o no caduca.</summary>
+    public DateOnly? FirmaBaulVigenteHasta { get; init; }
 }
 
 /// <summary>
@@ -80,6 +102,20 @@ public sealed record LegalRepresentativeCompanySummary(Guid Id, string Nit, stri
     /// y en el consumo del wizard queda vacío para no cargar el M:N innecesariamente.
     /// </summary>
     public IReadOnlyList<RepresentativeDeedSummary> Deeds { get; init; } = [];
+
+    /// <summary>
+    /// HU #11058 — CONTACTO de la compañía. Se proyecta porque el formulario de edición reenvía la
+    /// lista completa de compañías y el upsert sobrescribe estos campos con lo que reciba: sin
+    /// proyectarlos, el formulario los mandaba en blanco y CADA edición del representante borraba
+    /// silenciosamente el correo, la dirección, la ciudad y el teléfono de todas sus compañías.
+    /// </summary>
+    public string? Email { get; init; }
+
+    public string? Address { get; init; }
+
+    public string? City { get; init; }
+
+    public string? Phone { get; init; }
 }
 
 /// <summary>

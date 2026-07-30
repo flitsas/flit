@@ -143,10 +143,18 @@ public static class FurCompraventaDocumentGenerator
         {
             col.Item().Text($"Razón Social: {Val(parte.Nombre)}").FontSize(9);
             col.Item().Text($"NIT: {Val(parte.Documento)}").FontSize(9);
+            // Quien firma por la empresa es su REPRESENTANTE LEGAL, así que el bloque tiene que
+            // identificarlo: sin su nombre y documento la firma no queda atribuida a nadie. Los datos ya
+            // viajan en DocumentParte (ADR-0036); antes simplemente no se imprimían aquí.
+            col.Item().Text($"Representante legal: {Val(parte.RepresentanteLegalNombre)}").FontSize(9);
+            col.Item()
+                .Text($"{TipoDocRepresentante(parte)}: {Val(parte.RepresentanteLegalDocumento)}")
+                .FontSize(9);
         }
         else
         {
-            col.Item().Text($"{Val(parte.Nombre)} — {Val(parte.Documento)}").FontSize(9);
+            col.Item().Text($"Nombre: {Val(parte.Nombre)}").FontSize(9);
+            col.Item().Text($"{TipoDocParte(parte)}: {Val(parte.Documento)}").FontSize(9);
         }
 
         var sello = Sello(data, rol);
@@ -164,6 +172,19 @@ public static class FurCompraventaDocumentGenerator
             return $"{t.Etiqueta} [{(marcada ? "X" : " ")}]";
         }));
     }
+
+    /// <summary>
+    /// Rótulo del documento de la parte natural ("C.C.", "Documento"…). Se usa el tipo real cuando
+    /// viene; sin él, un rótulo neutro en vez de suponer cédula.
+    /// </summary>
+    private static string TipoDocParte(DocumentParte parte) =>
+        string.IsNullOrWhiteSpace(parte.DocumentType) ? "Documento" : parte.DocumentType.Trim();
+
+    /// <summary>Rótulo del documento del representante legal, con el mismo criterio.</summary>
+    private static string TipoDocRepresentante(DocumentParte parte) =>
+        string.IsNullOrWhiteSpace(parte.RepresentanteLegalTipoDoc)
+            ? "Documento"
+            : parte.RepresentanteLegalTipoDoc.Trim();
 
     private static DocumentParte? Parte(FurDocumentData data, string rol) =>
         data.Partes.FirstOrDefault(p => string.Equals(p.Rol, rol, StringComparison.OrdinalIgnoreCase));

@@ -175,6 +175,10 @@ public static class DependencyInjection
         services.AddScoped<IExpedienteHotDocumentsRegenerator>(sp => sp.GetRequiredService<GenerarFurHandler>());
         services.AddScoped<GetFurTemplateFormatHandler>(); // HU #10924 — formato de FUR por clasificación
         services.AddScoped<GenerarConsolidadoHandler>();
+        // HU #11051 — gate de generación documental del GESTOR (estado final ⇒ documentación definitiva).
+        // Lo consumen SOLO los endpoints de /api/v1/tramites; la regeneración interna del sistema
+        // (aprobación OT, placa, identidad validada, transiciones) NO pasa por él a propósito.
+        services.AddScoped<GeneracionDocumentalGestorGuard>();
         // Feature #10701 — presigned view URL inline (HU #10702) y consolidado maestro (HU #10706).
         services.AddScoped<GetAttachmentPreviewUrlHandler>();
         services.AddScoped<GenerarConsolidadoMaestroHandler>();

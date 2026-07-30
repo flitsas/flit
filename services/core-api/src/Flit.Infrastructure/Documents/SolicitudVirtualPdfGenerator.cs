@@ -81,13 +81,17 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
 
                     if (data.FirmasVisibles)
                     {
+                        // HU #11046 — la estampa (imagen del baúl o sello de identidad) va SOBRE la línea
+                        // y los datos del firmante debajo. FlitFirmaBlock centraliza la composición y la
+                        // prioridad del baúl (HU #11031), compartidas con el contrato de mandato.
                         col.Item().PaddingTop(24).Column(sig =>
-                        {
-                            RenderFirmaSlot(sig, data, parte?.Rol);
-                            foreach (var line in FirmaBlock(parte, esJuridica))
-                                sig.Item().Text(t => t.Span(line).Bold().FontSize(10));
-                            RenderSello(sig, data, parte?.Rol);
-                        });
+                            FlitFirmaBlock.Render(
+                                sig,
+                                FirmaBaulDe(data, parte?.Rol),
+                                SelloIdentidadDe(data, parte?.Rol),
+                                FirmaBlock(parte, esJuridica),
+                                FlitFirmaLinea.Grafica,
+                                datosBold: true));
                     }
                 });
             });
@@ -191,47 +195,24 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
             "correspondiente poder o contrato de mandato a la documentación del trámite.";
     }
 
-    // HU #10997 — pinta la firma del radicador según el mecanismo aplicable: imagen del baúl de firmas si
-    // el trámite la resolvió para el rol (persona jurídica ⇒ representante legal), o una línea en blanco
-    // para firma manuscrita en su ausencia. La llave del diccionario es el rol de la parte radicadora.
-    private static void RenderFirmaSlot(ColumnDescriptor sig, FurDocumentData data, string? rol)
-    {
-        if (rol is not null
-            && data.FirmaImagenes is not null
-            && data.FirmaImagenes.TryGetValue(rol, out var imagen)
-            && imagen.Length > 0)
-        {
-            sig.Item().PaddingBottom(4).Height(32).Image(imagen).FitHeight();
-        }
-        else
-        {
-            sig.Item().PaddingBottom(4).Width(240).LineHorizontal(0.5f);
-        }
-    }
+    /// <summary>Imagen de la firma del baúl resuelta para el rol del firmante, o <c>null</c>.</summary>
+    private static byte[]? FirmaBaulDe(FurDocumentData data, string? rol) =>
+        rol is not null
+        && data.FirmaImagenes is not null
+        && data.FirmaImagenes.TryGetValue(rol, out var imagen)
+        && imagen.Length > 0
+            ? imagen
+            : null;
 
-    // HU #10997 — sello de validación biométrica de identidad bajo el bloque de firma, solo si la
-    // identidad está validada y hay sello para el rol (mismo patrón que la compraventa autogenerada).
-    private static void RenderSello(ColumnDescriptor sig, FurDocumentData data, string? rol)
-    {
-        // HU #11031 — PRIORIDAD DEL BAÚL: si la firma estampada vino del baúl, esa es la firma del
-        // documento y no se añade además el sello de la validación de identidad.
-        if (rol is not null
-            && data.FirmaImagenes is not null
-            && data.FirmaImagenes.TryGetValue(rol, out var firmaBaul)
-            && firmaBaul.Length > 0)
-        {
-            return;
-        }
-
-        if (rol is not null
-            && data.IdentidadValidada
-            && data.SellosIdentidad is not null
-            && data.SellosIdentidad.TryGetValue(rol, out var sello)
-            && !string.IsNullOrWhiteSpace(sello))
-        {
-            sig.Item().PaddingTop(2).Text(t => t.Span(sello).FontSize(6.5f).FontColor(Colors.Grey.Darken2));
-        }
-    }
+    /// <summary>Sello de validación biométrica del rol, solo si la identidad está validada.</summary>
+    private static string? SelloIdentidadDe(FurDocumentData data, string? rol) =>
+        rol is not null
+        && data.IdentidadValidada
+        && data.SellosIdentidad is not null
+        && data.SellosIdentidad.TryGetValue(rol, out var sello)
+        && !string.IsNullOrWhiteSpace(sello)
+            ? sello
+            : null;
 
     private static IEnumerable<string> FirmaBlock(DocumentParte? parte, bool esJuridica)
     {

@@ -8,6 +8,11 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 const mocks = vi.hoisted(() => ({
   listInstances: vi.fn(),
   setPriority: vi.fn(),
+  // HU #11054 / #11055 — documentos y consolidado desde el listado.
+  getAttachments: vi.fn(),
+  fetchAttachmentPreviewUrl: vi.fn(),
+  downloadAttachment: vi.fn(),
+  // ICT (PR #204) — pausa individual y masiva + cierre del subflujo de placa.
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
   completePlateFlow: vi.fn(),
@@ -59,8 +64,26 @@ function makeInstances(n: number): InstanceSummary[] {
       subsanacionActiva: false,
       subsanacionCount: 0,
       ultimoRechazoMotivo: null,
+      // HU #11056 — columnas de seguimiento. Por defecto: sin modificar, sin gestor resuelto,
+      // origen plataforma, partes sin acreditar y sin consolidado generado.
+      updatedAt: null,
+      gestorNombre: null,
+      fuente: 'dashboard',
+      firmaVendedorEstado: 'pendiente',
+      firmaCompradorEstado: 'pendiente',
+      consolidadoAttachmentId: null,
     } satisfies InstanceSummary;
   });
+}
+
+/**
+ * Abre el menú de acciones de una fila. Desde HU #11037 las acciones de la fila viven dentro de un
+ * `ActionsMenu` (dropdown) en vez de botones sueltos: hay que abrirlo antes de buscar el ítem.
+ */
+async function abrirAcciones(referenceNumber = 'TR-0001') {
+  await userEvent.click(
+    screen.getByRole('button', { name: new RegExp(`Acciones del trámite ${referenceNumber}`) }),
+  );
 }
 
 beforeEach(() => {
@@ -159,9 +182,10 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
     expect(within(row).getByText('Pendiente validación')).toBeInTheDocument();
     // Accesible: el chip expone su estado por aria-label.
     expect(within(row).getByLabelText('Estado: Pendiente validación')).toBeInTheDocument();
-    // Aún no se puede radicar → la acción del menú sigue siendo "Continuar".
-    await userEvent.click(within(row).getByRole('button', { name: /Acciones del trámite/ }));
-    expect(await screen.findByRole('menuitem', { name: 'Continuar' })).toBeInTheDocument();
+    // Aún no se puede radicar → la acción sigue siendo "Continuar". Desde HU #11037 vive dentro del
+    // menú de acciones de la fila, así que hay que abrirlo.
+    await abrirAcciones();
+    expect(screen.getByRole('menuitem', { name: /Continuar/ })).toBeInTheDocument();
   });
 
   it('identidad aprobada con firma pendiente muestra "Pendiente firma"', async () => {
@@ -199,8 +223,9 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
 
     const row = (await screen.findByText('RDY001')).closest('[role="button"]') as HTMLElement;
     expect(within(row).getByText('Listo para radicar')).toBeInTheDocument();
-    await userEvent.click(within(row).getByRole('button', { name: /Acciones del trámite/ }));
-    expect(await screen.findByRole('menuitem', { name: 'Radicar' })).toBeInTheDocument();
+    // La acción vive dentro del menú de la fila desde HU #11037.
+    await abrirAcciones();
+    expect(screen.getByRole('menuitem', { name: /Radicar/ })).toBeInTheDocument();
   });
 });
 
@@ -364,7 +389,10 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
     document.cookie = 'flit_token=; path=/; Max-Age=0';
   });
 
-  it('muestra la columna Compañía, el filtro y abre con el tenant de la fila (?t=)', async () => {
+  // HU #11057 — la columna dedicada "Compañía" desapareció: la razón social vive ahora en la
+  // columna "Gestor" (empresa + persona que radica), que es la misma información con más contexto y
+  // para todos los perfiles. El filtro por compañía del SuperAdmin sigue intacto.
+  it('muestra la compañía en Gestor, conserva el filtro y abre con el tenant de la fila (?t=)', async () => {
     mocks.listInstances.mockResolvedValue([
       instance({ id: 'a', placa: 'AAA111', tenantId: 'ten-a', companiaNombre: 'Empresa A' }),
       instance({ id: 'b', placa: 'BBB222', tenantId: 'ten-b', companiaNombre: 'Empresa B' }),
@@ -372,8 +400,8 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
     render(<TramitesTable />);
 
     await screen.findByText('AAA111');
-    // Columna Compañía (header de la grilla, role="row") + nombre por fila (dentro de la lista).
-    expect(within(screen.getByRole('row')).getByText('Compañía')).toBeInTheDocument();
+    expect(within(screen.getByRole('row')).getByText('Gestor')).toBeInTheDocument();
+    expect(within(screen.getByRole('row')).queryByText('Compañía')).not.toBeInTheDocument();
     const rows = screen.getByRole('list', { name: 'Trámites en curso' });
     expect(within(rows).getByText('Empresa A')).toBeInTheDocument();
     // Filtro Compañía presente (select con label) con la opción de la empresa.
@@ -388,12 +416,13 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
 
 // HU #11020 — el dashboard identifica el traspaso por sus DOS actores, sin abrir el trámite.
 describe('TramitesTable — actores del traspaso (HU #11020)', () => {
-  it('muestra las columnas Vendedor y Comprador con sus valores', async () => {
+  it('muestra las columnas de vendedor y comprador con sus valores', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    expect(screen.getByText('Vendedor')).toBeInTheDocument();
+    // HU #11057 renombró la cabecera a "Propietario / vendedor" (rótulo del negocio).
+    expect(screen.getByText('Propietario / vendedor')).toBeInTheDocument();
     expect(screen.getByText('Comprador')).toBeInTheDocument();
     expect(screen.getByText('Vendedor 0001')).toBeInTheDocument();
     expect(screen.getByText('Comprador 0001')).toBeInTheDocument();
@@ -409,6 +438,174 @@ describe('TramitesTable — actores del traspaso (HU #11020)', () => {
     await screen.findByText('P0001');
     expect(screen.getByText('Comprador 0001')).toBeInTheDocument();
     expect(screen.queryByText('Vendedor 0001')).toBeNull();
+  });
+});
+
+// HU #11057 — columnas acordadas con el negocio.
+describe('TramitesTable — columnas del listado (HU #11057)', () => {
+  it('muestra las columnas acordadas con el negocio', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    const header = screen.getByRole('row');
+    for (const col of [
+      'Radicado',
+      'VIN',
+      'Placa',
+      'Trámite / Modalidad',
+      'Propietario / vendedor',
+      'Comprador',
+      'Fecha de creación',
+      'Fecha de actualización',
+      'Secretaría',
+      'Gestor',
+      'Fuente',
+      'Acciones',
+    ]) {
+      expect(within(header).getByText(col)).toBeInTheDocument();
+    }
+    // Dos columnas "Firmado" (vendedor y comprador), distinguidas por su sufijo accesible.
+    expect(within(header).getAllByText(/^Firmado/)).toHaveLength(2);
+    expect(within(header).getByText('(vendedor)')).toBeInTheDocument();
+    expect(within(header).getByText('(comprador)')).toBeInTheDocument();
+  });
+
+  it('proyecta gestor, fuente y fecha de actualización de la fila', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...item,
+        companiaNombre: 'Empresa Gestora SAS',
+        gestorNombre: 'Ana Gestora',
+        fuente: 'integracion',
+        // Media mañana UTC: el día calendario en Bogotá (UTC-5) es el mismo, así que la aserción
+        // no depende del desfase de zona que aplica `formatFecha`.
+        updatedAt: '2026-07-20T15:00:00Z',
+      },
+    ]);
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
+    expect(within(rows).getByText('Empresa Gestora SAS')).toBeInTheDocument();
+    expect(within(rows).getByText('Ana Gestora')).toBeInTheDocument();
+    expect(within(rows).getByText('Integración')).toBeInTheDocument();
+    expect(within(rows).getByText('2026/07/20')).toBeInTheDocument();
+  });
+
+  it('muestra el estado de acreditación de cada parte por separado', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, firmaVendedorEstado: 'firmado', firmaCompradorEstado: 'rechazado' },
+    ]);
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
+    expect(within(rows).getByText('Firmado')).toBeInTheDocument();
+    expect(within(rows).getByText('Rechazado')).toBeInTheDocument();
+  });
+
+  it('en matrícula inicial la columna del vendedor se presenta como no aplicable', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...item,
+        modalidad: 'matricula_inicial',
+        vendedorNombre: null,
+        firmaVendedorEstado: null,
+        firmaCompradorEstado: null,
+      },
+    ]);
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
+    // Sin chip de acreditación: el vendedor no existe y el comprador viene sin estado.
+    expect(within(rows).queryByText('Pendiente')).toBeNull();
+    expect(within(rows).getAllByTitle(/No aplica: este trámite no tiene/)).toHaveLength(2);
+  });
+});
+
+// HU #11054 — documentos del expediente desde el listado; HU #11055 — consolidado en la fila.
+describe('TramitesTable — documentos y consolidado desde el listado', () => {
+  it('abre el panel de documentos sin navegar al wizard', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    mocks.getAttachments.mockResolvedValue([
+      {
+        id: 'att-1',
+        tipo: 'fur',
+        filename: 'fur.pdf',
+        mimetype: 'application/pdf',
+        sizeBytes: 1024,
+        sha256: 'abc',
+        source: 'system',
+        uploadedAt: '2026-07-01T00:00:00Z',
+      },
+    ]);
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    await abrirAcciones();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Ver documentos' }));
+
+    expect(await screen.findByText('Documentos · TR-0001')).toBeInTheDocument();
+    expect(await screen.findByText('FUR')).toBeInTheDocument();
+    expect(mocks.getAttachments).toHaveBeenCalledWith('inst-0001', undefined);
+    // La acción vive dentro de una fila clickable: no debe abrir el trámite.
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('informa cuando el trámite no tiene documentos', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    await abrirAcciones();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Ver documentos' }));
+
+    expect(
+      await screen.findByText(/aún no tiene documentos en el expediente/),
+    ).toBeInTheDocument();
+  });
+
+  it('sin consolidado generado la fila NO ofrece la acción', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    await abrirAcciones();
+    // El item no existe en el menu: la accion se OMITE, no se muestra deshabilitada.
+    expect(screen.queryByRole('menuitem', { name: /consolidado/i })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'Ver documentos' })).toBeInTheDocument();
+  });
+
+  it('con el consolidado generado lo abre en el visor sin navegar', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, consolidadoAttachmentId: 'att-consolidado' },
+    ]);
+    mocks.fetchAttachmentPreviewUrl.mockResolvedValue({
+      url: 'https://s3.local/consolidado.pdf',
+      expiresAt: '2026-07-29T00:10:00Z',
+    });
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    await abrirAcciones();
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Ver consolidado' }));
+
+    expect(await screen.findByText('Expediente consolidado')).toBeInTheDocument();
+    // Se abre con el id que trae el resumen: no se consultan los adjuntos del trámite.
+    expect(mocks.fetchAttachmentPreviewUrl).toHaveBeenCalledWith(
+      'inst-0001',
+      'att-consolidado',
+      undefined,
+    );
+    expect(mocks.getAttachments).not.toHaveBeenCalled();
+    expect(routerPush).not.toHaveBeenCalled();
   });
 });
 

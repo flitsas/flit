@@ -44,9 +44,15 @@ interface Props {
   vaultCoveredPartes?: BiometricParte[];
 }
 
-/** Partes que requieren biométrica por modalidad. */
+/**
+ * Partes que requieren biométrica por modalidad.
+ *
+ * HU21 — saliente antes que entrante: el vendedor se muestra primero, igual que el resumen de
+ * firmas del paso FUR (HU #11019), el expediente y el listado. Antes el resumen de identidad
+ * era el único que invertía el orden.
+ */
 function partesFor(modalidad: WizardModalidad): BiometricParte[] {
-  return modalidad === 'traspaso' ? ['comprador', 'vendedor'] : ['comprador'];
+  return modalidad === 'traspaso' ? ['vendedor', 'comprador'] : ['comprador'];
 }
 
 const PARTE_LABEL: Record<BiometricParte, string> = {

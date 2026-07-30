@@ -9,6 +9,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
@@ -593,6 +594,15 @@ public sealed class GenerarFurHandler(
             var actor = instance.Actors.FirstOrDefault(a =>
                 string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
             if (actor is null || !EsActorJuridico(actor.DocumentType))
+                continue;
+
+            // HU #11061 — si el gestor eligió EXPLÍCITAMENTE el sello de identidad, no se consume el
+            // baúl aunque tenga firma vigente. Es el único punto donde se resuelve la imagen del baúl,
+            // así que el guard aquí honra la elección en TODOS los documentos (FUR, mandato, solicitud
+            // de trámite virtual y compraventa consumen `FirmaImagenes` de este mismo ensamblado).
+            // Sin elección explícita se mantiene la precedencia del baúl (HU #11031).
+            var (_, _, rl, _) = PutActorsHandler.ParseMetadata(actor.Metadata);
+            if (!MecanismoFirma.ConsumeBaul(rl?.MecanismoFirma))
                 continue;
 
             // HU #10930/#10937 — la firma del baúl es de la PERSONA: se resuelve por el documento del
