@@ -16,11 +16,15 @@
 --                       declaracion_aduana, acta_remate, oficio_judicial, otro
 --   traspaso          : compraventa, impronta, soat, rtm, paz_salvo, cedulas, cert_tradicion
 --
--- ESTADO DEL SEED (decisión de negocio 2026-07-23/24): mapeados los documentos con equivalente en
--- el checklist v2 (improntas, paz y salvo, factura, aduana, cédulas comprador/vendedor, otros) y
--- clasificados con tipo "loose" los de leasing (Contrato LEASING, Declaración cía arrendadora) ahora
--- que el locatario/leasing entró en alcance. Quedan como huecos reales SIN clasificar: Certificado
--- CEPD, poderes de apoderado y Blindaje (ver TODO al final). Nota de convención: los documentos
+-- ESTADO DEL SEED (decisión de negocio 2026-07-23/24, ampliado 2026-07-30): mapeados los documentos
+-- con equivalente en el checklist v2 (improntas, paz y salvo, factura, aduana, cédulas comprador/
+-- vendedor, otros) y clasificados con tipo "loose" los de leasing (Contrato LEASING, Declaración cía
+-- arrendadora), Certificado CEPD, poderes de apoderado (comprador/vendedor) y Blindaje — así los 13
+-- documentos del contrato quedan RELACIONADOS. Los "loose" (certificado_cepd, poder_comprador,
+-- poder_vendedor, blindaje, contrato_leasing, declaracion_arrendadora) aún no son ítems del checklist
+-- de la plataforma: clasifican el adjunto (en vez de 'otro') pero no auto-satisfacen un ítem. Las
+-- familias (matrícula/traspaso/otros) se derivan de external_integration_configuration_documents (la
+-- obligatoriedad del contrato). Nota de convención: los documentos
 -- separados de comprador y vendedor NO colapsan en un único 'cedulas' — siguen la convención de la
 -- plataforma (comprador = tipo base `cedulas`; vendedor = sufijo `cedulas_vendedor`). Un documento
 -- sin fila aquí se registra igual pero queda sin clasificar (queda como 'otro').
@@ -75,25 +79,32 @@ COMMENT ON COLUMN ict.external_integration_attachment_association.doc_tipo_otros
 -- matrícula en TramiteTipologiaCatalog cuando negocio los publique.
 INSERT INTO ict.external_integration_attachment_association
     (eiad_id, doc_tipo_matricula, doc_tipo_traspaso, doc_tipo_otros) VALUES
-    (1,  'impronta',                'impronta',         ''),  -- Improntas
-    (2,  '',                        'paz_salvo',        ''),  -- Paz y Salvo
-    (3,  'factura',                 '',                 ''),  -- Factura de venta
-    (4,  'aduana',                  '',                 ''),  -- Aduana/importación (negocio: -> aduana)
-    (5,  'cedulas',                 'cedulas',          ''),  -- Documento Comprador -> tipo BASE (convención comprador)
-    (6,  'contrato_leasing',        '',                 ''),  -- Contrato LEASING (matrícula leasing tipo 2) -> tipo loose
-    (7,  '',                        'cedulas_vendedor', ''),  -- Documento Vendedor  -> sufijo _vendedor (convención)
-    (9,  'otro',                    '',                 ''),  -- Otros Anexos
-    (10, 'declaracion_arrendadora', '',                 '')   -- Declaración cía arrendadora (leasing) -> tipo loose
+    (1,  'impronta',                'impronta',         ''),          -- Improntas (MI/MIL/TR bilateral)
+    (2,  '',                        'paz_salvo',        ''),          -- Paz y Salvo (traspasos)
+    (3,  'factura',                 '',                 ''),          -- Factura de venta (matrículas)
+    (4,  'aduana',                  '',                 ''),          -- Aduana/importación (matrículas) -> aduana
+    (5,  'cedulas',                 'cedulas',          ''),          -- Documento Comprador -> tipo BASE (convención comprador)
+    (6,  'contrato_leasing',        '',                 ''),          -- Contrato LEASING (matrícula leasing tipo 2) -> tipo loose
+    (7,  '',                        'cedulas_vendedor', ''),          -- Documento Vendedor -> sufijo _vendedor (convención)
+    (8,  'certificado_cepd',        '',                 ''),          -- Certificado CEPD (matrículas 1/2) -> tipo loose
+    (9,  'otro',                    '',                 ''),          -- Otros Anexos
+    (10, 'declaracion_arrendadora', '',                 ''),          -- Declaración cía arrendadora (leasing) -> tipo loose
+    (11, 'poder_comprador',         'poder_comprador',  ''),          -- Poder Comprador-Apoderado (MI 1 + TR bilateral 3) -> tipo loose
+    (12, '',                        'poder_vendedor',   ''),          -- Poder Vendedor-Apoderado (TR bilateral 3) -> tipo loose
+    (13, '',                        '',                 'blindaje')   -- Blindaje (otros trámites, tipo 5) -> tipo loose
 ON CONFLICT (eiad_id) DO UPDATE SET
     doc_tipo_matricula = EXCLUDED.doc_tipo_matricula,
     doc_tipo_traspaso  = EXCLUDED.doc_tipo_traspaso,
     doc_tipo_otros     = EXCLUDED.doc_tipo_otros,
     updated_at         = now();
 
--- TODO(ICT-DOCS-SIN-EQUIVALENTE): los siguientes documentos del contrato ICT NO tienen DocTipo en v2
--- todavía; se sembrarán cuando negocio los implemente en el checklist de la plataforma:
---   8  Certificado CEPD            (otros trámites)
---   11 Poder Comprador - Apoderado (traspaso con apoderado)
---   12 Poder Vendedor - Apoderado  (traspaso con apoderado)
---   13 Blindaje                    (otro trámite de blindaje)
--- Mientras tanto, un adjunto de estos tipos se registra igual pero queda sin clasificar ('otro').
+-- TODO(ICT-LEASING-CHECKLIST / ICT-DOCS-LOOSE): estos DocTipos son "loose" (clasifican el adjunto pero
+-- NO son ítems del checklist de la plataforma, así que no auto-satisfacen un ítem):
+--   contrato_leasing, declaracion_arrendadora (leasing, eiad 6/10)
+--   certificado_cepd (matrícula, eiad 8)
+--   poder_comprador, poder_vendedor (apoderado, eiad 11/12)
+--   blindaje (otros trámites, eiad 13)
+-- Promover a ítems reales de TramiteTipologiaCatalog cuando negocio los publique en el checklist v2.
+-- Nota de consistencia (pendiente de decisión de negocio): configuration_documents habilita eiad 6
+-- (Contrato LEASING) también para el traspaso unilateral (tipo 4); aquí sigue clasificado SOLO en
+-- matrícula. Si se quiere clasificar también en traspaso, añadir doc_tipo_traspaso='contrato_leasing'.
