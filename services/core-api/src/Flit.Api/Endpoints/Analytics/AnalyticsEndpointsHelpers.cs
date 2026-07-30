@@ -13,36 +13,25 @@ internal static class AnalyticsEndpointsHelpers
         tenant = Guid.Empty;
         error = null;
         var isSuperAdmin = user.IsInRole(AdminAuthorization.SuperAdminRole);
+        Guid? claimTenant = TryResolveTenantId(user, out var parsed) ? parsed : null;
 
-        if (tenantIdQuery is { } requested && requested != Guid.Empty)
+        var (resolved, err) = Flit.Analytics.Application.Reporting.ReportingTenantAccess.Resolve(
+            isSuperAdmin, claimTenant, tenantIdQuery);
+        if (err is null)
         {
-            if (isSuperAdmin) { tenant = requested; return true; }
-            if (TryResolveTenantId(user, out var claimTenant) && requested == claimTenant)
-            {
-                tenant = claimTenant;
-                return true;
-            }
-
-            error = Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Forbidden",
-                detail: "No está autorizado para consultar métricas de otro tenant.");
-            return false;
-        }
-
-        if (isSuperAdmin)
-        {
-            error = Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
-                detail: "Este endpoint requiere especificar un tenantId.");
-            return false;
-        }
-
-        if (TryResolveTenantId(user, out var userTenant))
-        {
-            tenant = userTenant;
+            tenant = resolved;
             return true;
         }
 
-        error = Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
-            detail: "Falta el tenant: el token no incluye tenant_id y no se indicó tenantId.");
+        error = err switch
+        {
+            "forbidden" => Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Forbidden",
+                detail: "No está autorizado para consultar métricas de otro tenant."),
+            "tenant_required" => Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
+                detail: "Este endpoint requiere especificar un tenantId."),
+            _ => Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
+                detail: "Falta el tenant: el token no incluye tenant_id y no se indicó tenantId."),
+        };
         return false;
     }
 

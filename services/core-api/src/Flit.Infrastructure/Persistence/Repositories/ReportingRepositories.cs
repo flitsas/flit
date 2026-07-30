@@ -24,13 +24,8 @@ internal sealed class ReportingReadRepository(FlitDbContext context) : IReportin
                 "completed_at" => "v.completed_at",
                 _ => "v.created_at",
             };
-            var orderCol = filter.SortBy switch
-            {
-                "status" => "v.status",
-                "procedure_type" => "v.procedure_type_name",
-                "elapsed_hours" => "v.elapsed_hours_total",
-                _ => "v.created_at",
-            };
+            var orderCol = ReportingProceduresSort.MapColumn(filter.SortBy)
+                ?? throw new InvalidOperationException($"sortBy no mapeado: {filter.SortBy}");
             var orderDir = filter.SortOrder == "asc" ? "ASC" : "DESC";
 
             var where = $"""
@@ -153,11 +148,14 @@ internal sealed class ReportingReadRepository(FlitDbContext context) : IReportin
         {
             await using var cmd = Create(conn, tx, """
                 SELECT h.changed_at, h.from_status, h.to_status, h.changed_by_user_id,
-                       u.display_name, h.role_id_at_time, h.organization_id_at_time,
+                       u.display_name, h.role_id_at_time, r.name AS role_name,
+                       h.organization_id_at_time, t.legal_name AS organization_name,
                        h.organization_type_at_time, h.reason
                 FROM tramites.procedure_instance_status_history h
                 JOIN tramites.procedure_instances p ON p.id = h.procedure_instance_id
                 LEFT JOIN identity.users u ON u.id = h.changed_by_user_id
+                LEFT JOIN security.roles r ON r.id = h.role_id_at_time AND r.deleted_at IS NULL
+                LEFT JOIN identity.tenants t ON t.id = h.organization_id_at_time
                 WHERE p.tenant_id = @tenant AND h.procedure_instance_id = @id
                 ORDER BY h.changed_at ASC, h.id ASC
                 """);
@@ -165,13 +163,10 @@ internal sealed class ReportingReadRepository(FlitDbContext context) : IReportin
             Add(cmd, "id", procedureId);
 
             var entries = new List<ReportingAuditEntryDto>();
-            var anyHistory = false;
             await using var reader = await cmd.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
             {
                 var roleAt = reader.IsDBNull(5) ? (Guid?)null : reader.GetGuid(5);
-                var available = roleAt.HasValue;
-                if (available) anyHistory = true;
                 entries.Add(new ReportingAuditEntryDto(
                     reader.GetFieldValue<DateTimeOffset>(0),
                     reader.IsDBNull(1) ? null : reader.GetString(1),
@@ -179,13 +174,16 @@ internal sealed class ReportingReadRepository(FlitDbContext context) : IReportin
                     reader.IsDBNull(3) ? null : reader.GetGuid(3),
                     reader.IsDBNull(4) ? null : reader.GetString(4),
                     roleAt,
-                    reader.IsDBNull(6) ? null : reader.GetGuid(6),
-                    reader.IsDBNull(7) ? null : reader.GetString(7),
+                    reader.IsDBNull(6) ? null : reader.GetString(6),
+                    reader.IsDBNull(7) ? null : reader.GetGuid(7),
                     reader.IsDBNull(8) ? null : reader.GetString(8),
-                    available));
+                    reader.IsDBNull(9) ? null : reader.GetString(9),
+                    reader.IsDBNull(10) ? null : reader.GetString(10),
+                    roleAt.HasValue));
             }
 
-            return new ReportingAuditDto(procedureId, anyHistory || entries.Count == 0, entries);
+            var historyAvailable = ReportingAuditSignals.HistoryAvailable(entries.Select(e => e.RoleIdAtTime));
+            return new ReportingAuditDto(procedureId, historyAvailable, entries);
         }, ct);
 
     public Task<ConsolidadoPageDto> GetConsolidadoAsync(

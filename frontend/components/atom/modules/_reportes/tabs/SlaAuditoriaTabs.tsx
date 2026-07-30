@@ -220,9 +220,11 @@ export function AuditoriaTab({
               <tr key={`${e.changedAt}-${idx}`} className="border-b">
                 <td className="py-2">{new Date(e.changedAt).toLocaleString()}</td>
                 <td>{e.changedByDisplayName ?? "—"}</td>
-                <td>{e.roleIdAtTime ?? "—"}</td>
+                <td>{e.roleName ?? e.roleIdAtTime ?? "—"}</td>
                 <td>
-                  {[e.organizationTypeAtTime, e.organizationIdAtTime].filter(Boolean).join(" · ") || "—"}
+                  {e.organizationName
+                    ?? [e.organizationTypeAtTime, e.organizationIdAtTime].filter(Boolean).join(" · ")
+                    || "—"}
                 </td>
                 <td>{e.fromStatus ?? "—"}</td>
                 <td>{e.toStatus ?? "—"}</td>

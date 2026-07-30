@@ -83,7 +83,9 @@ export interface ReportingAudit {
     toStatus?: string | null;
     changedByDisplayName?: string | null;
     roleIdAtTime?: string | null;
+    roleName?: string | null;
     organizationIdAtTime?: string | null;
+    organizationName?: string | null;
     organizationTypeAtTime?: string | null;
     reason?: string | null;
     historyAvailable: boolean;

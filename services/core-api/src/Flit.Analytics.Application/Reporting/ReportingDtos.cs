@@ -36,7 +36,9 @@ public sealed record ReportingAuditEntryDto(
     Guid? ChangedByUserId,
     string? ChangedByDisplayName,
     Guid? RoleIdAtTime,
+    string? RoleName,
     Guid? OrganizationIdAtTime,
+    string? OrganizationName,
     string? OrganizationTypeAtTime,
     string? Reason,
     bool HistoryAvailable);

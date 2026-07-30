@@ -22,6 +22,48 @@ public static class ReportingDateRange
     }
 }
 
+/// <summary>Mapeo anti-SQLi de sortBy → columna de <c>v_reporting_tramites</c> (HU #11109 AC4/AC8).</summary>
+public static class ReportingProceduresSort
+{
+    public static string? MapColumn(string? sortBy)
+    {
+        if (string.IsNullOrWhiteSpace(sortBy)) return "v.created_at";
+        return sortBy.Trim().ToLowerInvariant() switch
+        {
+            "created_at" => "v.created_at",
+            "status" => "v.status",
+            "procedure_type" => "v.procedure_type_name",
+            "elapsed_hours" => "v.elapsed_hours_total",
+            _ => null,
+        };
+    }
+}
+
+/// <summary>Señal historyAvailable del audit trail (HU #11109 AC3/AC7).</summary>
+public static class ReportingAuditSignals
+{
+    public static bool HistoryAvailable(IEnumerable<Guid?> roleIdsAtTime) =>
+        roleIdsAtTime.Any(id => id.HasValue);
+}
+
+/// <summary>Resolución de tenant para reporting (HU #11109 AC2/AC5).</summary>
+public static class ReportingTenantAccess
+{
+    public static (Guid Tenant, string? Error) Resolve(bool isSuperAdmin, Guid? claimTenantId, Guid? requestedTenantId)
+    {
+        if (requestedTenantId is { } requested && requested != Guid.Empty)
+        {
+            if (isSuperAdmin) return (requested, null);
+            if (claimTenantId == requested) return (requested, null);
+            return (Guid.Empty, "forbidden");
+        }
+
+        if (isSuperAdmin) return (Guid.Empty, "tenant_required");
+        if (claimTenantId is { } claim && claim != Guid.Empty) return (claim, null);
+        return (Guid.Empty, "tenant_missing");
+    }
+}
+
 public sealed class GetReportingProceduresHandler(IReportingReadRepository repo)
 {
     public const int DefaultPageSize = 50;
@@ -30,11 +72,6 @@ public sealed class GetReportingProceduresHandler(IReportingReadRepository repo)
     private static readonly HashSet<string> DateTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "created_at", "updated_at", "completed_at"
-    };
-
-    private static readonly HashSet<string> SortBy = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "created_at", "status", "procedure_type", "elapsed_hours"
     };
 
     public async Task<(ReportingProceduresPageDto? Result, string? Error)> HandleAsync(
@@ -58,9 +95,10 @@ public sealed class GetReportingProceduresHandler(IReportingReadRepository repo)
         var dt = string.IsNullOrWhiteSpace(dateType) ? "created_at" : dateType.Trim();
         if (!DateTypes.Contains(dt)) return (null, "invalid_date_type");
 
-        var sb = string.IsNullOrWhiteSpace(sortBy) ? "created_at" : sortBy.Trim();
-        if (!SortBy.Contains(sb)) return (null, "invalid_sort");
+        var orderCol = ReportingProceduresSort.MapColumn(sortBy);
+        if (orderCol is null) return (null, "invalid_sort");
 
+        var sb = string.IsNullOrWhiteSpace(sortBy) ? "created_at" : sortBy.Trim().ToLowerInvariant();
         var so = string.Equals(sortOrder, "asc", StringComparison.OrdinalIgnoreCase) ? "asc" : "desc";
         var p = page is null or <= 0 ? 1 : page.Value;
         var ps = pageSize is null or <= 0 ? DefaultPageSize : Math.Min(pageSize.Value, MaxPageSize);
@@ -68,7 +106,7 @@ public sealed class GetReportingProceduresHandler(IReportingReadRepository repo)
         var filter = new ReportingProceduresFilter(
             tenantId, f, t, dt.ToLowerInvariant(), transitOfficeId,
             Normalize(procedureType), Normalize(status), Normalize(search),
-            sb.ToLowerInvariant(), so);
+            sb, so);
 
         var result = await repo.GetProceduresAsync(filter, p, ps, ct).ConfigureAwait(false);
         return (result, null);
