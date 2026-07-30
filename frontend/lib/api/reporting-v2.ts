@@ -70,6 +70,8 @@ export interface SlaPage {
     avgBusinessHours?: number | null;
     compliancePct: number;
   }>;
+  /** false = tenant sin filas en report_sla_config (AC5 HU #11117). */
+  slaConfigured?: boolean;
 }
 
 export interface ReportingAudit {
