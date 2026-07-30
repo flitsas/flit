@@ -122,6 +122,19 @@ public sealed class VerifikSoat
 
     [JsonPropertyName("entidadExpideSoat")]
     public string? EntidadExpideSoat { get; set; }
+
+    // HU #11134 — el registro de SOAT del RUNT trae la póliza y sus fechas; el modelo solo declaraba
+    // tres campos y descartaba el resto al deserializar, así que media tabla del certificado dependía
+    // del OCR del PDF que cargara el operador. Los mismos nombres que ya declara el modelo de Intempo,
+    // que representa el mismo registro del RUNT.
+    [JsonPropertyName("noPoliza")]
+    public string? NoPoliza { get; set; }
+
+    [JsonPropertyName("fechaExpedicion")]
+    public string? FechaExpedicion { get; set; }
+
+    [JsonPropertyName("fechaVigencia")]
+    public string? FechaVigencia { get; set; }
 }
 
 public sealed class VerifikTecnomecanica

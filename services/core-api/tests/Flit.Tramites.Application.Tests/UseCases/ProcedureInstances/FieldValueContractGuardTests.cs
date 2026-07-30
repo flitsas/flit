@@ -99,9 +99,12 @@ public sealed class FieldValueContractGuardTests
         ["rtm_vencimiento"] = new(Verifik, Modo.Literal),
         ["rtm_estado"] = new(Verifik, Modo.Literal),
         ["rtm_entidad"] = new(Verifik, Modo.Literal),
-        ["soat_poliza"] = new(Ocr, Modo.Literal),
-        ["soat_vigencia"] = new(Ocr, Modo.Literal),
-        ["soat_expedicion"] = new(Ocr, Modo.Literal),
+        // HU #11134 — el RUNT (Verifik) pasa a ser el productor primario de la póliza y sus fechas;
+        // el OCR del PDF sigue escribiéndolas como respaldo (su handler respeta la precedencia y nunca
+        // pisa un valor de consulta). Se declara el primario: es el que debe existir.
+        ["soat_poliza"] = new(Verifik, Modo.Literal),
+        ["soat_vigencia"] = new(Verifik, Modo.Literal),
+        ["soat_expedicion"] = new(Verifik, Modo.Literal),
         ["rtm_numero"] = new(Ocr, Modo.Literal),
         ["rtm_vigencia"] = new(Ocr, Modo.Literal),
         ["rtm_expedicion"] = new(Ocr, Modo.Literal),

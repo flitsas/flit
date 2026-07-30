@@ -187,6 +187,17 @@ public static class VerifikResultMapper
         if (!string.IsNullOrWhiteSpace(soat?.EntidadExpideSoat))
             fields.Add(new HydratedField("soat_aseguradora", soat.EntidadExpideSoat, null));
 
+        // HU #11134 — póliza y fechas del SOAT desde el RUNT. Hasta ahora estas tres celdas del
+        // certificado solo se llenaban con el OCR del PDF cargado, así que un trámite sin ese
+        // documento (o con un OCR fallido) emitía el certificado a medias. El OCR se conserva como
+        // respaldo: su handler ya respeta la precedencia y nunca pisa un valor de consulta.
+        if (!string.IsNullOrWhiteSpace(soat?.NoPoliza))
+            fields.Add(new HydratedField("soat_poliza", soat.NoPoliza, null));
+        if (!string.IsNullOrWhiteSpace(soat?.FechaVigencia))
+            fields.Add(new HydratedField("soat_vigencia", soat.FechaVigencia, null));
+        if (!string.IsNullOrWhiteSpace(soat?.FechaExpedicion))
+            fields.Add(new HydratedField("soat_expedicion", soat.FechaExpedicion, null));
+
         // HU #10973 — el estado del SOAT alimenta el certificado de vigencia SOAT/RTM Y el gate de
         // aprobación del OT (SoatGate, HU #10804). Se persiste NORMALIZADO al vocabulario del gate:
         // Verifik devuelve "VIGENTE" en mayúscula y el frontend compara estricto contra "vigente"

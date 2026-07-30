@@ -121,6 +121,15 @@ public sealed class KyverumRuntDatosTecnicos
     public string? NoEjes { get; set; }
 }
 
+/// <summary>
+/// Registro de SOAT de Kyverum. <b>Son estos tres campos y no más</b> (HU #11134): las respuestas
+/// capturadas en <c>Consultations/Fixtures/KyverumRunt/*.json</c> traen exclusivamente
+/// <c>estado</c>, <c>fechaVencimSoat</c> y <c>razonSocialAsegur</c> — ni póliza, ni fecha de
+/// expedición, ni de vigencia, a diferencia del registro que entregan Verifik e Intempo.
+/// <para>Por eso, con este proveedor, esas tres celdas del certificado siguen dependiendo del OCR del
+/// PDF del SOAT. Declarar aquí campos inventados los dejaría en null igualmente y volvería a esconder
+/// el hueco tras un modelo que aparenta cubrirlo, que es justo el fallo que originó este Feature.</para>
+/// </summary>
 public sealed class KyverumRuntSoat
 {
     [JsonPropertyName("estado")]
