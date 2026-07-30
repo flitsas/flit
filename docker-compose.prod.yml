@@ -284,6 +284,7 @@ services:
       # Destinos internos del YARP: apuntan al puerto interno de cada servicio.
       # (sobrescriben appsettings.json, que trae los puertos por defecto)
       ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
+      ReverseProxy__Clusters__core-api-signalr-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
       ReverseProxy__Clusters__python-ml-cluster__Destinations__python-ml-1__Address: http://python-ml:${PYTHON_ML_PORT:-4012}/
       ReverseProxy__Clusters__core-ict-cluster__Destinations__core-ict-1__Address: http://core-ict:${CORE_ICT_PORT:-4020}/
       # Login deshabilitado temporalmente: sin llave JWT el gateway no valida firma

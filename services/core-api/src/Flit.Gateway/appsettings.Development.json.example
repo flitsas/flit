@@ -9,6 +9,11 @@
           "core-api-1": { "Address": "http://localhost:4003/" }
         }
       },
+      "core-api-signalr-cluster": {
+        "Destinations": {
+          "core-api-1": { "Address": "http://localhost:4003/" }
+        }
+      },
       "python-ml-cluster": {
         "Destinations": {
           "python-ml-1": { "Address": "http://localhost:4012/" }
