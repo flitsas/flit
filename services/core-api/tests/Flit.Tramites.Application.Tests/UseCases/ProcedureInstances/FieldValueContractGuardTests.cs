@@ -136,6 +136,9 @@ public sealed class FieldValueContractGuardTests
         ["rues_razon_cancelacion"] = new(RuesProvider, Modo.Literal),
         ["rues_representacion_legal"] = new(RuesProvider, Modo.Literal),
         ["rues_actividades_json"] = new(RuesProvider, Modo.Literal),
+        // HU #11132 — jurisdicción de la cámara de comercio.
+        ["rues_camara_ciudad"] = new(RuesProvider, Modo.Literal),
+        ["rues_camara_departamento"] = new(RuesProvider, Modo.Literal),
     };
 
     // ── Infraestructura de la guardia ────────────────────────────────────────

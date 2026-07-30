@@ -822,7 +822,10 @@ public sealed class GenerarFurHandler(
                 FechaActualizacion: Val(datos, "rues_fecha_actualizacion"),
                 RazonCancelacion: Val(datos, "rues_razon_cancelacion"),
                 RepresentacionLegal: Val(datos, "rues_representacion_legal"),
-                Actividades: ParseActividades(Val(datos, "rues_actividades_json")));
+                Actividades: ParseActividades(Val(datos, "rues_actividades_json")),
+                // HU #11132 — jurisdicción de la cámara de comercio.
+                CamaraCiudad: Val(datos, "rues_camara_ciudad"),
+                CamaraDepartamento: Val(datos, "rues_camara_departamento"));
 
             docs.Add(ConTipoDeRol(ruesGenerator.GenerateRuesCertificate(data), actor.ActorType));
         }

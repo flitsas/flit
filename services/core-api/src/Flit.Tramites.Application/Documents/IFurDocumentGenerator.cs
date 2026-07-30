@@ -277,7 +277,10 @@ public sealed record RuesCertificateData(
     string? RazonCancelacion = null,
     // Bloque de texto de la REPRESENTACIÓN LEGAL (facultades del representante) y lista de ACTIVIDADES.
     string? RepresentacionLegal = null,
-    IReadOnlyList<RuesActividad>? Actividades = null);
+    IReadOnlyList<RuesActividad>? Actividades = null,
+    // HU #11132 — jurisdicción de la cámara de comercio: la respuesta del RUES la trae y se descartaba.
+    string? CamaraCiudad = null,
+    string? CamaraDepartamento = null);
 
 /// <summary>
 /// Contrato del generador del Certificado RUES. La implementación productiva es
