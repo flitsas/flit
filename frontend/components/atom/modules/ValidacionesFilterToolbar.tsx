@@ -9,6 +9,7 @@ import type {
   BiometricVigenciaEstado,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+import { digitsOnly } from '@/lib/format/currency';
 import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from '@/lib/validation/fieldRules';
 
 /**
@@ -313,8 +314,9 @@ export function ValidacionesFilterToolbar({
           <Field label="Documento">
             <input
               type="text"
+              inputMode="numeric"
               value={filters.documentNumber}
-              onChange={(e) => onChange({ documentNumber: sanitizeNoAngleBrackets(e.target.value) })}
+              onChange={(e) => onChange({ documentNumber: digitsOnly(e.target.value) })}
               maxLength={SEARCH_TEXT_MAX_LENGTH}
               placeholder="Número…"
               className={CONTROL_CLASS}
@@ -322,21 +324,23 @@ export function ValidacionesFilterToolbar({
           </Field>
           <Field label="Score mín.">
             <input
-              type="number"
-              min={0}
-              max={100}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="off"
               value={filters.scoreMin}
-              onChange={(e) => onChange({ scoreMin: e.target.value })}
+              onChange={(e) => onChange({ scoreMin: digitsOnly(e.target.value) })}
               className={CONTROL_CLASS}
             />
           </Field>
           <Field label="Score máx.">
             <input
-              type="number"
-              min={0}
-              max={100}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="off"
               value={filters.scoreMax}
-              onChange={(e) => onChange({ scoreMax: e.target.value })}
+              onChange={(e) => onChange({ scoreMax: digitsOnly(e.target.value) })}
               className={CONTROL_CLASS}
             />
           </Field>
@@ -374,11 +378,12 @@ export function ValidacionesFilterToolbar({
           </Field>
           <Field label="Vence en ≤ N días">
             <input
-              type="number"
-              min={0}
-              max={30}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="off"
               value={filters.venceEnDias}
-              onChange={(e) => onChange({ venceEnDias: e.target.value })}
+              onChange={(e) => onChange({ venceEnDias: digitsOnly(e.target.value) })}
               placeholder="Ej. 3"
               className={CONTROL_CLASS}
             />

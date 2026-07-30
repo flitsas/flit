@@ -1,4 +1,5 @@
 // HU #10874 — panel de subsanación: motivo + checklist (AC1) y Re-radicar (AC2).
+// Feature #11066 — Re-radicar solo tras canReradicar; Cancelar sale del flag.
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -43,8 +44,6 @@ const HISTORY_WITHOUT_METADATA: StatusHistory[] = [
   },
 ];
 
-// HU #10870 — flujo NUEVO (flag sobre rechazado): OT rechaza; operador activa subsanación
-// (rechazado→rechazado) sin reemplazar el motivo. La guía debe seguir siendo el del OT.
 const HISTORY_OPERATOR_DRIVEN: StatusHistory[] = [
   { fromStatus: 'preparado', toStatus: 'entregado', changedAt: '2026-07-01T10:05:00Z', reason: null },
   {
@@ -108,6 +107,7 @@ describe('SubsanacionPanel — AC1: motivo y checklist', () => {
         loading={false}
         error={null}
         onReradicado={vi.fn()}
+        canReradicar
       />,
     );
 
@@ -153,13 +153,32 @@ describe('SubsanacionPanel — AC1: motivo y checklist', () => {
     expect(container).toHaveTextContent(
       'Motivo del rechazo: Documentos ilegibles; vuelve a cargar la cédula del comprador.',
     );
-    // En el flujo operador-driven no hay checklist estructurado.
     expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
   });
 });
 
 describe('SubsanacionPanel — AC2: Re-radicar', () => {
-  it('con checklist: Re-radicar queda deshabilitado hasta marcar todos los ítems, luego dispara submitInstance', async () => {
+  it('sin canReradicar: Re-radicar permanece deshabilitado aunque el checklist esté completo', async () => {
+    const user = userEvent.setup();
+    render(
+      <SubsanacionPanel
+        instanceId="inst-1"
+        statusHistory={HISTORY_WITH_ITEMS}
+        loading={false}
+        error={null}
+        onReradicado={vi.fn()}
+        canReradicar={false}
+      />,
+    );
+
+    const boton = screen.getByRole('button', { name: /re-radicar/i });
+    const checkboxes = screen.getAllByRole('checkbox');
+    await user.click(checkboxes[0]);
+    await user.click(checkboxes[1]);
+    expect(boton).toBeDisabled();
+  });
+
+  it('con checklist + canReradicar: Re-radicar se habilita al marcar todos y dispara submit', async () => {
     const user = userEvent.setup();
     const onReradicado = vi.fn();
     render(
@@ -169,6 +188,7 @@ describe('SubsanacionPanel — AC2: Re-radicar', () => {
         loading={false}
         error={null}
         onReradicado={onReradicado}
+        canReradicar
       />,
     );
 
@@ -177,7 +197,7 @@ describe('SubsanacionPanel — AC2: Re-radicar', () => {
 
     const checkboxes = screen.getAllByRole('checkbox');
     await user.click(checkboxes[0]);
-    expect(boton).toBeDisabled(); // aún falta el segundo ítem
+    expect(boton).toBeDisabled();
 
     await user.click(checkboxes[1]);
     expect(boton).toBeEnabled();
@@ -188,7 +208,33 @@ describe('SubsanacionPanel — AC2: Re-radicar', () => {
     await waitFor(() => expect(onReradicado).toHaveBeenCalled());
   });
 
-  it('sin checklist estructurado: Re-radicar está habilitado de entrada', async () => {
+  it('sin checklist: Re-radicar solo se habilita con canReradicar', () => {
+    const { rerender } = render(
+      <SubsanacionPanel
+        instanceId="inst-1"
+        statusHistory={HISTORY_WITHOUT_METADATA}
+        loading={false}
+        error={null}
+        onReradicado={vi.fn()}
+        canReradicar={false}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /re-radicar/i })).toBeDisabled();
+
+    rerender(
+      <SubsanacionPanel
+        instanceId="inst-1"
+        statusHistory={HISTORY_WITHOUT_METADATA}
+        loading={false}
+        error={null}
+        onReradicado={vi.fn()}
+        canReradicar
+      />,
+    );
+    expect(screen.getByRole('button', { name: /re-radicar/i })).toBeEnabled();
+  });
+
+  it('hasUnsavedChanges: Re-radicar deshabilitado aunque canReradicar', () => {
     render(
       <SubsanacionPanel
         instanceId="inst-1"
@@ -196,30 +242,29 @@ describe('SubsanacionPanel — AC2: Re-radicar', () => {
         loading={false}
         error={null}
         onReradicado={vi.fn()}
+        canReradicar
+        hasUnsavedChanges
       />,
     );
-    expect(screen.getByRole('button', { name: /re-radicar/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /re-radicar/i })).toBeDisabled();
   });
 
-  it('gate de re-radicación (422/409) del submit: muestra el mensaje del backend y no navega', async () => {
-    mocks.submitInstance.mockRejectedValue(new Error('Faltan documentos obligatorios para radicar.'));
+  it('Cancelar: invoca onCancelSubsanacion cuando showCancel', async () => {
     const user = userEvent.setup();
-    const onReradicado = vi.fn();
+    const onCancel = vi.fn().mockResolvedValue(undefined);
     render(
       <SubsanacionPanel
         instanceId="inst-1"
-        statusHistory={HISTORY_WITHOUT_METADATA}
+        statusHistory={HISTORY_OPERATOR_DRIVEN}
         loading={false}
         error={null}
-        onReradicado={onReradicado}
+        onReradicado={vi.fn()}
+        showCancel
+        onCancelSubsanacion={onCancel}
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /re-radicar/i }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Faltan documentos obligatorios para radicar.',
-    );
-    expect(onReradicado).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /^cancelar$/i }));
+    await waitFor(() => expect(onCancel).toHaveBeenCalled());
   });
 });

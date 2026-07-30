@@ -5510,6 +5510,14 @@ paths:
       description: >
         Fusiona el FUR y los adjuntos del trámite en un PDF único y lo adjunta como
         tipo "consolidado". Requiere FUR generado y documentos obligatorios completos.
+      parameters:
+        - name: force
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+          description: >
+            Feature #11066 — cuando es true, invalida el consolidado vigente y lo regenera desde cero
+            en lugar de servir el PDF cacheado.
       responses:
         "201":
           description: Consolidado generado (adjunto tipo "consolidado").
@@ -7558,7 +7566,7 @@ components:
             Para mock proviene del scorer; para Kyverum se deriva de las coincidencias del payload.
     TenantBiometricValidationDto:
       type: object
-      required: [id, name, documentType, documentNumber, status, provider, expired, createdAt, email, attempts, maxAttempts, resendCount]
+      required: [id, name, documentType, documentNumber, status, provider, expired, createdAt, email, attempts, maxAttempts, resendCount, linkedProcedures]
       description: Fila de la vista transversal del submódulo de Validaciones (HU #10234).
       properties:
         id: { type: string, format: uuid }
@@ -7634,6 +7642,20 @@ components:
           description: >
             Días calendario restantes de vigencia (0 = vencida). Se calcula al vuelo contra HOY, no se
             persiste. Null si no hay aprobación (HU #10350).
+        linkedProcedures:
+          type: array
+          description: >
+            Feature #11066 — otros trámites del tenant con validaciones de la misma identidad (documento).
+            El trámite primario sigue en instanceId/referenceNumber.
+          items:
+            $ref: "#/components/schemas/LinkedProcedureDto"
+    LinkedProcedureDto:
+      type: object
+      required: [instanceId, referenceNumber, status]
+      properties:
+        instanceId: { type: string, format: uuid }
+        referenceNumber: { type: string }
+        status: { type: string }
     BiometricValidationStatsDto:
       type: object
       required: [total, aprobadas, enProceso, rechazadas, expiradas]

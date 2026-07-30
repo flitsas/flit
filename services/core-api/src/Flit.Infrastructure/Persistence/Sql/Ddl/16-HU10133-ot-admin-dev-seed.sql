@@ -190,12 +190,16 @@ VALUES
     ('e2222222-2222-4222-8222-222222222222', 'bbbbbbbb-0001-4000-8000-000000000001', 'REVISAR', 'Revisar', '#F59E0B', now())
 ON CONFLICT (tenant_id, code) DO NOTHING;
 
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 11. Prelación documental (tipos canónicos por code — no UUIDs legacy SeedProcedureTypes)
+-- Idempotente: evita 23505 en pk_ot_document_precedence cuando los IDs fijos ya
+-- existen pero document_type_id cambió (p. ej. tras re-seed del catálogo).
+-- ─────────────────────────────────────────────────────────────────────────────
 INSERT INTO admin.ot_document_precedence
     (id, tenant_id, procedure_type_id, document_type_id, sort_order, created_at)
 SELECT
     v.id,
-    'bbbbbbbb-0001-4000-8000-000000000001',
+    'bbbbbbbb-0001-4000-8000-000000000001'::uuid,
     pt.id,
     dt.id,
     v.sort_order,
@@ -207,6 +211,16 @@ FROM (VALUES
 ) AS v(id, doc_code, sort_order)
 JOIN tramites.document_types dt ON dt.code = v.doc_code
 JOIN tramites.procedure_types pt ON pt.code = 'TRASPASO_STANDARD'
+WHERE NOT EXISTS (
+    SELECT 1 FROM admin.ot_document_precedence existing
+     WHERE existing.id = v.id
+)
+AND NOT EXISTS (
+    SELECT 1 FROM admin.ot_document_precedence existing
+     WHERE existing.tenant_id = 'bbbbbbbb-0001-4000-8000-000000000001'::uuid
+       AND existing.procedure_type_id = pt.id
+       AND existing.document_type_id = dt.id
+)
 ON CONFLICT (tenant_id, procedure_type_id, document_type_id) DO NOTHING;
 
 COMMIT;

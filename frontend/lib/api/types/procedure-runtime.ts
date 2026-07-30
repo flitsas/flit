@@ -889,6 +889,11 @@ export interface BiometricValidation {
   // Motivo del ÚLTIMO intento fallido mientras la validación sigue ABIERTA (en_proceso): Kyverum permite
   // reintentar. Guía amigable de Kyverum (p.ej. "rostro no completamente visible"). Null si no aplica.
   ultimoIntentoMotivo?: string | null;
+  // HU #11069 — trámite primario + otros del tenant con la misma identidad (detalle VID).
+  procedureInstanceId?: string | null;
+  referenceNumber?: string | null;
+  modalidad?: string | null;
+  linkedProcedures?: LinkedProcedureRef[] | null;
 }
 
 /**
@@ -966,6 +971,14 @@ export interface BiometricValidationsResponse {
   firmaBaulPartes?: string[] | null;
 }
 
+export interface LinkedProcedureRef {
+  instanceId: string;
+  referenceNumber: string;
+  status: string;
+  /** Modalidad del trámite (traspaso / matricula_inicial). HU #11069. */
+  modalidad?: string | null;
+}
+
 /**
  * Espejo de TenantBiometricValidationDto (HU #10234): fila de la vista transversal del submódulo
  * "Validaciones de Identidad". Incluye el trámite al que pertenece (para navegar). Sin email ni
@@ -1013,6 +1026,11 @@ export interface TenantBiometricValidation {
    * en paralelo) — se muestra "—" sin romper la tabla.
    */
   email: string | null;
+  /**
+   * Feature #11066 — otros trámites del tenant con la misma identidad documental
+   * (excluye el trámite primario `instanceId` si existe).
+   */
+  linkedProcedures?: LinkedProcedureRef[];
 }
 
 /** KPIs agregados del submódulo de Validaciones (espejo de BiometricValidationStatsDto). */

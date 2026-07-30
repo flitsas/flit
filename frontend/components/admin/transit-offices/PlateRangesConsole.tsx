@@ -10,6 +10,7 @@ import {
   type EligibleCompany,
   type PlateRangeSummary,
 } from "@/lib/api/admin-plate-ranges";
+import { digitsOnly } from "@/lib/format/currency";
 
 // HU #10652 (Feature #10587) — consola OT para asignar/editar rangos de placas a una compañía.
 export interface PlateRangesConsoleProps {
@@ -152,8 +153,10 @@ export function PlateRangesConsole({ transitOfficeId }: PlateRangesConsoleProps)
           Desde
           <input
             value={form.rangeFrom}
-            onChange={(e) => setForm((f) => ({ ...f, rangeFrom: e.target.value }))}
+            onChange={(e) => setForm((f) => ({ ...f, rangeFrom: digitsOnly(e.target.value) }))}
             inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
             placeholder="100"
             className="w-24 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF]"
           />
@@ -162,8 +165,10 @@ export function PlateRangesConsole({ transitOfficeId }: PlateRangesConsoleProps)
           Hasta
           <input
             value={form.rangeTo}
-            onChange={(e) => setForm((f) => ({ ...f, rangeTo: e.target.value }))}
+            onChange={(e) => setForm((f) => ({ ...f, rangeTo: digitsOnly(e.target.value) }))}
             inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
             placeholder="200"
             className="w-24 rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF]"
           />

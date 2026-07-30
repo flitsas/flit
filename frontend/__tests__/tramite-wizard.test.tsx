@@ -61,6 +61,10 @@ const mocks = vi.hoisted(() => ({
   listBiometric: vi.fn(),
   listFirmas: vi.fn(),
   listParticipantes: vi.fn(),
+  // Feature #11066 — Preparar dispara FUR + impronta + consolidado.
+  generarFur: vi.fn(),
+  generarImpronta: vi.fn(),
+  generarConsolidado: vi.fn(),
 }));
 
 // AC1 (HU #10882) — el wizard también importa `getDuplicateActiveProcedureId` de este módulo; se
@@ -227,6 +231,18 @@ beforeEach(() => {
   mocks.listBiometric.mockResolvedValue([]);
   mocks.listFirmas.mockResolvedValue([]);
   mocks.listParticipantes.mockResolvedValue([]);
+  mocks.generarFur.mockResolvedValue({ documents: [] });
+  mocks.generarImpronta.mockResolvedValue({
+    attachmentId: 'imp-1',
+    filename: 'impronta.pdf',
+    sha256: 'imp',
+    radicado: 'R-1',
+    hash: 'h',
+  });
+  mocks.generarConsolidado.mockResolvedValue({
+    document: { attachmentId: 'c-1', tipo: 'consolidado', filename: 'c.pdf', sha256: 'abc' },
+    regenerado: true,
+  });
   // Por defecto la identidad ya está vigente (no dispara nueva validación al guardar la parte).
   mocks.ensureIdentity.mockResolvedValue({ outcome: 'ya_vigente' });
 });
@@ -484,6 +500,29 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     };
     // Carga inicial en borrador; el refresh tras "Preparar" ya devuelve `preparado`.
     mocks.getWizardState.mockResolvedValueOnce(BORRADOR_COMPLETO).mockResolvedValue(PREPARADO);
+    // Organismo presente → al entrar al paso FUR se pre-genera el paquete.
+    mocks.getInstance.mockResolvedValue({
+      id: 'inst-1',
+      status: 'borrador',
+      fieldValues: [
+        {
+          formFieldId: null,
+          fieldKey: 'transit_office_code',
+          valueText: '11001',
+          valueJson: null,
+          source: 'runt',
+        },
+        {
+          formFieldId: null,
+          fieldKey: 'transit_office_name',
+          valueText: 'OT Bogotá',
+          valueJson: null,
+          source: 'runt',
+        },
+      ],
+      actors: [],
+      statusHistory: [],
+    });
     const onExit = vi.fn();
     const user = userEvent.setup();
     render(
@@ -491,24 +530,104 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     );
     await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
     await user.click(screen.getByRole('button', { name: /^Paso 6: FUR/ }));
-    const preparar = screen.getByRole('button', { name: /^Preparar$/ });
-    expect(preparar).toBeEnabled();
+
+    // Feature #11066 — pre-gen al entrar al paso (antes de Preparar).
+    await waitFor(() => {
+      expect(mocks.generarFur).toHaveBeenCalledWith('inst-1');
+      expect(mocks.generarImpronta).toHaveBeenCalledWith('inst-1');
+    });
+    // Preparar no espera ni se deshabilita por la generación del paquete.
+    const preparar = await waitFor(() => {
+      const btn = screen.getByRole('button', { name: /^Preparar$/ });
+      expect(btn).toBeEnabled();
+      return btn;
+    });
     // Aún no se ofrece "Radicar a tránsito" ni "Finalizar" en borrador con gates OK.
     expect(screen.queryByRole('button', { name: /Radicar a tránsito/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Finalizar$/ })).not.toBeInTheDocument();
+    const furCallsBeforePreparar = mocks.generarFur.mock.calls.length;
     await user.click(preparar);
 
-    // Transición explícita borrador→preparado (no el submit encadenado).
+    // Transición inmediata; expediente en background.
     await waitFor(() =>
       expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'preparado'),
     );
+    await waitFor(() => {
+      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, true);
+    });
+    // Puede reintentar FUR en background; al menos la pre-gen del paso ya corrió.
+    expect(mocks.generarFur.mock.calls.length).toBeGreaterThanOrEqual(furCallsBeforePreparar);
     expect(mocks.submitInstance).not.toHaveBeenCalled();
     expect(mocks.finalizeDraft).not.toHaveBeenCalled();
-    expect(toastShow).toHaveBeenCalledWith(expect.stringMatching(/preparado/i), 'success');
+    expect(toastShow).toHaveBeenCalledWith(
+      expect.stringMatching(/preparado.*segundo plano|preparado/i),
+      'success',
+    );
     // El wizard permanece abierto mostrando ahora "Radicar a tránsito".
     expect(onExit).not.toHaveBeenCalled();
     expect(await screen.findByRole('button', { name: /Radicar a tránsito/ })).toBeEnabled();
     expect(screen.queryByRole('button', { name: /^Preparar$/ })).not.toBeInTheDocument();
+  });
+
+  it('N 03 — fallo de generación de docs NO bloquea Preparar (transición de negocio sigue)', async () => {
+    const BORRADOR_COMPLETO: WizardState = {
+      ...TRASPASO_WIZARD,
+      canSubmit: true,
+      blockers: [],
+      steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
+    };
+    const PREPARADO: WizardState = {
+      ...BORRADOR_COMPLETO,
+      status: 'preparado',
+      allowedTransitions: ['entregado'],
+    };
+    mocks.getWizardState.mockResolvedValueOnce(BORRADOR_COMPLETO).mockResolvedValue(PREPARADO);
+    mocks.getInstance.mockResolvedValue({
+      id: 'inst-1',
+      status: 'borrador',
+      fieldValues: [
+        {
+          formFieldId: null,
+          fieldKey: 'transit_office_code',
+          valueText: '11001',
+          valueJson: null,
+          source: 'runt',
+        },
+      ],
+      actors: [],
+      statusHistory: [],
+    });
+    // Pre-gen falla; background al Preparar también falla — la transición de negocio igual ocurre.
+    mocks.generarFur.mockRejectedValue(new Error('fur_unavailable'));
+    mocks.generarConsolidado.mockRejectedValue(new Error('fur_unavailable'));
+
+    const user = userEvent.setup();
+    render(
+      <TramiteWizard configuration={CONFIG} procedureTypeId="type-1" onExit={() => {}} />,
+    );
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await user.click(screen.getByRole('button', { name: /^Paso 6: FUR/ }));
+
+    const preparar = await screen.findByRole('button', { name: /^Preparar$/ });
+    expect(preparar).toBeEnabled();
+    await user.click(preparar);
+
+    await waitFor(() =>
+      expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'preparado'),
+    );
+    expect(toastShow).toHaveBeenCalledWith(
+      expect.stringMatching(/preparado.*segundo plano|preparado/i),
+      'success',
+    );
+    await waitFor(() =>
+      expect(toastShow).toHaveBeenCalledWith(
+        expect.stringMatching(/faltó el expediente|fur_unavailable|reintentos/i),
+        'error',
+      ),
+    );
+    // Tres intentos en background (FUR + consolidado por intento).
+    expect(mocks.generarConsolidado.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(await screen.findByRole('button', { name: /Radicar a tránsito/ })).toBeEnabled();
   });
 
   it('N 03 dos pasos — en `preparado` el botón "Radicar a tránsito" transiciona a entregado, avisa y sale', async () => {
@@ -534,6 +653,9 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     expect(screen.queryByRole('button', { name: /^Preparar$/ })).not.toBeInTheDocument();
     await user.click(radicar);
 
+    await waitFor(() => {
+      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, true);
+    });
     await waitFor(() =>
       expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'entregado'),
     );
@@ -541,6 +663,42 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     // Toast de éxito + redirección inmediata (onExit), sin pantalla intermedia.
     expect(toastShow).toHaveBeenCalledWith(expect.stringMatching(/enviado a tránsito/i), 'success');
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('N 03 — Radicar bloquea si el consolidado queda incompleto', async () => {
+    const PREPARADO: WizardState = {
+      ...TRASPASO_WIZARD,
+      canSubmit: true,
+      blockers: [],
+      status: 'preparado',
+      allowedTransitions: ['entregado'],
+      steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
+    };
+    mocks.getWizardState.mockResolvedValue(PREPARADO);
+    mocks.getInstance.mockResolvedValue({
+      id: 'inst-1',
+      status: 'preparado',
+      draftFinalizedAt: null,
+      fieldValues: [],
+      actors: [],
+    });
+    mocks.generarConsolidado.mockResolvedValue({
+      document: { attachmentId: 'c-1', tipo: 'consolidado', filename: 'c.pdf', sha256: 'abc' },
+      regenerado: true,
+      incompleto: true,
+      documentosFaltantes: ['fur', 'impronta'],
+    });
+    const onExit = vi.fn();
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={onExit} />);
+
+    await user.click(await screen.findByRole('button', { name: /Radicar a tránsito/ }));
+
+    expect(
+      await screen.findByText(/No se puede radicar: Expediente incompleto/i),
+    ).toBeInTheDocument();
+    expect(mocks.transitionInstance).not.toHaveBeenCalled();
+    expect(onExit).not.toHaveBeenCalled();
   });
 
   it('N 03 dos pasos — el error del gate al preparar se muestra y el wizard sigue en borrador', async () => {

@@ -6,6 +6,7 @@ import { DocumentTypeSelect } from "@/components/admin/documents/DocumentTypeSel
 import { ScopeBadge } from "@/components/admin/documents/panels/ScopeBadge";
 import { ApiError, ApiValidationError } from "@/lib/api/types";
 import type { DocumentType, OverrideScope } from "@/lib/api/types-documents";
+import { digitsOnly } from "@/lib/format/currency";
 
 // Formulario de alta de override de orden por OT o Cliente (HU #10198, AC3/AC4).
 // Muestra el badge del scope (OT/CLIENTE) y, para CLIENTE, la nota de precedencia
@@ -89,11 +90,12 @@ export function OrderOverrideForm({ scope, documents, excludeIds, onSubmit, disa
           </label>
           <input
             id={`override-orden-${scope}`}
-            type="number"
-            min={0}
-            max={32767}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
             value={orden}
-            onChange={(e) => setOrden(e.target.value)}
+            onChange={(e) => setOrden(digitsOnly(e.target.value))}
             disabled={disabled}
             className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
             style={{ borderColor: error ? "#FF4E00" : "#DFE5ED" }}

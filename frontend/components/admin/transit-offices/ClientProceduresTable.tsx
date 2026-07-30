@@ -38,6 +38,8 @@ export interface ClientProceduresTableProps {
   consolidadoActingId?: string | null;
   /** Abre el panel de documentos del expediente para el trámite. */
   onVerDocumentos?: (row: OtClientProcedure) => void;
+  /** Abre el panel lateral con el detalle del trámite. */
+  onVerDetalle?: (row: OtClientProcedure) => void;
 }
 
 /** Tabla paginada tramites clientes OT ? patron CompanyListTable (HU #10220). */
@@ -56,6 +58,7 @@ export function ClientProceduresTable({
   onRevoke,
   consolidadoActingId = null,
   onVerDocumentos,
+  onVerDetalle,
 }: ClientProceduresTableProps) {
   return (
     <div className="flex flex-1 flex-col">
@@ -232,6 +235,17 @@ export function ClientProceduresTable({
                       onClick={() => onConsolidado(row)}
                     >
                       {consolidadoActingId === row.id ? "Abriendo…" : "Ver consolidado"}
+                    </button>
+                  )}
+                  {onVerDetalle && (
+                    <button
+                      type="button"
+                      className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold text-foreground"
+                      aria-label={`Ver detalle del trámite ${row.referenceNumber}`}
+                      title="Ver detalle del trámite"
+                      onClick={() => onVerDetalle(row)}
+                    >
+                      Detalle
                     </button>
                   )}
                 </div>

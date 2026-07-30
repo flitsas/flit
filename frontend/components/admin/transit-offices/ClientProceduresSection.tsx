@@ -26,6 +26,7 @@ import { Modal } from "@/components/atom/Modal";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
 import { FolderOpen } from "lucide-react";
 import { ClientProceduresTable } from "./ClientProceduresTable";
+import { ClientProcedureDetailPanel } from "./ClientProcedureDetailPanel";
 import {
   assignPlateToProcedure,
   listPlateDetails,
@@ -80,6 +81,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [profile, setProfile] = useState<OtProfile | null>(null);
   // HU #10705 — panel de documentos del expediente
   const [documentosProcedure, setDocumentosProcedure] = useState<OtClientProcedure | null>(null);
+  // Panel lateral derecho — detalle del trámite
+  const [detailProcedure, setDetailProcedure] = useState<OtClientProcedure | null>(null);
   // Previsualización inline del consolidado (sin forzar descarga).
   const [preview, setPreview] = useState<{
     open: boolean;
@@ -557,6 +560,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           }
           consolidadoActingId={consolidadoActingId}
           onVerDocumentos={setDocumentosProcedure}
+          onVerDetalle={setDetailProcedure}
         />
       </UiStateBoundary>
 
@@ -876,6 +880,21 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           </div>
         </div>
       )}
+
+      {/* Panel lateral — detalle del trámite */}
+      <ClientProcedureDetailPanel
+        open={!!detailProcedure}
+        procedure={detailProcedure}
+        onClose={() => setDetailProcedure(null)}
+        scope={scope}
+        onVerDocumentos={(row) => {
+          setDocumentosProcedure(row);
+        }}
+        onVerConsolidado={handleConsolidado}
+        consolidadoActing={
+          !!detailProcedure && consolidadoActingId === detailProcedure.id
+        }
+      />
 
       {/* HU #10705 — Modal de documentos del expediente */}
       {documentosProcedure && (

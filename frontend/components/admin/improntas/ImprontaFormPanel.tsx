@@ -6,6 +6,8 @@ import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload } from "@/lib/auth/jwt";
 import { describeImprontaError, generarImpronta } from "@/lib/api/admin-improntas";
 import type { GenerarImprontaRequest, GenerarImprontaResult } from "@/lib/api/types-improntas";
+import { digitsOnly } from "@/lib/format/currency";
+import { sanitizePlate } from "@/lib/validation/fieldRules";
 import { IMPRONTA_INPUT_CLS, IMPRONTA_LABEL_CLS, IMPRONTA_SECTION_CLS } from "./improntas-form-styles";
 
 type SubmitStatus = "idle" | "submitting" | "error" | "success";
@@ -112,7 +114,7 @@ export function ImprontaFormPanel() {
             id="impronta-placa"
             className={`mt-1 uppercase tracking-widest ${IMPRONTA_INPUT_CLS}`}
             value={placa}
-            onChange={(e) => setPlaca(e.target.value.toUpperCase())}
+            onChange={(e) => setPlaca(sanitizePlate(e.target.value))}
             placeholder="ABC123"
             aria-required="true"
             aria-invalid={attempted && placaMissing}
@@ -131,7 +133,10 @@ export function ImprontaFormPanel() {
             id="impronta-documento"
             className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
             value={documento}
-            onChange={(e) => setDocumento(e.target.value)}
+            onChange={(e) => setDocumento(digitsOnly(e.target.value))}
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
             placeholder="1040326572"
             aria-required="true"
             aria-invalid={attempted && documentoMissing}

@@ -4,6 +4,7 @@ using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.ReadModels;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Enums;
 using FluentAssertions;
@@ -26,6 +27,12 @@ public sealed class BiometricaHandlerTests
 
     public BiometricaHandlerTests()
     {
+        _repo.ListLinkedProceduresByIdentityDocumentsAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<IReadOnlyCollection<(string DocumentType, string DocumentNumber)>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, IReadOnlyList<LinkedProcedureSummary>>());
+
         _iniciar = new IniciarBiometriaHandler(_repo);
         _getByToken = new GetBiometriaByTokenHandler(_repo);
         _completar = new CompletarBiometriaHandler(_repo, _storage, _scorer);
@@ -713,6 +720,47 @@ public sealed class BiometricaHandlerTests
         result.Stats.EnProceso.Should().Be(3); // enviado(1) + en_proceso(2)
         result.Stats.Rechazadas.Should().Be(1);
         result.Stats.Expiradas.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ListTenant_MapsLinkedProceduresExcludingPrimary()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenant = Guid.NewGuid();
+        var handler = new ListTenantBiometricValidationsHandler(_repo);
+        var primaryInstanceId = Guid.NewGuid();
+        var linkedInstanceId = Guid.NewGuid();
+
+        var row = TenantVal(tenant, BiometricEstados.Aprobado, reference: "TRM-2026-000001");
+        row.ProcedureInstanceId = primaryInstanceId;
+        row.ProcedureInstance!.Id = primaryInstanceId;
+
+        var identityKey = BiometricRules.IdentidadKey(tenant, row.DocumentType, row.DocumentNumber);
+        _repo.ListLinkedProceduresByIdentityDocumentsAsync(
+                tenant,
+                Arg.Any<IReadOnlyCollection<(string DocumentType, string DocumentNumber)>>(),
+                ct)
+            .Returns(new Dictionary<string, IReadOnlyList<LinkedProcedureSummary>>
+            {
+                [identityKey] =
+                [
+                    new LinkedProcedureSummary(primaryInstanceId, "TRM-2026-000001", TramiteEstado.Borrador, "traspaso"),
+                    new LinkedProcedureSummary(linkedInstanceId, "TRM-2026-000099", TramiteEstado.Preparado, "matricula_inicial"),
+                ],
+            });
+
+        _repo.ListBiometricValidationsByTenantAsync(tenant, Arg.Any<int>(), Arg.Any<int>(), null, Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new List<ProcedureInstanceBiometricValidation> { row });
+        _repo.CountBiometricValidationsByEstadoAsync(tenant, null, Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new Dictionary<string, int> { [BiometricEstados.Aprobado] = 1 });
+
+        var (result, error) = await handler.HandleAsync(tenant, ct: ct);
+
+        error.Should().BeNull();
+        var dto = result!.Validations.Single();
+        dto.LinkedProcedures.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new LinkedProcedureDto(
+                linkedInstanceId, "TRM-2026-000099", TramiteEstado.Preparado, "matricula_inicial"));
     }
 
     [Fact]

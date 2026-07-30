@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.ReadModels;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Domain.Repositories;
@@ -177,6 +178,17 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<IReadOnlySet<string>> ListVigenteApprovedIdentityKeysAsync(
         IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// Feature #11066 / HU #11069 — trámites del tenant asociados a la misma identidad
+    /// (<paramref name="documents"/> = pares tipo+número): por validación biométrica de la instancia
+    /// y/o por actores con ese documento. Mapa por <see cref="Entities.BiometricRules.IdentidadKey"/>.
+    /// Solo lectura.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, IReadOnlyList<LinkedProcedureSummary>>> ListLinkedProceduresByIdentityDocumentsAsync(
+        Guid tenantId,
+        IReadOnlyCollection<(string DocumentType, string DocumentNumber)> documents,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Resuelve una validación biométrica por el hash SHA-256 de su token (acceso PÚBLICO vía

@@ -1,6 +1,7 @@
 using System.Data;
 using System.Security.Cryptography;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Infrastructure.Persistence.Sql;
@@ -17,6 +18,10 @@ public static class DevelopmentAuthSeeder
     public const string DemoPassword = "DemoPass1!";
     public const string OtAdminEmail = "otadmin@flit.local";
     public const string OtAdminPassword = "OtAdminPass1!";
+
+    /// <summary>Admin OT Sabaneta (DEV) — tenant vinculado al catálogo RUNT 5631000.</summary>
+    public const string OtSabanetaEmail = "otsabaneta@flit.local";
+    public const string OtSabanetaPassword = "OtSabaneta1!";
 
     /// <summary>Usuario fijo del tab Operación (HU #10200); el SQL seed crea la fila sin credencial.</summary>
     public const string DevOperacionEmail = "dev@flitsas.io";
@@ -36,9 +41,23 @@ public static class DevelopmentAuthSeeder
     public static readonly Guid OtDevTenantId =
         Guid.Parse("bbbbbbbb-0001-4000-8000-000000000001");
 
+    /// <summary>Tenant OT Sabaneta (DEV) — perfil → catálogo <c>5631000</c>.</summary>
+    public static readonly Guid OtSabanetaTenantId =
+        Guid.Parse("bbbbbbbb-0003-4000-8000-000000000001");
+
+    /// <summary>Oficina Sabaneta en <c>catalogs.transit_offices</c> (seed RUNT HU #10659).</summary>
+    public static readonly Guid OtSabanetaCatalogOfficeId =
+        Guid.Parse("ba575641-ea48-5cd2-ac51-ebba02584ba5");
+
     /// <summary>Usuario ot_admin fijo — alineado con seed SQL y FK changed_by en trámites.</summary>
     public static readonly Guid OtAdminUserId =
         Guid.Parse("ec4dddb9-ade5-43e8-b33b-c6036eba49d0");
+
+    public static readonly Guid OtSabanetaUserId =
+        Guid.Parse("ec4dddb9-ade5-43e8-b33b-c6036eba49d1");
+
+    public static readonly Guid OtSabanetaProfileId =
+        Guid.Parse("b9ec839d-7b78-4165-8860-cf29b104c76d");
 
     public static async Task SeedAsync(
         FlitDbContext db,
@@ -57,6 +76,7 @@ public static class DevelopmentAuthSeeder
         await SeedSuperAdminAsync(db, passwordHasher, cancellationToken);
         await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
         await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
+        await SeedSabanetaOtAdminAsync(db, passwordHasher, cancellationToken);
         await SeedBaseModulesAsync(db, cancellationToken);
         await SeedReportesPermissionsAsync(db, cancellationToken);
         await SeedDetailedReportPermissionsAsync(db, cancellationToken);
@@ -377,6 +397,104 @@ public static class DevelopmentAuthSeeder
         });
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Tenant OT Sabaneta + perfil sobre catálogo RUNT 5631000 + usuario
+    /// <see cref="OtSabanetaEmail"/> / <see cref="OtSabanetaPassword"/> (DEV).
+    /// Idempotente. Requiere que el seed del catálogo RUNT (HU #10659) haya corrido.
+    /// </summary>
+    private static async Task SeedSabanetaOtAdminAsync(
+        FlitDbContext db,
+        IPasswordHasher passwordHasher,
+        CancellationToken cancellationToken)
+    {
+        var catalogExists = await db.TransitOffices
+            .AnyAsync(o => o.Id == OtSabanetaCatalogOfficeId, cancellationToken);
+        if (!catalogExists)
+            return;
+
+        var now = DateTimeOffset.UtcNow;
+
+        // 1. Tenant OT-SABANETA
+        var tenant = await db.Tenants
+            .FirstOrDefaultAsync(t => t.Id == OtSabanetaTenantId || t.Code == "OT-SABANETA", cancellationToken);
+        if (tenant is null)
+        {
+            tenant = new Tenant
+            {
+                Id = OtSabanetaTenantId,
+                Code = "OT-SABANETA",
+                LegalName = "Secretaría de Tránsito y Transporte de Sabaneta (DEV)",
+                TaxId = "900273813-7",
+                TenantType = "RENTING",
+                IsActive = true,
+                CreatedAt = now,
+                RowVersion = 0,
+            };
+            db.Tenants.Add(tenant);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        var tenantId = tenant.Id;
+
+        // 2. Perfil OT → catálogo Sabaneta (una oficina física = un solo tenant)
+        var existingProfileForOffice = await db.TransitOfficeProfiles
+            .FirstOrDefaultAsync(p => p.TransitOfficeId == OtSabanetaCatalogOfficeId, cancellationToken);
+        if (existingProfileForOffice is null)
+        {
+            db.TransitOfficeProfiles.Add(new TransitOfficeProfile
+            {
+                Id = OtSabanetaProfileId,
+                TenantId = tenantId,
+                TransitOfficeId = OtSabanetaCatalogOfficeId,
+                OperationMode = "dashboard",
+                QuipuxReadOnly = false,
+                CreatedAt = now,
+                RowVersion = 0,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            // Si ya hay perfil (p. ej. creado por UI), asignar el usuario a ESE tenant.
+            tenantId = existingProfileForOffice.TenantId;
+        }
+
+        // 3. Usuario + credencial
+        var existingUser = await db.Users
+            .FirstOrDefaultAsync(u => u.Email == OtSabanetaEmail, cancellationToken);
+        if (existingUser is not null)
+        {
+            await EnsureUserCredentialsAsync(
+                db, existingUser.Id, OtSabanetaPassword, passwordHasher, cancellationToken);
+            await EnsureOtAdminAssignmentAsync(db, existingUser.Id, tenantId, cancellationToken);
+            return;
+        }
+
+        db.Users.Add(new User
+        {
+            Id = OtSabanetaUserId,
+            Email = OtSabanetaEmail,
+            DisplayName = "Administrador OT Sabaneta",
+            Status = "active",
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        db.UserCredentials.Add(new UserCredential
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = OtSabanetaUserId,
+            PasswordHash = passwordHasher.Hash(OtSabanetaPassword),
+            MustChangePassword = false,
+            FailedLoginAttempts = 0,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        await EnsureOtAdminAssignmentAsync(db, OtSabanetaUserId, tenantId, cancellationToken);
     }
 
     /// <summary>

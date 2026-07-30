@@ -8,6 +8,7 @@ import type {
   IniciarPrevalidacionResult,
 } from '@/lib/api/types/procedure-runtime';
 import { TramitesApiError } from '@/lib/api/tramites-client';
+import { sanitizeDocNumber } from '@/lib/validation/fieldRules';
 
 /**
  * Formulario modal/drawer para crear una prevalidación de identidad standalone (HU #10868).
@@ -169,7 +170,14 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
                 <select
                   id="pv-docType"
                   value={values.documentType}
-                  onChange={(e) => set('documentType', e.target.value)}
+                  onChange={(e) => {
+                    const nextType = e.target.value;
+                    set('documentType', nextType);
+                    set(
+                      'documentNumber',
+                      sanitizeDocNumber(values.documentNumber, nextType),
+                    );
+                  }}
                   disabled={submitting}
                   className={fieldClass('documentType')}
                   aria-describedby={touched.documentType && errors.documentType ? 'pv-docType-err' : undefined}
@@ -194,8 +202,11 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
                 <input
                   id="pv-docNum"
                   type="text"
+                  inputMode={values.documentType === 'PAS' ? 'text' : 'numeric'}
                   value={values.documentNumber}
-                  onChange={(e) => set('documentNumber', e.target.value)}
+                  onChange={(e) =>
+                    set('documentNumber', sanitizeDocNumber(e.target.value, values.documentType))
+                  }
                   disabled={submitting}
                   placeholder="Ej. 1234567890"
                   autoComplete="off"

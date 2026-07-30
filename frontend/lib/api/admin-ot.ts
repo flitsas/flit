@@ -93,6 +93,18 @@ export function fetchOtClientProcedures(
   });
 }
 
+/** Detalle de un trámite de cliente (GET /client-procedures/{id}). */
+export function fetchOtClientProcedure(
+  id: string,
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtClientProcedure> {
+  return apiFetch<OtClientProcedure>(`${base}/client-procedures/${id}`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
+}
+
 /** Diagnóstico de la bandeja OT (HU #10541 / R09): entregados con/sin grant vigente. */
 export function fetchOtBandejaHealth(
   signal?: AbortSignal,
