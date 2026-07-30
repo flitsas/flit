@@ -118,19 +118,12 @@ export function Reportes() {
   );
 }
 
-function SyncLegacyFiltersToV2({
-  from,
-  to,
-  tenantId,
-}: {
-  from: string;
-  to: string;
-  tenantId: string;
-}) {
+/** Solo sincroniza tenantId: from/to V2 quedan en default 30 días (HU #11115 AC1). */
+function SyncLegacyFiltersToV2({ tenantId }: { tenantId: string }) {
   const { patchFilters } = useReportFilters();
   useEffect(() => {
-    patchFilters({ from, to, tenantId });
-  }, [from, to, tenantId, patchFilters]);
+    patchFilters({ tenantId });
+  }, [tenantId, patchFilters]);
   return null;
 }
 
@@ -223,11 +216,7 @@ function ReportesInner() {
 
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
-      <SyncLegacyFiltersToV2
-        from={filters.range.from}
-        to={filters.range.to}
-        tenantId={filters.tenantId}
-      />
+      <SyncLegacyFiltersToV2 tenantId={filters.tenantId} />
       <ModuleTitle
         title="Reportes y Analíticas"
         subtitle="Monitorea el desempeño operativo por pestañas temáticas."
@@ -306,11 +295,7 @@ function ReportesInner() {
             />
           )}
           {activeTab === "tramites" && (
-            <TramitesV2Tab
-              from={v2Filters.from}
-              to={v2Filters.to}
-              tenantId={v2Filters.tenantId || undefined}
-            />
+            <TramitesV2Tab tenantId={v2Filters.tenantId || undefined} />
           )}
           {activeTab === "consolidado" && (
             <ConsolidadoTab

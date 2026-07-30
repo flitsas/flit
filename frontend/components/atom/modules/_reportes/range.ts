@@ -26,3 +26,16 @@ export function defaultRange(reference: Date = new Date()): DateRange {
 export function isValidRange(range: DateRange): boolean {
   return Boolean(range.from) && Boolean(range.to) && range.from <= range.to;
 }
+
+/**
+ * `true` si el rango cabe en `maxMonths` meses calendario (inclusive).
+ * HU #11115 AC6 — UI bloquea > 12 meses antes de llamar al backend.
+ */
+export function isWithinMaxMonths(range: DateRange, maxMonths = 12): boolean {
+  if (!isValidRange(range)) return false;
+  const start = new Date(`${range.from}T00:00:00`);
+  const end = new Date(`${range.to}T00:00:00`);
+  const limit = new Date(start);
+  limit.setMonth(limit.getMonth() + maxMonths);
+  return end <= limit;
+}

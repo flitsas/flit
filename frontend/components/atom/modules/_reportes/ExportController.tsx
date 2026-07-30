@@ -9,6 +9,7 @@ import {
   type ExportJob,
 } from "@/lib/api/reporting-v2";
 import { watchExportJob } from "@/lib/signalr/export-jobs-client";
+import { FLIT_EXPORT_JOB_CREATED } from "./export-events";
 
 type ToastState =
   | { kind: "success"; jobId: string; message: string }
@@ -103,11 +104,19 @@ export function ExportController({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async inicial
     void refresh();
     const active = watchers.current;
+    const onExternalJob = (event: Event) => {
+      const job = (event as CustomEvent<ExportJob>).detail;
+      if (!job?.id) return;
+      setJobs((prev) => [job, ...prev.filter((j) => j.id !== job.id)].slice(0, 8));
+      void attachWatcher(job.id);
+    };
+    window.addEventListener(FLIT_EXPORT_JOB_CREATED, onExternalJob);
     return () => {
+      window.removeEventListener(FLIT_EXPORT_JOB_CREATED, onExternalJob);
       for (const dispose of active.values()) dispose();
       active.clear();
     };
-  }, [refresh]);
+  }, [refresh, attachWatcher]);
 
   useEffect(() => {
     for (const job of jobs) {
