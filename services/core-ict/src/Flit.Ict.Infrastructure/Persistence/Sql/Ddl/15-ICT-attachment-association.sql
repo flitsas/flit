@@ -84,7 +84,7 @@ INSERT INTO ict.external_integration_attachment_association
     (3,  'factura',                 '',                 ''),          -- Factura de venta (matrículas)
     (4,  'aduana',                  '',                 ''),          -- Aduana/importación (matrículas) -> aduana
     (5,  'cedulas',                 'cedulas',          ''),          -- Documento Comprador -> tipo BASE (convención comprador)
-    (6,  'contrato_leasing',        '',                 ''),          -- Contrato LEASING (matrícula leasing tipo 2) -> tipo loose
+    (6,  'contrato_leasing',        'contrato_leasing', ''),          -- Contrato LEASING (mat. leasing tipo 2 + traspaso unilateral tipo 4) -> tipo loose
     (7,  '',                        'cedulas_vendedor', ''),          -- Documento Vendedor -> sufijo _vendedor (convención)
     (8,  'certificado_cepd',        '',                 ''),          -- Certificado CEPD (matrículas 1/2) -> tipo loose
     (9,  'otro',                    '',                 ''),          -- Otros Anexos
@@ -105,6 +105,5 @@ ON CONFLICT (eiad_id) DO UPDATE SET
 --   poder_comprador, poder_vendedor (apoderado, eiad 11/12)
 --   blindaje (otros trámites, eiad 13)
 -- Promover a ítems reales de TramiteTipologiaCatalog cuando negocio los publique en el checklist v2.
--- Nota de consistencia (pendiente de decisión de negocio): configuration_documents habilita eiad 6
--- (Contrato LEASING) también para el traspaso unilateral (tipo 4); aquí sigue clasificado SOLO en
--- matrícula. Si se quiere clasificar también en traspaso, añadir doc_tipo_traspaso='contrato_leasing'.
+-- Nota: eiad 6 (Contrato LEASING) se clasifica en matrícula (tipo 2) Y traspaso (tipo 4), acorde a
+-- external_integration_configuration_documents que lo habilita en ambos (decisión de negocio 2026-07-30).
