@@ -628,15 +628,27 @@ internal sealed class SavedQueryRepository(FlitDbContext db) : ISavedQueryReposi
         return Map(entity);
     }
 
-    public async Task<bool> DeleteAsync(Guid tenantId, Guid userId, Guid id, CancellationToken ct = default)
+    public async Task<string?> DeleteAsync(Guid tenantId, Guid userId, Guid id, CancellationToken ct = default)
     {
+        var ownership = await GetOwnershipAsync(tenantId, id, ct).ConfigureAwait(false);
+        if (ownership is null) return "not_found";
+        if (ownership.Value.OwnerUserId != userId) return "forbidden";
+
         var entity = await db.SavedQueries
-            .FirstOrDefaultAsync(q => q.Id == id && q.TenantId == tenantId && q.UserId == userId && q.DeletedAt == null, ct);
-        if (entity is null) return false;
+            .FirstOrDefaultAsync(q => q.Id == id && q.TenantId == tenantId && q.DeletedAt == null, ct);
+        if (entity is null) return "not_found";
         entity.DeletedAt = DateTimeOffset.UtcNow;
         entity.DeletedBy = userId;
         await db.SaveChangesAsync(ct);
-        return true;
+        return null;
+    }
+
+    public async Task<(Guid OwnerUserId, Guid TenantId)?> GetOwnershipAsync(
+        Guid tenantId, Guid id, CancellationToken ct = default)
+    {
+        var entity = await db.SavedQueries.AsNoTracking()
+            .FirstOrDefaultAsync(q => q.Id == id && q.TenantId == tenantId && q.DeletedAt == null, ct);
+        return entity is null ? null : (entity.UserId, entity.TenantId);
     }
 
     private static SavedQueryDto Map(SavedQuery q)

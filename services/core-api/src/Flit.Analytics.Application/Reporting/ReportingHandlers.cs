@@ -357,3 +357,73 @@ public sealed class GetDownloadUrlHandler(IExportJobRepository repo, IExportFile
         return (new DownloadUrlDto(url.Value.Url, expiresAt), null);
     }
 }
+
+/// <summary>Visibilidad de saved queries (HU #11111 AC1/AC2/AC5).</summary>
+public static class SavedQueryVisibility
+{
+    public static bool IsVisibleTo(
+        Guid queryTenantId,
+        Guid ownerUserId,
+        bool isShared,
+        Guid callerTenantId,
+        Guid callerUserId)
+    {
+        if (queryTenantId != callerTenantId) return false;
+        return ownerUserId == callerUserId || isShared;
+    }
+
+    public static IReadOnlyList<T> FilterVisible<T>(
+        IEnumerable<T> items,
+        Func<T, Guid> tenantId,
+        Func<T, Guid> ownerUserId,
+        Func<T, bool> isShared,
+        Guid callerTenantId,
+        Guid callerUserId) =>
+        items.Where(i => IsVisibleTo(tenantId(i), ownerUserId(i), isShared(i), callerTenantId, callerUserId)).ToList();
+}
+
+public sealed class SavedQueriesHandler(ISavedQueryRepository repo)
+{
+    public Task<IReadOnlyList<SavedQueryDto>> ListAsync(Guid tenantId, Guid userId, CancellationToken ct = default) =>
+        repo.ListAsync(tenantId, userId, ct);
+
+    public async Task<(SavedQueryDto? Result, string? Error)> CreateAsync(
+        Guid tenantId,
+        Guid userId,
+        string? name,
+        string? description,
+        string filtersJson,
+        bool isShared,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return (null, "name_required");
+        var filters = string.IsNullOrWhiteSpace(filtersJson) ? "{}" : filtersJson;
+        try { using var _ = System.Text.Json.JsonDocument.Parse(filters); }
+        catch (System.Text.Json.JsonException) { return (null, "invalid_filters"); }
+
+        var created = await repo.CreateAsync(tenantId, userId, name, description, filters, isShared, ct)
+            .ConfigureAwait(false);
+        return (created, null);
+    }
+
+    public Task<string?> DeleteAsync(Guid tenantId, Guid userId, Guid id, CancellationToken ct = default) =>
+        repo.DeleteAsync(tenantId, userId, id, ct);
+}
+
+public sealed class DashboardPreferencesHandler(IDashboardPreferencesRepository repo)
+{
+    public Task<DashboardPreferencesDto> GetAsync(Guid tenantId, Guid userId, CancellationToken ct = default) =>
+        repo.GetAsync(tenantId, userId, ct);
+
+    public async Task<(DashboardPreferencesDto? Result, string? Error)> UpsertAsync(
+        Guid tenantId, Guid userId, string configJson, CancellationToken ct = default)
+    {
+        var json = string.IsNullOrWhiteSpace(configJson) ? "{}" : configJson;
+        try { using var _ = System.Text.Json.JsonDocument.Parse(json); }
+        catch (System.Text.Json.JsonException) { return (null, "invalid_config"); }
+
+        var result = await repo.UpsertAsync(tenantId, userId, json, ct).ConfigureAwait(false);
+        return (result, null);
+    }
+}
+

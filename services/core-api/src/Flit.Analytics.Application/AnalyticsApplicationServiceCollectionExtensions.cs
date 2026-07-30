@@ -26,6 +26,8 @@ public static class AnalyticsApplicationServiceCollectionExtensions
         services.AddScoped<RequestExportHandler>();
         services.AddScoped<GetExportJobHandler>();
         services.AddScoped<GetDownloadUrlHandler>();
+        services.AddScoped<SavedQueriesHandler>();
+        services.AddScoped<DashboardPreferencesHandler>();
 
         // Reportes2 HU-B — handlers de métricas (§4.2–§4.5 del contrato).
         services.AddScoped<GetOtMetricsHandler>();

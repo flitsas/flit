@@ -83,7 +83,12 @@ public interface ISavedQueryRepository
         Guid tenantId, Guid userId, string name, string? description, string filtersJson, bool isShared, CancellationToken ct = default);
     Task<SavedQueryDto?> UpdateAsync(
         Guid tenantId, Guid userId, Guid id, string name, string? description, string filtersJson, bool isShared, CancellationToken ct = default);
-    Task<bool> DeleteAsync(Guid tenantId, Guid userId, Guid id, CancellationToken ct = default);
+
+    /// <summary>Soft-delete. Retorna <c>null</c> OK, <c>not_found</c> o <c>forbidden</c> (AC4).</summary>
+    Task<string?> DeleteAsync(Guid tenantId, Guid userId, Guid id, CancellationToken ct = default);
+
+    /// <summary>Busca por id+tenant sin filtrar owner (para ownership checks).</summary>
+    Task<(Guid OwnerUserId, Guid TenantId)?> GetOwnershipAsync(Guid tenantId, Guid id, CancellationToken ct = default);
 }
 
 public interface IDashboardPreferencesRepository

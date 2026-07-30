@@ -292,7 +292,7 @@ public static class ReportingEndpoints
 
     private static async Task<IResult> ListSavedQueriesAsync(
         HttpContext http,
-        ISavedQueryRepository repo,
+        SavedQueriesHandler handler,
         CancellationToken ct,
         [FromQuery] Guid? tenantId = null)
     {
@@ -300,13 +300,13 @@ public static class ReportingEndpoints
             return error!;
         if (!TryUserId(http.User, out var userId))
             return Results.Unauthorized();
-        var items = await repo.ListAsync(tenant, userId, ct).ConfigureAwait(false);
+        var items = await handler.ListAsync(tenant, userId, ct).ConfigureAwait(false);
         return Results.Ok(new { items });
     }
 
     private static async Task<IResult> CreateSavedQueryAsync(
         HttpContext http,
-        ISavedQueryRepository repo,
+        SavedQueriesHandler handler,
         [FromBody] SavedQueryBody body,
         CancellationToken ct,
         [FromQuery] Guid? tenantId = null)
@@ -315,13 +315,16 @@ public static class ReportingEndpoints
             return error!;
         if (!TryUserId(http.User, out var userId))
             return Results.Unauthorized();
-        if (string.IsNullOrWhiteSpace(body.Name))
-            return Results.BadRequest(new { code = "NAME_REQUIRED" });
 
         var filtersJson = body.Filters is null ? "{}" : JsonSerializer.Serialize(body.Filters);
-        var created = await repo.CreateAsync(tenant, userId, body.Name, body.Description, filtersJson, body.IsShared, ct)
-            .ConfigureAwait(false);
-        return Results.Created($"/api/v1/reporting/saved-queries/{created.Id}", created);
+        var (created, err) = await handler.CreateAsync(
+            tenant, userId, body.Name, body.Description, filtersJson, body.IsShared, ct).ConfigureAwait(false);
+        return err switch
+        {
+            "name_required" => Results.BadRequest(new { code = "NAME_REQUIRED" }),
+            "invalid_filters" => Results.BadRequest(new { code = "INVALID_FILTERS" }),
+            _ => Results.Created($"/api/v1/reporting/saved-queries/{created!.Id}", created),
+        };
     }
 
     private static async Task<IResult> UpdateSavedQueryAsync(
@@ -348,7 +351,7 @@ public static class ReportingEndpoints
     private static async Task<IResult> DeleteSavedQueryAsync(
         HttpContext http,
         Guid id,
-        ISavedQueryRepository repo,
+        SavedQueriesHandler handler,
         CancellationToken ct,
         [FromQuery] Guid? tenantId = null)
     {
@@ -356,13 +359,18 @@ public static class ReportingEndpoints
             return error!;
         if (!TryUserId(http.User, out var userId))
             return Results.Unauthorized();
-        var ok = await repo.DeleteAsync(tenant, userId, id, ct).ConfigureAwait(false);
-        return ok ? Results.NoContent() : Results.NotFound();
+        var err = await handler.DeleteAsync(tenant, userId, id, ct).ConfigureAwait(false);
+        return err switch
+        {
+            "forbidden" => Results.Forbid(),
+            "not_found" => Results.NotFound(),
+            _ => Results.NoContent(),
+        };
     }
 
     private static async Task<IResult> GetPreferencesAsync(
         HttpContext http,
-        IDashboardPreferencesRepository repo,
+        DashboardPreferencesHandler handler,
         CancellationToken ct,
         [FromQuery] Guid? tenantId = null)
     {
@@ -370,12 +378,12 @@ public static class ReportingEndpoints
             return error!;
         if (!TryUserId(http.User, out var userId))
             return Results.Unauthorized();
-        return Results.Ok(await repo.GetAsync(tenant, userId, ct).ConfigureAwait(false));
+        return Results.Ok(await handler.GetAsync(tenant, userId, ct).ConfigureAwait(false));
     }
 
     private static async Task<IResult> PutPreferencesAsync(
         HttpContext http,
-        IDashboardPreferencesRepository repo,
+        DashboardPreferencesHandler handler,
         [FromBody] PreferencesBody body,
         CancellationToken ct,
         [FromQuery] Guid? tenantId = null)
@@ -385,7 +393,12 @@ public static class ReportingEndpoints
         if (!TryUserId(http.User, out var userId))
             return Results.Unauthorized();
         var json = body.Config is null ? "{}" : JsonSerializer.Serialize(body.Config);
-        return Results.Ok(await repo.UpsertAsync(tenant, userId, json, ct).ConfigureAwait(false));
+        var (result, err) = await handler.UpsertAsync(tenant, userId, json, ct).ConfigureAwait(false);
+        return err switch
+        {
+            "invalid_config" => Results.BadRequest(new { code = "INVALID_CONFIG" }),
+            _ => Results.Ok(result),
+        };
     }
 
     private static bool TryUserId(ClaimsPrincipal user, out Guid userId)
