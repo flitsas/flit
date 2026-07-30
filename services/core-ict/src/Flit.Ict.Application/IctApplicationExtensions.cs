@@ -21,6 +21,7 @@ public static class IctApplicationExtensions
         services.AddScoped<RegisterAttachmentHandler>();
         services.AddScoped<ListAttachmentsHandler>();
         services.AddScoped<UploadAttachmentV1Handler>();
+        services.AddScoped<CloseDocumentHandler>();
         services.AddScoped<ReprocessHandler>();
         services.AddScoped<AbortDraftHandler>();
         services.AddScoped<PauseDraftHandler>();
