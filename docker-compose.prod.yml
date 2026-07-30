@@ -312,7 +312,7 @@ services:
   # tramite va en su propia transaccion y el candado es de sesion, asi que no queda a
   # medias — pero ese id hay que volver a lanzarlo. No desplegar durante una ola.
   migracion-api:
-    image: ghcr.io/flitsas/flitdev/core-api:${CORE_API_TAG:-latest}
+    image: ghcr.io/flitsas/flitqa/core-api:${CORE_API_TAG:-latest}
     entrypoint: ["dotnet", "/app/migracion-api/Flit.DataMigration.Api.dll"]
     # content root = working_dir, para que .NET encuentre su appsettings.json
     working_dir: /app/migracion-api
@@ -323,7 +323,7 @@ services:
       # los adjuntos a un file-manager y el endpoint leeria de otro. Falla en silencio.
       <<: *flitmig-env
       # Puerto interno fijo: tiene que coincidir con migracion-cluster del gateway.
-      ASPNETCORE_URLS: http://+:4030
+      ASPNETCORE_URLS: http://+:5030
       # Con false las rutas ni se registran: responden 404, no 403. Cambiarlo NO exige
       # desplegar, solo recrear el contenedor.
       FLITMIG_MigracionApi__Enabled: ${FLITMIG_MIGRACION_API_ENABLED:-false}
@@ -333,7 +333,7 @@ services:
     # Healthcheck propio: el HEALTHCHECK de la imagen trae el puerto 8081 en duro y se
     # heredaria roto.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4030/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:5030/health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -353,15 +353,9 @@ services:
       Cors__AllowedOrigins__0: ${CORS_ORIGIN:-https://qa.flitsas.online}
       # Destinos internos del YARP: apuntan al puerto interno de cada servicio.
       # (sobrescriben appsettings.json, que trae los puertos por defecto)
-      ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
-      ReverseProxy__Clusters__python-ml-cluster__Destinations__python-ml-1__Address: http://python-ml:${PYTHON_ML_PORT:-4012}/
-      ReverseProxy__Clusters__core-ict-cluster__Destinations__core-ict-1__Address: http://core-ict:${CORE_ICT_PORT:-4020}/
       ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-5003}/
       ReverseProxy__Clusters__python-ml-cluster__Destinations__python-ml-1__Address: http://python-ml:${PYTHON_ML_PORT:-5012}/
       ReverseProxy__Clusters__core-ict-cluster__Destinations__core-ict-1__Address: http://core-ict:${CORE_ICT_PORT:-5020}/
-      ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
-      ReverseProxy__Clusters__python-ml-cluster__Destinations__python-ml-1__Address: http://python-ml:${PYTHON_ML_PORT:-4012}/
-      ReverseProxy__Clusters__core-ict-cluster__Destinations__core-ict-1__Address: http://core-ict:${CORE_ICT_PORT:-4020}/
       # migracion-cluster NO se sobrescribe: migracion-api escucha en el 4030 fijo en
       # los tres ambientes (no publica puerto en el host, no hay nada con que chocar),
       # asi que vale el destino que ya trae appsettings.json.
