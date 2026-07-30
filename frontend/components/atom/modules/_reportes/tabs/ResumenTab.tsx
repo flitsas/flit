@@ -22,6 +22,7 @@ import { formatInt } from "../format";
 import { KpiCard } from "../KpiCard";
 import { LiveNowPanel } from "../LiveNowPanel";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
+import type { DashboardPreferencesConfig } from "../dashboardPreferences";
 
 export interface ResumenTabProps {
   filters: ReportFilters;
@@ -30,6 +31,8 @@ export interface ResumenTabProps {
   onDrillDown: (segment: { category?: AnalyticsCategory; status?: string }) => void;
   /** `category:status` abierto en el panel de detalle, para resaltar la leyenda. */
   activeSegmentKey?: string;
+  /** Preferencias de visibilidad/orden de KPIs (HU #11118). */
+  kpiPreferences?: DashboardPreferencesConfig | null;
 }
 
 /** Completa las categorías ausentes con totales en cero para pintar siempre los donuts. */
@@ -59,9 +62,18 @@ function categoryTotals(data: AnalyticsOverviewResponse | null): Record<Analytic
   return totals;
 }
 
-export function ResumenTab({ filters, needsCompany, onDrillDown, activeSegmentKey }: ResumenTabProps) {
+export function ResumenTab({
+  filters,
+  needsCompany,
+  onDrillDown,
+  activeSegmentKey,
+  kpiPreferences,
+}: ResumenTabProps) {
   const { range, tenantId, compareWith } = filters;
   const params = { from: range.from, to: range.to, tenantId: tenantId || undefined };
+
+  const isKpiVisible = (id: string) =>
+    kpiPreferences?.kpis.find((k) => k.id === id)?.visible !== false;
 
   // Overview (endpoint legado): admite SuperAdmin sin tenant (vista global).
   const overview = useAnalyticsQuery(
@@ -110,15 +122,17 @@ export function ResumenTab({ filters, needsCompany, onDrillDown, activeSegmentKe
         <div className="flex flex-col gap-4">
           {/* KPIs grandes con variación y tooltip "cómo se calcula" */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <KpiCard
-              label="Total trámites"
-              value={formatInt(totals.total)}
-              tooltip="Suma de trámites de todas las categorías creados en el rango de fechas."
-              variation={variation("total")}
-              color="#162744"
-              testId="kpi-total-tramites"
-            />
-            {CATEGORY_ORDER.map((cat) => (
+            {isKpiVisible("totalTramites") && (
+              <KpiCard
+                label="Total trámites"
+                value={formatInt(totals.total)}
+                tooltip="Suma de trámites de todas las categorías creados en el rango de fechas."
+                variation={variation("total")}
+                color="#162744"
+                testId="kpi-total-tramites"
+              />
+            )}
+            {CATEGORY_ORDER.filter((cat) => isKpiVisible(cat)).map((cat) => (
               <KpiCard
                 key={cat}
                 label={CATEGORY_META[cat].label}
@@ -128,6 +142,22 @@ export function ResumenTab({ filters, needsCompany, onDrillDown, activeSegmentKe
                 color={CATEGORY_META[cat].color}
               />
             ))}
+            {isKpiVisible("tramitesRechazados") && (
+              <KpiCard
+                label="Trámites rechazados"
+                value={formatInt(
+                  (overview.data?.categories ?? []).reduce(
+                    (acc, cat) =>
+                      acc +
+                      (cat.byStatus.find((s) => s.status === "rechazado")?.count ?? 0),
+                    0,
+                  ),
+                )}
+                tooltip="Suma de trámites en estado rechazado en el rango."
+                invertVariationColor
+                testId="kpi-tramites-rechazados"
+              />
+            )}
           </div>
 
           {/* Donuts por categoría (drill-down al detalle) */}

@@ -5,7 +5,7 @@
 // compartido al detalle de trámites. El dashboard original (HU #10247/#10248)
 // se recoloca en la pestaña "Resumen general" sin duplicarse.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarClock, ShieldQuestion } from "lucide-react";
+import { Bookmark, CalendarClock, Settings2, ShieldQuestion } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import type { AnalyticsCategory, CompanyListItem } from "@/lib/api/types";
@@ -27,6 +27,15 @@ import { TramitesV2Tab } from "./_reportes/tabs/TramitesV2Tab";
 import { ConsolidadoTab, ProductividadV2Tab } from "./_reportes/tabs/ConsolidadoProductividadTabs";
 import { AuditoriaTab, SlaTab } from "./_reportes/tabs/SlaAuditoriaTabs";
 import { ReportFilterProvider, useReportFilters } from "./_reportes/ReportFilterContext";
+import { DashboardPreferencesPanel } from "./_reportes/DashboardPreferencesPanel";
+import { SavedQueriesPanel } from "./_reportes/SavedQueriesPanel";
+import {
+  getDashboardPreferences,
+} from "@/lib/api/reporting-v2";
+import {
+  parseDashboardPreferences,
+  type DashboardPreferencesConfig,
+} from "./_reportes/dashboardPreferences";
 
 type TabId =
   | "resumen"
@@ -160,6 +169,23 @@ function ReportesInner() {
   // Programación y alertas (HU-D): visible con su permiso; SuperAdmin bypass.
   const canManageScheduling = isSuper || permissions.includes(SCHEDULING_SLUG);
   const [schedulingOpen, setSchedulingOpen] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [dashPrefs, setDashPrefs] = useState<DashboardPreferencesConfig | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDashboardPreferences(filters.tenantId || undefined)
+      .then((res) => {
+        if (!cancelled) setDashPrefs(parseDashboardPreferences(res.configJson));
+      })
+      .catch(() => {
+        if (!cancelled) setDashPrefs(parseDashboardPreferences(null));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.tenantId]);
 
   // Drill-down compartido: cualquier gráfica abre el panel lateral de detalle.
   const [segment, setSegment] = useState<SelectedSegment | null>(null);
@@ -212,6 +238,24 @@ function ReportesInner() {
             Programación y alertas
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => setPrefsOpen(true)}
+          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-[#F4F7FC] dark:hover:bg-white/5"
+          data-testid="reportes-abrir-preferencias"
+        >
+          <Settings2 className="h-4 w-4" aria-hidden="true" />
+          Preferencias
+        </button>
+        <button
+          type="button"
+          onClick={() => setSavedOpen(true)}
+          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-[#F4F7FC] dark:hover:bg-white/5"
+          data-testid="reportes-abrir-consultas"
+        >
+          <Bookmark className="h-4 w-4" aria-hidden="true" />
+          Consultas
+        </button>
         {activeTab && EXPORT_TABS.includes(activeTab) && (
           <div className="ml-auto flex flex-col items-end gap-2">
             <ExportButtons
@@ -257,6 +301,7 @@ function ReportesInner() {
               needsCompany={needsCompany}
               onDrillDown={openSegment}
               activeSegmentKey={activeSegmentKey}
+              kpiPreferences={dashPrefs}
             />
           )}
           {activeTab === "operacion" && (
@@ -310,6 +355,18 @@ function ReportesInner() {
           tenantId={filters.tenantId || undefined}
         />
       )}
+
+      <DashboardPreferencesPanel
+        open={prefsOpen}
+        onClose={() => setPrefsOpen(false)}
+        tenantId={filters.tenantId || undefined}
+        onSaved={setDashPrefs}
+      />
+      <SavedQueriesPanel
+        open={savedOpen}
+        onClose={() => setSavedOpen(false)}
+        tenantId={filters.tenantId || undefined}
+      />
 
       {segment && (
         <ProcedureDetailPanel
