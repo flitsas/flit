@@ -4,6 +4,7 @@ using Flit.Analytics.Application.Reporting;
 using Flit.Infrastructure.Hubs;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Analytics;
+using Flit.Modules.Security.Domain.Auth;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -15,8 +16,8 @@ using Npgsql;
 namespace Flit.Infrastructure.Workers;
 
 /// <summary>
-/// Escucha NOTIFY 'export_jobs_channel' y despierta al worker.
-/// Fallback: el worker también hace polling cada 30 s (ADR-0037).
+/// Escucha NOTIFY 'export_jobs_channel' y despierta al worker vía <see cref="ExportJobsWakeSignal"/>.
+/// Fallback: el worker también hace polling cada 30 s (ADR-0037 / HU #11107 AC2).
 /// </summary>
 internal sealed partial class ExportJobsChannelListener(
     IConfiguration configuration,
@@ -42,8 +43,10 @@ internal sealed partial class ExportJobsChannelListener(
                 await conn.OpenAsync(stoppingToken);
                 conn.Notification += (_, e) =>
                 {
-                    if (string.Equals(e.Channel, "export_jobs_channel", StringComparison.Ordinal))
-                        LogNotifyReceived(logger, e.Payload);
+                    if (!string.Equals(e.Channel, "export_jobs_channel", StringComparison.Ordinal))
+                        return;
+                    LogNotifyReceived(logger, e.Payload);
+                    ExportJobsWakeSignal.Signal();
                 };
                 await using (var cmd = new NpgsqlCommand("LISTEN export_jobs_channel", conn))
                     await cmd.ExecuteNonQueryAsync(stoppingToken);
@@ -74,20 +77,27 @@ internal sealed partial class ExportJobsChannelListener(
 }
 
 /// <summary>
-/// Procesa export_jobs pendientes con FOR UPDATE SKIP LOCKED (ADR-0037).
+/// Procesa export_jobs pendientes con FOR UPDATE SKIP LOCKED (ADR-0037 / HU #11107).
 /// </summary>
 internal sealed partial class ExportJobsWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<ExportJobsWorker> logger) : BackgroundService
 {
+    private static readonly TimeSpan StuckProcessingThreshold = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan PollTimeout = TimeSpan.FromSeconds(30);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
+                await HealStuckJobsAsync(stoppingToken).ConfigureAwait(false);
                 var processed = await ProcessOneAsync(stoppingToken).ConfigureAwait(false);
-                await Task.Delay(processed ? TimeSpan.FromSeconds(1) : TimeSpan.FromSeconds(30), stoppingToken);
+                if (processed)
+                    continue;
+
+                await ExportJobsWakeSignal.WaitAsync(PollTimeout, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -101,6 +111,30 @@ internal sealed partial class ExportJobsWorker(
         }
     }
 
+    /// <summary>AC5 — self-healing: processing estancado &gt; 10 min → failed.</summary>
+    private async Task HealStuckJobsAsync(CancellationToken ct)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
+        var cutoff = DateTimeOffset.UtcNow - StuckProcessingThreshold;
+        var stuck = await db.ExportJobs
+            .Where(j => j.Status == "processing" && j.DeletedAt == null && j.UpdatedAt != null && j.UpdatedAt < cutoff)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        if (stuck.Count == 0) return;
+
+        foreach (var job in stuck)
+        {
+            job.Status = "failed";
+            job.ErrorMessage = "self_healing: processing timeout (>10 min)";
+            job.CompletedAt = DateTimeOffset.UtcNow;
+            job.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        LogSelfHealed(logger, stuck.Count);
+    }
+
     private async Task<bool> ProcessOneAsync(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
@@ -108,6 +142,7 @@ internal sealed partial class ExportJobsWorker(
         var storage = scope.ServiceProvider.GetRequiredService<IExportFileStorage>();
         var hub = scope.ServiceProvider.GetRequiredService<IHubContext<ExportJobsHub>>();
         var reporting = scope.ServiceProvider.GetRequiredService<IReportingReadRepository>();
+        var email = scope.ServiceProvider.GetRequiredService<IEmailSender>();
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var job = await db.ExportJobs
@@ -134,20 +169,36 @@ internal sealed partial class ExportJobsWorker(
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        await hub.Clients.Group(ExportJobsHub.GroupName(job.Id))
-            .SendAsync("ExportProgress", new { jobId = job.Id, status = job.Status, progressPct = job.ProgressPct }, ct);
+        await SafeHubSendAsync(
+            hub,
+            job,
+            "ExportProgress",
+            new { jobId = job.Id, status = job.Status, progressPct = job.ProgressPct },
+            ct).ConfigureAwait(false);
 
         try
         {
             var bytes = await BuildFileAsync(job, reporting, ct).ConfigureAwait(false);
             job.ProgressPct = 80;
+            job.UpdatedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
-            await hub.Clients.Group(ExportJobsHub.GroupName(job.Id))
-                .SendAsync("ExportProgress", new { jobId = job.Id, status = job.Status, progressPct = 80 }, ct);
+            await SafeHubSendAsync(
+                hub,
+                job,
+                "ExportProgress",
+                new { jobId = job.Id, status = job.Status, progressPct = 80 },
+                ct).ConfigureAwait(false);
 
             await using var ms = new MemoryStream(bytes);
             var fileName = $"reporte-{job.ReportType}-{job.Id:N}.{Extension(job.Format)}";
-            var stored = await storage.SaveExportAsync(job.Id, job.Format, fileName, ms, ct).ConfigureAwait(false);
+            var stored = await ExportStorageRetry.ExecuteAsync(
+                async token =>
+                {
+                    ms.Position = 0;
+                    return await storage.SaveExportAsync(job.Id, job.Format, fileName, ms, token)
+                        .ConfigureAwait(false);
+                },
+                ct: ct).ConfigureAwait(false);
 
             job.Status = "completed";
             job.ProgressPct = 100;
@@ -158,8 +209,14 @@ internal sealed partial class ExportJobsWorker(
             job.UpdatedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
 
-            await hub.Clients.Group(ExportJobsHub.GroupName(job.Id))
-                .SendAsync("ExportCompleted", new { jobId = job.Id, status = "completed", progressPct = 100 }, ct);
+            await SafeHubSendAsync(
+                hub,
+                job,
+                "ExportCompleted",
+                new { jobId = job.Id, status = "completed", progressPct = 100 },
+                ct).ConfigureAwait(false);
+
+            await TrySendEmailAsync(db, email, job, failed: false, ct).ConfigureAwait(false);
             return true;
         }
         catch (Exception ex)
@@ -170,9 +227,68 @@ internal sealed partial class ExportJobsWorker(
             job.UpdatedAt = DateTimeOffset.UtcNow;
             job.CompletedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
-            await hub.Clients.Group(ExportJobsHub.GroupName(job.Id))
-                .SendAsync("ExportCompleted", new { jobId = job.Id, status = "failed", progressPct = job.ProgressPct }, ct);
+
+            var payload = new { jobId = job.Id, status = "failed", progressPct = job.ProgressPct };
+            await SafeHubSendAsync(hub, job, "ExportFailed", payload, ct).ConfigureAwait(false);
+            // Compat FE #11113: también ExportCompleted con status=failed.
+            await SafeHubSendAsync(hub, job, "ExportCompleted", payload, ct).ConfigureAwait(false);
+
+            await TrySendEmailAsync(db, email, job, failed: true, ct).ConfigureAwait(false);
             return true;
+        }
+    }
+
+    /// <summary>AC6 — SignalR desconectado no debe tumbar el job ni el email.</summary>
+    private async Task SafeHubSendAsync(
+        IHubContext<ExportJobsHub> hub,
+        ExportJob job,
+        string method,
+        object payload,
+        CancellationToken ct)
+    {
+        try
+        {
+            var group = hub.Clients.Group(ExportJobsHub.GroupName(job.Id));
+            await group.SendAsync(method, payload, ct).ConfigureAwait(false);
+
+            var user = hub.Clients.User(job.OwnerUserId.ToString("D"));
+            await user.SendAsync(method, payload, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogHubSendIgnored(logger, ex, job.Id, method);
+        }
+    }
+
+    private async Task TrySendEmailAsync(
+        FlitDbContext db,
+        IEmailSender email,
+        ExportJob job,
+        bool failed,
+        CancellationToken ct)
+    {
+        try
+        {
+            var user = await db.Users.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == job.OwnerUserId && u.DeletedAt == null, ct)
+                .ConfigureAwait(false);
+            if (user is null || string.IsNullOrWhiteSpace(user.Email))
+            {
+                LogEmailSkipped(logger, job.Id);
+                return;
+            }
+
+            var message = failed
+                ? ExportJobEmailComposer.BuildFailed(
+                    user.Email, user.DisplayName, job.Id, job.ReportType, job.Format, job.ErrorMessage)
+                : ExportJobEmailComposer.BuildCompleted(
+                    user.Email, user.DisplayName, job.Id, job.ReportType, job.Format);
+
+            await email.SendAsync(message, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogEmailFailed(logger, ex, job.Id);
         }
     }
 
@@ -243,4 +359,16 @@ internal sealed partial class ExportJobsWorker(
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Export job {JobId} failed")]
     private static partial void LogJobFailed(ILogger logger, Exception ex, Guid jobId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ExportJobsWorker self-healed {Count} stuck processing jobs")]
+    private static partial void LogSelfHealed(ILogger logger, int count);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Hub send {Method} ignored for job {JobId}")]
+    private static partial void LogHubSendIgnored(ILogger logger, Exception ex, Guid jobId, string method);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Email skipped for export job {JobId}: owner without email")]
+    private static partial void LogEmailSkipped(ILogger logger, Guid jobId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Email failed for export job {JobId}")]
+    private static partial void LogEmailFailed(ILogger logger, Exception ex, Guid jobId);
 }

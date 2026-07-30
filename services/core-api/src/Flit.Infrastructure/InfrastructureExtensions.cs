@@ -157,6 +157,7 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Analytics.Application.Reporting.IDashboardPreferencesRepository, DashboardPreferencesRepository>();
         services.Configure<Storage.ExportFileManagerOptions>(configuration.GetSection(Storage.ExportFileManagerOptions.SectionName));
         services.AddScoped<Flit.Analytics.Application.Reporting.IExportFileStorage, Storage.FileManagerExportStorage>();
+        services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, Hubs.ExportJobsUserIdProvider>();
         services.AddSignalR();
         services.AddHostedService<Workers.ExportJobsChannelListener>();
         services.AddHostedService<Workers.ExportJobsWorker>();

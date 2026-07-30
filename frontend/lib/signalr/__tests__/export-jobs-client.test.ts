@@ -141,4 +141,25 @@ describe("watchExportJob", () => {
 
     dispose();
   });
+
+  it("trata ExportFailed como evento terminal (HU #11107 AC4)", async () => {
+    mocks.startMock.mockImplementation(async function (this: { state: string }) {
+      this.state = mocks.HubConnectionState.Connected;
+    });
+
+    const handlers = new Map<string, (payload: unknown) => void>();
+    mocks.onMock.mockImplementation((event: string, cb: (payload: unknown) => void) => {
+      handlers.set(event, cb);
+    });
+
+    const onFailed = vi.fn();
+    const dispose = await watchExportJob("job-fail", { onFailed });
+
+    handlers.get("ExportFailed")?.({ jobId: "job-fail", status: "failed", progressPct: 40 });
+    expect(onFailed).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: "job-fail", status: "failed" }),
+    );
+
+    dispose();
+  });
 });

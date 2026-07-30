@@ -133,6 +133,10 @@ export async function watchExportJob(
       if (disposed || payload?.jobId !== jobId) return;
       emitTerminal(handlers, payload);
     });
+    hub.on("ExportFailed", (payload: ExportProgressEvent) => {
+      if (disposed || payload?.jobId !== jobId) return;
+      emitTerminal(handlers, payload);
+    });
   };
 
   try {
