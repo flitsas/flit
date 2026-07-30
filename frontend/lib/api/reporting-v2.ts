@@ -99,6 +99,20 @@ export interface ExportJob {
   errorMessage?: string | null;
 }
 
+export interface SavedQuery {
+  id: string;
+  name: string;
+  description?: string | null;
+  filtersJson: unknown;
+  isShared: boolean;
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
+export interface DashboardPreferences {
+  configJson: unknown;
+}
+
 function qs(params: Record<string, string | number | undefined | null>): string {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -117,6 +131,8 @@ export async function fetchReportingProcedures(params: {
   procedureType?: string;
   transitOfficeId?: string;
   search?: string;
+  sortBy?: string;
+  sortOrder?: string;
   page?: number;
   pageSize?: number;
   tenantId?: string;
@@ -180,4 +196,76 @@ export async function getExportDownloadUrl(
   id: string,
 ): Promise<{ downloadUrl: string; expiresAt: string }> {
   return apiFetch(`/api/v1/reporting/exports/${id}/download-url`);
+}
+
+export async function fetchProcedureDetail(
+  id: string,
+  tenantId?: string,
+): Promise<ReportingProcedureRow> {
+  return apiFetch(`/api/v1/reporting/procedures/${id}${qs({ tenantId })}`);
+}
+
+export async function listSavedQueries(tenantId?: string): Promise<{ items: SavedQuery[] }> {
+  return apiFetch(`/api/v1/reporting/saved-queries${qs({ tenantId })}`);
+}
+
+export async function createSavedQuery(body: {
+  name: string;
+  description?: string | null;
+  filters?: Record<string, unknown>;
+  isShared?: boolean;
+  tenantId?: string;
+}): Promise<SavedQuery> {
+  return apiFetch(`/api/v1/reporting/saved-queries${qs({ tenantId: body.tenantId })}`, {
+    method: "POST",
+    body: {
+      name: body.name,
+      description: body.description,
+      filters: body.filters ?? {},
+      isShared: body.isShared ?? false,
+    },
+  });
+}
+
+export async function updateSavedQuery(
+  id: string,
+  body: {
+    name: string;
+    description?: string | null;
+    filters?: Record<string, unknown>;
+    isShared?: boolean;
+    tenantId?: string;
+  },
+): Promise<SavedQuery> {
+  return apiFetch(`/api/v1/reporting/saved-queries/${id}${qs({ tenantId: body.tenantId })}`, {
+    method: "PUT",
+    body: {
+      name: body.name,
+      description: body.description,
+      filters: body.filters ?? {},
+      isShared: body.isShared ?? false,
+    },
+  });
+}
+
+export async function deleteSavedQuery(id: string, tenantId?: string): Promise<void> {
+  await apiFetch(`/api/v1/reporting/saved-queries/${id}${qs({ tenantId })}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getDashboardPreferences(
+  tenantId?: string,
+): Promise<DashboardPreferences> {
+  return apiFetch(`/api/v1/reporting/preferences${qs({ tenantId })}`);
+}
+
+export async function putDashboardPreferences(
+  config: Record<string, unknown>,
+  tenantId?: string,
+): Promise<DashboardPreferences> {
+  return apiFetch(`/api/v1/reporting/preferences${qs({ tenantId })}`, {
+    method: "PUT",
+    body: { config },
+  });
 }

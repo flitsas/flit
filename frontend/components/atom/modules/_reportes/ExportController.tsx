@@ -1,14 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import {
-  getExport,
   getExportDownloadUrl,
   listExports,
   requestExport,
   type ExportJob,
 } from "@/lib/api/reporting-v2";
+import { watchExportJob } from "@/lib/signalr/export-jobs-client";
 
 export function ExportController({
   reportType,
@@ -26,6 +26,7 @@ export function ExportController({
   const [jobs, setJobs] = useState<ExportJob[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const watchers = useRef<Map<string, () => void>>(new Map());
 
   const refresh = useCallback(async () => {
     try {
@@ -37,11 +38,52 @@ export function ExportController({
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async + polling de jobs (setState tras await)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async inicial de jobs (setState tras await)
     void refresh();
-    const id = window.setInterval(() => void refresh(), 5000);
-    return () => window.clearInterval(id);
+    const active = watchers.current;
+    return () => {
+      for (const dispose of active.values()) dispose();
+      active.clear();
+    };
   }, [refresh]);
+
+  const attachWatcher = useCallback(async (jobId: string) => {
+    watchers.current.get(jobId)?.();
+    const dispose = await watchExportJob(jobId, {
+      onProgress: (event) => {
+        setJobs((prev) =>
+          prev.map((j) =>
+            j.id === event.jobId
+              ? { ...j, status: event.status, progressPct: event.progressPct }
+              : j,
+          ),
+        );
+      },
+      onCompleted: (event) => {
+        setJobs((prev) =>
+          prev.map((j) =>
+            j.id === event.jobId
+              ? { ...j, status: event.status, progressPct: event.progressPct }
+              : j,
+          ),
+        );
+        watchers.current.get(jobId)?.();
+        watchers.current.delete(jobId);
+      },
+      onFailed: (event) => {
+        setJobs((prev) =>
+          prev.map((j) =>
+            j.id === event.jobId
+              ? { ...j, status: event.status, progressPct: event.progressPct }
+              : j,
+          ),
+        );
+        watchers.current.get(jobId)?.();
+        watchers.current.delete(jobId);
+      },
+    });
+    watchers.current.set(jobId, dispose);
+  }, []);
 
   const start = async (format: "excel" | "csv" | "pdf") => {
     setBusy(true);
@@ -53,24 +95,11 @@ export function ExportController({
         filters: { from, to, tenantId },
       });
       setJobs((prev) => [job, ...prev].slice(0, 5));
-      void pollUntilDone(job.id);
+      void attachWatcher(job.id);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "No se pudo solicitar la exportación");
     } finally {
       setBusy(false);
-    }
-  };
-
-  const pollUntilDone = async (id: string) => {
-    for (let i = 0; i < 60; i++) {
-      await new Promise((r) => setTimeout(r, 2000));
-      try {
-        const job = await getExport(id);
-        setJobs((prev) => prev.map((j) => (j.id === id ? job : j)));
-        if (job.status === "completed" || job.status === "failed") return;
-      } catch {
-        return;
-      }
     }
   };
 

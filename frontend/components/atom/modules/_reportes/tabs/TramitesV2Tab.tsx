@@ -5,6 +5,7 @@ import {
   fetchReportingProcedures,
   type ReportingProceduresPage,
 } from "@/lib/api/reporting-v2";
+import { useReportFilters } from "../ReportFilterContext";
 
 export function TramitesV2Tab({
   from,
@@ -15,19 +16,40 @@ export function TramitesV2Tab({
   to: string;
   tenantId?: string;
 }) {
+  const { filters, patchFilters } = useReportFilters();
   const [data, setData] = useState<ReportingProceduresPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+
+  const search = filters.search;
+  const status = filters.status;
+  const procedureType = filters.procedureType;
+  const dateType = filters.dateType;
+  const sortBy = filters.sortBy;
+  const sortOrder = filters.sortOrder;
+  const page = filters.page;
+  const pageSize = filters.pageSize;
 
   useEffect(() => {
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón de carga del repo: skeleton inmediato antes del fetch
     setLoading(true);
     setError(null);
-    fetchReportingProcedures({ from, to, tenantId, search, page: 1, pageSize: 50 })
-      .then((page) => {
-        if (!cancelled) setData(page);
+    fetchReportingProcedures({
+      from,
+      to,
+      tenantId,
+      search,
+      status,
+      procedureType,
+      dateType,
+      sortBy,
+      sortOrder,
+      page,
+      pageSize,
+    })
+      .then((pageResult) => {
+        if (!cancelled) setData(pageResult);
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Error al cargar trámites");
@@ -38,7 +60,7 @@ export function TramitesV2Tab({
     return () => {
       cancelled = true;
     };
-  }, [from, to, tenantId, search]);
+  }, [from, to, tenantId, search, status, procedureType, dateType, sortBy, sortOrder, page, pageSize]);
 
   if (loading) {
     return <div className="p-4 text-sm opacity-70" aria-busy="true">Cargando trámites…</div>;
@@ -51,7 +73,17 @@ export function TramitesV2Tab({
     );
   }
   if (!data || data.items.length === 0) {
-    return <div className="p-6 text-sm opacity-60">Sin datos para el período seleccionado</div>;
+    return (
+      <div className="space-y-3">
+        <TramitesFilters
+          search={search}
+          status={status}
+          onSearch={(value) => patchFilters({ search: value, page: 1 })}
+          onStatus={(value) => patchFilters({ status: value, page: 1 })}
+        />
+        <div className="p-6 text-sm opacity-60">Sin datos para el período seleccionado</div>
+      </div>
+    );
   }
 
   return (
@@ -66,12 +98,11 @@ export function TramitesV2Tab({
           value={data.kpis.avgElapsedHours != null ? data.kpis.avgElapsedHours.toFixed(1) : "—"}
         />
       </div>
-      <input
-        className="w-full rounded-lg border px-3 py-2 text-sm"
-        placeholder="Buscar placa, VIN, documento…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        aria-label="Buscar trámites"
+      <TramitesFilters
+        search={search}
+        status={status}
+        onSearch={(value) => patchFilters({ search: value, page: 1 })}
+        onStatus={(value) => patchFilters({ status: value, page: 1 })}
       />
       <div className="overflow-x-auto rounded-xl border">
         <table className="min-w-full text-left text-xs">
@@ -102,6 +133,42 @@ export function TramitesV2Tab({
       <p className="text-[11px] opacity-60">
         {data.totalCount} registros · página {data.page}
       </p>
+    </div>
+  );
+}
+
+function TramitesFilters({
+  search,
+  status,
+  onSearch,
+  onStatus,
+}: {
+  search: string;
+  status: string;
+  onSearch: (value: string) => void;
+  onStatus: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <input
+        className="min-w-[12rem] flex-1 rounded-lg border px-3 py-2 text-sm"
+        placeholder="Buscar placa, VIN, documento…"
+        value={search}
+        onChange={(e) => onSearch(e.target.value)}
+        aria-label="Buscar trámites"
+      />
+      <select
+        className="rounded-lg border px-3 py-2 text-sm"
+        value={status}
+        onChange={(e) => onStatus(e.target.value)}
+        aria-label="Filtrar por estado"
+      >
+        <option value="">Todos los estados</option>
+        <option value="en_proceso">En proceso</option>
+        <option value="aprobado">Aprobado</option>
+        <option value="rechazado">Rechazado</option>
+        <option value="borrador">Borrador</option>
+      </select>
     </div>
   );
 }

@@ -26,6 +26,7 @@ import { UsoTab } from "./_reportes/tabs/UsoTab";
 import { TramitesV2Tab } from "./_reportes/tabs/TramitesV2Tab";
 import { ConsolidadoTab, ProductividadV2Tab } from "./_reportes/tabs/ConsolidadoProductividadTabs";
 import { AuditoriaTab, SlaTab } from "./_reportes/tabs/SlaAuditoriaTabs";
+import { ReportFilterProvider, useReportFilters } from "./_reportes/ReportFilterContext";
 
 type TabId =
   | "resumen"
@@ -75,7 +76,33 @@ function initialTab(): string {
 }
 
 export function Reportes() {
+  return (
+    <ReportFilterProvider>
+      <ReportesInner />
+    </ReportFilterProvider>
+  );
+}
+
+/** Sincroniza filtros globales legacy → ReportFilterContext V2 (URL). */
+function SyncLegacyFiltersToV2({
+  from,
+  to,
+  tenantId,
+}: {
+  from: string;
+  to: string;
+  tenantId: string;
+}) {
+  const { patchFilters } = useReportFilters();
+  useEffect(() => {
+    patchFilters({ from, to, tenantId });
+  }, [from, to, tenantId, patchFilters]);
+  return null;
+}
+
+function ReportesInner() {
   const { permissions, isSuperAdmin: isSuper } = usePermissions();
+  const { filters: v2Filters } = useReportFilters();
 
   const visibleTabs = useMemo(
     () =>
@@ -161,6 +188,11 @@ export function Reportes() {
 
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+      <SyncLegacyFiltersToV2
+        from={filters.range.from}
+        to={filters.range.to}
+        tenantId={filters.tenantId}
+      />
       <ModuleTitle
         title="Reportes y Analíticas"
         subtitle="Monitorea el desempeño operativo por pestañas temáticas."
@@ -235,37 +267,37 @@ export function Reportes() {
           {activeTab === "productividad" && <ProductividadTab filters={filters} />}
           {activeTab === "tramites" && (
             <TramitesV2Tab
-              from={filters.range.from}
-              to={filters.range.to}
-              tenantId={filters.tenantId || undefined}
+              from={v2Filters.from}
+              to={v2Filters.to}
+              tenantId={v2Filters.tenantId || undefined}
             />
           )}
           {activeTab === "consolidado" && (
             <ConsolidadoTab
-              from={filters.range.from}
-              to={filters.range.to}
-              tenantId={filters.tenantId || undefined}
+              from={v2Filters.from}
+              to={v2Filters.to}
+              tenantId={v2Filters.tenantId || undefined}
             />
           )}
           {activeTab === "productividad-v2" && (
             <ProductividadV2Tab
-              from={filters.range.from}
-              to={filters.range.to}
-              tenantId={filters.tenantId || undefined}
+              from={v2Filters.from}
+              to={v2Filters.to}
+              tenantId={v2Filters.tenantId || undefined}
             />
           )}
           {activeTab === "tiempos-sla" && (
             <SlaTab
-              from={filters.range.from}
-              to={filters.range.to}
-              tenantId={filters.tenantId || undefined}
+              from={v2Filters.from}
+              to={v2Filters.to}
+              tenantId={v2Filters.tenantId || undefined}
             />
           )}
           {activeTab === "auditoria" && (
             <AuditoriaTab
-              from={filters.range.from}
-              to={filters.range.to}
-              tenantId={filters.tenantId || undefined}
+              from={v2Filters.from}
+              to={v2Filters.to}
+              tenantId={v2Filters.tenantId || undefined}
             />
           )}
         </div>
