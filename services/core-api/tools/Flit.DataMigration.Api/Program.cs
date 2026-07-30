@@ -17,7 +17,18 @@ var arranque = LoggerFactory
     .Create(b => b.AddConfiguration(builder.Configuration.GetSection("Logging")).AddConsole())
     .CreateLogger("Migracion");
 
-builder.Services.AddMigracionEngine(builder.Configuration, arranque);
+// El motor solo se arma si el ambiente encendió el endpoint. No es una optimización: desde que este
+// servicio dejó el perfil `migracion` sube en TODOS los despliegues, y el motor exige que el .env
+// traiga el bloque FLITMIG_ completo (V1Source, los dos file-managers…). Sin esta condición, un
+// ambiente que nunca configuró el migrador vería el contenedor reiniciándose en bucle por una
+// herramienta que ni piensa usar. Apagado = un proceso vivo que solo responde /health.
+var apagable = builder.Configuration
+    .GetSection(MigracionApiOptions.SectionName).Get<MigracionApiOptions>() ?? new MigracionApiOptions();
+
+if (apagable.Enabled)
+{
+    builder.Services.AddMigracionEngine(builder.Configuration, arranque);
+}
 
 var app = builder.Build();
 
