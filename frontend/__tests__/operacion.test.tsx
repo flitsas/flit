@@ -267,23 +267,23 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     expect(within(rows[0]).getByText('Entregado')).toBeInTheDocument();
   });
 
-  it('el botón Continuar de una fila borrador navega al wizard de esa instancia', async () => {
+  it('la acción Continuar (menú) de una fila borrador navega al wizard de esa instancia', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT]);
     const user = userEvent.setup();
     render(<OperacionView onStartTramite={vi.fn()} />);
 
-    const btn = await screen.findByRole('button', { name: /Continuar trámite TR-001/ });
-    await user.click(btn);
+    await user.click(await screen.findByRole('button', { name: /Acciones del trámite TR-001/ }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Continuar' }));
     expect(routerPush).toHaveBeenCalledWith('/tramites/inst-1');
   });
 
-  it('el botón Ver de una fila submitted navega al wizard de esa instancia', async () => {
+  it('la acción Ver (menú) de una fila submitted navega al wizard de esa instancia', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
     render(<OperacionView onStartTramite={vi.fn()} />);
 
-    const btn = await screen.findByRole('button', { name: /Ver trámite MA-002/ });
-    await user.click(btn);
+    await user.click(await screen.findByRole('button', { name: /Acciones del trámite MA-002/ }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Ver' }));
     expect(routerPush).toHaveBeenCalledWith('/tramites/inst-2');
   });
 

@@ -175,6 +175,43 @@ public sealed class SubmitProcedureInstanceTests
         instance.Status.Should().Be(TramiteEstado.Aprobado); // RF04: inmutable
     }
 
+    [Fact] // ICT (pauseDraftProcess / starts_procedure_in_paused) — un borrador PAUSADO no se radica:
+           // se corta antes de cualquier gate/transición y no toca el historial. Reanudar lo desbloquea.
+    public async Task HandleAsync_BorradorPausado_ReturnsTramitePausado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = FullyGated(id, tenantId); // satisface TODOS los gates...
+        instance.IsPaused = true;                 // ...pero está pausado.
+        Wire(instance, ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().Be(TramiteEstadoErrores.TramitePausado);
+        result.Should().BeNull();
+        instance.Status.Should().Be(TramiteEstado.Borrador); // no avanzó
+        _recorder.Records.Should().BeEmpty();
+        _publisher.Published.Should().BeEmpty();
+        await _repo.DidNotReceive().SaveChangesWithConcurrencyGuardAsync(ct);
+    }
+
+    [Fact] // Reanudado (is_paused=false) el mismo borrador con gates completos sí radica: la pausa es reversible.
+    public async Task HandleAsync_BorradorReanudado_Radica()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = FullyGated(id, tenantId);
+        instance.IsPaused = false;
+        Wire(instance, ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Entregado);
+    }
+
     [Fact]
     public async Task HandleAsync_BorradorConGates_EncadenaPreparadoYEntregado()
     {

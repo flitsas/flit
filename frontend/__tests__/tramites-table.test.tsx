@@ -8,6 +8,9 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 const mocks = vi.hoisted(() => ({
   listInstances: vi.fn(),
   setPriority: vi.fn(),
+  pauseInstance: vi.fn(),
+  pauseInstancesMassive: vi.fn(),
+  completePlateFlow: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -156,8 +159,9 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
     expect(within(row).getByText('Pendiente validación')).toBeInTheDocument();
     // Accesible: el chip expone su estado por aria-label.
     expect(within(row).getByLabelText('Estado: Pendiente validación')).toBeInTheDocument();
-    // Aún no se puede radicar → la acción sigue siendo "Continuar".
-    expect(within(row).getByRole('button', { name: /Continuar/ })).toBeInTheDocument();
+    // Aún no se puede radicar → la acción del menú sigue siendo "Continuar".
+    await userEvent.click(within(row).getByRole('button', { name: /Acciones del trámite/ }));
+    expect(await screen.findByRole('menuitem', { name: 'Continuar' })).toBeInTheDocument();
   });
 
   it('identidad aprobada con firma pendiente muestra "Pendiente firma"', async () => {
@@ -195,7 +199,8 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
 
     const row = (await screen.findByText('RDY001')).closest('[role="button"]') as HTMLElement;
     expect(within(row).getByText('Listo para radicar')).toBeInTheDocument();
-    expect(within(row).getByRole('button', { name: /Radicar trámite/ })).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole('button', { name: /Acciones del trámite/ }));
+    expect(await screen.findByRole('menuitem', { name: 'Radicar' })).toBeInTheDocument();
   });
 });
 
@@ -404,5 +409,105 @@ describe('TramitesTable — actores del traspaso (HU #11020)', () => {
     await screen.findByText('P0001');
     expect(screen.getByText('Comprador 0001')).toBeInTheDocument();
     expect(screen.queryByText('Vendedor 0001')).toBeNull();
+  });
+});
+
+describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_paused)', () => {
+  it('muestra el badge "Pausado" con la observación en el label cuando isPaused', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, isPaused: true, pausedObservation: 'En espera de liquidación' },
+    ]);
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    const badge = screen.getByLabelText('Trámite pausado: En espera de liquidación');
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveTextContent('Pausado');
+  });
+
+  it('no muestra el badge "Pausado" cuando el trámite no está pausado (default)', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1)); // isPaused undefined ⇒ sin badge
+    render(<TramitesTable />);
+
+    await screen.findByText('P0001');
+    expect(screen.queryByText('Pausado')).toBeNull();
+  });
+
+  it('en un borrador ICT el menú de acciones ofrece "Pausar" y al elegirlo llama a pauseInstance (optimista → "Reanudar")', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, id: 'ict1', referenceNumber: 'TR-ICT', placa: 'ICT001', origin: 'ict', estado: 'borrador', isPaused: false },
+    ]);
+    mocks.pauseInstance.mockResolvedValue({ id: 'ict1', isPaused: true, pausedObservation: null });
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-ICT' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Pausar' }));
+
+    expect(mocks.pauseInstance).toHaveBeenCalledWith('ict1', true, null, undefined);
+    // Optimista: reabrir el menú ahora ofrece "Reanudar".
+    await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-ICT' }));
+    expect(await screen.findByRole('menuitem', { name: 'Reanudar' })).toBeInTheDocument();
+  });
+
+  it('un trámite de plataforma (sin origin ict) no ofrece "Pausar" en el menú ni checkbox de selección', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([{ ...item, referenceNumber: 'TR-PLT', placa: 'PLT001', estado: 'borrador' }]);
+    render(<TramitesTable />);
+
+    await screen.findByText('PLT001');
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Acciones del trámite TR-PLT' }));
+    expect(screen.queryByRole('menuitem', { name: 'Pausar' })).toBeNull();
+  });
+
+  it('al continuar un trámite PAUSADO abre un modal FLIT (no confirm nativo): cancelar no navega, confirmar sí', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, id: 'pz', referenceNumber: 'TR-PZ', placa: 'PZ0001', origin: 'ict', estado: 'borrador', isPaused: true },
+    ]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-PZ' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Continuar' }));
+
+    // Modal de diseño FLIT (role=dialog), no window.confirm.
+    const dialog = await screen.findByRole('dialog', { name: /Trámite pausado/i });
+    expect(routerPush).not.toHaveBeenCalled();
+
+    // Cancelar cierra sin navegar.
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    expect(routerPush).not.toHaveBeenCalled();
+
+    // Reabrir menú → Continuar → confirmar navega.
+    await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-PZ' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Continuar' }));
+    const dialog2 = await screen.findByRole('dialog', { name: /Trámite pausado/i });
+    await userEvent.click(within(dialog2).getByRole('button', { name: /Continuar de todos modos/ }));
+    expect(routerPush).toHaveBeenCalled();
+  });
+});
+
+describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
+  it('selecciona varios borradores ICT y los pausa en lote', async () => {
+    const [b] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...b, id: 'm1', placa: 'MAS001', origin: 'ict', estado: 'borrador' },
+      { ...b, id: 'm2', placa: 'MAS002', origin: 'ict', estado: 'borrador' },
+    ]);
+    mocks.pauseInstancesMassive.mockResolvedValue({ total: 2, processed: 2, detail: [] });
+    render(<TramitesTable />);
+
+    await screen.findByText('MAS001');
+    const checks = screen.getAllByRole('checkbox');
+    expect(checks).toHaveLength(2);
+
+    await userEvent.click(checks[0]);
+    await userEvent.click(checks[1]);
+    expect(screen.getByText('2 seleccionados')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Pausar' }));
+    expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(['m1', 'm2'], true, null, undefined);
   });
 });

@@ -24,14 +24,21 @@ public sealed class RegisterIctBatchHandlerTests
     private RegisterIctBatchHandler CreateHandler(int max = 20) =>
         new(_repository, _tenant, Options.Create(new IctIngestOptions { MaxItemsPerBatch = max }));
 
-    private static RegisterRowInput ValidTraspaso(string plate = "PRU57A", string? doc = null) =>
+    // Traspaso bilateral (tipo 3) COMPLETO según el contrato de entrada: seller + buyer, compraventa,
+    // gestor y dirección. doc por defecto = NIT del token para que la fila sea aceptada.
+    private static RegisterRowInput ValidTraspaso(string plate = "PRU57A", string? doc = "901698038") =>
         new(
             TransactionType: 3,
             TransactionOperation: 1,
             CompanyManagerDocument: doc,
+            ManagerUser: "gestor",
             ManagerMail: "gestor@flit.com",
+            DeliveryAddress: "Calle 1 # 2-3",
             Plate: plate,
-            Seller: [new RegisterActorInput("CC", "11207262", "ABRAHAM", "CANON")]);
+            SellingDate: "05-07-2024",
+            SellingPrice: 15000000m,
+            Seller: [new RegisterActorInput("CC", "11207262", "ABRAHAM", "CANON")],
+            Buyer: [new RegisterActorInput("CC", "79912345", "COMPRADOR", "TEST")]);
 
     [Fact]
     public async Task Batch_over_limit_is_rejected_without_persisting()

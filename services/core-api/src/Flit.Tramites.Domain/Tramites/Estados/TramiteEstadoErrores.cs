@@ -61,4 +61,13 @@ public static class TramiteEstadoErrores
     /// reintentando la transición con <c>mandateSignerId</c>).
     /// </summary>
     public const string MandatarioRequerido = "mandatario_requerido";
+
+    /// <summary>
+    /// ICT (servicio v1 <c>pauseDraftProcess</c> / bandera <c>starts_procedure_in_paused</c>) — el
+    /// trámite está PAUSADO (<c>procedure_instances.is_paused=true</c>): no avanza (radicación /
+    /// preparación bloqueadas), replicando el <c>ForbiddenError</c> de v1. Es reversible (reanudar con
+    /// <c>pauseProcess=false</c>). La anulación NO se bloquea. Solo aplica a trámites pausados (default
+    /// false) ⇒ cero impacto en trámites de plataforma (409).
+    /// </summary>
+    public const string TramitePausado = "tramite_pausado";
 }
