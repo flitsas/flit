@@ -282,26 +282,30 @@ services:
 
   # ── API de migracion V1 -> V2 (mismo motor, un tramite por peticion) ───────
   #
-  # Existe para que operaciones migre desde Postman (Runner sobre un CSV de ids) sin
-  # entrar por SSH al VPS. Tambien tras el perfil `migracion`: no se levanta con un
-  # `docker compose up` normal.
+  # Existe para que quien haga la migracion la dispare desde Postman (Runner sobre un
+  # CSV de ids) sin entrar por SSH al VPS. Es un servicio normal del stack: sube con
+  # `docker compose up -d` como cualquier otro y se alcanza por el gateway:
   #
-  #   docker compose -f docker-compose.prod.yml --profile migracion up -d migracion-api
-  #   POST http://127.0.0.1:${MIGRACION_API_PORT}/api/v1/migracion/registration/26350
+  #   POST https://api.<env>.flitsas.online/api/v1/migracion/registration/26350
   #        ?instancias=todas&dryRun=true   +   cabecera X-Migration-Key
-  #   docker compose -f docker-compose.prod.yml stop migracion-api   # al terminar la ola
   #
-  # NO ENRUTAR POR EL GATEWAY. Dos razones, las dos verificadas:
-  #   · core-api-cluster fija ActivityTimeout 00:00:30 y la instancia 3 tarda mas:
-  #     devolveria 504 sobre migraciones que SI se completaron, invitando a reintentar
-  #     algo ya hecho.
-  #   · el gateway no exige JWT en ningun ambiente (JwtRequired = RequireAssertion(true)),
-  #     asi que publicar esto por ahi lo dejaria abierto a internet.
-  # El puerto queda en 127.0.0.1. Si operaciones necesita alcanzarlo en remoto, se le
-  # pide al reverse-proxy del HOST un dominio propio, restringible por IP y borrable al
-  # terminar la migracion.
+  # NO publica puerto en el host: el gateway lo alcanza por la red interna del compose
+  # (migracion-api:4030). Por eso el puerto interno es FIJO y no necesita variable —
+  # no puede chocar con nada aunque los tres ambientes compartan VPS.
+  #
+  # El gateway lo enruta por un cluster PROPIO (`migracion-cluster`, ActivityTimeout
+  # 00:30:00). No usar core-api-cluster: sus 30 s convertirian en 504 migraciones de
+  # instancia 3 que SI se completaron.
+  #
+  # La cabecera X-Migration-Key es la UNICA cerradura: el gateway no exige JWT en
+  # ningun ambiente (JwtRequired = RequireAssertion(true)). Si se filtra, se cambia
+  # FLITMIG_MIGRACION_API_KEY en el .env y se recrea el contenedor; no exige desplegar.
+  #
+  # OJO al ser un servicio normal: un despliegue (`up -d`) RECREA este contenedor y
+  # corta la migracion que este en vuelo. Se pierde solo la peticion en curso — cada
+  # tramite va en su propia transaccion y el candado es de sesion, asi que no queda a
+  # medias — pero ese id hay que volver a lanzarlo. No desplegar durante una ola.
   migracion-api:
-    profiles: ["migracion"]
     image: ghcr.io/flitsas/flitdev/core-api:${CORE_API_TAG:-latest}
     entrypoint: ["dotnet", "/app/migracion-api/Flit.DataMigration.Api.dll"]
     # content root = working_dir, para que .NET encuentre su appsettings.json
@@ -312,24 +316,23 @@ services:
       # El MISMO bloque que el migrador de consola: si divergieran, el comando subiria
       # los adjuntos a un file-manager y el endpoint leeria de otro. Falla en silencio.
       <<: *flitmig-env
-      ASPNETCORE_URLS: http://+:${MIGRACION_API_PORT:-4030}
-      # APAGADO por defecto: con false las rutas ni se registran (404, no 403). Se
-      # enciende en el .env mientras dura la ola y se apaga al terminar, sin desplegar.
+      # Puerto interno fijo: tiene que coincidir con migracion-cluster del gateway.
+      ASPNETCORE_URLS: http://+:4030
+      # Con false las rutas ni se registran: responden 404, no 403. Cambiarlo NO exige
+      # desplegar, solo recrear el contenedor.
       FLITMIG_MigracionApi__Enabled: ${FLITMIG_MIGRACION_API_ENABLED:-false}
       # Sin llave configurada el host arranca pero NADA valida (fail-closed).
       FLITMIG_MigracionApi__ApiKey: ${FLITMIG_MIGRACION_API_KEY:-}
       FLITMIG_MigracionApi__MaxConcurrentRuns: ${FLITMIG_MIGRACION_API_MAX_CONCURRENT:-2}
-    ports:
-      - "127.0.0.1:${MIGRACION_API_PORT:-4030}:${MIGRACION_API_PORT:-4030}"
     # Healthcheck propio: el HEALTHCHECK de la imagen trae el puerto 8081 en duro y se
     # heredaria roto.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:${MIGRACION_API_PORT:-4030}/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:4030/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
-    restart: "no"
+    restart: *restart
     logging: *default-logging
 
   # ── Flit.Gateway (API publica YARP: /api, /hubs, /ml) — GATEWAY_PORT ──────
@@ -347,6 +350,9 @@ services:
       ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
       ReverseProxy__Clusters__python-ml-cluster__Destinations__python-ml-1__Address: http://python-ml:${PYTHON_ML_PORT:-4012}/
       ReverseProxy__Clusters__core-ict-cluster__Destinations__core-ict-1__Address: http://core-ict:${CORE_ICT_PORT:-4020}/
+      # migracion-cluster NO se sobrescribe: migracion-api escucha en el 4030 fijo en
+      # los tres ambientes (no publica puerto en el host, no hay nada con que chocar),
+      # asi que vale el destino que ya trae appsettings.json.
       # Login deshabilitado temporalmente: sin llave JWT el gateway no valida firma
       # ni exige autenticación (ver Flit.Gateway/Program.cs).
     ports:

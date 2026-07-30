@@ -343,9 +343,17 @@ correspondiente. Reglas actuales:
 | `/api/**` | core-api `:4003` | passthrough `/api/**` | `JwtRequired` |
 | `/hubs/**` | core-api `:4003` | — (WebSocket/SignalR) | `JwtRequired` |
 | `/ml/**` | python-ml `:4012` | quita el prefijo `/ml` → `/**` | `JwtRequired` |
+| `/api/v1/migracion/**` | migracion-api `:4030` | — | cabecera `X-Migration-Key` |
 
 > Las rutas más específicas (`/api/v1/auth`, `/api/public/idsecure`) se evalúan antes
 > que la genérica `/api/**`, por eso los endpoints públicos no caen bajo `JwtRequired`.
+
+> **`migracion-cluster` tiene `ActivityTimeout: 00:30:00`, no los 30 s de
+> `core-api-cluster`.** Esa es la razón de que sea un cluster aparte: una migración de
+> instancia 3 (snapshot de PDFs de V1 + subidas de 9–12 MB) tarda más de 30 s, y bajo el
+> timeout de core-api el gateway devolvería 504 sobre migraciones que **sí** se
+> completaron. En YARP el `ActivityTimeout` es por cluster, así que esto no afecta al
+> resto del tráfico. **No mover esa ruta a `core-api-cluster`.**
 
 Flujo de una petición autenticada típica:
 
