@@ -134,7 +134,8 @@ public sealed class GetConsolidadoHandler(IReportingReadRepository repo)
     {
         var (f, t, err) = ReportingDateRange.Normalize(from, to);
         if (err is not null) return (null, err);
-        var g = string.IsNullOrWhiteSpace(groupBy) ? "estado" : groupBy.Trim();
+        // AC1 HU #11110: default volumetría por tipo de trámite.
+        var g = string.IsNullOrWhiteSpace(groupBy) ? "tipo" : groupBy.Trim();
         if (!Groups.Contains(g)) return (null, "invalid_group");
         var result = await repo.GetConsolidadoAsync(tenantId, f, t, g.ToLowerInvariant(), ct).ConfigureAwait(false);
         return (result, null);
@@ -157,6 +158,57 @@ public sealed class GetProductivityReportHandler(IReportingReadRepository repo)
         if (!Dimensions.Contains(d)) return (null, "invalid_dimension");
         var result = await repo.GetProductivityAsync(tenantId, f, t, d.ToLowerInvariant(), ct).ConfigureAwait(false);
         return (result, null);
+    }
+}
+
+/// <summary>Resolución jerárquica de SLA (HU #11110 AC2/AC3/AC6).</summary>
+public static class ReportingSlaResolver
+{
+    public sealed record Config(Guid? TransitOfficeId, string? ProcedureType, short SlaHours);
+
+    /// <summary>
+    /// Prioridad: OT+tipo → OT global → tipo global → tenant global.
+    /// Retorna null si no hay config aplicable (slaConfigured=false a nivel página).
+    /// </summary>
+    public static short? ResolveHours(
+        IReadOnlyList<Config> configs,
+        Guid? transitOfficeId,
+        string? procedureType)
+    {
+        if (configs.Count == 0) return null;
+
+        static bool TypeEq(string? a, string? b) =>
+            string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+        short? Pick(Func<Config, bool> pred)
+        {
+            foreach (var c in configs)
+            {
+                if (pred(c)) return c.SlaHours;
+            }
+
+            return null;
+        }
+
+        if (transitOfficeId is { } ot && !string.IsNullOrWhiteSpace(procedureType))
+        {
+            var exact = Pick(c => c.TransitOfficeId == ot && TypeEq(c.ProcedureType, procedureType));
+            if (exact.HasValue) return exact;
+        }
+
+        if (transitOfficeId is { } otOnly)
+        {
+            var otGlobal = Pick(c => c.TransitOfficeId == otOnly && c.ProcedureType is null);
+            if (otGlobal.HasValue) return otGlobal;
+        }
+
+        if (!string.IsNullOrWhiteSpace(procedureType))
+        {
+            var typeGlobal = Pick(c => c.TransitOfficeId is null && TypeEq(c.ProcedureType, procedureType));
+            if (typeGlobal.HasValue) return typeGlobal;
+        }
+
+        return Pick(c => c.TransitOfficeId is null && c.ProcedureType is null);
     }
 }
 

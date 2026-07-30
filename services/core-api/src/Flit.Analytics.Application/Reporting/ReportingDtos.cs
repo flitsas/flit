@@ -84,7 +84,7 @@ public sealed record SlaRowDto(
     double? AvgBusinessHours,
     double CompliancePct);
 
-public sealed record SlaPageDto(IReadOnlyList<SlaRowDto> Items);
+public sealed record SlaPageDto(IReadOnlyList<SlaRowDto> Items, bool SlaConfigured = true);
 
 public sealed record ExportJobDto(
     Guid Id,

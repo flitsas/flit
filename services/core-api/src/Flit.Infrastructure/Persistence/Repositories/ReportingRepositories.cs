@@ -290,49 +290,80 @@ internal sealed class ReportingReadRepository(FlitDbContext context) : IReportin
         Guid tenantId, DateOnly from, DateOnly toDate, CancellationToken ct = default) =>
         WithTenantAsync(tenantId, async (conn, tx) =>
         {
-            await using var cmd = Create(conn, tx, """
-                SELECT COALESCE(v.procedure_type_name,'Sin tipo') AS ptype,
-                       v.transit_office_name,
-                       COALESCE(s.sla_hours, 72) AS sla_hours,
-                       count(*)::int AS total,
-                       count(*) FILTER (WHERE COALESCE(v.elapsed_hours_total,0) <= COALESCE(s.sla_hours, 72))::int AS within_sla,
-                       count(*) FILTER (WHERE COALESCE(v.elapsed_hours_total,0) > COALESCE(s.sla_hours, 72))::int AS outside_sla,
-                       avg(v.elapsed_hours_total) AS avg_hours
-                FROM analytics.v_reporting_tramites v
-                LEFT JOIN analytics.report_sla_config s
-                  ON s.tenant_id = v.tenant_id
-                 AND s.deleted_at IS NULL
-                 AND (s.procedure_type IS NULL OR s.procedure_type = v.procedure_type_name)
-                 AND (s.transit_office_id IS NULL OR s.transit_office_id = v.transit_office_id)
-                 AND (s.effective_to IS NULL OR s.effective_to >= CURRENT_DATE)
-                WHERE v.tenant_id = @tenant
-                  AND v.created_at::date BETWEEN @from AND @to
-                GROUP BY 1, 2, 3
-                ORDER BY 4 DESC
-                LIMIT 100
-                """);
-            Add(cmd, "tenant", tenantId);
-            Add(cmd, "from", from);
-            Add(cmd, "to", toDate);
-
-            var items = new List<SlaRowDto>();
-            await using var reader = await cmd.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct))
+            await using (var existsCmd = Create(conn, tx, """
+                SELECT EXISTS(
+                  SELECT 1 FROM analytics.report_sla_config s
+                  WHERE s.tenant_id = @tenant AND s.deleted_at IS NULL
+                )
+                """))
             {
-                var total = reader.GetInt32(3);
-                var within = reader.GetInt32(4);
-                items.Add(new SlaRowDto(
-                    reader.GetString(0),
-                    reader.IsDBNull(1) ? null : reader.GetString(1),
-                    reader.GetInt16(2),
-                    total,
-                    within,
-                    reader.GetInt32(5),
-                    reader.IsDBNull(6) ? null : reader.GetDouble(6),
-                    total == 0 ? 0 : Math.Round(100.0 * within / total, 2)));
-            }
+                Add(existsCmd, "tenant", tenantId);
+                var slaConfigured = Convert.ToBoolean(await existsCmd.ExecuteScalarAsync(ct));
 
-            return new SlaPageDto(items);
+                await using var cmd = Create(conn, tx, """
+                    SELECT COALESCE(v.procedure_type_name,'Sin tipo') AS ptype,
+                           v.transit_office_name,
+                           s.sla_hours,
+                           count(*)::int AS total,
+                           count(*) FILTER (
+                             WHERE s.sla_hours IS NOT NULL
+                               AND COALESCE(v.elapsed_hours_total,0) <= s.sla_hours
+                           )::int AS within_sla,
+                           count(*) FILTER (
+                             WHERE s.sla_hours IS NOT NULL
+                               AND COALESCE(v.elapsed_hours_total,0) > s.sla_hours
+                           )::int AS outside_sla,
+                           avg(v.elapsed_hours_total) AS avg_hours
+                    FROM analytics.v_reporting_tramites v
+                    LEFT JOIN LATERAL (
+                        SELECT cfg.sla_hours
+                        FROM analytics.report_sla_config cfg
+                        WHERE cfg.tenant_id = v.tenant_id
+                          AND cfg.deleted_at IS NULL
+                          AND (cfg.effective_to IS NULL OR cfg.effective_to >= CURRENT_DATE)
+                          AND (cfg.transit_office_id IS NULL OR cfg.transit_office_id = v.transit_office_id)
+                          AND (cfg.procedure_type IS NULL OR cfg.procedure_type = v.procedure_type_name)
+                        ORDER BY
+                          CASE
+                            WHEN cfg.transit_office_id IS NOT NULL AND cfg.procedure_type IS NOT NULL THEN 1
+                            WHEN cfg.transit_office_id IS NOT NULL THEN 2
+                            WHEN cfg.procedure_type IS NOT NULL THEN 3
+                            ELSE 4
+                          END
+                        LIMIT 1
+                    ) s ON TRUE
+                    WHERE v.tenant_id = @tenant
+                      AND v.created_at::date BETWEEN @from AND @to
+                    GROUP BY 1, 2, 3
+                    ORDER BY 4 DESC
+                    LIMIT 100
+                    """);
+                Add(cmd, "tenant", tenantId);
+                Add(cmd, "from", from);
+                Add(cmd, "to", toDate);
+
+                var items = new List<SlaRowDto>();
+                await using var reader = await cmd.ExecuteReaderAsync(ct);
+                while (await reader.ReadAsync(ct))
+                {
+                    var total = reader.GetInt32(3);
+                    var within = reader.GetInt32(4);
+                    var slaHours = reader.IsDBNull(2) ? (short)0 : reader.GetInt16(2);
+                    items.Add(new SlaRowDto(
+                        reader.GetString(0),
+                        reader.IsDBNull(1) ? null : reader.GetString(1),
+                        slaHours,
+                        total,
+                        within,
+                        reader.GetInt32(5),
+                        reader.IsDBNull(6) ? null : reader.GetDouble(6),
+                        !slaConfigured || total == 0 || reader.IsDBNull(2)
+                            ? 0
+                            : Math.Round(100.0 * within / total, 2)));
+                }
+
+                return new SlaPageDto(items, slaConfigured);
+            }
         }, ct);
 
     private Task<T> WithTenantAsync<T>(Guid tenantId, Func<DbConnection, DbTransaction, Task<T>> action, CancellationToken ct) =>

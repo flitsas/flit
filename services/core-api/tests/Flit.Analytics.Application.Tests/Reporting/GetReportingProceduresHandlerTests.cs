@@ -137,7 +137,10 @@ public sealed class ReportingAuditSignalsTests
 internal sealed class FakeReportingReadRepository : IReportingReadRepository
 {
     public int GetProceduresCalls { get; private set; }
+    public int GetConsolidadoCalls { get; private set; }
     public ReportingProceduresFilter? LastFilter { get; private set; }
+    public string? LastConsolidadoGroupBy { get; private set; }
+    public SlaPageDto SlaPage { get; set; } = new([], true);
 
     public Task<ReportingProceduresPageDto> GetProceduresAsync(
         ReportingProceduresFilter filter, int page, int pageSize, CancellationToken ct = default)
@@ -157,8 +160,15 @@ internal sealed class FakeReportingReadRepository : IReportingReadRepository
         Task.FromResult(new ReportingAuditDto(procedureId, false, []));
 
     public Task<ConsolidadoPageDto> GetConsolidadoAsync(
-        Guid tenantId, DateOnly from, DateOnly toDate, string groupBy, CancellationToken ct = default) =>
-        Task.FromResult(new ConsolidadoPageDto([], 0));
+        Guid tenantId, DateOnly from, DateOnly toDate, string groupBy, CancellationToken ct = default)
+    {
+        GetConsolidadoCalls++;
+        LastConsolidadoGroupBy = groupBy;
+        return Task.FromResult(new ConsolidadoPageDto(
+        [
+            new ConsolidadoRowDto(groupBy, "traslado", "traslado", 5, 2, 1, 2, 12.5),
+        ], 1));
+    }
 
     public Task<ProductivityPageDto> GetProductivityAsync(
         Guid tenantId, DateOnly from, DateOnly toDate, string dimension, CancellationToken ct = default) =>
@@ -166,5 +176,5 @@ internal sealed class FakeReportingReadRepository : IReportingReadRepository
 
     public Task<SlaPageDto> GetSlaAsync(
         Guid tenantId, DateOnly from, DateOnly toDate, CancellationToken ct = default) =>
-        Task.FromResult(new SlaPageDto([]));
+        Task.FromResult(SlaPage);
 }
