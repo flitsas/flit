@@ -142,6 +142,14 @@ public sealed class KyverumRuntSoat
     public string? RazonSocialAsegur { get; set; }
 }
 
+/// <summary>
+/// Revisión técnico-mecánica de Kyverum. Igual que el SOAT del mismo proveedor, no trae número de
+/// certificado ni fechas de expedición/vigencia (HU #11135); las muestras capturadas la devuelven
+/// además como lista vacía, así que tampoco hay evidencia de campos adicionales.
+/// <para>Kyverum tampoco entrega <b>fecha de matrícula del vehículo</b>: el bloque <c>vehiculo</c> de
+/// las respuestas capturadas no la incluye. Es el insumo de la regla de antigüedad de la RTM
+/// (HU #11136), que por eso solo puede evaluarse con los proveedores que sí la reportan.</para>
+/// </summary>
 public sealed class KyverumRuntRtm
 {
     // Vigencia de la revisión técnico-mecánica: "SI" / "NO" / "NO APLICA" (mismo dominio que Verifik).

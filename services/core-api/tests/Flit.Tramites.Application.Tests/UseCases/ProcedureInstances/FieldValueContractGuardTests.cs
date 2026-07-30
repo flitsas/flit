@@ -105,9 +105,11 @@ public sealed class FieldValueContractGuardTests
         ["soat_poliza"] = new(Verifik, Modo.Literal),
         ["soat_vigencia"] = new(Verifik, Modo.Literal),
         ["soat_expedicion"] = new(Verifik, Modo.Literal),
-        ["rtm_numero"] = new(Ocr, Modo.Literal),
-        ["rtm_vigencia"] = new(Ocr, Modo.Literal),
-        ["rtm_expedicion"] = new(Ocr, Modo.Literal),
+        // HU #11135 — el RUNT también los produce, por lectura tolerante (ningún contrato disponible
+        // confirma su nombre). El OCR del PDF sigue de respaldo.
+        ["rtm_numero"] = new(Verifik, Modo.Literal),
+        ["rtm_vigencia"] = new(Verifik, Modo.Literal),
+        ["rtm_expedicion"] = new(Verifik, Modo.Literal),
 
         // Fecha de la consulta al RUNT (HU #10974): dato de la EJECUCIÓN, no de la respuesta.
         ["runt_consulta_fecha"] = new(RunConsulta, Modo.Literal),
