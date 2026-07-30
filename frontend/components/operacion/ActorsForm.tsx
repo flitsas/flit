@@ -17,6 +17,7 @@ import type { WizardStepFormHandle } from './wizard-step-form';
 import { useProcedureActors } from '@/hooks/useProcedureActors';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { filterCiudades } from '@/lib/catalogs/ciudades-co';
+import { digitsOnly } from '@/lib/format/currency';
 import {
   sanitizeDocNumber,
   validateDocNumber,
@@ -612,6 +613,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         // especiales. Se re-sanea el documento al cambiar de tipo (p.ej. PAS→CC).
         if (patch.numeroDocumento !== undefined || patch.tipoDocumento !== undefined)
           next.numeroDocumento = sanitizeDocNumber(next.numeroDocumento, next.tipoDocumento);
+        if (patch.telefono !== undefined)
+          next.telefono = digitsOnly(next.telefono ?? '');
         if (patch.nombreCompleto !== undefined)
           next.nombreCompleto = sanitizeName(next.nombreCompleto);
         return next;
@@ -628,11 +631,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // Actualiza el representante legal (persona jurídica) de un actor, embebido en el propio actor.
   const updateRepLegal = (index: number, patch: Partial<RepresentanteLegal>) =>
     setActors((prev) =>
-      prev.map((a, i) =>
-        i === index
-          ? { ...a, representanteLegal: { ...a.representanteLegal, ...patch } }
-          : a,
-      ),
+      prev.map((a, i) => {
+        if (i !== index) return a;
+        const rl = { ...a.representanteLegal, ...patch };
+        if (patch.numeroDocumento !== undefined || patch.tipoDocumento !== undefined) {
+          rl.numeroDocumento = sanitizeDocNumber(
+            rl.numeroDocumento ?? '',
+            rl.tipoDocumento ?? 'CC',
+          );
+        }
+        if (patch.telefono !== undefined) rl.telefono = digitsOnly(rl.telefono ?? '');
+        return { ...a, representanteLegal: rl };
+      }),
     );
 
   // HU #10937 — precarga en el actor el representante ELEGIDO (su documento + contacto). El actor
@@ -1000,10 +1010,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // ── Bloque de resultado de la consulta (RUNT o RUES, compartido entre layouts) ─────────────
   const runtResult = (index: number) => {
     const runtState: LookupState = runt[index] ?? { status: 'idle' };
+    const actor = actors[index];
+    const channel = actor && isJuridical(actor) ? 'RUES' : 'RUNT';
     if (runtState.status === 'loading') {
       return (
         <p className="text-xs opacity-70" role="status" aria-live="polite">
-          Consultando RUNT…
+          Consultando {channel}…
         </p>
       );
     }
@@ -1260,7 +1272,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           role="status"
           aria-live="polite"
         >
-          No se encontró en RUNT — completa los datos manualmente.
+          No se encontró en {channel} — completa los datos manualmente.
         </div>
       );
     }
@@ -1272,7 +1284,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           role="alert"
           aria-live="polite"
         >
-          No se pudo consultar RUNT ({runtState.message}). Puedes completar los datos manualmente.
+          No se pudo consultar {channel} ({runtState.message}). Puedes completar los datos manualmente.
         </div>
       );
     }
@@ -1406,6 +1418,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <input
               id={`${index}-rl-telefono`}
               type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="tel"
               value={rl.telefono ?? ''}
               onChange={(e) => updateRepLegal(index, { telefono: e.target.value })}
               className={INPUT_BASE}
@@ -1637,6 +1652,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               <input
                 id="comprador-telefono"
                 type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="tel"
                 value={actor.telefono ?? ''}
                 onChange={(e) => {
                   markContactTouched(0, 'telefono');
@@ -1886,6 +1904,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   <input
                     id={`${prefix}-telefono`}
                     type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    autoComplete="tel"
                     value={actor.telefono ?? ''}
                     onChange={(e) => {
                       markContactTouched(index, 'telefono');

@@ -177,7 +177,7 @@ describe('TramiteWizard — subsanación (HU #10874, AC1)', () => {
 });
 
 describe('TramiteWizard — subsanación (HU #10874, AC2)', () => {
-  it('Re-radicar queda deshabilitado hasta resolver el checklist y luego dispara el submit (subsanacion→entregado)', async () => {
+  it('Re-radicar queda deshabilitado hasta Guardar y continuar + checklist; luego dispara submit', async () => {
     const user = userEvent.setup();
     render(<TramiteWizard existingInstanceId="inst-sub" onExit={() => {}} />);
 
@@ -185,11 +185,15 @@ describe('TramiteWizard — subsanación (HU #10874, AC2)', () => {
     const boton = screen.getByRole('button', { name: /re-radicar/i });
     expect(boton).toBeDisabled();
 
+    // Sin edición guardada: aunque marques el checklist, Re-radicar sigue off.
     const checklist = screen.getByRole('list', { name: 'Checklist de ítems a subsanar' });
     for (const checkbox of within(checklist).getAllByRole('checkbox')) {
       await user.click(checkbox);
     }
-    expect(boton).toBeEnabled();
+    expect(boton).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: /guardar y continuar/i }));
+    await waitFor(() => expect(boton).toBeEnabled());
 
     await user.click(boton);
 

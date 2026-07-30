@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import type { BiometricEstado, BiometricVigenciaEstado } from '@/lib/api/types/procedure-runtime';
 import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from '@/lib/validation/fieldRules';
+import { digitsOnly } from '@/lib/format/currency';
 
 /**
  * Barra de filtros del módulo Prevalidaciones (standalone). Presentacional: el estado vive en
@@ -122,8 +123,9 @@ export function PrevalidacionesFilterToolbar({
           <input
             id="prevalidaciones-filtro-documento"
             type="search"
+            inputMode="numeric"
             value={filters.documentNumber}
-            onChange={(e) => onChange({ documentNumber: sanitizeNoAngleBrackets(e.target.value) })}
+            onChange={(e) => onChange({ documentNumber: digitsOnly(e.target.value) })}
             maxLength={SEARCH_TEXT_MAX_LENGTH}
             placeholder="Número de documento…"
             className={CONTROL_CLASS}

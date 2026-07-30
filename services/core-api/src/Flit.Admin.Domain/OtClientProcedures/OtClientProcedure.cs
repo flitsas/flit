@@ -54,4 +54,46 @@ public sealed class OtClientProcedure
 
     /// <summary>HU #10536 — trámite marcado como prioritario: se ordena con primacía en la bandeja del OT.</summary>
     public bool Prioritario { get; init; }
+
+    /// <summary>Detalle (GET by id): actores del trámite. Vacío en listados.</summary>
+    public IReadOnlyList<OtClientProcedureActor> Actors { get; init; } = [];
+
+    /// <summary>Detalle (GET by id): placa del vehículo.</summary>
+    public string? Placa { get; init; }
+
+    /// <summary>Detalle (GET by id): VIN.</summary>
+    public string? Vin { get; init; }
+
+    /// <summary>Detalle (GET by id): marca.</summary>
+    public string? Marca { get; init; }
+
+    /// <summary>Detalle (GET by id): línea.</summary>
+    public string? Linea { get; init; }
+
+    /// <summary>Detalle (GET by id): modelo.</summary>
+    public string? Modelo { get; init; }
+
+    /// <summary>Detalle (GET by id): color.</summary>
+    public string? Color { get; init; }
+
+    /// <summary>Detalle (GET by id): clase.</summary>
+    public string? Clase { get; init; }
+
+    /// <summary>Detalle (GET by id): servicio.</summary>
+    public string? Servicio { get; init; }
+
+    /// <summary>Detalle (GET by id): combustible.</summary>
+    public string? Combustible { get; init; }
+}
+
+/// <summary>Actor visible para el OT en el detalle del trámite de cliente.</summary>
+public sealed class OtClientProcedureActor
+{
+    public string ActorType { get; init; } = string.Empty;
+    public string DocumentType { get; init; } = string.Empty;
+    public string DocumentNumber { get; init; } = string.Empty;
+    public string FullName { get; init; } = string.Empty;
+    public string? Email { get; init; }
+    public string? Phone { get; init; }
+    public string? PersonType { get; init; }
 }

@@ -17,6 +17,7 @@ import {
   Layers,
   Lock,
   Palette,
+  RefreshCw,
   Search,
   Shield,
   Tag,
@@ -143,7 +144,7 @@ const STEP_SUBTITLE: Record<string, string> = {
   consulta: 'Ingresa la placa y el propietario para consultar los datos del RUNT.',
   documentos: 'Adjunta los documentos que exige el trámite (PDF, JPG, PNG o WEBP, máx 20 MB).',
   comercial: 'Valor de la venta, causal e impuestos del traspaso.',
-  fur: 'Generación opcional del FUR y expediente consolidado. Puedes enviar el trámite y generarlos después.',
+  fur: 'Fecha y observaciones del FUR. El expediente (FUR, certificados y consolidado) se genera al Preparar.',
   identidad:
     'Validación de identidad de cada parte. La biométrica real llegará en una iteración futura; por ahora puedes simular la validación de cada parte.',
 };
@@ -416,6 +417,10 @@ export function TramiteWizard(props: Props) {
   const stepInitializedRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Feature #11066 — estado informativo del paquete (FUR/certs/impronta). No bloquea Preparar.
+  const [paqueteDocsStatus, setPaqueteDocsStatus] = useState<
+    'idle' | 'loading' | 'ready' | 'error'
+  >('idle');
   // HU #10646 — partes (NIT/jurídicas) cuya identidad quedó cubierta por la firma electrónica del baúl.
   // El backend no expone un flag "cubierto por baúl" por parte en el estado biométrico, así que la señal
   // se captura del outcome `firma_baul` que devuelve ensureIdentity al guardar la parte, y desde aquí se
@@ -426,6 +431,13 @@ export function TramiteWizard(props: Props) {
   // shell dispara save() vía ref desde el footer "Guardar y continuar".
   const stepFormRef = useRef<WizardStepFormHandle>(null);
   const [continuing, setContinuing] = useState(false);
+  /** Feature #11066 — cambios locales pendientes de Guardar (docs/forms). */
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  /**
+   * Subsanación: se pone en true tras un Guardar y continuar exitoso (tras haber editado).
+   * Habilita Re-radicar solo cuando además no hay dirty pendiente.
+   */
+  const [subsanacionSavedEdits, setSubsanacionSavedEdits] = useState(false);
 
   // Preflight local (semáforo) para los pasos consulta/validación.
   const [preflight, setPreflight] = useState<PreflightSnapshot | null>(null);
@@ -543,10 +555,60 @@ export function TramiteWizard(props: Props) {
     }
   }, [instanceId, activeStep?.key]);
 
+  // Feature #11066 — genera FUR/impronta/consolidado sin bloquear la UI de negocio.
+  // Reintenta ante fallos transitorios o consolidado incompleto (p.ej. FUR aún en vuelo).
+  // Devuelve mensaje de error o null si el consolidado quedó completo.
+  const ensureExpedienteDocs = useCallback(async (id: string): Promise<string | null> => {
+    const maxAttempts = 3;
+    // En tests, backoff mínimo para no alargar la suite.
+    const retryMs =
+      typeof process !== 'undefined' && process.env.NODE_ENV === 'test' ? 10 : 1_500;
+
+    setPaqueteDocsStatus('loading');
+    let lastError: string | null = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        try {
+          await tramitesClient.generarFur(id);
+        } catch {
+          // Puede existir ya; el consolidado fallará si realmente falta.
+        }
+        try {
+          await tramitesClient.generarImpronta(id);
+        } catch {
+          // Best-effort: sin impronta no bloquea el consolidado en backend (HU #11017).
+        }
+        const result = await tramitesClient.generarConsolidado(id, undefined, true);
+        if (!result.incompleto) {
+          setPaqueteDocsStatus('ready');
+          return null;
+        }
+        const faltantes = (result.documentosFaltantes ?? []).filter(Boolean).join(', ');
+        lastError = faltantes
+          ? `Expediente incompleto: faltan ${faltantes}.`
+          : 'Expediente incompleto: faltan documentos obligatorios.';
+      } catch (genErr) {
+        lastError =
+          genErr instanceof Error
+            ? genErr.message
+            : 'No se pudieron generar los documentos del expediente.';
+      }
+
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, retryMs * attempt));
+      }
+    }
+
+    setPaqueteDocsStatus('error');
+    return lastError ?? 'No se pudieron generar los documentos del expediente.';
+  }, []);
+
   // N 03 (radicación en dos pasos) — Preparar: borrador→preparado vía POST /transition. El backend
   // valida el gate RF03 (identidad aprobada + documentos); solo se habilita cuando el wizard reporta
   // canSubmit Y la identidad está aprobada (ver `canRadicar`). El wizard permanece abierto: pasa a
   // solo lectura y ofrece "Radicar a tránsito".
+  // Feature #11066 — la generación de FUR/paquete corre en segundo plano: NO bloquea la transición.
   const handlePreparar = async () => {
     if (!instanceId || !canRadicar) return;
     setSubmitting(true);
@@ -554,8 +616,24 @@ export function TramiteWizard(props: Props) {
     try {
       await tramitesClient.transitionInstance(instanceId, 'preparado');
       setInstanceStatus('preparado');
-      show('Trámite preparado: validaciones completas, listo para radicar.', 'success');
+      show(
+        'Trámite preparado. Generando expediente en segundo plano…',
+        'success',
+      );
       await refresh();
+
+      const id = instanceId;
+      void (async () => {
+        const docsError = await ensureExpedienteDocs(id);
+        if (docsError) {
+          show(
+            `Trámite preparado, pero faltó el expediente tras reintentos: ${docsError} Regenera antes de radicar.`,
+            'error',
+          );
+        } else {
+          show('Expediente listo (FUR y consolidado). Ya puedes radicar.', 'success');
+        }
+      })();
     } catch (err) {
       setSubmitError(
         err instanceof Error ? err.message : 'No se pudo preparar el trámite.',
@@ -566,14 +644,22 @@ export function TramiteWizard(props: Props) {
   };
 
   // N 03 (radicación en dos pasos) — Radicar a tránsito: preparado→entregado vía POST /transition
-  // (los gates OT —organismo habilitado, reglas— los valida el backend en esta transición). Sin
-  // pantalla intermedia: toast de éxito + volver al listado de inmediato (onExit redirige a
+  // (los gates OT —organismo habilitado, reglas— los valida el backend en esta transición).
+  // Feature #11066 — gate estricto de expediente: exige consolidado completo antes de entregar.
+  // Sin pantalla intermedia: toast de éxito + volver al listado de inmediato (onExit redirige a
   // /tramites; el ToastProvider del layout no se desmonta).
   const handleRadicar = async () => {
     if (!instanceId || !canEntregar) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
+      const docsError = await ensureExpedienteDocs(instanceId);
+      if (docsError) {
+        setSubmitError(`No se puede radicar: ${docsError}`);
+        setSubmitting(false);
+        return;
+      }
+
       await tramitesClient.transitionInstance(instanceId, 'entregado');
       // Reportes2 HU-A — trámite radicado desde el wizard: wizard_complete con duración total.
       telemetry.trackComplete();
@@ -702,6 +788,12 @@ export function TramiteWizard(props: Props) {
       // Reportes2 HU-A — avance con éxito desde un paso sin form embebido.
       if (canNavigateToStep(steps, activeIndex + 1, navViewOnly)) telemetry.trackStepComplete();
       goToStep(activeIndex + 1);
+      // Subsanación: docs/checklist ya persisten al editar; Continuar confirma y habilita Re-radicar.
+      if (inSubsanacion) {
+        setHasUnsavedChanges(false);
+        setSubsanacionSavedEdits(true);
+        show('Cambios guardados. Ya puedes re-radicar cuando termines.', 'success');
+      }
       return;
     }
     setContinuing(true);
@@ -767,6 +859,13 @@ export function TramiteWizard(props: Props) {
         // directamente (no pasa por `goToStep`) porque primero guarda el formulario embebido.
         if (nextIndex > activeIndex && steps[nextIndex]) persistCurrentStep(steps[nextIndex].key);
         setActiveIndex(nextIndex);
+      }
+      setHasUnsavedChanges(false);
+      if (inSubsanacion) {
+        setSubsanacionSavedEdits(true);
+        show('Cambios guardados. Ya puedes re-radicar cuando termines.', 'success');
+      } else {
+        show('Cambios guardados en el borrador.', 'success');
       }
     } catch (err) {
       setSubmitError(
@@ -835,6 +934,18 @@ export function TramiteWizard(props: Props) {
           statusHistory={statusHistory}
           loading={instanceDetailLoading}
           error={instanceDetailError}
+          hasUnsavedChanges={hasUnsavedChanges}
+          canReradicar={subsanacionSavedEdits && !hasUnsavedChanges}
+          showCancel={estadoTramite === 'rechazado' && !!wizard?.subsanacionActiva}
+          onCancelSubsanacion={async () => {
+            if (!instanceId) return;
+            await tramitesClient.cancelSubsanacion(instanceId);
+            setHasUnsavedChanges(false);
+            setSubsanacionSavedEdits(false);
+            show('Subsanación cancelada. El trámite sigue rechazado.', 'success');
+            await refresh();
+            onExit();
+          }}
           onReradicado={() => {
             telemetry.trackComplete();
             show('Trámite re-radicado a tránsito correctamente.', 'success');
@@ -933,6 +1044,7 @@ export function TramiteWizard(props: Props) {
                 step={activeStep}
                 modalidad={modalidad}
                 instanceId={instanceId}
+                instanceStatus={estadoTramite}
                 preflight={preflight}
                 preflightLoading={preflightLoading}
                 onRunPreflight={runPreflight}
@@ -947,6 +1059,9 @@ export function TramiteWizard(props: Props) {
                 seedPlaca={seedPlaca}
                 onPreviewDone={setPendingConsulta}
                 onPendingFieldValues={collectPendingFieldValues}
+                paqueteDocsStatus={paqueteDocsStatus}
+                onPaqueteStatusChange={setPaqueteDocsStatus}
+                onMarkDirty={() => setHasUnsavedChanges(true)}
               />
             </div>
           )}
@@ -990,7 +1105,8 @@ export function TramiteWizard(props: Props) {
                   identidad ya está aprobada (canRadicar); si no, "Finalizar" (finalize-draft) cuando
                   los datos están completos. En borrador ya finalizado solo se ofrece "Preparar"
                   (deshabilitado hasta que el cliente valide su identidad).
-                · Pasos de datos: en borrador finalizado solo se navega; editable usa Continuar/Guardar. */}
+                · Pasos de datos: editable usa "Guardar y continuar" (sin Guardar aparte), igual
+                  en borrador y en subsanación. */}
             {fullReadOnly ? (
               isDecisionStep && canEntregar ? (
                 <button
@@ -1004,16 +1120,48 @@ export function TramiteWizard(props: Props) {
                 </button>
               ) : null
             ) : isDecisionStep ? (
-              // HU #10874 — en subsanación NO se ofrece Preparar/Finalizar (flujo borrador→preparado):
-              // el re-radicado (subsanacion→entregado) vive en el botón "Re-radicar" del
-              // SubsanacionPanel, siempre visible mientras dure el estado.
-              inSubsanacion ? null : canRadicar ? (
+              // HU #10874 — en subsanación NO Preparar/Finalizar: re-radicar vive en SubsanacionPanel.
+              // En el último paso de subsanación: "Guardar y continuar" habilita Re-radicar.
+              inSubsanacion ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void (async () => {
+                      setContinuing(true);
+                      try {
+                        if (stepFormRef.current?.save) {
+                          const ok = await stepFormRef.current.save();
+                          if (!ok) {
+                            setSubmitError('No se pudo guardar. Por favor, reintenta.');
+                            return;
+                          }
+                          await refresh();
+                        }
+                        setHasUnsavedChanges(false);
+                        setSubsanacionSavedEdits(true);
+                        show(
+                          'Cambios guardados. Ya puedes re-radicar cuando termines.',
+                          'success',
+                        );
+                      } finally {
+                        setContinuing(false);
+                      }
+                    })();
+                  }}
+                  disabled={continuing}
+                  className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  title="Guarda los cambios de este paso y habilita Re-radicar"
+                >
+                  {continuing ? 'Guardando…' : 'Guardar y continuar'}
+                </button>
+              ) : canRadicar ? (
                 <button
                   onClick={() => void handlePreparar()}
                   disabled={submitting}
                   className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-                  title="Deja el trámite validado y listo para radicar"
+                  title="Deja el trámite validado y listo para radicar (la generación de documentos no bloquea)"
                 >
                   {submitting ? 'Preparando…' : 'Preparar'}
                 </button>
@@ -1054,7 +1202,11 @@ export function TramiteWizard(props: Props) {
                 className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
                 style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
               >
-                {continuing ? 'Guardando…' : isSavableStep ? 'Guardar y continuar' : 'Continuar'}
+                {continuing
+                  ? 'Guardando…'
+                  : inSubsanacion || isSavableStep
+                    ? 'Guardar y continuar'
+                    : 'Continuar'}
                 <ChevronRight className="h-3 w-3" />
               </button>
             )}
@@ -1996,6 +2148,7 @@ function StepBody({
   step,
   modalidad,
   instanceId,
+  instanceStatus,
   preflight,
   preflightLoading,
   onRunPreflight,
@@ -2010,10 +2163,15 @@ function StepBody({
   seedPlaca,
   onPreviewDone,
   onPendingFieldValues,
+  paqueteDocsStatus = 'idle',
+  onPaqueteStatusChange,
+  onMarkDirty,
 }: {
   step: WizardStep;
   modalidad: WizardModalidad;
   instanceId: string | null;
+  /** Para remount del paso FUR tras Preparar y mostrar adjuntos generados. */
+  instanceStatus?: InstanceStatus | null;
   /** CF-02 — modalidad en curso cuando el trámite AÚN no existe (paso 1 desacoplado). */
   deferredModalidad?: WizardModalidad;
   seedVin?: string;
@@ -2041,6 +2199,11 @@ function StepBody({
   /** HU #10646 — partes (NIT) cubiertas por la firma electrónica del baúl (señal capturada del outcome
    * `firma_baul` de ensureIdentity). BiometricStep pinta el estado "cubierto por el baúl" para ellas. */
   vaultCoveredPartes?: BiometricParte[];
+  /** Feature #11066 — estado de pre-generación del paquete al entrar al paso FUR. */
+  paqueteDocsStatus?: 'idle' | 'loading' | 'ready' | 'error';
+  onPaqueteStatusChange?: (status: 'idle' | 'loading' | 'ready' | 'error') => void;
+  /** Feature #11066 — marca dirty en el shell (p.ej. checklist de docs editado). */
+  onMarkDirty?: () => void;
 }) {
   switch (step.key) {
     // Consulta inicial: VIN (matrícula) o placa+propietario (traspaso).
@@ -2072,7 +2235,10 @@ function StepBody({
         <div className="space-y-4">
           <DocumentChecklist
             instanceId={instanceId}
-            onChanged={onRefresh}
+            onChanged={() => {
+              onMarkDirty?.();
+              onRefresh?.();
+            }}
             hideHeader
             modalidad={modalidad}
           />
@@ -2183,6 +2349,33 @@ function StepBody({
       );
       return (
         <div className="space-y-6">
+          {/* Feature #11066 — banner de pre-gen primero, antes de identidad y el resto del paso. */}
+          {(paqueteDocsStatus === 'loading' || paqueteDocsStatus === 'error') && (
+            <div
+              className="rounded-xl border p-3 text-xs"
+              style={
+                paqueteDocsStatus === 'error'
+                  ? { borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }
+                  : { borderColor: '#DFE5ED', background: 'rgba(85,126,255,0.06)' }
+              }
+              role="status"
+              aria-live="polite"
+              aria-label="Estado de generación del expediente"
+            >
+              {paqueteDocsStatus === 'loading' ? (
+                <span className="inline-flex items-center gap-2">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  Generando documentos del expediente (FUR, certificados
+                  {modalidad === 'traspaso' ? ', compraventa' : ''} e impronta)… No bloquea Preparar.
+                </span>
+              ) : (
+                <span>
+                  No se pudieron generar los documentos del expediente (tras reintentos). Puedes
+                  Preparar igual y regenerarlos al Radicar.
+                </span>
+              )}
+            </div>
+          )}
           {/* HU #10350 — con la identidad pendiente, el FUR/firma se generan AUTOMÁTICAMENTE al
               aprobarse la validación del cliente (consumidor de outbox #10349). Se avisa aquí para que
               el gestor no intente generarlos a mano y entienda que solo debe "Finalizar". */}
@@ -2212,10 +2405,12 @@ function StepBody({
             biometric
           )}
           <FirmaFurStep
+            key={`${instanceId ?? 'new'}-${instanceStatus ?? 'borrador'}`}
             instanceId={instanceId}
             modalidad={modalidad}
             onRefresh={onRefresh}
             rnmcEnabled={rnmcEnabled}
+            onPaqueteStatusChange={onPaqueteStatusChange}
           />
         </div>
       );

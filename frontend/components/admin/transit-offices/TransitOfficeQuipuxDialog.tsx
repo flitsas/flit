@@ -18,6 +18,7 @@ import {
   type TransitOfficeOperationalStatus,
   type TransitOfficeQuipuxSettings,
 } from "@/lib/api/admin-transit-office-tenants";
+import { digitsOnly } from "@/lib/format/currency";
 import { OT_INPUT_CLS } from "./ot-form-styles";
 
 export interface TransitOfficeQuipuxDialogProps {
@@ -104,9 +105,11 @@ export function TransitOfficeQuipuxDialog({
             id="ot-quipux-divipo"
             type="text"
             inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
             value={divipoCode}
             disabled={busy}
-            onChange={(e) => setDivipoCode(e.target.value)}
+            onChange={(e) => setDivipoCode(digitsOnly(e.target.value).slice(0, 20))}
             placeholder="Ej. 05001"
             aria-invalid={formatoInvalido || undefined}
             aria-describedby="ot-quipux-divipo-hint"

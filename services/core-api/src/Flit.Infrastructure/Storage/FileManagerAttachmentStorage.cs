@@ -168,17 +168,39 @@ internal sealed class FileManagerAttachmentStorage(
 
     private async Task UploadToS3Async(PresignedUrl presigned, byte[] bytes, string filename, CancellationToken ct)
     {
-        using var form = new MultipartFormDataContent();
-        // S3 POST policy: los campos firmados (key, policy, x-amz-*) van ANTES del 'file'.
-        if (presigned.Fields is not null)
-            foreach (var (key, value) in presigned.Fields)
-                form.Add(new StringContent(value), key);
+        // Reintento único ante fallos transitorios de red/SSL al subir a S3 (presigned POST).
+        Exception? last = null;
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                using var form = new MultipartFormDataContent();
+                // S3 POST policy: los campos firmados (key, policy, x-amz-*) van ANTES del 'file'.
+                if (presigned.Fields is not null)
+                    foreach (var (key, value) in presigned.Fields)
+                        form.Add(new StringContent(value), key);
 
-        form.Add(new ByteArrayContent(bytes), "file", filename);
+                var fileContent = new ByteArrayContent(bytes);
+                fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                form.Add(fileContent, "file", filename);
 
-        // URL absoluta de S3 ⇒ ignora el BaseAddress del cliente. SIN header de auth del file-manager.
-        using var resp = await http.PostAsync(presigned.Url, form, ct);
-        resp.EnsureSuccessStatusCode();
+                // URL absoluta de S3 ⇒ ignora el BaseAddress del cliente. SIN header de auth del file-manager.
+                using var resp = await http.PostAsync(presigned.Url, form, ct);
+                resp.EnsureSuccessStatusCode();
+                return;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                last = ex;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "file-manager: no se pudo subir el archivo a S3 tras reintentar.", last);
     }
 
     private void ApplyAuth(HttpRequestMessage req)

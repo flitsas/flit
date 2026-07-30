@@ -60,6 +60,7 @@ public static class DependencyInjection
         services.AddScoped<ITramiteLifecycleService, TramiteLifecycleService>();
         services.AddScoped<TransitionProcedureInstanceHandler>();
         services.AddScoped<StartSubsanacionHandler>();
+        services.AddScoped<CancelSubsanacionHandler>();
         services.AddScoped<GetActorsHandler>();
         services.AddScoped<PutActorsHandler>();
         // HU #10955 (AC2/AC3/AC4/AC5) — lookup de datos de contacto ya conocidos (ciudad/email/

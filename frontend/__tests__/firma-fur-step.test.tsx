@@ -246,31 +246,30 @@ describe('FirmaFurStep — invitar participante', () => {
   });
 });
 
-// HU #11052 — la generación paso a paso desaparece del paso FUR: el expediente consolidado es el
-// ÚNICO disparador y produce en cascada lo que falte (FUR e impronta ya lo hacían por backend desde
-// las HU #10860 y #11017). La impronta conserva solo su aviso informativo.
-describe('FirmaFurStep — impronta (sin generación manual, HU #11052)', () => {
-  it('sin adjunto de impronta informa que se genera con el consolidado y NO ofrece botón', async () => {
+// Feature #11066 — la impronta se pre-genera al entrar al paso (best-effort). Sin botón Generar.
+// HU #11052 — tampoco hay generación manual; el consolidado sigue disponible en el paso FUR.
+describe('FirmaFurStep — impronta (Feature #11066)', () => {
+  it('sin impronta: informa pre-gen al entrar y NO ofrece botón Generar', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
     const seccion = await screen.findByRole('region', { name: 'Impronta de motor y chasis' });
-    expect(seccion).toHaveTextContent(/se genera automáticamente al generar el expediente consolidado/i);
+    expect(seccion).toHaveTextContent(/Se genera automáticamente al entrar a este paso/i);
     expect(screen.queryByRole('button', { name: /Generar Improntas/i })).not.toBeInTheDocument();
   });
 
-  it('con adjunto de impronta la sección no aparece', async () => {
+  it('con impronta existente muestra descarga y no el botón Generar', async () => {
     mocks.getAttachments.mockResolvedValue([IMPRONTA_DOC]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByRole('region', { name: 'Generación del FUR' });
-    expect(
-      screen.queryByRole('region', { name: 'Impronta de motor y chasis' }),
-    ).not.toBeInTheDocument();
+    const section = await screen.findByRole('region', { name: 'Impronta de motor y chasis' });
+    expect(screen.queryByRole('button', { name: /Generar Improntas/i })).not.toBeInTheDocument();
+    expect(within(section).getByText(/impronta\.pdf/i)).toBeInTheDocument();
+    expect(within(section).getByRole('button', { name: /Descargar/i })).toBeInTheDocument();
   });
 });
 
-describe('FirmaFurStep — consolidado como único disparador (HU #11052)', () => {
-  it('no ofrece generar el FUR por separado', async () => {
+describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () => {
+  it('sin consolidado: no genera FUR a mano; pre-genera paquete+impronta al entrar', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
     await screen.findByRole('region', { name: 'Generación del FUR' });
@@ -280,20 +279,46 @@ describe('FirmaFurStep — consolidado como único disparador (HU #11052)', () =
     expect(
       await screen.findByRole('button', { name: 'Generar expediente consolidado' }),
     ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(mocks.generarFur).toHaveBeenCalledWith(INSTANCE);
+      expect(mocks.generarImpronta).toHaveBeenCalledWith(INSTANCE);
+    });
   });
 
-  it('sigue listando y permitiendo descargar los documentos ya generados', async () => {
+  it('lista el FUR ya generado para descarga y no vuelve a generarFur', async () => {
     mocks.getAttachments.mockResolvedValue([FUR_DOC]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
     // El nombre amigable ('FUR') y el filename van en nodos separados; se valida el <p> contenedor.
     const furFilename = await screen.findByText(/· fur\.txt/);
     expect(furFilename.closest('p')).toHaveTextContent('FUR · fur.txt');
+    await waitFor(() => expect(mocks.generarImpronta).toHaveBeenCalled());
+    expect(mocks.generarFur).not.toHaveBeenCalled();
+  });
+
+  it('precarga Fecha del trámite con la fecha local de hoy si no hay valor guardado', async () => {
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    const fecha = (await screen.findByLabelText(/Fecha del trámite/i)) as HTMLInputElement;
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    expect(fecha.value).toBe(`${yyyy}-${mm}-${dd}`);
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith(
+        INSTANCE,
+        expect.arrayContaining([
+          expect.objectContaining({ fieldKey: 'fur_processing_date', valueText: fecha.value }),
+        ]),
+      ),
+    );
   });
 
   // Hereda el guardado previo que hacía el botón del FUR (HU #10987/#10988): al ser el único
-  // disparador, si no persistiera antes, la fecha y las observaciones escritas sin perder el foco no
-  // llegarían al PDF.
+  // disparador manual, si no persistiera antes, la fecha y las observaciones escritas sin perder
+  // el foco no llegarían al PDF.
   it('persiste fecha y observaciones ANTES de generar el consolidado', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     const user = userEvent.setup();
@@ -326,9 +351,9 @@ describe('FirmaFurStep — consolidado como único disparador (HU #11052)', () =
     ).toBeInTheDocument();
   });
 
-  // HU #11050 (AC3) — lo que la cascada no pudo generar se avisa. Importa porque el gestor ya no tiene
-  // botones para generar documento por documento: sin aviso, el documento faltaría en silencio.
-  it('avisa qué documento de la cascada no se pudo generar, y el consolidado sí se entrega', async () => {
+  // Avisos informativos del consolidado (p.ej. impronta no disponible). Feature #11066 no usa
+  // cascada caliente en backend; el FE igual muestra avisosCascada si el API los envía.
+  it('avisa si el consolidado reporta un aviso (p.ej. impronta no disponible)', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     mocks.generarConsolidado.mockResolvedValue({
       attachmentId: 'att-consolidado',
@@ -434,16 +459,19 @@ describe('FirmaFurStep — organismo de tránsito', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Seleccionar organismo de tránsito' });
     await user.click(await within(dialog).findByRole('button', { name: /Cali/ }));
 
-    await waitFor(() => expect(mocks.patchFieldValues).toHaveBeenCalledTimes(1));
-    const items = mocks.patchFieldValues.mock.calls[0][1] as {
-      fieldKey: string;
-      valueText: string;
-    }[];
-    const byKey = Object.fromEntries(items.map((i) => [i.fieldKey, i.valueText]));
-    // Persiste el id real del catálogo (no solo el texto), además de code/name/city.
-    expect(byKey.transit_office_id).toBe('aaaaaaaa-0001-4000-8000-000000000003');
-    expect(byKey.transit_office_code).toBe('76001');
-    expect(byKey.transit_office_name).toBe('Cali — STTMP');
+    // Feature #11066 también puede auto-persistir `fur_processing_date` (hoy); no exigir un solo call.
+    await waitFor(() => {
+      const otCall = mocks.patchFieldValues.mock.calls.find(([, items]) =>
+        (items as { fieldKey: string }[]).some((i) => i.fieldKey === 'transit_office_id'),
+      );
+      expect(otCall).toBeTruthy();
+      const byKey = Object.fromEntries(
+        (otCall![1] as { fieldKey: string; valueText: string }[]).map((i) => [i.fieldKey, i.valueText]),
+      );
+      expect(byKey.transit_office_id).toBe('aaaaaaaa-0001-4000-8000-000000000003');
+      expect(byKey.transit_office_code).toBe('76001');
+      expect(byKey.transit_office_name).toBe('Cali — STTMP');
+    });
   });
 });
 

@@ -19,6 +19,7 @@ internal static class ConsolidadoEndpoints
         group.MapPost("/instances/{id:guid}/consolidado", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            [FromQuery] bool force,
             HttpContext http,
             GenerarConsolidadoHandler handler,
             GeneracionDocumentalGestorGuard estadoGuard,
@@ -35,7 +36,7 @@ internal static class ConsolidadoEndpoints
                 return GeneracionEstadoProblem.From(estadoError);
 
             // HU #11017 - el usuario habilita la generacion en cascada de la impronta (el proveedor la exige).
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ResolveUserId(http.User), ct);
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ResolveUserId(http.User), force, ct);
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
@@ -45,6 +46,7 @@ internal static class ConsolidadoEndpoints
                 "sin_adjuntos" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No hay adjuntos para consolidar."),
                 "adjunto_no_disponible" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Un adjunto del expediente no está disponible en almacenamiento."),
                 "mimetype_no_soportado" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Un adjunto tiene un formato no soportado para el consolidado."),
+                "storage_unavailable" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "No se pudo guardar el consolidado en el almacenamiento de archivos. Intenta de nuevo en unos minutos."),
                 // Éxito SOLO cuando no hay error. El comodín anterior (`_ => Created`) trataba cualquier
                 // código NO MAPEADO como éxito y devolvía 201 con cuerpo nulo: el gestor veía la
                 // operación "correcta", sin consolidado y sin motivo. Es lo que pasaba con

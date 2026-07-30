@@ -1,5 +1,6 @@
 using System.Globalization;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.ReadModels;
 using Flit.Tramites.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -383,6 +384,79 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return keys;
     }
 
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<LinkedProcedureSummary>>> ListLinkedProceduresByIdentityDocumentsAsync(
+        Guid tenantId,
+        IReadOnlyCollection<(string DocumentType, string DocumentNumber)> documents,
+        CancellationToken ct = default)
+    {
+        if (documents.Count == 0)
+            return new Dictionary<string, IReadOnlyList<LinkedProcedureSummary>>();
+
+        var requestedKeys = documents
+            .Select(d => BiometricRules.IdentidadKey(tenantId, d.DocumentType, d.DocumentNumber))
+            .ToHashSet(StringComparer.Ordinal);
+
+        var documentNumbers = documents
+            .Select(d => d.DocumentNumber.Trim())
+            .Where(n => n.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(n => n.ToUpperInvariant())
+            .ToList();
+
+        if (documentNumbers.Count == 0)
+            return new Dictionary<string, IReadOnlyList<LinkedProcedureSummary>>();
+
+        // 1) Trámites con validación biométrica de esa identidad (histórico Feature #11066).
+        var fromBio = await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => v.TenantId == tenantId
+                && v.ProcedureInstanceId != null
+                && v.ProcedureInstance != null
+                && v.ProcedureInstance.DeletedAt == null
+                && documentNumbers.Contains(v.DocumentNumber.ToUpper()))
+            .Select(v => new
+            {
+                v.DocumentType,
+                v.DocumentNumber,
+                InstanceId = v.ProcedureInstanceId!.Value,
+                v.ProcedureInstance!.ReferenceNumber,
+                v.ProcedureInstance.Status,
+                Modalidad = v.ProcedureInstance.ModalidadEntrada,
+            })
+            .ToListAsync(ct);
+
+        // 2) HU #11069 — también trámites donde la persona es actor (mismo tipo+documento).
+        // Una identidad aprobada (p. ej. prevalidación) se reutiliza en varios trámites sin crear
+        // otra fila biométrica por instancia; sin este join solo aparecería 1 trámite.
+        var fromActors = await db.ProcedureInstanceActors
+            .AsNoTracking()
+            .Where(a => a.TenantId == tenantId
+                && documentNumbers.Contains(a.DocumentNumber.ToUpper())
+                && a.ProcedureInstance != null
+                && a.ProcedureInstance.DeletedAt == null)
+            .Select(a => new
+            {
+                a.DocumentType,
+                a.DocumentNumber,
+                InstanceId = a.ProcedureInstanceId,
+                a.ProcedureInstance!.ReferenceNumber,
+                a.ProcedureInstance.Status,
+                Modalidad = a.ProcedureInstance.ModalidadEntrada,
+            })
+            .ToListAsync(ct);
+
+        return fromBio.Concat(fromActors)
+            .Where(r => requestedKeys.Contains(BiometricRules.IdentidadKey(tenantId, r.DocumentType, r.DocumentNumber)))
+            .GroupBy(r => BiometricRules.IdentidadKey(tenantId, r.DocumentType, r.DocumentNumber))
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<LinkedProcedureSummary>)g
+                    .DistinctBy(r => r.InstanceId)
+                    .OrderBy(r => r.ReferenceNumber, StringComparer.OrdinalIgnoreCase)
+                    .Select(r => new LinkedProcedureSummary(r.InstanceId, r.ReferenceNumber, r.Status, r.Modalidad))
+                    .ToList());
+    }
+
     public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsByTenantAsync(
         Guid tenantId,
         int skip,
@@ -579,6 +653,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct) =>
         db.ProcedureInstanceBiometricValidations
+            .Include(x => x.ProcedureInstance)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     // HU #10943 (CF-03) — TRACKEADA (editar/reenviar la modifica) + Person incluida (ResolveSubject).

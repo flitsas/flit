@@ -2,6 +2,7 @@
 
 import { Lock } from 'lucide-react';
 import type { FormFieldItem } from '@/lib/api/types/procedure-parametrization';
+import { digitsOnly } from '@/lib/format/currency';
 
 interface SelectOption {
   value: string;
@@ -109,15 +110,19 @@ export function DynamicFieldRenderer({ field, value, onChange }: Props) {
           </div>
         );
       case 'number':
+        // text + digitsOnly: type=number aún permite e/E/+/- en varios navegadores (HU #11072).
         return (
           <input
             id={fieldId}
-            type="number"
-            value={(value as string) ?? ''}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
+            value={value == null ? '' : String(value)}
             disabled={disabled}
             required={isRequired}
             aria-describedby={describedBy}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => onChange(digitsOnly(e.target.value))}
             className={INPUT_BASE}
           />
         );

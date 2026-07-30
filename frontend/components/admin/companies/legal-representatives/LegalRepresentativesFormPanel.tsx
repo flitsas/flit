@@ -12,6 +12,8 @@ import type {
   LegalRepresentativeItem,
   LegalRepresentativeSaved,
 } from "@/lib/api/admin-legal-representatives";
+import { digitsOnly } from "@/lib/format/currency";
+import { sanitizeDocNumber } from "@/lib/validation/fieldRules";
 
 // Tipos de documento del representante — mismos que en el resto de la app (ActorsForm / Baúl).
 const DOC_TYPE_OPTIONS: { value: string; label: string }[] = [
@@ -319,10 +321,13 @@ export function LegalRepresentativesFormPanel({
                     <input
                       id={`lr-companyNit-${index}`}
                       value={company.nit}
-                      onChange={(e) => patchCompany(index, { nit: e.target.value })}
+                      onChange={(e) => patchCompany(index, { nit: digitsOnly(e.target.value) })}
                       className={OT_INPUT_CLS}
                       style={err("nit") ? { borderColor: "#FF4E00" } : undefined}
                       placeholder="NIT"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="off"
                     />
                   </Field>
                   <Field id={`lr-companyName-${index}`} label="Razón social" error={err("name")}>
@@ -347,8 +352,12 @@ export function LegalRepresentativesFormPanel({
                   <Field id={`lr-companyPhone-${index}`} label="Teléfono (opcional)" error={err("phone")}>
                     <input
                       id={`lr-companyPhone-${index}`}
+                      type="tel"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="tel"
                       value={company.phone}
-                      onChange={(e) => patchCompany(index, { phone: e.target.value })}
+                      onChange={(e) => patchCompany(index, { phone: digitsOnly(e.target.value) })}
                       className={OT_INPUT_CLS}
                     />
                   </Field>
@@ -384,7 +393,13 @@ export function LegalRepresentativesFormPanel({
               <select
                 id="lr-doctype"
                 value={form.documentType}
-                onChange={(e) => patch({ documentType: e.target.value })}
+                onChange={(e) => {
+                  const documentType = e.target.value;
+                  patch({
+                    documentType,
+                    documentNumber: sanitizeDocNumber(form.documentNumber, documentType),
+                  });
+                }}
                 className={OT_INPUT_CLS}
                 style={errStyle("documentType")}
               >
@@ -399,10 +414,13 @@ export function LegalRepresentativesFormPanel({
               <input
                 id="lr-docnumber"
                 value={form.documentNumber}
-                onChange={(e) => patch({ documentNumber: e.target.value })}
+                onChange={(e) =>
+                  patch({ documentNumber: sanitizeDocNumber(e.target.value, form.documentType) })
+                }
                 className={OT_INPUT_CLS}
                 style={errStyle("documentNumber")}
-                inputMode="numeric"
+                inputMode={form.documentType === "PAS" ? "text" : "numeric"}
+                autoComplete="off"
               />
             </Field>
           </div>
@@ -454,8 +472,12 @@ export function LegalRepresentativesFormPanel({
             <Field id="lr-phone" label="Teléfono (opcional)" error={fieldErrors.phone}>
               <input
                 id="lr-phone"
+                type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="tel"
                 value={form.phone}
-                onChange={(e) => patch({ phone: e.target.value })}
+                onChange={(e) => patch({ phone: digitsOnly(e.target.value) })}
                 className={OT_INPUT_CLS}
                 style={errStyle("phone")}
               />
