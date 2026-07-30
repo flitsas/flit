@@ -298,18 +298,10 @@ function ReportesInner() {
             <TramitesV2Tab tenantId={v2Filters.tenantId || undefined} />
           )}
           {activeTab === "consolidado" && (
-            <ConsolidadoTab
-              from={v2Filters.from}
-              to={v2Filters.to}
-              tenantId={v2Filters.tenantId || undefined}
-            />
+            <ConsolidadoTab tenantId={v2Filters.tenantId || undefined} />
           )}
           {activeTab === "productividad" && (
-            <ProductividadV2Tab
-              from={v2Filters.from}
-              to={v2Filters.to}
-              tenantId={v2Filters.tenantId || undefined}
-            />
+            <ProductividadV2Tab tenantId={v2Filters.tenantId || undefined} />
           )}
           {activeTab === "tiempos-sla" && (
             <SlaTab
