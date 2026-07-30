@@ -80,6 +80,7 @@ export function ConsolidadoTab({ tenantId }: { tenantId?: string }) {
   }, [canView, from, to, groupBy, effectiveTenant]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón de carga del repo
     void load();
   }, [load, reloadKey]);
 
@@ -257,6 +258,7 @@ export function ProductividadV2Tab({ tenantId }: { tenantId?: string }) {
   }, [canView, from, to, dimension, effectiveTenant]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón de carga del repo
     void load();
   }, [load, reloadKey]);
 

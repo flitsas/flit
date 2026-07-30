@@ -185,6 +185,7 @@ export function TramitesV2Tab({ tenantId }: { tenantId?: string }) {
   ]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón de carga del repo
     void load();
   }, [load, reloadKey]);
 

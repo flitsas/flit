@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Xunit;
@@ -15,8 +16,17 @@ public sealed class SignalRYarpConfigTests
     private const string AffinityCookie = ".Flit.SignalR.Affinity";
     private const string FailurePolicy = "Redistribute";
 
-    private static string FindGatewayFile(string fileName)
+    private static string FindGatewayFile(string fileName, [CallerFilePath] string callerFilePath = "")
     {
+        // Anclado al source del test: .../tests/Flit.Infrastructure.Tests/Yarp/ → .../src/Flit.Gateway/
+        if (!string.IsNullOrEmpty(callerFilePath))
+        {
+            var fromCaller = Path.GetFullPath(Path.Combine(
+                Path.GetDirectoryName(callerFilePath)!,
+                "..", "..", "..", "src", "Flit.Gateway", fileName));
+            if (File.Exists(fromCaller)) return fromCaller;
+        }
+
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
@@ -82,7 +92,21 @@ public sealed class SignalRYarpConfigTests
     [Fact]
     public void Signalr_cluster_json_shape_is_valid()
     {
-        using var doc = JsonDocument.Parse(File.ReadAllText(FindGatewayFile("appsettings.json")));
+        // ConfigurationBuilder (JSONC-tolerant) — mismo contrato que los demás tests de appsettings.
+        // Evita JsonDocument.Parse estricto: en CI el resolver de rutas puede cruzar artefactos
+        // bin/ con comentarios o BOM que rompen STJ sin CommentHandling.
+        var path = FindGatewayFile("appsettings.json");
+        Assert.EndsWith("appsettings.json", path, StringComparison.OrdinalIgnoreCase);
+        var json = File.ReadAllText(path);
+        Assert.StartsWith("{", json.TrimStart('\uFEFF', ' ', '\t', '\r', '\n'), StringComparison.Ordinal);
+
+        using var doc = JsonDocument.Parse(
+            json,
+            new JsonDocumentOptions
+            {
+                CommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true,
+            });
         var cluster = doc.RootElement
             .GetProperty("ReverseProxy")
             .GetProperty("Clusters")
