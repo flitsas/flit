@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -187,6 +188,17 @@ public static class VerifikResultMapper
         if (!string.IsNullOrWhiteSpace(soat?.EntidadExpideSoat))
             fields.Add(new HydratedField("soat_aseguradora", soat.EntidadExpideSoat, null));
 
+        // HU #11134 — póliza y fechas del SOAT desde el RUNT. Hasta ahora estas tres celdas del
+        // certificado solo se llenaban con el OCR del PDF cargado, así que un trámite sin ese
+        // documento (o con un OCR fallido) emitía el certificado a medias. El OCR se conserva como
+        // respaldo: su handler ya respeta la precedencia y nunca pisa un valor de consulta.
+        if (!string.IsNullOrWhiteSpace(soat?.NoPoliza))
+            fields.Add(new HydratedField("soat_poliza", soat.NoPoliza, null));
+        if (!string.IsNullOrWhiteSpace(soat?.FechaVigencia))
+            fields.Add(new HydratedField("soat_vigencia", soat.FechaVigencia, null));
+        if (!string.IsNullOrWhiteSpace(soat?.FechaExpedicion))
+            fields.Add(new HydratedField("soat_expedicion", soat.FechaExpedicion, null));
+
         // HU #10973 — el estado del SOAT alimenta el certificado de vigencia SOAT/RTM Y el gate de
         // aprobación del OT (SoatGate, HU #10804). Se persiste NORMALIZADO al vocabulario del gate:
         // Verifik devuelve "VIGENTE" en mayúscula y el frontend compara estricto contra "vigente"
@@ -210,7 +222,63 @@ public static class VerifikResultMapper
         if (!string.IsNullOrWhiteSpace(rtm?.CdaExpide))
             fields.Add(new HydratedField("rtm_entidad", rtm.CdaExpide, null));
 
+        // HU #11135 — número de certificado y fechas de la RTM. Ninguna muestra real disponible los
+        // documenta (ver VerifikTecnomecanica), así que se resuelven por lectura tolerante sobre los
+        // campos que el proveedor manda y el modelo no declara. Sin coincidencia no se escribe la
+        // llave, con lo que la celda queda en blanco y el OCR del PDF puede aportarla como respaldo.
+        AddSiHay(fields, "rtm_numero", Tolerante(rtm, NombresNumeroRtm));
+        AddSiHay(fields, "rtm_vigencia", Tolerante(rtm, NombresVigenciaRtm));
+        AddSiHay(fields, "rtm_expedicion", Tolerante(rtm, NombresExpedicionRtm));
+
         return fields;
+    }
+
+    // Nombres candidatos, en orden de preferencia. Salen de la convención que el propio RUNT usa en
+    // el registro de SOAT (noPoliza / fechaVigencia / fechaExpedicion) y de las variantes habituales
+    // del servicio. La sonda al RUNT con un vehículo que SÍ tenga RTM cerrará la lista.
+    private static readonly string[] NombresNumeroRtm =
+        ["noCertificado", "numeroCertificado", "nroCertificado", "noRevision", "numeroRevision"];
+
+    private static readonly string[] NombresVigenciaRtm =
+        ["fechaVigencia", "fechaInicioVigencia", "fechaVigenciaRtm"];
+
+    private static readonly string[] NombresExpedicionRtm =
+        ["fechaExpedicion", "fechaExpedicionRtm", "fechaRevision"];
+
+    /// <summary>
+    /// Primer valor no vacío entre los nombres candidatos, buscado en los campos que el proveedor
+    /// envió y el modelo no declara. Solo se aceptan cadenas y números: un objeto o un array significa
+    /// que ese nombre no es el que se busca.
+    /// </summary>
+    private static string? Tolerante(VerifikTecnomecanica? rtm, string[] candidatos)
+    {
+        var extra = rtm?.CamposNoModelados;
+        if (extra is null || extra.Count == 0)
+            return null;
+
+        foreach (var nombre in candidatos)
+        {
+            if (!extra.TryGetValue(nombre, out var el))
+                continue;
+
+            var valor = el.ValueKind switch
+            {
+                JsonValueKind.String => el.GetString(),
+                JsonValueKind.Number => el.ToString(),
+                _ => null,
+            };
+
+            if (!string.IsNullOrWhiteSpace(valor))
+                return valor;
+        }
+
+        return null;
+    }
+
+    private static void AddSiHay(List<HydratedField> fields, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            fields.Add(new HydratedField(key, value, null));
     }
 
     private static string ComputeOverall(IReadOnlyList<ConsultationCheck> checks)

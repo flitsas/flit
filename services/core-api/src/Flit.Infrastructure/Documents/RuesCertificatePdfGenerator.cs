@@ -105,6 +105,9 @@ public sealed class RuesCertificatePdfGenerator : IRuesCertificateGenerator
             ("Razón Cancelación", d.RazonCancelacion),
             ("Número Registro", d.MatriculaMercantil),
             ("Estado Registro", d.Estado),
+            // HU #11132 — jurisdicción de la cámara: dato que el RUES devuelve y antes se descartaba.
+            ("Ciudad Cámara", d.CamaraCiudad),
+            ("Departamento Cámara", d.CamaraDepartamento),
         ];
 
         col.Item().Column(grid =>

@@ -178,4 +178,102 @@ public sealed class IntempoVehicleResultMapperTests
 
         result.Overall.Should().Be("yellow");
     }
+
+    // ── HU #11137 — SOAT y fecha de matrícula ────────────────────────────────
+
+    private static IntempoVehicleResponse ConSoatCompleto()
+    {
+        var r = Response();
+        r.FechaMatricula = "15/03/2015";
+        r.TipoServicio = "PARTICULAR";
+        r.TipoCarroceria = "SEDAN";
+        r.NoChasis = "CH-9988";
+        r.SoatNacionales =
+        [
+            new IntempoSoat
+            {
+                Estado = "VIGENTE",
+                NoPoliza = "SOAT-778899",
+                FechaExpedicion = "04/05/2026",
+                FechaVigencia = "06/05/2026",
+                FechaVencimiento = "05/05/2027",
+                EntidadExpideSoat = "SEGUROS DEL ESTADO S.A.",
+            },
+        ];
+        return r;
+    }
+
+    private static string? Valor(ConsultationResult r, string key) =>
+        r.HydratedFields.FirstOrDefault(f => f.FieldKey == key)?.ValueText;
+
+    [Fact]
+    public void Soat_SeAlmacenaCompleto()
+    {
+        // Antes este mapper producía una verificación de estado y NINGÚN campo, así que un trámite
+        // consultado por Intempo emitía la tabla certificadora del SOAT entera en blanco.
+        var result = IntempoVehicleResultMapper.Map(ConSoatCompleto());
+
+        Valor(result, "soat_poliza").Should().Be("SOAT-778899");
+        Valor(result, "soat_expedicion").Should().Be("04/05/2026");
+        Valor(result, "soat_vigencia").Should().Be("06/05/2026");
+        Valor(result, "soat_vencimiento").Should().Be("05/05/2027");
+        Valor(result, "soat_aseguradora").Should().Be("SEGUROS DEL ESTADO S.A.");
+    }
+
+    [Fact]
+    public void SoatEstado_SeNormalizaAlVocabularioDelGateDelOt()
+    {
+        // El crudo del RUNT ("VIGENTE") bloquearía la aprobación del OT: el frontend compara estricto
+        // contra "vigente" en minúscula.
+        var result = IntempoVehicleResultMapper.Map(ConSoatCompleto());
+
+        Valor(result, "soat_estado").Should().Be("vigente");
+    }
+
+    [Fact]
+    public void Soat_PrefiereElVigenteSobreElVencido()
+    {
+        var r = ConSoatCompleto();
+        r.SoatNacionales =
+        [
+            new IntempoSoat { Estado = "VENCIDO", NoPoliza = "VIEJA" },
+            new IntempoSoat { Estado = "VIGENTE", NoPoliza = "ACTUAL" },
+        ];
+
+        Valor(IntempoVehicleResultMapper.Map(r), "soat_poliza").Should().Be("ACTUAL");
+    }
+
+    [Fact]
+    public void FechaDeMatricula_SeAlmacena()
+    {
+        // Insumo de la regla de antigüedad de la RTM (HU #11136).
+        Valor(IntempoVehicleResultMapper.Map(ConSoatCompleto()), "vehicle_registration_date")
+            .Should().Be("15/03/2015");
+    }
+
+    [Fact]
+    public void Intempo_AlmacenaAlMenosLasMismasLlavesDeSoatQueVerifik()
+    {
+        // Paridad entre los dos proveedores cuyo contrato SÍ trae el registro completo de SOAT. Si uno
+        // se queda atrás, esta prueba lo dice. (Kyverum no entra: su contrato solo trae tres campos,
+        // documentado en KyverumRuntSoat.)
+        var intempo = IntempoVehicleResultMapper.Map(ConSoatCompleto())
+            .HydratedFields.Select(f => f.FieldKey)
+            .Where(k => k.StartsWith("soat_", StringComparison.Ordinal))
+            .ToHashSet(StringComparer.Ordinal);
+
+        intempo.Should().BeEquivalentTo(
+            ["soat_poliza", "soat_vigencia", "soat_expedicion", "soat_vencimiento", "soat_aseguradora", "soat_estado"]);
+    }
+
+    [Fact]
+    public void Soat_SinDatos_NoEscribeLlaves()
+    {
+        var r = Response();
+        r.SoatNacionales = [];
+
+        var result = IntempoVehicleResultMapper.Map(r);
+
+        result.HydratedFields.Should().NotContain(f => f.FieldKey.StartsWith("soat_", StringComparison.Ordinal));
+    }
 }

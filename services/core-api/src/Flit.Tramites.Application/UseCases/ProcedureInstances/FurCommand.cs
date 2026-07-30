@@ -4,6 +4,7 @@ using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Avaluos;
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
@@ -307,8 +308,13 @@ public sealed class GenerarFurHandler(
                         FechaExpedicion: Get(fv, "soat_expedicion"),
                         Entidad: Get(fv, "soat_aseguradora"),
                         Estado: EstadoSoatDisplay(Get(fv, SoatGate.FieldKey))),
-                    esMatricula
-                        ? null // matrícula inicial: sin RTM
+                    // HU #11136 — la RTM aplica solo en traspaso Y solo si el vehículo tiene más de 5
+                    // años de matriculado. Antes se pintaba en todo traspaso sin mirar la antigüedad.
+                    !RtmCertificado.Aplica(
+                        esTraspaso: !esMatricula,
+                        fechaMatricula: Get(fv, RtmCertificado.FieldKeyFechaMatricula),
+                        hoy: DateTimeOffset.UtcNow)
+                        ? null
                         : new SoatRtmBlock(
                             Poliza: Get(fv, "rtm_numero"),
                             FechaVigencia: Get(fv, "rtm_vigencia"),
@@ -788,8 +794,20 @@ public sealed class GenerarFurHandler(
             if (string.IsNullOrEmpty(nit))
                 continue;
 
-            var datos = DatosRuesDeLaInstancia(fv, nit)
-                ?? await _ruesResolver.ResolveAsync(instance.Id, instance.TenantId, nit, ct);
+            // HU #11133 — orden de resolución. Primero el SNAPSHOT congelado al registrar el trámite:
+            // es la fuente de verdad del certificado y no cuesta una llamada al proveedor. Después las
+            // llaves `rues_*` de instancia (trámites anteriores al snapshot, y solo sirven a UNA
+            // compañía). La consulta EN VIVO queda como último recurso y se deja registrada, para
+            // poder medir cuántos trámites siguen dependiendo de ella y apagarla cuando sean cero.
+            IReadOnlyDictionary<string, string?>? datos =
+                RuesSnapshots.Read(Get(fv, RuesSnapshots.FieldKey), nit)
+                ?? DatosRuesDeLaInstancia(fv, nit);
+
+            if (datos is null)
+            {
+                GenerarFurLog.CertificadoRuesConsultaEnVivo(logger, instance.Id);
+                datos = await _ruesResolver.ResolveAsync(instance.Id, instance.TenantId, nit, ct);
+            }
 
             var razonSocial = Val(datos, "rues_razon_social");
             if (datos is null || string.IsNullOrWhiteSpace(razonSocial))
@@ -822,7 +840,10 @@ public sealed class GenerarFurHandler(
                 FechaActualizacion: Val(datos, "rues_fecha_actualizacion"),
                 RazonCancelacion: Val(datos, "rues_razon_cancelacion"),
                 RepresentacionLegal: Val(datos, "rues_representacion_legal"),
-                Actividades: ParseActividades(Val(datos, "rues_actividades_json")));
+                Actividades: ParseActividades(Val(datos, "rues_actividades_json")),
+                // HU #11132 — jurisdicción de la cámara de comercio.
+                CamaraCiudad: Val(datos, "rues_camara_ciudad"),
+                CamaraDepartamento: Val(datos, "rues_camara_departamento"));
 
             docs.Add(ConTipoDeRol(ruesGenerator.GenerateRuesCertificate(data), actor.ActorType));
         }
@@ -1178,4 +1199,11 @@ internal static partial class GenerarFurLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Sin datos de registro del RUES para un actor jurídico (instancia {InstanceId}); se omite su certificado en vez de emitirlo en blanco.")]
     public static partial void CertificadoRuesSinDatos(ILogger logger, Guid instanceId);
+
+    // HU #11133 — el camino normal es el snapshot congelado al registrar. Esta traza marca los
+    // trámites que todavía obligan a pagar una consulta al proveedor: cuando deje de aparecer, el
+    // respaldo en vivo se puede retirar.
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Sin snapshot del RUES para un actor jurídico (instancia {InstanceId}); se consulta en vivo como respaldo.")]
+    public static partial void CertificadoRuesConsultaEnVivo(ILogger logger, Guid instanceId);
 }

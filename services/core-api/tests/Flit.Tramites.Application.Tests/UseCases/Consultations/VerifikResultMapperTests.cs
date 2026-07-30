@@ -298,7 +298,14 @@ public sealed class VerifikResultMapperTests
               "color": "PLATA"
             },
             "soat": [
-              { "estado": "VIGENTE", "fechaVencimiento": "05/05/2027", "noPoliza": "12345" }
+              {
+                "estado": "VIGENTE",
+                "fechaVencimiento": "05/05/2027",
+                "noPoliza": "12345",
+                "fechaExpedicion": "04/05/2026",
+                "fechaVigencia": "06/05/2026",
+                "entidadExpideSoat": "SEGUROS DEL ESTADO S.A."
+              }
             ],
             "tecnoMecanica": [],
             "vin": "1HGCM82633A004352"
@@ -330,7 +337,104 @@ public sealed class VerifikResultMapperTests
         result.Overall.Should().Be("green"); // hay ok, ningún fail/warn
 
         result.HydratedFields.Should().Contain(f => f.FieldKey == "plate" && f.ValueText == "QPL705");
+
+        // HU #11134 — las seis celdas del bloque SOAT del certificado salen del RUNT. Antes, tres de
+        // ellas solo se llenaban con el OCR del PDF del SOAT: sin ese documento salían en blanco.
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "soat_poliza" && f.ValueText == "12345");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "soat_expedicion" && f.ValueText == "04/05/2026");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "soat_vigencia" && f.ValueText == "06/05/2026");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "soat_vencimiento" && f.ValueText == "05/05/2027");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "soat_aseguradora" && f.ValueText == "SEGUROS DEL ESTADO S.A.");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "soat_estado");
         result.HydratedFields.Should().Contain(f => f.FieldKey == "vin" && f.ValueText == "1HGCM82633A004352");
         result.HydratedFields.Should().Contain(f => f.FieldKey == "vehicle_year" && f.ValueText == "2026");
+    }
+
+    [Fact]
+    public void Soat_SinPolizaNiFechas_NoEscribeEsasLlaves()
+    {
+        // Regla del negocio: lo que no vino en la consulta se deja EN BLANCO, no se rellena. Y al no
+        // escribirse la llave, el OCR del PDF puede aportarla después como respaldo.
+        var result = VerifikResultMapper.MapVehicle(Response(soatEstado: "VIGENTE"));
+
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "soat_poliza");
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "soat_expedicion");
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "soat_vigencia");
+    }
+
+    // ── HU #11135 — RTM: lectura tolerante de los campos sin contrato confirmado ─────────────────
+
+    private static ConsultationResult MapearRtm(string rtmJson)
+    {
+        var json = $$"""
+            {
+              "data": {
+                "informacionGeneral": { "noPlaca": "QPL705", "estadoDelVehiculo": "ACTIVO" },
+                "soat": [],
+                "tecnoMecanica": [ {{rtmJson}} ]
+              }
+            }
+            """;
+        var response = JsonSerializer.Deserialize<VerifikVehicleResponse>(json, WebJsonOptions);
+        return VerifikResultMapper.MapVehicle(response!);
+    }
+
+    [Theory]
+    [InlineData("noCertificado")]
+    [InlineData("numeroCertificado")]
+    [InlineData("nroCertificado")]
+    public void Rtm_NumeroDeCertificado_SeResuelvePorCualquieraDeLosNombresCandidatos(string nombre)
+    {
+        // No hay muestra real que documente cómo se llama este campo: las respuestas capturadas traen
+        // la lista de RTM vacía. En vez de fijar un nombre inventado, se aceptan los candidatos.
+        var result = MapearRtm($$"""{ "vigente": "SI", "{{nombre}}": "CDA-99887" }""");
+
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_numero" && f.ValueText == "CDA-99887");
+    }
+
+    [Fact]
+    public void Rtm_FechasDeVigenciaYExpedicion_SeResuelvenDeLosCamposNoModelados()
+    {
+        var result = MapearRtm("""
+            { "vigente": "SI", "cdaExpide": "CDA NORTE", "fechaVigencia": "01/02/2026", "fechaExpedicion": "31/01/2026" }
+            """);
+
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_vigencia" && f.ValueText == "01/02/2026");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_expedicion" && f.ValueText == "31/01/2026");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_entidad" && f.ValueText == "CDA NORTE");
+    }
+
+    [Fact]
+    public void Rtm_NumeroComoNumeroJson_TambienSeLee()
+    {
+        var result = MapearRtm("""{ "vigente": "SI", "noCertificado": 99887 }""");
+
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_numero" && f.ValueText == "99887");
+    }
+
+    [Fact]
+    public void Rtm_SinNingunNombreConocido_NoEscribeLaLlave()
+    {
+        // Celda en blanco y el OCR del PDF puede aportarla: nunca se inventa un dato del certificado.
+        var result = MapearRtm("""{ "vigente": "SI", "campoDesconocido": "X" }""");
+
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "rtm_numero");
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "rtm_vigencia");
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "rtm_expedicion");
+    }
+
+    [Fact]
+    public void Rtm_CamposNoModelados_SeConservanEnVezDeDescartarse()
+    {
+        // La red de seguridad: lo que el proveedor manda y el modelo no declara deja de perderse en
+        // silencio. Es lo que permite descubrir el contrato real sin volver a adivinar.
+        var json = """
+            {"data":{"informacionGeneral":{"noPlaca":"QPL705"},"soat":[],
+             "tecnoMecanica":[{"vigente":"SI","campoNuevoDelProveedor":"valor"}]}}
+            """;
+
+        var response = JsonSerializer.Deserialize<VerifikVehicleResponse>(json, WebJsonOptions);
+
+        response!.Data!.TecnoMecanica![0].CamposNoModelados.Should().ContainKey("campoNuevoDelProveedor");
     }
 }
