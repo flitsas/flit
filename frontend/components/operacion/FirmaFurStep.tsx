@@ -235,7 +235,9 @@ export function FirmaFurStep({
   const [paqueteStatus, setPaqueteStatus] = useState<PaqueteDocsStatus>('idle');
   const paqueteKickoffRef = useRef(false);
   const onPaqueteStatusChangeRef = useRef(onPaqueteStatusChange);
-  onPaqueteStatusChangeRef.current = onPaqueteStatusChange;
+  useEffect(() => {
+    onPaqueteStatusChangeRef.current = onPaqueteStatusChange;
+  }, [onPaqueteStatusChange]);
 
   const loadDetail = useCallback(async () => {
     if (!instanceId) return;

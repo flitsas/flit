@@ -12,6 +12,8 @@ export interface OtSidePanelProps {
   children: ReactNode;
   footer?: ReactNode;
   disabled?: boolean;
+  /** Clase de z-index del overlay (p. ej. cuando hay otro modal encima). */
+  zClassName?: string;
   /**
    * Ancho del drawer. `lg` para paneles de detalle densos (trámites clientes).
    */

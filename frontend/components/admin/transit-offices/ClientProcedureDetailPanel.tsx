@@ -141,7 +141,8 @@ export function ClientProcedureDetailPanel({
 
   useEffect(() => {
     if (!open || !procedure) {
-      setDetail(null);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia el detalle al cerrar el panel
+    setDetail(null);
       setDocs([]);
       setDetailError(null);
       setDocsError(null);
