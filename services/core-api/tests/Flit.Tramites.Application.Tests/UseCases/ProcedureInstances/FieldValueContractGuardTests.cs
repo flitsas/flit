@@ -92,6 +92,11 @@ public sealed class FieldValueContractGuardTests
         ["vehicle_color_runt"] = new(Preflight, Modo.Dinamico, "RuntSnapshotSuffix"),
         ["vehicle_fuel_runt"] = new(Preflight, Modo.Dinamico, "RuntSnapshotSuffix"),
 
+        // HU #11136 — fecha de matrícula del vehículo: insumo de la regla de antigüedad de la RTM.
+        // OJO: solo la reporta Verifik. Las respuestas capturadas de Kyverum no traen fecha alguna de
+        // matrícula, así que con ese proveedor la regla cae al lado seguro (mostrar la tabla).
+        ["vehicle_registration_date"] = new(Verifik, Modo.Literal),
+
         // SOAT y RTM — parte del RUNT, parte del OCR del documento (HU #10975/#10976/#10977).
         ["soat_vencimiento"] = new(Verifik, Modo.Literal),
         ["soat_aseguradora"] = new(Verifik, Modo.Literal),
@@ -186,6 +191,9 @@ public sealed class FieldValueContractGuardTests
         ["soat_estado"] = "Get(fv, SoatGate.FieldKey)",
         // HU #11133 — el snapshot del RUES se lee por la constante que lo define, no por el literal.
         ["rues_snapshots_json"] = "Get(fv, RuesSnapshots.FieldKey)",
+        // HU #11136 — la fecha de matrícula alimenta la regla de antigüedad de la RTM, y se lee por la
+        // constante del servicio de dominio que la define.
+        ["vehicle_registration_date"] = "Get(fv, RtmCertificado.FieldKeyFechaMatricula)",
     };
 
     /// <summary>

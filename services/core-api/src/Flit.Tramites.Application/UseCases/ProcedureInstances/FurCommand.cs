@@ -308,8 +308,13 @@ public sealed class GenerarFurHandler(
                         FechaExpedicion: Get(fv, "soat_expedicion"),
                         Entidad: Get(fv, "soat_aseguradora"),
                         Estado: EstadoSoatDisplay(Get(fv, SoatGate.FieldKey))),
-                    esMatricula
-                        ? null // matrícula inicial: sin RTM
+                    // HU #11136 — la RTM aplica solo en traspaso Y solo si el vehículo tiene más de 5
+                    // años de matriculado. Antes se pintaba en todo traspaso sin mirar la antigüedad.
+                    !RtmCertificado.Aplica(
+                        esTraspaso: !esMatricula,
+                        fechaMatricula: Get(fv, RtmCertificado.FieldKeyFechaMatricula),
+                        hoy: DateTimeOffset.UtcNow)
+                        ? null
                         : new SoatRtmBlock(
                             Poliza: Get(fv, "rtm_numero"),
                             FechaVigencia: Get(fv, "rtm_vigencia"),

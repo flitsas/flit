@@ -318,6 +318,59 @@ public sealed class FurHandlerTests
         fakeSoatRtm.LastData!.Soat.Entidad.Should().Be("La Previsora S.A.");
     }
 
+    // ── HU #11136 — la RTM solo aplica a vehículos con más de 5 años ─────────
+
+    private async Task<FakeSoatRtmGenerator> GenerarTraspasoConFechaMatricula(string? fechaMatricula)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
+        WithField(instance, "soat_vencimiento", "2027-01-15");
+        WithField(instance, "rtm_vencimiento", "2027-03-20");
+        if (fechaMatricula is not null)
+            WithField(instance, "vehicle_registration_date", fechaMatricula);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var fake = new FakeSoatRtmGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance, soatRtmGenerator: fake);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+        error.Should().BeNull();
+        return fake;
+    }
+
+    [Fact]
+    public async Task Generar_TraspasoDeVehiculoAntiguo_IncluyeLaTablaDeRtm()
+    {
+        var fake = await GenerarTraspasoConFechaMatricula("15/03/2015");
+
+        fake.LastData!.Rtm.Should().NotBeNull();
+        fake.LastData.Rtm!.FechaVencimiento.Should().Be("2027-03-20");
+    }
+
+    [Fact]
+    public async Task Generar_TraspasoDeVehiculoReciente_OmiteLaTablaDeRtmSinTocarElResto()
+    {
+        // Antes la tabla se pintaba en TODO traspaso, sin mirar la antigüedad del vehículo.
+        var fake = await GenerarTraspasoConFechaMatricula("15/03/2025");
+
+        fake.LastData!.Rtm.Should().BeNull();
+        fake.LastData.Soat.FechaVencimiento.Should().Be("2027-01-15", "el bloque SOAT no cambia");
+    }
+
+    [Fact]
+    public async Task Generar_TraspasoSinFechaDeMatricula_IncluyeLaTablaDeRtm()
+    {
+        // Fallo seguro: hay proveedores de RUNT que no reportan la fecha de matrícula.
+        var fake = await GenerarTraspasoConFechaMatricula(null);
+
+        fake.LastData!.Rtm.Should().NotBeNull();
+    }
+
     [Fact]
     public async Task Generar_Matricula_WithoutBiometria_GeneratesOnlyFurNoCertificate()
     {
