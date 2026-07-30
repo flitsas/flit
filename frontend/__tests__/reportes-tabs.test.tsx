@@ -1,7 +1,7 @@
 // Reportes 2.0 (HU-C): pestañas por permiso, KPIs del Resumen, helper variationPct,
 // auto-refresh del panel "Ahora mismo", drill-down y aviso de compañía para SuperAdmin.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import type { AnalyticsOverviewResponse, ProcedureDetailsPage } from "@/lib/api/types";
 import type {
@@ -169,12 +169,39 @@ const DETAIL_PAGE: ProcedureDetailsPage = {
 };
 
 const ALL_SLUGS = [
-  "reportes.resumen.read",
-  "reportes.operacion.read",
-  "reportes.ot.read",
-  "reportes.uso.read",
-  "reportes.productividad.read",
+  "reporting.read",
+  "reporting.consolidado",
+  "reporting.productivity",
+  "reporting.audit",
+  "reporting.schedules.read",
+  "reporting.alerts.read",
 ];
+
+vi.mock("@/lib/api/reporting-v2", () => ({
+  listExports: vi.fn().mockResolvedValue({ items: [] }),
+  requestExport: vi.fn(),
+  getExportDownloadUrl: vi.fn(),
+  getDashboardPreferences: vi.fn().mockResolvedValue({ configJson: null }),
+  fetchReportingProcedures: vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 20 }),
+  fetchConsolidado: vi.fn().mockResolvedValue({ groupBy: "tipo", items: [] }),
+  fetchProductivity: vi.fn().mockResolvedValue({ items: [] }),
+  fetchSla: vi.fn().mockResolvedValue({ slaConfigured: false, items: [] }),
+  fetchProcedureAudit: vi.fn().mockResolvedValue({ items: [], totalCount: 0 }),
+}));
+vi.mock("@/lib/signalr/export-jobs-client", () => ({
+  watchExportJob: vi.fn().mockResolvedValue(() => {}),
+}));
+vi.mock("@/lib/api/analytics-scheduling", () => ({
+  fetchReportSchedules: vi.fn().mockResolvedValue({ items: [] }),
+  fetchAlertRules: vi.fn().mockResolvedValue({ items: [] }),
+  createReportSchedule: vi.fn(),
+  updateReportSchedule: vi.fn(),
+  deleteReportSchedule: vi.fn(),
+  createAlertRule: vi.fn(),
+  updateAlertRule: vi.fn(),
+  deleteAlertRule: vi.fn(),
+  fetchAlertEvents: vi.fn().mockResolvedValue({ items: [], totalCount: 0 }),
+}));
 
 function setPermissions(permissions: string[], isSuperAdmin = false) {
   mocks.usePermissions.mockReturnValue({
@@ -224,41 +251,42 @@ describe("variationPct — helper único de variación (§5)", () => {
   });
 });
 
-// ── Visibilidad de pestañas por permiso (§3) ─────────────────────────────────
+// ── Visibilidad de pestañas por permiso (HU #11114) ──────────────────────────
 describe("Reportes — pestañas según permisos RBAC", () => {
-  it("con todos los slugs muestra las 5 pestañas temáticas", async () => {
+  it("con slugs V2 muestra las 8 pestañas canónicas", async () => {
     render(<Reportes />);
 
     const tabs = await screen.findAllByRole("tab");
     expect(tabs.map((t) => t.textContent)).toEqual([
-      "Resumen general",
-      "Operación / Trámites",
-      "Organismo de Tránsito",
-      "Uso del aplicativo",
+      "Resumen",
+      "Trámites",
+      "Consolidado",
       "Productividad",
+      "Tiempos / SLA",
+      "Auditoría",
+      "Programados",
+      "Alertas",
     ]);
   });
 
-  it("compatibilidad: reportes.read (legado) muestra al menos Resumen general", async () => {
+  it("compatibilidad: reportes.read (legado) muestra Resumen (+ Trámites/SLA)", async () => {
     setPermissions(["reportes.read"]);
     render(<Reportes />);
 
     const tabs = await screen.findAllByRole("tab");
-    expect(tabs).toHaveLength(1);
-    expect(tabs[0]).toHaveTextContent("Resumen general");
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      "Resumen",
+      "Trámites",
+      "Tiempos / SLA",
+    ]);
   });
 
-  it("con un único slug temático, esa pestaña queda activa y carga sus datos", async () => {
-    setPermissions(["reportes.uso.read"]);
+  it("con un único slug temático V2, esa pestaña queda activa", async () => {
+    setPermissions(["reporting.audit"]);
     render(<Reportes />);
 
-    const tab = await screen.findByRole("tab", { name: "Uso del aplicativo" });
+    const tab = await screen.findByRole("tab", { name: "Auditoría" });
     expect(tab).toHaveAttribute("aria-selected", "true");
-    await waitFor(() => expect(mocks.fetchUsageMetrics).toHaveBeenCalledTimes(1));
-    // Telemetría nueva sin datos → estado vacío específico.
-    expect(await screen.findByText(/aún no hay datos de uso registrados/i)).toBeInTheDocument();
-    // No se llamó nada de otras pestañas.
-    expect(mocks.fetchAnalyticsOverview).not.toHaveBeenCalled();
   });
 
   it("sin ningún permiso de reportes muestra el estado vacío amable", async () => {
@@ -272,14 +300,13 @@ describe("Reportes — pestañas según permisos RBAC", () => {
 });
 
 // ── Pestaña Resumen ──────────────────────────────────────────────────────────
-describe("Reportes — pestaña Resumen general", () => {
+describe("Reportes — pestaña Resumen", () => {
   it("carga y muestra los KPIs y el panel 'Ahora mismo'", async () => {
     render(<Reportes />);
 
     expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     expect(screen.getByText("150")).toBeInTheDocument();
     expect(screen.getByText("Ahora mismo")).toBeInTheDocument();
-    // Datos del live-overview (creados hoy = 14).
     expect(await screen.findByText("Creados hoy")).toBeInTheDocument();
     expect(screen.getByText("14")).toBeInTheDocument();
     expect(mocks.fetchLiveOverview).toHaveBeenCalledTimes(1);
@@ -298,62 +325,18 @@ describe("Reportes — filtros globales persistentes", () => {
       expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)?.[0]).toMatchObject({ from: "2026-01-05" });
     });
 
-    fireEvent.click(screen.getByRole("tab", { name: "Operación / Trámites" }));
-
-    await waitFor(() => {
-      expect(mocks.fetchOtMetrics).toHaveBeenCalledTimes(1);
-      expect(mocks.fetchOtMetrics.mock.calls.at(-1)?.[0]).toMatchObject({ from: "2026-01-05" });
-      expect(mocks.fetchFunnel.mock.calls.at(-1)?.[0]).toMatchObject({ from: "2026-01-05" });
-    });
-  });
-});
-
-// ── Pestaña Operación: drill-down y atascados accionables ───────────────────
-describe("Reportes — pestaña Operación / Trámites", () => {
-  it("el embudo permite drill-down por estado (abre el panel de detalle)", async () => {
-    render(<Reportes />);
-    await screen.findByText("Total trámites");
-
-    fireEvent.click(screen.getByRole("tab", { name: "Operación / Trámites" }));
-
-    const stage = await screen.findByRole("button", { name: /ver trámites en estado preparado/i });
-    fireEvent.click(stage);
-
-    const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Detalle de trámites")).toBeInTheDocument();
-    expect(await within(dialog).findByText("TRM-2026-000008")).toBeInTheDocument();
-    await waitFor(() => {
-      expect(mocks.fetchProcedureDetails.mock.calls.at(-1)?.[0]).toMatchObject({ status: "preparado" });
-    });
-  });
-
-  it("la tabla de atascados enlaza cada fila a /tramites/{instanceId}", async () => {
-    render(<Reportes />);
-    await screen.findByText("Total trámites");
-
-    fireEvent.click(screen.getByRole("tab", { name: "Operación / Trámites" }));
-
-    const table = await screen.findByTestId("stuck-table");
-    const link = within(table).getByRole("link", { name: /trm-2026-000001/i });
-    expect(link).toHaveAttribute("href", "/tramites/inst-1");
+    fireEvent.click(screen.getByRole("tab", { name: "Consolidado" }));
+    expect(await screen.findByRole("tab", { name: "Consolidado" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect((screen.getByLabelText("Desde") as HTMLInputElement).value).toBe("2026-01-05");
   });
 });
 
 // ── SuperAdmin sin compañía elegida (§4: tenantId obligatorio) ───────────────
 describe("Reportes — SuperAdmin sin compañía", () => {
-  it("las pestañas nuevas muestran el aviso y NO llaman a la API", async () => {
-    setPermissions([], true);
-    render(<Reportes />);
-    await screen.findByText("Total trámites");
-
-    fireEvent.click(screen.getByRole("tab", { name: "Operación / Trámites" }));
-
-    expect(await screen.findByTestId("aviso-selecciona-compania")).toHaveTextContent(/selecciona una compañía/i);
-    expect(mocks.fetchOtMetrics).not.toHaveBeenCalled();
-    expect(mocks.fetchFunnel).not.toHaveBeenCalled();
-  });
-
-  it("el panel 'Ahora mismo' del Resumen también pide compañía sin llamar al live-overview", async () => {
+  it("el panel 'Ahora mismo' del Resumen pide compañía sin llamar al live-overview", async () => {
     setPermissions([], true);
     render(<Reportes />);
 

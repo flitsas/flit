@@ -222,8 +222,8 @@ export function AuditoriaTab({
                 <td>{e.changedByDisplayName ?? "—"}</td>
                 <td>{e.roleName ?? e.roleIdAtTime ?? "—"}</td>
                 <td>
-                  {e.organizationName
-                    ?? [e.organizationTypeAtTime, e.organizationIdAtTime].filter(Boolean).join(" · ")
+                  {(e.organizationName
+                    ?? [e.organizationTypeAtTime, e.organizationIdAtTime].filter(Boolean).join(" · "))
                     || "—"}
                 </td>
                 <td>{e.fromStatus ?? "—"}</td>
