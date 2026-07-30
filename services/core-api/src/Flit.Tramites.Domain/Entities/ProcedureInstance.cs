@@ -102,6 +102,22 @@ public sealed class ProcedureInstance
     public string? ExternalRef { get; set; }
 
     /// <summary>
+    /// Pausa del trámite (ICT — servicio v1 <c>pauseDraftProcess</c> y bandera <c>starts_procedure_in_paused</c>
+    /// del register). En <c>true</c> el trámite NO avanza: la radicación/preparación se bloquean
+    /// (<see cref="UseCases.ProcedureInstances.SubmitProcedureInstanceHandler"/> devuelve
+    /// <see cref="Tramites.Estados.TramiteEstadoErrores.TramitePausado"/>). Reversible (reanudar). La
+    /// anulación NO se bloquea. Default false ⇒ trámites de plataforma nunca están pausados (sin impacto).
+    /// Columna agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+    /// </summary>
+    public bool IsPaused { get; set; }
+
+    /// <summary>
+    /// Nota mostrada en el dashboard cuando el trámite está pausado (origen ICT). Solo INFORMATIVA: no
+    /// dispara lógica. Se limpia al reanudar. Columna cruda (tabla ExcludeFromMigrations); solo mapeo EF.
+    /// </summary>
+    public string? PausedObservation { get; set; }
+
+    /// <summary>
     /// Vigencia del expediente derivado del wizard (FUR + documentos en caliente + consolidado),
     /// espejo de <see cref="ConsolidadoMaestroVigente"/> (HU #10860, Feature #10852, ADR-0032).
     /// <c>true</c> = el consolidado persistido refleja el expediente actual (se sirve sin regenerar);

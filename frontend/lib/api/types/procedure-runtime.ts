@@ -166,6 +166,19 @@ export interface InstanceSummary {
    * generado ⇒ la fila NO ofrece la acción (el botón no dispara generación).
    */
   consolidadoAttachmentId?: string | null;
+  // ── ICT (PR #204) — pausa de trámites de la integración ──────────────────────────
+  /**
+   * ICT (servicio v1 pauseDraftProcess / bandera starts_procedure_in_paused): el trámite está pausado
+   * y no avanza (la radicación se bloquea) hasta reanudarlo. Default false para trámites de plataforma.
+   */
+  isPaused?: boolean;
+  /** Nota informativa mostrada cuando el trámite está pausado (origen ICT). null si no está pausado. */
+  pausedObservation?: string | null;
+  /**
+   * Origen del trámite: 'ict' para los creados por la integración con terceros. Solo esos ofrecen la
+   * acción de pausar/reanudar en la UI (paridad v1). null/'' para trámites de plataforma.
+   */
+  origin?: string | null;
 }
 
 /** Fuente por la que el trámite entró a FLIT (HU #11056). No existe fuente "QX": Quipux es salida. */

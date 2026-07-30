@@ -434,6 +434,40 @@ export const tramitesClient = {
       },
     ),
 
+  // ICT (paridad v1 handleChangePausedState) — pausar/reanudar un trámite ICT (solo borradores
+  // origin='ict'). No cambia el estado del ciclo de vida; un trámite pausado no radica (guard 409 en submit).
+  pauseInstance: (
+    id: string,
+    paused: boolean,
+    observation?: string | null,
+    tenantId?: string,
+  ) =>
+    request<{ id: string; isPaused: boolean; pausedObservation: string | null }>(
+      `/api/v1/tramites/instances/${id}/pause`,
+      {
+        method: 'PUT',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ paused, observation: observation ?? null }),
+      },
+    ),
+
+  // ICT (paridad v1 pause-unpause-massive) — pausar/reanudar en lote. Devuelve el detalle por trámite.
+  pauseInstancesMassive: (
+    ids: string[],
+    paused: boolean,
+    observation?: string | null,
+    tenantId?: string,
+  ) =>
+    request<{
+      total: number;
+      processed: number;
+      detail: { id: string; ok: boolean; error: string | null }[];
+    }>(`/api/v1/tramites/instances/pause-massive`, {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: JSON.stringify({ ids, paused, observation: observation ?? null }),
+    }),
+
   // #2 — Organismos de tránsito habilitados para la empresa (tenant del header).
   // El operador solo puede elegir/enviar a estos en el FUR.
   listTransitOffices: async (

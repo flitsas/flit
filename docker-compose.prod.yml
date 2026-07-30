@@ -195,6 +195,11 @@ services:
       CoreApiGrpc__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}
       # Secreto HMAC compartido con core-api (canal directo e inverso).
       Ict__ServiceToken__Secret: ${ICT_SERVICE_TOKEN_SECRET:-}
+      # File Manager: DONDE SUBE ICT los binarios de los adjuntos. Tiene que ser EXACTAMENTE la
+      # misma URL que FileManager__BaseUrl de core-api (misma var FILE_MANAGER_BASE_URL): si difieren,
+      # ICT sube a un sitio y core-api lee de otro → el adjunto transferido por referencia al borrador
+      # existe en la tabla pero no abre. Falla en silencio.
+      FileManager__BaseUrl: ${FILE_MANAGER_BASE_URL:-https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/}
     ports:
       - "127.0.0.1:${CORE_ICT_PORT:-4020}:${CORE_ICT_PORT:-4020}"
     depends_on:

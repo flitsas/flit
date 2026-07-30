@@ -43,7 +43,16 @@ public sealed record InstanceSummaryDto(
     bool SubsanacionActiva = false,           // flag de edición sobre rechazado
     int SubsanacionCount = 0,                 // veces que se activó la subsanación
     string? UltimoRechazoMotivo = null,      // reason (texto libre) del último rechazo OT
-    /// <summary>Sub-estado de placa (null | preasignado | asignado | terminado), ortogonal a Estado.</summary>
+                                              // ICT (servicio v1 pauseDraftProcess / bandera starts_procedure_in_paused):
+                                              // el trámite está pausado y no avanza; la observación es informativa (dashboard).
+    bool IsPaused = false,
+    string? PausedObservation = null,
+    // ICT — origen del trámite ('ict' para los creados por la integración). Habilita en la UI la acción
+    // de pausar/reanudar SOLO para esos; null/"" en trámites de plataforma (no se ofrece la acción).
+    // OJO: es el valor CRUDO. La columna "Fuente" del listado NO lo usa directo, sino `Fuente` (abajo),
+    // que además contempla los trámites migrados de V1.
+    string? Origin = null,
+    // Sub-estado de placa (null | preasignado | asignado | terminado), ortogonal a Estado (HU11037).
     string? PlateFlowStatus = null,
                                               // HU #11056 — columnas de seguimiento del listado. Todo se DERIVA del grafo que ya
                                               // carga ListWithSummaryGraphAsync; lo único que cuesta una consulta extra es el
@@ -179,6 +188,12 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             e.SubsanacionActiva,
             e.SubsanacionCount,
             DeriveUltimoRechazoMotivo(e),
+            // El ORDEN de estos argumentos debe seguir al del record posicional de arriba: son casi
+            // todos string?/bool, así que una desalineación compilaría igual e intercambiaría valores.
+            e.IsPaused,
+            // Solo tiene sentido mostrar la nota cuando está pausado; se limpia al reanudar de todos modos.
+            e.IsPaused ? e.PausedObservation : null,
+            e.Origin,
             e.PlateFlowStatus,
             e.UpdatedAt,
             string.IsNullOrWhiteSpace(gestorNombre) ? null : gestorNombre.Trim(),
