@@ -104,6 +104,9 @@
 
     <!-- DI abstractions para librerías que exponen AddXxx() sin depender de ASP.NET. -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+    <!-- Contenedor concreto: lo usa el migrador de consola para obtener IHttpClientFactory
+         sin levantar un Host completo (el host web ya lo trae por el SDK Web). -->
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.0" />

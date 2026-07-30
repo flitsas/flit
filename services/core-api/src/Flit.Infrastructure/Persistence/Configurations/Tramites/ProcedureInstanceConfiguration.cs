@@ -132,6 +132,17 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         builder.Property(x => x.ExternalRef)
             .HasColumnName("external_ref")
             .HasMaxLength(64);
+
+        // ICT — pausa del trámite (servicio v1 pauseDraftProcess + bandera starts_procedure_in_paused).
+        // Columnas agregadas por 39-ICT-procedure-pause.sql (tabla ExcludeFromMigrations); aquí solo se
+        // mapean al modelo EF. is_paused NOT NULL default false; paused_observation nullable varchar(250).
+        builder.Property(x => x.IsPaused)
+            .HasColumnName("is_paused")
+            .IsRequired()
+            .HasDefaultValue(false);
+        builder.Property(x => x.PausedObservation)
+            .HasColumnName("paused_observation")
+            .HasMaxLength(250);
         builder.HasIndex(x => new { x.TenantId, x.ExternalRef })
             .IsUnique()
             .HasDatabaseName("uq_procedure_instances_tenant_external_ref")

@@ -22,10 +22,17 @@ internal static class FurEndpoints
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             GenerarFurHandler handler,
+            GeneracionDocumentalGestorGuard estadoGuard,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            // HU #11051 — con el trámite aprobado o anulado su documentación es definitiva: el gestor no
+            // la regenera. La regeneración interna del sistema no pasa por aquí (ver el guard).
+            var estadoError = await estadoGuard.CheckAsync(id, tenantId.Value, ct);
+            if (estadoError is not null)
+                return GeneracionEstadoProblem.From(estadoError);
 
             var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
             return error switch

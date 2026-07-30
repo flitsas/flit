@@ -56,9 +56,25 @@ public static class TramiteEstadoErrores
     public const string PrendaDocumentoRequerido = "prenda_documento_requerido";
 
     /// <summary>
+    /// HU #11051 — el gestor pidió generar o regenerar documentación de un trámite en estado final
+    /// (aprobado/anulado), cuya documentación ya es definitiva (409). No aplica a la regeneración
+    /// interna del sistema (aprobación del OT, asignación de placa, identidad validada).
+    /// </summary>
+    public const string GeneracionBloqueadaEstadoFinal = "generacion_bloqueada_estado_final";
+
+    /// <summary>
     /// ADR-0036 §D9 (HU #10916) — al aprobar un trámite que exige mandato hay VARIOS mandatarios y
     /// ninguno cotejó con el usuario que aprueba: se debe elegir uno explícitamente (409, subsanable
     /// reintentando la transición con <c>mandateSignerId</c>).
     /// </summary>
     public const string MandatarioRequerido = "mandatario_requerido";
+
+    /// <summary>
+    /// ICT (servicio v1 <c>pauseDraftProcess</c> / bandera <c>starts_procedure_in_paused</c>) — el
+    /// trámite está PAUSADO (<c>procedure_instances.is_paused=true</c>): no avanza (radicación /
+    /// preparación bloqueadas), replicando el <c>ForbiddenError</c> de v1. Es reversible (reanudar con
+    /// <c>pauseProcess=false</c>). La anulación NO se bloquea. Solo aplica a trámites pausados (default
+    /// false) ⇒ cero impacto en trámites de plataforma (409).
+    /// </summary>
+    public const string TramitePausado = "tramite_pausado";
 }

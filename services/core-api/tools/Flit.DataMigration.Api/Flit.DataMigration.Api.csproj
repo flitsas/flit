@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Host HTTP del migrador V1 -> V2: un tramite por peticion, las tres instancias en orden.
+    Existe para que operaciones pueda migrar desde Postman sobre un CSV de ids sin entrar por
+    SSH a la VPS.
+
+    NO vive dentro de Flit.Api a proposito, y no es una preferencia de estilo:
+      · El gateway fija ActivityTimeout 00:00:30 en core-api-cluster
+        (src/Flit.Gateway/appsettings.json). La instancia 3 tarda mas que eso, asi que el
+        endpoint habria devuelto 504 sobre migraciones que SI se completaron. Subir ese
+        timeout se lo subiria a todo el trafico de la API.
+      · Flit.Api tendria encima, de forma permanente, las credenciales de la base de V1.
+      · Una ola de instancia 3 mueve consolidados de 9-12 MB dentro del mismo proceso que
+        atiende a los usuarios.
+    Aqui es un servicio aparte, en 127.0.0.1, que el gateway no enruta (no tiene ruta
+    catch-all) y que se apaga con `docker compose stop` cuando termina la migracion.
+
+    Vive en tools/ y no en src/ para que el dia que V1 se apague se borre entero sin tocar
+    el arbol de producto.
+
+    AOT desactivado: EF Core usa reflexion. Igual que Flit.Api y Flit.Infrastructure.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Flit.DataMigration.Api</RootNamespace>
+    <AssemblyName>Flit.DataMigration.Api</AssemblyName>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+    <NuGetAuditMode>direct</NuGetAuditMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.DataMigration.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Flit.DataMigration.Core/Flit.DataMigration.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

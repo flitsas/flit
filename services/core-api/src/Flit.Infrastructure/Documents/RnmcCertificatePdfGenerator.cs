@@ -44,7 +44,8 @@ public sealed class RnmcCertificatePdfGenerator : IRnmcCertificateGenerator
                         .FontSize(9).FontColor(Colors.Grey.Darken2);
                     col.Item().Text($"Referencia: {Val(data.ReferenceNumber)}   |   Instancia: {data.ProcedureInstanceId:D}")
                         .FontSize(8).FontColor(Colors.Grey.Darken2);
-                    col.Item().Text($"Consultado el {data.ConsultadoEn:yyyy-MM-dd HH:mm} UTC")
+                    // HU #11049 — AÑO/MES/DÍA sin hora: sin hora, el sufijo UTC ya no aporta.
+                    col.Item().Text($"Consultado el {FlitDocumentDate.Format(data.ConsultadoEn)}")
                         .FontSize(8).FontColor(Colors.Grey.Darken2);
 
                     // Sin consulta RNMC (p. ej. todas las partes son personas jurídicas): párrafo explícito
@@ -80,7 +81,7 @@ public sealed class RnmcCertificatePdfGenerator : IRnmcCertificateGenerator
                         .FontSize(8).FontColor(Colors.Grey.Darken2);
 
                     col.Item().PaddingTop(10)
-                        .Text($"Documento generado por FLIT el {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm} UTC.")
+                        .Text($"Documento generado por FLIT el {FlitDocumentDate.Format(DateTimeOffset.UtcNow)}.")
                         .FontSize(7).FontColor(Colors.Grey.Medium);
                 });
             });

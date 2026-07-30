@@ -10,7 +10,9 @@ import {
   CheckCircle2,
   Eye,
   FileCheck,
+  FileStack,
   FileText,
+  Pause,
   Play,
   Search,
   Star,
@@ -22,22 +24,21 @@ import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
 import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
 import { StatusBadge } from '@/components/atom/StatusBadge';
+import { Modal } from '@/components/atom/Modal';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
-import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import { EstadoFunnel } from './EstadoFunnel';
+import {
+  AttachmentPreview,
+  TramiteDocumentosModal,
+  useAttachmentPreview,
+} from './TramiteDocumentosModal';
 import type {
+  FirmaParteEstado,
   InstanceStatus,
   InstanceSummary,
+  TramiteFuente,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
-
-/** Estados donde el menú Acciones ofrece "Ver consolidado". */
-const CONSOLIDADO_MENU_ESTADOS = new Set<InstanceStatus>([
-  'preparado',
-  'entregado',
-  'aprobado',
-  'rechazado',
-]);
 
 /** Texto corto y discreto del sub-estado de placa (debajo del chip de estado). */
 function plateFlowHint(status: string | null | undefined): string | null {
@@ -154,11 +155,63 @@ function stepLabel(item: InstanceSummary): string {
   return STEP_LABELS[item.modalidad]?.[item.pasoActual - 1] ?? '—';
 }
 
+/**
+ * HU #11057 — chip de "Firmado" POR PARTE (vendedor y comprador tienen columna propia).
+ *
+ * Ajuste del PO: la columna acredita a la parte por VALIDACIÓN DE IDENTIDAD o FIRMA DEL BAÚL, no por
+ * la firma electrónica de la compraventa. Solo hay tres estados válidos y son excluyentes.
+ */
+const FIRMA_CHIP: Record<FirmaParteEstado, Chip> = {
+  firmado: { label: 'Firmado', bg: 'rgba(140,198,63,0.15)', color: '#5B8A1F', border: 'rgba(140,198,63,0.4)' },
+  pendiente: { label: 'Pendiente', bg: 'rgba(245,158,11,0.14)', color: '#b45309', border: 'rgba(245,158,11,0.35)' },
+  rechazado: { label: 'Rechazado', bg: 'rgba(255,78,0,0.10)', color: '#c2410c', border: 'rgba(255,78,0,0.3)' },
+};
+
+/** HU #11057 — etiqueta de la columna Fuente. No hay "QX": Quipux es canal de salida, no de entrada. */
+const FUENTE_LABEL: Record<TramiteFuente, string> = {
+  dashboard: 'Dashboard',
+  integracion: 'Integración',
+  migrado: 'Migrado',
+};
+
 // HU #11020 — se añade la columna Vendedor antes de Comprador (saliente → entrante), coherente con
 // el expediente y el resumen del último paso.
-const GRID_COLS = '1fr 1.2fr 1.2fr 1.1fr 1.1fr 0.9fr 1.3fr 1fr 1.2fr 0.9fr 1fr';
-// #1 — SuperAdmin: columna "Compañía" como primera columna (ve trámites de TODAS las empresas).
-const GRID_COLS_ADMIN = `1.2fr ${GRID_COLS}`;
+// ICT (PR #204) — ancho de la columna de selección (checkbox), PRIMERA columna de la tabla.
+const SELECT_COL = '2.25rem';
+
+// HU #11057 — columnas acordadas con el negocio: radicado · VIN · placa · trámite/modalidad ·
+// propietario/vendedor + su firma · comprador + su firma · fecha de creación · fecha de actualización ·
+// secretaría · gestor · fuente · acciones. El negocio pidió "visualizar MÍNIMO" esa información, así
+// que se conservan además Vehículo, Paso y Estado (Estado y Paso son los chips que orientan la acción
+// de la fila; quitarlos sería una regresión funcional). Con 17 columnas la tabla se navega con
+// desplazamiento horizontal: el ancho mínimo crece en consecuencia y la cabecera comparte el mismo
+// `gridTemplateColumns` que las filas para no desalinearse (ver docs/reporte-desalineamiento-tablas.md).
+const GRID_COLS = [
+  SELECT_COL, // Selección (checkbox ICT); cabecera vacía
+  '1.2fr', // Radicado (+ estrella de prioridad)
+  '1.1fr', // VIN
+  '0.9fr', // Placa
+  '0.9fr', // Trámite / Modalidad
+  '1.1fr', // Vehículo
+  '1.2fr', // Propietario / vendedor
+  '0.9fr', // Firmado (vendedor)
+  '1.2fr', // Comprador
+  '0.9fr', // Firmado (comprador)
+  '1fr',   // Paso
+  '1.2fr', // Estado
+  '0.9fr', // Fecha de creación
+  '0.9fr', // Fecha de actualización
+  '1.1fr', // Secretaría
+  '1.3fr', // Gestor
+  '0.9fr', // Fuente
+  '1.2fr', // Acciones
+].join(' ');
+
+/**
+ * Ancho mínimo del grid con las 17 columnas: por debajo de esto la tabla se desplaza en horizontal
+ * dentro de su contenedor (`overflow-x-auto`) en vez de comprimir las celdas.
+ */
+const MIN_WIDTH = 'min-w-[1940px]';
 
 /** Filas por página en el listado (paginación client-side sobre `filtered`). */
 const PAGE_SIZE = 10;
@@ -202,10 +255,19 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
     setIsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
   }, []);
 
+  // HU #11054 / HU #11055 — consulta de documentos desde el listado, sin abrir el wizard. Se guarda
+  // el trámite elegido (no solo su id) porque el panel se titula con el radicado y el SuperAdmin
+  // necesita el tenant de la fila.
+  const [docsTramite, setDocsTramite] = useState<InstanceSummary | null>(null);
+  const [consolidadoTramite, setConsolidadoTramite] = useState<InstanceSummary | null>(null);
+
   // Paginación client-side (1-based).
   const [page, setPage] = useState(1);
   /** Popover de motivo OT / subsanación abierto (un solo id a la vez). */
   const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
+  // ICT (paridad v1 pause-unpause-massive) — selección de trámites ICT para pausar/reanudar en lote.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
   /** Modal Procesar (Asignado → Terminado) desde la tabla. */
   const [processTarget, setProcessTarget] = useState<InstanceSummary | null>(null);
   const [soatPagado, setSoatPagado] = useState(false);
@@ -213,139 +275,11 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
   const [processActing, setProcessActing] = useState(false);
   const [processError, setProcessError] = useState<string | null>(null);
 
-  /** Feature #11066 — Ver consolidado desde menú Acciones (paridad OT). */
-  const [consolidadoActingId, setConsolidadoActingId] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{
-    open: boolean;
-    title: string;
-    mimetype: string | null;
-    url: string | null;
-    loading: boolean;
-    error: string | null;
-    download: { instanceId: string; tenantId?: string; attachmentId: string; filename: string } | null;
-  }>({
-    open: false,
-    title: 'Consolidado',
-    mimetype: null,
-    url: null,
-    loading: false,
-    error: null,
-    download: null,
-  });
-
   const openProcesar = (item: InstanceSummary) => {
     setProcessTarget(item);
     setSoatPagado(false);
     setImpuestoPagado(false);
     setProcessError(null);
-  };
-
-  const closeConsolidadoPreview = () => {
-    setPreview((p) => {
-      if (p.url) URL.revokeObjectURL(p.url);
-      return {
-        open: false,
-        title: 'Consolidado',
-        mimetype: null,
-        url: null,
-        loading: false,
-        error: null,
-        download: null,
-      };
-    });
-  };
-
-  const openConsolidado = async (item: InstanceSummary) => {
-    const tenantId = isAdmin ? item.tenantId : undefined;
-    setConsolidadoActingId(item.id);
-    setPreview((p) => {
-      if (p.url) URL.revokeObjectURL(p.url);
-      return {
-        open: true,
-        title: `Consolidado — ${item.referenceNumber}`,
-        mimetype: 'application/pdf',
-        url: null,
-        loading: true,
-        error: null,
-        download: null,
-      };
-    });
-    try {
-      let attachmentId: string;
-      let filename: string;
-      let mimetype = 'application/pdf';
-
-      try {
-        const res = await tramitesClient.generarConsolidado(item.id, tenantId, true);
-        attachmentId = res.document.attachmentId;
-        filename = res.document.filename;
-      } catch {
-        const atts = await tramitesClient.getAttachments(item.id, tenantId);
-        const consol = atts.find((a) => a.tipo === 'consolidado');
-        if (!consol) {
-          setPreview((p) => ({
-            ...p,
-            loading: false,
-            error: 'El trámite aún no tiene consolidado generado.',
-          }));
-          return;
-        }
-        attachmentId = consol.id;
-        filename = consol.filename;
-        mimetype = consol.mimetype || 'application/pdf';
-      }
-
-      const { blob, filename: dlName, mimetype: dlMime } =
-        await tramitesClient.downloadAttachment(item.id, attachmentId, tenantId, filename);
-      const type =
-        dlMime?.startsWith('application/') || dlMime?.startsWith('image/')
-          ? dlMime
-          : mimetype;
-      const objectUrl = URL.createObjectURL(new Blob([blob], { type: type || 'application/pdf' }));
-      setPreview((p) => ({
-        ...p,
-        loading: false,
-        url: objectUrl,
-        mimetype: type || 'application/pdf',
-        download: {
-          instanceId: item.id,
-          tenantId,
-          attachmentId,
-          filename: dlName || filename,
-        },
-      }));
-    } catch {
-      setPreview((p) => ({
-        ...p,
-        loading: false,
-        error: 'No se pudo abrir el consolidado. Intenta de nuevo.',
-      }));
-    } finally {
-      setConsolidadoActingId(null);
-    }
-  };
-
-  const handlePreviewDownload = async () => {
-    const dl = preview.download;
-    if (!dl) return;
-    try {
-      const { blob, filename } = await tramitesClient.downloadAttachment(
-        dl.instanceId,
-        dl.attachmentId,
-        dl.tenantId,
-        dl.filename,
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch {
-      setPreview((p) => ({ ...p, error: 'No se pudo descargar el consolidado.' }));
-    }
   };
 
   const confirmProcesar = async () => {
@@ -504,6 +438,94 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
     [isAdmin],
   );
 
+  // HU #11055 — visor del consolidado. El resumen ya trae el id del adjunto, así que no hace falta
+  // consultar los adjuntos del trámite: se abre directo. El disparo va en un effect porque el hook
+  // toma el instanceId del render, y en el clic el trámite elegido todavía no está en estado.
+  const consolidadoPreview = useAttachmentPreview(
+    consolidadoTramite?.id ?? null,
+    isAdmin ? consolidadoTramite?.tenantId : undefined,
+  );
+  const abrirConsolidado = consolidadoPreview.open;
+  useEffect(() => {
+    const attachmentId = consolidadoTramite?.consolidadoAttachmentId;
+    if (!consolidadoTramite || !attachmentId) return;
+    void abrirConsolidado({
+      id: attachmentId,
+      tipo: 'consolidado',
+      filename: `expediente-consolidado-${consolidadoTramite.referenceNumber}.pdf`,
+      mimetype: 'application/pdf',
+    });
+  }, [consolidadoTramite, abrirConsolidado]);
+
+  // ICT (paridad v1) — pausar/reanudar un trámite ICT con actualización optimista; revierte si falla.
+  // Solo aplica a borradores origin='ict' (el botón solo se muestra ahí). Al reanudar se limpia la nota.
+  const handleTogglePause = useCallback(
+    async (id: string, next: boolean, tenantId: string) => {
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === id
+            ? { ...it, isPaused: next, pausedObservation: next ? it.pausedObservation ?? null : null }
+            : it,
+        ),
+      );
+      try {
+        await tramitesClient.pauseInstance(id, next, null, isAdmin ? tenantId : undefined);
+      } catch {
+        setItems((prev) =>
+          prev.map((it) => (it.id === id ? { ...it, isPaused: !next } : it)),
+        );
+      }
+    },
+    [isAdmin],
+  );
+
+  // ICT (paridad v1 pause-unpause-massive) — selección múltiple para pausa/reanudación en lote.
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const handleBulkPause = useCallback(
+    async (paused: boolean) => {
+      if (selectedIds.size === 0) return;
+      // Optimista sobre las filas seleccionadas (solo tienen sentido las ICT en borrador).
+      setItems((prev) =>
+        prev.map((it) =>
+          selectedIds.has(it.id) && it.origin === 'ict' && it.estado === 'borrador'
+            ? { ...it, isPaused: paused, pausedObservation: paused ? it.pausedObservation ?? null : null }
+            : it,
+        ),
+      );
+      // El superadmin puede seleccionar trámites de varias compañías; el endpoint masivo se acota por
+      // X-Tenant-Id, así que se agrupa por tenant y se llama una vez por compañía.
+      const byTenant = new Map<string, string[]>();
+      for (const it of items) {
+        if (!selectedIds.has(it.id)) continue;
+        const arr = byTenant.get(it.tenantId) ?? [];
+        arr.push(it.id);
+        byTenant.set(it.tenantId, arr);
+      }
+      try {
+        await Promise.all(
+          Array.from(byTenant.entries()).map(([tenantId, ids]) =>
+            tramitesClient.pauseInstancesMassive(ids, paused, null, isAdmin ? tenantId : undefined),
+          ),
+        );
+      } catch {
+        void load(); // ante fallo parcial, refresca para reflejar el estado real del backend
+      } finally {
+        setSelectedIds(new Set());
+      }
+    },
+    [selectedIds, items, isAdmin, load],
+  );
+
   const hasActiveFilters =
     search.trim() !== '' ||
     modalidad !== '' ||
@@ -639,6 +661,40 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           </div>
         )}
 
+        {/* ICT (paridad v1 pause-unpause-massive) — barra de acción cuando hay trámites ICT seleccionados. */}
+        {selectedIds.size > 0 ? (
+          <div
+            role="region"
+            aria-label="Acciones masivas de pausa"
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.06] px-3 py-2 text-xs"
+          >
+            <span className="font-semibold text-[#162744] dark:text-white">
+              {`${selectedIds.size} seleccionado${selectedIds.size === 1 ? '' : 's'}`}
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleBulkPause(true)}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#162744]/20 px-2.5 py-1 font-semibold text-[#162744] transition hover:bg-[#162744]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
+            >
+              <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBulkPause(false)}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#557EFF]/40 px-2.5 py-1 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            >
+              <Play className="h-3.5 w-3.5" aria-hidden="true" /> Reanudar
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 font-semibold text-[#162744]/60 transition hover:text-[#162744] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:text-white/60 dark:hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" /> Limpiar
+            </button>
+          </div>
+        ) : null}
+
         <TableBody
           loading={loading}
           error={error}
@@ -649,16 +705,16 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           totalPages={totalPages}
           onPageChange={setPage}
           hasActiveFilters={hasActiveFilters}
-          showCompania={isAdmin}
           openPopoverId={openPopoverId}
           onTogglePopover={(id) => setOpenPopoverId((prev) => (prev === id ? null : id))}
           onClosePopover={() => setOpenPopoverId(null)}
           onRetry={() => void load()}
           onClearFilters={clearFilters}
           onTogglePriority={handleTogglePriority}
+          onTogglePause={handleTogglePause}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
           onProcesar={openProcesar}
-          onVerConsolidado={(item) => void openConsolidado(item)}
-          consolidadoActingId={consolidadoActingId}
           onOpen={(id, tenantId) =>
             router.push(
               isAdmin && tenantId
@@ -666,8 +722,30 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
                 : `/tramites/${id}`,
             )
           }
+          onVerDocumentos={setDocsTramite}
+          onVerConsolidado={setConsolidadoTramite}
         />
       </div>
+
+      {/* HU #11054 — panel de documentos del expediente sobre el propio listado. */}
+      <TramiteDocumentosModal
+        open={docsTramite !== null}
+        onClose={() => setDocsTramite(null)}
+        instanceId={docsTramite?.id ?? null}
+        referenceNumber={docsTramite?.referenceNumber ?? ''}
+        tenantId={isAdmin ? docsTramite?.tenantId : undefined}
+      />
+
+      {/* HU #11055 — visor del consolidado, abierto directo desde la fila. */}
+      <AttachmentPreview
+        preview={{
+          ...consolidadoPreview,
+          close: () => {
+            consolidadoPreview.close();
+            setConsolidadoTramite(null);
+          },
+        }}
+      />
 
       {processTarget && (
         <div
@@ -741,17 +819,6 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           </div>
         </div>
       )}
-
-      <DocumentPreviewModal
-        open={preview.open}
-        onClose={closeConsolidadoPreview}
-        title={preview.title}
-        mimetype={preview.mimetype}
-        url={preview.url}
-        loading={preview.loading}
-        error={preview.error}
-        onDownload={preview.download ? () => void handlePreviewDownload() : undefined}
-      />
     </section>
   );
 }
@@ -767,17 +834,19 @@ function TableBody({
   totalPages,
   onPageChange,
   hasActiveFilters,
-  showCompania,
   openPopoverId,
   onTogglePopover,
   onClosePopover,
   onRetry,
   onClearFilters,
   onTogglePriority,
+  onTogglePause,
+  selectedIds,
+  onToggleSelect,
   onProcesar,
-  onVerConsolidado,
-  consolidadoActingId,
   onOpen,
+  onVerDocumentos,
+  onVerConsolidado,
 }: {
   loading: boolean;
   error: string | null;
@@ -788,19 +857,20 @@ function TableBody({
   totalPages: number;
   onPageChange: (page: number) => void;
   hasActiveFilters: boolean;
-  showCompania: boolean;
   openPopoverId: string | null;
   onTogglePopover: (id: string) => void;
   onClosePopover: () => void;
   onRetry: () => void;
   onClearFilters: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
+  onTogglePause: (id: string, next: boolean, tenantId: string) => void;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
   onProcesar: (item: InstanceSummary) => void;
-  onVerConsolidado: (item: InstanceSummary) => void;
-  consolidadoActingId: string | null;
   onOpen: (id: string, tenantId: string) => void;
+  onVerDocumentos: (item: InstanceSummary) => void;
+  onVerConsolidado: (item: InstanceSummary) => void;
 }) {
-  const gridCols = showCompania ? GRID_COLS_ADMIN : GRID_COLS;
   if (loading) {
     return (
       <div
@@ -876,28 +946,41 @@ function TableBody({
 
     return (
     <div className="overflow-x-auto">
-      <div className={showCompania ? 'min-w-[1340px]' : 'min-w-[1180px]'}>
+      <div className={MIN_WIDTH}>
         {/* Header */}
         <div
           className="grid items-center text-[11px] uppercase tracking-wider font-semibold rounded-xl px-4 py-3"
           style={{
             background: '#dfe5ed',
             color: '#162744',
-            gridTemplateColumns: gridCols,
+            gridTemplateColumns: GRID_COLS,
           }}
           role="row"
         >
-          {showCompania && <div>Compañía</div>}
-          <div>Placa</div>
-          <div>Vendedor</div>
-          <div>Comprador</div>
+          {/* Columna de selección (checkbox por fila); cabecera vacía. */}
+          <div aria-hidden="true" />
+          <div>Radicado</div>
           <div>VIN</div>
+          <div>Placa</div>
+          <div>Trámite / Modalidad</div>
           <div>Vehículo</div>
-          <div>Modalidad</div>
+          <div>Propietario / vendedor</div>
+          {/* Dos columnas "Firmado": el negocio las rotula igual, así que el sufijo va oculto
+              visualmente para que cada cabecera tenga un nombre accesible propio. */}
+          <div>
+            Firmado<span className="sr-only"> (vendedor)</span>
+          </div>
+          <div>Comprador</div>
+          <div>
+            Firmado<span className="sr-only"> (comprador)</span>
+          </div>
           <div>Paso</div>
           <div>Estado</div>
-          <div>Organismo</div>
-          <div>Creado</div>
+          <div>Fecha de creación</div>
+          <div>Fecha de actualización</div>
+          <div>Secretaría</div>
+          <div>Gestor</div>
+          <div>Fuente</div>
           <div className="text-right">Acciones</div>
         </div>
 
@@ -907,16 +990,17 @@ function TableBody({
             <TramiteRow
               key={item.id}
               item={item}
-              showCompania={showCompania}
-              gridCols={gridCols}
               popoverOpen={openPopoverId === item.id}
               onTogglePopover={onTogglePopover}
               onClosePopover={onClosePopover}
               onTogglePriority={onTogglePriority}
+              onTogglePause={onTogglePause}
+              selected={selectedIds.has(item.id)}
+              onToggleSelect={onToggleSelect}
               onProcesar={onProcesar}
-              onVerConsolidado={onVerConsolidado}
-              consolidadoActing={consolidadoActingId === item.id}
               onOpen={onOpen}
+              onVerDocumentos={onVerDocumentos}
+              onVerConsolidado={onVerConsolidado}
             />
           ))}
         </ul>
@@ -992,32 +1076,68 @@ function Pagination({
   );
 }
 
-/** Fila de trámite: clickable (abre el wizard) + acción explícita Continuar/Ver. */
+/**
+ * HU #11057 — celda de "Firmado" de una parte. `null` = NO APLICA (el vendedor no existe en matrícula
+ * inicial): se muestra un guion, no un chip, para no dar una falsa alarma.
+ */
+function FirmaCell({
+  estado,
+  parte,
+}: {
+  estado?: FirmaParteEstado | null;
+  parte: 'vendedor' | 'comprador';
+}) {
+  if (!estado) {
+    return (
+      <span
+        className="block text-xs text-[#162744]/40 dark:text-white/30"
+        title={`No aplica: este trámite no tiene ${parte}`}
+      >
+        —
+      </span>
+    );
+  }
+  const chip = FIRMA_CHIP[estado];
+  return (
+    <span className="block">
+      <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+    </span>
+  );
+}
+
+/** Fila de trámite: clickable (abre el wizard) + acciones explícitas (documentos, consolidado, Continuar/Ver). */
 function TramiteRow({
   item,
-  showCompania,
-  gridCols,
   popoverOpen,
   onTogglePopover,
   onClosePopover,
   onTogglePriority,
+  onTogglePause,
+  selected,
+  onToggleSelect,
   onProcesar,
-  onVerConsolidado,
-  consolidadoActing,
   onOpen,
+  onVerDocumentos,
+  onVerConsolidado,
 }: {
   item: InstanceSummary;
-  showCompania: boolean;
-  gridCols: string;
   popoverOpen: boolean;
   onTogglePopover: (id: string) => void;
   onClosePopover: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
+  onTogglePause: (id: string, next: boolean, tenantId: string) => void;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
   onProcesar: (item: InstanceSummary) => void;
-  onVerConsolidado: (item: InstanceSummary) => void;
-  consolidadoActing: boolean;
   onOpen: (id: string, tenantId: string) => void;
+  onVerDocumentos: (item: InstanceSummary) => void;
+  onVerConsolidado: (item: InstanceSummary) => void;
 }) {
+  // HU #11055 — la acción del consolidado solo existe si el expediente ya está generado (el resumen
+  // trae el id del adjunto): el botón NUNCA dispara una generación.
+  const consolidadoDisponible = !!item.consolidadoAttachmentId;
+  // ICT (paridad v1) — solo los borradores originados por ICT son pausables/seleccionables.
+  const isIctDraft = item.origin === 'ict' && item.estado === 'borrador';
   // HU #10350 — un borrador finalizado muestra un chip async ("Pendiente validación"/"Pendiente
   // firma"/"Listo para radicar"); el resto usa el chip base de estado. `ready` promueve la acción a
   // "Radicar" cuando la identidad ya quedó aprobada y los gates están listos.
@@ -1029,22 +1149,22 @@ function TramiteRow({
   const plateHint = plateFlowHint(item.plateFlowStatus);
   const puedeProcesar =
     item.estado === 'entregado' && item.plateFlowStatus === 'asignado';
-  const puedeVerConsolidado = CONSOLIDADO_MENU_ESTADOS.has(item.estado);
   const actionItems: ActionsMenuItem[] = [
     {
       key: 'abrir',
       label: actionLabel,
       icon: actionIcon,
-      onSelect: () => onOpen(item.id, item.tenantId),
+      // ICT — si está pausado, handleOpen abre el modal de confirmación antes de continuar.
+      onSelect: () => handleOpen(),
     },
-    ...(puedeVerConsolidado
+    // ICT (paridad v1) — pausar/reanudar como acción del menú (solo borradores origin='ict').
+    ...(isIctDraft
       ? [
           {
-            key: 'consolidado',
-            label: consolidadoActing ? 'Abriendo consolidado…' : 'Ver consolidado',
-            icon: FileText,
-            disabled: consolidadoActing,
-            onSelect: () => onVerConsolidado(item),
+            key: 'pausa',
+            label: item.isPaused ? 'Reanudar' : 'Pausar',
+            icon: item.isPaused ? Play : Pause,
+            onSelect: () => onTogglePause(item.id, !item.isPaused, item.tenantId),
           },
         ]
       : []),
@@ -1058,6 +1178,25 @@ function TramiteRow({
           },
         ]
       : []),
+    // HU #11054 — documentos del expediente sin entrar al wizard.
+    {
+      key: 'documentos',
+      label: 'Ver documentos',
+      icon: FileText,
+      onSelect: () => onVerDocumentos(item),
+    },
+    // HU #11055 — el negocio pidió la acción "sólo visible si ya se encuentra generado": se OMITE
+    // cuando no hay consolidado, en vez de mostrarse deshabilitada. Así nunca dispara una generación.
+    ...(consolidadoDisponible
+      ? [
+          {
+            key: 'consolidado',
+            label: 'Ver consolidado',
+            icon: FileStack,
+            onSelect: () => onVerConsolidado(item),
+          },
+        ]
+      : []),
   ];
   const motivoRechazo = item.ultimoRechazoMotivo?.trim() || null;
   const subsanacionCount = item.subsanacionCount ?? 0;
@@ -1066,6 +1205,17 @@ function TramiteRow({
     !!motivoRechazo || enSubsanacion || subsanacionCount > 0;
   const popoverRef = useRef<HTMLDivElement>(null);
   const iconColor = enSubsanacion ? '#b45309' : '#c2410c';
+
+  // ICT — abrir/continuar un trámite PAUSADO pide confirmación primero (modal FLIT, no confirm nativo):
+  // recordar reanudarlo para poder radicarlo.
+  const [confirmPauseOpen, setConfirmPauseOpen] = useState(false);
+  const handleOpen = () => {
+    if (item.isPaused) {
+      setConfirmPauseOpen(true);
+      return;
+    }
+    onOpen(item.id, item.tenantId);
+  };
 
   useEffect(() => {
     if (!popoverOpen) return;
@@ -1090,22 +1240,31 @@ function TramiteRow({
       <div
         role="button"
         tabIndex={0}
-        onClick={() => onOpen(item.id, item.tenantId)}
+        onClick={handleOpen}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            onOpen(item.id, item.tenantId);
+            handleOpen();
           }
         }}
         className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl border px-4 py-3 text-sm transition hover:border-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-        style={{ gridTemplateColumns: gridCols }}
+        style={{ gridTemplateColumns: GRID_COLS }}
         aria-label={`Abrir trámite ${item.referenceNumber}`}
       >
-        {showCompania && (
-          <span className="block text-xs font-semibold text-[#162744]/90 dark:text-white/80 truncate">
-            {item.companiaNombre ?? '—'}
-          </span>
-        )}
+        {/* ICT (paridad v1 pause-unpause-massive) — checkbox de selección: PRIMERA columna. Solo
+            borradores ICT; en el resto la celda va vacía para mantener la grilla alineada. */}
+        <span className="flex items-center justify-start" onClick={(e) => e.stopPropagation()}>
+          {isIctDraft ? (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleSelect(item.id)}
+              aria-label={`Seleccionar el trámite ${item.referenceNumber} para pausar/reanudar en lote`}
+              title="Seleccionar para pausar/reanudar en lote"
+              className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#557EFF]"
+            />
+          ) : null}
+        </span>
         <span className="flex min-w-0 items-center gap-2">
           {/* HU #10536 — estrella de prioridad: toggle in-line (no navega la fila). */}
           <button
@@ -1133,26 +1292,15 @@ function TramiteRow({
               aria-hidden="true"
             />
           </button>
-          <span className="min-w-0">
-            <span className="font-mono font-semibold text-[#162744] dark:text-white truncate block">
-              {item.placa ?? '—'}
-            </span>
-            <span className="text-[10px] font-mono text-[#162744]/50 dark:text-white/50 truncate block">
-              {item.referenceNumber}
-            </span>
+          <span className="min-w-0 font-mono font-semibold text-[#162744] dark:text-white truncate block">
+            {item.referenceNumber}
           </span>
-        </span>
-        <span className="block text-[#162744] dark:text-white/90 truncate">
-          {item.vendedorNombre ?? '—'}
-        </span>
-        <span className="block text-[#162744] dark:text-white/90 truncate">
-          {item.compradorNombre ?? '—'}
         </span>
         <span className="block font-mono text-xs text-[#162744]/80 dark:text-white/70 truncate">
           {item.vin ?? '—'}
         </span>
-        <span className="block text-[#162744]/90 dark:text-white/80 truncate">
-          {vehiculo(item)}
+        <span className="block font-mono font-semibold text-[#162744] dark:text-white truncate">
+          {item.placa ?? '—'}
         </span>
         <span className="block">
           <span
@@ -1166,6 +1314,17 @@ function TramiteRow({
             {MODALIDAD_SHORT[item.modalidad]}
           </span>
         </span>
+        <span className="block text-[#162744]/90 dark:text-white/80 truncate">
+          {vehiculo(item)}
+        </span>
+        <span className="block text-[#162744] dark:text-white/90 truncate">
+          {item.vendedorNombre ?? '—'}
+        </span>
+        <FirmaCell estado={item.firmaVendedorEstado} parte="vendedor" />
+        <span className="block text-[#162744] dark:text-white/90 truncate">
+          {item.compradorNombre ?? '—'}
+        </span>
+        <FirmaCell estado={item.firmaCompradorEstado} parte="comprador" />
         <span className="block min-w-0">
           <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
             {item.pasoActual}/{item.totalPasos}
@@ -1174,7 +1333,7 @@ function TramiteRow({
             {stepLabel(item)}
           </span>
         </span>
-        <span className="relative flex min-w-0 flex-col gap-0.5">
+        <span className="relative flex min-w-0 flex-col items-start gap-1">
           <span className="flex min-w-0 flex-wrap items-center gap-1.5">
             <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
             {showRejectPopover ? (
@@ -1255,6 +1414,20 @@ function TramiteRow({
             </div>
           ) : null}
           </span>
+          {/* ICT — "Pausado" (solo texto, sin ícono): apilado bajo el estado; no invade Organismo. */}
+          {item.isPaused ? (
+            <span
+              className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#162744]/20 bg-[#162744]/[0.06] px-2 py-0.5 text-[10px] font-semibold text-[#162744]/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
+              title={item.pausedObservation ?? 'Trámite pausado'}
+              aria-label={
+                item.pausedObservation
+                  ? `Trámite pausado: ${item.pausedObservation}`
+                  : 'Trámite pausado'
+              }
+            >
+              Pausado
+            </span>
+          ) : null}
           {plateHint ? (
             <span
               className="text-[10px] leading-tight text-[#162744]/45 dark:text-white/40 truncate"
@@ -1264,12 +1437,35 @@ function TramiteRow({
             </span>
           ) : null}
         </span>
-        <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
-          {item.organismoTransito ?? '—'}
-        </span>
         <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
           {shortDate(item.createdAt)}
         </span>
+        {/* Sin modificaciones desde que se creó ⇒ no hay fecha de actualización que mostrar. */}
+        <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+          {item.updatedAt ? shortDate(item.updatedAt) : '—'}
+        </span>
+        <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
+          {item.organismoTransito ?? '—'}
+        </span>
+        {/* Gestor = empresa que radica + persona que la operó. Sustituye a la antigua columna
+            "Compañía" del SuperAdmin: era exactamente la misma razón social, sin la persona. El
+            filtro por compañía sigue existiendo (arriba), y ahora todos los perfiles ven el dato. */}
+        <span className="block min-w-0">
+          <span className="block truncate text-xs font-semibold text-[#162744] dark:text-white">
+            {item.companiaNombre ?? '—'}
+          </span>
+          <span className="block truncate text-[10px] text-[#162744]/60 dark:text-white/50">
+            {item.gestorNombre ?? '—'}
+          </span>
+        </span>
+        <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
+          {FUENTE_LABEL[item.fuente ?? 'dashboard']}
+        </span>
+        {/* La fila entera navega al wizard, así que las acciones detienen la propagación en un
+            envoltorio: el menú no recibe el evento y no hay que filtrarlo acción por acción.
+            Se conserva el `ActionsMenu` que introdujo el subflujo de placa (HU #11037): las acciones
+            de documentos y consolidado entran como ítems suyos, en vez de montar un segundo grupo de
+            botones en la misma celda. */}
         <span
           className="flex justify-end"
           onClick={(e) => e.stopPropagation()}
@@ -1284,6 +1480,41 @@ function TramiteRow({
           />
         </span>
       </div>
+      {/* ICT — confirmación FLIT (Modal con blur/overlay/CTA degradado) al continuar un trámite pausado. */}
+      <Modal
+        open={confirmPauseOpen}
+        onClose={() => setConfirmPauseOpen(false)}
+        title="Trámite pausado"
+        icon={Pause}
+        iconBg="#162744"
+        description={`Trámite ${item.referenceNumber}`}
+        size="sm"
+      >
+        <p className="text-sm text-[#162744]/80 dark:text-white/80">
+          Este trámite está <strong>pausado</strong>. Recuerda reanudarlo (despausarlo) para poder
+          radicarlo. ¿Deseas continuar de todos modos?
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setConfirmPauseOpen(false)}
+            className="rounded-full border border-[#DFE5ED] px-4 py-1.5 text-xs font-semibold text-[#162744] transition hover:bg-[#162744]/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmPauseOpen(false);
+              onOpen(item.id, item.tenantId);
+            }}
+            className="rounded-full px-4 py-1.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+          >
+            Continuar de todos modos
+          </button>
+        </div>
+      </Modal>
     </li>
   );
 }

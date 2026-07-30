@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Motor de la migracion Flit V1 -> V2. Aqui vive TODO lo que decide que se migra y como:
+    lectura del origen, mapeo, carga y almacenamiento. Lo que NO vive aqui es como se le
+    cuenta al operador: eso lo decide cada host (la consola imprime, el API serializa).
+
+    Existe porque hay DOS hosts que deben ejecutar exactamente el mismo codigo:
+      · tools/Flit.DataMigration.V1  (consola, `docker compose run migrador`)
+      · tools/Flit.DataMigration.Api (Minimal API, un tramite por peticion)
+    Si el motor estuviera duplicado, el comando y el endpoint migrarian distinto y nadie
+    se enteraria hasta ver los datos en produccion.
+
+    RootNamespace != AssemblyName A PROPOSITO. Al valer `Flit.DataMigration.V1`, los archivos
+    que se movieron desde el proyecto de consola conservan su `namespace` sin editar una sola
+    linea (movimiento puro, revisable con `git diff -M`), y el ejecutable puede seguir
+    llamandose Flit.DataMigration.V1.dll — que es como lo invocan el Dockerfile y el
+    docker-compose de los tres ambientes. Renombrarlo habria roto el despliegue.
+
+    AOT desactivado (igual que Flit.Infrastructure): EF Core usa reflexion y no es
+    AOT-compatible. Es el "JIT como escape documentado" de ADR-0002 §2 Decision 5.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Flit.DataMigration.V1</RootNamespace>
+    <AssemblyName>Flit.DataMigration.Core</AssemblyName>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+    <NuGetAuditMode>direct</NuGetAuditMode>
+    <!-- CA1848: el motor no hace telemetria de alto volumen; devuelve resultados, no loguea.
+         CA1031: el bucle por tramite captura Exception a proposito (ProcedureInstanceLoader)
+         para que un registro malo mande a cuarentena sin abortar el lote completo. -->
+    <NoWarn>$(NoWarn);CA1848;CA1031</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.DataMigration.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Flit.Infrastructure/Flit.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+</Project>

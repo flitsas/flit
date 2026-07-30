@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { useCooldown } from "@/hooks/useCooldown";
 import { ApiError } from "@/lib/api/types";
+// HU19 — misma area clickeable minima que la columna de acciones unificada (RowActions).
+import { ICON_BUTTON_HIT_AREA } from "@/components/atom/RowActions";
 
 // HU #10626 — Botón "Reenviar invitación" del menú de acciones de la tabla (módulo Compañía
 // "Usuarios y Permisos" y pestaña "Usuarios" del hub OT). AC3: el padre solo lo renderiza cuando
@@ -108,7 +110,7 @@ export function ResendInvitationButton({
         aria-label={ariaLabel}
         onClick={handleClick}
         disabled={disabled}
-        className="p-1.5 rounded-lg transition hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+        className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
         style={{ color: "#557EFF" }}
       >
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

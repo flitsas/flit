@@ -1,11 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Migrador de trámites Flit V1 -> V2 (instancia 1: data plana).
+    Migrador de trámites Flit V1 -> V2. HOST DE CONSOLA.
 
     Consola de un solo uso operativo: recibe una ORDEN DE TRABAJO (lista de ids de V1)
     y migra esos trámites a V2. La SELECCIÓN de qué migrar NO es responsabilidad de este
     programa: se la entregan por parámetro. Ver README.md.
+
+    Este proyecto ya NO contiene el motor: vive en Flit.DataMigration.Core y lo comparte
+    con el host HTTP (Flit.DataMigration.Api), para que el comando y el endpoint ejecuten
+    exactamente el mismo código. Aquí solo quedan los argumentos y la impresión del reporte.
+
+    El AssemblyName NO se toca: el Dockerfile publica a /app/migrador y el docker-compose
+    de los tres ambientes arranca `dotnet /app/migrador/Flit.DataMigration.V1.dll`.
 
     AOT desactivado (igual que Flit.Infrastructure): EF Core usa reflexión y no es
     AOT-compatible. Es el "JIT como escape documentado" de ADR-0002 §2 Decisión 5.
@@ -25,16 +32,27 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/Flit.Infrastructure/Flit.Infrastructure.csproj" />
+    <!--
+      Los metodos que imprimen el reporte son `internal`: son salida para el operador, no API
+      publica. El proyecto de tests los congela con golden files, para poder DEMOSTRAR que un
+      refactor no cambio una sola linea de lo que el operador lee.
+    -->
+    <InternalsVisibleTo Include="Flit.DataMigration.Tests" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../Flit.DataMigration.Core/Flit.DataMigration.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Solo lo que necesita el HOST: leer appsettings.json y las variables FLITMIG_, y armar
+      el contenedor minimo del que sale IHttpClientFactory. EF Core, Npgsql y el resto llegan
+      por Flit.DataMigration.Core.
+    -->
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" />
-    <PackageReference Include="EFCore.NamingConventions" />
-    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 
   <ItemGroup>

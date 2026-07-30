@@ -21,7 +21,12 @@ import {
   type OtCompany,
 } from "@/lib/api/admin-mandate-signers";
 import { MandatarioFormPanel } from "./MandatarioFormPanel";
-import { hasPriorIdentity, identityUi } from "./mandatario-identity";
+import {
+  hasPriorIdentity,
+  identityUi,
+  puedeRenovarIdentidad,
+  vigenciaLabel,
+} from "./mandatario-identity";
 
 /**
  * Pestaña "Mandatario" del hub Admin OT (ADR-0023): lista los mandatarios activos del OT,
@@ -256,19 +261,35 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
                 <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}>
                   {(() => {
                     const identity = identityUi(signer.identityStatus);
+                    // HU #11060 — con la identidad vigente se informa HASTA CUÁNDO lo está, en vez de
+                    // dejar solo el chip: es la diferencia entre "está bien" y "está bien hasta el X".
+                    const vigencia = vigenciaLabel(
+                      signer.identityStatus,
+                      signer.identityValidUntil,
+                    );
                     return (
-                      <span
-                        data-testid={`ms-identity-${signer.id}`}
-                        className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold"
-                        style={identity.style}
-                      >
-                        {identity.isValid ? (
-                          <ShieldCheck className="h-3 w-3" />
-                        ) : (
-                          <ShieldAlert className="h-3 w-3" />
+                      <>
+                        <span
+                          data-testid={`ms-identity-${signer.id}`}
+                          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                          style={identity.style}
+                        >
+                          {identity.isValid ? (
+                            <ShieldCheck className="h-3 w-3" />
+                          ) : (
+                            <ShieldAlert className="h-3 w-3" />
+                          )}
+                          {identity.label}
+                        </span>
+                        {vigencia && (
+                          <span
+                            className="mt-1 block text-[10px] opacity-60"
+                            data-testid={`ms-identity-vigencia-${signer.id}`}
+                          >
+                            {vigencia}
+                          </span>
                         )}
-                        {identity.label}
-                      </span>
+                      </>
                     );
                   })()}
                 </td>
@@ -286,11 +307,21 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
                           type="button"
                           className="rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
                           style={{ color: "#557EFF", borderColor: "#557EFF" }}
-                          disabled={busyId === signer.id || !signer.email}
+                          // HU #11060 — con la identidad vigente NO se ofrece renovar: el backend
+                          // reutiliza la vigente y no reenvía nada, así que el botón prometía una
+                          // acción que no ocurre. Se informa la vigencia en el chip de al lado.
+                          disabled={
+                            busyId === signer.id ||
+                            !signer.email ||
+                            !puedeRenovarIdentidad(signer.identityStatus)
+                          }
                           title={
-                            signer.email
-                              ? undefined
-                              : "Agrega un correo al mandatario para poder enviarle la validación."
+                            !puedeRenovarIdentidad(signer.identityStatus)
+                              ? vigenciaLabel(signer.identityStatus, signer.identityValidUntil) ??
+                                "La identidad ya está validada y vigente."
+                              : signer.email
+                                ? undefined
+                                : "Agrega un correo al mandatario para poder enviarle la validación."
                           }
                           aria-label={`${identityUi(signer.identityStatus).action} de ${signer.fullName}`}
                           onClick={() => void handleIdentity(signer)}

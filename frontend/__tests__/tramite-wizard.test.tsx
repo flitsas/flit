@@ -375,6 +375,44 @@ describe('TramiteWizard — solo lectura (Track C)', () => {
   });
 });
 
+// HU #11053 — el aviso superior describía siempre un envío a tránsito, incluso en trámites aprobados,
+// rechazados o anulados, y ofrecía generar documentación que desde la HU #11051 el backend rechaza en
+// estado final.
+describe('TramiteWizard — aviso acorde al estado real (HU #11053)', () => {
+  const renderEnEstado = (status: string) => {
+    mocks.getWizardState.mockResolvedValue({ ...SUBMITTED_WIZARD, status });
+    mocks.getInstance.mockResolvedValue({ id: 'inst-sub', status, fieldValues: [] });
+    render(<TramiteWizard existingInstanceId="inst-sub" onExit={() => {}} />);
+  };
+
+  it('entregado: anuncia el envío a tránsito y que aún puede generar el consolidado', async () => {
+    renderEnEstado('entregado');
+    expect(await screen.findByText(/Enviado a tránsito — solo visualización/i)).toBeInTheDocument();
+    expect(screen.getByText(/aún puedes generar o descargar el expediente consolidado/i)).toBeInTheDocument();
+  });
+
+  it('aprobado: anuncia la aprobación y que la documentación ya no se regenera', async () => {
+    renderEnEstado('aprobado');
+    expect(await screen.findByText(/Trámite aprobado — solo visualización/i)).toBeInTheDocument();
+    expect(screen.getByText(/ya no se regenera/i)).toBeInTheDocument();
+    // Lo que el estado NO permite no debe anunciarse.
+    expect(screen.queryByText(/Enviado a tránsito/i)).not.toBeInTheDocument();
+  });
+
+  it('rechazado sin subsanación: anuncia el rechazo y remite al motivo', async () => {
+    renderEnEstado('rechazado');
+    expect(await screen.findByText(/Trámite rechazado — solo visualización/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Enviado a tránsito/i)).not.toBeInTheDocument();
+  });
+
+  it('anulado: anuncia que quedó sin efecto y no ofrece generar', async () => {
+    renderEnEstado('anulado');
+    expect(await screen.findByText(/Trámite anulado — solo visualización/i)).toBeInTheDocument();
+    expect(screen.getByText(/no editarlo ni regenerarlo/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Enviado a tránsito/i)).not.toBeInTheDocument();
+  });
+});
+
 describe('TramiteWizard — status y reasons traducidos', () => {
   it('traduce los códigos de reason a copy amigable', async () => {
     renderWizard();

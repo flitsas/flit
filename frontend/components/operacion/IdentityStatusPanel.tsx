@@ -79,13 +79,26 @@ interface OutcomeRow {
   vigente: boolean;
 }
 
+/**
+ * HU21 — orden de presentación: saliente antes que entrante, igual que el resumen de firmas del
+ * paso FUR (HU #11019), el expediente y el listado. Antes se respetaba el orden de llegada de los
+ * actores, que deja al comprador primero.
+ */
+const PARTE_ORDEN: Record<string, number> = { vendedor: 0, comprador: 1 };
+
+function ordenarPartes(actors: ProcedureActor[]): ProcedureActor[] {
+  return [...actors].sort(
+    (a, b) => (PARTE_ORDEN[a.rol] ?? 99) - (PARTE_ORDEN[b.rol] ?? 99),
+  );
+}
+
 function buildOutcomeRows(
   modalidad: WizardModalidad,
   actors: ProcedureActor[],
   validations: BiometricValidation[],
 ): OutcomeRow[] {
   const rows: OutcomeRow[] = [];
-  for (const actor of actors) {
+  for (const actor of ordenarPartes(actors)) {
     const parte = actor.rol;
     const matches = validations.filter((v) =>
       modalidad === 'traspaso'

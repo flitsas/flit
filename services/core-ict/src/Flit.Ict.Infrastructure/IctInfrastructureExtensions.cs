@@ -43,7 +43,22 @@ public static class IctInfrastructureExtensions
         services.AddScoped<ISecretariesV1Query, SecretariesV1Query>();
         services.AddScoped<IAttachmentRepository, AttachmentRepository>();
         services.AddScoped<IAttachmentDocTypeResolver, AttachmentDocTypeResolver>();
-        services.AddHttpClient<IIctAttachmentStorage, Storage.FileManagerAttachmentStorage>()
+        // Typed HttpClient del File Manager: BaseAddress al File Manager (las subidas/descargas a S3 usan
+        // la presigned URL absoluta, que lo ignora). BaseUrl OBLIGATORIA — mismo criterio que core-api:
+        // sin File Manager NO se sintetiza un path falso (eso dejaba adjuntos que no abrían).
+        services.AddHttpClient<IIctAttachmentStorage, Storage.FileManagerAttachmentStorage>((sp, c) =>
+            {
+                var o = sp.GetRequiredService<IOptions<Storage.FileManagerOptions>>().Value;
+                if (string.IsNullOrWhiteSpace(o.BaseUrl))
+                {
+                    throw new InvalidOperationException(
+                        "FileManager:BaseUrl (o FILE_MANAGER_BASE_URL) es obligatoria para los adjuntos de ICT.");
+                }
+
+                var baseUrl = o.BaseUrl.EndsWith('/') ? o.BaseUrl : o.BaseUrl + "/";
+                c.BaseAddress = new Uri(baseUrl);
+                c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+            })
             .AddHttpMessageHandler(sp => new Logging.IctOutboundLoggingHandler(
                 sp.GetRequiredService<IServiceScopeFactory>(), "external"));
 

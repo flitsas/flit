@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Building2,
   Check,
@@ -17,7 +17,6 @@ import {
   listAvailablePlatesForCompany,
   type PlateDetail,
 } from '@/lib/api/admin-plate-ranges';
-import { digitsOnly } from '@/lib/format/currency';
 import MatriculaResumen from './MatriculaResumen';
 import ExpedienteVisor from './ExpedienteVisor';
 import ExpedienteTimeline from './ExpedienteTimeline';
@@ -40,9 +39,6 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
-/** Estado de la pre-generación del paquete al entrar al paso FUR. */
-export type PaqueteDocsStatus = 'idle' | 'loading' | 'ready' | 'error';
-
 interface Props {
   instanceId: string | null;
   modalidad: WizardModalidad;
@@ -50,11 +46,6 @@ interface Props {
   onRefresh?: () => void;
   /** FEATURE 05 — el RNMC aplica al trámite: se consulta por actor y se muestra en el resumen. */
   rnmcEnabled?: boolean;
-  /**
-   * Feature #11066 — avisa al wizard si el paquete (FUR + impronta) ya se pre-generó al entrar
-   * al paso, para que Preparar solo arme el consolidado y no se habilite mientras genera.
-   */
-  onPaqueteStatusChange?: (status: PaqueteDocsStatus) => void;
 }
 
 const PARTE_LABEL: Record<SignatureParte, string> = {
@@ -204,13 +195,7 @@ function CopyLink({ link, label }: { link: string; label: string }) {
  * wizard tras cada acción y delega la verificación autoritativa al backend
  * (submit hard-gate). La firma de compraventa solo aplica a traspaso.
  */
-export function FirmaFurStep({
-  instanceId,
-  modalidad,
-  onRefresh,
-  rnmcEnabled = false,
-  onPaqueteStatusChange,
-}: Props) {
+export function FirmaFurStep({ instanceId, modalidad, onRefresh, rnmcEnabled = false }: Props) {
   // Solo lectura (Track C): sin acciones (organismo, firma, participantes, FUR);
   // se conserva la visualización (resumen, expediente, timeline, descargas).
   const readOnly = useWizardReadOnly();
@@ -232,11 +217,6 @@ export function FirmaFurStep({
   // (cuando ya se capturó la fecha de expedición de cada actor), no en el pre-vuelo.
   const [rnmcChecks, setRnmcChecks] = useState<PreflightCheck[]>([]);
   const [rnmcLoading, setRnmcLoading] = useState(false);
-  // Feature #11066 — pre-generación del paquete al entrar al paso (antes de Preparar).
-  const [paqueteStatus, setPaqueteStatus] = useState<PaqueteDocsStatus>('idle');
-  const paqueteKickoffRef = useRef(false);
-  const onPaqueteStatusChangeRef = useRef(onPaqueteStatusChange);
-  onPaqueteStatusChangeRef.current = onPaqueteStatusChange;
 
   const loadDetail = useCallback(async () => {
     if (!instanceId) return;
@@ -354,65 +334,6 @@ export function FirmaFurStep({
     onRefresh?.();
     void loadExpediente();
   }, [onRefresh, loadExpediente]);
-  // Feature #11066 — token para que Fur/Impronta re-listen adjuntos tras la pre-gen (sin
-  // refrescar el wizard: eso remonta el paso y puede adelantar el estado de negocio).
-  const [docsReloadToken, setDocsReloadToken] = useState(0);
-
-  // Feature #11066 — al entrar al paso FUR (con organismo y en borrador/subsanación) pre-genera
-  // el paquete + impronta para que Preparar solo arme el consolidado.
-  useEffect(() => {
-    onPaqueteStatusChangeRef.current?.(paqueteStatus);
-  }, [paqueteStatus]);
-
-  useEffect(() => {
-    if (!instanceId || readOnly || !organismoSelected || !detail) return;
-    if (detail.status !== 'borrador' && detail.status !== 'subsanacion') return;
-    if (paqueteKickoffRef.current) return;
-    paqueteKickoffRef.current = true;
-
-    let cancelled = false;
-    void (async () => {
-      setPaqueteStatus('loading');
-      try {
-        let atts: ProcedureAttachment[] = [];
-        try {
-          atts = await tramitesClient.getAttachments(instanceId);
-          if (!cancelled) setAttachments(atts);
-        } catch {
-          // Si falla el listado, intentamos generar de todas formas.
-        }
-
-        const hasFurDoc = atts.some((a) => a.tipo === 'fur');
-        const hasImpronta = atts.some((a) => a.tipo === 'impronta');
-
-        if (!hasFurDoc) {
-          await tramitesClient.generarFur(instanceId);
-        }
-
-        if (!hasImpronta) {
-          try {
-            await tramitesClient.generarImpronta(instanceId);
-          } catch {
-            // Best-effort: sin impronta no bloquea el paso ni Preparar.
-          }
-        }
-
-        if (cancelled) return;
-        setPaqueteStatus('ready');
-        // Solo adjuntos locales — no onRefresh del wizard (evita remount / cambio de estado).
-        void loadExpediente();
-        setDocsReloadToken((t) => t + 1);
-      } catch {
-        if (cancelled) return;
-        paqueteKickoffRef.current = false;
-        setPaqueteStatus('error');
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [instanceId, readOnly, organismoSelected, detail, loadExpediente]);
 
   return (
     <div className="space-y-8">
@@ -490,12 +411,12 @@ export function FirmaFurStep({
         <FirmaSection instanceId={instanceId} onRefresh={onRefresh} />
       )}
       <ParticipantesSection instanceId={instanceId} />
-      <ImprontaSection instanceId={instanceId} reloadToken={docsReloadToken} />
+      <ImprontaSection instanceId={instanceId} />
       <FurSection
         instanceId={instanceId}
         modalidad={modalidad}
+        status={detail?.status ?? 'borrador'}
         onRefresh={handleDocumentGenerated}
-        reloadToken={docsReloadToken}
       />
 
       <ExpedienteTimeline statusHistory={detail?.statusHistory ?? []} />
@@ -1135,10 +1056,14 @@ function FirmaSection({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h4 className="text-sm font-bold">Firma de la compraventa</h4>
+          {/* La firma del documento NO se captura aquí: se apalanca de lo que la parte ya acreditó.
+              Decirlo evita que el gestor busque un paso de firma que no existe. */}
           <p className="text-xs opacity-70">
-            Estado informativo de la firma electrónica por parte. La lógica
-            definitiva de firmas está pendiente de definición de negocio, por lo
-            que <strong>no bloquea</strong> preparar ni radicar el traspaso.
+            La firma de cada parte se apalanca de su{' '}
+            <strong>validación de identidad</strong> o de su{' '}
+            <strong>firma del baúl</strong>, según el mecanismo seleccionado al registrar el trámite.
+            El estado que ves aquí es informativo y <strong>no bloquea</strong> preparar ni radicar el
+            traspaso.
           </p>
         </div>
         {!readOnly && (
@@ -1418,11 +1343,8 @@ function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
             <input
               id="part-telefono"
               type="tel"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              autoComplete="tel"
               value={telefono}
-              onChange={(e) => setTelefono(digitsOnly(e.target.value))}
+              onChange={(e) => setTelefono(e.target.value)}
               className={INPUT_BASE}
             />
           </div>
@@ -1592,17 +1514,13 @@ function StatusChip({
 // ── Impronta integrada al trámite ────────────────────────────────────
 
 /**
- * Impronta en el paso FUR: se pre-genera al entrar al paso (Feature #11066).
- * Aquí solo se muestra descarga / estado si ya existe; sin botón manual de generación.
+ * Botón "Generar Impronta" del paso FUR: genera el Certificado de Improntas Digitales (Kyverum
+ * RUNT) con los datos ya disponibles del trámite (placa/VIN, documento del propietario, organismo
+ * de tránsito, operador) y lo adjunta al expediente (mismo flujo que una subida manual). Solo se
+ * muestra si aún no existe un adjunto tipo 'impronta' (cargado a mano o generado antes) — la
+ * generación es idempotente por NO-regeneración en el backend.
  */
-function ImprontaSection({
-  instanceId,
-  reloadToken = 0,
-}: {
-  instanceId: string | null;
-  /** Feature #11066 — se incrementa tras la pre-gen para reconsultar adjuntos. */
-  reloadToken?: number;
-}) {
+function ImprontaSection({ instanceId }: { instanceId: string | null }) {
   const [attachment, setAttachment] = useState<ProcedureAttachment | null | undefined>(undefined);
 
   const load = useCallback(async () => {
@@ -1619,61 +1537,31 @@ function ImprontaSection({
     // load solo hace setState DESPUÉS del await (no es cascada síncrona).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [load, reloadToken]);
+  }, [load]);
 
-  // Aún no se sabe si existe (carga inicial): evitar parpadeo.
+  // Aún no se sabe si existe (carga inicial): no se muestra nada para evitar parpadeo.
   if (attachment === undefined) return null;
-  // Sin impronta: copy breve (se genera al entrar al paso). Con impronta: descarga.
+  // Ya hay impronta en el expediente: nada que anunciar (el documento se ve en el visor).
+  if (attachment) return null;
+
   return (
-    <section className="space-y-3" aria-label="Generación de la impronta">
+    <section className="space-y-4" aria-label="Impronta de motor y chasis">
       <div>
         <h4 className="text-sm font-bold">Impronta de motor y chasis</h4>
         <p className="text-xs opacity-70">
-          {attachment
-            ? 'Certificado de Improntas Digitales adjunto al expediente.'
-            : 'Se genera automáticamente al entrar a este paso (Kyverum RUNT). Si ya tienes una impronta propia, súbela en Documentos.'}
+          El Certificado de Improntas Digitales (Kyverum RUNT) se genera automáticamente al generar el
+          expediente consolidado, con los datos del trámite. Si ya tienes tu propia impronta, puedes
+          subirla manualmente en el paso de documentos.
         </p>
       </div>
-      {attachment && (
-        <div
-          className="rounded-xl border p-3 flex items-center gap-3"
-          style={{ borderColor: '#8CC63F' }}
-        >
-          <FileText className="h-4 w-4 shrink-0" style={{ color: '#5B8A1F' }} aria-hidden="true" />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold">
-              Impronta <span className="opacity-50 font-normal">· {attachment.filename}</span>
-            </p>
-          </div>
-          <DownloadButton instanceId={instanceId} attachment={attachment} />
-        </div>
-      )}
     </section>
   );
 }
 
 // ── FUR / compraventa ─────────────────────────────────────────────────
 
-/** Tipos del paquete que genera `generarFur` (+ variantes por actor) — se listan para descarga. */
-function isPaqueteDocumentoGenerado(tipo: string): boolean {
-  const exact = new Set([
-    'fur',
-    'compraventa',
-    'tramite_virtual',
-    'mandato',
-    'certificado_identidad',
-    'certificado_identidad_vendedor',
-    'certificado_rnmc',
-    'certificado_soat_rtm',
-    'escritura',
-    'escritura_comprador',
-  ]);
-  if (exact.has(tipo)) return true;
-  if (tipo.startsWith('certificado_rues')) return true;
-  if (tipo.startsWith('certificado_identidad')) return true;
-  if (tipo.startsWith('escritura')) return true;
-  return false;
-}
+/** Tipos de documento generados por el FUR. */
+const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad', 'certificado_identidad_vendedor', 'certificado_rnmc']);
 
 /**
  * HU #10987 — tope de las observaciones manuales. El recuadro OBSERVACIONES del FUR es un campo
@@ -1682,26 +1570,41 @@ function isPaqueteDocumentoGenerado(tipo: string): boolean {
  */
 const FUR_OBSERVACIONES_MAX = 300;
 
-/** Fecha local YYYY-MM-DD para el input `type="date"` (no UTC: evita desfase en CO). */
-function todayIsoDate(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+/**
+ * HU #11050 (AC3) — traduce un aviso de la cascada (`"impronta: provider_unavailable"`) a algo que el
+ * gestor entienda. El backend manda `documento: motivo`; aquí se nombra el documento con su etiqueta
+ * conocida y se explica el motivo cuando es uno de los previsibles.
+ */
+function consolidadoAvisoLabel(aviso: string): string {
+  const [documento, motivo = ''] = aviso.split(':').map((s) => s.trim());
+  const nombre =
+    documento === 'documentos_del_expediente'
+      ? 'algunos documentos del expediente'
+      : documentLabel(documento);
+  const causa =
+    motivo.includes('organismo_requerido')
+      ? ' (falta el organismo de tránsito)'
+      : motivo.includes('provider_unavailable')
+        ? ' (el proveedor no está disponible; vuelve a generar el expediente en unos minutos)'
+        : motivo.includes('provider_validation')
+          ? ' (el proveedor rechazó los datos del trámite)'
+          : motivo
+            ? ` (${motivo})`
+            : '';
+  return `${nombre}${causa}`;
 }
 
 function FurSection({
   instanceId,
   modalidad,
+  status,
   onRefresh,
-  reloadToken = 0,
 }: {
   instanceId: string | null;
   modalidad: WizardModalidad;
+  /** Estado de negocio del trámite: en estado final no se ofrece generar (HU #11052/#11051). */
+  status: InstanceStatus;
   onRefresh?: () => void;
-  /** Feature #11066 — se incrementa tras la pre-gen para reconsultar adjuntos. */
-  reloadToken?: number;
 }) {
   const [docs, setDocs] = useState<ProcedureAttachment[] | null>(null);
   const [consolidado, setConsolidado] = useState<ProcedureAttachment | null>(null);
@@ -1713,15 +1616,14 @@ function FurSection({
   // leían `fur_observations` y `fur_processing_date`, dos llaves que NADIE escribía: el gestor no
   // podía aportar observaciones y la fecha era la de generación, impuesta por un fallback silencioso.
   const [observaciones, setObservaciones] = useState('');
-  // Por defecto: hoy. Si el trámite ya tiene `fur_processing_date`, load() la respeta.
-  const [fechaTramite, setFechaTramite] = useState(todayIsoDate);
+  const [fechaTramite, setFechaTramite] = useState('');
   const [savingCampos, setSavingCampos] = useState(false);
 
   const load = useCallback(async () => {
     if (!instanceId) return;
     try {
       const list = await tramitesClient.getAttachments(instanceId);
-      setDocs(list.filter((a) => isPaqueteDocumentoGenerado(a.tipo)));
+      setDocs(list.filter((a) => FUR_TIPOS.has(a.tipo)));
       setConsolidado(list.find((a) => a.tipo === 'consolidado') ?? null);
       const fmt = await tramitesClient.getFurTemplateFormat(instanceId);
       setFurFormat(fmt.format);
@@ -1729,28 +1631,17 @@ function FurSection({
       const valor = (key: string) =>
         detail?.fieldValues?.find((f) => f.fieldKey === key)?.valueText ?? '';
       setObservaciones(valor('fur_observations'));
-      const fechaGuardada = valor('fur_processing_date').slice(0, 10);
-      const fecha = fechaGuardada || todayIsoDate();
-      setFechaTramite(fecha);
-      // Si no había fecha persistida, guardamos la de hoy para que el paquete/FUR la usen.
-      if (!fechaGuardada) {
-        try {
-          await tramitesClient.patchFieldValues(instanceId, [
-            { formFieldId: null, fieldKey: 'fur_processing_date', valueText: fecha },
-          ]);
-        } catch {
-          // Best-effort: el input ya muestra hoy; el backend puede caer al fallback.
-        }
-      }
+      setFechaTramite(valor('fur_processing_date').slice(0, 10));
     } catch {
-      // El listado de adjuntos y el formato son secundarios; no bloquea el paso.
+      // El listado de adjuntos y el formato son secundarios; el error de generar se muestra abajo.
     }
   }, [instanceId]);
 
   /**
-   * Persiste observaciones y fecha del trámite al perder el foco. El paquete se pre-genera al
-   * entrar al paso; conviene que el blur haya guardado antes de Preparar (el clic dispara blur).
-   * Best-effort: fuera de borrador/subsanación el backend responde `not_draft`.
+   * Persiste observaciones y fecha del trámite. Se dispara al perder el foco y ANTES de generar, para
+   * que el PDF salga con lo que el gestor tiene en pantalla y no con lo último guardado.
+   * Best-effort: fuera de borrador/subsanación el backend responde `not_draft` y el campo queda de
+   * solo lectura de hecho — no tiene sentido bloquear la generación por eso.
    */
   const guardarCampos = useCallback(async () => {
     if (!instanceId) return;
@@ -1771,37 +1662,58 @@ function FurSection({
     // load solo hace setState DESPUÉS del await (no es cascada síncrona).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [load, reloadToken]);
+  }, [load]);
 
-  const handleRegenerarConsolidado = async () => {
+  const handleGenerateConsolidado = async () => {
     if (!instanceId) return;
     setGeneratingConsolidado(true);
     setConsolidadoError(null);
     try {
+      // HU #11052 — el consolidado es el ÚNICO disparador de generación, así que hereda el guardado
+      // previo que hacía el botón del FUR (HU #10987/#10988): si el gestor escribe la fecha o las
+      // observaciones y pulsa generar sin que el campo pierda el foco, el PDF saldría sin ese texto.
       await guardarCampos();
-      // force=true: solo reconstruye el PDF consolidado con los adjuntos ya existentes.
-      // No regenera certificados ni el resto del paquete (eso se hizo al Preparar).
-      const generado = await tramitesClient.generarConsolidado(instanceId, undefined, true);
+      // HU #11017 — el consolidado se genera aunque falten documentos obligatorios: si vuelve marcado
+      // como incompleto se avisa qué falta, en vez de dejar al gestor con un expediente que el
+      // organismo rechazará sin explicación.
+      const generado = await tramitesClient.generarConsolidado(instanceId);
+      const avisos: string[] = [];
       if (generado?.incompleto) {
         const faltantes = (generado.documentosFaltantes ?? []).map(documentLabel).join(', ');
-        setConsolidadoError(
+        avisos.push(
           faltantes
-            ? `Consolidado regenerado, pero faltan documentos obligatorios: ${faltantes}.`
-            : 'Consolidado regenerado, pero faltan documentos obligatorios.',
+            ? `Faltan documentos obligatorios: ${faltantes}.`
+            : 'Faltan documentos obligatorios.',
         );
+      }
+      // HU #11050 (AC3) — documentos que la cascada no pudo generar. Importa desde que el gestor ya no
+      // tiene botones para generarlos a mano (HU #11052): sin este aviso, el documento simplemente no
+      // aparecería en el expediente y no habría forma de saber por qué.
+      for (const aviso of generado?.avisosCascada ?? []) {
+        avisos.push(`No se pudo generar ${consolidadoAvisoLabel(aviso)}.`);
+      }
+      if (avisos.length > 0) {
+        setConsolidadoError(`Expediente consolidado generado. ${avisos.join(' ')}`);
       }
       await load();
       onRefresh?.();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
+      const msg = (err instanceof Error ? err.message : '').trim();
       setConsolidadoError(
-        msg.includes('organismo_requerido')
-          ? 'Selecciona el organismo de tránsito antes de regenerar el consolidado.'
-          : msg.includes('modalidad_no_soportada')
-            ? 'El consolidado no está disponible para esta modalidad.'
-            : msg.includes('storage_unavailable') || msg.includes('almacenamiento') || msg.includes('503')
-              ? 'No se pudo guardar el consolidado en el almacenamiento de archivos. Intenta de nuevo en unos minutos.'
-              : 'No se pudo regenerar el consolidado.',
+        // HU #11051 — el trámite aprobado/anulado ya no admite regeneración del gestor.
+        msg.includes('generacion_bloqueada_estado_final')
+          ? 'El trámite ya está aprobado o anulado: su documentación es definitiva y no se regenera.'
+          : msg.includes('organismo_requerido')
+            ? 'El organismo de tránsito del trámite no está seleccionado o no está activo en el sistema. Verifícalo antes de generar el expediente.'
+            : msg.includes('fur_requerido')
+              ? 'No se pudo generar el FUR del expediente: revisa los datos del trámite e inténtalo de nuevo.'
+              : msg.includes('documentos_incompletos')
+                ? 'Sube los documentos obligatorios antes de generar el consolidado.'
+                : msg.includes('modalidad_no_soportada')
+                  ? 'El consolidado no está disponible para esta modalidad.'
+                  // El cliente ya trae el `detail` del ProblemDetails: se muestra en vez de un genérico
+                  // que descarta justo el motivo. Sin mensaje (fallo de red) sí cae al genérico.
+                  : msg || 'No se pudo generar el consolidado. Revisa la conexión e inténtalo de nuevo.',
       );
     } finally {
       setGeneratingConsolidado(false);
@@ -1810,6 +1722,8 @@ function FurSection({
 
   const generated = (docs ?? []).length > 0;
   const consolidadoGenerated = consolidado !== null;
+  // HU #11052 (AC3) / HU #11051 — en estado final la documentación es definitiva: solo descarga.
+  const estadoFinal = status === 'aprobado' || status === 'anulado';
 
   return (
     <section className="space-y-4" aria-label="Generación del FUR">
@@ -1826,16 +1740,19 @@ function FurSection({
             </span>
           )}
         </div>
+        {/* HU #11052 — la generación ya no va documento por documento: el expediente consolidado es el
+            único disparador y produce en cascada lo que falte. Este texto explica dónde está el botón,
+            porque la sección conserva los datos que el gestor aporta al FUR. */}
         <p className="text-xs opacity-70">
-          Al entrar a este paso se generan automáticamente el FUR
-          {modalidad === 'traspaso' ? ', el contrato de compraventa' : ''}, la solicitud de trámite
-          virtual, el mandato (si aplica) y los certificados. Aquí configuras fecha y observaciones;
-          cuando existan, puedes descargarlos abajo. Preparar no espera esta generación: si falla,
-          puedes regenerar después.
+          El FUR, el certificado de identidad, la impronta y (en traspaso) el contrato de compraventa se
+          generan automáticamente al generar el expediente consolidado, con los datos del trámite.
+          Completa aquí abajo lo que el formulario necesita y genera el expediente cuando esté listo.
         </p>
       </div>
 
-      {/* HU #10987 / #10988 — datos del FUR que aporta el gestor. */}
+      {/* HU #10987 / #10988 — datos del FUR que aporta el gestor. Antes de esta HU el recuadro
+          OBSERVACIONES del formulario oficial era de solo-lectura automática y la fecha era la de
+          generación del PDF. */}
       <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: '#DFE5ED' }}>
         <div>
           <label htmlFor="fur-fecha-tramite" className="text-xs font-semibold mb-1.5 block">
@@ -1852,8 +1769,8 @@ function FurSection({
             style={{ borderColor: '#DFE5ED' }}
           />
           <p className="text-[10px] opacity-60 mt-1">
-            Por defecto es la fecha de hoy. Puedes cambiarla; se estampa en el FUR y en el resto de
-            documentos del trámite.
+            Se estampa en el FUR y en el resto de documentos del trámite. Si la dejas vacía se usa la
+            fecha de hoy.
           </p>
         </div>
 
@@ -1909,13 +1826,10 @@ function FurSection({
           <div>
             <h5 className="text-xs font-bold">Expediente consolidado</h5>
             <p className="text-[11px] opacity-70">
-              Un solo PDF con el FUR, el certificado de identidad y los documentos
+              Un solo PDF con el FUR, el certificado de identidad, la impronta y los documentos
               cargados en el trámite
-              {modalidad === 'traspaso' ? ' (incluye el contrato de compraventa)' : ''}.
-              Se genera al Preparar
-              {consolidadoGenerated
-                ? '; Re-generar solo vuelve a armar este PDF con los documentos ya existentes.'
-                : '.'}
+              {modalidad === 'traspaso' ? ' (incluye el contrato de compraventa)' : ''}. Al generarlo se
+              producen también los documentos que falten.
             </p>
           </div>
 
@@ -1930,37 +1844,166 @@ function FurSection({
             </div>
           )}
 
+          {/* HU #11052 (AC3) / HU #11051 — en estado final la documentación es definitiva: no se
+              ofrece generar, solo consultar y descargar lo que ya existe. */}
+          {estadoFinal ? (
+            <p className="text-[11px] font-medium" style={{ color: '#557EFF' }} role="status">
+              El trámite ya está {status === 'aprobado' ? 'aprobado' : 'anulado'}: su documentación es
+              definitiva. Puedes consultarla y descargarla.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handleGenerateConsolidado()}
+              disabled={generatingConsolidado || !instanceId}
+              className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+              style={{ background: '#162744' }}
+            >
+              {generatingConsolidado
+                ? 'Generando expediente…'
+                : consolidadoGenerated
+                  ? 'Re-generar expediente consolidado'
+                  : 'Generar expediente consolidado'}
+            </button>
+          )}
+
           {consolidadoGenerated && consolidado && (
-            <>
-              <div
-                className="rounded-xl border p-3 flex items-center gap-3"
-                style={{ borderColor: '#557EFF' }}
-              >
-                <FileText className="h-4 w-4 shrink-0" style={{ color: '#557EFF' }} aria-hidden="true" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold">
-                    consolidado · {consolidado.filename}
-                  </p>
-                  <p className="text-[10px] opacity-60 truncate" title={consolidado.sha256}>
-                    SHA-256: {consolidado.sha256}
-                  </p>
-                </div>
-                <DownloadButton instanceId={instanceId} attachment={consolidado} />
+            <div
+              className="rounded-xl border p-3 flex items-center gap-3"
+              style={{ borderColor: '#557EFF' }}
+            >
+              <FileText className="h-4 w-4 shrink-0" style={{ color: '#557EFF' }} aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold">
+                  consolidado · {consolidado.filename}
+                </p>
+                <p className="text-[10px] opacity-60 truncate" title={consolidado.sha256}>
+                  SHA-256: {consolidado.sha256}
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={() => void handleRegenerarConsolidado()}
-                disabled={generatingConsolidado || !instanceId}
-                className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: '#162744' }}
-              >
-                {generatingConsolidado ? 'Regenerando consolidado…' : 'Re-generar consolidado'}
-              </button>
-            </>
+              <DownloadButton instanceId={instanceId} attachment={consolidado} />
+            </div>
           )}
         </div>
       )}
+
+      {/* HU #10611 (Feature #10587) — asignación de SOAT de la ruta de placa, ubicada bajo el
+          Expediente consolidado (movida desde EstadoAcciones). Se auto-oculta salvo sub-estado
+          de placa 'asignado' (el OT ya asignó la placa). */}
+      <PlateFlowCompleteSection instanceId={instanceId} onRefresh={onRefresh} />
     </section>
+  );
+}
+
+/**
+ * Proceso del gestor en sub-estado Asignado: checks opcionales (SOAT / impuesto) y
+ * avance a Terminado para desbloquear Aprobar/Rechazar del OT.
+ */
+function PlateFlowCompleteSection({
+  instanceId,
+  onRefresh,
+}: {
+  instanceId: string | null;
+  onRefresh?: () => void;
+}) {
+  const [plateFlowStatus, setPlateFlowStatus] = useState<string | null>(null);
+  const [soatPagado, setSoatPagado] = useState(false);
+  const [impuestoPagado, setImpuestoPagado] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!instanceId) return;
+    let active = true;
+    tramitesClient
+      .getInstance(instanceId)
+      .then((d) => {
+        if (!active) return;
+        setPlateFlowStatus(d?.plateFlowStatus ?? null);
+        const fields = d?.fieldValues ?? [];
+        setSoatPagado(fields.some((f) => f.fieldKey === 'soat_pagado' && f.valueText === 'true'));
+        setImpuestoPagado(
+          fields.some(
+            (f) => f.fieldKey === 'impuesto_departamental_pagado' && f.valueText === 'true',
+          ),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [instanceId]);
+
+  const completar = async () => {
+    if (!instanceId) return;
+    setWorking(true);
+    setError(null);
+    setMsg(null);
+    try {
+      await tramitesClient.completePlateFlow(instanceId, {
+        soatPagado,
+        impuestoDepartamentalPagado: impuestoPagado,
+      });
+      setPlateFlowStatus('terminado');
+      setMsg('Trámite marcado como Terminado. El OT ya puede aprobar o rechazar.');
+      onRefresh?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo completar el proceso de placa.');
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  if (plateFlowStatus !== 'asignado') return null;
+
+  return (
+    <div className="space-y-3 pt-2 border-t">
+      <div>
+        <h5 className="text-xs font-bold">Procesar trámite (Asignado → Terminado)</h5>
+        <p className="text-[11px] opacity-70">
+          Marca los checks opcionales si aplican y procesa el trámite. Sin pasar a Terminado el OT
+          no puede aprobar ni rechazar.
+        </p>
+      </div>
+
+      <label className="flex cursor-pointer items-center gap-2 text-xs">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-[#557EFF]"
+          checked={soatPagado}
+          onChange={(e) => setSoatPagado(e.target.checked)}
+          disabled={working}
+        />
+        SOAT pagado
+      </label>
+      <label className="flex cursor-pointer items-center gap-2 text-xs">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-[#557EFF]"
+          checked={impuestoPagado}
+          onChange={(e) => setImpuestoPagado(e.target.checked)}
+          disabled={working}
+        />
+        Impuesto departamental pagado
+      </label>
+
+      <button
+        type="button"
+        disabled={working}
+        onClick={() => void completar()}
+        className="rounded-lg bg-[#557eff] px-3.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+      >
+        {working ? 'Procesando…' : 'Marcar como Terminado'}
+      </button>
+
+      {msg ? <p className="m-0 text-xs text-green-700">{msg}</p> : null}
+      {error ? (
+        <p role="alert" className="m-0 text-xs text-orange-700">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -1983,13 +2026,11 @@ function DownloadButton({
       const { blob, filename } = await tramitesClient.downloadAttachment(
         instanceId,
         d.id,
-        undefined,
-        d.filename,
       );
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = filename;
+      a.download = filename || d.filename;
       document.body.appendChild(a);
       a.click();
       a.remove();

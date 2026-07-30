@@ -83,6 +83,29 @@ public interface IProcedureInstanceRepository
     Task<IReadOnlyDictionary<Guid, string>> GetTenantNamesAsync(
         IReadOnlyCollection<Guid> tenantIds, CancellationToken ct = default);
 
+    /// <summary>
+    /// HU #11056 — resuelve el nombre visible de cada usuario indicado, para la columna "Gestor" del
+    /// listado (la persona que radica, <c>created_by_user_id</c>). Devuelve un mapa id→nombre en UNA
+    /// consulta (<c>WHERE id IN …</c>): la columna no debe costar una petición por fila. Los ids sin
+    /// usuario o con nombre vacío se omiten, y la columna cae al identificador de la fila.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetUserDisplayNamesAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Estado de la firma del BAÚL por persona (clave <see cref="Entities.BiometricRules.IdentidadKey"/>),
+    /// para las columnas "Firmado" del listado: <c>true</c> = hay firma vigente hoy; <c>false</c> = hay
+    /// firma pero ya no sirve (vencida o revocada); AUSENTE = esa persona no tiene ninguna firma.
+    /// <para>
+    /// Existe porque la columna necesita distinguir «firmada por baúl» de «baúl vencido», y la ruta de
+    /// lote de la identidad biométrica (<see cref="ListVigenteApprovedIdentityKeysAsync"/>)
+    /// deliberadamente no consulta el baúl para no caer en N+1. Aquí se resuelve en UNA consulta por los
+    /// tenants del listado, que es lo que permite usarlo fila a fila.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyDictionary<string, bool>> ListFirmaBaulVigenciaKeysAsync(
+        IReadOnlyCollection<Guid> tenantIds, DateOnly hoy, CancellationToken ct = default);
+
     /// <summary>Carga la instancia con sus validaciones biométricas (Slice 6).</summary>
     Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 

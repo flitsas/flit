@@ -94,11 +94,13 @@ public sealed class RuesCertificatePdfGenerator : IRuesCertificateGenerator
             ("Tipo Compañía", d.TipoCompania),
             ("Email", d.Email),
             ("Categoría Inscripción", d.Categoria),
-            ("Fecha Inscripción", d.FechaMatricula),
+            // HU #11049 — AÑO/MES/DÍA sin hora. Las fechas llegan como texto del RUES: si no se pueden
+            // interpretar se imprimen tal cual (nunca se inventa ni se vacía un dato del certificado).
+            ("Fecha Inscripción", FlitDocumentDate.Normalize(d.FechaMatricula)),
             ("Id", d.IdRm),
             ("Año Renovado", d.UltimoAnoRenovado),
-            ("Fecha Renovación", d.FechaRenovacion),
-            ("Fecha Actualización", d.FechaActualizacion),
+            ("Fecha Renovación", FlitDocumentDate.Normalize(d.FechaRenovacion)),
+            ("Fecha Actualización", FlitDocumentDate.Normalize(d.FechaActualizacion)),
             ("Tipo Organización", d.TipoOrganizacion),
             ("Razón Cancelación", d.RazonCancelacion),
             ("Número Registro", d.MatriculaMercantil),

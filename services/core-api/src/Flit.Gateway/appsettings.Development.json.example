@@ -13,6 +13,11 @@
         "Destinations": {
           "python-ml-1": { "Address": "http://localhost:4012/" }
         }
+      },
+      "migracion-cluster": {
+        "Destinations": {
+          "migracion-api-1": { "Address": "http://localhost:4030/" }
+        }
       }
     }
   }

@@ -166,6 +166,81 @@ function isIdentityApproved(steps: WizardStep[], modalidad: WizardModalidad): bo
   return identidad ? identidad.status === 'complete' : true;
 }
 
+/**
+ * Aviso del detalle en los estados no editables (HU #11053).
+ *
+ * Antes se imprimía un texto fijo —«Enviado a tránsito … aún puedes generar o descargar el FUR y el
+ * expediente consolidado»— para CUALQUIER estado no editable, así que un trámite aprobado, rechazado o
+ * anulado anunciaba un envío a tránsito que ya no era su situación y ofrecía una generación que, desde
+ * la HU #11051, el backend rechaza en estado final. Ahora el mensaje se deriva del estado real y solo
+ * menciona generar donde de verdad se puede.
+ */
+const READ_ONLY_NOTICE: Record<string, { titulo: string; detalle: string; color: string; bg: string }> = {
+  entregado: {
+    titulo: 'Enviado a tránsito — solo visualización.',
+    detalle:
+      'Este trámite ya no puede editarse, pero aún puedes generar o descargar el expediente consolidado.',
+    color: '#557EFF',
+    bg: 'rgba(85,126,255,0.06)',
+  },
+  aprobado: {
+    titulo: 'Trámite aprobado — solo visualización.',
+    detalle:
+      'El organismo de tránsito lo aprobó. Su documentación es definitiva: puedes consultarla y descargarla, pero ya no se regenera.',
+    color: '#5B8A1F',
+    bg: 'rgba(140,198,63,0.10)',
+  },
+  rechazado: {
+    titulo: 'Trámite rechazado — solo visualización.',
+    detalle:
+      'El organismo de tránsito lo rechazó. Revisa el motivo para saber qué corregir; mientras no se active la subsanación no puede editarse.',
+    color: '#c2410c',
+    bg: 'rgba(255,78,0,0.06)',
+  },
+  anulado: {
+    titulo: 'Trámite anulado — solo visualización.',
+    detalle:
+      'Este trámite quedó sin efecto. Puedes consultar y descargar su documentación, pero no editarlo ni regenerarlo.',
+    color: '#b91c1c',
+    bg: 'rgba(185,28,28,0.06)',
+  },
+  preparado: {
+    titulo: 'Borrador preparado — solo visualización.',
+    detalle:
+      'Los datos quedaron en firme. Desde el paso de decisión puedes radicar el trámite a tránsito.',
+    color: '#B45309',
+    bg: 'rgba(249,172,0,0.08)',
+  },
+};
+
+/** Fallback para un estado no editable no contemplado (nunca debería ocurrir con los estados de N 03). */
+const READ_ONLY_NOTICE_FALLBACK = {
+  titulo: 'Solo visualización.',
+  detalle: 'Este trámite no puede editarse en su estado actual.',
+  color: '#557EFF',
+  bg: 'rgba(85,126,255,0.06)',
+};
+
+function ReadOnlyStateNotice({ estado }: { estado: InstanceStatus | null }) {
+  const notice = (estado && READ_ONLY_NOTICE[estado]) || READ_ONLY_NOTICE_FALLBACK;
+  return (
+    <div
+      className="rounded-xl p-3 text-xs border shrink-0 flex items-start gap-2"
+      style={{ borderColor: notice.color, background: notice.bg, color: '#162744' }}
+      role="status"
+      aria-live="polite"
+    >
+      <Eye className="h-4 w-4 shrink-0 mt-0.5" style={{ color: notice.color }} aria-hidden="true" />
+      <span>
+        <span className="font-semibold" style={{ color: notice.color }}>
+          {notice.titulo}
+        </span>{' '}
+        {notice.detalle}
+      </span>
+    </div>
+  );
+}
+
 /** Icono/marcador por status del paso (✓ / • / 🔒). */
 function StepMarker({ status, index }: { status: WizardStepStatus; index: number }) {
   const s = STATUS_BADGE[status];
@@ -829,21 +904,7 @@ export function TramiteWizard(props: Props) {
       </div>
 
       {fullReadOnly && (
-        <div
-          className="rounded-xl p-3 text-xs border shrink-0 flex items-start gap-2"
-          style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)', color: '#162744' }}
-          role="status"
-          aria-live="polite"
-        >
-          <Eye className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#557EFF' }} aria-hidden="true" />
-          <span>
-            <span className="font-semibold" style={{ color: '#557EFF' }}>
-              Enviado a tránsito — solo visualización.
-            </span>{' '}
-            Este trámite ya no puede editarse, pero aún puedes generar o
-            descargar el FUR y el expediente consolidado.
-          </span>
-        </div>
+        <ReadOnlyStateNotice estado={estadoTramite} />
       )}
 
       {draftFinalized && (

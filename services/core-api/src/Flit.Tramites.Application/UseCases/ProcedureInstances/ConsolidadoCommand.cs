@@ -15,6 +15,12 @@ public sealed record ConsolidadoDocumentDto(Guid AttachmentId, string Tipo, stri
 /// consolidado maestro vigente sin regenerarlo (Feature #10701, botón único). El consolidado del
 /// wizard siempre regenera, así que su default es <c>true</c>.
 /// </param>
+/// <param name="AvisosCascada">
+/// HU #11050 (AC3) — documentos de la cascada que NO se pudieron generar, con el motivo
+/// (<c>"mandato: organismo_requerido"</c>). Antes el fallo de la cascada se descartaba en silencio: el
+/// consolidado salía sin ese documento y el gestor no tenía forma de saber por qué. No bloquea: el
+/// consolidado se entrega igual (misma decisión que la HU #11017 con los documentos obligatorios).
+/// </param>
 public sealed record GenerarConsolidadoResult(
     ConsolidadoDocumentDto Document,
     bool Regenerado = true,
@@ -22,7 +28,8 @@ public sealed record GenerarConsolidadoResult(
     // marca. `Incompleto` + `DocumentosFaltantes` permiten avisar al gestor de que falta, en vez de
     // negarle el documento sin explicacion.
     bool Incompleto = false,
-    IReadOnlyList<string>? DocumentosFaltantes = null);
+    IReadOnlyList<string>? DocumentosFaltantes = null,
+    IReadOnlyList<string>? AvisosCascada = null);
 
 /// <summary>
 /// Regenera los documentos "en caliente" del expediente del wizard (FUR + certificados generados)
@@ -125,9 +132,27 @@ public sealed class GenerarConsolidadoHandler(
             return (new GenerarConsolidadoResult(vigenteDto, Regenerado: false), null);
         }
 
-        // Feature #11066 — el consolidado SOLO fusiona el expediente ya persistido.
-        // NO regenera certificados / mandato / compraventa / etc.: esos se generan en Preparar
-        // (generarFur). Solo si falta el FUR se produce aquí (sin eso no hay qué consolidar).
+        // HU #10860 — regeneración en cascada (β): al estar invalidado, se regeneran primero el FUR y
+        // los documentos en caliente (con fecha vigente) y luego se consolida. Best-effort: si la
+        // regeneración falla (p. ej. falta el organismo), se consolida con los documentos existentes.
+        // HU #11050 (AC3) — lo que la cascada no logró generar, para informarlo al final.
+        var avisosCascada = new List<string>();
+
+        if (!instance.ConsolidadoWizardVigente && hotDocsRegenerator is not null)
+        {
+            // La regeneración en caliente cubre FUR, compraventa, solicitud de trámite virtual y —si el
+            // organismo lo exige— el contrato de mandato (ADR-0036). Su error se recoge en vez de
+            // descartarse: el consolidado sigue, pero el gestor sabrá qué quedó fuera y por qué.
+            var errorCascada = await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct);
+            if (!string.IsNullOrWhiteSpace(errorCascada))
+                avisosCascada.Add($"documentos_del_expediente: {errorCascada}");
+            // HU #11034 — el regenerador ACTUALIZA la instancia (invalida consolidados), y un trigger de
+            // base de datos sube su row_version, que es token de concurrencia. Sin releer, el guardado
+            // final del consolidado viajaba con la versión vieja y Postgres afectaba 0 filas:
+            // DbUpdateConcurrencyException. Es el mismo motivo por el que se relee tras la cascada de la
+            // HU #11029; a esta llamada, anterior, le faltaba.
+            instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+        }
 
         // HU #10522 (RF27/41) — el consolidado ya no rechaza otras modalidades: matrícula y traspaso
         // conservan su orden; cualquier otra modalidad usa el orden genérico (ver ConsolidadoOrderingResolver).
@@ -163,8 +188,14 @@ public sealed class GenerarConsolidadoHandler(
         // (Kyverum) y de que el trámite esté en borrador, así que su fallo NO impide el consolidado.
         if (improntaGenerator is not null && userId is { } operador && !TieneImpronta(instance))
         {
-            await improntaGenerator.TryGenerateAsync(id, tenantId, operador, ct).ConfigureAwait(false);
+            var errorImpronta = await improntaGenerator
+                .TryGenerateAsync(id, tenantId, operador, ct).ConfigureAwait(false);
             instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+            // HU #11050 (AC3) — la impronta depende de Kyverum RUNT; su fallo no impide el consolidado,
+            // pero desde que el gestor ya no tiene botón para generarla a mano (HU #11052) necesita
+            // saber que no entró y por qué.
+            if (!string.IsNullOrWhiteSpace(errorImpronta) && !TieneImpronta(instance))
+                avisosCascada.Add($"impronta: {errorImpronta}");
         }
 
         // HU #11017 — los documentos obligatorios faltantes YA NO bloquean (antes: documentos_incompletos).
@@ -271,7 +302,11 @@ public sealed class GenerarConsolidadoHandler(
 
         var dto = new ConsolidadoDocumentDto(newAttachment.Id, doc.Tipo, doc.Filename, stored.Sha256);
         return (new GenerarConsolidadoResult(
-            dto, Regenerado: true, Incompleto: faltantes.Count > 0, DocumentosFaltantes: faltantes), null);
+            dto,
+            Regenerado: true,
+            Incompleto: faltantes.Count > 0,
+            DocumentosFaltantes: faltantes,
+            AvisosCascada: avisosCascada.Count > 0 ? avisosCascada : null), null);
     }
 
     /// <summary>

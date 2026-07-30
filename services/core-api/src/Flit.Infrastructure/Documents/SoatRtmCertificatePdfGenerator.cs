@@ -73,7 +73,8 @@ public sealed class SoatRtmCertificatePdfGenerator : ISoatRtmCertificateGenerato
     private static string Intro(SoatRtmCertificateData data)
     {
         var placa = Disp(data.Placa);
-        var fecha = Disp(data.FechaConsulta);
+        // HU #11049 — AÑO/MES/DÍA sin hora, también cuando la fecha llega como texto del proveedor.
+        var fecha = Disp(FlitDocumentDate.Normalize(data.FechaConsulta));
         var cuando = string.IsNullOrEmpty(fecha) ? "" : $" el día {fecha}";
         var ramos = data.Rtm is not null ? "SOAT y REVISIÓN TECNOMECÁNICA" : "SOAT";
         return $"En la consulta realizada al RUNT 2.0{cuando} el vehículo de placas {placa} "
@@ -96,13 +97,14 @@ public sealed class SoatRtmCertificatePdfGenerator : ISoatRtmCertificateGenerato
             {
                 row.Spacing(CellGapCm, Unit.Centimetre);
                 Chip(row.RelativeItem(), $"N° {numeroLabel}", b.Poliza, roundLeft: true, roundRight: false);
-                Chip(row.RelativeItem(), "Fecha expedición", b.FechaExpedicion, roundLeft: false, roundRight: false);
-                Chip(row.RelativeItem(), "Fecha vigencia", b.FechaVigencia, roundLeft: false, roundRight: true);
+                // HU #11049 — las fechas del proveedor se normalizan a AÑO/MES/DÍA (sin hora).
+                Chip(row.RelativeItem(), "Fecha expedición", FlitDocumentDate.Normalize(b.FechaExpedicion), roundLeft: false, roundRight: false);
+                Chip(row.RelativeItem(), "Fecha vigencia", FlitDocumentDate.Normalize(b.FechaVigencia), roundLeft: false, roundRight: true);
             });
             tabla.Item().Row(row =>
             {
                 row.Spacing(CellGapCm, Unit.Centimetre);
-                Chip(row.RelativeItem(), "Fecha de vencimiento", b.FechaVencimiento, roundLeft: true, roundRight: false);
+                Chip(row.RelativeItem(), "Fecha de vencimiento", FlitDocumentDate.Normalize(b.FechaVencimiento), roundLeft: true, roundRight: false);
                 Chip(row.RelativeItem(), "Estado", b.Estado, roundLeft: false, roundRight: false);
                 Chip(row.RelativeItem(), entidadLabel, b.Entidad, roundLeft: false, roundRight: true);
             });

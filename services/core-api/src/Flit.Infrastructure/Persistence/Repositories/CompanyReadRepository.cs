@@ -64,6 +64,23 @@ internal sealed class CompanyReadRepository : ICompanyReadRepository
         return new PagedResult<CompanyListItem>(items, totalCount);
     }
 
+    public Task<CompanyListItem?> GetByIdAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+        _context.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == tenantId)
+            .Select(t => new CompanyListItem
+            {
+                Id = t.Id,
+                Nit = t.TaxId,
+                RazonSocial = t.LegalName,
+                Code = t.Code,
+                TenantType = t.TenantType,
+                EstadoActivo = t.IsActive,
+                FechaCreacion = t.CreatedAt,
+                RowVersion = t.RowVersion,
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
     private static IQueryable<Tenant> ApplyFilters(IQueryable<Tenant> query, CompanyListFilter filter)
     {
         if (!string.IsNullOrWhiteSpace(filter.Nit))

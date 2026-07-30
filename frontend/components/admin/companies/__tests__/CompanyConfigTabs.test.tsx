@@ -195,3 +195,49 @@ describe("CompanyConfigTabs (AC2)", () => {
     );
   });
 });
+
+// HU #11062 — el tenant solo vivía en la URL: nada en pantalla confirmaba sobre qué compañía se
+// guardaba, mientras "Guardar todo" persiste con un único PUT atómico.
+describe("CompanyConfigTabs — identificación de la compañía (HU #11062)", () => {
+  const company = { razonSocial: "Transportes ACME SAS", nit: "900123456-7" };
+
+  it("rotula la compañía y el encabezado sobrevive al cambio de pestaña", async () => {
+    const user = userEvent.setup();
+    render(
+      <CompanyConfigTabs settings={settings} company={company} onSaveSettings={vi.fn()} />,
+    );
+
+    const header = screen.getByLabelText("Compañía en configuración");
+    expect(within(header).getByText("Transportes ACME SAS")).toBeInTheDocument();
+    expect(within(header).getByText(/900123456-7/)).toBeInTheDocument();
+
+    // El encabezado va POR ENCIMA de la barra de pestañas: cambiar de pestaña no lo quita.
+    await user.click(screen.getByRole("tab", { name: /historial de cambios/i }));
+    expect(screen.getByLabelText("Compañía en configuración")).toBeInTheDocument();
+  });
+
+  it("identifica la compañía en la confirmación de guardado", async () => {
+    const user = userEvent.setup();
+    render(
+      <CompanyConfigTabs settings={settings} company={company} onSaveSettings={vi.fn()} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /guardar todo/i }));
+
+    const callout = within(screen.getByRole("dialog")).getByTestId("save-config-company");
+    expect(within(callout).getByText("Transportes ACME SAS")).toBeInTheDocument();
+    expect(within(callout).getByText(/900123456-7/)).toBeInTheDocument();
+  });
+
+  it("sin identidad resuelta la pantalla funciona igual, sin hueco", async () => {
+    const user = userEvent.setup();
+    render(<CompanyConfigTabs settings={settings} company={null} onSaveSettings={vi.fn()} />);
+
+    expect(screen.queryByLabelText("Compañía en configuración")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /guardar todo/i }));
+    expect(
+      within(screen.getByRole("dialog")).queryByTestId("save-config-company"),
+    ).not.toBeInTheDocument();
+  });
+});
