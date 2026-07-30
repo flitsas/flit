@@ -55,6 +55,7 @@ public sealed class FieldValueContractGuardTests
     private const string Ocr = App + "UseCases/ProcedureInstances/OcrFieldsCommand.cs";
     private const string Preflight = App + "UseCases/ProcedureInstances/PreflightCommand.cs";
     private const string RuesProvider = Infra + "Consultations/VerifikRuesConsultationProvider.cs";
+    private const string RuesLookup = App + "UseCases/Consultations/RuesPersonLookupHandler.cs";
     private const string WizardFur = "frontend/components/operacion/FirmaFurStep.tsx";
 
     /// <summary>Fichero que se lee para extraer las llaves CONSUMIDAS por los documentos.</summary>
@@ -139,6 +140,9 @@ public sealed class FieldValueContractGuardTests
         // HU #11132 — jurisdicción de la cámara de comercio.
         ["rues_camara_ciudad"] = new(RuesProvider, Modo.Literal),
         ["rues_camara_departamento"] = new(RuesProvider, Modo.Literal),
+        // HU #11133 — snapshot congelado por NIT; lo escribe el lookup del asistente a través de la
+        // constante RuesSnapshots.FieldKey, no de un literal.
+        ["rues_snapshots_json"] = new(RuesLookup, Modo.Dinamico, "RuesSnapshots.FieldKey"),
     };
 
     // ── Infraestructura de la guardia ────────────────────────────────────────
@@ -175,6 +179,8 @@ public sealed class FieldValueContractGuardTests
         // FurCommand lee el estado del SOAT por la constante del gate, no por el literal, porque esa
         // llave es a la vez dato del certificado y gate de aprobación del OT (HU #10973).
         ["soat_estado"] = "Get(fv, SoatGate.FieldKey)",
+        // HU #11133 — el snapshot del RUES se lee por la constante que lo define, no por el literal.
+        ["rues_snapshots_json"] = "Get(fv, RuesSnapshots.FieldKey)",
     };
 
     /// <summary>

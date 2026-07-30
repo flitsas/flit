@@ -4,6 +4,7 @@ using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Avaluos;
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
@@ -788,8 +789,20 @@ public sealed class GenerarFurHandler(
             if (string.IsNullOrEmpty(nit))
                 continue;
 
-            var datos = DatosRuesDeLaInstancia(fv, nit)
-                ?? await _ruesResolver.ResolveAsync(instance.Id, instance.TenantId, nit, ct);
+            // HU #11133 — orden de resolución. Primero el SNAPSHOT congelado al registrar el trámite:
+            // es la fuente de verdad del certificado y no cuesta una llamada al proveedor. Después las
+            // llaves `rues_*` de instancia (trámites anteriores al snapshot, y solo sirven a UNA
+            // compañía). La consulta EN VIVO queda como último recurso y se deja registrada, para
+            // poder medir cuántos trámites siguen dependiendo de ella y apagarla cuando sean cero.
+            IReadOnlyDictionary<string, string?>? datos =
+                RuesSnapshots.Read(Get(fv, RuesSnapshots.FieldKey), nit)
+                ?? DatosRuesDeLaInstancia(fv, nit);
+
+            if (datos is null)
+            {
+                GenerarFurLog.CertificadoRuesConsultaEnVivo(logger, instance.Id);
+                datos = await _ruesResolver.ResolveAsync(instance.Id, instance.TenantId, nit, ct);
+            }
 
             var razonSocial = Val(datos, "rues_razon_social");
             if (datos is null || string.IsNullOrWhiteSpace(razonSocial))
@@ -1181,4 +1194,11 @@ internal static partial class GenerarFurLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Sin datos de registro del RUES para un actor jurídico (instancia {InstanceId}); se omite su certificado en vez de emitirlo en blanco.")]
     public static partial void CertificadoRuesSinDatos(ILogger logger, Guid instanceId);
+
+    // HU #11133 — el camino normal es el snapshot congelado al registrar. Esta traza marca los
+    // trámites que todavía obligan a pagar una consulta al proveedor: cuando deje de aparecer, el
+    // respaldo en vivo se puede retirar.
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Sin snapshot del RUES para un actor jurídico (instancia {InstanceId}); se consulta en vivo como respaldo.")]
+    public static partial void CertificadoRuesConsultaEnVivo(ILogger logger, Guid instanceId);
 }

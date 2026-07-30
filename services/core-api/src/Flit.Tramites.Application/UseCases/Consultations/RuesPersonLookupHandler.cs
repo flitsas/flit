@@ -74,6 +74,19 @@ public sealed class RuesPersonLookupHandler(
             && result.HydratedFields.Count > 0)
         {
             UpsertHydrated(instance, tenantId, result.HydratedFields);
+
+            // HU #11133 — además de las llaves `rues_*` de instancia (que autopoblan el asistente y
+            // solo pueden representar a UNA compañía), se congela el resultado POR NIT. Es la fuente
+            // del certificado: se consulta al registrar y no se vuelve a preguntar al proveedor.
+            var snapshotPrevio = instance.FieldValues
+                .FirstOrDefault(f => string.Equals(f.FieldKey, RuesSnapshots.FieldKey, StringComparison.OrdinalIgnoreCase))
+                ?.ValueText;
+            var snapshot = RuesSnapshots.Merge(snapshotPrevio, nit, result.HydratedFields, now);
+            if (snapshot is not null)
+            {
+                UpsertHydrated(instance, tenantId, [new HydratedField(RuesSnapshots.FieldKey, snapshot, null)]);
+            }
+
             await repo.SaveChangesAsync(ct);
         }
 

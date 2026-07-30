@@ -3,6 +3,7 @@ using System.Text.Json;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -568,6 +569,71 @@ public sealed class FurHandlerTests
 
         error.Should().BeNull();
         result!.Documents.Select(d => d.Tipo).Should().Contain("certificado_rues");
+        resolver.NitsConsultados.Should().BeEmpty();
+    }
+
+    // ── HU #11133 — snapshot congelado al registrar ──────────────────────────
+
+    [Fact]
+    public async Task Generar_ConSnapshotDeAmbasCompanias_NoConsultaAlProveedorNiUnaVez()
+    {
+        // El objetivo del negocio: regenerar el expediente no puede costar consultas al RUES. Con dos
+        // personas jurídicas el camino anterior siempre pagaba al menos una, porque las llaves
+        // `rues_*` son de instancia y solo pueden representar a una de las dos compañías.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorJuridico(instance));          // comprador, NIT 900123456
+        instance.Actors.Add(ActorJuridicoVendedor(instance));  // vendedor,  NIT 800555444
+
+        var snapshot = RuesSnapshots.Merge(
+            null, "900123456",
+            [new HydratedField("rues_razon_social", "EMPRESA DEMO S.A.S.", null)],
+            DateTimeOffset.UtcNow);
+        snapshot = RuesSnapshots.Merge(
+            snapshot, "800555444",
+            [new HydratedField("rues_razon_social", "VENDEDORA S.A.S.", null)],
+            DateTimeOffset.UtcNow);
+        AddFieldValue(instance, RuesSnapshots.FieldKey, snapshot!);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var resolver = new FakeRuesResolver();
+        var (result, error) = await HandlerConRues(resolver).HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        var tipos = result!.Documents.Select(d => d.Tipo).ToList();
+        tipos.Should().Contain("certificado_rues");
+        tipos.Should().Contain("certificado_rues_vendedor");
+        resolver.NitsConsultados.Should().BeEmpty("el snapshot congelado al registrar es la fuente del certificado");
+    }
+
+    [Fact]
+    public async Task Generar_ConSnapshot_TienePrecedenciaSobreLasLlavesDeInstancia()
+    {
+        // Las `rues_*` de instancia quedan como respaldo de trámites anteriores al snapshot; cuando
+        // ambos existen manda el snapshot, que es el que se congeló al registrar ESTE trámite.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        instance.Actors.Add(ActorJuridico(instance));
+        AddFieldValue(instance, "rues_nit", "900123456");
+        AddFieldValue(instance, "rues_razon_social", "NOMBRE DESACTUALIZADO");
+        AddFieldValue(instance, RuesSnapshots.FieldKey, RuesSnapshots.Merge(
+            null, "900123456",
+            [new HydratedField("rues_razon_social", "NOMBRE DEL SNAPSHOT", null)],
+            DateTimeOffset.UtcNow)!);
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var resolver = new FakeRuesResolver();
+        var (result, error) = await HandlerConRues(resolver).HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        _ruesGenerator.Received().GenerateRuesCertificate(
+            Arg.Is<RuesCertificateData>(d => d.RazonSocial == "NOMBRE DEL SNAPSHOT"));
         resolver.NitsConsultados.Should().BeEmpty();
     }
 
