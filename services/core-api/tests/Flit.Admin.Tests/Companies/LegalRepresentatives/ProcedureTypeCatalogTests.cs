@@ -31,7 +31,7 @@ public sealed class ProcedureTypeCatalogTests
         await using var ctx = NewContext();
         var traspaso = Type("TRASPASO_STANDARD", "Traspaso", isActive: true, status: "published");
         var matricula = Type("MATRICULA_NUEVA", "Matrícula inicial", isActive: true, status: "published");
-        var draft = Type("CAMBIO_SERVICIO", "Cambio de servicio", isActive: true, status: "draft");
+        var draft = Type("CAMBIO_COLOR", "Cambio de color", isActive: true, status: "draft");
         var inactivePublished = Type("TRASPASO_LEGACY", "Traspaso legacy", isActive: false, status: "published");
         ctx.ProcedureTypes.AddRange(traspaso, matricula, draft, inactivePublished);
         await ctx.SaveChangesAsync(Ct);
@@ -40,7 +40,7 @@ public sealed class ProcedureTypeCatalogTests
 
         // Solo activos + published, ordenados por nombre (Matrícula < Traspaso).
         result.Select(p => p.Code).Should().Equal("MATRICULA_NUEVA", "TRASPASO_STANDARD");
-        result.Should().NotContain(p => p.Code == "CAMBIO_SERVICIO" || p.Code == "TRASPASO_LEGACY");
+        result.Should().NotContain(p => p.Code == "CAMBIO_COLOR" || p.Code == "TRASPASO_LEGACY");
 
         // Proyecta el ID REAL del catálogo (no un valor hardcodeado) + código + nombre.
         var t = result.Single(p => p.Code == "TRASPASO_STANDARD");

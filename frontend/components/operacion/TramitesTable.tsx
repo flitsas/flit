@@ -3,7 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatFecha } from '@/lib/format/date';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, ArrowLeftRight, Car, Pause, Play, Search, Star, X } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowLeftRight,
+  Car,
+  CheckCircle2,
+  Eye,
+  FileCheck,
+  Pause,
+  Play,
+  Search,
+  Star,
+  X,
+} from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
@@ -11,12 +23,21 @@ import { TramitesListToolbar } from './TramitesListToolbar';
 import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { Modal } from '@/components/atom/Modal';
+import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { EstadoFunnel } from './EstadoFunnel';
 import type {
   InstanceStatus,
   InstanceSummary,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+
+/** Texto corto y discreto del sub-estado de placa (debajo del chip de estado). */
+function plateFlowHint(status: string | null | undefined): string | null {
+  if (status === 'asignado') return 'Placa asignada por el OT';
+  if (status === 'preasignado') return 'Esperando placa del OT';
+  if (status === 'terminado') return 'Listo para el OT';
+  return null;
+}
 
 /**
  * Track A — vista completa del listado de "Trámites en curso": toolbar de
@@ -181,6 +202,43 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
   const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
   // ICT (paridad v1 pause-unpause-massive) — selección de trámites ICT para pausar/reanudar en lote.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  /** Modal Procesar (Asignado → Terminado) desde la tabla. */
+  const [processTarget, setProcessTarget] = useState<InstanceSummary | null>(null);
+  const [soatPagado, setSoatPagado] = useState(false);
+  const [impuestoPagado, setImpuestoPagado] = useState(false);
+  const [processActing, setProcessActing] = useState(false);
+  const [processError, setProcessError] = useState<string | null>(null);
+
+  const openProcesar = (item: InstanceSummary) => {
+    setProcessTarget(item);
+    setSoatPagado(false);
+    setImpuestoPagado(false);
+    setProcessError(null);
+  };
+
+  const confirmProcesar = async () => {
+    if (!processTarget) return;
+    setProcessActing(true);
+    setProcessError(null);
+    try {
+      await tramitesClient.completePlateFlow(
+        processTarget.id,
+        { soatPagado, impuestoDepartamentalPagado: impuestoPagado },
+        isAdmin ? processTarget.tenantId : undefined,
+      );
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === processTarget.id ? { ...it, plateFlowStatus: 'terminado' } : it,
+        ),
+      );
+      setProcessTarget(null);
+    } catch (err) {
+      setProcessError(err instanceof Error ? err.message : 'No se pudo marcar como Terminado.');
+    } finally {
+      setProcessActing(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -573,6 +631,7 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           onTogglePause={handleTogglePause}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
+          onProcesar={openProcesar}
           onOpen={(id, tenantId) =>
             router.push(
               isAdmin && tenantId
@@ -582,6 +641,79 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           }
         />
       </div>
+
+      {processTarget && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="procesar-plate-title"
+        >
+          <div
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
+            style={{ border: '1px solid #DFE5ED' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="procesar-plate-title" className="text-lg font-semibold" style={{ color: '#162744' }}>
+              Procesar trámite
+            </h2>
+            <p className="mt-1 text-sm opacity-80">
+              {processTarget.referenceNumber}
+              {processTarget.placa ? ` · ${processTarget.placa}` : ''}
+            </p>
+            <p className="mt-2 text-xs opacity-70">
+              El OT ya asignó la placa. Marca los checks opcionales si aplican y pasa a Terminado
+              para que el OT pueda aprobar o rechazar.
+            </p>
+            <div className="mt-4 space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[#557EFF]"
+                  checked={soatPagado}
+                  onChange={(e) => setSoatPagado(e.target.checked)}
+                  disabled={processActing}
+                />
+                SOAT pagado
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[#557EFF]"
+                  checked={impuestoPagado}
+                  onChange={(e) => setImpuestoPagado(e.target.checked)}
+                  disabled={processActing}
+                />
+                Impuesto departamental pagado
+              </label>
+            </div>
+            {processError ? (
+              <p role="alert" className="mt-3 text-xs text-orange-700">
+                {processError}
+              </p>
+            ) : null}
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                onClick={() => setProcessTarget(null)}
+                disabled={processActing}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: '#557EFF' }}
+                disabled={processActing}
+                onClick={() => void confirmProcesar()}
+              >
+                {processActing ? 'Procesando…' : 'Marcar como Terminado'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -607,6 +739,7 @@ function TableBody({
   onTogglePause,
   selectedIds,
   onToggleSelect,
+  onProcesar,
   onOpen,
 }: {
   loading: boolean;
@@ -628,6 +761,7 @@ function TableBody({
   onTogglePause: (id: string, next: boolean, tenantId: string) => void;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
+  onProcesar: (item: InstanceSummary) => void;
   onOpen: (id: string, tenantId: string) => void;
 }) {
   const gridCols = `${SELECT_COL} ${showCompania ? GRID_COLS_ADMIN : GRID_COLS}`;
@@ -748,6 +882,7 @@ function TableBody({
               onTogglePause={onTogglePause}
               selected={selectedIds.has(item.id)}
               onToggleSelect={onToggleSelect}
+              onProcesar={onProcesar}
               onOpen={onOpen}
             />
           ))}
@@ -836,6 +971,7 @@ function TramiteRow({
   onTogglePause,
   selected,
   onToggleSelect,
+  onProcesar,
   onOpen,
 }: {
   item: InstanceSummary;
@@ -848,6 +984,7 @@ function TramiteRow({
   onTogglePause: (id: string, next: boolean, tenantId: string) => void;
   selected: boolean;
   onToggleSelect: (id: string) => void;
+  onProcesar: (item: InstanceSummary) => void;
   onOpen: (id: string, tenantId: string) => void;
 }) {
   // ICT (paridad v1) — solo los borradores originados por ICT son pausables/seleccionables.
@@ -859,6 +996,40 @@ function TramiteRow({
   const chip = async?.chip ?? estadoChip(item.estado);
   const isDraft = item.estado === 'borrador';
   const actionLabel = async?.ready ? 'Radicar' : isDraft ? 'Continuar' : 'Ver';
+  const actionIcon = async?.ready ? FileCheck : isDraft ? Play : Eye;
+  const plateHint = plateFlowHint(item.plateFlowStatus);
+  const puedeProcesar =
+    item.estado === 'entregado' && item.plateFlowStatus === 'asignado';
+  const actionItems: ActionsMenuItem[] = [
+    {
+      key: 'abrir',
+      label: actionLabel,
+      icon: actionIcon,
+      // ICT — si está pausado, handleOpen abre el modal de confirmación antes de continuar.
+      onSelect: () => handleOpen(),
+    },
+    // ICT (paridad v1) — pausar/reanudar como acción del menú (solo borradores origin='ict').
+    ...(isIctDraft
+      ? [
+          {
+            key: 'pausa',
+            label: item.isPaused ? 'Reanudar' : 'Pausar',
+            icon: item.isPaused ? Play : Pause,
+            onSelect: () => onTogglePause(item.id, !item.isPaused, item.tenantId),
+          },
+        ]
+      : []),
+    ...(puedeProcesar
+      ? [
+          {
+            key: 'procesar',
+            label: 'Procesar',
+            icon: CheckCircle2,
+            onSelect: () => onProcesar(item),
+          },
+        ]
+      : []),
+  ];
   const motivoRechazo = item.ultimoRechazoMotivo?.trim() || null;
   const subsanacionCount = item.subsanacionCount ?? 0;
   const enSubsanacion = !!item.subsanacionActiva;
@@ -1000,9 +1171,9 @@ function TramiteRow({
           </span>
         </span>
         <span className="relative flex min-w-0 flex-col items-start gap-1">
-          <span className="flex items-center gap-1.5">
-          <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
-          {showRejectPopover ? (
+          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+            {showRejectPopover ? (
             <div ref={popoverRef} className="relative shrink-0">
               <button
                 type="button"
@@ -1094,6 +1265,14 @@ function TramiteRow({
               Pausado
             </span>
           ) : null}
+          {plateHint ? (
+            <span
+              className="text-[10px] leading-tight text-[#162744]/45 dark:text-white/40 truncate"
+              title={plateHint}
+            >
+              {plateHint}
+            </span>
+          ) : null}
         </span>
         <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
           {item.organismoTransito ?? '—'}
@@ -1101,47 +1280,18 @@ function TramiteRow({
         <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
           {shortDate(item.createdAt)}
         </span>
-        <span className="flex items-center justify-end gap-2">
-          {/* ICT (paridad v1 handleChangePausedState) — toggle pausar/reanudar (solo borradores ICT). */}
-          {isIctDraft ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onTogglePause(item.id, !item.isPaused, item.tenantId);
-              }}
-              aria-pressed={!!item.isPaused}
-              aria-label={
-                item.isPaused
-                  ? `Reanudar el trámite ${item.referenceNumber}`
-                  : `Pausar el trámite ${item.referenceNumber}`
-              }
-              title={item.isPaused ? 'Reanudar trámite' : 'Pausar trámite'}
-              className="shrink-0 rounded-md p-1 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-            >
-              {item.isPaused ? (
-                <Play className="h-3.5 w-3.5" style={{ color: '#557EFF' }} aria-hidden="true" />
-              ) : (
-                <Pause className="h-3.5 w-3.5" style={{ color: '#162744', opacity: 0.45 }} aria-hidden="true" />
-              )}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOpen();
-            }}
-            className="rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition"
-            style={
-              isDraft
-                ? { background: 'linear-gradient(135deg,#557EFF,#00DBD5)', color: '#fff' }
-                : { border: '1px solid #DFE5ED', color: '#162744' }
-            }
-            aria-label={`${actionLabel} trámite ${item.referenceNumber}`}
-          >
-            {actionLabel}
-          </button>
+        <span
+          className="flex justify-end"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <ActionsMenu
+            ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
+            items={actionItems}
+            className="bg-white dark:bg-[#162744]"
+            attention={puedeProcesar}
+            attentionHint="Pendiente por procesar: el OT ya asignó la placa"
+          />
         </span>
       </div>
       {/* ICT — confirmación FLIT (Modal con blur/overlay/CTA degradado) al continuar un trámite pausado. */}

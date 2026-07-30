@@ -8,6 +8,7 @@ using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Estados;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
 
@@ -49,7 +50,8 @@ public sealed class SubmitProcedureInstanceTests
             NullOtRuleGate.Instance,
             _recorder,
             _publisher);
-        _sut = new SubmitProcedureInstanceHandler(lifecycle, _repo);
+        _sut = new SubmitProcedureInstanceHandler(
+            lifecycle, _repo, NullPlatePreassignPolicy.Instance, NullLogger<SubmitProcedureInstanceHandler>.Instance);
     }
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status) =>
@@ -339,10 +341,10 @@ public sealed class SubmitProcedureInstanceTests
         instance.Status.Should().Be(TramiteEstado.Entregado);
     }
 
-    [Theory] // AC4/AC5/AC6 (HU #10785) — el submit SIEMPRE deja el status en 'entregado'; lo que varía por
-             // ruta es el SUB-ESTADO interno de placa (Flujo A → asignado, Flujo B → preasignado, estándar → null).
+    [Theory] // submit deja status 'entregado'; sub-estado varía por ruta (incl. Terminado directo).
     [InlineData(PlateRouteDecision.Asignado, PlateFlowStatus.Asignado)]
     [InlineData(PlateRouteDecision.Preasignado, PlateFlowStatus.Preasignado)]
+    [InlineData(PlateRouteDecision.Terminado, PlateFlowStatus.Terminado)]
     [InlineData(PlateRouteDecision.Standard, null)]
     public async Task HandleAsync_RutaDePlaca_QuedaEntregadoConSubEstado(
         PlateRouteDecision decision, string? expectedSubStatus)
@@ -358,7 +360,8 @@ public sealed class SubmitProcedureInstanceTests
 
         var lifecycle = new TramiteLifecycleService(
             _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher);
-        var handler = new SubmitProcedureInstanceHandler(lifecycle, _repo, new FakePlatePolicy(decision));
+        var handler = new SubmitProcedureInstanceHandler(
+            lifecycle, _repo, new FakePlatePolicy(decision), NullLogger<SubmitProcedureInstanceHandler>.Instance);
 
         var (result, error) = await handler.HandleAsync(id, tenantId, changedBy: null, ct);
 
@@ -383,7 +386,8 @@ public sealed class SubmitProcedureInstanceTests
 
         var lifecycle = new TramiteLifecycleService(
             _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher);
-        var handler = new SubmitProcedureInstanceHandler(lifecycle, _repo, new FakePlatePolicy(PlateRouteDecision.Blocked));
+        var handler = new SubmitProcedureInstanceHandler(
+            lifecycle, _repo, new FakePlatePolicy(PlateRouteDecision.Blocked), NullLogger<SubmitProcedureInstanceHandler>.Instance);
 
         var (result, error) = await handler.HandleAsync(id, tenantId, changedBy: null, ct);
 
@@ -397,6 +401,7 @@ public sealed class SubmitProcedureInstanceTests
             Task.FromResult(decision switch
             {
                 PlateRouteDecision.Asignado => PlateRouteResult.Reserved,
+                PlateRouteDecision.Terminado => PlateRouteResult.ReservedSkipToTerminado,
                 PlateRouteDecision.Preasignado => PlateRouteResult.NoPlate,
                 PlateRouteDecision.Blocked => PlateRouteResult.Misconfigured,
                 _ => PlateRouteResult.NotEnabled,

@@ -45,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<SubmitProcedureInstanceHandler>();
         // ICT (paridad v1) — pausar/reanudar trámites ICT desde la UI de FLIT (individual + masivo).
         services.AddScoped<PauseProcedureInstanceHandler>();
+        services.AddScoped<CompletePlateFlowHandler>();
         // HU #10349 — finalizar borrador (fase 2): datos completos sin exigir identidad/FUR.
         services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
         // HU #10536 — marcar trámite como prioritario (ordenamiento con primacía en los listados).

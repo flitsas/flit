@@ -673,6 +673,21 @@ export const tramitesClient = {
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
 
+  /** Gestor en Asignado: checks opcionales + avanza a Terminado. */
+  completePlateFlow: (
+    instanceId: string,
+    body: { soatPagado?: boolean; impuestoDepartamentalPagado?: boolean } = {},
+    tenantId?: string,
+  ) =>
+    request<ProcedureInstanceSummary>(
+      `/api/v1/tramites/instances/${instanceId}/plate-flow/complete`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(body),
+      },
+    ),
+
   // ── Documentos / checklist (Slice 3) ────────────────────────────
   // Checklist guiado por la tipología: qué docTipos exige el trámite y
   // cuáles ya están satisfechos.

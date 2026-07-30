@@ -25,7 +25,7 @@ export type InstanceStatus =
  * {@link InstanceStatus}: mientras avanza, el trámite permanece en `entregado`. `null`/ausente =
  * trámite sin ruta de placa. Gobierna el badge secundario, el panel de SOAT y las acciones del OT.
  */
-export type PlateFlowStatus = 'preasignado' | 'asignado';
+export type PlateFlowStatus = 'preasignado' | 'asignado' | 'terminado';
 
 /** Configuración pública por code: GET /procedure-types/{code}/configuration. */
 export interface ProcedureConfiguration {

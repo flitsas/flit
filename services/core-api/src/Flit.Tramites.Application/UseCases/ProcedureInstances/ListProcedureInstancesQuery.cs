@@ -50,8 +50,9 @@ public sealed record InstanceSummaryDto(
     string? PausedObservation = null,
     // ICT — origen del trámite ('ict' para los creados por la integración). Habilita en la UI la acción
     // de pausar/reanudar SOLO para esos; null/"" en trámites de plataforma (no se ofrece la acción).
-    string? Origin = null);
-
+    string? Origin = null,
+    // Sub-estado de placa (null | preasignado | asignado | terminado), ortogonal a Estado (HU11037).
+    string? PlateFlowStatus = null);
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
 /// <see cref="InstanceSummaryDto"/> para la tabla de operación.
@@ -146,7 +147,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             e.IsPaused,
             // Solo tiene sentido mostrar la nota cuando está pausado; se limpia al reanudar de todos modos.
             e.IsPaused ? e.PausedObservation : null,
-            e.Origin);
+            e.Origin,
+            e.PlateFlowStatus);
     }
 
     /// <summary>

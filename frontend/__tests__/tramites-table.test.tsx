@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   setPriority: vi.fn(),
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
+  completePlateFlow: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -158,8 +159,9 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
     expect(within(row).getByText('Pendiente validación')).toBeInTheDocument();
     // Accesible: el chip expone su estado por aria-label.
     expect(within(row).getByLabelText('Estado: Pendiente validación')).toBeInTheDocument();
-    // Aún no se puede radicar → la acción sigue siendo "Continuar".
-    expect(within(row).getByRole('button', { name: /Continuar/ })).toBeInTheDocument();
+    // Aún no se puede radicar → la acción del menú sigue siendo "Continuar".
+    await userEvent.click(within(row).getByRole('button', { name: /Acciones del trámite/ }));
+    expect(await screen.findByRole('menuitem', { name: 'Continuar' })).toBeInTheDocument();
   });
 
   it('identidad aprobada con firma pendiente muestra "Pendiente firma"', async () => {
@@ -197,7 +199,8 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
 
     const row = (await screen.findByText('RDY001')).closest('[role="button"]') as HTMLElement;
     expect(within(row).getByText('Listo para radicar')).toBeInTheDocument();
-    expect(within(row).getByRole('button', { name: /Radicar trámite/ })).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole('button', { name: /Acciones del trámite/ }));
+    expect(await screen.findByRole('menuitem', { name: 'Radicar' })).toBeInTheDocument();
   });
 });
 
@@ -431,31 +434,32 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
     expect(screen.queryByText('Pausado')).toBeNull();
   });
 
-  it('en un borrador ICT ofrece "Pausar" y al hacer clic llama a pauseInstance (optimista → Reanudar)', async () => {
+  it('en un borrador ICT el menú de acciones ofrece "Pausar" y al elegirlo llama a pauseInstance (optimista → "Reanudar")', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
-      { ...item, id: 'ict1', placa: 'ICT001', origin: 'ict', estado: 'borrador', isPaused: false },
+      { ...item, id: 'ict1', referenceNumber: 'TR-ICT', placa: 'ICT001', origin: 'ict', estado: 'borrador', isPaused: false },
     ]);
     mocks.pauseInstance.mockResolvedValue({ id: 'ict1', isPaused: true, pausedObservation: null });
     render(<TramitesTable />);
 
-    const btn = await screen.findByRole('button', { name: /Pausar el trámite/ });
-    await userEvent.click(btn);
+    await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-ICT' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Pausar' }));
 
     expect(mocks.pauseInstance).toHaveBeenCalledWith('ict1', true, null, undefined);
-    expect(
-      await screen.findByRole('button', { name: /Reanudar el trámite/ }),
-    ).toBeInTheDocument();
+    // Optimista: reabrir el menú ahora ofrece "Reanudar".
+    await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-ICT' }));
+    expect(await screen.findByRole('menuitem', { name: 'Reanudar' })).toBeInTheDocument();
   });
 
-  it('un trámite de plataforma (sin origin ict) no ofrece pausa ni checkbox de selección', async () => {
+  it('un trámite de plataforma (sin origin ict) no ofrece "Pausar" en el menú ni checkbox de selección', async () => {
     const [item] = makeInstances(1);
-    mocks.listInstances.mockResolvedValue([{ ...item, placa: 'PLT001', estado: 'borrador' }]);
+    mocks.listInstances.mockResolvedValue([{ ...item, referenceNumber: 'TR-PLT', placa: 'PLT001', estado: 'borrador' }]);
     render(<TramitesTable />);
 
     await screen.findByText('PLT001');
-    expect(screen.queryByRole('button', { name: /Pausar el trámite/ })).toBeNull();
     expect(screen.queryByRole('checkbox')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Acciones del trámite TR-PLT' }));
+    expect(screen.queryByRole('menuitem', { name: 'Pausar' })).toBeNull();
   });
 
   it('al continuar un trámite PAUSADO abre un modal FLIT (no confirm nativo): cancelar no navega, confirmar sí', async () => {
@@ -465,8 +469,8 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
     ]);
     render(<TramitesTable />);
 
-    const cont = await screen.findByRole('button', { name: 'Continuar trámite TR-PZ' });
-    await userEvent.click(cont);
+    await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-PZ' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Continuar' }));
 
     // Modal de diseño FLIT (role=dialog), no window.confirm.
     const dialog = await screen.findByRole('dialog', { name: /Trámite pausado/i });
@@ -476,8 +480,9 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
     expect(routerPush).not.toHaveBeenCalled();
 
-    // Reabrir y confirmar navega.
-    await userEvent.click(cont);
+    // Reabrir menú → Continuar → confirmar navega.
+    await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-PZ' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Continuar' }));
     const dialog2 = await screen.findByRole('dialog', { name: /Trámite pausado/i });
     await userEvent.click(within(dialog2).getByRole('button', { name: /Continuar de todos modos/ }));
     expect(routerPush).toHaveBeenCalled();

@@ -398,6 +398,36 @@ internal static class ProcedureInstanceEndpoints
             });
         }).WithName("PauseProcedureInstancesMassive");
 
+        // Sub-flujo placa (HU11037): gestor procesa Asignado → Terminado (checks SOAT/impuesto opcionales).
+        group.MapPost("/instances/{id:guid}/plate-flow/complete", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
+            CompletePlateFlowRequest? body,
+            CompletePlateFlowHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(
+                id, tenantId.Value, ResolveUserId(http.User), body ?? new CompletePlateFlowRequest(), ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                TramiteEstadoErrores.TransicionNoPermitida => Results.Problem(
+                    statusCode: 409, title: TramiteEstadoErrores.TransicionNoPermitida,
+                    detail: "El trámite no está en entregado o no admite completar el flujo de placa."),
+                "plate_flow_not_asignado" => Results.Problem(
+                    statusCode: 409, title: "plate_flow_not_asignado",
+                    detail: "Solo se puede procesar cuando el sub-estado de placa es asignado."),
+                TramiteEstadoErrores.ConflictoConcurrencia => Results.Problem(
+                    statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia,
+                    detail: "El trámite cambió mientras se procesaba. Recarga e inténtalo de nuevo."),
+                _ => Results.Ok(result)
+            };
+        }).WithName("CompletePlateFlow");
+
         // Activa subsanación sobre rechazado (flag, sin cambiar status). Solo permitido en rechazado.
         group.MapPost("/instances/{id:guid}/subsanar", async (
             Guid id,
