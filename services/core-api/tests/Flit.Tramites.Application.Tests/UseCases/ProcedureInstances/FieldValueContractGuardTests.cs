@@ -42,7 +42,17 @@ public sealed class FieldValueContractGuardTests
         Dinamico,
     }
 
-    private sealed record Productor(string Fichero, Modo Modo, string? Marcador = null);
+    /// <summary>
+    /// Quién escribe una llave. <paramref name="Ficheros"/> admite VARIOS porque una llave puede tener
+    /// productor primario y respaldo — el caso real: el RUNT entrega la póliza del SOAT y el OCR del PDF
+    /// la aporta cuando el proveedor no la trae (HU #11134). Declarar solo uno escondía media verdad, y
+    /// el valor de este registro está en que describa la realidad completa.
+    /// </summary>
+    private sealed record Productor(string[] Ficheros, Modo Modo, string? Marcador = null)
+    {
+        public Productor(string fichero, Modo modo, string? marcador = null)
+            : this([fichero], modo, marcador) { }
+    }
 
     // ── Rutas relativas a la raíz del repositorio ────────────────────────────
     private const string Src = "services/core-api/src/";
@@ -104,17 +114,14 @@ public sealed class FieldValueContractGuardTests
         ["rtm_vencimiento"] = new(Verifik, Modo.Literal),
         ["rtm_estado"] = new(Verifik, Modo.Literal),
         ["rtm_entidad"] = new(Verifik, Modo.Literal),
-        // HU #11134 — el RUNT (Verifik) pasa a ser el productor primario de la póliza y sus fechas;
-        // el OCR del PDF sigue escribiéndolas como respaldo (su handler respeta la precedencia y nunca
-        // pisa un valor de consulta). Se declara el primario: es el que debe existir.
-        ["soat_poliza"] = new(Verifik, Modo.Literal),
-        ["soat_vigencia"] = new(Verifik, Modo.Literal),
-        ["soat_expedicion"] = new(Verifik, Modo.Literal),
-        // HU #11135 — el RUNT también los produce, por lectura tolerante (ningún contrato disponible
-        // confirma su nombre). El OCR del PDF sigue de respaldo.
-        ["rtm_numero"] = new(Verifik, Modo.Literal),
-        ["rtm_vigencia"] = new(Verifik, Modo.Literal),
-        ["rtm_expedicion"] = new(Verifik, Modo.Literal),
+        // HU #11134 / #11135 — doble productor: el RUNT es el primario y el OCR del PDF el respaldo
+        // (PersistOcrFieldsHandler nunca pisa un valor de consulta). Ambos deben seguir existiendo.
+        ["soat_poliza"] = new([Verifik, Ocr], Modo.Literal),
+        ["soat_vigencia"] = new([Verifik, Ocr], Modo.Literal),
+        ["soat_expedicion"] = new([Verifik, Ocr], Modo.Literal),
+        ["rtm_numero"] = new([Verifik, Ocr], Modo.Literal),
+        ["rtm_vigencia"] = new([Verifik, Ocr], Modo.Literal),
+        ["rtm_expedicion"] = new([Verifik, Ocr], Modo.Literal),
 
         // Fecha de la consulta al RUNT (HU #10974): dato de la EJECUCIÓN, no de la respuesta.
         ["runt_consulta_fecha"] = new(RunConsulta, Modo.Literal),
@@ -246,15 +253,18 @@ public sealed class FieldValueContractGuardTests
 
         foreach (var (llave, productor) in Productores)
         {
-            var fuente = Leer(productor.Fichero);
-            var ok = productor.Modo == Modo.Literal
-                ? ContieneLiteral(fuente, llave)
-                : fuente.Contains(productor.Marcador!, StringComparison.Ordinal);
-
-            if (!ok)
+            foreach (var fichero in productor.Ficheros)
             {
-                var esperado = productor.Modo == Modo.Literal ? $"el literal {llave}" : $"el marcador '{productor.Marcador}'";
-                incumplen.Add($"{llave} → {productor.Fichero} (se esperaba {esperado})");
+                var fuente = Leer(fichero);
+                var ok = productor.Modo == Modo.Literal
+                    ? ContieneLiteral(fuente, llave)
+                    : fuente.Contains(productor.Marcador!, StringComparison.Ordinal);
+
+                if (!ok)
+                {
+                    var esperado = productor.Modo == Modo.Literal ? $"el literal {llave}" : $"el marcador '{productor.Marcador}'";
+                    incumplen.Add($"{llave} → {fichero} (se esperaba {esperado})");
+                }
             }
         }
 
@@ -302,7 +312,56 @@ public sealed class FieldValueContractGuardTests
 
         consumidas.Should().Contain("vehicle_color_runt");
         Productores["vehicle_color_runt"].Modo.Should().Be(Modo.Dinamico);
-        ContieneLiteral(Leer(Productores["vehicle_color_runt"].Fichero), "vehicle_color_runt")
+        ContieneLiteral(Leer(Productores["vehicle_color_runt"].Ficheros[0]), "vehicle_color_runt")
             .Should().BeFalse("si apareciera como literal, el modo dinámico sobraría");
+    }
+
+    // ── HU #11138 — invariantes entre los tres proveedores del RUNT ──────────
+
+    /// <summary>Los tres mappers que traducen una consulta de vehículo del RUNT a <c>field_values</c>.</summary>
+    private static readonly string[] MappersDeRunt = [Verifik, Kyverum, Intempo];
+
+    private const string Intempo = App + "UseCases/Consultations/IntempoVehicleResultMapper.cs";
+
+    [Fact]
+    public void NingunMapperEscribeElEstadoDelSoatSinNormalizar()
+    {
+        // `soat_estado` es a la vez celda del certificado y GATE de aprobación del organismo: el
+        // frontend lo compara estricto contra "vigente" en minúscula, así que escribir el crudo del
+        // RUNT ("VIGENTE") bloquea la aprobación de trámites con SOAT vigente. Ya pasó una vez
+        // (HU #10973, en dos proveedores a la vez) y volvió a aparecer al sumar el tercero.
+        var sinNormalizar = new List<string>();
+
+        foreach (var mapper in MappersDeRunt)
+        {
+            var fuente = Leer(mapper);
+            if (!fuente.Contains("SoatGate.FieldKey", StringComparison.Ordinal))
+                continue; // ese mapper no escribe la llave
+
+            if (!fuente.Contains("SoatGate.Normalize", StringComparison.Ordinal))
+                sinNormalizar.Add(mapper);
+        }
+
+        sinNormalizar.Should().BeEmpty(
+            "estos mappers escriben soat_estado sin pasarlo por SoatGate.Normalize, lo que bloquearía "
+            + "la aprobación del organismo de tránsito: {0}",
+            string.Join(", ", sinNormalizar));
+    }
+
+    [Fact]
+    public void LosModelosDeRespuestaDelSoatDeclaranLoQueSuMapperConsume()
+    {
+        // La forma del fallo que originó el Feature: el modelo declara menos de lo que el servicio
+        // envía, y lo que falta se descarta en silencio al deserializar. Aquí se comprueba lo contrario
+        // —que nada del modelo quede sin usar— porque una propiedad declarada y nunca leída es la
+        // señal de que alguien amplió el modelo y olvidó el mapper.
+        var modelo = Leer(App + "UseCases/Consultations/IntempoVehicleResponse.cs");
+        var mapper = Leer(Intempo);
+
+        foreach (var propiedad in new[] { "NoPoliza", "FechaExpedicion", "FechaVigencia", "FechaVencimiento", "EntidadExpideSoat" })
+        {
+            modelo.Should().Contain($"public string? {propiedad}", "el modelo de Intempo declara {0}", propiedad);
+            mapper.Should().Contain($".{propiedad}", "y su mapper debe consumirlo, no dejarlo muerto");
+        }
     }
 }
