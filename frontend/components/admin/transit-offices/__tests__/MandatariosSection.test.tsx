@@ -9,16 +9,29 @@ import { MandatariosSection } from "../MandatariosSection";
 import { ApiValidationError } from "@/lib/api/types";
 import type { MandateSigner, OtCompany } from "@/lib/api/admin-mandate-signers";
 
-vi.mock("@/lib/api/admin-mandate-signers", () => ({
-  fetchMandateSigners: vi.fn(),
-  fetchOtCompanies: vi.fn(),
-  createMandateSigner: vi.fn(),
-  updateMandateSigner: vi.fn(),
-  inactivateMandateSigner: vi.fn(),
-  reactivateMandateSigner: vi.fn(),
-  sendMandateSignerIdentity: vi.fn(),
-  resendMandateSignerIdentity: vi.fn(),
-}));
+// El mock declaraba solo `fetchMandateSigners`, pero desde la HU #11028 el componente consume
+// `fetchMandateSignersWithFlags` (+ vincular/simular identidad). Al faltar esas funciones el
+// componente fallaba al cargar y TODO el archivo quedaba rojo. Se delega la variante con flags al
+// mock de siempre para que cada test siga configurando `fetchMandateSigners`.
+vi.mock("@/lib/api/admin-mandate-signers", () => {
+  const fetchMandateSigners = vi.fn();
+  return {
+    fetchMandateSigners,
+    fetchMandateSignersWithFlags: vi.fn(async (...args: unknown[]) => ({
+      signers: await (fetchMandateSigners as (...a: unknown[]) => Promise<MandateSigner[]>)(...args),
+      mockIdentityEnabled: false,
+    })),
+    fetchOtCompanies: vi.fn(),
+    createMandateSigner: vi.fn(),
+    updateMandateSigner: vi.fn(),
+    inactivateMandateSigner: vi.fn(),
+    reactivateMandateSigner: vi.fn(),
+    sendMandateSignerIdentity: vi.fn(),
+    resendMandateSignerIdentity: vi.fn(),
+    linkMandateSignerIdentity: vi.fn(),
+    mockMandateSignerIdentity: vi.fn(),
+  };
+});
 
 vi.mock("@/lib/api/admin-ot-security", () => ({
   fetchOtUsers: vi.fn().mockResolvedValue({ data: [] }),
@@ -207,14 +220,16 @@ describe("MandatariosSection (ADR-0023 + ADR-0036)", () => {
   });
 
   // HU #11000 — la tabla muestra el estado de identidad y ofrece la acción sin abrir el panel.
+  // HU #11060 — con la identidad VIGENTE la acción queda deshabilitada: el backend reutiliza la
+  // vigente y no reenvía nada, así que el botón prometía algo que no ocurre.
   it.each([
-    ["valid", "Identidad validada", "Reenviar validación"],
-    ["expired", "Identidad vencida", "Renovar validación"],
-    ["pending", "Validación en proceso", "Reenviar validación"],
-    ["none", "Identidad sin validar", "Enviar validación"],
+    ["valid", "Identidad validada", "Reenviar validación", true],
+    ["expired", "Identidad vencida", "Renovar validación", false],
+    ["pending", "Validación en proceso", "Reenviar validación", false],
+    ["none", "Identidad sin validar", "Enviar validación", false],
   ] as const)(
     "columna Identidad: %s pinta «%s» y ofrece «%s»",
-    async (identityStatus, label, action) => {
+    async (identityStatus, label, action, accionInhabilitada) => {
       vi.mocked(fetchMandateSigners).mockResolvedValue([
         { ...samuel, identityStatus, email: "samuel@x.co" },
       ]);
@@ -222,9 +237,43 @@ describe("MandatariosSection (ADR-0023 + ADR-0036)", () => {
       await screen.findByText("Samuel Cárdenas");
 
       expect(within(screen.getByTestId("ms-identity-signer-1")).getByText(label)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: new RegExp(action, "i") })).toBeInTheDocument();
+      const boton = screen.getByRole("button", { name: new RegExp(action, "i") });
+      expect(boton).toBeInTheDocument();
+      if (accionInhabilitada) {
+        expect(boton).toBeDisabled();
+      } else {
+        expect(boton).toBeEnabled();
+      }
     },
   );
+
+  // HU #11060 — vigencia en curso: se informa hasta cuándo es válida en vez de ofrecer renovarla.
+  it("con la identidad vigente informa hasta cuándo lo está", async () => {
+    vi.mocked(fetchMandateSigners).mockResolvedValue([
+      {
+        ...samuel,
+        identityStatus: "valid",
+        identityValidUntil: "2026-12-31T15:00:00Z",
+        email: "samuel@x.co",
+      },
+    ]);
+    renderSection();
+    await screen.findByText("Samuel Cárdenas");
+
+    expect(screen.getByTestId("ms-identity-vigencia-signer-1")).toHaveTextContent(
+      "Válida hasta 2026/12/31",
+    );
+  });
+
+  it("sin fecha de caducidad no promete una vigencia que no existe", async () => {
+    vi.mocked(fetchMandateSigners).mockResolvedValue([
+      { ...samuel, identityStatus: "valid", identityValidUntil: null, email: "samuel@x.co" },
+    ]);
+    renderSection();
+    await screen.findByText("Samuel Cárdenas");
+
+    expect(screen.queryByTestId("ms-identity-vigencia-signer-1")).not.toBeInTheDocument();
+  });
 
   it("la acción de identidad renueva la vencida y recarga la lista", async () => {
     vi.mocked(fetchMandateSigners).mockResolvedValue([

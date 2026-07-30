@@ -88,54 +88,74 @@ internal sealed class VerifikRuesConsultationProvider(
         }
     }
 
-    // Empresa activa (caso limpio para DEV). El NIT viaja en el contexto; el resto son datos
-    // canónicos que HU #10589 usará para renderizar el certificado.
-    private static ConsultationResult MockResult(string? nit) =>
-        Map(
-            new VerifikRuesResponse
-            {
-                Data = new VerifikRuesData
-                {
-                    CommercialRegistry = new VerifikRuesCommercialRegistry
-                    {
-                        BusinessName = "EMPRESA DEMO S.A.S.",
-                        RegistrationStatus = "ACTIVA",
-                        RegistrationNumber = "0000000",
-                        ChamberCommerce = "Cámara de Comercio de Bogotá",
-                        Nit = nit,
-                        Sigla = "EMPRESA DEMO",
-                        RegistrationDate = "22 de Junio de 2023",
-                        LastRenewedYear = "2026",
-                        RenewalDate = "26 de Marzo de 2026",
-                        Address = "CL 1 D No 20 - 45",
-                        City = "Bogotá D.C.",
-                        Category = "4. GRUPO III. Microempresas",
-                        EconomicActivity = "6201 - Actividades de desarrollo de sistemas informáticos",
-                        OrganizationType = "Sociedad por Acciones Simplificada",
-                        CompanyType = "SOCIEDADES POR ACCIONES SIMPLIFICADAS SAS",
-                        Email = "contacto@empresademo.co",
-                        IdRm = "550000077793",
-                        LastUpdatedDate = "26 de Marzo de 2026",
-                        ReasonForCancellation = "",
-                        LegalRepresentatives =
-                            "REPRESENTACIÓN LEGAL (PRINCIPALES): El gerente tendrá y ejercerá legalmente a la "
-                            + "sociedad ante las autoridades de cualquier orden y ante otras personas jurídicas o "
-                            + "naturales, fuera o dentro de juicio, con amplias facultades generales para el buen "
-                            + "desempeño de su cargo, y con los poderes especiales que exige la ley para novar, "
-                            + "transigir, comprometer, conciliar, desistir y arbitrar los negocios sociales; recibir "
-                            + "bienes en pago, promover acciones judiciales e interponer todos los recursos que "
-                            + "fueren procedentes conforme a la ley.",
-                    },
-                    InfoActivitiesEconomic =
-                    [
-                        new VerifikRuesActivity { Code = "4620", Name = "ciiu_act_econ_pri", Description = "Comercio al por mayor de materias primas agropecuarias; animales vivos" },
-                        new VerifikRuesActivity { Code = "1090", Name = "ciiu_act_econ_sec", Description = "Elaboración de alimentos preparados para animales" },
-                        new VerifikRuesActivity { Code = "0144", Name = "ciiu3", Description = "Cría de ganado porcino" },
-                        new VerifikRuesActivity { Code = "4923", Name = "ciiu4", Description = "Transporte de carga por carretera" },
-                    ],
-                },
-            },
-            nit);
+    /// <summary>
+    /// Empresa activa (caso limpio para DEV). El NIT viaja en el contexto; el resto son datos
+    /// canónicos que el certificado (HU #10589) renderiza.
+    ///
+    /// <para><b>HU #11132 — el mock parte de JSON, no de objetos.</b> Antes construía
+    /// <see cref="VerifikRuesResponse"/> a mano, así que reproducía la forma que el MODELO espera y no
+    /// la que devuelve el servicio: por eso seis nombres de campo equivocados y un cambio de tipo
+    /// pasaron meses inadvertidos —en DEV el certificado se veía perfecto y en real la consulta no
+    /// devolvía nada—. Deserializando una muestra con la forma REAL, el mock recorre exactamente el
+    /// mismo camino que el modo real: si un <c>JsonPropertyName</c> vuelve a divergir, se nota aquí.</para>
+    /// </summary>
+    private static ConsultationResult MockResult(string? nit)
+    {
+        var payload = JsonSerializer.Deserialize<VerifikRuesResponse>(MockPayloadJson, JsonOptions)
+            ?? new VerifikRuesResponse();
+
+        // El NIT lo manda el contexto, no la muestra: sin NIT en el contexto el mock no debe inventar
+        // uno (hay consumidores que distinguen "no se consultó nadie" de "se consultó esta empresa").
+        if (payload.Data?.CommercialRegistry is { } registry)
+            registry.Nit = nit;
+
+        return Map(payload, nit);
+    }
+
+    /// <summary>Muestra con la forma REAL del contrato Verifik RUES v3 (datos de demo).</summary>
+    private const string MockPayloadJson = """
+    {
+      "data": {
+        "category": "RM",
+        "commercialRegistry": {
+          "NIT": "900000000",
+          "acronym": "EMPRESA DEMO",
+          "businessName": "EMPRESA DEMO S.A.S.",
+          "chamberCity": "Bogotá",
+          "chamberCommerce": "BOGOTA",
+          "chamberDepartment": "Cundinamarca",
+          "commercialAddress": "CL 1 D No 20 - 45",
+          "companyLocation": "BOGOTA",
+          "companyType": "SOCIEDADES POR ACCIONES SIMPLIFICADAS SAS",
+          "email": "contacto@empresademo.co",
+          "enrollmentDate": "2023-06-22",
+          "idRm": "550000077793",
+          "lastRenewedYear": "2026",
+          "lastUpdatedDate": "2026-03-26",
+          "legalRepresentatives": {
+            "faculty": "** NOMBRAMIENTOS ** QUE POR DOCUMENTO PRIVADO DE ASAMBLEA DE ACCIONISTAS FUE (RON) NOMBRADO (S): NOMBRE IDENTIFICACION REPRESENTANTE LEGAL DEMO PEREZ ANA C.C. 000000052000000 REPRESENTANTE LEGAL SUPLENTE DEMO GOMEZ LUIS C.C. 000000079000000",
+            "legalRepresentatives": [
+              { "documentNumber": "000000052000000", "documentType": "CC", "name": "DEMO PEREZ ANA", "role": "Representante Legal" },
+              { "documentNumber": "000000079000000", "documentType": "CC", "name": "SUPLENTE DEMO GOMEZ LUIS", "role": "Representante Legal" }
+            ]
+          },
+          "organizationType": "SOCIEDAD ó PERSONA JURIDICA PRINCIPAL ó ESAL",
+          "reasonForCancellation": "",
+          "registrationNumber": "0000000",
+          "registrationStatus": "ACTIVA",
+          "renewalDate": "2026-03-26"
+        },
+        "economicActivities": [
+          { "code": "4620", "description": "Comercio al por mayor de materias primas agropecuarias; animales vivos", "name": "ciiu_act_econ_pri" },
+          { "code": "1090", "description": "Elaboración de alimentos preparados para animales", "name": "ciiu_act_econ_sec" },
+          { "code": "0144", "description": "Cría de ganado porcino", "name": "ciiu3" },
+          { "code": "4923", "description": "Transporte de carga por carretera", "name": "ciiu4" }
+        ]
+      },
+      "signature": { "dateTime": "July 30, 2026 4:31 PM", "message": "Certified by Verifik.co" },
+      "id": "DEMO1"
+    }
+    """;
 
     private static ConsultationResult Map(VerifikRuesResponse payload, string? nit)
     {
@@ -153,30 +173,36 @@ internal sealed class VerifikRuesConsultationProvider(
                 ? $"Empresa activa en RUES: {razonSocial}"
                 : $"Estado en RUES: {estado}");
 
+        var actividades = payload.Data?.EconomicActivities;
+
         var hydrated = new List<HydratedField>
         {
             new("rues_razon_social", razonSocial, null),
             new("rues_estado", estado, null),
-            new("rues_matricula_mercantil", registry?.RegistrationNumber, null),
-            new("rues_camara_comercio", registry?.ChamberCommerce, null),
+            new("rues_matricula_mercantil", Limpio(registry?.RegistrationNumber), null),
+            new("rues_camara_comercio", Limpio(registry?.ChamberCommerce), null),
             // HU #10856 — resto de la tabla certificadora (existencia y representación legal).
-            new("rues_sigla", registry?.Sigla, null),
-            new("rues_fecha_matricula", registry?.RegistrationDate, null),
-            new("rues_ultimo_ano_renovado", registry?.LastRenewedYear, null),
-            new("rues_fecha_renovacion", registry?.RenewalDate, null),
-            new("rues_direccion", registry?.Address, null),
-            new("rues_municipio", registry?.City, null),
-            new("rues_categoria", registry?.Category, null),
-            new("rues_actividad_economica", registry?.EconomicActivity, null),
-            new("rues_tipo_organizacion", registry?.OrganizationType, null),
+            new("rues_sigla", Limpio(registry?.Sigla), null),
+            new("rues_fecha_matricula", Limpio(registry?.RegistrationDate), null),
+            new("rues_ultimo_ano_renovado", Limpio(registry?.LastRenewedYear), null),
+            new("rues_fecha_renovacion", Limpio(registry?.RenewalDate), null),
+            new("rues_direccion", Limpio(registry?.Address), null),
+            new("rues_municipio", Limpio(registry?.City), null),
+            // HU #11132 — el servicio no entrega estos dos como campo propio; se DERIVAN de datos que sí
+            // trae, en vez de dejar dos celdas del certificado condenadas a salir siempre en blanco.
+            new("rues_categoria", CategoriaLegible(payload.Data?.Category), null),
+            new("rues_actividad_economica", ActividadPrincipal(actividades), null),
+            new("rues_tipo_organizacion", Limpio(registry?.OrganizationType), null),
             // HU #10589 (Feature #10852) — resto del REGISTRO COMERCIAL + representación legal + actividades.
-            new("rues_tipo_compania", registry?.CompanyType, null),
-            new("rues_email", registry?.Email, null),
-            new("rues_id_rm", registry?.IdRm, null),
-            new("rues_fecha_actualizacion", registry?.LastUpdatedDate, null),
-            new("rues_razon_cancelacion", registry?.ReasonForCancellation, null),
-            new("rues_representacion_legal", registry?.LegalRepresentatives, null),
-            new("rues_actividades_json", SerializeActividades(payload.Data?.InfoActivitiesEconomic), null),
+            new("rues_tipo_compania", Limpio(registry?.CompanyType), null),
+            new("rues_email", Limpio(registry?.Email), null),
+            new("rues_id_rm", Limpio(registry?.IdRm), null),
+            new("rues_fecha_actualizacion", Limpio(registry?.LastUpdatedDate), null),
+            new("rues_razon_cancelacion", Limpio(registry?.ReasonForCancellation), null),
+            new("rues_representacion_legal", Limpio(registry?.LegalRepresentatives?.Faculty), null),
+            new("rues_camara_ciudad", Limpio(registry?.ChamberCity), null),
+            new("rues_camara_departamento", Limpio(registry?.ChamberDepartment), null),
+            new("rues_actividades_json", SerializeActividades(actividades), null),
         };
         // El NIT del contexto tiene prioridad; si no vino, se usa el que devuelve RUES.
         var nitValue = !string.IsNullOrWhiteSpace(nit) ? nit : registry?.Nit;
@@ -213,6 +239,71 @@ internal sealed class VerifikRuesConsultationProvider(
     private static string? GetValue(ConsultationContext ctx, string key) =>
         ctx.FieldValues.TryGetValue(key, out var v) ? v : null;
 
+    /// <summary>
+    /// HU #11132 — descarta los valores CENTINELA del proveedor. El RUES devuelve literalmente
+    /// <c>"Invalid date"</c> en fechas que no tiene, y ese texto llegaba tal cual al PDF: el
+    /// normalizador documental conserva el original cuando no puede interpretarlo, y hacía bien
+    /// (nunca inventa un dato), pero el centinela no es un dato. Se corta en el origen para que
+    /// ningún consumidor —certificado, wizard o caché— lo herede.
+    /// </summary>
+    private static string? Limpio(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var raw = value.Trim();
+        return Centinelas.Contains(raw) ? null : raw;
+    }
+
+    private static readonly HashSet<string> Centinelas = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "invalid date",
+        "null",
+        "undefined",
+        "n/a",
+    };
+
+    /// <summary>
+    /// "Categoría Inscripción" del certificado. El servicio no la entrega como campo; sí devuelve la
+    /// categoría del registro consultado (<c>RM</c> = registro mercantil), que es lo que la celda
+    /// significa. Un código desconocido se imprime tal cual antes que dejarse en blanco.
+    /// </summary>
+    private static string? CategoriaLegible(string? category)
+    {
+        var raw = Limpio(category);
+        if (raw is null)
+            return null;
+
+        return raw.ToUpperInvariant() switch
+        {
+            "RM" => "Registro Mercantil",
+            "ESAL" => "Entidad Sin Ánimo de Lucro",
+            "RNT" => "Registro Nacional de Turismo",
+            _ => raw,
+        };
+    }
+
+    /// <summary>
+    /// "Actividad Económica" del certificado: la CIIU PRINCIPAL de la lista de actividades
+    /// (<c>ciiu_act_econ_pri</c>), formateada "código - descripción". Tampoco existe como campo propio
+    /// en la respuesta. Si la actividad principal viene sin código ni descripción, la celda queda vacía.
+    /// </summary>
+    private static string? ActividadPrincipal(List<VerifikRuesActivity>? actividades)
+    {
+        var principal = actividades?.FirstOrDefault(a =>
+            string.Equals(a.Name, "ciiu_act_econ_pri", StringComparison.OrdinalIgnoreCase));
+        if (principal is null)
+            return null;
+
+        var codigo = Limpio(principal.Code);
+        var descripcion = Limpio(principal.Description);
+
+        if (codigo is null)
+            return descripcion;
+
+        return descripcion is null ? codigo : $"{codigo} - {descripcion}";
+    }
+
     // HU #10589 — serializa la lista de actividades a JSON compacto (codigo/nombre/descripcion) para
     // persistirla en un único field_value; el generador del certificado la deserializa. Vacía/null → null.
     private static string? SerializeActividades(List<VerifikRuesActivity>? actividades)
@@ -244,10 +335,14 @@ internal sealed class VerifikRuesData
     [JsonPropertyName("commercialRegistry")]
     public VerifikRuesCommercialRegistry? CommercialRegistry { get; set; }
 
-    // HU #10589 (Feature #10852) — lista de actividades económicas (CIIU). Clave aproximada al contrato
-    // Verifik RUES v3; si el servicio real usa otra, llega vacía y la sección queda en blanco.
-    [JsonPropertyName("infoActivitiesEconomic")]
-    public List<VerifikRuesActivity>? InfoActivitiesEconomic { get; set; }
+    // HU #11132 — la lista de actividades económicas (CIIU) viaja en `economicActivities`. Antes se
+    // leía `infoActivitiesEconomic`, que no existe en el contrato: la tabla salía SIEMPRE vacía.
+    [JsonPropertyName("economicActivities")]
+    public List<VerifikRuesActivity>? EconomicActivities { get; set; }
+
+    /// <summary>Categoría del registro consultado ("RM" = registro mercantil). Es el `category` de la petición.</summary>
+    [JsonPropertyName("category")]
+    public string? Category { get; set; }
 }
 
 internal sealed class VerifikRuesActivity
@@ -279,13 +374,13 @@ internal sealed class VerifikRuesCommercialRegistry
     [JsonPropertyName("NIT")]
     public string? Nit { get; set; }
 
-    // HU #10856 — campos adicionales de la tabla certificadora (existencia y representación legal).
-    // NOTA: los nombres JSON son la mejor aproximación al contrato Verifik RUES v3; si el servicio real
-    // usa otras claves, estos campos llegan null y el certificado los deja EN BLANCO (sin romper nada).
-    [JsonPropertyName("tradeName")]
+    // HU #11132 — nombres REALES del contrato Verifik RUES v3, verificados contra una respuesta del
+    // servicio. Los anteriores eran una aproximación y ninguno de estos cinco casaba, así que sus
+    // celdas del certificado salían siempre en blanco.
+    [JsonPropertyName("acronym")]
     public string? Sigla { get; set; }
 
-    [JsonPropertyName("registrationDate")]
+    [JsonPropertyName("enrollmentDate")]
     public string? RegistrationDate { get; set; }
 
     [JsonPropertyName("lastRenewedYear")]
@@ -294,17 +389,18 @@ internal sealed class VerifikRuesCommercialRegistry
     [JsonPropertyName("renewalDate")]
     public string? RenewalDate { get; set; }
 
-    [JsonPropertyName("address")]
+    [JsonPropertyName("commercialAddress")]
     public string? Address { get; set; }
 
-    [JsonPropertyName("city")]
+    [JsonPropertyName("companyLocation")]
     public string? City { get; set; }
 
-    [JsonPropertyName("category")]
-    public string? Category { get; set; }
+    /// <summary>Ciudad de la cámara de comercio (dato propio, distinto de la ubicación de la empresa).</summary>
+    [JsonPropertyName("chamberCity")]
+    public string? ChamberCity { get; set; }
 
-    [JsonPropertyName("economicActivity")]
-    public string? EconomicActivity { get; set; }
+    [JsonPropertyName("chamberDepartment")]
+    public string? ChamberDepartment { get; set; }
 
     [JsonPropertyName("organizationType")]
     public string? OrganizationType { get; set; }
@@ -326,6 +422,24 @@ internal sealed class VerifikRuesCommercialRegistry
     [JsonPropertyName("reasonForCancellation")]
     public string? ReasonForCancellation { get; set; }
 
+    /// <summary>
+    /// HU #11132 — <b>este campo es un OBJETO, no una cadena.</b> Declararlo como <c>string?</c> hacía
+    /// que <c>System.Text.Json</c> lanzara <c>JsonException</c> al deserializar, la excepción se
+    /// capturaba como fallo de transporte y la consulta REAL devolvía "proveedor no disponible" con
+    /// CERO campos. No era que el certificado saliera incompleto: no llegaba ningún dato.
+    /// </summary>
     [JsonPropertyName("legalRepresentatives")]
-    public string? LegalRepresentatives { get; set; }
+    public VerifikRuesLegalRepresentation? LegalRepresentatives { get; set; }
+}
+
+/// <summary>
+/// Bloque de representación legal. Solo se modela <c>faculty</c>, que es lo que pinta el certificado.
+/// El servicio trae además una lista estructurada de representantes (nombre, tipo y número de
+/// documento, rol) que hoy NO se consume: pintarla es una decisión de layout pendiente del PO, y
+/// modelarla sin consumidor sería código muerto. Las claves no modeladas se ignoran al deserializar.
+/// </summary>
+internal sealed class VerifikRuesLegalRepresentation
+{
+    [JsonPropertyName("faculty")]
+    public string? Faculty { get; set; }
 }

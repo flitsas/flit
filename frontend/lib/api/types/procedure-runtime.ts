@@ -25,7 +25,7 @@ export type InstanceStatus =
  * {@link InstanceStatus}: mientras avanza, el trámite permanece en `entregado`. `null`/ausente =
  * trámite sin ruta de placa. Gobierna el badge secundario, el panel de SOAT y las acciones del OT.
  */
-export type PlateFlowStatus = 'preasignado' | 'asignado';
+export type PlateFlowStatus = 'preasignado' | 'asignado' | 'terminado';
 
 /** Configuración pública por code: GET /procedure-types/{code}/configuration. */
 export interface ProcedureConfiguration {
@@ -148,7 +148,51 @@ export interface InstanceSummary {
   subsanacionCount?: number;
   /** Motivo (texto libre) del último rechazo del OT; null si no hay rechazo con motivo. */
   ultimoRechazoMotivo?: string | null;
+  // ── HU #11056 — columnas de seguimiento del listado ──────────────────────────────
+  /** Última modificación del trámite; null si no se ha modificado desde que se creó. */
+  updatedAt?: string | null;
+  /** Persona que radica (nombre visible del usuario creador); null si no se pudo resolver. */
+  gestorNombre?: string | null;
+  /** Fuente por la que entró el trámite. Ver `TramiteFuente` en backend. */
+  fuente?: TramiteFuente | null;
+  /**
+   * Cómo queda ACREDITADA cada parte: por validación de identidad o por firma del baúl. `null` = no
+   * aplica (el vendedor no existe en matrícula inicial).
+   */
+  firmaVendedorEstado?: FirmaParteEstado | null;
+  firmaCompradorEstado?: FirmaParteEstado | null;
+  /**
+   * HU #11055 — adjunto del expediente consolidado del gestor, si ya está generado. `null` = no
+   * generado ⇒ la fila NO ofrece la acción (el botón no dispara generación).
+   */
+  consolidadoAttachmentId?: string | null;
+  // ── ICT (PR #204) — pausa de trámites de la integración ──────────────────────────
+  /**
+   * ICT (servicio v1 pauseDraftProcess / bandera starts_procedure_in_paused): el trámite está pausado
+   * y no avanza (la radicación se bloquea) hasta reanudarlo. Default false para trámites de plataforma.
+   */
+  isPaused?: boolean;
+  /** Nota informativa mostrada cuando el trámite está pausado (origen ICT). null si no está pausado. */
+  pausedObservation?: string | null;
+  /**
+   * Origen del trámite: 'ict' para los creados por la integración con terceros. Solo esos ofrecen la
+   * acción de pausar/reanudar en la UI (paridad v1). null/'' para trámites de plataforma.
+   */
+  origin?: string | null;
 }
+
+/** Fuente por la que el trámite entró a FLIT (HU #11056). No existe fuente "QX": Quipux es salida. */
+export type TramiteFuente = 'dashboard' | 'integracion' | 'migrado';
+
+/**
+ * Cómo queda acreditada una parte en el listado. Son los ÚNICOS tres estados válidos:
+ * - `pendiente`: la validación de identidad no se ha realizado (y no hay firma del baúl).
+ * - `firmado`: identidad validada y aprobada, o firma del baúl vigente.
+ * - `rechazado`: identidad rechazada, o firma del baúl vencida.
+ *
+ * No habla de la firma electrónica de la compraventa: ese es otro eje (`signaturePending`).
+ */
+export type FirmaParteEstado = 'pendiente' | 'firmado' | 'rechazado';
 
 /** Respuesta de GET /instances. */
 export interface InstancesResponse {
@@ -274,12 +318,24 @@ export interface ConsultationProvidersConfig {
  * el actor es jurídico (NIT). Se captura manualmente o se autopobla desde el RUNT y viaja embebido
  * en actor.metadata (sin columnas nuevas). No es un actor de primera clase.
  */
+/**
+ * HU #11061 — mecanismo con el que se plasma la firma del representante legal. `'baul'` = firma
+ * precargada del baúl; `'identidad'` = sello de la validación biométrica.
+ */
+export type MecanismoFirma = 'baul' | 'identidad';
+
 export interface RepresentanteLegal {
   tipoDocumento?: ActorDocumentType;
   numeroDocumento?: string;
   nombreCompleto?: string;
   email?: string;
   telefono?: string;
+  /**
+   * HU #11061 — mecanismo de firma ELEGIDO cuando el representante tiene el baúl y la identidad
+   * vigentes a la vez. Ausente = sin elección explícita ⇒ el backend aplica la precedencia del baúl
+   * (HU #11031), que es el comportamiento previo.
+   */
+  mecanismoFirma?: MecanismoFirma;
 }
 
 export interface ProcedureActor {
@@ -833,6 +889,11 @@ export interface BiometricValidation {
   // Motivo del ÚLTIMO intento fallido mientras la validación sigue ABIERTA (en_proceso): Kyverum permite
   // reintentar. Guía amigable de Kyverum (p.ej. "rostro no completamente visible"). Null si no aplica.
   ultimoIntentoMotivo?: string | null;
+  // HU #11069 — trámite primario + otros del tenant con la misma identidad (detalle VID).
+  procedureInstanceId?: string | null;
+  referenceNumber?: string | null;
+  modalidad?: string | null;
+  linkedProcedures?: LinkedProcedureRef[] | null;
 }
 
 /**
@@ -910,6 +971,14 @@ export interface BiometricValidationsResponse {
   firmaBaulPartes?: string[] | null;
 }
 
+export interface LinkedProcedureRef {
+  instanceId: string;
+  referenceNumber: string;
+  status: string;
+  /** Modalidad del trámite (traspaso / matricula_inicial). HU #11069. */
+  modalidad?: string | null;
+}
+
 /**
  * Espejo de TenantBiometricValidationDto (HU #10234): fila de la vista transversal del submódulo
  * "Validaciones de Identidad". Incluye el trámite al que pertenece (para navegar). Sin email ni
@@ -957,6 +1026,11 @@ export interface TenantBiometricValidation {
    * en paralelo) — se muestra "—" sin romper la tabla.
    */
   email: string | null;
+  /**
+   * Feature #11066 — otros trámites del tenant con la misma identidad documental
+   * (excluye el trámite primario `instanceId` si existe).
+   */
+  linkedProcedures?: LinkedProcedureRef[];
 }
 
 /** KPIs agregados del submódulo de Validaciones (espejo de BiometricValidationStatsDto). */
@@ -1235,6 +1309,12 @@ export interface GenerarConsolidadoResult {
    */
   incompleto?: boolean;
   documentosFaltantes?: string[] | null;
+  /**
+   * HU #11050 (AC3) — documentos de la cascada que NO se pudieron generar, con su motivo
+   * (`"impronta: provider_unavailable"`). Antes el fallo se descartaba en silencio y el consolidado
+   * salía sin ese documento sin que el gestor supiera por qué. No bloquea: el consolidado se entrega.
+   */
+  avisosCascada?: string[] | null;
 }
 
 // ── Participantes del portal (Slice 7B) — lado gestor autenticado ───

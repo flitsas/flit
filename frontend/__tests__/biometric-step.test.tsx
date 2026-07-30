@@ -120,6 +120,17 @@ describe('BiometricStep — partes por modalidad', () => {
       screen.getAllByRole('button', { name: 'Simular validación de identidad' }),
     ).toHaveLength(2);
   });
+
+  // HU21 — saliente antes que entrante, igual que el resumen de firmas y el expediente.
+  it('traspaso presenta el vendedor ANTES del comprador', async () => {
+    render(<BiometricStep instanceId={INSTANCE} modalidad="traspaso" />);
+    await screen.findByRole('group', { name: 'Biométrica Vendedor' });
+    const grupos = screen
+      .getAllByRole('group')
+      .map((g) => g.getAttribute('aria-label'))
+      .filter((label): label is string => label?.startsWith('Biométrica ') ?? false);
+    expect(grupos).toEqual(['Biométrica Vendedor', 'Biométrica Comprador']);
+  });
 });
 
 describe('BiometricStep — mock (simular)', () => {

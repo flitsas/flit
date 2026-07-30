@@ -410,6 +410,15 @@ export const tramitesClient = {
       signaturePending: item.signaturePending ?? false,
       canSubmit: item.canSubmit ?? false,
       prioritario: item.prioritario ?? false,
+      // HU #11056 — mismo criterio: un backend que aún no exponga estas columnas deja la tabla
+      // funcionando. `fuente` cae a 'dashboard' (el origen por defecto), y los estados de "Firmado" a
+      // null = "no aplica", que es la lectura conservadora: no inventa un estado que no se conoce.
+      updatedAt: item.updatedAt ?? null,
+      gestorNombre: item.gestorNombre ?? null,
+      fuente: item.fuente ?? 'dashboard',
+      firmaVendedorEstado: item.firmaVendedorEstado ?? null,
+      firmaCompradorEstado: item.firmaCompradorEstado ?? null,
+      consolidadoAttachmentId: item.consolidadoAttachmentId ?? null,
     }));
   },
 
@@ -424,6 +433,40 @@ export const tramitesClient = {
         body: JSON.stringify({ prioritario }),
       },
     ),
+
+  // ICT (paridad v1 handleChangePausedState) — pausar/reanudar un trámite ICT (solo borradores
+  // origin='ict'). No cambia el estado del ciclo de vida; un trámite pausado no radica (guard 409 en submit).
+  pauseInstance: (
+    id: string,
+    paused: boolean,
+    observation?: string | null,
+    tenantId?: string,
+  ) =>
+    request<{ id: string; isPaused: boolean; pausedObservation: string | null }>(
+      `/api/v1/tramites/instances/${id}/pause`,
+      {
+        method: 'PUT',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ paused, observation: observation ?? null }),
+      },
+    ),
+
+  // ICT (paridad v1 pause-unpause-massive) — pausar/reanudar en lote. Devuelve el detalle por trámite.
+  pauseInstancesMassive: (
+    ids: string[],
+    paused: boolean,
+    observation?: string | null,
+    tenantId?: string,
+  ) =>
+    request<{
+      total: number;
+      processed: number;
+      detail: { id: string; ok: boolean; error: string | null }[];
+    }>(`/api/v1/tramites/instances/pause-massive`, {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: JSON.stringify({ ids, paused, observation: observation ?? null }),
+    }),
 
   // #2 — Organismos de tránsito habilitados para la empresa (tenant del header).
   // El operador solo puede elegir/enviar a estos en el FUR.
@@ -639,6 +682,21 @@ export const tramitesClient = {
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
 
+  /** Gestor en Asignado: checks opcionales + avanza a Terminado. */
+  completePlateFlow: (
+    instanceId: string,
+    body: { soatPagado?: boolean; impuestoDepartamentalPagado?: boolean } = {},
+    tenantId?: string,
+  ) =>
+    request<ProcedureInstanceSummary>(
+      `/api/v1/tramites/instances/${instanceId}/plate-flow/complete`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify(body),
+      },
+    ),
+
   // ── Documentos / checklist (Slice 3) ────────────────────────────
   // Checklist guiado por la tipología: qué docTipos exige el trámite y
   // cuáles ya están satisfechos.
@@ -784,6 +842,7 @@ export const tramitesClient = {
     instanceId: string,
     attachmentId: string,
     tenantId?: string,
+    fallbackFilename?: string,
   ): Promise<{ blob: Blob; filename: string; mimetype: string }> => {
     const res = await fetch(
       apiUrl(`/api/v1/tramites/instances/${instanceId}/attachments/${attachmentId}/download`),
@@ -809,7 +868,7 @@ export const tramitesClient = {
     } catch {
       // raw no era URI-encoded; se usa tal cual.
     }
-    return { blob, filename: filename || attachmentId, mimetype };
+    return { blob, filename: filename || fallbackFilename || attachmentId, mimetype };
   },
 
   // GET URL presignada de previsualización inline (ADR-0029). TTL ~10 min.
@@ -1430,9 +1489,10 @@ export const tramitesClient = {
 
   // POST generar expediente consolidado (matrícula inicial). Fusiona FUR + adjuntos.
   // 409 fur_requerido | documentos_incompletos | modalidad_no_soportada.
-  generarConsolidado: (instanceId: string, tenantId?: string) =>
+  // Feature #11066 — `force=true` invalida caché y regenera desde cero (sin duplicar).
+  generarConsolidado: (instanceId: string, tenantId?: string, force = false) =>
     request<GenerarConsolidadoResult>(
-      `/api/v1/tramites/instances/${instanceId}/consolidado`,
+      `/api/v1/tramites/instances/${instanceId}/consolidado${force ? '?force=true' : ''}`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
@@ -1567,6 +1627,13 @@ export const tramitesClient = {
   startSubsanacion: (instanceId: string, tenantId?: string) =>
     request<InstanceSummary>(
       `/api/v1/tramites/instances/${instanceId}/subsanar`,
+      { method: 'POST', headers: tenantHeader(tenantId) },
+    ),
+
+  /** Cancela subsanación (apaga el flag; el trámite sigue en rechazado). */
+  cancelSubsanacion: (instanceId: string, tenantId?: string) =>
+    request<InstanceSummary>(
+      `/api/v1/tramites/instances/${instanceId}/cancelar-subsanacion`,
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
 };

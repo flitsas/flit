@@ -105,10 +105,13 @@ export interface ProcedureDocumentsState {
   checklist: ChecklistView | null;
   attachments: ProcedureAttachment[];
   loading: boolean;
-  /** tipo del ítem cuya subida está en curso (null = ninguna). */
-  uploadingTipo: string | null;
-  /** tipo del ítem que se está analizando por OCR (null = ninguno). */
-  analyzingTipo: string | null;
+  /**
+   * Tipos con subida en curso (varios en paralelo). Feature #11066 — evidencia por documento
+   * aunque el operador lance otra carga de inmediato.
+   */
+  uploadingTipos: ReadonlySet<string>;
+  /** tipos con OCR en curso (varios en paralelo). */
+  analyzingTipos: ReadonlySet<string>;
   /** id del adjunto en proceso de borrado (null = ninguno). */
   deletingId: string | null;
   /** Resultado OCR por tipo (verificado / rechazado / no analizado). Vive sólo en sesión. */
@@ -120,12 +123,24 @@ const INITIAL_STATE: ProcedureDocumentsState = {
   checklist: null,
   attachments: [],
   loading: false,
-  uploadingTipo: null,
-  analyzingTipo: null,
+  uploadingTipos: new Set(),
+  analyzingTipos: new Set(),
   deletingId: null,
   ocrResults: {},
   error: null,
 };
+
+function withTipoInSet(set: ReadonlySet<string>, tipo: string): Set<string> {
+  const next = new Set(set);
+  next.add(tipo);
+  return next;
+}
+
+function withoutTipoInSet(set: ReadonlySet<string>, tipo: string): Set<string> {
+  const next = new Set(set);
+  next.delete(tipo);
+  return next;
+}
 
 export interface UseProcedureDocumentsOptions {
   /** Modalidad del trámite: decide qué tipos pasan por OCR. */
@@ -205,7 +220,7 @@ export function useProcedureDocuments(
       setState((s) => {
         const rest = { ...s.ocrResults };
         delete rest[tipo];
-        return { ...s, error: null, analyzingTipo: null, ocrResults: rest };
+        return { ...s, error: null, ocrResults: rest };
       });
 
       let fileToUpload = file;
@@ -213,7 +228,10 @@ export function useProcedureDocuments(
 
       if (usaOcr && file.size <= OCR_MAX_BYTES) {
         // 1) OCR antes de subir.
-        setState((s) => ({ ...s, analyzingTipo: tipo }));
+        setState((s) => ({
+          ...s,
+          analyzingTipos: withTipoInSet(s.analyzingTipos, tipo),
+        }));
         let ocr: DocumentOcrResult;
         try {
           ocr = await tramitesClient.analyzeDocument(tipo, file, tenantId);
@@ -221,7 +239,7 @@ export function useProcedureDocuments(
           // Fallo HTTP del OCR → NO se sube. El operador puede reintentar / adjuntar manualmente.
           setState((s) => ({
             ...s,
-            analyzingTipo: null,
+            analyzingTipos: withoutTipoInSet(s.analyzingTipos, tipo),
             error:
               err instanceof Error ? err.message : 'Error al analizar el documento',
           }));
@@ -244,7 +262,7 @@ export function useProcedureDocuments(
         // el cargue, solo queda marcado en la UI (ocrResults[tipo].status = 'rejected').
         setState((s) => ({
           ...s,
-          analyzingTipo: null,
+          analyzingTipos: withoutTipoInSet(s.analyzingTipos, tipo),
           ocrResults: { ...s.ocrResults, [tipo]: ocrUi },
         }));
 
@@ -276,17 +294,23 @@ export function useProcedureDocuments(
         }));
       }
 
-      // 2) Subida a S3 (flujo presign → S3 → register existente).
-      setState((s) => ({ ...s, uploadingTipo: tipo }));
+      // 2) Subida a S3 (flujo presign → S3 → register existente). Varios tipos en paralelo.
+      setState((s) => ({
+        ...s,
+        uploadingTipos: withTipoInSet(s.uploadingTipos, tipo),
+      }));
       try {
         await tramitesClient.uploadAttachment(instanceId, tipo, fileToUpload, tenantId);
-        setState((s) => ({ ...s, uploadingTipo: null }));
+        setState((s) => ({
+          ...s,
+          uploadingTipos: withoutTipoInSet(s.uploadingTipos, tipo),
+        }));
         await refresh();
         return true;
       } catch (err) {
         setState((s) => ({
           ...s,
-          uploadingTipo: null,
+          uploadingTipos: withoutTipoInSet(s.uploadingTipos, tipo),
           error:
             err instanceof Error ? err.message : 'Error al subir el documento',
         }));

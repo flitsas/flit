@@ -506,11 +506,16 @@ function DocRow({
     setBusy(true);
     setError(false);
     try {
-      const { blob, filename } = await tramitesClient.downloadAttachment(instanceId, d.id);
+      const { blob, filename } = await tramitesClient.downloadAttachment(
+        instanceId,
+        d.id,
+        undefined,
+        d.filename,
+      );
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = filename || d.filename;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();

@@ -54,6 +54,29 @@ public static class SignatureEstados
     public const string Cancelada = "cancelada";
 }
 
+/// <summary>
+/// Estado de "Firmado" de UNA parte en el listado de trámites.
+/// <para>
+/// Ajuste del PO sobre la HU #11056: la columna NO habla de la firma electrónica de la compraventa
+/// (<see cref="SignatureEstados"/>), sino de <b>cómo queda acreditada la parte</b> — por validación de
+/// identidad o por firma del baúl. Solo hay tres estados válidos, y son excluyentes.
+/// </para>
+/// </summary>
+public static class FirmaParteEstados
+{
+    /// <summary>La validación de identidad aún no se ha realizado (y no hay firma del baúl).</summary>
+    public const string Pendiente = "pendiente";
+
+    /// <summary>Identidad validada y aprobada, o firma del baúl vigente.</summary>
+    public const string Firmado = "firmado";
+
+    /// <summary>
+    /// Identidad rechazada, o firma del baúl ya vencida (típicamente porque el trámite llevaba mucho
+    /// tiempo en el mismo estado sin que el organismo lo aprobara).
+    /// </summary>
+    public const string Rechazado = "rechazado";
+}
+
 /// <summary>Tipos de documento firmable.</summary>
 public static class SignatureDocTipos
 {

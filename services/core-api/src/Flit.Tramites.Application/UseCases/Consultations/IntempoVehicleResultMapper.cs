@@ -1,3 +1,5 @@
+using Flit.Tramites.Domain.Tramites.Services;
+
 namespace Flit.Tramites.Application.UseCases.Consultations;
 
 /// <summary>
@@ -133,7 +135,48 @@ public static class IntempoVehicleResultMapper
         if (!string.IsNullOrWhiteSpace(r.EstadoDelVehiculo))
             fields.Add(new HydratedField("vehicle_state", r.EstadoDelVehiculo, null));
 
+        // HU #11137 — paridad con los otros proveedores del RUNT. Estos tres campos ya venían
+        // deserializados y se descartaban.
+        if (!string.IsNullOrWhiteSpace(r.TipoServicio))
+            fields.Add(new HydratedField("vehicle_service", r.TipoServicio, null));
+
+        if (!string.IsNullOrWhiteSpace(r.TipoCarroceria))
+            fields.Add(new HydratedField("vehicle_body_type", r.TipoCarroceria, null));
+
+        if (!string.IsNullOrWhiteSpace(r.NoChasis))
+            fields.Add(new HydratedField("vehicle_chassis", r.NoChasis, null));
+
+        // Insumo de la regla de antigüedad de la RTM (HU #11136).
+        if (!string.IsNullOrWhiteSpace(r.FechaMatricula))
+            fields.Add(new HydratedField("vehicle_registration_date", r.FechaMatricula, null));
+
+        // HU #11137 — SOAT. Este mapper producía una verificación de estado y NINGÚN campo, así que un
+        // trámite consultado por Intempo emitía la tabla certificadora del SOAT entera en blanco. El
+        // modelo ya declaraba los seis campos: solo faltaba persistirlos.
+        // Misma selección que los demás proveedores: el vigente y, si no hay, el primero.
+        var soat = r.SoatNacionales?.FirstOrDefault(s =>
+            string.Equals(s?.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase))
+            ?? r.SoatNacionales?.FirstOrDefault();
+
+        Add(fields, "soat_poliza", soat?.NoPoliza);
+        Add(fields, "soat_vigencia", soat?.FechaVigencia);
+        Add(fields, "soat_expedicion", soat?.FechaExpedicion);
+        Add(fields, "soat_vencimiento", soat?.FechaVencimiento);
+        Add(fields, "soat_aseguradora", soat?.EntidadExpideSoat);
+        // NORMALIZADO al vocabulario del gate: esta llave alimenta también la aprobación del OT y el
+        // frontend la compara estricto contra "vigente" en minúscula. El crudo del RUNT la bloquearía.
+        Add(fields, SoatGate.FieldKey, SoatGate.Normalize(soat?.Estado));
+
+        // RTM: el contrato de Intempo NO tiene bloque de revisión técnico-mecánica. No se declara uno
+        // inventado (ver VerifikTecnomecanica): con este proveedor la tabla de RTM depende del OCR del
+        // PDF, y el modelo lo dice en vez de aparentar cobertura.
         return fields;
+    }
+
+    private static void Add(List<HydratedField> fields, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            fields.Add(new HydratedField(key, value, null));
     }
 
     private static string ComputeOverall(IReadOnlyList<ConsultationCheck> checks)

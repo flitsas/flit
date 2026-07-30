@@ -17,6 +17,7 @@ import type { WizardStepFormHandle } from './wizard-step-form';
 import { useProcedureActors } from '@/hooks/useProcedureActors';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { filterCiudades } from '@/lib/catalogs/ciudades-co';
+import { digitsOnly } from '@/lib/format/currency';
 import {
   sanitizeDocNumber,
   validateDocNumber,
@@ -30,6 +31,7 @@ import type {
   ActorRol,
   LegalRepresentativeLookupResult,
   LegalRepresentativeOption,
+  MecanismoFirma,
   BiometricEstado,
   ProcedureActor,
   RepresentanteLegal,
@@ -152,7 +154,8 @@ export interface ActorsValidation {
 }
 
 /**
- * Valida requeridos + email + (traspaso) vendedor≠comprador por doc/email.
+ * Valida requeridos + formato de email + (traspaso) vendedor≠comprador por DOCUMENTO.
+ * El correo compartido entre las partes no bloquea desde la HU #11019.
  * Pura: sin estado, testeable de forma aislada. Ciudad/dirección son opcionales.
  */
 export function validateActors(
@@ -610,6 +613,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         // especiales. Se re-sanea el documento al cambiar de tipo (p.ej. PAS→CC).
         if (patch.numeroDocumento !== undefined || patch.tipoDocumento !== undefined)
           next.numeroDocumento = sanitizeDocNumber(next.numeroDocumento, next.tipoDocumento);
+        if (patch.telefono !== undefined)
+          next.telefono = digitsOnly(next.telefono ?? '');
         if (patch.nombreCompleto !== undefined)
           next.nombreCompleto = sanitizeName(next.nombreCompleto);
         return next;
@@ -626,11 +631,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // Actualiza el representante legal (persona jurídica) de un actor, embebido en el propio actor.
   const updateRepLegal = (index: number, patch: Partial<RepresentanteLegal>) =>
     setActors((prev) =>
-      prev.map((a, i) =>
-        i === index
-          ? { ...a, representanteLegal: { ...a.representanteLegal, ...patch } }
-          : a,
-      ),
+      prev.map((a, i) => {
+        if (i !== index) return a;
+        const rl = { ...a.representanteLegal, ...patch };
+        if (patch.numeroDocumento !== undefined || patch.tipoDocumento !== undefined) {
+          rl.numeroDocumento = sanitizeDocNumber(
+            rl.numeroDocumento ?? '',
+            rl.tipoDocumento ?? 'CC',
+          );
+        }
+        if (patch.telefono !== undefined) rl.telefono = digitsOnly(rl.telefono ?? '');
+        return { ...a, representanteLegal: rl };
+      }),
     );
 
   // HU #10937 — precarga en el actor el representante ELEGIDO (su documento + contacto). El actor
@@ -998,10 +1010,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // ── Bloque de resultado de la consulta (RUNT o RUES, compartido entre layouts) ─────────────
   const runtResult = (index: number) => {
     const runtState: LookupState = runt[index] ?? { status: 'idle' };
+    const actor = actors[index];
+    const channel = actor && isJuridical(actor) ? 'RUES' : 'RUNT';
     if (runtState.status === 'loading') {
       return (
         <p className="text-xs opacity-70" role="status" aria-live="polite">
-          Consultando RUNT…
+          Consultando {channel}…
         </p>
       );
     }
@@ -1080,6 +1094,33 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 label={identidadVigente ? 'Identidad vigente' : 'Sin identidad vigente'}
               />
             </div>
+            {/* HU #11061 — con los DOS mecanismos vigentes el gestor elige con cuál se registra el
+                trámite. Con uno solo no se pregunta: se usa el que hay. Sin ninguno el flujo
+                continúa y los badges de arriba ya dicen que no hay firma que plasmar. */}
+            {firmaVigente && identidadVigente && (
+              <div className="mt-2">
+                <label
+                  htmlFor={`${index}-mecanismo-firma`}
+                  className="opacity-60 font-normal block mb-1"
+                >
+                  Firma con la que se registra el trámite
+                </label>
+                <select
+                  id={`${index}-mecanismo-firma`}
+                  value={actors[index]?.representanteLegal?.mecanismoFirma ?? 'baul'}
+                  disabled={readOnly}
+                  onChange={(e) =>
+                    updateRepLegal(index, {
+                      mecanismoFirma: e.target.value as MecanismoFirma,
+                    })
+                  }
+                  className={INPUT_BASE}
+                >
+                  <option value="baul">Firma del baúl</option>
+                  <option value="identidad">Sello de validación de identidad</option>
+                </select>
+              </div>
+            )}
           </div>
         </div>
       );
@@ -1231,7 +1272,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           role="status"
           aria-live="polite"
         >
-          No se encontró en RUNT — completa los datos manualmente.
+          No se encontró en {channel} — completa los datos manualmente.
         </div>
       );
     }
@@ -1243,7 +1284,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           role="alert"
           aria-live="polite"
         >
-          No se pudo consultar RUNT ({runtState.message}). Puedes completar los datos manualmente.
+          No se pudo consultar {channel} ({runtState.message}). Puedes completar los datos manualmente.
         </div>
       );
     }
@@ -1377,6 +1418,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <input
               id={`${index}-rl-telefono`}
               type="tel"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="tel"
               value={rl.telefono ?? ''}
               onChange={(e) => updateRepLegal(index, { telefono: e.target.value })}
               className={INPUT_BASE}
@@ -1608,6 +1652,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               <input
                 id="comprador-telefono"
                 type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="tel"
                 value={actor.telefono ?? ''}
                 onChange={(e) => {
                   markContactTouched(0, 'telefono');
@@ -1857,6 +1904,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   <input
                     id={`${prefix}-telefono`}
                     type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    autoComplete="tel"
                     value={actor.telefono ?? ''}
                     onChange={(e) => {
                       markContactTouched(index, 'telefono');

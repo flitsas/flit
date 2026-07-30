@@ -8,7 +8,8 @@
  * AC6 — Un error de carga muestra el estado de error, sin datos parciales.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 const mocks = vi.hoisted(() => ({
   getPrevalidacionDetail: vi.fn(),
@@ -162,5 +163,50 @@ describe('PrevalidacionDetailDrawer (HU #11008)', () => {
 
     await screen.findByText('Ana Ríos');
     expect(screen.getByRole('button', { name: /ver tracking|tracking del proceso/i })).toBeInTheDocument();
+  });
+
+  it('HU #11069 — muestra trámites asociados (enlace, id y tipo) en el detalle', async () => {
+    mocks.getPrevalidacionDetail.mockResolvedValueOnce(
+      detail({
+        procedureInstanceId: null,
+        referenceNumber: null,
+        modalidad: null,
+        linkedProcedures: [
+          {
+            instanceId: 'inst-1',
+            referenceNumber: 'TRM-2026-000006',
+            status: 'borrador',
+            modalidad: 'matricula_inicial',
+          },
+          {
+            instanceId: 'inst-99',
+            referenceNumber: 'TRM-2026-000099',
+            status: 'preparado',
+            modalidad: 'traspaso',
+          },
+        ],
+      }),
+    );
+
+    render(<PrevalidacionDetailDrawer validationId="pv-1" onClose={() => {}} />);
+
+    expect(await screen.findByRole('button', { name: /ver trámites asociados/i })).toBeInTheDocument();
+    expect(screen.queryByText('TRM-2026-000006')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /ver trámites asociados/i }));
+
+    const section = await screen.findByLabelText(/trámites asociados a esta validación/i);
+    expect(within(section).getByText('TRM-2026-000006')).toBeInTheDocument();
+    expect(within(section).getByText('TRM-2026-000099')).toBeInTheDocument();
+    expect(within(section).getByRole('link', { name: /TRM-2026-000006/ })).toHaveAttribute(
+      'href',
+      '/tramites/inst-1',
+    );
+    expect(within(section).getByRole('link', { name: /TRM-2026-000099/ })).toHaveAttribute(
+      'href',
+      '/tramites/inst-99',
+    );
+    expect(within(section).getByText(/Matrícula inicial/i)).toBeInTheDocument();
+    expect(within(section).getByText(/Traspaso/i)).toBeInTheDocument();
   });
 });

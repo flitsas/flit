@@ -1,4 +1,5 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 
 namespace Flit.Tramites.Application.UseCases.Persons;
@@ -10,6 +11,7 @@ namespace Flit.Tramites.Application.UseCases.Persons;
 /// usa el listado por-instancia, para no duplicar la proyección a <see cref="BiometricValidationDto"/>.
 /// Pensado para poll de detalle (patrón <c>KyverumPendingView</c> en FE): el consumidor llama este
 /// endpoint cada pocos segundos mientras el estado no sea terminal.
+/// HU #11069 — enriquece el DTO con el trámite primario y <c>linkedProcedures</c> (misma identidad).
 /// </summary>
 public sealed class GetPrevalidacionDetailHandler(IProcedureInstanceRepository repo)
 {
@@ -22,6 +24,38 @@ public sealed class GetPrevalidacionDetailHandler(IProcedureInstanceRepository r
         if (validation is null || validation.TenantId != tenantId)
             return (null, "not_found");
 
-        return (IniciarBiometriaHandler.ToDto(validation, DateTimeOffset.UtcNow), null);
+        var now = DateTimeOffset.UtcNow;
+        var baseDto = IniciarBiometriaHandler.ToDto(validation, now);
+        var linked = await LoadLinkedProceduresAsync(tenantId, validation, ct);
+
+        return (baseDto with
+        {
+            ProcedureInstanceId = validation.ProcedureInstanceId,
+            ReferenceNumber = validation.ProcedureInstance?.ReferenceNumber,
+            Modalidad = validation.ProcedureInstance?.ModalidadEntrada,
+            LinkedProcedures = linked,
+        }, null);
+    }
+
+    private async Task<IReadOnlyList<LinkedProcedureDto>> LoadLinkedProceduresAsync(
+        Guid tenantId,
+        ProcedureInstanceBiometricValidation validation,
+        CancellationToken ct)
+    {
+        var summaries = await repo.ListLinkedProceduresByIdentityDocumentsAsync(
+            tenantId,
+            [(validation.DocumentType, validation.DocumentNumber)],
+            ct);
+
+        var identityKey = BiometricRules.IdentidadKey(
+            tenantId, validation.DocumentType, validation.DocumentNumber);
+        var all = summaries.GetValueOrDefault(identityKey) ?? [];
+
+        // El primario va en ProcedureInstanceId/ReferenceNumber; aquí solo los demás.
+        return all
+            .Where(s => validation.ProcedureInstanceId is null
+                || s.InstanceId != validation.ProcedureInstanceId.Value)
+            .Select(s => new LinkedProcedureDto(s.InstanceId, s.ReferenceNumber, s.Status, s.Modalidad))
+            .ToList();
     }
 }

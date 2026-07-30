@@ -15,6 +15,12 @@ public sealed record ConsolidadoDocumentDto(Guid AttachmentId, string Tipo, stri
 /// consolidado maestro vigente sin regenerarlo (Feature #10701, botón único). El consolidado del
 /// wizard siempre regenera, así que su default es <c>true</c>.
 /// </param>
+/// <param name="AvisosCascada">
+/// HU #11050 (AC3) — documentos de la cascada que NO se pudieron generar, con el motivo
+/// (<c>"mandato: organismo_requerido"</c>). Antes el fallo de la cascada se descartaba en silencio: el
+/// consolidado salía sin ese documento y el gestor no tenía forma de saber por qué. No bloquea: el
+/// consolidado se entrega igual (misma decisión que la HU #11017 con los documentos obligatorios).
+/// </param>
 public sealed record GenerarConsolidadoResult(
     ConsolidadoDocumentDto Document,
     bool Regenerado = true,
@@ -22,7 +28,8 @@ public sealed record GenerarConsolidadoResult(
     // marca. `Incompleto` + `DocumentosFaltantes` permiten avisar al gestor de que falta, en vez de
     // negarle el documento sin explicacion.
     bool Incompleto = false,
-    IReadOnlyList<string>? DocumentosFaltantes = null);
+    IReadOnlyList<string>? DocumentosFaltantes = null,
+    IReadOnlyList<string>? AvisosCascada = null);
 
 /// <summary>
 /// Regenera los documentos "en caliente" del expediente del wizard (FUR + certificados generados)
@@ -47,9 +54,9 @@ public interface IImprontaAutoGenerator
 /// <summary>
 /// Genera el expediente consolidado: fusiona el FUR, el certificado de identidad y los demás adjuntos
 /// del trámite en un único PDF (tipo <c>consolidado</c>). Idempotente: re-generar reemplaza el previo.
-/// <para>HU #11017 — genera EN CASCADA lo que falte en vez de bloquear: si no hay FUR (ni impronta,
-/// cuando se conoce el usuario) los produce y sigue. Los documentos obligatorios faltantes ya no
-/// impiden el consolidado: se genera marcado como incompleto, con la lista de lo que falta.</para>
+/// <para>Feature #11066 — no regenera el paquete documental en caliente (certificados, mandato, etc.):
+/// esos se generan al Preparar. Solo produce el FUR aquí si aún no existe. Los documentos obligatorios
+/// faltantes no impiden el consolidado: se genera marcado como incompleto.</para>
 /// </summary>
 public sealed class GenerarConsolidadoHandler(
     IProcedureInstanceRepository repo,
@@ -63,16 +70,28 @@ public sealed class GenerarConsolidadoHandler(
         Guid id,
         Guid tenantId,
         CancellationToken ct = default) =>
-        HandleAsync(id, tenantId, userId: null, ct);
+        HandleAsync(id, tenantId, userId: null, force: false, ct);
 
     /// <param name="userId">
     /// Operador que pide el consolidado. Necesario solo para generar la impronta en cascada (el
     /// proveedor la exige); sin él, la impronta faltante simplemente no se autogenera.
     /// </param>
+    public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        Guid? userId,
+        CancellationToken ct = default) =>
+        HandleAsync(id, tenantId, userId, force: false, ct);
+
+    /// <param name="force">
+    /// Feature #11066 — cuando es <c>true</c>, invalida el consolidado vigente y lo regenera desde cero
+    /// (FUR en cascada, adjuntos, fusión), en lugar de servir el PDF cacheado.
+    /// </param>
     public async Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         Guid? userId,
+        bool force,
         CancellationToken ct = default)
     {
         // Grafo de checklist (incluye Attachments): permite que el gate "gestor manda" (matriz +
@@ -94,28 +113,28 @@ public sealed class GenerarConsolidadoHandler(
 
         // HU #10860 (ADR-0032) — caché explícita del expediente del wizard: si está vigente y el
         // consolidado persistido existe, se sirve sin regenerar (espejo del maestro, Feature #10701).
+        // Feature #11066 — `force=true` invalida y salta el atajo de caché para reconstruir desde cero.
         var consolidadoVigente = instance.Attachments
             .FirstOrDefault(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
-        if (instance.ConsolidadoWizardVigente && consolidadoVigente is not null)
+        if (force && (instance.ConsolidadoWizardVigente || consolidadoVigente is not null))
+        {
+            instance.InvalidarConsolidados();
+            await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+            instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+            consolidadoVigente = instance.Attachments
+                .FirstOrDefault(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!force && instance.ConsolidadoWizardVigente && consolidadoVigente is not null)
         {
             var vigenteDto = new ConsolidadoDocumentDto(
                 consolidadoVigente.Id, consolidadoVigente.Tipo, consolidadoVigente.Filename, consolidadoVigente.Sha256);
             return (new GenerarConsolidadoResult(vigenteDto, Regenerado: false), null);
         }
 
-        // HU #10860 — regeneración en cascada (β): al estar invalidado, se regeneran primero el FUR y
-        // los documentos en caliente (con fecha vigente) y luego se consolida. Best-effort: si la
-        // regeneración falla (p. ej. falta el organismo), se consolida con los documentos existentes.
-        if (!instance.ConsolidadoWizardVigente && hotDocsRegenerator is not null)
-        {
-            await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct);
-            // HU #11034 — el regenerador ACTUALIZA la instancia (invalida consolidados), y un trigger de
-            // base de datos sube su row_version, que es token de concurrencia. Sin releer, el guardado
-            // final del consolidado viajaba con la versión vieja y Postgres afectaba 0 filas:
-            // DbUpdateConcurrencyException. Es el mismo motivo por el que se relee tras la cascada de la
-            // HU #11029; a esta llamada, anterior, le faltaba.
-            instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
-        }
+        // Feature #11066 — el consolidado SOLO fusiona el expediente ya persistido.
+        // NO regenera certificados / mandato / compraventa / etc.: esos se generan en Preparar
+        // (generarFur). Solo si falta el FUR se produce aquí (sin eso no hay qué consolidar).
 
         // HU #10522 (RF27/41) — el consolidado ya no rechaza otras modalidades: matrícula y traspaso
         // conservan su orden; cualquier otra modalidad usa el orden genérico (ver ConsolidadoOrderingResolver).
@@ -128,8 +147,21 @@ public sealed class GenerarConsolidadoHandler(
             if (hotDocsRegenerator is null)
                 return (null, SubmitGate.FurRequerido);
 
-            var errorFur = await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct);
-            instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+            string? errorFur;
+            try
+            {
+                errorFur = await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct);
+                instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                return (null, "storage_unavailable");
+            }
+
             if (!TieneFur(instance))
                 return (null, errorFur ?? SubmitGate.FurRequerido);
         }
@@ -190,7 +222,20 @@ public sealed class GenerarConsolidadoHandler(
             repo.RemoveAttachment(prev);
         }
 
-        var stored = await storage.SaveAsync(id, doc.Tipo, doc.Filename, new MemoryStream(doc.Content), ct);
+        StoredFile stored;
+        try
+        {
+            stored = await storage.SaveAsync(id, doc.Tipo, doc.Filename, new MemoryStream(doc.Content), ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return (null, "storage_unavailable");
+        }
+
         var newAttachment = new ProcedureInstanceAttachment
         {
             Id = Guid.NewGuid(),

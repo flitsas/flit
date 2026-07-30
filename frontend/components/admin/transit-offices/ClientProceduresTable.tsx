@@ -7,7 +7,7 @@ import { RowActions } from "@/components/atom/RowActions";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, procedureStatusTone } from "./ot-utils";
 import {
-  esperandoSoatDelGestor,
+  esperandoProcesoDelGestor,
   plateFlowChipStyle,
   plateFlowLabel,
   puedeDecidirOt,
@@ -38,6 +38,8 @@ export interface ClientProceduresTableProps {
   consolidadoActingId?: string | null;
   /** Abre el panel de documentos del expediente para el trámite. */
   onVerDocumentos?: (row: OtClientProcedure) => void;
+  /** Abre el panel lateral con el detalle del trámite. */
+  onVerDetalle?: (row: OtClientProcedure) => void;
 }
 
 /** Tabla paginada tramites clientes OT ? patron CompanyListTable (HU #10220). */
@@ -56,6 +58,7 @@ export function ClientProceduresTable({
   onRevoke,
   consolidadoActingId = null,
   onVerDocumentos,
+  onVerDetalle,
 }: ClientProceduresTableProps) {
   return (
     <div className="flex flex-1 flex-col">
@@ -143,9 +146,7 @@ export function ClientProceduresTable({
                       <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   )}
-                  {/* HU #10804 — Aprobar y Rechazar se ocultan JUNTOS en la ruta de placa hasta que la
-                      placa esté 'asignado' y el SOAT 'vigente' (el gestor validó por RUNT o cargó el PDF).
-                      En ruta estándar se muestran como siempre. */}
+                  {/* Aprobar/Rechazar solo en ruta estándar o Terminado. */}
                   {row.status === "entregado" &&
                     puedeDecidirOt(row.plateFlowStatus, row.soatEstado) &&
                     showApprovalActions && (
@@ -166,20 +167,33 @@ export function ClientProceduresTable({
                       ]}
                     />
                   )}
-                  {/* HU #10804 — placa asignada pero SOAT aún no vigente: se avisa por qué no hay acciones. */}
                   {row.status === "entregado" &&
-                    esperandoSoatDelGestor(row.plateFlowStatus, row.soatEstado) &&
+                    esperandoProcesoDelGestor(row.plateFlowStatus) &&
                     showApprovalActions && (
                     <span
                       className="text-[10px] font-medium italic"
                       style={{ color: "#b45309" }}
-                      title="El gestor debe validar el SOAT (RUNT o PDF) antes de que el OT pueda aprobar o rechazar."
+                      title="El gestor debe procesar el trámite (Asignado → Terminado) antes de que el OT apruebe o rechace."
                     >
-                      Esperando validación de SOAT del gestor
+                      Esperando proceso del gestor
                     </span>
                   )}
-                  {/* Feature #10587 / HU #10785 — la ruta de placa vive en plate_flow_status (el status
-                      permanece 'entregado'): asignar (preasignado) y revocar (preasignado/asignado). */}
+                  {/* Badges SOAT/impuesto solo visibles en Terminado. */}
+                  {row.plateFlowStatus === "terminado" && (
+                    <span className="flex flex-wrap justify-end gap-1">
+                      {row.soatPagado && (
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                          SOAT
+                        </span>
+                      )}
+                      {row.impuestoDepartamentalPagado && (
+                        <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+                          Impuesto
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  {/* Feature #10587 — asignar (preasignado/sin asignar) y revocar. */}
                   {row.plateFlowStatus === "preasignado" && showApprovalActions && onAssignPlate && (
                     <button
                       type="button"
@@ -221,6 +235,17 @@ export function ClientProceduresTable({
                       onClick={() => onConsolidado(row)}
                     >
                       {consolidadoActingId === row.id ? "Abriendo…" : "Ver consolidado"}
+                    </button>
+                  )}
+                  {onVerDetalle && (
+                    <button
+                      type="button"
+                      className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold text-foreground"
+                      aria-label={`Ver detalle del trámite ${row.referenceNumber}`}
+                      title="Ver detalle del trámite"
+                      onClick={() => onVerDetalle(row)}
+                    >
+                      Detalle
                     </button>
                   )}
                 </div>

@@ -702,4 +702,34 @@ describe('Validaciones — proceso de identidad (HU #11007/#11008)', () => {
       expect(mocks.getBiometricAuditByValidation).toHaveBeenCalledWith(ROW_APROBADA.id);
     });
   });
+
+  it('HU #11069 — en el listado de Validaciones NO embebe trámites (van en el detalle)', async () => {
+    mocks.listTenantBiometricValidations.mockResolvedValue({
+      validations: [
+        {
+          ...ROW_APROBADA,
+          instanceId: null,
+          referenceNumber: null,
+          modalidad: null,
+          linkedProcedures: [
+            {
+              instanceId: 'inst-99',
+              referenceNumber: 'TRM-2026-000099',
+              status: 'borrador',
+              modalidad: 'matricula_inicial',
+            },
+          ],
+        },
+      ],
+      stats: { total: 1, aprobadas: 1, enProceso: 0, rechazadas: 0, expiradas: 0 },
+      page: 1,
+      pageSize: 20,
+      total: 1,
+    });
+
+    render(<Validaciones />);
+    expect(await screen.findByText('Prevalidación')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/trámites asociados|otros trámites vinculados/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Trámites:/i)).not.toBeInTheDocument();
+  });
 });

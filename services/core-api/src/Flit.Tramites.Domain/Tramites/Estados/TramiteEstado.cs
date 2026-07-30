@@ -69,6 +69,21 @@ public static class TramiteEstado
         || string.Equals(status, Subsanacion, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// ¿El <b>GESTOR</b> puede generar o regenerar documentación del expediente en este estado?
+    /// (HU #11051)
+    /// <para>En los estados <see cref="Finales"/> la documentación del expediente es DEFINITIVA: es la
+    /// que el organismo de tránsito tuvo a la vista al aprobar (o la del trámite anulado). Permitir que
+    /// el gestor la regenerara después reemplazaba esos PDF por otros nuevos, dejando el expediente
+    /// aprobado sin la documentación con la que se aprobó.</para>
+    /// <para><b>Solo aplica al gestor.</b> El sistema SÍ regenera en estado final por diseño: la
+    /// aprobación del organismo de tránsito regenera FUR, mandato, trámite virtual y certificados para
+    /// que reflejen las firmas definitivas (HU #10996), y lo propio hacen la asignación de placa, el
+    /// consumidor de identidad validada y las transiciones de estado. Por eso este gate se aplica en los
+    /// <b>endpoints del gestor</b> y NO dentro de los handlers de generación, que son compartidos.</para>
+    /// </summary>
+    public static bool PermiteGeneracionDocumentalDelGestor(string? status) => !EsFinal(status);
+
+    /// <summary>
     /// ¿La re-radicación selectiva (gates por diff de snapshot) aplica a esta transición a entregado?
     /// </summary>
     public static bool EsReRadicacionSubsanacion(string? from, bool subsanacionActiva) =>

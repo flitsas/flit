@@ -37,6 +37,15 @@ export interface LegalRepresentativeCompanySummary {
   nit: string;
   name: string;
   deeds: RepresentativeDeed[];
+  /**
+   * HU #11058 — contacto de la compañía. El formulario de edición reenvía la lista completa de
+   * compañías y el backend hace upsert con lo que reciba, así que ESTOS CAMPOS TIENEN QUE
+   * PRECARGARSE: mandarlos en blanco los borra.
+   */
+  email?: string | null;
+  address?: string | null;
+  city?: string | null;
+  phone?: string | null;
 }
 
 export interface LegalRepresentativeItem {
@@ -67,6 +76,18 @@ export interface LegalRepresentativeItem {
   isActive: boolean;
   createdAt: string;
   updatedAt?: string | null;
+  /**
+   * HU #11059 — vigencia de la identidad, con la misma semántica que el mandatario del OT:
+   * `valid` | `expired` (⇒ renovar) | `pending` | `none`. `hasSignatureOrIdentity` no distingue una
+   * identidad vigente de una vencida, así que no sirve para decidir si hay que renovar.
+   */
+  identityStatus?: string | null;
+  /** Hasta cuándo es válida la identidad; solo con `identityStatus: "valid"`. */
+  identityValidUntil?: string | null;
+  /** ¿La firma del baúl está registrada y vigente HOY? Vence por separado de la identidad. */
+  firmaBaulVigente?: boolean;
+  /** Hasta cuándo es válida la firma del baúl (fecha, sin hora). */
+  firmaBaulVigenteHasta?: string | null;
 }
 
 /** Página de representantes: `{ data, totalCount, page, pageSize }` (igual que el audit log). */
@@ -220,6 +241,21 @@ export function sendLegalRepresentativeIdentity(
   id: string,
 ): Promise<IdentityValidationSent> {
   return apiFetch<IdentityValidationSent>(`${base(tenantId)}/${id}/identity/send`, {
+    method: "POST",
+  });
+}
+
+/**
+ * POST "/{id}/identity/resend" — RENUEVA la validación de identidad (HU #11059). El backend respeta la
+ * vigencia: con una aprobada y vigente devuelve `reused: true` sin reenviar nada; en cualquier otro
+ * caso (vencida, rechazada, expirada o en curso) inicia una nueva. Por eso la UI solo ofrece renovar
+ * cuando NO está vigente.
+ */
+export function resendLegalRepresentativeIdentity(
+  tenantId: string,
+  id: string,
+): Promise<IdentityValidationSent> {
+  return apiFetch<IdentityValidationSent>(`${base(tenantId)}/${id}/identity/resend`, {
     method: "POST",
   });
 }

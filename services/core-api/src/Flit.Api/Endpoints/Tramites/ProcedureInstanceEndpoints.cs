@@ -100,8 +100,8 @@ internal static class ProcedureInstanceEndpoints
             ListProcedureInstancesHandler handler,
             CancellationToken ct) =>
         {
-            var (tenantId, isSuperAdmin) = ResolveTenantContext(http);
-            var items = await handler.HandleAsync(tenantId, isSuperAdmin, ct);
+            var (tenantId, _) = ResolveTenantContext(http);
+            var items = await handler.HandleAsync(tenantId, ct);
             return Results.Ok(new { items });
         }).WithName("ListProcedureInstances");
 
@@ -320,6 +320,8 @@ internal static class ProcedureInstanceEndpoints
                 // N 03 — el submit radica vía TramiteLifecycleService; códigos del contrato ADR-0022.
                 TramiteEstadoErrores.EstadoFinal => Results.Problem(statusCode: 422, title: TramiteEstadoErrores.EstadoFinal, detail: "El trámite está en estado final y no admite radicación."),
                 TramiteEstadoErrores.TransicionNoPermitida => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.TransicionNoPermitida, detail: "La instancia ya fue entregada o su estado no permite radicar."),
+                // ICT (servicio v1 pauseDraftProcess) — el trámite está pausado y no avanza hasta reanudarlo.
+                TramiteEstadoErrores.TramitePausado => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.TramitePausado, detail: "El trámite está pausado: reanúdelo antes de radicar."),
                 TramiteEstadoErrores.ConflictoConcurrencia => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia, detail: "El trámite fue modificado por otro proceso. Recargue e intente de nuevo."),
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
                 TramiteEstadoErrores.DocumentosIncompletos => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.DocumentosIncompletos, detail: "Faltan documentos obligatorios para radicar."),
@@ -348,6 +350,84 @@ internal static class ProcedureInstanceEndpoints
             };
         }).WithName("SubmitProcedureInstance");
 
+        // ICT (paridad v1 handleChangePausedState) — pausar/reanudar un trámite ICT desde la UI de FLIT.
+        // Solo borradores originados por ICT (origin='ict'); un trámite pausado no radica (guard 409 en submit).
+        group.MapPut("/instances/{id:guid}/pause", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            PauseProcedureInstanceRequest body,
+            HttpContext http,
+            PauseProcedureInstanceHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (ok, error) = await handler.HandleAsync(
+                id, tenantId.Value, body.Paused, body.Observation, ResolveUserId(http.User), ct);
+            return error switch
+            {
+                null => Results.Ok(new { id, isPaused = body.Paused, pausedObservation = ok && body.Paused ? body.Observation : null }),
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "not_ict" => Results.Problem(statusCode: 409, title: "not_ict", detail: "Solo se pueden pausar/reanudar trámites originados por ICT."),
+                "not_borrador" => Results.Problem(statusCode: 409, title: "not_borrador", detail: "Solo se puede pausar/reanudar un trámite en borrador."),
+                _ => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se pudo cambiar el estado de pausa."),
+            };
+        }).WithName("PauseProcedureInstance");
+
+        // ICT (paridad v1 pause-unpause-massive) — pausar/reanudar en lote. Detalle por trámite.
+        group.MapPost("/instances/pause-massive", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            PauseProcedureInstancesBulkRequest body,
+            HttpContext http,
+            PauseProcedureInstanceHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+            if (body.Ids is null || body.Ids.Count == 0)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique al menos un trámite.");
+
+            var results = await handler.HandleBulkAsync(
+                body.Ids, tenantId.Value, body.Paused, body.Observation, ResolveUserId(http.User), ct);
+            return Results.Ok(new
+            {
+                total = results.Count,
+                processed = results.Count(r => r.Ok),
+                detail = results.Select(r => new { id = r.Id, ok = r.Ok, error = r.Error }),
+            });
+        }).WithName("PauseProcedureInstancesMassive");
+
+        // Sub-flujo placa (HU11037): gestor procesa Asignado → Terminado (checks SOAT/impuesto opcionales).
+        group.MapPost("/instances/{id:guid}/plate-flow/complete", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
+            CompletePlateFlowRequest? body,
+            CompletePlateFlowHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(
+                id, tenantId.Value, ResolveUserId(http.User), body ?? new CompletePlateFlowRequest(), ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                TramiteEstadoErrores.TransicionNoPermitida => Results.Problem(
+                    statusCode: 409, title: TramiteEstadoErrores.TransicionNoPermitida,
+                    detail: "El trámite no está en entregado o no admite completar el flujo de placa."),
+                "plate_flow_not_asignado" => Results.Problem(
+                    statusCode: 409, title: "plate_flow_not_asignado",
+                    detail: "Solo se puede procesar cuando el sub-estado de placa es asignado."),
+                TramiteEstadoErrores.ConflictoConcurrencia => Results.Problem(
+                    statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia,
+                    detail: "El trámite cambió mientras se procesaba. Recarga e inténtalo de nuevo."),
+                _ => Results.Ok(result)
+            };
+        }).WithName("CompletePlateFlow");
+
         // Activa subsanación sobre rechazado (flag, sin cambiar status). Solo permitido en rechazado.
         group.MapPost("/instances/{id:guid}/subsanar", async (
             Guid id,
@@ -373,6 +453,32 @@ internal static class ProcedureInstanceEndpoints
                 _ => Results.Problem(statusCode: 422, title: error, detail: "No se pudo iniciar la subsanación."),
             };
         }).WithName("StartSubsanacionProcedureInstance");
+
+        // Cancela la subsanación (apaga el flag) sobre rechazado. El status sigue en rechazado.
+        group.MapPost("/instances/{id:guid}/cancelar-subsanacion", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
+            CancelSubsanacionHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ResolveUserId(http.User), ct);
+            return error switch
+            {
+                null => Results.Ok(result),
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "not_rechazado" => Results.Problem(
+                    statusCode: 409, title: "Conflict",
+                    detail: "Solo un trámite en estado rechazado puede cancelar la subsanación."),
+                TramiteEstadoErrores.ConflictoConcurrencia => Results.Problem(
+                    statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia,
+                    detail: "El trámite fue modificado por otro proceso. Recargue e intente de nuevo."),
+                _ => Results.Problem(statusCode: 422, title: error, detail: "No se pudo cancelar la subsanación."),
+            };
+        }).WithName("CancelSubsanacionProcedureInstance");
 
         // N 03 (RF01–RF05) — transición explícita de estado del ciclo de vida. Body: toStatus
         // (borrador|anulado|preparado|entregado|aprobado|rechazado)
@@ -664,6 +770,16 @@ internal sealed record TransitionProcedureInstanceRequest(string? ToStatus, stri
 
 /// <summary>Body de PATCH /instances/{id}/priority (HU #10536). Prioritario = nuevo valor del flag.</summary>
 internal sealed record SetPriorityRequest(bool Prioritario);
+
+/// <summary>
+/// Body de PUT /instances/{id}/pause (paridad v1). <c>Paused</c> = nuevo estado (true=pausar,
+/// false=reanudar); <c>Observation</c> = nota informativa (se guarda solo al pausar; se limpia al reanudar).
+/// </summary>
+internal sealed record PauseProcedureInstanceRequest(bool Paused, string? Observation = null);
+
+/// <summary>Body de POST /instances/pause-massive (paridad v1 pause-unpause-massive).</summary>
+internal sealed record PauseProcedureInstancesBulkRequest(
+    IReadOnlyList<Guid> Ids, bool Paused, string? Observation = null);
 
 /// <summary>Body de PATCH /instances/{id}/current-step (HU #10879). Step = Key del paso del wizard.</summary>
 internal sealed record SetCurrentStepRequest(string? Step);

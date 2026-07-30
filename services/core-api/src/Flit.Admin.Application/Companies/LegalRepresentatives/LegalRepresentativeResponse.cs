@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
+using Flit.Admin.Domain.Identity;
 
 namespace Flit.Admin.Application.Companies.LegalRepresentatives;
 
@@ -29,7 +30,13 @@ public sealed record LegalRepresentativeResponse(
     IReadOnlyList<LegalRepresentativeCompanySummary> Companies,
     bool IsActive,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? UpdatedAt)
+    DateTimeOffset? UpdatedAt,
+    // HU #11059 — vigencia de identidad y firma, para poder ofrecer la renovación de lo vencido.
+    // Opcionales al final del record para no romper a los consumidores posicionales existentes.
+    string IdentityStatus = AdminIdentityVigencia.None,
+    DateTimeOffset? IdentityValidUntil = null,
+    bool FirmaBaulVigente = false,
+    DateOnly? FirmaBaulVigenteHasta = null)
 {
     public static LegalRepresentativeResponse From(LegalRepresentativeItem item)
     {
@@ -55,6 +62,10 @@ public sealed record LegalRepresentativeResponse(
             item.Companies,
             item.IsActive,
             item.CreatedAt,
-            item.UpdatedAt);
+            item.UpdatedAt,
+            item.IdentityStatus,
+            item.IdentityValidUntil,
+            item.FirmaBaulVigente,
+            item.FirmaBaulVigenteHasta);
     }
 }

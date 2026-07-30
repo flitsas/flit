@@ -125,16 +125,27 @@ INSERT INTO tramites.procedure_types (
     publication_status, row_version
 )
 VALUES
-    -- Familia MATRICULAS
-    (uuidv7(), 'MATRICULA_NUEVA',        'Matrícula nueva de vehículo',     'MATRICULAS', 'Proceso de matrícula inicial de vehículo nuevo.',         true, '{}', 'draft', 0),
-    (uuidv7(), 'MATRICULA_REACTIVACION', 'Reactivación de matrícula',       'MATRICULAS', 'Reactivación de matrícula de vehículo con baja temporal.', true, '{}', 'draft', 0),
-
-    -- Familia TRASPASO
-    (uuidv7(), 'TRASPASO_SIMPLE',        'Traspaso simple de propiedad',    'TRASPASO',   'Cambio de propietario entre personas naturales.',           true, '{}', 'draft', 0),
-    (uuidv7(), 'TRASPASO_LEASING',       'Traspaso con leasing',            'TRASPASO',   'Traspaso de vehículo con contrato de arrendamiento.',       true, '{}', 'draft', 0),
-
-    -- Familia OTROS
-    (uuidv7(), 'LEVANTAMIENTO_PRENDA',   'Levantamiento de prenda',         'OTROS',      'Cancelación de prenda sobre vehículo.',                     true, '{}', 'draft', 0)
+    -- Canónicos operativos (wizard)
+    (uuidv7(), 'MATRICULA_NUEVA',           'Matrícula inicial',           'MATRICULAS', 'Matrícula inicial de vehículo.', true, '{}', 'draft', 0),
+    (uuidv7(), 'TRASPASO_STANDARD',         'Traspaso',                    'TRASPASO',   'Traspaso de propiedad.', true, '{}', 'draft', 0),
+    -- Activos de catálogo
+    (uuidv7(), 'CAMBIO_LOCATARIO',          'Cambio de locatario',         'OTROS',      'Cambio de locatario (leasing).', true, '{}', 'draft', 0),
+    (uuidv7(), 'CAMBIO_CARROCERIA',         'Cambio de carrocería',        'OTROS',      'Cambio de carrocería.', true, '{}', 'draft', 0),
+    (uuidv7(), 'BLINDAJE',                  'Blindaje',                    'OTROS',      'Blindaje de vehículo.', true, '{}', 'draft', 0),
+    (uuidv7(), 'CAMBIO_COLOR',              'Cambio de color',             'OTROS',      'Cambio de color.', true, '{}', 'draft', 0),
+    (uuidv7(), 'DUPLICADO_PLACA',           'Duplicado de placa',          'OTROS',      'Duplicado de placa.', true, '{}', 'draft', 0),
+    (uuidv7(), 'DUPLICADO_TARJETA',         'Duplicado de tarjeta',        'OTROS',      'Duplicado de tarjeta de propiedad.', true, '{}', 'draft', 0),
+    (uuidv7(), 'LEVANTAMIENTO_PRENDA',      'Levantar prenda',             'OTROS',      'Levantamiento de prenda.', true, '{}', 'draft', 0),
+    (uuidv7(), 'PRENDA_INSCRIPCION',        'Inscribir prenda',            'OTROS',      'Inscripción de prenda.', true, '{}', 'draft', 0),
+    (uuidv7(), 'RADICADO_CUENTA',           'Radicado de cuenta',          'OTROS',      'Radicado de cuenta.', true, '{}', 'draft', 0),
+    (uuidv7(), 'CONVERSION_COMBUSTIBLE',    'Conversiones de combustible', 'OTROS',      'Conversiones de combustible.', true, '{}', 'draft', 0),
+    (uuidv7(), 'TRASLADO_CUENTA',           'Traslado de cuenta',          'OTROS',      'Traslado de cuenta.', true, '{}', 'draft', 0),
+    (uuidv7(), 'CANCELACION_MATRICULA',     'Cancelación de matrícula',    'MATRICULAS', 'Cancelación de matrícula.', true, '{}', 'draft', 0),
+    -- Inactivos
+    (uuidv7(), 'REGRABAR_MOTOR_CHASIS',     'Regrabar motor, chasis',      'OTROS',      'Regrabación de motor y/o chasis.', false, '{}', 'draft', 0),
+    (uuidv7(), 'REMATRICULA',               'Rematrícula',                 'MATRICULAS', 'Rematrícula de vehículo.', false, '{}', 'draft', 0),
+    (uuidv7(), 'LEVANTAR_INSCRIBIR_PRENDA', 'Levantar e inscribir prenda', 'OTROS',      'Levantamiento e inscripción de prenda.', false, '{}', 'draft', 0),
+    (uuidv7(), 'CAMBIO_ACREEDOR',           'Cambio acreedor',             'OTROS',      'Cambio de acreedor prendario.', false, '{}', 'draft', 0)
 ON CONFLICT (code) DO NOTHING;
 
 -- ─────────────────────────────────────────────────────────────────────────────

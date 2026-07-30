@@ -6,7 +6,7 @@ import { DocumentInUseDialog } from "../DocumentInUseDialog";
 
 const procedureTypes = [
   { codigo: "TRASPASO", nombre: "Traspaso" },
-  { codigo: "MATRICULA_INICIAL", nombre: "Matricula inicial" },
+  { codigo: "MATRICULA_NUEVA", nombre: "Matricula inicial" },
 ];
 
 describe("DocumentInUseDialog", () => {
@@ -19,7 +19,7 @@ describe("DocumentInUseDialog", () => {
     expect(screen.getByText(/Cedula/)).toBeInTheDocument();
     expect(screen.getByText("Traspaso")).toBeInTheDocument();
     expect(screen.getByText("Matricula inicial")).toBeInTheDocument();
-    expect(screen.getByText("MATRICULA_INICIAL")).toBeInTheDocument();
+    expect(screen.getByText("MATRICULA_NUEVA")).toBeInTheDocument();
   });
 
   it("se cierra con «Entendido» y con la X (no se autodescarta)", () => {

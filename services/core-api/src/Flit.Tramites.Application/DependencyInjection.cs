@@ -43,6 +43,9 @@ public static class DependencyInjection
         // HU #10990 (Feature #10972) — resuelve el RUES por actor al generar el expediente.
         services.AddScoped<IRuesActorDataResolver, RuesActorDataResolver>();
         services.AddScoped<SubmitProcedureInstanceHandler>();
+        // ICT (paridad v1) — pausar/reanudar trámites ICT desde la UI de FLIT (individual + masivo).
+        services.AddScoped<PauseProcedureInstanceHandler>();
+        services.AddScoped<CompletePlateFlowHandler>();
         // HU #10349 — finalizar borrador (fase 2): datos completos sin exigir identidad/FUR.
         services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
         // HU #10536 — marcar trámite como prioritario (ordenamiento con primacía en los listados).
@@ -57,6 +60,7 @@ public static class DependencyInjection
         services.AddScoped<ITramiteLifecycleService, TramiteLifecycleService>();
         services.AddScoped<TransitionProcedureInstanceHandler>();
         services.AddScoped<StartSubsanacionHandler>();
+        services.AddScoped<CancelSubsanacionHandler>();
         services.AddScoped<GetActorsHandler>();
         services.AddScoped<PutActorsHandler>();
         // HU #10955 (AC2/AC3/AC4/AC5) — lookup de datos de contacto ya conocidos (ciudad/email/
@@ -172,6 +176,10 @@ public static class DependencyInjection
         services.AddScoped<IExpedienteHotDocumentsRegenerator>(sp => sp.GetRequiredService<GenerarFurHandler>());
         services.AddScoped<GetFurTemplateFormatHandler>(); // HU #10924 — formato de FUR por clasificación
         services.AddScoped<GenerarConsolidadoHandler>();
+        // HU #11051 — gate de generación documental del GESTOR (estado final ⇒ documentación definitiva).
+        // Lo consumen SOLO los endpoints de /api/v1/tramites; la regeneración interna del sistema
+        // (aprobación OT, placa, identidad validada, transiciones) NO pasa por él a propósito.
+        services.AddScoped<GeneracionDocumentalGestorGuard>();
         // Feature #10701 — presigned view URL inline (HU #10702) y consolidado maestro (HU #10706).
         services.AddScoped<GetAttachmentPreviewUrlHandler>();
         services.AddScoped<GenerarConsolidadoMaestroHandler>();

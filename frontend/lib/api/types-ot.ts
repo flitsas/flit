@@ -48,28 +48,49 @@ export interface OtClientProcedure {
   referenceNumber: string;
   status: string;
   /**
-   * Feature #10587 / HU #10785 — sub-estado interno de la ruta de placa (null | preasignado |
-   * asignado), ortogonal al status (que permanece en 'entregado'). Gobierna las acciones del OT
-   * (Asignar / Revocar placa) y el badge secundario de la bandeja.
+   * Sub-estado interno de la ruta de placa (null | preasignado | asignado | terminado),
+   * ortogonal al status (que permanece en 'entregado').
    */
   plateFlowStatus?: string | null;
   /**
-   * HU #10804 (Feature #10587) — estado del SOAT (null | unknown | vencido | vigente). El OT solo ve
-   * Aprobar/Rechazar en ruta estándar o con la placa `asignado` y el SOAT `vigente` (ver
-   * `puedeDecidirOt`). El gate duro de aprobación ya lo impone el backend.
+   * Estado del SOAT (null | unknown | vencido | vigente). Informativo; la decisión OT
+   * en ruta de placa requiere `terminado`.
    */
   soatEstado?: string | null;
   /**
-   * HU #10805 (Feature #10587) — dígito de preferencia de placa (0-9) que el gestor indicó al radicar
-   * sin placa. Es solo una GUÍA para el OT al asignar: puede elegir una placa que termine en este
-   * dígito o cualquier otra. `null` si no hubo preferencia.
+   * Dígito de preferencia de placa (0-9) indicado al radicar sin placa. Guía para el OT.
    */
   platePreferredLastDigit?: string | null;
+  /** Check opcional del gestor; badge en bandeja OT solo en Terminado. */
+  soatPagado?: boolean;
+  /** Check opcional del gestor; badge en bandeja OT solo en Terminado. */
+  impuestoDepartamentalPagado?: boolean;
   transitOfficeId?: string | null;
   createdAt: string;
   submittedAt?: string | null;
   /** HU #10536 — trámite marcado como prioritario: el OT lo revisa con primacía (solo indicador). */
   prioritario?: boolean;
+  /** Detalle (GET by id): actores del trámite. */
+  actors?: OtClientProcedureActor[];
+  placa?: string | null;
+  vin?: string | null;
+  marca?: string | null;
+  linea?: string | null;
+  modelo?: string | null;
+  color?: string | null;
+  clase?: string | null;
+  servicio?: string | null;
+  combustible?: string | null;
+}
+
+export interface OtClientProcedureActor {
+  actorType: string;
+  documentType: string;
+  documentNumber: string;
+  fullName: string;
+  email?: string | null;
+  phone?: string | null;
+  personType?: string | null;
 }
 
 export interface OtClientProcedurePagedResult {

@@ -41,12 +41,12 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                 var companiesBySigner = await LoadActiveCompanyIdsBySignerAsync(
                     transitOfficeId, cancellationToken).ConfigureAwait(false);
 
-                var statusBySigner = await LoadIdentityStatusAsync(
+                var vigenciaBySigner = await LoadIdentityVigenciaAsync(
                     [.. signers.Select(s => s.Id)], cancellationToken).ConfigureAwait(false);
 
                 IReadOnlyList<MandateSignerItem> items =
                 [
-                    .. signers.Select(s => Project(s, companiesBySigner, statusBySigner)),
+                    .. signers.Select(s => Project(s, companiesBySigner, vigenciaBySigner)),
                 ];
                 return items;
             },
@@ -75,7 +75,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
 
-                var statusBySigner = await LoadIdentityStatusAsync(
+                var vigenciaBySigner = await LoadIdentityVigenciaAsync(
                     [signer.Id], cancellationToken).ConfigureAwait(false);
 
                 return new MandateSignerItem
@@ -89,7 +89,12 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     Email = signer.Email,
                     SignatureVaultId = signer.SignatureVaultId,
                     IdentityValidationRef = signer.IdentityValidationRef,
-                    IdentityStatus = statusBySigner.GetValueOrDefault(signer.Id, "none"),
+                    IdentityStatus = vigenciaBySigner
+                        .GetValueOrDefault(signer.Id, new AdminIdentityVigencia.Resultado(
+                            AdminIdentityVigencia.None, null)).Status,
+                    IdentityValidUntil = vigenciaBySigner
+                        .GetValueOrDefault(signer.Id, new AdminIdentityVigencia.Resultado(
+                            AdminIdentityVigencia.None, null)).ValidUntil,
                     UserId = signer.UserId,
                     RegisteredAt = signer.RegisteredAt,
                     IsActive = signer.IsActive,
@@ -203,8 +208,12 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
     private static MandateSignerItem Project(
         Entities.Admin.MandateSigner signer,
         Dictionary<Guid, List<Guid>> companiesBySigner,
-        Dictionary<Guid, string> statusBySigner) =>
-        new()
+        Dictionary<Guid, AdminIdentityVigencia.Resultado> vigenciaBySigner)
+    {
+        var vigencia = vigenciaBySigner.GetValueOrDefault(
+            signer.Id, new AdminIdentityVigencia.Resultado(AdminIdentityVigencia.None, null));
+
+        return new MandateSignerItem
         {
             Id = signer.Id,
             TransitOfficeId = signer.TransitOfficeId,
@@ -215,20 +224,23 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             Email = signer.Email,
             SignatureVaultId = signer.SignatureVaultId,
             IdentityValidationRef = signer.IdentityValidationRef,
-            IdentityStatus = statusBySigner.GetValueOrDefault(signer.Id, "none"),
+            IdentityStatus = vigencia.Status,
+            IdentityValidUntil = vigencia.ValidUntil,
             UserId = signer.UserId,
             RegisteredAt = signer.RegisteredAt,
             IsActive = signer.IsActive,
             CompanyTenantIds = companiesBySigner.GetValueOrDefault(signer.Id, []),
         };
+    }
 
     /// <summary>
-    /// Estado de la validación de identidad (HU #10994) por mandatario, resuelto por prioridad sobre TODAS
-    /// sus validaciones admin: vigente aprobada ⇒ <c>valid</c>; enviada/en proceso ⇒ <c>pending</c>;
-    /// aprobada vencida, rechazada o expirada ⇒ <c>expired</c> (habilita RENOVAR); ninguna ⇒ <c>none</c>.
+    /// Vigencia de la identidad (HU #10994) por mandatario. La precedencia vive en
+    /// <see cref="AdminIdentityVigencia"/>, compartida con el representante legal (HU #11059): aquí solo
+    /// queda la consulta en lote. Desde la HU #11060 se devuelve TAMBIÉN hasta cuándo es válida, que es
+    /// lo que la consola necesita para informar la vigencia en curso en vez de ofrecer renovar.
     /// Se lee dentro del scope cross-tenant (row_security off) que abre <c>ExecuteCrossTenantReadAsync</c>.
     /// </summary>
-    private async Task<Dictionary<Guid, string>> LoadIdentityStatusAsync(
+    private async Task<Dictionary<Guid, AdminIdentityVigencia.Resultado>> LoadIdentityVigenciaAsync(
         IReadOnlyList<Guid> signerIds,
         CancellationToken cancellationToken)
     {
@@ -246,36 +258,12 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var result = new Dictionary<Guid, string>();
-        foreach (var group in rows.GroupBy(r => r.SubjectRef))
-        {
-            var items = group.ToList();
-            string status;
-            if (items.Any(r => r.Status == AdminIdentityEstados.Aprobado
-                && (r.ValidUntil == null || r.ValidUntil > now)))
-            {
-                status = "valid";
-            }
-            else if (items.Any(r => r.Status == AdminIdentityEstados.Enviado
-                || r.Status == AdminIdentityEstados.EnProceso))
-            {
-                status = "pending";
-            }
-            else if (items.Any(r => r.Status == AdminIdentityEstados.Aprobado
-                || r.Status == AdminIdentityEstados.Expirado
-                || r.Status == AdminIdentityEstados.Rechazado))
-            {
-                status = "expired";
-            }
-            else
-            {
-                status = "none";
-            }
-
-            result[group.Key] = status;
-        }
-
-        return result;
+        return rows
+            .GroupBy(r => r.SubjectRef)
+            .ToDictionary(
+                g => g.Key,
+                g => AdminIdentityVigencia.Resumir(
+                    g.Select(r => new AdminIdentityVigencia.Entrada(r.Status, r.ValidUntil)), now));
     }
 
     private async Task<T> ExecuteCrossTenantReadAsync<T>(

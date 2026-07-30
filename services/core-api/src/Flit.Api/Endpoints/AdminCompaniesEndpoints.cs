@@ -49,6 +49,18 @@ public static class AdminCompaniesEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        // GET /api/v1/admin/companies/{tenantId} — identidad de la compañía (#11062). Alimenta el
+        // encabezado de la consola de configuración: razón social + NIT visibles en toda la pantalla.
+        group.MapGet("/{tenantId:guid}", GetCompanyAsync)
+            .WithName("AdminCompanyGet")
+            .WithSummary("Obtiene una compañía por id")
+            .WithDescription("Retorna la identidad de la compañía (razón social, NIT, código, tipo y "
+                + "estado). 404 si no existe. Requiere SuperAdmin.")
+            .Produces<CompanyListItem>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         // POST /api/v1/admin/companies — alta de compañía (botón "Crear compañía", #10118).
         group.MapPost("", CreateCompanyAsync)
             .WithName("AdminCompanyCreate")
@@ -303,6 +315,22 @@ public static class AdminCompaniesEndpoints
                 new CompanyValidationErrorResponse(result.Errors),
                 statusCode: StatusCodes.Status422UnprocessableEntity),
         };
+    }
+
+    /// <summary>
+    /// HU #11062 — identidad de la compañía para el encabezado de la consola de configuración. Lectura
+    /// directa del repositorio: no hay comando ni regla de negocio que mediar.
+    /// </summary>
+    private static async Task<IResult> GetCompanyAsync(
+        Guid tenantId,
+        [FromServices] ICompanyReadRepository companies,
+        CancellationToken cancellationToken)
+    {
+        var company = await companies.GetByIdAsync(tenantId, cancellationToken).ConfigureAwait(false);
+
+        return company is null
+            ? Results.NotFound(new { error = $"No existe la compañía {tenantId}." })
+            : Results.Ok(company);
     }
 
     private static async Task<IResult> SetStatusAsync(

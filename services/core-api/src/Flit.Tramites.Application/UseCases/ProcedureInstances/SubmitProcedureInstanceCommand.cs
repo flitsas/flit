@@ -24,11 +24,11 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 public sealed class SubmitProcedureInstanceHandler(
     ITramiteLifecycleService lifecycle,
     IProcedureInstanceRepository repo,
-    IPlatePreassignPolicy? platePreassignPolicy = null,
-    ILogger<SubmitProcedureInstanceHandler>? logger = null)
+    IPlatePreassignPolicy platePreassignPolicy,
+    ILogger<SubmitProcedureInstanceHandler> logger)
 {
-    private readonly IPlatePreassignPolicy _platePolicy = platePreassignPolicy ?? NullPlatePreassignPolicy.Instance;
-    private readonly ILogger<SubmitProcedureInstanceHandler>? _logger = logger;
+    private readonly IPlatePreassignPolicy _platePolicy = platePreassignPolicy;
+    private readonly ILogger<SubmitProcedureInstanceHandler> _logger = logger;
 
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
         Guid id,
@@ -43,6 +43,14 @@ public sealed class SubmitProcedureInstanceHandler(
         // RF04 — estados finales (aprobado/anulado) son inmutables.
         if (TramiteEstado.EsFinal(instance.Status))
             return (null, TramiteEstadoErrores.EstadoFinal);
+
+        // ICT (paridad v1 pauseDraftProcess / starts_procedure_in_paused): un trámite PAUSADO no avanza.
+        // v1 bloqueaba con ForbiddenError salir de Borrador estando pausado; aquí se corta la radicación
+        // (manual o auto-encadenada tras identidad) en el mismo punto. La anulación va por AbortDraft y NO
+        // pasa por aquí, así que un trámite pausado sí se puede anular. is_paused default false ⇒ los
+        // trámites de plataforma nunca entran en esta rama.
+        if (instance.IsPaused)
+            return (null, TramiteEstadoErrores.TramitePausado);
 
         // La resolución de identidad por persona (HU #10350, #87) y los gates OT viven en
         // TramiteLifecycleService — este orquestador solo encadena las transiciones.
@@ -68,9 +76,11 @@ public sealed class SubmitProcedureInstanceHandler(
         // Flujo B (sin rango/placa) → preasignado; ruta estándar → null.
         var route = await _platePolicy.DecideAsync(tenantId, id, ct).ConfigureAwait(false);
 
-        // HU #10806 (AC5) — traza observable del enrutamiento: sustituye el antiguo fallo silencioso.
-        if (_logger is not null)
-            SubmitLog.PlateRoute(_logger, id, tenantId, route.Decision, route.Reason);
+        // Defensa: placa completa NUNCA debe quedar en Standard/Preasignado (el OT aprobaría sin
+        // paso gestor). Si la policy degradó, forzar Asignado (skip OFF es el default seguro).
+        route = await EnsureFullPlateNotStandardAsync(route, id, tenantId, ct).ConfigureAwait(false);
+
+        SubmitLog.PlateRoute(_logger, id, tenantId, route.Decision, route.Reason);
 
         // HU #10806 (AC4) — la compañía tiene preasignación activa pero el OT está mal configurado:
         // se BLOQUEA la radicación con un error subsanable, en vez de degradar a estándar en silencio.
@@ -81,10 +91,13 @@ public sealed class SubmitProcedureInstanceHandler(
         {
             PlateRouteDecision.Asignado => (
                 PlateFlowStatus.Asignado,
-                "Radicación: entregado al OT; placa seleccionada (sub-estado asignado)."),
+                "Radicación: entregado; placa seleccionada o del RUNT (sub-estado asignado)."),
+            PlateRouteDecision.Terminado => (
+                PlateFlowStatus.Terminado,
+                "Radicación: entregado; placa seleccionada/RUNT y paso gestor omitido (sub-estado terminado)."),
             PlateRouteDecision.Preasignado => (
                 PlateFlowStatus.Preasignado,
-                "Radicación: entregado al OT sin rango de placa; pendiente de asignación (sub-estado preasignado)."),
+                "Radicación: entregado sin placa; pendiente de asignación OT (sub-estado preasignado / sin asignar)."),
             _ => (
                 (string?)null,
                 "Radicación: trámite entregado al organismo de tránsito."),
@@ -98,6 +111,36 @@ public sealed class SubmitProcedureInstanceHandler(
 
         return (CreateProcedureInstanceHandler.ToSummary(final.Instance!), null);
     }
+
+    /// <summary>
+    /// Si hay field_value <c>plate</c> con valor y la policy devolvió Standard o Preasignado,
+    /// corrige a Asignado para no entregar la pelota al OT sin paso gestor.
+    /// </summary>
+    private async Task<PlateRouteResult> EnsureFullPlateNotStandardAsync(
+        PlateRouteResult route,
+        Guid id,
+        Guid tenantId,
+        CancellationToken ct)
+    {
+        if (route.Decision is not (PlateRouteDecision.Standard or PlateRouteDecision.Preasignado))
+            return route;
+
+        var detail = await repo.GetByIdWithDetailsAsync(id, tenantId, ct).ConfigureAwait(false);
+        if (detail is null)
+            return route;
+
+        if (!string.Equals(detail.ModalidadEntrada, "matricula_inicial", StringComparison.OrdinalIgnoreCase))
+            return route;
+
+        var plate = detail.FieldValues
+            .FirstOrDefault(f => string.Equals(f.FieldKey, "plate", StringComparison.OrdinalIgnoreCase))
+            ?.ValueText;
+        if (string.IsNullOrWhiteSpace(plate))
+            return route;
+
+        SubmitLog.PlateRouteForcedAsignado(_logger, id, tenantId, route.Decision, route.Reason);
+        return PlateRouteResult.Reserved;
+    }
 }
 
 /// <summary>Logging source-generated (CA1848) del enrutamiento de placa al radicar (HU #10806).</summary>
@@ -106,5 +149,10 @@ internal static partial class SubmitLog
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Ruta de placa para el trámite {InstanceId} (tenant {TenantId}): {Decision} ({Reason}).")]
     public static partial void PlateRoute(
+        ILogger logger, Guid instanceId, Guid tenantId, PlateRouteDecision decision, PlateRouteReason reason);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Ruta de placa corregida a Asignado para {InstanceId} (tenant {TenantId}): la policy devolvió {Decision} ({Reason}) con placa completa.")]
+    public static partial void PlateRouteForcedAsignado(
         ILogger logger, Guid instanceId, Guid tenantId, PlateRouteDecision decision, PlateRouteReason reason);
 }

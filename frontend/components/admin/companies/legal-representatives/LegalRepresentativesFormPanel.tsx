@@ -12,6 +12,8 @@ import type {
   LegalRepresentativeItem,
   LegalRepresentativeSaved,
 } from "@/lib/api/admin-legal-representatives";
+import { digitsOnly } from "@/lib/format/currency";
+import { sanitizeDocNumber } from "@/lib/validation/fieldRules";
 
 // Tipos de documento del representante — mismos que en el resto de la app (ActorsForm / Baúl).
 const DOC_TYPE_OPTIONS: { value: string; label: string }[] = [
@@ -74,13 +76,23 @@ const EMPTY: FormState = {
   procedureTypeIds: [],
 };
 
-// La respuesta del backend proyecta las compañías del representante (NIT + razón social); el contacto
-// de cada compañía no se proyecta, así que al editar se precargan NIT y nombre y el resto queda en
-// blanco. Si por compatibilidad el detalle no trae `companies`, cae a la compañía primaria denormalizada.
+// HU #11058 — la precarga tiene que traer TODAS las compañías del representante y el contacto COMPLETO
+// de cada una. El guardado reenvía esta lista y el backend hace upsert con lo que reciba: un campo que
+// llegue en blanco se persiste como null. Antes solo se precargaban NIT y razón social, así que cada
+// edición del representante borraba el correo, la dirección, la ciudad y el teléfono de sus compañías.
+// Si por compatibilidad la respuesta no trae `companies`, cae a la compañía primaria denormalizada
+// (que no proyecta contacto: es el camino legado y el backend siempre envía `companies`).
 function fromItem(item: LegalRepresentativeItem): FormState {
   const companies: CompanyRow[] =
     item.companies && item.companies.length > 0
-      ? item.companies.map((c) => ({ ...EMPTY_COMPANY, nit: c.nit, name: c.name }))
+      ? item.companies.map((c) => ({
+          nit: c.nit,
+          name: c.name,
+          email: c.email ?? "",
+          address: c.address ?? "",
+          city: c.city ?? "",
+          phone: c.phone ?? "",
+        }))
       : [{ ...EMPTY_COMPANY, nit: item.companyDocumentNumber, name: item.companyName }];
   return {
     companies,
@@ -309,10 +321,13 @@ export function LegalRepresentativesFormPanel({
                     <input
                       id={`lr-companyNit-${index}`}
                       value={company.nit}
-                      onChange={(e) => patchCompany(index, { nit: e.target.value })}
+                      onChange={(e) => patchCompany(index, { nit: digitsOnly(e.target.value) })}
                       className={OT_INPUT_CLS}
                       style={err("nit") ? { borderColor: "#FF4E00" } : undefined}
                       placeholder="NIT"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="off"
                     />
                   </Field>
                   <Field id={`lr-companyName-${index}`} label="Razón social" error={err("name")}>
@@ -337,8 +352,12 @@ export function LegalRepresentativesFormPanel({
                   <Field id={`lr-companyPhone-${index}`} label="Teléfono (opcional)" error={err("phone")}>
                     <input
                       id={`lr-companyPhone-${index}`}
+                      type="tel"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="tel"
                       value={company.phone}
-                      onChange={(e) => patchCompany(index, { phone: e.target.value })}
+                      onChange={(e) => patchCompany(index, { phone: digitsOnly(e.target.value) })}
                       className={OT_INPUT_CLS}
                     />
                   </Field>
@@ -374,7 +393,13 @@ export function LegalRepresentativesFormPanel({
               <select
                 id="lr-doctype"
                 value={form.documentType}
-                onChange={(e) => patch({ documentType: e.target.value })}
+                onChange={(e) => {
+                  const documentType = e.target.value;
+                  patch({
+                    documentType,
+                    documentNumber: sanitizeDocNumber(form.documentNumber, documentType),
+                  });
+                }}
                 className={OT_INPUT_CLS}
                 style={errStyle("documentType")}
               >
@@ -389,10 +414,13 @@ export function LegalRepresentativesFormPanel({
               <input
                 id="lr-docnumber"
                 value={form.documentNumber}
-                onChange={(e) => patch({ documentNumber: e.target.value })}
+                onChange={(e) =>
+                  patch({ documentNumber: sanitizeDocNumber(e.target.value, form.documentType) })
+                }
                 className={OT_INPUT_CLS}
                 style={errStyle("documentNumber")}
-                inputMode="numeric"
+                inputMode={form.documentType === "PAS" ? "text" : "numeric"}
+                autoComplete="off"
               />
             </Field>
           </div>
@@ -444,8 +472,12 @@ export function LegalRepresentativesFormPanel({
             <Field id="lr-phone" label="Teléfono (opcional)" error={fieldErrors.phone}>
               <input
                 id="lr-phone"
+                type="tel"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="tel"
                 value={form.phone}
-                onChange={(e) => patch({ phone: e.target.value })}
+                onChange={(e) => patch({ phone: digitsOnly(e.target.value) })}
                 className={OT_INPUT_CLS}
                 style={errStyle("phone")}
               />

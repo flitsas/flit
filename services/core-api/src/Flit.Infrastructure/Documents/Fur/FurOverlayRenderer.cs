@@ -107,11 +107,29 @@ public static class FurOverlayRenderer
         // HU #11031 — cuerpo efectivo = el del manifiesto ± el ajuste que traiga el valor, con un
         // mínimo legible. Lo usa el sello de identidad, que va 2pt por debajo del resto del campo.
         var fontSize = Math.Max(3, field.FontSize + fontSizeDelta);
-        var font = CreateFont(fontSize, field.Bold);
-        var lines = field.Type == FurFieldType.Multiline
-            ? text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            : [text];
+        string[] lines;
 
+        if (field.Type == FurFieldType.Multiline)
+        {
+            lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
+        else
+        {
+            // HU #11048 — un valor más ancho que el campo (razón social larga) se salía del recuadro y
+            // pisaba los campos vecinos. Se encaja en la caja declarada del manifiesto: primero
+            // reduciendo el cuerpo, después partiendo en líneas si el alto lo admite, y solo como último
+            // recurso truncando. Si el texto ya cabía, sale EXACTAMENTE como antes (misma calibración).
+            var fit = FurTextFitter.Fit(
+                text,
+                field.W,
+                field.H,
+                fontSize,
+                (value, size) => gfx.MeasureString(value, CreateFont(size, field.Bold)).Width);
+            lines = [.. fit.Lines];
+            fontSize = fit.FontSize;
+        }
+
+        var font = CreateFont(fontSize, field.Bold);
         var lineHeight = fontSize * 1.25;
         for (var i = 0; i < lines.Length; i++)
         {

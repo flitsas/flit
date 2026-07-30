@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCOP, digitsOnly, groupThousands } from '../currency';
+import { formatCOP, digitsOnly, groupThousands, sanitizeDecimalInput } from '../currency';
 
 describe('formatCOP', () => {
   it('formatea pesos como moneda COP sin decimales', () => {
@@ -17,6 +17,7 @@ describe('formatCOP', () => {
 
   it('formatea el cero como $0', () => {
     expect(formatCOP(0)).toContain('0');
+    expect(formatCOP(0)).toContain('$');
   });
 });
 
@@ -24,7 +25,19 @@ describe('digitsOnly', () => {
   it('descarta todo lo que no sea dígito', () => {
     expect(digitsOnly('$ 50.000.000')).toBe('50000000');
     expect(digitsOnly('abc1d2e3')).toBe('123');
+    expect(digitsOnly('12e4+5-6')).toBe('12456');
     expect(digitsOnly('')).toBe('');
+  });
+});
+
+describe('sanitizeDecimalInput', () => {
+  it('permite un solo separador decimal y descarta letras/símbolos', () => {
+    expect(sanitizeDecimalInput('1.5')).toBe('1.5');
+    expect(sanitizeDecimalInput('1,5')).toBe('1.5');
+    expect(sanitizeDecimalInput('12.3.4')).toBe('12.34');
+    expect(sanitizeDecimalInput('1a2b.3c')).toBe('12.3');
+    expect(sanitizeDecimalInput('e+5')).toBe('5');
+    expect(sanitizeDecimalInput('')).toBe('');
   });
 });
 

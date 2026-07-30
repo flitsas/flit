@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -35,7 +36,8 @@ public sealed class FinalizeDraftProcedureInstanceTests
             NullOtRuleGate.Instance,
             new NullTramiteTransitionRecorder(),
             new NullTramiteTransitionPublisher());
-        return new SubmitProcedureInstanceHandler(lifecycle, _repo);
+        return new SubmitProcedureInstanceHandler(
+            lifecycle, _repo, NullPlatePreassignPolicy.Instance, NullLogger<SubmitProcedureInstanceHandler>.Instance);
     }
 
     private static ProcedureInstance Instance(Guid id, Guid tenant, string status = TramiteEstado.Borrador) =>

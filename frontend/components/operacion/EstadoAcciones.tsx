@@ -52,7 +52,7 @@ export function EstadoAcciones({
   const [status, setStatus] = useState<string | null>(null);
   const [subsanacionActiva, setSubsanacionActiva] = useState(false);
   // Feature #10587 / HU #10785 — sub-estado interno de placa (ortogonal al status; el trámite sigue
-  // en 'entregado'). Gobierna el badge secundario y el panel de SOAT.
+  // en 'entregado'). Gobierna el badge secundario.
   const [plateFlowStatus, setPlateFlowStatus] = useState<PlateFlowStatus | null>(null);
   const [allowed, setAllowed] = useState<string[]>([]);
   const [pending, setPending] = useState<AccionConfig | null>(null);
