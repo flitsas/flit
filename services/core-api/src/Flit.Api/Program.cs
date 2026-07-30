@@ -312,8 +312,7 @@ app.MapLegalRepresentativeConsumptionEndpoints();
 
 // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
 app.MapAnalyticsEndpoints();
-app.MapDetailedReportEndpoints(); // Feature #10813 (legado; deprecar en sprint+1)
-app.MapReportingV2Endpoints(); // Feature #11076
+app.MapReportingV2Endpoints(); // Feature #11076 (HU #11108: legado /detailed-report eliminado)
 app.MapReportSchedulesEndpoints(); // Reportes2 HU-D
 app.MapAlertRulesEndpoints(); // Reportes2 HU-D
 app.MapAnalyticsMetricsEndpoints(); // Reportes2 HU-B

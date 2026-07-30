@@ -804,85 +804,33 @@ public static class DevelopmentAuthSeeder
     }
 
     /// <summary>
-    /// Feature #10813 — módulo dock "Reportes Detallados" + permisos de lectura y export.
-    /// Idempotente sobre BDs ya sembradas.
+    /// HU #11108 / ADR-0038 — el módulo detailed-report ya no se siembra activo.
+    /// Si existe de semillas previas, se desactiva (el seed V2 también lo hace).
     /// </summary>
     private static async Task SeedDetailedReportPermissionsAsync(FlitDbContext db, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
         var module = await db.SecurityModules
             .FirstOrDefaultAsync(m => m.Code == "reportes-detallados" && m.DeletedAt == null, ct);
+        if (module is null) return;
 
-        if (module is null)
+        if (module.IsActive)
         {
-            module = new SecurityModule
-            {
-                Id = Guid.CreateVersion7(),
-                Code = "reportes-detallados",
-                Name = "Reportes Detallados",
-                SortOrder = 8,
-                IsActive = true,
-                CreatedAt = now,
-            };
-            db.SecurityModules.Add(module);
-            await db.SaveChangesAsync(ct);
+            module.IsActive = false;
+            module.UpdatedAt = now;
         }
 
-        var slugs = new (string Slug, string Name, string RoutePattern, string Method)[]
-        {
-            ("reportes.detallados.read",   "Ver reportes detallados",   "/api/v1/detailed-report/procedures",        "GET"),
-            ("reportes.detallados.export", "Exportar reportes detallados", "/api/v1/detailed-report/procedures/export", "GET"),
-        };
-
-        var existingSlugs = await db.RbacActions
-            .Where(a => a.ModuleId == module.Id)
-            .Select(a => a.Slug)
+        var legacyActions = await db.RbacActions
+            .Where(a => a.ModuleId == module.Id && a.IsActive)
             .ToListAsync(ct);
-
-        var newActions = slugs
-            .Where(s => !existingSlugs.Contains(s.Slug))
-            .Select(s => new RbacAction
-            {
-                Id = Guid.CreateVersion7(),
-                ModuleId = module.Id,
-                Slug = s.Slug,
-                Name = s.Name,
-                HttpMethod = s.Method,
-                RoutePattern = s.RoutePattern,
-                IsActive = true,
-                CreatedAt = now,
-            })
-            .ToArray();
-
-        if (newActions.Length == 0)
-            return;
-
-        db.RbacActions.AddRange(newActions);
-        await db.SaveChangesAsync(ct);
-
-        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        foreach (var action in legacyActions)
         {
-            var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
-            foreach (var role in roles)
-            {
-                var existing = await db.RoleGrants
-                    .Where(g => g.RoleId == role.Id)
-                    .Select(g => g.PermissionId)
-                    .ToListAsync(ct);
-
-                db.RoleGrants.AddRange(newActions
-                    .Where(a => !existing.Contains(a.Id))
-                    .Select(a => new RoleGrant
-                    {
-                        Id = Guid.CreateVersion7(),
-                        RoleId = role.Id,
-                        PermissionId = a.Id,
-                        CreatedAt = now,
-                    }));
-            }
+            action.IsActive = false;
+            action.UpdatedAt = now;
         }
 
-        await db.SaveChangesAsync(ct);
+        if (legacyActions.Count > 0 || module.UpdatedAt == now)
+            await db.SaveChangesAsync(ct);
     }
 
     /// <summary>

@@ -17,8 +17,6 @@ public static class AnalyticsApplicationServiceCollectionExtensions
         services.AddScoped<GetProcedureDetailsHandler>();
         services.AddScoped<ExportExecutivePdfHandler>();
         services.AddScoped<GetMonthlyTrendHandler>();
-        services.AddScoped<GetDetailedProceduresHandler>(); // Feature #10813 HU #10815
-
         // Feature #11076 — Reporting V2
         services.AddScoped<GetReportingProceduresHandler>();
         services.AddScoped<GetReportingAuditHandler>();

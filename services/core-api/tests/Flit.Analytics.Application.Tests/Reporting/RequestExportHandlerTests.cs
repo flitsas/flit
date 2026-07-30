@@ -69,6 +69,10 @@ internal sealed class FakeExportJobRepository : IExportJobRepository
 {
     public int ActiveCount { get; set; }
 
+    public (Guid JobId, string? StoragePath, Guid OwnerUserId, string Status)? DownloadMeta { get; set; }
+
+    public Dictionary<Guid, IReadOnlyList<ExportJobDto>> JobsByOwner { get; } = new();
+
     public Task<int> CountActiveJobsAsync(Guid ownerUserId, CancellationToken ct = default) =>
         Task.FromResult(ActiveCount);
 
@@ -80,8 +84,13 @@ internal sealed class FakeExportJobRepository : IExportJobRepository
         Task.FromResult<ExportJobDto?>(null);
 
     public Task<IReadOnlyList<ExportJobDto>> ListByOwnerAsync(Guid ownerUserId, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<ExportJobDto>>([]);
+        Task.FromResult(JobsByOwner.TryGetValue(ownerUserId, out var items) ? items : []);
 
-    public Task<(string? StoragePath, Guid OwnerUserId, string Status)?> GetDownloadMetaAsync(Guid jobId, CancellationToken ct = default) =>
-        Task.FromResult<(string?, Guid, string)?>(null);
+    public Task<(string? StoragePath, Guid OwnerUserId, string Status)?> GetDownloadMetaAsync(Guid jobId, CancellationToken ct = default)
+    {
+        if (DownloadMeta is null || DownloadMeta.Value.JobId != jobId)
+            return Task.FromResult<(string?, Guid, string)?>(null);
+        var m = DownloadMeta.Value;
+        return Task.FromResult<(string?, Guid, string)?>((m.StoragePath, m.OwnerUserId, m.Status));
+    }
 }
