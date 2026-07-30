@@ -186,6 +186,16 @@ public sealed class GetExportJobHandler(IExportJobRepository repo)
     public Task<ExportJobDto?> HandleAsync(Guid jobId, CancellationToken ct = default) =>
         repo.GetAsync(jobId, ct);
 
+    public async Task<(ExportJobDto? Result, string? Error)> HandleForOwnerAsync(
+        Guid jobId, Guid callerUserId, CancellationToken ct = default)
+    {
+        var meta = await repo.GetDownloadMetaAsync(jobId, ct).ConfigureAwait(false);
+        if (meta is null) return (null, "not_found");
+        if (meta.Value.OwnerUserId != callerUserId) return (null, "forbidden");
+        var job = await repo.GetAsync(jobId, ct).ConfigureAwait(false);
+        return (job, null);
+    }
+
     public Task<IReadOnlyList<ExportJobDto>> ListAsync(Guid ownerUserId, CancellationToken ct = default) =>
         repo.ListByOwnerAsync(ownerUserId, ct);
 }

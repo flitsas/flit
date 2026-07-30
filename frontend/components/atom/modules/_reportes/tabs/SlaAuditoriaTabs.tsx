@@ -24,6 +24,7 @@ export function SlaTab({
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón de carga del repo: skeleton inmediato antes del fetch
     setLoading(true);
     fetchSla({ from, to, tenantId })
       .then((page) => {
@@ -107,6 +108,7 @@ export function AuditoriaTab({
   useEffect(() => {
     if (!procedureId) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón de carga del repo: skeleton inmediato antes del fetch
     setLoading(true);
     setError(null);
     fetchProcedureAudit(procedureId, tenantId)

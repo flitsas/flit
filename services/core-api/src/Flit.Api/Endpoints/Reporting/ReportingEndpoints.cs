@@ -254,10 +254,17 @@ public static class ReportingEndpoints
     }
 
     private static async Task<IResult> GetExportAsync(
-        Guid id, GetExportJobHandler handler, CancellationToken ct)
+        HttpContext http, Guid id, GetExportJobHandler handler, CancellationToken ct)
     {
-        var job = await handler.HandleAsync(id, ct).ConfigureAwait(false);
-        return job is null ? Results.NotFound() : Results.Ok(job);
+        if (!TryUserId(http.User, out var userId))
+            return Results.Unauthorized();
+        var (job, err) = await handler.HandleForOwnerAsync(id, userId, ct).ConfigureAwait(false);
+        return err switch
+        {
+            "not_found" => Results.NotFound(),
+            "forbidden" => Results.Forbid(),
+            _ => Results.Ok(job),
+        };
     }
 
     private static async Task<IResult> GetDownloadUrlAsync(

@@ -300,10 +300,12 @@ CREATE TABLE analytics.report_sla_config (
     deleted_by          uuid          NULL
 );
 
--- A11: tenant_id primera columna; partial index para lookup activo
+-- A11: tenant_id primera columna.
+-- No usar CURRENT_DATE en predicado de índice (no es IMMUTABLE → 42P17).
+-- Filtro de vigencia activa se aplica en consulta; el índice cubre el lookup.
 CREATE INDEX ix_report_sla_config_tenant_lookup
     ON analytics.report_sla_config(tenant_id, procedure_type, transit_office_id)
-    WHERE effective_to IS NULL OR effective_to >= CURRENT_DATE;
+    WHERE deleted_at IS NULL;
 
 -- A9: FK index transit_office_id
 CREATE INDEX ix_report_sla_config_transit_office_id

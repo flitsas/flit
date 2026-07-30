@@ -19,6 +19,7 @@ export function ConsolidadoTab({
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón de carga del repo: skeleton inmediato antes del fetch
     setLoading(true);
     fetchConsolidado({ from, to, groupBy, tenantId })
       .then((page) => {
@@ -101,6 +102,7 @@ export function ProductividadV2Tab({
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón de carga del repo: skeleton inmediato antes del fetch
     setLoading(true);
     fetchProductivity({ from, to, dimension, tenantId })
       .then((page) => {

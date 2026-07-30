@@ -22,6 +22,7 @@ export function TramitesV2Tab({
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón de carga del repo: skeleton inmediato antes del fetch
     setLoading(true);
     setError(null);
     fetchReportingProcedures({ from, to, tenantId, search, page: 1, pageSize: 50 })
