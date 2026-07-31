@@ -50,6 +50,19 @@ public static class AdminLegalRepresentativeIdentityEndpoints
             .Produces(StatusCodes.Status502BadGateway)
             .Produces(StatusCodes.Status503ServiceUnavailable);
 
+        // POST /link — vincula una identidad que la PERSONA ya validó (HU #11176). NO envía correo ni
+        // crea validaciones: 409 si esa persona no tiene ninguna aprobada y vigente en el tenant.
+        // Idempotente: si el representante ya la tiene vigente, devuelve reused=true.
+        group.MapPost("/link", LinkAsync)
+            .WithName("AdminLegalRepIdentityLink")
+            .WithSummary("Vincula al representante una validación de identidad ya existente y vigente")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
         return app;
     }
 
@@ -70,6 +83,44 @@ public static class AdminLegalRepresentativeIdentityEndpoints
         [FromServices] IAdminIdentityValidationService service,
         CancellationToken cancellationToken) =>
         RunAsync(tenantId, id, httpContext, reader, service, resend: true, cancellationToken);
+
+    private static async Task<IResult> LinkAsync(
+        Guid tenantId,
+        Guid id,
+        HttpContext httpContext,
+        [FromServices] ILegalRepresentativeReader reader,
+        [FromServices] IAdminIdentityValidationService service,
+        CancellationToken cancellationToken)
+    {
+        var representative = await reader.GetByIdAsync(tenantId, id, cancellationToken).ConfigureAwait(false);
+        if (representative is null)
+        {
+            return Results.NotFound(new { error = $"No existe el representante {id} en esta compañía." });
+        }
+
+        var descriptor = new AdminIdentitySubjectDescriptor(
+            tenantId,
+            AdminIdentitySubjectTypes.LegalRepresentative,
+            representative.Id,
+            ComposeFullName(representative),
+            representative.DocumentType,
+            representative.DocumentNumber,
+            // Link no necesita correo (no envía nada). Marcador para satisfacer el campo obligatorio
+            // del descriptor sin exponer un correo real cuando no existe.
+            string.IsNullOrWhiteSpace(representative.Email) ? "sin-correo@flit.local" : representative.Email!,
+            ResolveUserId(httpContext.User));
+
+        var result = await service.LinkExistingAsync(descriptor, cancellationToken).ConfigureAwait(false);
+        if (result is null)
+        {
+            // La persona no tiene ninguna identidad aprobada y vigente en este tenant.
+            return Results.Json(
+                new { error = "sin_identidad_vigente" },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
+        return Results.Ok(ToResponse(result));
+    }
 
     private static async Task<IResult> RunAsync(
         Guid tenantId,
@@ -128,6 +179,17 @@ public static class AdminLegalRepresentativeIdentityEndpoints
                 statusCode: status);
         }
     }
+
+    /// <summary>Respuesta común de las acciones de identidad. NUNCA expone documento ni correo (PII).</summary>
+    private static object ToResponse(AdminIdentityValidationResult result) => new
+    {
+        id = result.Validation.Id,
+        status = result.Validation.Status,
+        captureUrl = result.Validation.CaptureUrl,
+        validUntil = result.Validation.ValidUntil,
+        reused = result.Reused,
+        provider = result.Validation.Provider,
+    };
 
     /// <summary>Nombre completo del representante para el proveedor (nombres + apellidos).</summary>
     private static string ComposeFullName(LegalRepresentativeItem rep)

@@ -5940,6 +5940,53 @@ paths:
         "401": { description: "No autenticado." }
         "403": { description: "Sin permiso (requiere SuperAdmin)." }
 
+  # ── Admin · Identidad de Representantes (HU #11176) ──────────────────────────
+  /api/v1/admin/companies/{tenantId}/legal-representatives/{id}/identity/link:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del tenant (compañía gestora).
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Identificador del representante legal.
+    post:
+      operationId: adminLegalRepIdentityLink
+      tags: ["Admin · Identidad de Representantes"]
+      security:
+        - bearerAuth: []
+      summary: "Vincula al representante una validación de identidad ya existente y vigente"
+      description: |
+        Vincula al representante legal una identidad que la persona ya validó en el tenant
+        (HU #11176). NO envía correo ni crea validaciones nuevas. Si la persona no tiene
+        ninguna identidad aprobada y vigente en el tenant, responde 409 con
+        `sin_identidad_vigente`. Si el representante ya la tiene vigente, responde 200 con
+        `reused=true` (idempotente). Las respuestas NUNCA exponen el documento ni el correo
+        del representante (PII, Ley 1581).
+      responses:
+        "200":
+          description: "Identidad vinculada (o reutilizada si ya estaba vigente)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminIdentityLinkResponse"
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+        "404": { description: "Representante no encontrado en esta compañía." }
+        "409":
+          description: "La persona no tiene ninguna identidad aprobada y vigente en el tenant."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string, example: sin_identidad_vigente }
+                required: [error]
+        "422": { description: "Solicitud inválida." }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -5957,6 +6004,22 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    # ── Admin · Identidad de Representantes (HU #11176) ──────────────────────
+    AdminIdentityLinkResponse:
+      type: object
+      description: >
+        Resultado de vincular una identidad ya existente al representante legal.
+        `reused=true` indica que ya estaba vigente (idempotente, AC3).
+        NUNCA expone documento ni correo del representante (PII, Ley 1581).
+      properties:
+        id: { type: string, format: uuid, description: "Id de la validación de identidad." }
+        status: { type: string, description: "Estado de la validación (aprobado, etc.)." }
+        captureUrl: { type: string, nullable: true, description: "URL de captura biométrica (null en vinculación)." }
+        validUntil: { type: string, format: date-time, nullable: true, description: "Fecha hasta la que es válida la identidad." }
+        reused: { type: boolean, description: "true si se reutilizó una identidad ya vigente." }
+        provider: { type: string, description: "Proveedor de validación biométrica." }
+      required: [id, status, reused, provider]
+
     # ── Admin · Baúl de Firmas (HU #10643, #11175) ───────────────────────────
     SignatureVaultResponse:
       type: object
