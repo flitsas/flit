@@ -5875,7 +5875,20 @@ paths:
         - bearerAuth: []
       summary: "Obtiene un representante legal por id"
       responses:
-        "200": { description: "Representante encontrado." }
+        "200":
+          description: "Representante encontrado."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  companies:
+                    type: array
+                    description: >
+                      Compañías del representante (HU #10932, #11177). La principal viene primero
+                      con isPrimary: true; el resto ordenado por fecha de asociación ascendente.
+                    items:
+                      $ref: "#/components/schemas/LegalRepresentativeCompanySummaryResponse"
         "401": { description: "No autenticado." }
         "403": { description: "Sin permiso (requiere SuperAdmin)." }
         "404": { description: "Representante no encontrado en esta compañía." }
@@ -6056,7 +6069,35 @@ components:
         mandateSignerId: { type: string, format: uuid, nullable: true }
       required: [documentType, documentNumber, fullName, vigenciaDesde, vigenciaHasta, artefactoFirmaBase64]
 
-    # ── Admin · Representantes Legales (HU #10901, #11175) ───────────────────
+    # ── Admin · Representantes Legales (HU #10901, #11175, #11177) ──────────
+    LegalRepresentativeCompanySummaryResponse:
+      type: object
+      description: >
+        Resumen de una compañía representada en la respuesta de listado/detalle de un representante
+        legal (HU #10932, #11177). El campo `isPrimary` identifica explícitamente la compañía
+        principal; exactamente una compañía en la lista viene con `isPrimary: true`. La lista se
+        devuelve siempre con la principal primero, seguida del resto ordenadas por fecha de
+        asociación ascendente (orden estable entre consultas). No inferir la principal de campos
+        denormalizados deprecados.
+      properties:
+        id: { type: string, format: uuid }
+        nit: { type: string, description: "NIT de la compañía representada (PII)." }
+        name: { type: string }
+        isPrimary:
+          type: boolean
+          description: >
+            HU #11177 — true si esta es la compañía principal del representante. Exactamente una
+            compañía por representante viene con isPrimary: true.
+        email: { type: string, format: email, nullable: true }
+        address: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        deeds:
+          type: array
+          description: "Historial de escrituras (solo en el detalle; vacío en el listado)."
+          items: { type: object }
+      required: [id, nit, name, isPrimary]
+
     LegalRepresentativeCompanyInput:
       type: object
       properties:

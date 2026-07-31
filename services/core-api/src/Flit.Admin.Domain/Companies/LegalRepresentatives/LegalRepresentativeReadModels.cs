@@ -97,6 +97,14 @@ public sealed class LegalRepresentativeItem
 public sealed record LegalRepresentativeCompanySummary(Guid Id, string Nit, string Name)
 {
     /// <summary>
+    /// HU #11177 — bandera explícita que indica si esta es la compañía principal del representante.
+    /// Exactamente UNA compañía viene marcada como principal en cada respuesta. La principal es la
+    /// compañía primaria registrada al crear el representante (<c>RepresentedCompanyId</c>); el resto
+    /// se ordena por fecha de asociación al puente. No inferir de la columna denormalizada deprecada.
+    /// </summary>
+    public bool IsPrimary { get; init; }
+
+    /// <summary>
     /// Historial de escrituras de la compañía (HU #10933): vigentes y vencidas, ordenadas por
     /// <c>VigenciaHasta</c> descendente. Solo se puebla en el detalle del representante; en el listado
     /// y en el consumo del wizard queda vacío para no cargar el M:N innecesariamente.
