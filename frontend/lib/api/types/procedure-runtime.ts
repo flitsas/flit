@@ -857,8 +857,12 @@ export type BiometricEstado =
 /** Parte a la que pertenece la validación. null = matrícula (comprador único). */
 export type BiometricParte = 'comprador' | 'vendedor';
 
-/** Proveedor de validación de identidad (espejo de BiometricProviders). */
-export type BiometricProvider = 'mock' | 'kyverum';
+/**
+ * Proveedor de validación de identidad (espejo de BiometricProviders).
+ * `migracion_v1` = identidad que ya venía validada de V1 y la migración trajo como hecho
+ * consumado; no hubo captura ni proveedor externo, y solo acredita a su propio trámite.
+ */
+export type BiometricProvider = 'mock' | 'kyverum' | 'migracion_v1';
 
 /** Estado de vigencia derivado de una identidad aprobada (espejo de BiometricVigenciaEstados). */
 export type BiometricVigenciaEstado = 'vigente' | 'por_vencer' | 'vencida';

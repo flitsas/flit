@@ -341,6 +341,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && v.Status == BiometricEstados.Aprobado
                 && v.DocumentType == tipoDoc
                 && v.DocumentNumber == documento
+                // Migración V1→V2: una identidad traída de V1 vale SOLO para su trámite (ver
+                // BiometricProviders.MigracionV1). Sin esta exclusión apalancaría trámites nativos de V2.
+                && v.Provider != BiometricProviders.MigracionV1
                 && ((v.ValidUntil != null && v.ValidUntil > now)
                     || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
                 // HU #10867 — incluir prevalidaciones standalone (sin trámite) y las ligadas a instancias no eliminadas.
@@ -370,6 +373,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && v.Status == BiometricEstados.Aprobado
                 && v.DocumentType != null
                 && v.DocumentNumber != null
+                // Migración V1→V2: una identidad traída de V1 vale SOLO para su trámite (ver
+                // BiometricProviders.MigracionV1). Sin esta exclusión apalancaría trámites nativos de V2.
+                && v.Provider != BiometricProviders.MigracionV1
                 && ((v.ValidUntil != null && v.ValidUntil > now)
                     || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
                 // HU #10867 — incluir prevalidaciones standalone (sin trámite) y las ligadas a instancias no eliminadas.

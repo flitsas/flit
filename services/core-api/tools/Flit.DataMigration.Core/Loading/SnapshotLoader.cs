@@ -32,6 +32,15 @@ public sealed class SnapshotLoadResult
     /// <summary>Piezas no guardadas porque su binario ya lo copió la instancia 2.</summary>
     public int Duplicated { get; init; }
 
+    /// <summary>
+    /// Validaciones de identidad marcadas como aprobadas en V2 porque V1 ya las tenía acreditadas
+    /// (biométrica aprobada o firma física). Ver <see cref="IdentityValidationSeeder"/>.
+    /// </summary>
+    public int IdentidadesMarcadas { get; init; }
+
+    /// <summary>Identidades que ya estaban marcadas de una corrida anterior.</summary>
+    public int IdentidadesExistentes { get; init; }
+
     /// <summary>Piezas que V1 no pudo construir o entregó degradadas, con su motivo.</summary>
     public IReadOnlyList<string> Issues { get; init; } = [];
 
@@ -186,6 +195,13 @@ public sealed class SnapshotLoader(
         var failed = 0;
         var duplicated = 0;
 
+        // sha256 de cada pieza, para que el sembrado de identidades pueda anclar su evidencia a la
+        // carta selfie. Se llena tanto con lo que se materializa ahora como con lo que ya estaba: al
+        // re-correr la instancia, la carta sigue siendo la evidencia aunque no se vuelva a subir.
+        var shaPorPieza = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var identidades = IdentitySeedResult.Vacio;
+        Exception? errorIdentidades = null;
+
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         try
         {
@@ -200,6 +216,9 @@ public sealed class SnapshotLoader(
 
                 if (already.Contains(column))
                 {
+                    // Ya está en V2 de una corrida anterior: sirve igual como evidencia. Se toma el
+                    // sha declarado por V1, que es el único disponible sin volver a descargar la pieza.
+                    shaPorPieza[piece.Key] = piece.Sha256;
                     skipped++;
                     continue;
                 }
@@ -216,7 +235,7 @@ public sealed class SnapshotLoader(
                 try
                 {
                     var warning = await MaterializeOneAsync(
-                        record, targetRef, snapshot, piece, column, dryRun, cancellationToken);
+                        record, targetRef, snapshot, piece, column, shaPorPieza, dryRun, cancellationToken);
 
                     if (warning is not null)
                     {
@@ -234,7 +253,27 @@ public sealed class SnapshotLoader(
                 }
             }
 
-            if (dryRun)
+            // Lo último, y dentro de la MISMA transacción: la afirmación "esta identidad ya estaba
+            // validada" solo se sostiene si su evidencia quedó guardada. Si algo falla al escribirla,
+            // el rollback se lleva las dos cosas y no queda una sin la otra.
+            //
+            // Se captura el fallo en vez de dejarlo subir: ningún camino de este método tumba el lote
+            // —una pieza que falla se cuenta y se sigue— y el sembrado no puede ser la excepción. Pero
+            // tampoco se puede "seguir y confirmar": un error de Postgres envenena la transacción, así
+            // que el trámite se deshace entero y se reporta como fallido. Re-correr la instancia lo
+            // rehace sin duplicar nada.
+            try
+            {
+                identidades = await new IdentityValidationSeeder(kind, db).SeedAsync(
+                    record, targetRef, shaPorPieza, DateTimeOffset.UtcNow, dryRun, cancellationToken);
+                warnings.AddRange(identidades.Avisos);
+            }
+            catch (Exception ex)
+            {
+                errorIdentidades = ex;
+            }
+
+            if (dryRun || errorIdentidades is not null)
             {
                 await transaction.RollbackAsync(cancellationToken);
             }
@@ -248,6 +287,20 @@ public sealed class SnapshotLoader(
             db.ChangeTracker.Clear();
         }
 
+        if (errorIdentidades is not null)
+        {
+            return new SnapshotLoadResult
+            {
+                V1Id = record.Id,
+                Status = SnapshotLoadStatus.Failed,
+                V2Id = targetRef.V2Id,
+                Reason = "No se pudo marcar la validación de identidad que V1 tenía aprobada, así que se "
+                    + $"deshizo todo el trámite: {Describe(errorIdentidades)}",
+                Issues = issues,
+                Warnings = warnings,
+            };
+        }
+
         return new SnapshotLoadResult
         {
             V1Id = record.Id,
@@ -257,6 +310,8 @@ public sealed class SnapshotLoader(
             Skipped = skipped,
             Failed = failed,
             Duplicated = duplicated,
+            IdentidadesMarcadas = identidades.Creadas,
+            IdentidadesExistentes = identidades.YaExistian,
             Issues = issues,
             Warnings = warnings,
         };
@@ -287,6 +342,7 @@ public sealed class SnapshotLoader(
         V1Snapshot snapshot,
         V1SnapshotPiece piece,
         string column,
+        Dictionary<string, string> shaPorPieza,
         bool dryRun,
         CancellationToken cancellationToken)
     {
@@ -301,6 +357,8 @@ public sealed class SnapshotLoader(
             warning = $"{piece.Key}: el sha256 declarado por V1 ({piece.Sha256}) no coincide con el del binario "
                 + $"recibido ({sha256}); se usa el calculado.";
         }
+
+        shaPorPieza[piece.Key] = sha256;
 
         // En dry-run NO se sube: una subida real no la revierte el rollback de la base.
         string storagePath;

@@ -138,6 +138,7 @@ const PROVIDER_OPTIONS: { value: '' | BiometricProvider; label: string }[] = [
   { value: '', label: 'Todos' },
   { value: 'mock', label: 'Simulado' },
   { value: 'kyverum', label: 'Kyverum' },
+  { value: 'migracion_v1', label: 'Migrada de V1' },
 ];
 
 const VIGENCIA_OPTIONS: { value: '' | BiometricVigenciaEstado; label: string }[] = [
