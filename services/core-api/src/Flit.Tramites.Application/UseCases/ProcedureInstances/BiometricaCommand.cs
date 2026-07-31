@@ -333,11 +333,21 @@ public sealed class ListBiometriaHandler(
 
             // HU #11014 — cobertura por FIRMA DEL BAÚL: la identidad del sujeto queda satisfecha por su
             // firma vigente y NO hay validación biométrica ni certificado que mostrar.
-            var firmaBaul = await _vaultPolicy
-                .ResolveAsync(instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), ct)
-                .ConfigureAwait(false);
-            if (firmaBaul is not null)
-                firmaBaulPartes.Add(parte);
+            //
+            // Bug #11141 — antes bastaba con que EXISTIERA una firma vigente, sin mirar el mecanismo
+            // elegido por el gestor ni si el actor era jurídico. Con "validación de identidad"
+            // seleccionada, el documento se firmaba con el sello de identidad (correcto) pero esta
+            // lista rotulaba a la parte como firmada desde el baúl, y de ahí salían el resumen del paso
+            // FUR y las pestañas de comprador/vendedor del expediente. Ahora la condición es el mismo
+            // predicado que usa el generador, así que la vista no puede contradecir al documento.
+            if (FirmaBaulCobertura.Aplica(actor))
+            {
+                var firmaBaul = await _vaultPolicy
+                    .ResolveAsync(instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), ct)
+                    .ConfigureAwait(false);
+                if (firmaBaul is not null)
+                    firmaBaulPartes.Add(parte);
+            }
 
             var yaLocal = instance.BiometricValidations.Any(v =>
                 string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)

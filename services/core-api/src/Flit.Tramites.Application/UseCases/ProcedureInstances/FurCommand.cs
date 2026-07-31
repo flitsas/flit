@@ -624,18 +624,20 @@ public sealed class GenerarFurHandler(
 
         foreach (var role in roles)
         {
+            var actor = instance.Actors.FirstOrDefault(a =>
+                string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+
             // HU #11061 — si el gestor eligió EXPLÍCITAMENTE el sello de identidad, no se consume el
             // baúl aunque tenga firma vigente. Es el único punto donde se resuelve la imagen del baúl,
             // así que el guard aquí honra la elección en TODOS los documentos (FUR, mandato, solicitud
             // de trámite virtual y compraventa consumen `FirmaImagenes` de este mismo ensamblado).
             // Sin elección explícita se mantiene la precedencia del baúl (HU #11031).
-            // Bug #11147 — misma condición que retira el sello de identidad de esa parte, para que la
-            // imagen y el sello no puedan aparecer los dos ni desaparecer los dos.
-            if (!ProcedeElBaul(instance, role))
+            // Bug #11141 — la decisión vive en un único predicado, compartido con la consulta que
+            // alimenta la interfaz: lo que se muestra debe ser lo que se plasma.
+            // Bug #11147 — y es el MISMO predicado que decide si esa parte conserva su sello de
+            // identidad, para que la imagen y el sello no puedan aparecer los dos ni faltar los dos.
+            if (actor is null || !FirmaBaulCobertura.Aplica(actor))
                 continue;
-
-            var actor = instance.Actors.First(a =>
-                string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
 
             // HU #10930/#10937 — la firma del baúl es de la PERSONA: se resuelve por el documento del
             // REPRESENTANTE LEGAL seleccionado (sujeto de identidad del actor jurídico), no por el NIT.
@@ -683,44 +685,21 @@ public sealed class GenerarFurHandler(
     }
 
     /// <summary>¿El actor es persona JURÍDICA (NIT/N)? Solo estos consumen el baúl de firmas (ADR-0025 §4).</summary>
-    private static bool EsActorJuridico(string? documentType)
-    {
-        var t = documentType?.Trim();
-        return string.Equals(t, "NIT", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(t, "N", StringComparison.OrdinalIgnoreCase);
-    }
+    // Bug #11141 — delega en el predicado compartido para que no queden dos definiciones de
+    // "persona jurídica" que puedan separarse con el tiempo.
+    private static bool EsActorJuridico(string? documentType) =>
+        FirmaBaulCobertura.EsJuridico(documentType);
 
     /// <summary>
-    /// Bug #11147 — ¿procede intentar la firma del baúl para esta parte? Persona jurídica y sin haber
-    /// elegido explícitamente el sello de identidad. Es la condición con la que
-    /// <see cref="ResolveVaultSignaturesAsync"/> decide si baja la imagen.
-    /// </summary>
-    private static bool ProcedeElBaul(ProcedureInstance instance, string role)
-    {
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-        if (actor is null || !EsActorJuridico(actor.DocumentType))
-            return false;
-
-        var (_, _, rl, _) = PutActorsHandler.ParseMetadata(actor.Metadata);
-        return MecanismoFirma.ConsumeBaul(rl?.MecanismoFirma);
-    }
-
-    /// <summary>
-    /// Bug #11147 — ¿el gestor eligió el baúl <b>a propósito</b>? Distinto de <see cref="ProcedeElBaul"/>,
-    /// que también es cierto cuando NO hay elección (ahí manda la precedencia del baúl, HU #11031, pero
-    /// solo si de verdad existe la firma). Confundir ambos deja sin firma a las partes con identidad
-    /// validada y sin baúl, que son la mayoría.
+    /// Bug #11147 — ¿el gestor eligió el baúl <b>a propósito</b> para esta parte? Se apoya en el mismo
+    /// predicado compartido que decide si procede bajar la imagen, para no reintroducir una segunda
+    /// definición de la regla.
     /// </summary>
     private static bool EligioExplicitamenteElBaul(ProcedureInstance instance, string role)
     {
         var actor = instance.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-        if (actor is null || !EsActorJuridico(actor.DocumentType))
-            return false;
-
-        var (_, _, rl, _) = PutActorsHandler.ParseMetadata(actor.Metadata);
-        return MecanismoFirma.Normalizar(rl?.MecanismoFirma) == MecanismoFirma.Baul;
+        return FirmaBaulCobertura.EligioBaulExplicitamente(actor);
     }
 
     /// <summary>Huso horario de Colombia (UTC-5) para presentar las fechas del sello de identidad.</summary>
