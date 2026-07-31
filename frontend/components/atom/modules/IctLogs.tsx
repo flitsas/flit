@@ -62,7 +62,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 function LogsTab() {
   const [applied, setApplied] = useState<IctLogFilters>({});
   const [logTypeInput, setLogTypeInput] = useState<IctLogType | "">("");
-  const [correlationInput, setCorrelationInput] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [fromInput, setFromInput] = useState("");
   const [toInput, setToInput] = useState("");
   const [page, setPage] = useState(1);
@@ -82,7 +82,11 @@ function LogsTab() {
         setError(null);
       })
       .catch((e: unknown) => {
-        if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Error al cargar los logs");
+        // Mensaje genérico: nunca exponer el código HTTP ni la ruta técnica al usuario.
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        if (!controller.signal.aborted) {
+          setError("No se pudieron cargar los logs. Revisa los filtros e intenta de nuevo.");
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -98,7 +102,7 @@ function LogsTab() {
     setExpandedId(null);
     setApplied({
       logType: logTypeInput || undefined,
-      correlationId: correlationInput.trim() || undefined,
+      search: searchInput.trim() || undefined,
       from: fromInput ? new Date(fromInput).toISOString() : undefined,
       to: toInput ? new Date(toInput).toISOString() : undefined,
     });
@@ -106,7 +110,7 @@ function LogsTab() {
 
   function clearFilters() {
     setLogTypeInput("");
-    setCorrelationInput("");
+    setSearchInput("");
     setFromInput("");
     setToInput("");
     setPage(1);
@@ -134,13 +138,13 @@ function LogsTab() {
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs text-slate-500">
-          Correlación
+          Buscar
           <input
             type="text"
-            value={correlationInput}
-            onChange={(e) => setCorrelationInput(e.target.value)}
-            placeholder="correlation id"
-            className={`${inputClass} font-mono`}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="nº de trámite o ruta (p.ej. 82)"
+            className={inputClass}
           />
         </label>
         <label className="flex flex-col gap-1 text-xs text-slate-500">

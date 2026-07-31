@@ -47,6 +47,7 @@ app.MapIctClientAdminEndpoints();
 app.MapGrpcService<IctStateCallbackService>()
     .RequireAuthorization(Flit.Ict.Api.Authorization.IctSecurityExtensions.CoreApiCallbackPolicy);
 
+// Health del servicio (usado por el compose y el smoke local).
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "core-ict" }));
 
 app.Run();
