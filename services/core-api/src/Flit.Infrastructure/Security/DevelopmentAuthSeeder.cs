@@ -62,6 +62,7 @@ public static class DevelopmentAuthSeeder
         await SeedDetailedReportPermissionsAsync(db, cancellationToken);
         await SeedLogQxPermissionsAsync(db, cancellationToken);
         await SeedIctLogsPermissionsAsync(db, cancellationToken);
+        await SeedIctClientsPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
     }
 
@@ -996,6 +997,76 @@ public static class DevelopmentAuthSeeder
                 Name = "Ver logs ICT",
                 HttpMethod = "GET",
                 RoutePattern = "/api/v1/ict/logs",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // Grant a SuperAdmin (idempotente): solo si aún no lo tiene.
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin")
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
+            {
+                db.RoleGrants.Add(new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Administración de clientes ICT (Feature #10888, ronda 2) — módulo <c>ict-clients</c> + permiso
+    /// <c>ict.clients.manage</c> que protege el CRUD de <c>ict.integration_clients</c>
+    /// (<c>/api/v1/ict/clients</c>, submódulo "Clientes ICT" dentro de Usuarios y Roles). Mismo patrón e
+    /// idempotencia que <see cref="SeedIctLogsPermissionsAsync"/>: crea módulo y permiso si faltan y concede
+    /// el permiso a SuperAdmin (que además bypassa por rol).
+    /// </summary>
+    private static async Task SeedIctClientsPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "ict-clients" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "ict-clients",
+                Name = "Clientes ICT",
+                SortOrder = 10,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var action = await db.RbacActions
+            .FirstOrDefaultAsync(a => a.Slug == "ict.clients.manage", ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = "ict.clients.manage",
+                Name = "Administrar clientes ICT",
+                HttpMethod = "POST",
+                RoutePattern = "/api/v1/ict/clients",
                 IsActive = true,
                 CreatedAt = now,
             };

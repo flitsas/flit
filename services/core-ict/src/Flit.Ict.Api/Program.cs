@@ -39,6 +39,7 @@ app.MapIctStatusEndpoints();
 app.MapIctSecretariesEndpoints();
 app.MapIctLifecycleEndpoints();
 app.MapIctObservabilityEndpoints();
+app.MapIctClientAdminEndpoints();
 
 // Servidor gRPC del callback de estados (core-api -> core-ict). Requiere HTTP/2 (h2c en dev).
 // Protegido con el service-token del canal inverso (aud=core-ict-internal, scope=ict.state): solo
