@@ -14,10 +14,15 @@ namespace Flit.Ict.Infrastructure.Persistence.Repositories;
 public sealed class StatusProcessV1Query(IctDbContext db) : IStatusProcessV1Query
 {
     public async Task<StatusProcessV1Response?> GetByManagerIdTransactionAsync(
-        string managerIdTransaction,
+        string reference,
         Guid tenantId,
         CancellationToken ct = default)
     {
+        // La referencia puede ser el número secuencial (transaction_number, paridad v1) o el
+        // manager_id_transaction propio del gestor; se prioriza el número cuando es numérica.
+        var number = long.TryParse(reference, NumberStyles.None, CultureInfo.InvariantCulture, out var n)
+            ? n
+            : (long?)null;
         var connection = db.Database.GetDbConnection();
         var wasClosed = connection.State != ConnectionState.Open;
         if (wasClosed)
@@ -29,7 +34,8 @@ public sealed class StatusProcessV1Query(IctDbContext db) : IStatusProcessV1Quer
         {
             await SetTenantGucAsync(connection, tenantId, ct);
 
-            var (masterId, companyDocument) = await FindMasterAsync(connection, managerIdTransaction, tenantId, ct);
+            var (masterId, companyDocument, transactionNumber) =
+                await FindMasterAsync(connection, reference, number, tenantId, ct);
             if (masterId is null)
             {
                 return null;
@@ -55,7 +61,7 @@ public sealed class StatusProcessV1Query(IctDbContext db) : IStatusProcessV1Quer
                 .ToList();
 
             return new StatusProcessV1Response(
-                TransactionFlit: managerIdTransaction,
+                TransactionFlit: transactionNumber.ToString(CultureInfo.InvariantCulture),
                 StatusValidation: latest.Code,
                 StatusDescription: Describe(latest.Code),
                 MessageValidation: latest.Message,
@@ -75,22 +81,25 @@ public sealed class StatusProcessV1Query(IctDbContext db) : IStatusProcessV1Quer
 
     private sealed record HistoryRow(int Code, string Message, string Observation, string Mail, string Role, string UserName, string Date, string Company);
 
-    private static async Task<(Guid? MasterId, string CompanyDocument)> FindMasterAsync(
-        DbConnection connection, string flit, Guid tenantId, CancellationToken ct)
+    private static async Task<(Guid? MasterId, string CompanyDocument, long TransactionNumber)> FindMasterAsync(
+        DbConnection connection, string reference, long? number, Guid tenantId, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();
         cmd.CommandText =
-            "SELECT id, company_manager_document FROM ict.external_integration_master " +
-            "WHERE manager_id_transaction = @flit AND tenant_id = @tenant AND deleted_at IS NULL LIMIT 1";
-        AddParam(cmd, "flit", flit);
+            "SELECT id, company_manager_document, transaction_number FROM ict.external_integration_master " +
+            "WHERE ((@num IS NOT NULL AND transaction_number = @num) OR manager_id_transaction = @flit) " +
+            "AND tenant_id = @tenant AND deleted_at IS NULL " +
+            "ORDER BY (transaction_number = @num) DESC NULLS LAST LIMIT 1";
+        AddParam(cmd, "flit", reference);
+        AddParam(cmd, "num", (object?)number ?? DBNull.Value);
         AddParam(cmd, "tenant", tenantId);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))
         {
-            return (null, string.Empty);
+            return (null, string.Empty, 0);
         }
 
-        return (reader.GetGuid(0), reader.IsDBNull(1) ? string.Empty : reader.GetString(1));
+        return (reader.GetGuid(0), reader.IsDBNull(1) ? string.Empty : reader.GetString(1), reader.GetInt64(2));
     }
 
     private static async Task<List<HistoryRow>> ReadHistoryAsync(DbConnection connection, Guid masterId, CancellationToken ct)

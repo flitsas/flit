@@ -1,3 +1,4 @@
+using System.Globalization;
 using Flit.Ict.Domain.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -85,7 +86,11 @@ public sealed class RegisterIctBatchHandler(
             master.CreatedBy = currentTenant.IntegrationClientId;
             await repository.AddAsync(master, tenantId.Value, ct);
             processed++;
-            details.Add(new RegisterDetail(master.Plate, 1, "registrado", master.ManagerIdTransaction));
+            // TransactionFlit devuelto = el número secuencial que asigna FLIT (paridad v1). La secuencia
+            // lo genera en el INSERT y EF lo lee de vuelta (RETURNING); el manager_id_transaction sigue
+            // siendo la referencia propia del gestor, con la que también puede consultar estado/reproceso.
+            details.Add(new RegisterDetail(
+                master.Plate, 1, "registrado", master.TransactionNumber.ToString(CultureInfo.InvariantCulture)));
         }
 
         return (new RegisterBatchResult(rows.Count, processed, details), null);

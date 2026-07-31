@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using System.Globalization;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -15,10 +16,15 @@ namespace Flit.Ict.Infrastructure.Persistence.Repositories;
 public sealed class IctStatusV2Query(IctDbContext db) : IIctStatusV2Query
 {
     public async Task<IctStatusV2Response?> GetByManagerIdTransactionAsync(
-        string managerIdTransaction,
+        string reference,
         Guid tenantId,
         CancellationToken ct = default)
     {
+        // La referencia puede ser el número secuencial (transaction_number, paridad v1) o el
+        // manager_id_transaction propio del gestor. Se prioriza el número cuando la referencia es numérica.
+        var number = long.TryParse(reference, NumberStyles.None, CultureInfo.InvariantCulture, out var n)
+            ? n
+            : (long?)null;
         var connection = db.Database.GetDbConnection();
         var wasClosed = connection.State != ConnectionState.Open;
         if (wasClosed)
@@ -45,10 +51,13 @@ public sealed class IctStatusV2Query(IctDbContext db) : IIctStatusV2Query
                            procedure_instance_id, business_comments_validation,
                            closed_document, process_without_attached_documents
                     FROM ict.external_integration_master
-                    WHERE manager_id_transaction = @flit AND tenant_id = @tenant AND deleted_at IS NULL
+                    WHERE ((@num IS NOT NULL AND transaction_number = @num) OR manager_id_transaction = @flit)
+                          AND tenant_id = @tenant AND deleted_at IS NULL
+                    ORDER BY (transaction_number = @num) DESC NULLS LAST
                     LIMIT 1
                     """;
-                AddParam(cmd, "flit", managerIdTransaction);
+                AddParam(cmd, "flit", reference);
+                AddParam(cmd, "num", (object?)number ?? DBNull.Value);
                 AddParam(cmd, "tenant", tenantId);
 
                 await using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -86,7 +95,9 @@ public sealed class IctStatusV2Query(IctDbContext db) : IIctStatusV2Query
                 ? null
                 : await TryReadTramiteStatusAsync(connection, procedureInstanceId.Value, ct);
 
-            return new IctStatusV2Response(managerIdTransaction, ictEstado, procedureInstanceId, tramiteStatus, comments);
+            // Echo de la referencia recibida (número secuencial o manager_id_transaction), sin cambiar la
+            // forma de la respuesta v2-native.
+            return new IctStatusV2Response(reference, ictEstado, procedureInstanceId, tramiteStatus, comments);
         }
         finally
         {

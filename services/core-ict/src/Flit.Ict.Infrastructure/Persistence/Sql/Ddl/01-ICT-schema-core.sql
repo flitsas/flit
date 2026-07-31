@@ -157,6 +157,28 @@ CREATE OR REPLACE TRIGGER tr_eim_row_version
     FOR EACH ROW EXECUTE FUNCTION ict.set_row_version();
 
 -- -----------------------------------------------------------------------------
+-- transaction_number — identificador NUMÉRICO secuencial del trámite, asignado por FLIT (paridad v1).
+-- En v1 el TransactionFlit que se devolvía al cliente era la PK numérica autoincremental del master.
+-- En v2 la PK es id uuid (de ella cuelgan las FKs, la RLS y la correlación gRPC external_ref con
+-- core-api), así que el número se agrega como columna APARTE: es la llave pública que /register devuelve
+-- y por la que el cliente consulta estado/reproceso (además del manager_id_transaction propio del gestor).
+-- Idempotente: ADD COLUMN IF NOT EXISTS + backfill único de filas previas a esta columna.
+-- -----------------------------------------------------------------------------
+CREATE SEQUENCE IF NOT EXISTS ict.transaction_number_seq AS bigint START WITH 1 INCREMENT BY 1;
+ALTER TABLE ict.external_integration_master
+    ADD COLUMN IF NOT EXISTS transaction_number bigint;
+ALTER TABLE ict.external_integration_master
+    ALTER COLUMN transaction_number SET DEFAULT nextval('ict.transaction_number_seq');
+UPDATE ict.external_integration_master
+    SET transaction_number = nextval('ict.transaction_number_seq')
+    WHERE transaction_number IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_eim_transaction_number
+    ON ict.external_integration_master (transaction_number)
+    WHERE deleted_at IS NULL;
+COMMENT ON COLUMN ict.external_integration_master.transaction_number
+    IS 'Identificador numérico secuencial del trámite asignado por FLIT (llave pública, paridad v1). La PK sigue siendo id uuid.';
+
+-- -----------------------------------------------------------------------------
 -- ict.external_integration_actors — actores del pre-trámite. RLS por tenant_id.
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS ict.external_integration_actors (

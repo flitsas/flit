@@ -40,6 +40,11 @@ internal sealed class ExternalIntegrationMasterConfiguration : IEntityTypeConfig
     {
         builder.ToTable("external_integration_master", SchemaNames.Ict, t => t.ExcludeFromMigrations());
         builder.HasKey(x => x.Id);
+        // Identificador numérico secuencial (paridad v1): lo genera la secuencia en la BD (DDL embebido);
+        // EF no lo envía en el INSERT y lo lee de vuelta (RETURNING) para exponerlo en /register.
+        builder.Property(x => x.TransactionNumber)
+            .ValueGeneratedOnAdd()
+            .HasDefaultValueSql("nextval('ict.transaction_number_seq')");
         builder.Property(x => x.SellingPrice).HasColumnType("numeric(19,2)");
         builder.Property(x => x.BusinessCommentsValidation).HasColumnType("text");
         builder.Property(x => x.ExternalCommentsValidation).HasColumnType("text");
