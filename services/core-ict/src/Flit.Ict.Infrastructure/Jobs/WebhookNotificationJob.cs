@@ -30,47 +30,38 @@ public sealed partial class WebhookNotificationJob(
 
     protected override string JobName => "webhook-notification";
 
-    protected override async Task RunCycleAsync(IServiceScope scope, CancellationToken ct)
+    protected override Task RunCycleAsync(IServiceScope scope, CancellationToken ct) =>
+        // Advisory lock (guarda multi-réplica): solo UNA réplica entrega el lote por ciclo, lo que evita la
+        // DOBLE ENTREGA del mismo webhook cuando hay 2+ réplicas (antes este job era el único sin el lock).
+        // Se prefiere sobre FOR UPDATE SKIP LOCKED para no retener locks de fila durante la entrega HTTP
+        // (lenta); es el mismo mecanismo que ya usan los otros 4 jobs del pipeline. La conexión (abierta y
+        // con el lock) la provee RunUnderAdvisoryLockAsync.
+        RunUnderAdvisoryLockAsync(
+            scope, IctAdvisoryLock.Keys.Webhook, connection => DeliverPendingAsync(scope, connection, ct), ct);
+
+    private async Task DeliverPendingAsync(IServiceScope scope, DbConnection connection, CancellationToken ct)
     {
-        var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
         var http = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>().CreateClient("ict-webhook");
-        var connection = db.Database.GetDbConnection();
-        var wasClosed = connection.State != ConnectionState.Open;
-        if (wasClosed)
+        var pending = await ReadPendingAsync(connection, JobSettings.WebhookBatchSize, ct);
+        foreach (var wh in pending)
         {
-            await connection.OpenAsync(ct);
-        }
-
-        try
-        {
-            var pending = await ReadPendingAsync(connection, JobSettings.WebhookBatchSize, ct);
-            foreach (var wh in pending)
+            // Anti-SSRF: el target_url viene del payload de ingesta. Un destino interno/privado o un
+            // esquema no-http se descarta como fallo terminal (no reintentar; no se arregla solo).
+            if (!await WebhookTargetGuard.IsPublicHttpTargetAsync(wh.TargetUrl, ct))
             {
-                // Anti-SSRF: el target_url viene del payload de ingesta. Un destino interno/privado o un
-                // esquema no-http se descarta como fallo terminal (no reintentar; no se arregla solo).
-                if (!await WebhookTargetGuard.IsPublicHttpTargetAsync(wh.TargetUrl, ct))
-                {
-                    Log.TargetBlocked(logger, wh.Id, wh.TargetUrl);
-                    await MarkDeliveredAsync(connection, wh.Id, responseOk: false, ct);
-                    continue;
-                }
-
-                var delivered = await TryDeliverAsync(http, wh, ct);
-                if (delivered)
-                {
-                    await MarkDeliveredAsync(connection, wh.Id, responseOk: true, ct);
-                }
-                else
-                {
-                    await ScheduleRetryAsync(connection, wh.Id, wh.Attempts, ct);
-                }
+                Log.TargetBlocked(logger, wh.Id, wh.TargetUrl);
+                await MarkDeliveredAsync(connection, wh.Id, responseOk: false, ct);
+                continue;
             }
-        }
-        finally
-        {
-            if (wasClosed)
+
+            var delivered = await TryDeliverAsync(http, wh, ct);
+            if (delivered)
             {
-                await connection.CloseAsync();
+                await MarkDeliveredAsync(connection, wh.Id, responseOk: true, ct);
+            }
+            else
+            {
+                await ScheduleRetryAsync(connection, wh.Id, wh.Attempts, ct);
             }
         }
     }

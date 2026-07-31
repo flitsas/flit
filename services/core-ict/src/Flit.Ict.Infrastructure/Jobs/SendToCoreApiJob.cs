@@ -39,17 +39,22 @@ public sealed class SendToCoreApiJob(
     protected override string JobName => "send-to-core-api";
 
     protected override Task RunCycleAsync(IServiceScope scope, CancellationToken ct) =>
-        // Advisory lock: guarda multi-réplica (evita doble materialización del mismo master).
+        // Advisory lock: guarda multi-réplica (solo una réplica materializa el lote por ciclo).
         RunUnderAdvisoryLockAsync(
-            scope, IctAdvisoryLock.Keys.SendToCoreApi, _ => MaterializeAsync(scope, JobSettings.SendBatchSize, ct), ct);
+            scope, IctAdvisoryLock.Keys.SendToCoreApi,
+            _ => MaterializeAsync(scope, JobSettings.SendBatchSize, JobSettings.SendConcurrency, ct), ct);
 
-    private static async Task MaterializeAsync(IServiceScope scope, int batchSize, CancellationToken ct)
+    private async Task MaterializeAsync(IServiceScope scope, int batchSize, int concurrency, CancellationToken ct)
     {
         var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
-        var draftClient = scope.ServiceProvider.GetRequiredService<IProcedureDraftClient>();
 
-        var mappings = await db.ProcedureTypeMappings
-            .ToDictionaryAsync(m => m.ExternalTransactionType, m => m, ct);
+        // Catálogo de mapeo (global, pequeño) proyectado a datos planos: se pasa a las tareas paralelas sin
+        // arrastrar entidades rastreadas por un DbContext entre scopes.
+        var mappingRows = await db.ProcedureTypeMappings
+            .AsNoTracking()
+            .Select(m => new { m.ExternalTransactionType, m.IsPublished, m.ProcedureTypeCode })
+            .ToListAsync(ct);
+        var mappings = mappingRows.ToDictionary(m => m.ExternalTransactionType, m => (m.IsPublished, m.ProcedureTypeCode));
 
         // Solo masters cuyas fuentes externas ya fueron TODAS consultadas por el orquestador.
         var readyIds = await ReadReadyMasterIdsAsync(db, batchSize, ct);
@@ -58,26 +63,49 @@ public sealed class SendToCoreApiJob(
             return;
         }
 
-        var ready = await db.Masters
-            .Include(m => m.Actors)
-            .Include(m => m.Attachments)
-            .Where(m => readyIds.Contains(m.Id))
-            .ToListAsync(ct);
+        // Materialización en PARALELO ACOTADO: el gRPC (lo lento) de cada master corre concurrente, cada
+        // uno en su propio scope/DbContext/conexión (thread-safe), gateado por el semáforo. Antes era un
+        // foreach secuencial — el cuello de botella con miles de pre-trámites. El advisory lock de la
+        // réplica sigue garantizando que solo UNA instancia procese el lote (sin doble materialización).
+        using var gate = new SemaphoreSlim(Math.Max(1, concurrency));
+        await Task.WhenAll(readyIds.Select(id => ProcessMasterAsync(gate, id, mappings, ct)));
+    }
 
-        foreach (var master in ready)
+    /// <summary>Materializa UN master en su propio scope/DbContext (thread-safe), gateado por el semáforo.</summary>
+    private async Task ProcessMasterAsync(
+        SemaphoreSlim gate,
+        Guid masterId,
+        Dictionary<short, (bool IsPublished, string ProcedureTypeCode)> mappings,
+        CancellationToken ct)
+    {
+        await gate.WaitAsync(ct);
+        try
         {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
+            var draftClient = scope.ServiceProvider.GetRequiredService<IProcedureDraftClient>();
+
+            var master = await db.Masters
+                .Include(m => m.Actors)
+                .Include(m => m.Attachments)
+                .FirstOrDefaultAsync(m => m.Id == masterId, ct);
+            if (master is null)
+            {
+                return;
+            }
+
             if (!mappings.TryGetValue((short)master.TransactionType, out var mapping) || !mapping.IsPublished)
             {
                 await FlagNoveltyAsync(db, master, "tipo de trámite no soportado en v2 (modalidad_not_available)", ct);
-                continue;
+                return;
             }
 
             var result = await draftClient.CreateDraftAsync(master, mapping.ProcedureTypeCode, ct);
 
             if (result.ErrorCode == "grpc_unavailable")
             {
-                // gRPC pendiente (HU4). No cambiar estado; se reintenta en el siguiente ciclo.
-                continue;
+                // gRPC pendiente. No cambiar estado; se reintenta en el siguiente ciclo.
+                return;
             }
 
             if (result.ProcedureInstanceId is { } instanceId)
@@ -107,6 +135,16 @@ public sealed class SendToCoreApiJob(
             {
                 await FlagNoveltyAsync(db, master, result.ErrorCode ?? "error al crear el borrador", ct);
             }
+        }
+#pragma warning disable CA1031 // un master fallido no debe abortar los demás del lote; se reintenta el siguiente ciclo
+        catch (Exception ex)
+        {
+            IctJobLog.CycleError(logger, ex, JobName);
+        }
+#pragma warning restore CA1031
+        finally
+        {
+            gate.Release();
         }
     }
 
