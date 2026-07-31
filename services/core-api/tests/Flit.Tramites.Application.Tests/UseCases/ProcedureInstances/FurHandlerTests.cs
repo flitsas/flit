@@ -564,7 +564,7 @@ public sealed class FurHandlerTests
         new(_repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
             NullLogger<GenerarFurHandler>.Instance, ruesResolver: resolver);
 
-    // ── Bug #11147 — una parte firma de UNA sola manera ──────────────────────
+    // ── Bug #11146 — una parte firma de UNA sola manera ──────────────────────
 
     /// <summary>Baúl que siempre resuelve firma vigente para la persona consultada.</summary>
     private sealed class VaultConFirma : ISignatureVaultPolicy

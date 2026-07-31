@@ -41,7 +41,7 @@ public static class FirmaBaulCobertura
     }
 
     /// <summary>
-    /// Bug #11147 — ¿el gestor eligió el baúl <b>a propósito</b>?
+    /// Bug #11146 — ¿el gestor eligió el baúl <b>a propósito</b>?
     ///
     /// <para>Distinto de <see cref="Aplica"/>, que también es cierto cuando NO hay elección: ahí manda
     /// la precedencia del baúl (HU #11031), pero solo si de verdad existe la firma. Confundir las dos
