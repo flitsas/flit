@@ -576,10 +576,10 @@ public sealed class FurHandlerTests
                 new DateOnly(2026, 1, 1), new DateOnly(2027, 1, 1), "52082029"));
     }
 
-    private static ProcedureInstanceActor ActorJuridicoCon(string mecanismo)
+    private static ProcedureInstanceActor ActorJuridicoCon(string? mecanismo, string rol = "comprador")
     {
         var actor = ActorJuridico(Instance(Guid.NewGuid(), Guid.NewGuid(), TramiteTipologiaCatalog.CodigoTraspasoStandard));
-        actor.ActorType = "comprador";
+        actor.ActorType = rol;
         // El sujeto de identidad de una persona JURÍDICA es su representante legal, y eso lo decide
         // `PersonType`: sin marcarlo, el sujeto sería el NIT y la validación no casaría.
         actor.PersonType = "juridical";
@@ -590,44 +590,59 @@ public sealed class FurHandlerTests
                 ["tipoDocumento"] = "CC",
                 ["numeroDocumento"] = "52082029",
                 ["nombreCompleto"] = "REPRESENTANTE DEMO",
+                // null = sin eleccion explicita, que es el caso normal.
                 ["mecanismoFirma"] = mecanismo,
             },
         });
         return actor;
     }
 
-    private async Task<FurDocumentData> DatosDelDocumentoCon(string mecanismo)
+    private Task<FurDocumentData> DatosDelDocumentoCon(string mecanismo) =>
+        DatosDelDocumento(mecanismo, conBaul: true, rol: "comprador");
+
+    /// <summary>
+    /// Traspaso con comprador Y vendedor jurídicos, ambos con identidad aprobada y vigente. Es
+    /// traspaso siempre porque el vendedor solo existe ahí, y ambos validan porque el gate del FUR
+    /// exige las dos partes.
+    /// </summary>
+    private async Task<FurDocumentData> DatosDelDocumento(string? mecanismo, bool conBaul, string rol)
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
         WithOrganismo(instance);
 
-        var actor = ActorJuridicoCon(mecanismo);
-        actor.TenantId = tenant;
-        actor.ProcedureInstanceId = id;
-        instance.Actors.Add(actor);
-        // La parte TIENE identidad aprobada y vigente. El sujeto de identidad de un actor jurídico es
-        // su REPRESENTANTE LEGAL, así que la validación va con el documento del representante: con otro
-        // documento no casaría y el sello no se emitiría por motivos ajenos a lo que se está probando.
-        var bio = Bio("comprador");
-        bio.DocumentType = "CC";
-        bio.DocumentNumber = "52082029";
-        // Aprobada Y VIGENTE: sin fecha de validación no cuenta como vigente y el sello no se emitiría.
-        bio.ValidatedAt = DateTimeOffset.UtcNow;
-        bio.ValidUntil = DateTimeOffset.UtcNow.AddDays(20);
-        instance.BiometricValidations.Add(bio);
+        foreach (var parte in new[] { "comprador", "vendedor" })
+        {
+            var actor = ActorJuridicoCon(mecanismo, parte);
+            actor.TenantId = tenant;
+            actor.ProcedureInstanceId = id;
+            instance.Actors.Add(actor);
+
+            // El sujeto de identidad de un actor jurídico es su REPRESENTANTE LEGAL: la validación va
+            // con el documento del representante, o no casaría y el sello no se emitiría por motivos
+            // ajenos a lo que se prueba. Aprobada Y vigente.
+            var bio = Bio(parte);
+            bio.DocumentType = "CC";
+            bio.DocumentNumber = "52082029";
+            bio.ValidatedAt = DateTimeOffset.UtcNow;
+            bio.ValidUntil = DateTimeOffset.UtcNow.AddDays(20);
+            instance.BiometricValidations.Add(bio);
+        }
+
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
         var capturing = new CapturingFurGenerator();
         var handler = new GenerarFurHandler(
             _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
-            NullLogger<GenerarFurHandler>.Instance, vaultPolicy: new VaultConFirma());
+            NullLogger<GenerarFurHandler>.Instance,
+            vaultPolicy: conBaul ? new VaultConFirma() : null);
 
         var (_, error) = await handler.HandleAsync(id, tenant, ct);
         error.Should().BeNull();
         capturing.Captured.Should().NotBeNull();
+        _ = rol;
         return capturing.Captured!;
     }
 
@@ -651,6 +666,32 @@ public sealed class FurHandlerTests
             .Should().NotContainKey("comprador", "se eligió el sello de identidad: no se toca el baúl");
         (data.SellosIdentidad ?? new Dictionary<string, string>())
             .Should().ContainKey("comprador");
+    }
+
+    [Theory]
+    [InlineData("comprador")]
+    [InlineData("vendedor")]
+    public async Task Generar_SinBaulYSinEleccion_CONSERVA_ElSelloDeIdentidad(string rol)
+    {
+        // Regresion: al retirar el sello por el mero hecho de ser persona juridica, una parte con
+        // identidad validada y SIN firma de baul se quedaba sin firma en los documentos. Sin eleccion
+        // explicita manda la precedencia del baul, pero solo si la firma existe de verdad.
+        var data = await DatosDelDocumento(mecanismo: null, conBaul: false, rol: rol);
+
+        (data.SellosIdentidad ?? new Dictionary<string, string>())
+            .Should().ContainKey(rol, "sin firma del baul, la identidad validada es la firma");
+    }
+
+    [Theory]
+    [InlineData("comprador")]
+    [InlineData("vendedor")]
+    public async Task Generar_ConBaulExplicitoSinImagen_DejaLaFirmaEnBlanco(string rol)
+    {
+        // Elegido el baul a proposito, no se rellena con un sello que el negocio no eligio: la firma
+        // queda en blanco y se nota.
+        var data = await DatosDelDocumento(MecanismoFirma.Baul, conBaul: true, rol: rol);
+
+        (data.SellosIdentidad ?? new Dictionary<string, string>()).Should().NotContainKey(rol);
     }
 
     private static ProcedureInstanceActor ActorJuridicoVendedor(ProcedureInstance instance) =>

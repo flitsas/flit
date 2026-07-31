@@ -169,16 +169,25 @@ public sealed class GenerarFurHandler(
         // la validación de identidad no lleva imagen del baúl. Los dos juntos dejaban el documento como
         // si la parte hubiera firmado dos veces por vías distintas.
         //
-        // Se decide por el MECANISMO y no por lo que se haya podido resolver: si el baúl es el elegido y
-        // su imagen falla, la firma queda en blanco para que se note, en vez de rellenarse a escondidas
-        // con un sello de identidad que el negocio no eligió.
-        //
         // Va aquí, en el único punto donde se ensamblan los datos de TODOS los documentos, y no en cada
         // generador: la compraventa pintaba ambos y el mandato y la solicitud virtual resolvían la
         // exclusividad cada uno por su cuenta.
+        //
+        // Hay DOS motivos distintos para retirar el sello, y confundirlos borra firmas legítimas:
+        //
+        //  · <b>Elección explícita del baúl.</b> Se retira SIEMPRE, resuelva o no la imagen: si el baúl
+        //    es el elegido y su descarga falla, la firma queda en blanco —visible— en vez de rellenarse
+        //    a escondidas con un sello que el negocio no eligió.
+        //
+        //  · <b>Sin elección</b> (el caso normal): manda la precedencia del baúl (HU #11031), pero solo
+        //    si REALMENTE hay firma. Sin ella se cae al sello de identidad, que es el comportamiento de
+        //    siempre. Retirarlo aquí por el mero hecho de ser persona jurídica dejaba sin firma a
+        //    comprador y vendedor con identidad validada y sin baúl.
         foreach (var role in esTraspaso ? new[] { "comprador", "vendedor" } : ["comprador"])
         {
-            if (FirmaLaParteConElBaul(instance, role))
+            var eligioBaul = EligioExplicitamenteElBaul(instance, role);
+            var tieneFirmaDelBaul = firmaImagenes?.ContainsKey(role) == true;
+            if (eligioBaul || tieneFirmaDelBaul)
                 sellosIdentidad.Remove(role);
         }
 
@@ -622,7 +631,7 @@ public sealed class GenerarFurHandler(
             // Sin elección explícita se mantiene la precedencia del baúl (HU #11031).
             // Bug #11147 — misma condición que retira el sello de identidad de esa parte, para que la
             // imagen y el sello no puedan aparecer los dos ni desaparecer los dos.
-            if (!FirmaLaParteConElBaul(instance, role))
+            if (!ProcedeElBaul(instance, role))
                 continue;
 
             var actor = instance.Actors.First(a =>
@@ -682,17 +691,11 @@ public sealed class GenerarFurHandler(
     }
 
     /// <summary>
-    /// Bug #11147 — ¿esta parte firma con el BAÚL? Es la pregunta que decide, para cada parte y para
-    /// TODOS los documentos, cuál de las dos estampas se pinta y cuál no existe.
-    ///
-    /// <para>Depende del MECANISMO elegido, no de si la imagen llegó a resolverse: así, cuando el baúl
-    /// es el elegido y su descarga falla, la firma queda en blanco —visible— en vez de rellenarse a
-    /// escondidas con un sello de identidad que el negocio no eligió.</para>
-    ///
-    /// <para>Misma condición que aplica <see cref="ResolveVaultSignaturesAsync"/> al decidir si baja la
-    /// imagen: persona jurídica y sin elección explícita del sello de identidad.</para>
+    /// Bug #11147 — ¿procede intentar la firma del baúl para esta parte? Persona jurídica y sin haber
+    /// elegido explícitamente el sello de identidad. Es la condición con la que
+    /// <see cref="ResolveVaultSignaturesAsync"/> decide si baja la imagen.
     /// </summary>
-    private static bool FirmaLaParteConElBaul(ProcedureInstance instance, string role)
+    private static bool ProcedeElBaul(ProcedureInstance instance, string role)
     {
         var actor = instance.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
@@ -701,6 +704,23 @@ public sealed class GenerarFurHandler(
 
         var (_, _, rl, _) = PutActorsHandler.ParseMetadata(actor.Metadata);
         return MecanismoFirma.ConsumeBaul(rl?.MecanismoFirma);
+    }
+
+    /// <summary>
+    /// Bug #11147 — ¿el gestor eligió el baúl <b>a propósito</b>? Distinto de <see cref="ProcedeElBaul"/>,
+    /// que también es cierto cuando NO hay elección (ahí manda la precedencia del baúl, HU #11031, pero
+    /// solo si de verdad existe la firma). Confundir ambos deja sin firma a las partes con identidad
+    /// validada y sin baúl, que son la mayoría.
+    /// </summary>
+    private static bool EligioExplicitamenteElBaul(ProcedureInstance instance, string role)
+    {
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+        if (actor is null || !EsActorJuridico(actor.DocumentType))
+            return false;
+
+        var (_, _, rl, _) = PutActorsHandler.ParseMetadata(actor.Metadata);
+        return MecanismoFirma.Normalizar(rl?.MecanismoFirma) == MecanismoFirma.Baul;
     }
 
     /// <summary>Huso horario de Colombia (UTC-5) para presentar las fechas del sello de identidad.</summary>
