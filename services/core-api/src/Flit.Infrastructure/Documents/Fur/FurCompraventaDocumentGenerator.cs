@@ -125,7 +125,7 @@ public static class FurCompraventaDocumentGenerator
     {
         col.Item().PaddingTop(8).Text(titulo);
 
-        // Bug #11147 — la imagen del baúl y el sello de identidad son EXCLUYENTES: una parte firma de
+        // Bug #11146 — la imagen del baúl y el sello de identidad son EXCLUYENTES: una parte firma de
         // una sola manera. Antes se pintaba la imagen y, más abajo, el sello sin condición alguna, así
         // que quien firmaba por el baúl y además tenía identidad vigente aparecía firmando dos veces
         // por vías distintas. El mandato y la solicitud de trámite virtual ya lo resolvían así.
@@ -166,8 +166,15 @@ public static class FurCompraventaDocumentGenerator
             col.Item().Text($"{TipoDocParte(parte)}: {Val(parte.Documento)}").FontSize(9);
         }
 
-        // Con firma del baúl, esa ES la firma: el sello de identidad no se añade (ver arriba).
-        var sello = firmaBaul is null ? Sello(data, rol) : null;
+        // Trazabilidad de la firma, en el mismo lugar sea cual sea el mecanismo:
+        //  · Con firma del baúl, esa ES la firma (Bug #11146): el sello de identidad no se añade, y en su
+        //    lugar va la vigencia y el hash de la firma custodiada (HU #11170). Antes no iba nada, así
+        //    que la imagen quedaba sin ningún dato que permitiera verificarla —la carencia solo se hizo
+        //    visible al retirar el sello de identidad que se pintaba de más—.
+        //  · Sin ella, el sello de la validación biométrica.
+        var sello = firmaBaul is null
+            ? Sello(data, rol)
+            : FlitFirmaBaulSello.Resolve(data.FirmaBaulMetadatos, rol, incluirIdentificacion: false);
         if (sello is not null)
             col.Item().Text(sello).FontSize(6.5f).FontColor(Colors.Grey.Darken2);
     }

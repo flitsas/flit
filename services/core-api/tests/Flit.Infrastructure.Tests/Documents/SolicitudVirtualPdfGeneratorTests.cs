@@ -28,6 +28,29 @@ public sealed class SolicitudVirtualPdfGeneratorTests
             SellosFirma: [],
             FirmasVisibles: firmasVisibles);
 
+    /// <summary>PNG 1×1 válido: QuestPDF decodifica la imagen de verdad, no basta con bytes sueltos.</summary>
+    private static readonly byte[] FirmaPng = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
+    [Fact]
+    public void ConFirmaDelBaul_GeneraElPdfConSuTrazabilidad()
+    {
+        // HU #11170 — la solicitud estampaba la imagen del baúl sin vigencia ni hash. El texto impreso
+        // se verifica con render; aquí se comprueba que el bloque acepta los metadatos sin romperse.
+        var parte = new DocumentParte("comprador", "Renting S.A.S.", "900123456-7", "info@renting.com", "NIT", "6041112233", EsJuridica: true);
+        var data = DataWith(parte) with
+        {
+            FirmaImagenes = new Dictionary<string, byte[]> { ["comprador"] = FirmaPng },
+            FirmaBaulMetadatos = new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["comprador"] = new FirmaBaulMetadata(
+                    "52123456", "Ana Gómez", new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), Guid.NewGuid(), "ABC-123"),
+            },
+        };
+
+        Generator.GenerateSolicitudVirtual(data).Content.Should().NotBeEmpty();
+    }
+
     [Fact]
     public void GeneratesPdf_ForPersonaNatural()
     {

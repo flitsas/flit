@@ -164,7 +164,7 @@ public sealed class GenerarFurHandler(
         // espacio de firma en vez del sello de texto. Si la descarga falla, NO rompe el FUR (cae al sello).
         var (firmaImagenes, firmaBaulMetadatos) = await ResolveVaultSignaturesAsync(instance, esTraspaso, ct);
 
-        // Bug #11147 — UNA parte firma de UNA sola manera. Quien firma por el baúl no lleva sello de
+        // Bug #11146 — UNA parte firma de UNA sola manera. Quien firma por el baúl no lleva sello de
         // validación de identidad en ningún documento, aunque su identidad esté vigente; quien firma con
         // la validación de identidad no lleva imagen del baúl. Los dos juntos dejaban el documento como
         // si la parte hubiera firmado dos veces por vías distintas.
@@ -578,7 +578,7 @@ public sealed class GenerarFurHandler(
     /// vigente, y si no el sello de su validación de identidad. Best-effort: cualquier fallo deja la
     /// línea de firma en blanco, nunca rompe la generación del mandato.
     /// </summary>
-    private async Task<(byte[]? Firma, string? Sello)> ResolveMandatarioFirmaAsync(
+    private async Task<(byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos)> ResolveMandatarioFirmaAsync(
         FurDocumentData data, MandateSignerCandidate signer, CancellationToken ct)
     {
         var tipoDoc = string.IsNullOrWhiteSpace(signer.TipoDocumento) ? "CC" : signer.TipoDocumento!.Trim();
@@ -599,7 +599,19 @@ public sealed class GenerarFurHandler(
                         using var ms = new MemoryStream();
                         await stream.CopyToAsync(ms, ct).ConfigureAwait(false);
                         if (ms.Length > 0)
-                            return (ms.ToArray(), null);
+                        {
+                            // HU #11170 — la imagen viaja con su trazabilidad (vigencia y hash), igual
+                            // que la de las partes: una firma estampada que no se puede verificar leyendo
+                            // el documento no sirve de nada.
+                            var metadatos = new FirmaBaulMetadata(
+                                match.DocumentNumber,
+                                match.FullName,
+                                match.VigenciaDesde,
+                                match.VigenciaHasta,
+                                match.SignatureVaultId,
+                                match.CodigoHash);
+                            return (ms.ToArray(), null, metadatos);
+                        }
                     }
                 }
             }
@@ -611,8 +623,8 @@ public sealed class GenerarFurHandler(
 
         // Sin firma del baúl: sello con el certificado de su identidad vigente, si lo hay.
         return signer.IdentityVigente && !string.IsNullOrWhiteSpace(signer.CertificadoIdentidad)
-            ? (null, $"Validación de identidad\nFirma {signer.CertificadoIdentidad}")
-            : (null, null);
+            ? (null, $"Validación de identidad\nFirma {signer.CertificadoIdentidad}", null)
+            : (null, null, null);
     }
 
     private async Task<(IReadOnlyDictionary<string, byte[]>? Images, IReadOnlyDictionary<string, FirmaBaulMetadata>? Metadata)> ResolveVaultSignaturesAsync(
@@ -634,7 +646,7 @@ public sealed class GenerarFurHandler(
             // Sin elección explícita se mantiene la precedencia del baúl (HU #11031).
             // Bug #11141 — la decisión vive en un único predicado, compartido con la consulta que
             // alimenta la interfaz: lo que se muestra debe ser lo que se plasma.
-            // Bug #11147 — y es el MISMO predicado que decide si esa parte conserva su sello de
+            // Bug #11146 — y es el MISMO predicado que decide si esa parte conserva su sello de
             // identidad, para que la imagen y el sello no puedan aparecer los dos ni faltar los dos.
             if (actor is null || !FirmaBaulCobertura.Aplica(actor))
                 continue;
@@ -691,7 +703,7 @@ public sealed class GenerarFurHandler(
         FirmaBaulCobertura.EsJuridico(documentType);
 
     /// <summary>
-    /// Bug #11147 — ¿el gestor eligió el baúl <b>a propósito</b> para esta parte? Se apoya en el mismo
+    /// Bug #11146 — ¿el gestor eligió el baúl <b>a propósito</b> para esta parte? Se apoya en el mismo
     /// predicado compartido que decide si procede bajar la imagen, para no reintroducir una segunda
     /// definición de la regla.
     /// </summary>
@@ -790,8 +802,8 @@ public sealed class GenerarFurHandler(
                 // HU #11030 — la firma del mandatario no se pintaba nunca: el contrato salía con la línea
                 // en blanco aunque el mandatario tuviera firma en el baúl o identidad validada. Misma
                 // precedencia que el resto de documentos: imagen del baúl > sello de identidad > línea.
-                var (firma, sello) = await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
-                mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento, firma, sello);
+                var (firma, sello, metadatos) = await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
+                mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento, firma, sello, metadatos);
             }
         }
 

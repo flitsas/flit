@@ -59,4 +59,50 @@ File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "virtual.pdf"), virtua
 var fur = new FurOverlayDocumentGenerator().GenerateFur(data);
 File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "fur.pdf"), fur.Content);
 
+// HU #11170 — variante FIRMADA CON EL BAÚL, para comprobar que la vigencia y el hash acompañan a la
+// imagen en los cuatro documentos (antes solo los llevaba el FUR). Requiere una imagen de firma:
+// FIRMA_PNG=<ruta a un png>. Sin la variable se omite y el render normal no cambia.
+var firmaPng = Environment.GetEnvironmentVariable("FIRMA_PNG");
+if (!string.IsNullOrWhiteSpace(firmaPng) && File.Exists(firmaPng))
+{
+    var imagen = File.ReadAllBytes(firmaPng);
+    var metaVendedor = new FirmaBaulMetadata(
+        "1038409485", "MARIA FERNANDA GONZALEZ RESTREPO",
+        new DateOnly(2026, 1, 15), new DateOnly(2027, 1, 14), Guid.NewGuid(), "BAUL-7F3A21");
+    var metaComprador = new FirmaBaulMetadata(
+        "1020304050", "JUAN ESTEBAN PEREZ",
+        new DateOnly(2026, 3, 1), new DateOnly(2027, 2, 28), Guid.NewGuid(), "BAUL-9C55E0");
+
+    var conBaul = data with
+    {
+        FirmaImagenes = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["vendedor"] = imagen,
+            ["comprador"] = imagen,
+        },
+        FirmaBaulMetadatos = new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["vendedor"] = metaVendedor,
+            ["comprador"] = metaComprador,
+        },
+        // Bug #11146 — quien firma por el baúl no lleva además el sello de identidad.
+        SellosIdentidad = null,
+    };
+
+    var mandatoBaul = new MandatoPdfGenerator().GenerateMandato(new MandatoData(
+        conBaul, "generico", null, null,
+        new MandatarioFirmante("CARLOS ANDRES RUIZ", "71234567", imagen, null, metaComprador)));
+    File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "mandato-baul.pdf"), mandatoBaul.Content);
+
+    var virtualBaul = new SolicitudVirtualPdfGenerator().GenerateSolicitudVirtual(conBaul);
+    File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "virtual-baul.pdf"), virtualBaul.Content);
+
+    File.WriteAllBytes(
+        Path.Combine(AppContext.BaseDirectory, "compraventa-baul.pdf"),
+        FurCompraventaDocumentGenerator.Generate(conBaul));
+
+    var furBaul = new FurOverlayDocumentGenerator().GenerateFur(conBaul);
+    File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "fur-baul.pdf"), furBaul.Content);
+}
+
 Console.WriteLine($"OK {AppContext.BaseDirectory}");
