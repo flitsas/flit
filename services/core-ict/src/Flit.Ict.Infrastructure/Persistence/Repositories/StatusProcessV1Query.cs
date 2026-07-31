@@ -72,6 +72,9 @@ public sealed class StatusProcessV1Query(IctDbContext db) : IStatusProcessV1Quer
         }
         finally
         {
+            // Defensa en profundidad: limpiar el GUC de tenant para no dejarlo en una conexión que vuelve
+            // al pool (Npgsql además resetea al cerrar; esto cubre el caso wasClosed=false).
+            await ResetTenantGucAsync(connection);
             if (wasClosed)
             {
                 await connection.CloseAsync();
@@ -133,12 +136,36 @@ public sealed class StatusProcessV1Query(IctDbContext db) : IStatusProcessV1Quer
         return list;
     }
 
+    // El GUC se fija con scope de SESIÓN (is_local=false) porque la consulta corre en varios statements
+    // sobre la MISMA conexión sin transacción explícita; con is_local=true no persistiría entre statements
+    // y RLS no vería el tenant. Se re-fija en cada llamada antes de leer y se limpia al terminar (finally).
     private static async Task SetTenantGucAsync(DbConnection connection, Guid tenantId, CancellationToken ct)
     {
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenant, false)";
         AddParam(cmd, "tenant", tenantId.ToString());
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task ResetTenantGucAsync(DbConnection connection)
+    {
+        try
+        {
+            if (connection.State != ConnectionState.Open)
+            {
+                return;
+            }
+
+            await using var cmd = connection.CreateCommand();
+            cmd.CommandText = "SELECT set_config('app.current_tenant_id', '', false)";
+            await cmd.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+#pragma warning disable CA1031 // limpiar el GUC es best-effort; nunca debe romper la consulta
+        catch (Exception)
+        {
+            // best-effort
+        }
+#pragma warning restore CA1031
     }
 
     /// <summary>Descripción v1 exacta por código de estado (para no depender de la fila del catálogo).</summary>

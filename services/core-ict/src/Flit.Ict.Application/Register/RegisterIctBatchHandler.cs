@@ -49,9 +49,15 @@ public sealed class RegisterIctBatchHandler(
             var plateLabel = row.Plate?.Trim().ToUpperInvariant() ?? string.Empty;
             var flit = row.ManagerIdTransaction ?? string.Empty;
 
-            // Multi-tenant: el company_manager_document del payload debe coincidir con el NIT del token.
-            // La comparación es TOLERANTE al formato (ignora puntos, espacios y el dígito de verificación
-            // tras '-'): "900123456", "900.123.456" y "900123456-1" cuentan como la misma compañía.
+            // Aislamiento por compañía: un cliente ICT SOLO puede registrar pre-trámites de SU propia
+            // compañía. Tres barreras: (1) company_manager_document es OBLIGATORIO (RegisterRowValidator
+            // lo exige NotEmpty ⇒ una fila sin documento se rechaza con Status=2 más abajo); (2) este
+            // chequeo exige que ese documento COINCIDA con el NIT del token (comparación TOLERANTE al
+            // formato: ignora puntos, espacios y el dígito de verificación tras '-') ⇒ un NIT ajeno se
+            // rechaza con Status=2; (3) el aislamiento REAL: el tenant persistido sale SIEMPRE del token
+            // (IctPayloadNormalizer.ToMaster(row, tenantId.Value) más abajo), nunca del payload, así que una
+            // fila JAMÁS queda estampada con un tenant ajeno. El guard IsNullOrWhiteSpace solo evita comparar
+            // contra vacío aquí (la obligatoriedad ya la impone el validador, barrera 1).
             if (!string.IsNullOrWhiteSpace(row.CompanyManagerDocument)
                 && !string.Equals(
                     IctPayloadNormalizer.NormalizeNit(row.CompanyManagerDocument),
