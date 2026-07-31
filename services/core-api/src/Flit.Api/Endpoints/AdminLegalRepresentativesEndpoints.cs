@@ -149,6 +149,7 @@ public static class AdminLegalRepresentativesEndpoints
             Phone = request.Phone,
             ProcedureTypeIds = request.ProcedureTypeIds ?? [],
             Companies = request.Companies,
+            SignatureVaultId = request.SignatureVaultId,
             ActorBy = ResolveUserId(httpContext.User),
         };
 
@@ -195,6 +196,7 @@ public static class AdminLegalRepresentativesEndpoints
             Phone = request.Phone,
             ProcedureTypeIds = request.ProcedureTypeIds ?? [],
             Companies = request.Companies,
+            SignatureVaultId = request.SignatureVaultId,
             ActorBy = ResolveUserId(httpContext.User),
         };
 

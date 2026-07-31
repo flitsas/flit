@@ -60,6 +60,10 @@ tags:
       radicaciones por placa/trámite/radicado y línea de tiempo de eventos con detalle
       técnico sanitizado y enmascarado. Solo lectura; permiso logqx.read (HU #10794,
       SuperAdmin bypassa).
+  - name: Admin · Baúl de Firmas
+    description: "Gestión del baúl de firmas precargadas por compañía (HU #10643, ADR-0025). Solo SuperAdmin."
+  - name: Admin · Representantes Legales
+    description: "Directorio de representantes legales por compañía (HU #10901, ADR-0033). Solo SuperAdmin."
 
 paths:
   /api/v1/auth/login:
@@ -5662,6 +5666,280 @@ paths:
         "404": { description: "Trámite no encontrado." }
         "409": { description: "sin_adjuntos — No hay adjuntos disponibles para consolidar; o adjunto_no_disponible / mimetype_no_soportado." }
 
+  # ── Admin · Baúl de Firmas (HU #10643, #11175) ──────────────────────────────
+
+  /api/v1/admin/companies/{tenantId}/signature-vault:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: adminSignatureVaultList
+      tags: ["Admin · Baúl de Firmas"]
+      security:
+        - bearerAuth: []
+      summary: "Lista las firmas del baúl de una compañía"
+      description: >
+        Devuelve las firmas del baúl del tenant (activas y revocadas), sin material de firma.
+        Soporta filtrado opcional por documento del representante (AC1, HU #11175) y por
+        vigencia (AC2). Solo rol SuperAdmin.
+      parameters:
+        - name: documentType
+          in: query
+          required: false
+          schema: { type: string, maxLength: 20 }
+          description: "Tipo de documento del representante. Requerido junto con documentNumber para filtrar por persona."
+        - name: documentNumber
+          in: query
+          required: false
+          schema: { type: string, maxLength: 30 }
+          description: "Número de documento del representante (PII). Si se indica, la respuesta incluye solo las firmas de esa persona."
+        - name: soloVigentes
+          in: query
+          required: false
+          schema: { type: boolean }
+          description: "Si true, excluye las firmas cuya vigencia ya expiró (VigenciaHasta < hoy Colombia)."
+      responses:
+        "200":
+          description: "Lista de firmas (activas primero, luego por creación descendente)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SignatureVaultResponse"
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+    post:
+      operationId: adminSignatureVaultCreate
+      tags: ["Admin · Baúl de Firmas"]
+      security:
+        - bearerAuth: []
+      summary: "Registra una firma precargada en el baúl de la compañía"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSignatureVaultRequest"
+      responses:
+        "201":
+          description: "Firma registrada."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+        "422": { description: "Datos inválidos (campo faltante, artefacto inválido, firma activa existente)." }
+
+  /api/v1/admin/companies/{tenantId}/signature-vault/{id}:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: adminSignatureVaultGetById
+      tags: ["Admin · Baúl de Firmas"]
+      security:
+        - bearerAuth: []
+      summary: "Obtiene una firma del baúl por id"
+      responses:
+        "200":
+          description: "Firma encontrada."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignatureVaultResponse"
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+        "404": { description: "Firma no encontrada en el baúl de esta compañía." }
+
+  /api/v1/admin/companies/{tenantId}/signature-vault/{id}/revoke:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: adminSignatureVaultRevoke
+      tags: ["Admin · Baúl de Firmas"]
+      security:
+        - bearerAuth: []
+      summary: "Revoca una firma del baúl (idempotente)"
+      responses:
+        "204": { description: "Firma revocada." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+        "404": { description: "Firma no encontrada en el baúl de esta compañía." }
+
+  # ── Admin · Representantes Legales (HU #10901, #11175) ───────────────────────
+
+  /api/v1/admin/companies/{tenantId}/legal-representatives:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: adminLegalRepresentativesList
+      tags: ["Admin · Representantes Legales"]
+      security:
+        - bearerAuth: []
+      summary: "Lista paginada de representantes legales de una compañía"
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: "Lista paginada de representantes."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { type: object } }
+                  totalCount: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+    post:
+      operationId: adminLegalRepresentativesCreate
+      tags: ["Admin · Representantes Legales"]
+      security:
+        - bearerAuth: []
+      summary: "Crea un representante legal de la compañía"
+      description: >
+        Alta de un representante legal. Si se indica signatureVaultId, se valida contra la
+        tenencia, documento del representante, estado activo y vigencia (HU #11175, AC3/AC4);
+        si no se indica, el sistema resuelve la firma automáticamente (AC5).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LegalRepresentativeWriteRequest"
+      responses:
+        "201":
+          description: "Representante creado."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  signals: { type: array, items: { type: string } }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+        "422":
+          description: >
+            Datos inválidos. Posibles códigos: requerido, tipo_tramite_inexistente,
+            firma_no_encontrada, firma_documento_no_coincide, firma_no_vigente.
+
+  /api/v1/admin/companies/{tenantId}/legal-representatives/{id}:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: adminLegalRepresentativesGetById
+      tags: ["Admin · Representantes Legales"]
+      security:
+        - bearerAuth: []
+      summary: "Obtiene un representante legal por id"
+      responses:
+        "200": { description: "Representante encontrado." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+        "404": { description: "Representante no encontrado en esta compañía." }
+    put:
+      operationId: adminLegalRepresentativesUpdate
+      tags: ["Admin · Representantes Legales"]
+      security:
+        - bearerAuth: []
+      summary: "Edita un representante legal de la compañía"
+      description: >
+        Edición de un representante legal. Acepta signatureVaultId para elegir explícitamente
+        la firma del baúl (HU #11175, AC3/AC4); si no se indica, el sistema re-resuelve (AC5).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LegalRepresentativeWriteRequest"
+      responses:
+        "200":
+          description: "Representante actualizado."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  signals: { type: array, items: { type: string } }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+        "404": { description: "Representante no encontrado." }
+        "422":
+          description: >
+            Datos inválidos. Posibles códigos: requerido, tipo_tramite_inexistente,
+            firma_no_encontrada, firma_documento_no_coincide, firma_no_vigente.
+    delete:
+      operationId: adminLegalRepresentativesDelete
+      tags: ["Admin · Representantes Legales"]
+      security:
+        - bearerAuth: []
+      summary: "Desactiva (baja lógica) un representante legal"
+      responses:
+        "204": { description: "Representante desactivado." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+        "404": { description: "Representante no encontrado." }
+
+  /api/v1/admin/companies/{tenantId}/legal-representatives/procedure-types:
+    parameters:
+      - name: tenantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: adminLegalRepresentativesProcedureTypes
+      tags: ["Admin · Representantes Legales"]
+      security:
+        - bearerAuth: []
+      summary: "Tipos de trámite asignables (activos y publicados)"
+      responses:
+        "200": { description: "Lista de tipos de trámite." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -5679,6 +5957,96 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    # ── Admin · Baúl de Firmas (HU #10643, #11175) ───────────────────────────
+    SignatureVaultResponse:
+      type: object
+      description: "Metadatos de una firma del baúl (sin material criptográfico, ADR-0025 §3)."
+      properties:
+        id: { type: string, format: uuid }
+        documentType: { type: string }
+        documentNumber: { type: string, description: "PII (Ley 1581)." }
+        nitEmpresa: { type: string, nullable: true, description: "Deprecado (HU #10930)." }
+        fullName: { type: string }
+        signatureHash: { type: string }
+        storagePath: { type: string }
+        storageSha256: { type: string }
+        estado: { type: string, enum: [activa, revocada] }
+        vigenciaDesde: { type: string, format: date }
+        vigenciaHasta: { type: string, format: date }
+        mandateSignerId: { type: string, format: uuid, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time, nullable: true }
+        codigoHash: { type: string, nullable: true }
+      required: [id, documentType, documentNumber, fullName, signatureHash, storagePath, storageSha256, estado, vigenciaDesde, vigenciaHasta, createdAt]
+
+    CreateSignatureVaultRequest:
+      type: object
+      properties:
+        documentType: { type: string, maxLength: 20 }
+        documentNumber: { type: string, maxLength: 30, description: "PII (Ley 1581)." }
+        nitEmpresa: { type: string, maxLength: 50, nullable: true, description: "Deprecado (HU #10930): ya no es obligatorio." }
+        fullName: { type: string, maxLength: 200 }
+        vigenciaDesde: { type: string, format: date }
+        vigenciaHasta: { type: string, format: date }
+        artefactoFirmaBase64: { type: string, description: "PNG de la firma en base64." }
+        codigoHash: { type: string, nullable: true, maxLength: 100 }
+        mandateSignerId: { type: string, format: uuid, nullable: true }
+      required: [documentType, documentNumber, fullName, vigenciaDesde, vigenciaHasta, artefactoFirmaBase64]
+
+    # ── Admin · Representantes Legales (HU #10901, #11175) ───────────────────
+    LegalRepresentativeCompanyInput:
+      type: object
+      properties:
+        nit: { type: string, maxLength: 20, description: "NIT de la compañía representada (PII)." }
+        name: { type: string, maxLength: 200 }
+        email: { type: string, format: email, nullable: true }
+        address: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+      required: [nit, name]
+
+    LegalRepresentativeWriteRequest:
+      type: object
+      description: >
+        Cuerpo de alta/edición de un representante legal. Si se indica signatureVaultId, el
+        sistema valida la firma contra la tenencia, el documento del representante, el estado
+        activo y la vigencia antes de persistirla (HU #11175, AC3/AC4). Si no se indica, el
+        sistema resuelve la firma automáticamente (AC5).
+      properties:
+        companyNit: { type: string, nullable: true, description: "NIT de la compañía (compatibilidad). Alternativa a companies[]." }
+        companyName: { type: string, nullable: true }
+        companyEmail: { type: string, nullable: true }
+        companyAddress: { type: string, nullable: true }
+        companyCity: { type: string, nullable: true }
+        companyPhone: { type: string, nullable: true }
+        documentType: { type: string }
+        documentNumber: { type: string, description: "PII (Ley 1581)." }
+        firstLastName: { type: string }
+        secondLastName: { type: string, nullable: true }
+        name: { type: string }
+        email: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        procedureTypeIds:
+          type: array
+          items: { type: string, format: uuid }
+          nullable: true
+        companies:
+          type: array
+          items:
+            $ref: "#/components/schemas/LegalRepresentativeCompanyInput"
+          nullable: true
+          description: "Lista de compañías del representante (HU #10932). Si viene, reemplaza companyNit/companyName."
+        signatureVaultId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            Id de la firma del baúl elegida explícitamente (HU #11175, AC3). Opcional.
+            Si se omite, el sistema resuelve la firma automáticamente (AC5).
+      required: [documentType, documentNumber, firstLastName, name]
+
     # ── Trámites · Configurador dinámico (FEATURE-08 / CFD-01) ────────────────
     ProcedureTypeSummaryF08:
       type: object

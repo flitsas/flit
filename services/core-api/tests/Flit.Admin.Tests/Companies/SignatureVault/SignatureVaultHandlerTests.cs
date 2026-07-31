@@ -244,7 +244,7 @@ public sealed class SignatureVaultHandlerTests
         storage = new FakeArtifactStorage();
         return (
             new CreateSignatureVaultHandler(storage, repo),
-            new ListSignatureVaultHandler(reader),
+            new ListSignatureVaultHandler(reader, TimeProvider.System),
             new GetSignatureVaultByIdHandler(reader),
             new RevokeSignatureVaultHandler(reader, repo));
     }

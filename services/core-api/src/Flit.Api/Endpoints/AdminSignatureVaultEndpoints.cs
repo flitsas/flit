@@ -27,6 +27,7 @@ public static class AdminSignatureVaultEndpoints
             .WithTags("Admin · Baúl de Firmas");
 
         // GET — firmas del baúl del tenant (activas y revocadas), sin material de firma.
+        // Filtros opcionales: documentType + documentNumber (AC1, HU #11175) y soloVigentes (AC2).
         group.MapGet("", ListAsync)
             .WithName("AdminSignatureVaultList")
             .WithSummary("Lista las firmas del baúl de una compañía")
@@ -67,10 +68,19 @@ public static class AdminSignatureVaultEndpoints
     private static async Task<IResult> ListAsync(
         Guid tenantId,
         [FromServices] ListSignatureVaultHandler handler,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? documentType = null,
+        [FromQuery] string? documentNumber = null,
+        [FromQuery] bool? soloVigentes = null)
     {
         var result = await handler
-            .HandleAsync(new ListSignatureVaultQuery { TenantId = tenantId }, cancellationToken)
+            .HandleAsync(new ListSignatureVaultQuery
+            {
+                TenantId = tenantId,
+                DocumentType = documentType,
+                DocumentNumber = documentNumber,
+                SoloVigentes = soloVigentes,
+            }, cancellationToken)
             .ConfigureAwait(false);
 
         return Results.Ok(new { data = result });
