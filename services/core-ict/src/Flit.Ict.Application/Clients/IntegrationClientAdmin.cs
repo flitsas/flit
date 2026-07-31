@@ -84,7 +84,9 @@ public sealed class CreateIntegrationClientHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var username = command.Username?.Trim() ?? string.Empty;
+        // Se guarda en MINÚSCULAS: la unicidad y el login son case-insensitive por normalización en la app
+        // (no por citext). "GestorA" y "gestora" son el mismo cliente.
+        var username = (command.Username ?? string.Empty).Trim().ToLowerInvariant();
         if (username.Length is < 3 or > 50)
         {
             return (null, "invalid_username");
@@ -101,7 +103,7 @@ public sealed class CreateIntegrationClientHandler(
             return (null, "tenant_inactive");
         }
 
-        // username es UNIQUE global (citext): se rechaza el duplicado antes de intentar el INSERT.
+        // username es UNIQUE global (case-insensitive por minúsculas): se rechaza el duplicado antes del INSERT.
         var existing = await repository.FindByUsernameAsync(username, ct);
         if (existing is not null)
         {

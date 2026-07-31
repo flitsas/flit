@@ -47,6 +47,22 @@ public sealed class IntegrationClientAdminTests
     }
 
     [Fact]
+    public async Task Create_stores_username_in_lowercase()
+    {
+        // Case-insensitive sin citext: el username se normaliza a minúsculas al crear (y al buscar/login).
+        _repository.FindByUsernameAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((IntegrationClient?)null);
+        IntegrationClient? captured = null;
+        _repository.AddAsync(Arg.Do<IntegrationClient>(c => captured = c), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var (result, error) = await CreateHandler().HandleAsync(new CreateClientCommand("GestorMix", TenantId, null), Ct);
+
+        error.Should().BeNull();
+        result!.Client.Username.Should().Be("gestormix");
+        captured!.Username.Should().Be("gestormix");
+    }
+
+    [Fact]
     public async Task Create_rejects_short_username()
     {
         var (result, error) = await CreateHandler().HandleAsync(new CreateClientCommand("ab", TenantId, null), Ct);

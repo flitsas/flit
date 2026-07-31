@@ -16,7 +16,10 @@ internal sealed class IntegrationClientConfiguration : IEntityTypeConfiguration<
     {
         builder.ToTable("integration_clients", SchemaNames.Ict, t => t.ExcludeFromMigrations());
         builder.HasKey(x => x.Id);
-        builder.Property(x => x.Username).HasColumnType("citext");
+        // username es varchar (NO citext): la case-insensitivity se resuelve normalizando a minúsculas en la
+        // app + índice único funcional lower(username) (ver 01-ICT-schema-core.sql). Evita la dependencia de
+        // la extensión citext, que no se puede crear con el rol de la app en PDN.
+        builder.Property(x => x.Username).HasMaxLength(50);
         builder.Property(x => x.Scopes).HasColumnType("jsonb");
         builder.Property(x => x.RowVersion).IsConcurrencyToken().HasDefaultValue(0L);
         builder.HasIndex(x => x.Username).IsUnique();

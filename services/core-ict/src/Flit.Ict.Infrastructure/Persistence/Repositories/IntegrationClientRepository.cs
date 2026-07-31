@@ -9,9 +9,10 @@ public sealed class IntegrationClientRepository(IctDbContext db) : IIntegrationC
 {
     public async Task<IntegrationClient?> FindByUsernameAsync(string username, CancellationToken ct = default)
     {
-        // La columna es citext → la comparación es case-insensitive en el motor.
+        // Case-insensitive por normalización en la app (el username se guarda en minúsculas), no por citext.
+        var normalized = (username ?? string.Empty).Trim().ToLowerInvariant();
         return await db.IntegrationClients
-            .FirstOrDefaultAsync(c => c.Username == username && c.DeletedAt == null, ct);
+            .FirstOrDefaultAsync(c => c.Username == normalized && c.DeletedAt == null, ct);
     }
 
     public async Task<IntegrationClient?> FindByIdAsync(Guid id, CancellationToken ct = default)
