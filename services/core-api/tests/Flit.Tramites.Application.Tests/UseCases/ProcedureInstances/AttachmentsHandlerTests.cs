@@ -74,6 +74,13 @@ public sealed class AttachmentsHandlerTests
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>
             Task.FromResult<Stream?>(
                 Contents.TryGetValue(storagePath, out var bytes) ? new MemoryStream(bytes) : null);
+
+        public Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(
+            string storagePath, CancellationToken ct = default) =>
+            Task.FromResult<(string Url, DateTimeOffset ExpiresAt)?>(
+                string.IsNullOrWhiteSpace(storagePath)
+                    ? null
+                    : ($"https://s3.test/view/{Uri.EscapeDataString(storagePath)}", DateTimeOffset.UtcNow.AddMinutes(10)));
     }
 
     private static ProcedureInstance Instance(
@@ -81,7 +88,8 @@ public sealed class AttachmentsHandlerTests
         string modalidad = "matricula_inicial",
         string status = TramiteEstado.Borrador,
         string? tipologia = null,
-        string checklistEstado = "{}") =>
+        string checklistEstado = "{}",
+        bool subsanacionActiva = false) =>
         new()
         {
             Id = id,
@@ -92,6 +100,7 @@ public sealed class AttachmentsHandlerTests
             ModalidadEntrada = modalidad,
             TipologiaCodigo = tipologia,
             ChecklistEstado = checklistEstado,
+            SubsanacionActiva = subsanacionActiva,
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -116,7 +125,7 @@ public sealed class AttachmentsHandlerTests
     [Fact]
     public void AttachmentRules_AceptaPazSalvoRnmc()
     {
-        // HU #10604: el DocTipo paz_salvo_rnmc (que desbloquea el envío) es válido para subida.
+        // HU #10604: el DocTipo paz_salvo_rnmc (paz y salvo de medidas correctivas) es válido para subida.
         AttachmentRules.Validate("paz_salvo_rnmc", "application/pdf", 100).Should().BeNull();
     }
 
@@ -175,6 +184,37 @@ public sealed class AttachmentsHandlerTests
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(Instance(id, tenant, status: status));
+
+        var (_, error) = await _upload.HandleAsync(id, tenant, Pdf(), null, ct);
+
+        error.Should().Be("not_draft");
+        _storage.Saved.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Upload_RechazadoConSubsanacionActiva_PermiteAdjuntar()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, status: TramiteEstado.Rechazado, subsanacionActiva: true);
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _upload.HandleAsync(id, tenant, Pdf(tipo: "factura"), null, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        instance.Attachments.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Upload_RechazadoSinFlag_Returns409()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithAttachmentsAsync(id, tenant, ct)
+            .Returns(Instance(id, tenant, status: TramiteEstado.Rechazado, subsanacionActiva: false));
 
         var (_, error) = await _upload.HandleAsync(id, tenant, Pdf(), null, ct);
 

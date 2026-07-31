@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId } from "react";
+import { createPortal } from "react-dom";
 import { X, type LucideIcon } from "lucide-react";
 
 // HU #10496 — Componente Modal unificado (ancho estándar, blur consistente y
@@ -11,14 +12,16 @@ import { X, type LucideIcon } from "lucide-react";
 // anchos divergentes. El cuerpo (formulario, campos, botones) se pasa como
 // `children`; el título lo renderiza el propio Modal para garantizar el contraste.
 
-export type ModalSize = "sm" | "md" | "lg";
+export type ModalSize = "sm" | "md" | "lg" | "xl";
 
 // Anchos como clases literales (Tailwind JIT necesita el nombre completo).
 // AC1: ancho estándar, "no angosto" → por defecto `md` (max-w-lg).
+// `xl` (max-w-4xl) para contenido ancho como tablas (p. ej. documentos del expediente OT).
 const SIZE_CLASS: Record<ModalSize, string> = {
   sm: "max-w-md",
   md: "max-w-lg",
   lg: "max-w-2xl",
+  xl: "max-w-4xl",
 };
 
 export interface ModalProps {
@@ -73,15 +76,21 @@ export function Modal({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, busy, onClose]);
 
-  if (!open) return null;
+  // Se renderiza vía portal a <body> (guardado para SSR): un modal anidado dentro de otro cuyo
+  // overlay usa `backdrop-blur` heredaría ese containing block y su `fixed inset-0` quedaría
+  // recortado al recuadro del modal padre (fondo oscuro confinado a una caja). Portalizar a body
+  // hace que el overlay cubra el viewport real, sin importar los ancestros. Se portaliza de forma
+  // síncrona (sin diferir el montaje) para no romper el auto-foco que los hijos hacen en su efecto
+  // de montaje.
+  if (!open || typeof document === "undefined") return null;
 
   const requestClose = () => {
     if (!busy) onClose();
   };
 
-  return (
+  return createPortal(
     <div
-      className={`fixed inset-0 ${zClassName} flex items-center justify-center bg-slate-900/50 px-4 backdrop-blur-md`}
+      className={`fixed inset-0 ${zClassName} flex items-center justify-center overflow-y-auto bg-slate-900/50 px-4 py-6 backdrop-blur-md`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -90,9 +99,9 @@ export function Modal({
       }}
     >
       <div
-        className={`w-full ${SIZE_CLASS[size]} rounded-2xl border border-[#DFE5ED] bg-white p-6 text-[#162744] shadow-2xl dark:border-white/10 dark:bg-[#0B0F14] dark:text-white`}
+        className={`flex max-h-[calc(100dvh-3rem)] w-full ${SIZE_CLASS[size]} flex-col rounded-2xl border border-[#DFE5ED] bg-white p-4 text-[#162744] shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white`}
       >
-        <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             {Icon && (
               <span
@@ -120,8 +129,9 @@ export function Modal({
             <X className="h-5 w-5" />
           </button>
         </div>
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

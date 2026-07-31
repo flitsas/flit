@@ -1,10 +1,11 @@
 namespace Flit.Admin.Application.Auditing;
 
 /// <summary>
-/// Vocabulario estable de la auditoría de configuración (RNF01, ADR-0024). Centraliza los
-/// valores de <c>result</c> y <c>operation</c> que persisten en
-/// <c>admin.tenant_config_audit_logs</c> para que writers de éxito, writer de fallo y el
-/// filtro de la API usen exactamente las mismas cadenas.
+/// Vocabulario estable de la auditoría de configuración y administrativa/seguridad (RNF01,
+/// ADR-0024; HU #10678). Centraliza los valores de <c>result</c>, <c>operation</c> y
+/// <c>module</c> que persisten en <c>admin.tenant_config_audit_logs</c> para que writers de
+/// éxito, writer de fallo, <c>IAdminAuditWriter</c> y el filtro de la API usen exactamente
+/// las mismas cadenas.
 /// </summary>
 public static class AuditVocabulary
 {
@@ -21,5 +22,33 @@ public static class AuditVocabulary
         public const string Create = "create";
         public const string Update = "update";
         public const string Delete = "delete";
+
+        // HU #10678 — operaciones administrativas y de seguridad transversales.
+        public const string AssignRole = "assign_role";
+        public const string RevokeRole = "revoke_role";
+        public const string Suspend = "suspend";
+        public const string Unsuspend = "unsuspend";
+        public const string Invite = "invite";
+        public const string ResendInvite = "resend_invite";
+        public const string DeleteUser = "delete_user";
+        public const string Login = "login";
+        public const string LoginFailed = "login_failed";
+        public const string Logout = "logout";
+        public const string ForgotPassword = "forgot_password";
+        public const string ResetPassword = "reset_password";
+        public const string ChangePassword = "change_password";
+        public const string AdminResetPassword = "admin_reset_password";
+        public const string ActivateAccount = "activate_account";
+    }
+
+    /// <summary>Categoría transversal de la operación auditada (HU #10678).</summary>
+    public static class Modules
+    {
+        public const string Users = "users";
+        public const string Roles = "roles";
+        public const string Permissions = "permissions";
+        public const string Authentication = "authentication";
+        public const string Security = "security";
+        public const string Config = "config";
     }
 }

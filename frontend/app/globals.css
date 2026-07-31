@@ -91,6 +91,35 @@
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
+
+  /* Badges de estado — paleta semántica unificada (HU #10844). Cinco tones; forma
+     tintada (fondo translúcido + texto + borde). Reemplaza los colores crudos que cada
+     dominio pasaba a mano y los badges de relleno sólido (OtStatusBadge). */
+  --badge-success-bg: rgba(0, 219, 213, 0.15);
+  --badge-success-fg: #0f766e;
+  --badge-success-border: rgba(0, 219, 213, 0.35);
+  --badge-warning-bg: rgba(245, 158, 11, 0.15);
+  --badge-warning-fg: #b45309;
+  --badge-warning-border: rgba(245, 158, 11, 0.35);
+  --badge-danger-bg: rgba(255, 78, 0, 0.12);
+  --badge-danger-fg: #c2410c;
+  --badge-danger-border: rgba(255, 78, 0, 0.32);
+  --badge-info-bg: rgba(85, 126, 255, 0.14);
+  --badge-info-fg: #3b4fd6;
+  --badge-info-border: rgba(85, 126, 255, 0.35);
+  --badge-neutral-bg: rgba(223, 229, 237, 0.55);
+  --badge-neutral-fg: #445569;
+  --badge-neutral-border: rgba(223, 229, 237, 0.9);
+
+  /* Tabla card-list (HU #10844) — tokens de superficie para que el DataTable se lea como
+     tarjeta en CUALQUIER fondo (página tintada app-bg o panel blanco). La cabecera usa el
+     gris de marca #DFE5ED (== CompanyListTable, la tabla de referencia), NO el --muted casi
+     blanco que se aplanaba sobre paneles blancos; la fila lleva borde definido + sombra sutil
+     que la hace flotar aunque el contenedor sea blanco. */
+  --table-header-bg: #dfe5ed;
+  --table-header-fg: #162744;
+  --table-row-border: #dfe5ed;
+  --table-row-hover: #f4f8ff;
 }
 
 .dark {
@@ -126,6 +155,29 @@
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
+
+  /* Badges de estado — variantes para modo oscuro (HU #10844). */
+  --badge-success-bg: rgba(0, 219, 213, 0.18);
+  --badge-success-fg: #5eead4;
+  --badge-success-border: rgba(0, 219, 213, 0.35);
+  --badge-warning-bg: rgba(245, 158, 11, 0.2);
+  --badge-warning-fg: #fbbf24;
+  --badge-warning-border: rgba(245, 158, 11, 0.4);
+  --badge-danger-bg: rgba(255, 78, 0, 0.2);
+  --badge-danger-fg: #fca574;
+  --badge-danger-border: rgba(255, 78, 0, 0.4);
+  --badge-info-bg: rgba(85, 126, 255, 0.22);
+  --badge-info-fg: #a5b8ff;
+  --badge-info-border: rgba(85, 126, 255, 0.4);
+  --badge-neutral-bg: rgba(255, 255, 255, 0.08);
+  --badge-neutral-fg: #cbd5e1;
+  --badge-neutral-border: rgba(255, 255, 255, 0.15);
+
+  /* Tabla card-list — variantes para modo oscuro (HU #10844). */
+  --table-header-bg: rgba(255, 255, 255, 0.06);
+  --table-header-fg: rgba(255, 255, 255, 0.72);
+  --table-row-border: rgba(255, 255, 255, 0.1);
+  --table-row-hover: rgba(255, 255, 255, 0.04);
 }
 
 @layer base {

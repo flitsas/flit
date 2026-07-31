@@ -11,8 +11,40 @@ public sealed class MandateSignerItem
     public Guid Id { get; init; }
     public Guid TransitOfficeId { get; init; }
     public string FullName { get; init; } = string.Empty;
+
+    /// <summary>Tipo de documento (ADR-0036). Insumo del descriptor de validación de identidad.</summary>
+    public string DocumentType { get; init; } = "CC";
+
     public string DocumentNumber { get; init; } = string.Empty;
     public string IntegrityHash { get; init; } = string.Empty;
+
+    /// <summary>Correo del mandatario para la validación de identidad (ADR-0036, HU #10911). PII.</summary>
+    public string? Email { get; init; }
+
+    /// <summary>Firma del baúl vinculada (ADR-0025), si está resuelta.</summary>
+    public Guid? SignatureVaultId { get; init; }
+
+    /// <summary>Validación de identidad admin vigente vinculada (ADR-0034), si está resuelta.</summary>
+    public Guid? IdentityValidationRef { get; init; }
+
+    /// <summary>
+    /// Estado de la validación de identidad del mandatario (HU #10994) para la UI de gestión:
+    /// <c>"valid"</c> (aprobada y vigente), <c>"expired"</c> (aprobada pero vencida / rechazada / expirada
+    /// ⇒ se puede RENOVAR), <c>"pending"</c> (enviada o en proceso) o <c>"none"</c> (nunca se envió).
+    /// </summary>
+    public string IdentityStatus { get; init; } = "none";
+
+    /// <summary>
+    /// HU #11060 — hasta cuándo es válida la identidad. Solo se informa cuando
+    /// <see cref="IdentityStatus"/> es <c>"valid"</c>; <c>null</c> en el resto de estados y también en
+    /// una aprobada sin caducidad registrada. La consola lo usa para informar la vigencia en curso en
+    /// vez de ofrecer una renovación que el backend rechazaría (reutiliza la vigente).
+    /// </summary>
+    public DateTimeOffset? IdentityValidUntil { get; init; }
+
+    /// <summary>Cuenta de usuario de OT del mandatario (ADR-0036 §D9): cotejo del firmante al aprobar.</summary>
+    public Guid? UserId { get; init; }
+
     public DateTimeOffset RegisteredAt { get; init; }
     public bool IsActive { get; init; }
 

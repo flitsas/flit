@@ -1,6 +1,9 @@
+using Flit.Admin.Domain.Auditing;
 using Flit.Admin.Domain.Companies;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.Settings;
+using Flit.Admin.Domain.Companies.LegalRepresentatives;
+using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.Companies.VehicleOwnership;
 using Flit.Admin.Domain.Companies.Whitelist;
@@ -16,10 +19,12 @@ using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.OtDocumentPrecedence;
 using Flit.Admin.Domain.OtDocumentTags;
 using Flit.Admin.Domain.OtRules;
+using Flit.Admin.Domain.PlatePreassign;
 using Flit.Admin.Application.Auditing;
 using Flit.Infrastructure.Auditing;
 using Flit.Infrastructure.OtRules;
 using Flit.Infrastructure.OtWebhooks;
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Integration;
 using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -43,6 +48,14 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IAuditContextAccessor, HttpAuditContextAccessor>();
         services.AddScoped<IAuditFailureWriter, AuditFailureWriter>();
 
+        // HU #10678 — rastro de auditoría administrativa/seguridad transversal (usuarios,
+        // roles, permisos, autenticación) sobre el mismo scope independiente que AuditFailureWriter.
+        services.AddScoped<IAdminAuditWriter, AdminAuditWriter>();
+
+        // HU #10679 — consulta global (cross-tenant, SuperAdmin) del rastro unificado de
+        // auditoría administrativa/seguridad.
+        services.AddScoped<IAdminAuditLogRepository, AdminAuditLogRepository>();
+
         services.AddScoped<ICompanyReadRepository, CompanyReadRepository>();
         services.AddScoped<ICompanyWriteRepository, CompanyWriteRepository>();
         services.AddScoped<ITenantSettingsRepository, TenantSettingsRepository>();
@@ -56,6 +69,9 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
 
+        // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
+        services.AddScoped<IOtConsultationRestrictionRepository, OtConsultationRestrictionRepository>();
+
         // Refactor adminOT — alta/listado de tenants Organismo de Tránsito (OT como
         // tenant de primera clase: tenant + rol ot_admin + perfil OT en una operación).
         services.AddScoped<ITransitOfficeTenantWriteRepository, TransitOfficeTenantWriteRepository>();
@@ -64,10 +80,62 @@ public static class AdminInfrastructureExtensions
         // lectura cross-tenant para el listado del SuperAdmin.
         services.AddScoped<ITransitOfficeOperationalStatusReader, DbTransitOfficeOperationalStatusReader>();
 
+        // HU #10710 — parametrización Quipux de la secretaría DESTINO (code_divipo + banderas).
+        // Escritura sobre el catálogo global catalogs.transit_offices (sin RLS), solo SuperAdmin.
+        services.AddScoped<ITransitOfficeQuipuxSettingsWriter, DbTransitOfficeQuipuxSettingsWriter>();
+
         // ADR-0023 — mandatarios (firmantes de mandato) por OT: lectura cross-tenant +
         // escritura con auditoría atómica (RF22–RF28).
         services.AddScoped<IMandateSignerReader, DbMandateSignerReader>();
         services.AddScoped<IMandateSignerRepository, MandateSignerRepository>();
+
+        // HU #10642 (ADR-0025) — baúl de firmas: custodia de firmas precargadas tenant-scoped.
+        services.AddScoped<ISignatureVaultReader, DbSignatureVaultReader>();
+        services.AddScoped<ISignatureVaultRepository, SignatureVaultRepository>();
+
+        // HU #10643 (ADR-0025) — custodia del artefacto de firma en storage (delega en
+        // IAttachmentStorage) + política de consumo que ACTIVA el flag inerte SignatureVaultEnabled.
+        services.AddScoped<Flit.Admin.Application.Companies.SignatureVault.ISignatureVaultArtifactStorage,
+            Flit.Infrastructure.Storage.SignatureVaultArtifactStorage>();
+        services.AddScoped<ISignatureVaultPolicy, SignatureVaultPolicy>();
+
+        // HU #10912 (ADR-0036) — configuración de mandato por OT (plantilla + exige-PN + mandatario
+        // institucional), leída por código de OT para el flujo de trámite.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IMandateRequirementPolicy,
+            Flit.Infrastructure.OtRules.MandateRequirementPolicy>();
+
+        // HU #10916 (ADR-0036 §D9) — directorio de mandatarios por OT/compañía: resuelve el firmante del
+        // mandato al aprobar y rellena su nombre/documento en el PDF regenerado.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IMandateSignerDirectory,
+            Flit.Infrastructure.OtRules.MandateSignerDirectory>();
+
+        // HU #10900 (ADR-0033) — directorio de representantes legales por compañía + escrituras.
+        // Readers/repos tenant-scoped (RLS) + adaptador del puerto de identidad biométrica que
+        // consume el resolutor de firma/identidad (registrado en AddAdminApplication).
+        services.AddScoped<ILegalRepresentativeReader, DbLegalRepresentativeReader>();
+        services.AddScoped<ILegalRepresentativeRepository, LegalRepresentativeRepository>();
+        services.AddScoped<IDeedReader, DbDeedReader>();
+        services.AddScoped<IDeedRepository, DeedRepository>();
+
+        // HU #10902 (ADR-0033) — custodia del PDF de la escritura en storage (delega en
+        // IAttachmentStorage vía presigned URLs; el SHA-256 lo aporta el cliente).
+        services.AddScoped<Flit.Admin.Application.Companies.Deeds.IDeedDocumentStorage,
+            Flit.Infrastructure.Storage.DeedDocumentStorage>();
+        services.AddScoped<Flit.Admin.Application.Companies.LegalRepresentatives.IRepresentativeIdentityLookup,
+            RepresentativeIdentityLookup>();
+
+        // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
+        // correo: persistencia tenant-scoped, adaptador Kyverum DESACOPLADO (reutiliza IKyverumVerifyClient
+        // + cifra el secreto del webhook) y linker que ancla la identidad aprobada al sujeto
+        // (representante legal → identity_validation_ref). El servicio se registra en AddAdminApplication.
+        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentityValidationRepository,
+            AdminIdentityValidationRepository>();
+        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentitySubjectLinker,
+            AdminIdentitySubjectLinker>();
+        // HU #11028 — identidad que la persona ya validó dentro de un trámite de las compañías del OT.
+        services.AddScoped<Flit.Admin.Application.Identity.IPersonIdentityLookup, PersonIdentityLookup>();
+        services.AddScoped<Flit.Admin.Application.Identity.IAdminIdentityValidationProvider,
+            Flit.Infrastructure.Kyverum.KyverumAdminIdentityValidationProvider>();
 
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
@@ -110,7 +178,12 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IOtApiCallLogRepository, OtApiCallLogRepository>();
         services.AddScoped<IOtWebhookSecretHasher, OtWebhookSecretHasherService>();
         services.AddScoped<IOtWebhookDispatchService, OtWebhookDispatchService>();
-        services.AddScoped<IProcedureStateChangeNotifier, OtWebhookProcedureStateChangeNotifier>();
+        // Concreto + mapeo a la interfaz (misma instancia). El concreto lo consume el notifier COMPUESTO
+        // (OT + reflejo ICT, ver AddIctStateReflection); si el canal inverso ICT no está configurado, este
+        // mapeo a la interfaz sigue vigente y el comportamiento OT no cambia.
+        services.AddScoped<OtWebhookProcedureStateChangeNotifier>();
+        services.AddScoped<IProcedureStateChangeNotifier>(sp =>
+            sp.GetRequiredService<OtWebhookProcedureStateChangeNotifier>());
 
         services.AddHttpClient(nameof(OtWebhookDispatchService), client =>
         {
@@ -137,6 +210,18 @@ public static class AdminInfrastructureExtensions
         // HU #10602 — exigibilidad de la consulta RNMC según la config del OT destino (requires_rnmc).
         services.AddScoped<IRnmcRequirementPolicy, RnmcRequirementPolicy>();
 
+        // HU #10608 (Feature #10587) — decisión de la ruta de preasignación de placa al radicar.
+        services.AddScoped<IPlatePreassignPolicy, PlatePreassignPolicy>();
+
+        // HU #10760 — consultas que la compañía inhabilitó para el OT destino: el preflight las omite.
+        // Eje ortogonal al anterior (el OT declara qué exige; la compañía, qué no quiere consultar).
+        services.AddScoped<IConsultationRestrictionPolicy, ConsultationRestrictionPolicy>();
+
+        // FEATURE 05 — política de bloqueo de preflight por criterio y OT: decide si un hallazgo
+        // negativo (soat/rtm/estado/fines/rnmc) bloquea (rojo) o solo advierte (amarillo).
+        services.AddScoped<IOtBlockingPolicyRepository, OtBlockingPolicyRepository>();
+        services.AddScoped<IConsultationBlockingPolicy, ConsultationBlockingPolicy>();
+
         // B11 (HU #10659) — en traspaso el OT lo fija el RUNT: resuelve el OT habilitado de la
         // empresa por nombre (grants + catálogo) para poblar transit_office_id en el preflight.
         services.AddScoped<ITransitOfficeResolver, TransitOfficeResolver>();
@@ -147,6 +232,9 @@ public static class AdminInfrastructureExtensions
 
         // HU #10466 — historial de improntas generadas (ADR-0022).
         services.AddScoped<IImprontaRepository, ImprontaRepository>();
+
+        // HU #10650 (Feature #10587) — inventario de rangos de placas de preasignación.
+        services.AddScoped<IPlateRangeRepository, PlateRangeRepository>();
 
         return services;
     }

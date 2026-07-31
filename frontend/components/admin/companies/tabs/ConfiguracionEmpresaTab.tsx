@@ -3,21 +3,30 @@
 import type { ReactNode } from "react";
 import { ToggleSwitch } from "../ToggleSwitch";
 import { ConsultaProvidersSection } from "../ConsultaProvidersSection";
+import { AvaluoProvidersSection } from "../AvaluoProvidersSection";
 import {
+  FINES_QUERY_SOURCE_LABELS,
+  FINES_QUERY_SOURCES,
   METODOS_RECAUDO,
   NOTIFICATION_TARGET_LABELS,
   NOTIFICATION_TARGETS,
   SMTP_LABELS,
   type SettingsForm,
 } from "../settingsForm";
-import type { EnrutamientoSMTP, NotificationTarget } from "@/lib/api/types";
+import type {
+  EnrutamientoSMTP,
+  FinesQuerySource,
+  NotificationTarget,
+} from "@/lib/api/types";
 
 // Pestaña Configuración Empresa (HU #10194, AC2/AC4 / RF09-RF10). Baúl de firmas,
-// enrutamiento SMTP, destinatario de notificaciones, métodos de recaudo + matriz
-// OT (slot, endpoint propio).
+// enrutamiento SMTP, destinatario de notificaciones, métodos de recaudo + tabla
+// consolidada de Organismos de Tránsito (grant, bloqueos y restricciones de consulta
+// scoped por OT desde un menú de acciones — endpoint propio, fuera del PUT atómico).
 export interface ConfiguracionEmpresaTabProps {
   form: SettingsForm;
   onChange: (patch: Partial<SettingsForm>) => void;
+  /** Tabla consolidada de Organismos de Tránsito (grant + bloqueos + restricciones). */
   otSlot?: ReactNode;
   fieldErrors?: Record<string, string>;
 }
@@ -37,12 +46,36 @@ export function ConfiguracionEmpresaTab({
 
   return (
     <div className="space-y-4">
+      <fieldset>
+        <legend className="text-xs font-semibold">Parámetros de firma</legend>
+        <p className="mb-2 mt-0.5 max-w-md text-[11px] opacity-60">
+          Controla cómo se firman los documentos de cada trámite. Los cambios aplican solo a las
+          radicaciones nuevas: las que ya están en curso conservan la configuración con la que se
+          iniciaron.
+        </p>
+        <ToggleSwitch
+          id="baulFirmasActivo"
+          label="Firma precargada (baúl)"
+          description="Guarda de forma segura las firmas digitales de la compañía en el baúl para reutilizarlas al firmar los documentos de cada trámite, sin tener que capturarlas en cada radicación."
+          checked={form.baulFirmasActivo}
+          onChange={(v) => onChange({ baulFirmasActivo: v })}
+        />
+      </fieldset>
+
       <ToggleSwitch
-        id="baulFirmasActivo"
-        label="Baúl de firmas activo"
-        description="Guarda de forma segura las firmas digitales de la compañía para reutilizarlas al firmar los documentos de cada trámite, sin tener que capturarlas en cada radicación."
-        checked={form.baulFirmasActivo}
-        onChange={(v) => onChange({ baulFirmasActivo: v })}
+        id="preasignacionPlacaActiva"
+        label="Preasignación de placa activa"
+        description="Habilita la ruta de placa preasignada para matrícula inicial: los organismos de tránsito activos de esta compañía podrán asignarle rangos de placas, y al radicar se podrá seleccionar la placa del rango asignado."
+        checked={form.preasignacionPlacaActiva}
+        onChange={(v) => onChange({ preasignacionPlacaActiva: v })}
+      />
+
+      <ToggleSwitch
+        id="plateFlowSkipToTerminado"
+        label="Omitir proceso del gestor (placa → Terminado)"
+        description="Si al radicar ya hay placa completa o del rango, el trámite pasa directo a Terminado (sin paso Asignado ni checks del gestor). Si está desactivado, el gestor debe procesar Asignado → Terminado antes de que el OT apruebe."
+        checked={form.plateFlowSkipToTerminado}
+        onChange={(v) => onChange({ plateFlowSkipToTerminado: v })}
       />
 
       <div>
@@ -135,7 +168,46 @@ export function ConfiguracionEmpresaTab({
         )}
       </fieldset>
 
+      <fieldset>
+        <legend className="text-xs font-semibold">Fuente de comparendos</legend>
+        <p className="mb-2 mt-0.5 max-w-md text-[11px] opacity-60">
+          Dónde se consultan los comparendos de la compañía. «Interna» usa el módulo de
+          comparendos de FLIT con la fuente base cargada en la plataforma; «Externa» consulta en
+          línea al SIMIT (regla especial del SIMIT). Esta opción se aplicará al flujo de trámite en
+          una entrega posterior.
+        </p>
+        <div className="flex flex-wrap gap-3" role="radiogroup" aria-label="Fuente de comparendos">
+          {FINES_QUERY_SOURCES.map((value) => {
+            const checked = form.finesQuerySource === value;
+            return (
+              <label
+                key={value}
+                className="flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+                style={checked ? { borderColor: "#557EFF" } : undefined}
+              >
+                <input
+                  type="radio"
+                  name="finesQuerySource"
+                  value={value}
+                  checked={checked}
+                  onChange={() => onChange({ finesQuerySource: value as FinesQuerySource })}
+                  className="h-4 w-4 accent-[#557EFF]"
+                />
+                {FINES_QUERY_SOURCE_LABELS[value]}
+              </label>
+            );
+          })}
+        </div>
+        {fieldErrors?.finesQuerySource && (
+          <p className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+            {fieldErrors.finesQuerySource}
+          </p>
+        )}
+      </fieldset>
+
       <ConsultaProvidersSection form={form} onChange={onChange} fieldErrors={fieldErrors} />
+
+      <AvaluoProvidersSection form={form} onChange={onChange} fieldErrors={fieldErrors} />
 
       {otSlot && (
         <div className="rounded-2xl border p-4">

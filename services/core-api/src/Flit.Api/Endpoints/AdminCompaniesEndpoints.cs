@@ -8,9 +8,13 @@ using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
 using Flit.Admin.Application.Companies.TransitOffices.AddTransitGrant;
+using Flit.Admin.Application.Companies.TransitOffices.GetOtBlockingPolicies;
+using Flit.Admin.Application.Companies.TransitOffices.GetOtConsultationRestrictions;
 using Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
+using Flit.Admin.Application.Companies.TransitOffices.SetOtBlockingPolicy;
+using Flit.Admin.Application.Companies.TransitOffices.SetOtConsultationRestriction;
 using Flit.Admin.Application.Companies.Whitelist;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
 using Flit.Admin.Application.Companies.Whitelist.GetWhitelist;
@@ -44,6 +48,18 @@ public static class AdminCompaniesEndpoints
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
+
+        // GET /api/v1/admin/companies/{tenantId} — identidad de la compañía (#11062). Alimenta el
+        // encabezado de la consola de configuración: razón social + NIT visibles en toda la pantalla.
+        group.MapGet("/{tenantId:guid}", GetCompanyAsync)
+            .WithName("AdminCompanyGet")
+            .WithSummary("Obtiene una compañía por id")
+            .WithDescription("Retorna la identidad de la compañía (razón social, NIT, código, tipo y "
+                + "estado). 404 si no existe. Requiere SuperAdmin.")
+            .Produces<CompanyListItem>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
 
         // POST /api/v1/admin/companies — alta de compañía (botón "Crear compañía", #10118).
         group.MapPost("", CreateCompanyAsync)
@@ -164,6 +180,62 @@ public static class AdminCompaniesEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        // GET /api/v1/admin/companies/{tenantId}/ot-consultation-restrictions — restricciones
+        // de consulta (RNMC, comparendos) por OT de la compañía (HU #10759 AC1/AC5).
+        group.MapGet("/{tenantId:guid}/ot-consultation-restrictions", GetOtConsultationRestrictionsAsync)
+            .WithName("AdminCompanyGetOtConsultationRestrictions")
+            .WithSummary("Lista las restricciones de consulta por OT del tenant")
+            .WithDescription("Retorna las filas de restricción configuradas explícitamente (tabla dispersa: "
+                + "ausencia de fila = consulta permitida). Requiere SuperAdmin.")
+            .Produces<IReadOnlyList<OtConsultationRestrictionResponse>>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // PUT /api/v1/admin/companies/{tenantId}/ot-consultation-restrictions/{transitOfficeId}/{consultationKind}
+        // — fija el estado deseado (habilitada/inhabilitada) de una consulta por OT (HU #10759 AC1–AC4).
+        // PUT (no POST/DELETE): transporta el estado deseado ⇒ idempotente en ambos sentidos, sin 404.
+        group.MapPut(
+                "/{tenantId:guid}/ot-consultation-restrictions/{transitOfficeId:guid}/{consultationKind}",
+                SetOtConsultationRestrictionAsync)
+            .WithName("AdminCompanySetOtConsultationRestriction")
+            .WithSummary("Fija el estado de una restricción de consulta por OT")
+            .WithDescription("Habilita o inhabilita una consulta (rnmc|fines) para un Organismo de Tránsito "
+                + "puntual de la compañía. Idempotente: reenviar el mismo estado no duplica auditoría. 422 si "
+                + "el OT no existe, no está habilitado para la compañía, o el tipo de consulta no es "
+                + "restringible. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // GET /api/v1/admin/companies/{tenantId}/ot-blocking-policies — políticas de bloqueo de
+        // preflight (soat/rtm/estado_vehiculo/fines/rnmc) por OT de la compañía (FEATURE 05).
+        group.MapGet("/{tenantId:guid}/ot-blocking-policies", GetOtBlockingPoliciesAsync)
+            .WithName("AdminCompanyGetOtBlockingPolicies")
+            .WithSummary("Lista las políticas de bloqueo de preflight por OT del tenant")
+            .WithDescription("Retorna las filas de política configuradas explícitamente (tabla dispersa: "
+                + "ausencia de fila = default del criterio). Requiere SuperAdmin.")
+            .Produces<IReadOnlyList<OtBlockingPolicyResponse>>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // PUT /api/v1/admin/companies/{tenantId}/ot-blocking-policies/{transitOfficeId}/{criterion}
+        // — fija si un criterio del preflight bloquea (rojo) o solo advierte (amarillo) para un OT
+        // puntual de la compañía (FEATURE 05). PUT idempotente: transporta el estado deseado.
+        group.MapPut(
+                "/{tenantId:guid}/ot-blocking-policies/{transitOfficeId:guid}/{criterion}",
+                SetOtBlockingPolicyAsync)
+            .WithName("AdminCompanySetOtBlockingPolicy")
+            .WithSummary("Fija el carácter bloqueante de un criterio del preflight por OT")
+            .WithDescription("Marca un criterio (soat|rtm|estado_vehiculo|fines|rnmc) como bloqueante o "
+                + "informativo para un Organismo de Tránsito puntual de la compañía. Idempotente: reenviar "
+                + "el mismo estado no duplica auditoría. 422 si el OT no existe, no está habilitado para la "
+                + "compañía, o el criterio no es configurable. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
         return app;
     }
 
@@ -243,6 +315,22 @@ public static class AdminCompaniesEndpoints
                 new CompanyValidationErrorResponse(result.Errors),
                 statusCode: StatusCodes.Status422UnprocessableEntity),
         };
+    }
+
+    /// <summary>
+    /// HU #11062 — identidad de la compañía para el encabezado de la consola de configuración. Lectura
+    /// directa del repositorio: no hay comando ni regla de negocio que mediar.
+    /// </summary>
+    private static async Task<IResult> GetCompanyAsync(
+        Guid tenantId,
+        [FromServices] ICompanyReadRepository companies,
+        CancellationToken cancellationToken)
+    {
+        var company = await companies.GetByIdAsync(tenantId, cancellationToken).ConfigureAwait(false);
+
+        return company is null
+            ? Results.NotFound(new { error = $"No existe la compañía {tenantId}." })
+            : Results.Ok(company);
     }
 
     private static async Task<IResult> SetStatusAsync(
@@ -422,6 +510,85 @@ public static class AdminCompaniesEndpoints
         return Results.Ok(result);
     }
 
+    private static async Task<IResult> GetOtConsultationRestrictionsAsync(
+        Guid tenantId,
+        [FromServices] GetOtConsultationRestrictionsHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(new GetOtConsultationRestrictionsQuery { TenantId = tenantId }, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> SetOtConsultationRestrictionAsync(
+        Guid tenantId,
+        Guid transitOfficeId,
+        string consultationKind,
+        SetOtConsultationRestrictionRequest request,
+        HttpContext httpContext,
+        [FromServices] SetOtConsultationRestrictionHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetOtConsultationRestrictionCommand
+        {
+            TenantId = tenantId,
+            TransitOfficeId = transitOfficeId,
+            ConsultationKind = consultationKind,
+            Enabled = request.Enabled,
+            ChangedBy = ResolveUserId(httpContext.User),
+        };
+
+        var result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+
+        // AC1/AC2: 204 tanto en alta nueva como en no-op idempotente (mismo estado deseado).
+        return result.IsValid
+            ? Results.NoContent()
+            : Results.Json(
+                new OtConsultationRestrictionValidationErrorResponse(result.Errors),
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+
+    private static async Task<IResult> GetOtBlockingPoliciesAsync(
+        Guid tenantId,
+        [FromServices] GetOtBlockingPoliciesHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(new GetOtBlockingPoliciesQuery { TenantId = tenantId }, cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> SetOtBlockingPolicyAsync(
+        Guid tenantId,
+        Guid transitOfficeId,
+        string criterion,
+        SetOtBlockingPolicyRequest request,
+        HttpContext httpContext,
+        [FromServices] SetOtBlockingPolicyHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetOtBlockingPolicyCommand
+        {
+            TenantId = tenantId,
+            TransitOfficeId = transitOfficeId,
+            Criterion = criterion,
+            Blocks = request.Blocks,
+            ChangedBy = ResolveUserId(httpContext.User),
+        };
+
+        var result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+
+        return result.IsValid
+            ? Results.NoContent()
+            : Results.Json(
+                new OtBlockingPolicyValidationErrorResponse(result.Errors),
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+
     private static Guid? ResolveUserId(ClaimsPrincipal user)
     {
         var raw = user.FindFirst("sub")?.Value
@@ -447,4 +614,12 @@ public static class AdminCompaniesEndpoints
 
     /// <summary>Cuerpo de error 422 de grant: <c>{ errors: [{ field, message, value }] }</c>.</summary>
     private sealed record TransitGrantValidationErrorResponse(IReadOnlyList<TransitGrantValidationError> Errors);
+
+    /// <summary>Cuerpo de error 422 de restricción de consulta: <c>{ errors: [{ field, message, value }] }</c>.</summary>
+    private sealed record OtConsultationRestrictionValidationErrorResponse(
+        IReadOnlyList<OtConsultationRestrictionValidationError> Errors);
+
+    /// <summary>Cuerpo de error 422 de política de bloqueo: <c>{ errors: [{ field, message, value }] }</c>.</summary>
+    private sealed record OtBlockingPolicyValidationErrorResponse(
+        IReadOnlyList<OtBlockingPolicyValidationError> Errors);
 }

@@ -2,6 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { digitsOnly } from '@/lib/format/currency';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import type { PrendaDecision } from '@/lib/api/types/procedure-runtime';
@@ -82,7 +83,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
         if (active && p) {
           setDecision(p.decision);
           setAcreedorNombre(p.acreedorNombre ?? '');
-          setAcreedorDocumento(p.acreedorDocumento ?? '');
+          setAcreedorDocumento(digitsOnly(p.acreedorDocumento ?? ''));
         }
       } catch {
         /* sin decisión previa: el form queda vacío */
@@ -206,8 +207,10 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                   id="prenda-acreedor-doc"
                   type="text"
                   inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="off"
                   value={acreedorDocumento}
-                  onChange={(e) => setAcreedorDocumento(e.target.value)}
+                  onChange={(e) => setAcreedorDocumento(digitsOnly(e.target.value))}
                   className={INPUT_BASE}
                 />
               </div>

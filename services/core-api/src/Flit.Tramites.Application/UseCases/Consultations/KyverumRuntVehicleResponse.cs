@@ -121,6 +121,15 @@ public sealed class KyverumRuntDatosTecnicos
     public string? NoEjes { get; set; }
 }
 
+/// <summary>
+/// Registro de SOAT de Kyverum. <b>Son estos tres campos y no más</b> (HU #11134): las respuestas
+/// capturadas en <c>Consultations/Fixtures/KyverumRunt/*.json</c> traen exclusivamente
+/// <c>estado</c>, <c>fechaVencimSoat</c> y <c>razonSocialAsegur</c> — ni póliza, ni fecha de
+/// expedición, ni de vigencia, a diferencia del registro que entregan Verifik e Intempo.
+/// <para>Por eso, con este proveedor, esas tres celdas del certificado siguen dependiendo del OCR del
+/// PDF del SOAT. Declarar aquí campos inventados los dejaría en null igualmente y volvería a esconder
+/// el hueco tras un modelo que aparenta cubrirlo, que es justo el fallo que originó este Feature.</para>
+/// </summary>
 public sealed class KyverumRuntSoat
 {
     [JsonPropertyName("estado")]
@@ -133,11 +142,27 @@ public sealed class KyverumRuntSoat
     public string? RazonSocialAsegur { get; set; }
 }
 
+/// <summary>
+/// Revisión técnico-mecánica de Kyverum. Igual que el SOAT del mismo proveedor, no trae número de
+/// certificado ni fechas de expedición/vigencia (HU #11135); las muestras capturadas la devuelven
+/// además como lista vacía, así que tampoco hay evidencia de campos adicionales.
+/// <para>Kyverum tampoco entrega <b>fecha de matrícula del vehículo</b>: el bloque <c>vehiculo</c> de
+/// las respuestas capturadas no la incluye. Es el insumo de la regla de antigüedad de la RTM
+/// (HU #11136), que por eso solo puede evaluarse con los proveedores que sí la reportan.</para>
+/// </summary>
 public sealed class KyverumRuntRtm
 {
-    [JsonPropertyName("estado")]
-    public string? Estado { get; set; }
+    // Vigencia de la revisión técnico-mecánica: "SI" / "NO" / "NO APLICA" (mismo dominio que Verifik).
+    // OJO: la RTM de Kyverum NO usa "estado"/"fechaVencimiento" (como sí el SOAT), sino "vigente" y
+    // "fechaVencimientoRvt". Leer los nombres equivocados dejaba la RTM en null → novedad falsa
+    // "RTM no vigente" aunque el RUNT sí traía una revisión vigente.
+    [JsonPropertyName("vigente")]
+    public string? Vigente { get; set; }
 
-    [JsonPropertyName("fechaVencimiento")]
-    public string? FechaVencimiento { get; set; }
+    // Estado del trámite de la RVT ("APROBADA", ...). Informativo.
+    [JsonPropertyName("estadoRvt")]
+    public string? EstadoRvt { get; set; }
+
+    [JsonPropertyName("fechaVencimientoRvt")]
+    public string? FechaVencimientoRvt { get; set; }
 }

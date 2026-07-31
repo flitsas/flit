@@ -5,6 +5,7 @@ using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -35,7 +36,12 @@ public sealed record BiometricValidationDto(
     string? RejectionReason = null,
     // Motivo del ÚLTIMO intento fallido MIENTRAS la validación sigue abierta (en_proceso): Kyverum permite
     // reintentar (p.ej. "El rostro no es completamente visible…"). Null si no hubo intento fallido o no aplica.
-    string? UltimoIntentoMotivo = null);
+    string? UltimoIntentoMotivo = null,
+    // HU #11069 — trámite primario + otros trámites del tenant con la misma identidad (detalle VID).
+    Guid? ProcedureInstanceId = null,
+    string? ReferenceNumber = null,
+    string? Modalidad = null,
+    IReadOnlyList<LinkedProcedureDto>? LinkedProcedures = null);
 
 /// <summary>Resultado de iniciar: incluye el token CRUDO (solo aquí) para construir el magic-link.</summary>
 public sealed record IniciarBiometriaResult(
@@ -50,7 +56,11 @@ public sealed record IniciarBiometriaResult(
 /// </summary>
 public sealed record BiometricValidationsResponse(
     IReadOnlyList<BiometricValidationDto> Validations,
-    string Provider = BiometricProviders.Mock);
+    string Provider = BiometricProviders.Mock,
+    // HU #11014 (ADR-0025 §4) — partes cuya identidad queda cubierta por la FIRMA DEL BAÚL en vez de por
+    // una validación biométrica (misma regla que el outcome `firma_baul` de EnsureIdentity, HU #10646).
+    // La UI las rotula como "firmado desde el baúl" y no ofrece el certificado de identidad, que no existe.
+    IReadOnlyList<string>? FirmaBaulPartes = null);
 
 // NOTA: estos DOS contratos quedan en ESPAÑOL a propósito (request de iniciar + vista pública de
 // captura). El renombrado a inglés (HU10350) cubre SOLO la tabla y sus respuestas (grilla/wizard/stuck);
@@ -128,7 +138,7 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
         var instance = await repo.GetByIdWithBiometricsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft");
 
         // Idempotencia por parte: una validación activa o aprobada bloquea recrear.
@@ -277,8 +287,15 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
 // ── Handler: listar (autenticado) ───────────────────────────────────────────
 
 /// <summary>Lista las validaciones biométricas de una instancia (vista del gestor).</summary>
-public sealed class ListBiometriaHandler(IProcedureInstanceRepository repo, BiometricsProviderOptions providerOptions)
+public sealed class ListBiometriaHandler(
+    IProcedureInstanceRepository repo,
+    BiometricsProviderOptions providerOptions,
+    ISignatureVaultPolicy? vaultPolicy = null)
 {
+    // ADR-0025 §4 — sin baúl inyectado (tests que no lo ejercitan) NUNCA hay cobertura de firma.
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
+
     public async Task<(BiometricValidationsResponse? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -301,27 +318,41 @@ public sealed class ListBiometriaHandler(IProcedureInstanceRepository repo, Biom
         var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
                          == TramiteModalidadEntrada.Traspaso;
         var partes = esTraspaso ? new[] { "comprador", "vendedor" } : new[] { "comprador" };
+        var firmaBaulPartes = new List<string>(partes.Length);
         foreach (var parte in partes)
         {
             var actor = instance.Actors.FirstOrDefault(a =>
                 string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
-            if (actor is null || string.IsNullOrWhiteSpace(actor.DocumentType) || string.IsNullOrWhiteSpace(actor.DocumentNumber))
+            if (actor is null)
                 continue;
+
+            // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
+            var subject = IdentitySubjectResolver.For(actor);
+            if (string.IsNullOrWhiteSpace(subject.TipoDocumento) || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
+                continue;
+
+            // HU #11014 — cobertura por FIRMA DEL BAÚL: la identidad del sujeto queda satisfecha por su
+            // firma vigente y NO hay validación biométrica ni certificado que mostrar.
+            var firmaBaul = await _vaultPolicy
+                .ResolveAsync(instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), ct)
+                .ConfigureAwait(false);
+            if (firmaBaul is not null)
+                firmaBaulPartes.Add(parte);
 
             var yaLocal = instance.BiometricValidations.Any(v =>
                 string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
                 && BiometricRules.EsAprobadaVigente(v, now)
-                && BiometricRules.DocumentoCoincide(v, actor.DocumentType, actor.DocumentNumber));
+                && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, subject.NumeroDocumento));
             if (yaLocal)
                 continue;
 
             var source = await repo.FindVigenteApprovedByDocumentAsync(
-                instance.TenantId, actor.DocumentType.Trim(), actor.DocumentNumber.Trim(), now, ct);
+                instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), now, ct);
             if (source is not null)
                 dtos.Add(IniciarBiometriaHandler.ToDto(source, now) with { PartyRole = parte });
         }
 
-        return (new BiometricValidationsResponse(dtos, providerOptions.Provider), null);
+        return (new BiometricValidationsResponse(dtos, providerOptions.Provider, firmaBaulPartes), null);
     }
 }
 
@@ -414,12 +445,14 @@ public sealed class CompletarBiometriaHandler(
         v.UpdatedAt = now;
 
         // Persiste las fotos presentes (reusa IAttachmentStorage con tipos biometric_*).
+        // El scorer mock solo se usa en validaciones ligadas a una instancia de trámite (HU #10865).
+        var instanceIdForStorage = v.ProcedureInstanceId.GetValueOrDefault();
         if (rostro is { Length: > 0 })
-            v.FacePhotoPath = (await storage.SaveAsync(v.ProcedureInstanceId, "biometric_rostro", "rostro", new MemoryStream(rostro), ct)).StoragePath;
+            v.FacePhotoPath = (await storage.SaveAsync(instanceIdForStorage, "biometric_rostro", "rostro", new MemoryStream(rostro), ct)).StoragePath;
         if (frontal is { Length: > 0 })
-            v.IdFrontPhotoPath = (await storage.SaveAsync(v.ProcedureInstanceId, "biometric_cedula_frontal", "cedula_frontal", new MemoryStream(frontal), ct)).StoragePath;
+            v.IdFrontPhotoPath = (await storage.SaveAsync(instanceIdForStorage, "biometric_cedula_frontal", "cedula_frontal", new MemoryStream(frontal), ct)).StoragePath;
         if (reverso is { Length: > 0 })
-            v.IdBackPhotoPath = (await storage.SaveAsync(v.ProcedureInstanceId, "biometric_cedula_reverso", "cedula_reverso", new MemoryStream(reverso), ct)).StoragePath;
+            v.IdBackPhotoPath = (await storage.SaveAsync(instanceIdForStorage, "biometric_cedula_reverso", "cedula_reverso", new MemoryStream(reverso), ct)).StoragePath;
 
         var score = scorer.Score(new BiometricPhotos(rostro, frontal, reverso));
 
@@ -502,6 +535,10 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
         if (actor is null)
             return (null, "actor_requerido");
 
+        // Sujeto de identidad (HU #10688): natural → actor; jurídica → representante legal. La validación se
+        // ancla al documento/correo del sujeto para que la PJ quede firmada por el RL, no por el NIT.
+        var subject = IdentitySubjectResolver.For(actor);
+
         var detalle = JsonSerializer.Serialize(new
         {
             score = MockScore,
@@ -519,10 +556,10 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
             validation = existing;
             validation.Score = MockScore;
             validation.Detail = detalle;
-            validation.Name = actor.FullName;
-            validation.DocumentType = actor.DocumentType;
-            validation.DocumentNumber = actor.DocumentNumber;
-            validation.Email = actor.Email ?? string.Empty;
+            validation.Name = subject.Nombre ?? actor.FullName;
+            validation.DocumentType = subject.TipoDocumento ?? actor.DocumentType;
+            validation.DocumentNumber = subject.NumeroDocumento ?? actor.DocumentNumber;
+            validation.Email = subject.Email ?? string.Empty;
             validation.Approve(now); // estado + validated_at + estampa valid_until + updated_at
         }
         else
@@ -533,10 +570,10 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
                 TenantId = tenantId,
                 ProcedureInstanceId = id,
                 PartyRole = normalized,
-                Name = actor.FullName,
-                DocumentType = actor.DocumentType,
-                DocumentNumber = actor.DocumentNumber,
-                Email = actor.Email ?? string.Empty,
+                Name = subject.Nombre ?? actor.FullName,
+                DocumentType = subject.TipoDocumento ?? actor.DocumentType,
+                DocumentNumber = subject.NumeroDocumento ?? actor.DocumentNumber,
+                Email = subject.Email ?? string.Empty,
                 Status = BiometricEstados.Aprobado,
                 TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
                 ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras),

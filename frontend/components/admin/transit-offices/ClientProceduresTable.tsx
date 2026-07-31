@@ -1,11 +1,17 @@
 "use client";
 
-import { Check, Star, X } from "lucide-react";
-import { OtStatusBadge } from "./OtStatusBadge";
+import { Check, FolderOpen, Star, X } from "lucide-react";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { OtTablePagination } from "./OtTablePagination";
 import { RowActions } from "@/components/atom/RowActions";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, procedureStatusTone } from "./ot-utils";
+import {
+  esperandoProcesoDelGestor,
+  plateFlowChipStyle,
+  plateFlowLabel,
+  puedeDecidirOt,
+} from "@/lib/tramites/estados";
 
 export interface ClientProceduresTableProps {
   rows: OtClientProcedure[];
@@ -16,14 +22,24 @@ export interface ClientProceduresTableProps {
   onApprove: (row: OtClientProcedure) => void;
   onReject: (row: OtClientProcedure) => void;
   showApprovalActions?: boolean;
-  /** Genera/regenera el expediente consolidado (omitir = accion oculta, p. ej. QX read-only). */
-  onGenerarConsolidado?: (row: OtClientProcedure) => void;
-  /** Descarga el PDF del consolidado mas reciente. */
-  onVerConsolidado?: (row: OtClientProcedure) => void;
+  /**
+   * Botón único "Ver consolidado" (Feature #10701): muestra el consolidado maestro vigente y, si no
+   * lo está (nunca generado o invalidado por un cambio de estado / LT), lo genera y lo muestra. El
+   * backend decide regenerar-o-reutilizar por la marca `consolidado_maestro_vigente`.
+   */
+  onConsolidado?: (row: OtClientProcedure) => void;
   /** Adjunta la Licencia de Transito a un tramite ya aprobado (solo OT admin). */
   onAdjuntarLt?: (row: OtClientProcedure) => void;
+  /** Feature #10587 — asignar placa a un trámite en preasignado (Flujo B). */
+  onAssignPlate?: (row: OtClientProcedure) => void;
+  /** Feature #10587 — revocar la preasignación de un trámite. */
+  onRevoke?: (row: OtClientProcedure) => void;
   /** Id de la fila con accion de consolidado en curso (deshabilita sus botones). */
   consolidadoActingId?: string | null;
+  /** Abre el panel de documentos del expediente para el trámite. */
+  onVerDocumentos?: (row: OtClientProcedure) => void;
+  /** Abre el panel lateral con el detalle del trámite. */
+  onVerDetalle?: (row: OtClientProcedure) => void;
 }
 
 /** Tabla paginada tramites clientes OT ? patron CompanyListTable (HU #10220). */
@@ -36,39 +52,43 @@ export function ClientProceduresTable({
   onApprove,
   onReject,
   showApprovalActions = true,
-  onGenerarConsolidado,
-  onVerConsolidado,
+  onConsolidado,
   onAdjuntarLt,
+  onAssignPlate,
+  onRevoke,
   consolidadoActingId = null,
+  onVerDocumentos,
+  onVerDetalle,
 }: ClientProceduresTableProps) {
   return (
     <div className="flex flex-1 flex-col">
-      <table className="w-full border-separate border-spacing-y-2 text-xs">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px] border-separate border-spacing-y-2 text-xs">
         <thead>
-          <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
-            <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+          <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
+            <th className="rounded-l-xl px-4 py-2.5 bg-muted">
               Radicado
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th className="px-4 py-2.5 bg-muted">
               Tipo tramite
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th className="px-4 py-2.5 bg-muted">
               Empresa cliente
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th className="px-4 py-2.5 bg-muted">
               Estado
             </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+            <th className="px-4 py-2.5 bg-muted">
               Fecha radicacion
             </th>
-            <th className="rounded-r-xl px-4 py-2.5 text-right" style={{ background: "#DFE5ED" }}>
+            <th className="rounded-r-xl px-4 py-2.5 text-right bg-muted">
               Acciones
             </th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id} className="bg-white dark:bg-[#0B0F14]">
+            <tr key={row.id} className="bg-card">
               <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">
                 <span className="flex items-center gap-1.5">
                   {/* HU #10536 — distintivo de prioridad (solo lectura para el OT). */}
@@ -89,17 +109,47 @@ export function ClientProceduresTable({
                 {row.clientTenantName ?? row.clientTenantId}
               </td>
               <td className="border-y px-4 py-3">
-                <OtStatusBadge
-                  label={formatOtProcedureStatus(row.status)}
-                  tone={procedureStatusTone(row.status)}
-                />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <StatusBadge
+                    label={formatOtProcedureStatus(row.status)}
+                    tone={procedureStatusTone(row.status)}
+                  />
+                  {plateFlowChipStyle(row.plateFlowStatus) && (
+                    <span
+                      title="Progreso de la placa (sub-estado interno; el trámite sigue en Entregado)"
+                      className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                      style={{
+                        background: plateFlowChipStyle(row.plateFlowStatus)!.bg,
+                        color: plateFlowChipStyle(row.plateFlowStatus)!.color,
+                        border: `1px solid ${plateFlowChipStyle(row.plateFlowStatus)!.border}`,
+                      }}
+                    >
+                      {plateFlowLabel(row.plateFlowStatus)}
+                    </span>
+                  )}
+                </div>
               </td>
               <td className="border-y px-4 py-3 opacity-70">
                 {formatOtDate(row.createdAt)}
               </td>
               <td className="rounded-r-xl border-y border-r px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">
-                  {row.status === "entregado" && showApprovalActions && (
+                  {onVerDocumentos && (
+                    <button
+                      type="button"
+                      className="rounded-lg border p-1.5"
+                      style={{ color: "#557EFF" }}
+                      aria-label={`Ver documentos del trámite ${row.referenceNumber}`}
+                      title="Ver documentos del expediente"
+                      onClick={() => onVerDocumentos(row)}
+                    >
+                      <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  )}
+                  {/* Aprobar/Rechazar solo en ruta estándar o Terminado. */}
+                  {row.status === "entregado" &&
+                    puedeDecidirOt(row.plateFlowStatus, row.soatEstado) &&
+                    showApprovalActions && (
                     <RowActions
                       actions={[
                         {
@@ -117,6 +167,55 @@ export function ClientProceduresTable({
                       ]}
                     />
                   )}
+                  {row.status === "entregado" &&
+                    esperandoProcesoDelGestor(row.plateFlowStatus) &&
+                    showApprovalActions && (
+                    <span
+                      className="text-[10px] font-medium italic"
+                      style={{ color: "#b45309" }}
+                      title="El gestor debe procesar el trámite (Asignado → Terminado) antes de que el OT apruebe o rechace."
+                    >
+                      Esperando proceso del gestor
+                    </span>
+                  )}
+                  {/* Badges SOAT/impuesto solo visibles en Terminado. */}
+                  {row.plateFlowStatus === "terminado" && (
+                    <span className="flex flex-wrap justify-end gap-1">
+                      {row.soatPagado && (
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                          SOAT
+                        </span>
+                      )}
+                      {row.impuestoDepartamentalPagado && (
+                        <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+                          Impuesto
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  {/* Feature #10587 — asignar (preasignado/sin asignar) y revocar. */}
+                  {row.plateFlowStatus === "preasignado" && showApprovalActions && onAssignPlate && (
+                    <button
+                      type="button"
+                      className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
+                      style={{ borderColor: "#557EFF", color: "#557EFF" }}
+                      onClick={() => onAssignPlate(row)}
+                    >
+                      Asignar placa
+                    </button>
+                  )}
+                  {(row.plateFlowStatus === "preasignado" || row.plateFlowStatus === "asignado") &&
+                    showApprovalActions &&
+                    onRevoke && (
+                      <button
+                        type="button"
+                        className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold"
+                        style={{ borderColor: "#fca5a5", color: "#b91c1c" }}
+                        onClick={() => onRevoke(row)}
+                      >
+                        Revocar
+                      </button>
+                    )}
                   {row.status === "aprobado" && onAdjuntarLt && (
                     <button
                       type="button"
@@ -127,31 +226,27 @@ export function ClientProceduresTable({
                       Adjuntar LT
                     </button>
                   )}
-                  {(row.status === "entregado" || row.status === "aprobado") && (
-                    <>
-                      {onGenerarConsolidado && (
-                        <button
-                          type="button"
-                          className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50"
-                          style={{ borderColor: "#DFE5ED", color: "#162744" }}
-                          disabled={consolidadoActingId === row.id}
-                          onClick={() => onGenerarConsolidado(row)}
-                        >
-                          Generar consolidado
-                        </button>
-                      )}
-                      {onVerConsolidado && (
-                        <button
-                          type="button"
-                          className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50"
-                          style={{ borderColor: "#DFE5ED", color: "#162744" }}
-                          disabled={consolidadoActingId === row.id}
-                          onClick={() => onVerConsolidado(row)}
-                        >
-                          Ver consolidado
-                        </button>
-                      )}
-                    </>
+                  {(row.status === "entregado" || row.status === "aprobado") && onConsolidado && (
+                    <button
+                      type="button"
+                      className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50 text-foreground"
+                      disabled={consolidadoActingId === row.id}
+                      title="Muestra el consolidado del expediente; lo genera si aún no está o si cambió el trámite"
+                      onClick={() => onConsolidado(row)}
+                    >
+                      {consolidadoActingId === row.id ? "Abriendo…" : "Ver consolidado"}
+                    </button>
+                  )}
+                  {onVerDetalle && (
+                    <button
+                      type="button"
+                      className="rounded-lg border px-2.5 py-1 text-[10px] font-semibold text-foreground"
+                      aria-label={`Ver detalle del trámite ${row.referenceNumber}`}
+                      title="Ver detalle del trámite"
+                      onClick={() => onVerDetalle(row)}
+                    >
+                      Detalle
+                    </button>
                   )}
                 </div>
               </td>
@@ -159,6 +254,7 @@ export function ClientProceduresTable({
           ))}
         </tbody>
       </table>
+      </div>
       <OtTablePagination
         totalCount={totalCount}
         page={page}

@@ -43,7 +43,7 @@ internal static class AttachmentEndpoints
                 "invalid_mime" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Tipo MIME no permitido (use pdf/jpeg/png/webp)."),
                 "file_too_large" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El archivo excede el tamaño máximo permitido para este documento."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en estado borrador."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en borrador o con subsanación activa."),
                 _ => Results.Created($"/api/v1/tramites/instances/{id}/attachments/{result!.Id}", result),
             };
         })
@@ -78,7 +78,7 @@ internal static class AttachmentEndpoints
                 "invalid_mime" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Tipo MIME no permitido (use pdf/jpeg/png/webp)."),
                 "file_too_large" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El archivo excede el tamaño máximo permitido para este documento."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en estado borrador."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en borrador o con subsanación activa."),
                 _ => Results.Ok(result),
             };
         }).WithName("PresignProcedureInstanceAttachment");
@@ -114,7 +114,7 @@ internal static class AttachmentEndpoints
                 "missing_storage_path" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta storagePath (id de almacenamiento)."),
                 "missing_sha256" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta sha256."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en estado borrador."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en borrador o con subsanación activa."),
                 _ => Results.Created($"/api/v1/tramites/instances/{id}/attachments/{result!.Id}", result),
             };
         }).WithName("RegisterProcedureInstanceAttachment");
@@ -134,6 +134,27 @@ internal static class AttachmentEndpoints
                 ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
                 : Results.Ok(result);
         }).WithName("ListProcedureInstanceAttachments");
+
+        // GET preview-url: presigned GET URL con Content-Disposition: inline para visualización en el
+        // navegador sin forzar descarga (Feature #10701 / ADR-0029). -> 200 { url, expiresAt }
+        group.MapGet("/instances/{id:guid}/attachments/{attachmentId:guid}/preview-url", async (
+            Guid id,
+            Guid attachmentId,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetAttachmentPreviewUrlHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, attachmentId, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Attachment not found."),
+                "storage_unavailable" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "No se pudo obtener la URL de previsualización."),
+                _ => Results.Ok(new { url = result!.Url, expiresAt = result.ExpiresAt }),
+            };
+        }).WithName("GetProcedureInstanceAttachmentPreviewUrl");
 
         // GET descarga del binario de un adjunto (DF-1) -> stream con Content-Disposition: attachment
         group.MapGet("/instances/{id:guid}/attachments/{attachmentId:guid}/download", async (
@@ -171,7 +192,7 @@ internal static class AttachmentEndpoints
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "attachment_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Attachment not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden borrar documentos en estado borrador."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden borrar documentos en borrador o con subsanación activa."),
                 _ => Results.NoContent(),
             };
         }).WithName("DeleteProcedureInstanceAttachment");
@@ -195,7 +216,7 @@ internal static class AttachmentEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede generar la impronta en estado borrador."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede generar la impronta en borrador o con subsanación activa."),
                 "impronta_ya_existe" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe un documento de impronta cargado para este trámite."),
                 "organismo_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe seleccionar el organismo de tránsito antes de generar la impronta."),
                 "identificador_vehiculo_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Falta la placa o el VIN del vehículo para generar la impronta."),
@@ -229,7 +250,7 @@ internal static class AttachmentEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede generar el RUES en estado borrador."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede generar el RUES en borrador o con subsanación activa."),
                 "rues_ya_existe" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe un documento RUES cargado para este trámite."),
                 "actor_nit_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El RUES solo aplica a actores con documento NIT."),
                 "rues_autogen_disabled" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La autogeneración de RUES no está habilitada; suba el certificado manualmente."),
@@ -277,7 +298,7 @@ internal static class AttachmentEndpoints
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede diferir la impronta en estado borrador."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede diferir la impronta en borrador o con subsanación activa."),
                 "impronta_no_aplica" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La tipología del trámite no incluye impronta."),
                 _ => Results.NoContent(),
             };

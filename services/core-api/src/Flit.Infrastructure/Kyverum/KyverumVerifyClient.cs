@@ -11,8 +11,16 @@ namespace Flit.Infrastructure.Kyverum;
 
 /// <summary>
 /// Cliente HTTP de Kyverum Verify (HU #10233). Crea una validación remota (<c>POST /v1/validations</c>)
-/// y devuelve la URL de captura. El secreto con el que Kyverum firma el webhook es por-tenant (dashboard),
-/// se toma de <see cref="KyverumOptions.WebhookSecret"/> y el handler lo persiste cifrado. Errores se
+/// y devuelve la URL de captura. El secreto con el que Kyverum firma el webhook se lee del campo
+/// <c>webhookSecret</c> de la RESPUESTA de creación (ver <c>KyverumCreateValidationResponse</c>) y el
+/// handler lo persiste cifrado; <see cref="KyverumOptions.WebhookSecret"/> es solo el valor de respaldo
+/// configurado por tenant en el dashboard.
+/// <para>PENDIENTE DE CONFIRMAR CON EL PROVEEDOR (HU #10943): si ese <c>webhookSecret</c> es único por
+/// verificación o el mismo valor de tenant en todas las respuestas. De ello depende que el descarte de
+/// webhooks del intento anterior tras un reenvío —que se apoya en rotar el secreto persistido— realmente
+/// invalide la firma vieja. Si resultara estático, hay que buscar otra señal de correlación: el payload
+/// del webhook NO trae el id de verificación.</para>
+/// Errores se
 /// mapean a <see cref="KyverumVerifyException"/> SIN incluir nunca la API key ni el secreto (AC7):
 /// 4xx ⇒ definitivo (502); 5xx/timeout/red/respuesta inválida ⇒ transitorio (503).
 /// </summary>
@@ -28,7 +36,7 @@ internal sealed class KyverumVerifyClient(
     public async Task<KyverumVerifyStartResult> StartVerificationAsync(KyverumVerifyStartRequest request, CancellationToken ct)
     {
         var body = new KyverumCreateValidationBody(
-            ExternalRef: request.ProcedureInstanceId.ToString("D"),
+            ExternalRef: request.ProcedureInstanceId?.ToString("D") ?? string.Empty,
             Metadata: new KyverumMetadata(request.Parte),
             // El webhook de Kyverum no repite nuestro id en el cuerpo: lo incrustamos en la URL de callback
             // para poder correlacionar la notificación con la validación.
@@ -152,12 +160,15 @@ internal sealed class KyverumVerifyClient(
 
             // OJO: Kyverum reporta `result` (aprobado/closedAt) tras CADA intento, no solo al agotar los 3.
             // Por eso un `result.aprobado=false` NO es terminal por sí solo → se mapea a `rechazado_intento` y
-            // el reconciliador CUENTA los intentos (dedup por validadoAt) para decidir si ya se agotaron.
+            // el reconciliador decide con el conteo de intentos del webhook.
+            // Excepción: el status top-level `rechazado` indica validación CERRADA en Kyverum (agotó
+            // reintentos) → mapear a `rechazado` TERMINAL (no `rechazado_intento`), para no depender solo
+            // del conteo local cuando el GET llega después del cierre.
             string effectiveStatus;
-            if (payload.Result?.Aprobado is { } aprobado)
+            if (string.Equals(payload.Status, "rechazado", StringComparison.OrdinalIgnoreCase))
+                effectiveStatus = "rechazado";
+            else if (payload.Result?.Aprobado is { } aprobado)
                 effectiveStatus = aprobado ? "aprobado" : "rechazado_intento";
-            else if (string.Equals(payload.Status, "rechazado", StringComparison.OrdinalIgnoreCase))
-                effectiveStatus = "rechazado_intento";
             else
                 effectiveStatus = payload.Status!; // en_proceso/enviado/aprobado/expirado (compat)
 

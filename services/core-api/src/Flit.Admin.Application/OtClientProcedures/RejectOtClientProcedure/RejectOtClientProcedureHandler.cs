@@ -3,10 +3,17 @@ using Flit.Admin.Domain.OtProfile;
 
 namespace Flit.Admin.Application.OtClientProcedures.RejectOtClientProcedure;
 
-/// <summary>Rechaza un trámite entregado de un cliente OT (HU #10217 AC3 · N 03: entregado→rechazado).</summary>
+/// <summary>
+/// Rechaza u observa un trámite entregado de un cliente OT (HU #10217 AC3 · N 03: entregado→rechazado).
+/// HU #10871 (AC1) — cuando la request trae un checklist de ítems subsanables, la decisión se
+/// registra como OBSERVACIÓN (entregado→subsanacion) en vez de rechazo definitivo: mismo endpoint,
+/// mismo motivo obligatorio, distinto destino según haya o no ítems.
+/// </summary>
 public sealed class RejectOtClientProcedureHandler
 {
-    // N 03 (ADR-0022): el OT decide sobre trámites en estado 'entregado' (antes pending_ot).
+    // N 03 (ADR-0022): el OT decide sobre trámites en estado 'entregado' (antes pending_ot). La ruta de
+    // placa (Feature #10587 / HU #10785) NO cambia el status: el trámite siempre está 'entregado' cuando
+    // el OT decide (el progreso de placa es un sub-estado interno).
     private const string EstadoEntregado = "entregado";
 
     private readonly IOtClientProcedureRepository _repository;
@@ -42,7 +49,11 @@ public sealed class RejectOtClientProcedureHandler
         }
 
         var existing = await _repository
-            .GetByIdAsync(command.OtTenantId, command.ProcedureInstanceId, cancellationToken)
+            .GetByIdAsync(
+                command.OtTenantId,
+                command.ProcedureInstanceId,
+                command.TransitOfficeId,
+                cancellationToken)
             .ConfigureAwait(false);
 
         if (existing is null)
@@ -55,13 +66,28 @@ public sealed class RejectOtClientProcedureHandler
             return RejectOtClientProcedureResult.InvalidState();
         }
 
-        var updated = await _repository.RejectAsync(
-            command.OtTenantId,
-            command.ProcedureInstanceId,
-            command.Request.Reason.Trim(),
-            command.RejectedBy,
-            OtTransitionSource.OtAdmin,
-            cancellationToken).ConfigureAwait(false);
+        // Con ítems del checklist: observación (rechazado + metadata). Sin ítems: rechazo definitivo.
+        var items = command.Request.Items?.Where(i => i is not null).ToList()
+            ?? [];
+
+        var updated = items.Count > 0
+            ? await _repository.ObserveAsync(
+                command.OtTenantId,
+                command.ProcedureInstanceId,
+                command.Request.Reason.Trim(),
+                items,
+                command.RejectedBy,
+                OtTransitionSource.OtAdmin,
+                command.TransitOfficeId,
+                cancellationToken).ConfigureAwait(false)
+            : await _repository.RejectAsync(
+                command.OtTenantId,
+                command.ProcedureInstanceId,
+                command.Request.Reason.Trim(),
+                command.RejectedBy,
+                OtTransitionSource.OtAdmin,
+                command.TransitOfficeId,
+                cancellationToken).ConfigureAwait(false);
 
         return updated is null
             ? RejectOtClientProcedureResult.InvalidState()

@@ -17,7 +17,7 @@ INSERT INTO tramites.procedure_types (
 VALUES (
     uuidv7(),
     'TRASPASO_STANDARD',
-    'Traspaso estándar de vehículo',
+    'Traspaso',
     'TRASPASO',
     'Traspaso de propiedad entre particulares (placa-first, vendedor + comprador).',
     true, '{}', 'draft', 0

@@ -1,20 +1,52 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { formatFecha } from '@/lib/format/date';
 import { useRouter } from 'next/navigation';
-import { ArrowLeftRight, Car, Search, Star, X } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowLeftRight,
+  Car,
+  CheckCircle2,
+  Eye,
+  FileCheck,
+  FileStack,
+  FileText,
+  Pause,
+  Play,
+  Search,
+  Star,
+  X,
+} from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
 import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
 import { StatusBadge } from '@/components/atom/StatusBadge';
+import { Modal } from '@/components/atom/Modal';
+import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { EstadoFunnel } from './EstadoFunnel';
+import {
+  AttachmentPreview,
+  TramiteDocumentosModal,
+  useAttachmentPreview,
+} from './TramiteDocumentosModal';
 import type {
+  FirmaParteEstado,
   InstanceStatus,
   InstanceSummary,
+  TramiteFuente,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+
+/** Texto corto y discreto del sub-estado de placa (debajo del chip de estado). */
+function plateFlowHint(status: string | null | undefined): string | null {
+  if (status === 'asignado') return 'Placa asignada por el OT';
+  if (status === 'preasignado') return 'Esperando placa del OT';
+  if (status === 'terminado') return 'Listo para el OT';
+  return null;
+}
 
 /**
  * Track A — vista completa del listado de "Trámites en curso": toolbar de
@@ -80,14 +112,9 @@ function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean } | nu
   };
 }
 
+// HU #11018 — formato de negocio unico: AÑO/MES/DIA, sin hora.
 function shortDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('es-CO', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  return formatFecha(iso);
 }
 
 function vehiculo(item: InstanceSummary): string {
@@ -128,9 +155,63 @@ function stepLabel(item: InstanceSummary): string {
   return STEP_LABELS[item.modalidad]?.[item.pasoActual - 1] ?? '—';
 }
 
-const GRID_COLS = '1fr 1.3fr 1.2fr 1.2fr 0.9fr 1.4fr 1.1fr 1.3fr 0.9fr 1fr';
-// #1 — SuperAdmin: columna "Compañía" como primera columna (ve trámites de TODAS las empresas).
-const GRID_COLS_ADMIN = `1.2fr ${GRID_COLS}`;
+/**
+ * HU #11057 — chip de "Firmado" POR PARTE (vendedor y comprador tienen columna propia).
+ *
+ * Ajuste del PO: la columna acredita a la parte por VALIDACIÓN DE IDENTIDAD o FIRMA DEL BAÚL, no por
+ * la firma electrónica de la compraventa. Solo hay tres estados válidos y son excluyentes.
+ */
+const FIRMA_CHIP: Record<FirmaParteEstado, Chip> = {
+  firmado: { label: 'Firmado', bg: 'rgba(140,198,63,0.15)', color: '#5B8A1F', border: 'rgba(140,198,63,0.4)' },
+  pendiente: { label: 'Pendiente', bg: 'rgba(245,158,11,0.14)', color: '#b45309', border: 'rgba(245,158,11,0.35)' },
+  rechazado: { label: 'Rechazado', bg: 'rgba(255,78,0,0.10)', color: '#c2410c', border: 'rgba(255,78,0,0.3)' },
+};
+
+/** HU #11057 — etiqueta de la columna Fuente. No hay "QX": Quipux es canal de salida, no de entrada. */
+const FUENTE_LABEL: Record<TramiteFuente, string> = {
+  dashboard: 'Dashboard',
+  integracion: 'Integración',
+  migrado: 'Migrado',
+};
+
+// HU #11020 — se añade la columna Vendedor antes de Comprador (saliente → entrante), coherente con
+// el expediente y el resumen del último paso.
+// ICT (PR #204) — ancho de la columna de selección (checkbox), PRIMERA columna de la tabla.
+const SELECT_COL = '2.25rem';
+
+// HU #11057 — columnas acordadas con el negocio: radicado · VIN · placa · trámite/modalidad ·
+// propietario/vendedor + su firma · comprador + su firma · fecha de creación · fecha de actualización ·
+// secretaría · gestor · fuente · acciones. El negocio pidió "visualizar MÍNIMO" esa información, así
+// que se conservan además Vehículo, Paso y Estado (Estado y Paso son los chips que orientan la acción
+// de la fila; quitarlos sería una regresión funcional). Con 17 columnas la tabla se navega con
+// desplazamiento horizontal: el ancho mínimo crece en consecuencia y la cabecera comparte el mismo
+// `gridTemplateColumns` que las filas para no desalinearse (ver docs/reporte-desalineamiento-tablas.md).
+const GRID_COLS = [
+  SELECT_COL, // Selección (checkbox ICT); cabecera vacía
+  '1.2fr', // Radicado (+ estrella de prioridad)
+  '1.1fr', // VIN
+  '0.9fr', // Placa
+  '0.9fr', // Trámite / Modalidad
+  '1.1fr', // Vehículo
+  '1.2fr', // Propietario / vendedor
+  '0.9fr', // Firmado (vendedor)
+  '1.2fr', // Comprador
+  '0.9fr', // Firmado (comprador)
+  '1fr',   // Paso
+  '1.2fr', // Estado
+  '0.9fr', // Fecha de creación
+  '0.9fr', // Fecha de actualización
+  '1.1fr', // Secretaría
+  '1.3fr', // Gestor
+  '0.9fr', // Fuente
+  '1.2fr', // Acciones
+].join(' ');
+
+/**
+ * Ancho mínimo del grid con las 17 columnas: por debajo de esto la tabla se desplaza en horizontal
+ * dentro de su contenedor (`overflow-x-auto`) en vez de comprimir las celdas.
+ */
+const MIN_WIDTH = 'min-w-[1940px]';
 
 /** Filas por página en el listado (paginación client-side sobre `filtered`). */
 const PAGE_SIZE = 10;
@@ -174,8 +255,55 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
     setIsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
   }, []);
 
+  // HU #11054 / HU #11055 — consulta de documentos desde el listado, sin abrir el wizard. Se guarda
+  // el trámite elegido (no solo su id) porque el panel se titula con el radicado y el SuperAdmin
+  // necesita el tenant de la fila.
+  const [docsTramite, setDocsTramite] = useState<InstanceSummary | null>(null);
+  const [consolidadoTramite, setConsolidadoTramite] = useState<InstanceSummary | null>(null);
+
   // Paginación client-side (1-based).
   const [page, setPage] = useState(1);
+  /** Popover de motivo OT / subsanación abierto (un solo id a la vez). */
+  const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
+  // ICT (paridad v1 pause-unpause-massive) — selección de trámites ICT para pausar/reanudar en lote.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  /** Modal Procesar (Asignado → Terminado) desde la tabla. */
+  const [processTarget, setProcessTarget] = useState<InstanceSummary | null>(null);
+  const [soatPagado, setSoatPagado] = useState(false);
+  const [impuestoPagado, setImpuestoPagado] = useState(false);
+  const [processActing, setProcessActing] = useState(false);
+  const [processError, setProcessError] = useState<string | null>(null);
+
+  const openProcesar = (item: InstanceSummary) => {
+    setProcessTarget(item);
+    setSoatPagado(false);
+    setImpuestoPagado(false);
+    setProcessError(null);
+  };
+
+  const confirmProcesar = async () => {
+    if (!processTarget) return;
+    setProcessActing(true);
+    setProcessError(null);
+    try {
+      await tramitesClient.completePlateFlow(
+        processTarget.id,
+        { soatPagado, impuestoDepartamentalPagado: impuestoPagado },
+        isAdmin ? processTarget.tenantId : undefined,
+      );
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === processTarget.id ? { ...it, plateFlowStatus: 'terminado' } : it,
+        ),
+      );
+      setProcessTarget(null);
+    } catch (err) {
+      setProcessError(err instanceof Error ? err.message : 'No se pudo marcar como Terminado.');
+    } finally {
+      setProcessActing(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -208,6 +336,9 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
       entregado: 0,
       aprobado: 0,
       rechazado: 0,
+      // HU #10874 — no tiene tarjeta propia en el funnel (FUNNEL_ORDER no la incluye), pero el
+      // tipo Record<EstadoTramite, number> exige la clave; se cuenta igual por completitud.
+      subsanacion: 0,
     };
     for (const it of items) {
       if (it.estado in c) c[it.estado as EstadoTramite] += 1;
@@ -232,6 +363,7 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           item.vin,
           item.referenceNumber,
           item.compradorNombre,
+          item.vendedorNombre,
           item.organismoTransito,
           item.companiaNombre,
         ]
@@ -306,6 +438,94 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
     [isAdmin],
   );
 
+  // HU #11055 — visor del consolidado. El resumen ya trae el id del adjunto, así que no hace falta
+  // consultar los adjuntos del trámite: se abre directo. El disparo va en un effect porque el hook
+  // toma el instanceId del render, y en el clic el trámite elegido todavía no está en estado.
+  const consolidadoPreview = useAttachmentPreview(
+    consolidadoTramite?.id ?? null,
+    isAdmin ? consolidadoTramite?.tenantId : undefined,
+  );
+  const abrirConsolidado = consolidadoPreview.open;
+  useEffect(() => {
+    const attachmentId = consolidadoTramite?.consolidadoAttachmentId;
+    if (!consolidadoTramite || !attachmentId) return;
+    void abrirConsolidado({
+      id: attachmentId,
+      tipo: 'consolidado',
+      filename: `expediente-consolidado-${consolidadoTramite.referenceNumber}.pdf`,
+      mimetype: 'application/pdf',
+    });
+  }, [consolidadoTramite, abrirConsolidado]);
+
+  // ICT (paridad v1) — pausar/reanudar un trámite ICT con actualización optimista; revierte si falla.
+  // Solo aplica a borradores origin='ict' (el botón solo se muestra ahí). Al reanudar se limpia la nota.
+  const handleTogglePause = useCallback(
+    async (id: string, next: boolean, tenantId: string) => {
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === id
+            ? { ...it, isPaused: next, pausedObservation: next ? it.pausedObservation ?? null : null }
+            : it,
+        ),
+      );
+      try {
+        await tramitesClient.pauseInstance(id, next, null, isAdmin ? tenantId : undefined);
+      } catch {
+        setItems((prev) =>
+          prev.map((it) => (it.id === id ? { ...it, isPaused: !next } : it)),
+        );
+      }
+    },
+    [isAdmin],
+  );
+
+  // ICT (paridad v1 pause-unpause-massive) — selección múltiple para pausa/reanudación en lote.
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const handleBulkPause = useCallback(
+    async (paused: boolean) => {
+      if (selectedIds.size === 0) return;
+      // Optimista sobre las filas seleccionadas (solo tienen sentido las ICT en borrador).
+      setItems((prev) =>
+        prev.map((it) =>
+          selectedIds.has(it.id) && it.origin === 'ict' && it.estado === 'borrador'
+            ? { ...it, isPaused: paused, pausedObservation: paused ? it.pausedObservation ?? null : null }
+            : it,
+        ),
+      );
+      // El superadmin puede seleccionar trámites de varias compañías; el endpoint masivo se acota por
+      // X-Tenant-Id, así que se agrupa por tenant y se llama una vez por compañía.
+      const byTenant = new Map<string, string[]>();
+      for (const it of items) {
+        if (!selectedIds.has(it.id)) continue;
+        const arr = byTenant.get(it.tenantId) ?? [];
+        arr.push(it.id);
+        byTenant.set(it.tenantId, arr);
+      }
+      try {
+        await Promise.all(
+          Array.from(byTenant.entries()).map(([tenantId, ids]) =>
+            tramitesClient.pauseInstancesMassive(ids, paused, null, isAdmin ? tenantId : undefined),
+          ),
+        );
+      } catch {
+        void load(); // ante fallo parcial, refresca para reflejar el estado real del backend
+      } finally {
+        setSelectedIds(new Set());
+      }
+    },
+    [selectedIds, items, isAdmin, load],
+  );
+
   const hasActiveFilters =
     search.trim() !== '' ||
     modalidad !== '' ||
@@ -333,11 +553,11 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
 
   return (
     <section
-      className="rounded-2xl border bg-white p-4 shrink-0 dark:bg-[#0B0F14]"
+      className="rounded-2xl border bg-white p-4 shrink-0 min-w-0 dark:bg-[#0B0F14]"
     >
       {heading}
 
-      <div className="flex flex-col gap-3">
+      <div className="flex min-w-0 flex-col gap-3">
         {/* Funnel de estados (paridad con el diseño): conteo por estado + filtro. */}
         {!loading && !error && items.length > 0 && (
           <EstadoFunnel
@@ -441,6 +661,40 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           </div>
         )}
 
+        {/* ICT (paridad v1 pause-unpause-massive) — barra de acción cuando hay trámites ICT seleccionados. */}
+        {selectedIds.size > 0 ? (
+          <div
+            role="region"
+            aria-label="Acciones masivas de pausa"
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.06] px-3 py-2 text-xs"
+          >
+            <span className="font-semibold text-[#162744] dark:text-white">
+              {`${selectedIds.size} seleccionado${selectedIds.size === 1 ? '' : 's'}`}
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleBulkPause(true)}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#162744]/20 px-2.5 py-1 font-semibold text-[#162744] transition hover:bg-[#162744]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
+            >
+              <Pause className="h-3.5 w-3.5" aria-hidden="true" /> Pausar
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBulkPause(false)}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#557EFF]/40 px-2.5 py-1 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            >
+              <Play className="h-3.5 w-3.5" aria-hidden="true" /> Reanudar
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 font-semibold text-[#162744]/60 transition hover:text-[#162744] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:text-white/60 dark:hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" /> Limpiar
+            </button>
+          </div>
+        ) : null}
+
         <TableBody
           loading={loading}
           error={error}
@@ -451,10 +705,16 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           totalPages={totalPages}
           onPageChange={setPage}
           hasActiveFilters={hasActiveFilters}
-          showCompania={isAdmin}
+          openPopoverId={openPopoverId}
+          onTogglePopover={(id) => setOpenPopoverId((prev) => (prev === id ? null : id))}
+          onClosePopover={() => setOpenPopoverId(null)}
           onRetry={() => void load()}
           onClearFilters={clearFilters}
           onTogglePriority={handleTogglePriority}
+          onTogglePause={handleTogglePause}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onProcesar={openProcesar}
           onOpen={(id, tenantId) =>
             router.push(
               isAdmin && tenantId
@@ -462,8 +722,103 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
                 : `/tramites/${id}`,
             )
           }
+          onVerDocumentos={setDocsTramite}
+          onVerConsolidado={setConsolidadoTramite}
         />
       </div>
+
+      {/* HU #11054 — panel de documentos del expediente sobre el propio listado. */}
+      <TramiteDocumentosModal
+        open={docsTramite !== null}
+        onClose={() => setDocsTramite(null)}
+        instanceId={docsTramite?.id ?? null}
+        referenceNumber={docsTramite?.referenceNumber ?? ''}
+        tenantId={isAdmin ? docsTramite?.tenantId : undefined}
+      />
+
+      {/* HU #11055 — visor del consolidado, abierto directo desde la fila. */}
+      <AttachmentPreview
+        preview={{
+          ...consolidadoPreview,
+          close: () => {
+            consolidadoPreview.close();
+            setConsolidadoTramite(null);
+          },
+        }}
+      />
+
+      {processTarget && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="procesar-plate-title"
+        >
+          <div
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
+            style={{ border: '1px solid #DFE5ED' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="procesar-plate-title" className="text-lg font-semibold" style={{ color: '#162744' }}>
+              Procesar trámite
+            </h2>
+            <p className="mt-1 text-sm opacity-80">
+              {processTarget.referenceNumber}
+              {processTarget.placa ? ` · ${processTarget.placa}` : ''}
+            </p>
+            <p className="mt-2 text-xs opacity-70">
+              El OT ya asignó la placa. Marca los checks opcionales si aplican y pasa a Terminado
+              para que el OT pueda aprobar o rechazar.
+            </p>
+            <div className="mt-4 space-y-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[#557EFF]"
+                  checked={soatPagado}
+                  onChange={(e) => setSoatPagado(e.target.checked)}
+                  disabled={processActing}
+                />
+                SOAT pagado
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[#557EFF]"
+                  checked={impuestoPagado}
+                  onChange={(e) => setImpuestoPagado(e.target.checked)}
+                  disabled={processActing}
+                />
+                Impuesto departamental pagado
+              </label>
+            </div>
+            {processError ? (
+              <p role="alert" className="mt-3 text-xs text-orange-700">
+                {processError}
+              </p>
+            ) : null}
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                onClick={() => setProcessTarget(null)}
+                disabled={processActing}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: '#557EFF' }}
+                disabled={processActing}
+                onClick={() => void confirmProcesar()}
+              >
+                {processActing ? 'Procesando…' : 'Marcar como Terminado'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -479,11 +834,19 @@ function TableBody({
   totalPages,
   onPageChange,
   hasActiveFilters,
-  showCompania,
+  openPopoverId,
+  onTogglePopover,
+  onClosePopover,
   onRetry,
   onClearFilters,
   onTogglePriority,
+  onTogglePause,
+  selectedIds,
+  onToggleSelect,
+  onProcesar,
   onOpen,
+  onVerDocumentos,
+  onVerConsolidado,
 }: {
   loading: boolean;
   error: string | null;
@@ -494,13 +857,20 @@ function TableBody({
   totalPages: number;
   onPageChange: (page: number) => void;
   hasActiveFilters: boolean;
-  showCompania: boolean;
+  openPopoverId: string | null;
+  onTogglePopover: (id: string) => void;
+  onClosePopover: () => void;
   onRetry: () => void;
   onClearFilters: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
+  onTogglePause: (id: string, next: boolean, tenantId: string) => void;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+  onProcesar: (item: InstanceSummary) => void;
   onOpen: (id: string, tenantId: string) => void;
+  onVerDocumentos: (item: InstanceSummary) => void;
+  onVerConsolidado: (item: InstanceSummary) => void;
 }) {
-  const gridCols = showCompania ? GRID_COLS_ADMIN : GRID_COLS;
   if (loading) {
     return (
       <div
@@ -574,29 +944,43 @@ function TableBody({
     );
   }
 
-  return (
+    return (
     <div className="overflow-x-auto">
-      <div className={showCompania ? 'min-w-[1340px]' : 'min-w-[1180px]'}>
+      <div className={MIN_WIDTH}>
         {/* Header */}
         <div
           className="grid items-center text-[11px] uppercase tracking-wider font-semibold rounded-xl px-4 py-3"
           style={{
             background: '#dfe5ed',
             color: '#162744',
-            gridTemplateColumns: gridCols,
+            gridTemplateColumns: GRID_COLS,
           }}
           role="row"
         >
-          {showCompania && <div>Compañía</div>}
-          <div>Placa</div>
-          <div>Comprador</div>
+          {/* Columna de selección (checkbox por fila); cabecera vacía. */}
+          <div aria-hidden="true" />
+          <div>Radicado</div>
           <div>VIN</div>
+          <div>Placa</div>
+          <div>Trámite / Modalidad</div>
           <div>Vehículo</div>
-          <div>Modalidad</div>
+          <div>Propietario / vendedor</div>
+          {/* Dos columnas "Firmado": el negocio las rotula igual, así que el sufijo va oculto
+              visualmente para que cada cabecera tenga un nombre accesible propio. */}
+          <div>
+            Firmado<span className="sr-only"> (vendedor)</span>
+          </div>
+          <div>Comprador</div>
+          <div>
+            Firmado<span className="sr-only"> (comprador)</span>
+          </div>
           <div>Paso</div>
           <div>Estado</div>
-          <div>Organismo</div>
-          <div>Creado</div>
+          <div>Fecha de creación</div>
+          <div>Fecha de actualización</div>
+          <div>Secretaría</div>
+          <div>Gestor</div>
+          <div>Fuente</div>
           <div className="text-right">Acciones</div>
         </div>
 
@@ -606,10 +990,17 @@ function TableBody({
             <TramiteRow
               key={item.id}
               item={item}
-              showCompania={showCompania}
-              gridCols={gridCols}
+              popoverOpen={openPopoverId === item.id}
+              onTogglePopover={onTogglePopover}
+              onClosePopover={onClosePopover}
               onTogglePriority={onTogglePriority}
+              onTogglePause={onTogglePause}
+              selected={selectedIds.has(item.id)}
+              onToggleSelect={onToggleSelect}
+              onProcesar={onProcesar}
               onOpen={onOpen}
+              onVerDocumentos={onVerDocumentos}
+              onVerConsolidado={onVerConsolidado}
             />
           ))}
         </ul>
@@ -685,20 +1076,68 @@ function Pagination({
   );
 }
 
-/** Fila de trámite: clickable (abre el wizard) + acción explícita Continuar/Ver. */
+/**
+ * HU #11057 — celda de "Firmado" de una parte. `null` = NO APLICA (el vendedor no existe en matrícula
+ * inicial): se muestra un guion, no un chip, para no dar una falsa alarma.
+ */
+function FirmaCell({
+  estado,
+  parte,
+}: {
+  estado?: FirmaParteEstado | null;
+  parte: 'vendedor' | 'comprador';
+}) {
+  if (!estado) {
+    return (
+      <span
+        className="block text-xs text-[#162744]/40 dark:text-white/30"
+        title={`No aplica: este trámite no tiene ${parte}`}
+      >
+        —
+      </span>
+    );
+  }
+  const chip = FIRMA_CHIP[estado];
+  return (
+    <span className="block">
+      <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+    </span>
+  );
+}
+
+/** Fila de trámite: clickable (abre el wizard) + acciones explícitas (documentos, consolidado, Continuar/Ver). */
 function TramiteRow({
   item,
-  showCompania,
-  gridCols,
+  popoverOpen,
+  onTogglePopover,
+  onClosePopover,
   onTogglePriority,
+  onTogglePause,
+  selected,
+  onToggleSelect,
+  onProcesar,
   onOpen,
+  onVerDocumentos,
+  onVerConsolidado,
 }: {
   item: InstanceSummary;
-  showCompania: boolean;
-  gridCols: string;
+  popoverOpen: boolean;
+  onTogglePopover: (id: string) => void;
+  onClosePopover: () => void;
   onTogglePriority: (id: string, next: boolean, tenantId: string) => void;
+  onTogglePause: (id: string, next: boolean, tenantId: string) => void;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
+  onProcesar: (item: InstanceSummary) => void;
   onOpen: (id: string, tenantId: string) => void;
+  onVerDocumentos: (item: InstanceSummary) => void;
+  onVerConsolidado: (item: InstanceSummary) => void;
 }) {
+  // HU #11055 — la acción del consolidado solo existe si el expediente ya está generado (el resumen
+  // trae el id del adjunto): el botón NUNCA dispara una generación.
+  const consolidadoDisponible = !!item.consolidadoAttachmentId;
+  // ICT (paridad v1) — solo los borradores originados por ICT son pausables/seleccionables.
+  const isIctDraft = item.origin === 'ict' && item.estado === 'borrador';
   // HU #10350 — un borrador finalizado muestra un chip async ("Pendiente validación"/"Pendiente
   // firma"/"Listo para radicar"); el resto usa el chip base de estado. `ready` promueve la acción a
   // "Radicar" cuando la identidad ya quedó aprobada y los gates están listos.
@@ -706,28 +1145,126 @@ function TramiteRow({
   const chip = async?.chip ?? estadoChip(item.estado);
   const isDraft = item.estado === 'borrador';
   const actionLabel = async?.ready ? 'Radicar' : isDraft ? 'Continuar' : 'Ver';
+  const actionIcon = async?.ready ? FileCheck : isDraft ? Play : Eye;
+  const plateHint = plateFlowHint(item.plateFlowStatus);
+  const puedeProcesar =
+    item.estado === 'entregado' && item.plateFlowStatus === 'asignado';
+  const actionItems: ActionsMenuItem[] = [
+    {
+      key: 'abrir',
+      label: actionLabel,
+      icon: actionIcon,
+      // ICT — si está pausado, handleOpen abre el modal de confirmación antes de continuar.
+      onSelect: () => handleOpen(),
+    },
+    // ICT (paridad v1) — pausar/reanudar como acción del menú (solo borradores origin='ict').
+    ...(isIctDraft
+      ? [
+          {
+            key: 'pausa',
+            label: item.isPaused ? 'Reanudar' : 'Pausar',
+            icon: item.isPaused ? Play : Pause,
+            onSelect: () => onTogglePause(item.id, !item.isPaused, item.tenantId),
+          },
+        ]
+      : []),
+    ...(puedeProcesar
+      ? [
+          {
+            key: 'procesar',
+            label: 'Procesar',
+            icon: CheckCircle2,
+            onSelect: () => onProcesar(item),
+          },
+        ]
+      : []),
+    // HU #11054 — documentos del expediente sin entrar al wizard.
+    {
+      key: 'documentos',
+      label: 'Ver documentos',
+      icon: FileText,
+      onSelect: () => onVerDocumentos(item),
+    },
+    // HU #11055 — el negocio pidió la acción "sólo visible si ya se encuentra generado": se OMITE
+    // cuando no hay consolidado, en vez de mostrarse deshabilitada. Así nunca dispara una generación.
+    ...(consolidadoDisponible
+      ? [
+          {
+            key: 'consolidado',
+            label: 'Ver consolidado',
+            icon: FileStack,
+            onSelect: () => onVerConsolidado(item),
+          },
+        ]
+      : []),
+  ];
+  const motivoRechazo = item.ultimoRechazoMotivo?.trim() || null;
+  const subsanacionCount = item.subsanacionCount ?? 0;
+  const enSubsanacion = !!item.subsanacionActiva;
+  const showRejectPopover =
+    !!motivoRechazo || enSubsanacion || subsanacionCount > 0;
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const iconColor = enSubsanacion ? '#b45309' : '#c2410c';
+
+  // ICT — abrir/continuar un trámite PAUSADO pide confirmación primero (modal FLIT, no confirm nativo):
+  // recordar reanudarlo para poder radicarlo.
+  const [confirmPauseOpen, setConfirmPauseOpen] = useState(false);
+  const handleOpen = () => {
+    if (item.isPaused) {
+      setConfirmPauseOpen(true);
+      return;
+    }
+    onOpen(item.id, item.tenantId);
+  };
+
+  useEffect(() => {
+    if (!popoverOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClosePopover();
+    };
+    const onPointer = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        onClosePopover();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onPointer);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onPointer);
+    };
+  }, [popoverOpen, onClosePopover]);
 
   return (
     <li>
       <div
         role="button"
         tabIndex={0}
-        onClick={() => onOpen(item.id, item.tenantId)}
+        onClick={handleOpen}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            onOpen(item.id, item.tenantId);
+            handleOpen();
           }
         }}
-        className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl px-4 py-3 text-sm shadow-[0_2px_8px_rgba(22,39,68,0.05)] transition hover:shadow-[0_4px_14px_rgba(22,39,68,0.12)] hover:ring-1 hover:ring-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-        style={{ gridTemplateColumns: gridCols }}
+        className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl border px-4 py-3 text-sm transition hover:border-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+        style={{ gridTemplateColumns: GRID_COLS }}
         aria-label={`Abrir trámite ${item.referenceNumber}`}
       >
-        {showCompania && (
-          <span className="block text-xs font-semibold text-[#162744]/90 dark:text-white/80 truncate">
-            {item.companiaNombre ?? '—'}
-          </span>
-        )}
+        {/* ICT (paridad v1 pause-unpause-massive) — checkbox de selección: PRIMERA columna. Solo
+            borradores ICT; en el resto la celda va vacía para mantener la grilla alineada. */}
+        <span className="flex items-center justify-start" onClick={(e) => e.stopPropagation()}>
+          {isIctDraft ? (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleSelect(item.id)}
+              aria-label={`Seleccionar el trámite ${item.referenceNumber} para pausar/reanudar en lote`}
+              title="Seleccionar para pausar/reanudar en lote"
+              className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#557EFF]"
+            />
+          ) : null}
+        </span>
         <span className="flex min-w-0 items-center gap-2">
           {/* HU #10536 — estrella de prioridad: toggle in-line (no navega la fila). */}
           <button
@@ -755,23 +1292,15 @@ function TramiteRow({
               aria-hidden="true"
             />
           </button>
-          <span className="min-w-0">
-            <span className="font-mono font-semibold text-[#162744] dark:text-white truncate block">
-              {item.placa ?? '—'}
-            </span>
-            <span className="text-[10px] font-mono text-[#162744]/50 dark:text-white/50 truncate block">
-              {item.referenceNumber}
-            </span>
+          <span className="min-w-0 font-mono font-semibold text-[#162744] dark:text-white truncate block">
+            {item.referenceNumber}
           </span>
-        </span>
-        <span className="block text-[#162744] dark:text-white/90 truncate">
-          {item.compradorNombre ?? '—'}
         </span>
         <span className="block font-mono text-xs text-[#162744]/80 dark:text-white/70 truncate">
           {item.vin ?? '—'}
         </span>
-        <span className="block text-[#162744]/90 dark:text-white/80 truncate">
-          {vehiculo(item)}
+        <span className="block font-mono font-semibold text-[#162744] dark:text-white truncate">
+          {item.placa ?? '—'}
         </span>
         <span className="block">
           <span
@@ -785,6 +1314,17 @@ function TramiteRow({
             {MODALIDAD_SHORT[item.modalidad]}
           </span>
         </span>
+        <span className="block text-[#162744]/90 dark:text-white/80 truncate">
+          {vehiculo(item)}
+        </span>
+        <span className="block text-[#162744] dark:text-white/90 truncate">
+          {item.vendedorNombre ?? '—'}
+        </span>
+        <FirmaCell estado={item.firmaVendedorEstado} parte="vendedor" />
+        <span className="block text-[#162744] dark:text-white/90 truncate">
+          {item.compradorNombre ?? '—'}
+        </span>
+        <FirmaCell estado={item.firmaCompradorEstado} parte="comprador" />
         <span className="block min-w-0">
           <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
             {item.pasoActual}/{item.totalPasos}
@@ -793,34 +1333,188 @@ function TramiteRow({
             {stepLabel(item)}
           </span>
         </span>
-        <span className="block">
-          <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
-        </span>
-        <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
-          {item.organismoTransito ?? '—'}
+        <span className="relative flex min-w-0 flex-col items-start gap-1">
+          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+            {showRejectPopover ? (
+            <div ref={popoverRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTogglePopover(item.id);
+                }}
+                aria-expanded={popoverOpen}
+                aria-haspopup="dialog"
+                aria-label={`Ver detalle de rechazo / subsanación de ${item.referenceNumber}`}
+                title="Ver motivo del OT y subsanación"
+                className="rounded-md p-0.5 transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00]"
+              >
+                <AlertCircle
+                  className="h-3.5 w-3.5"
+                  style={{ color: iconColor }}
+                  aria-hidden="true"
+                />
+              </button>
+              {popoverOpen ? (
+                <div
+                  role="dialog"
+                  aria-label={`Detalle de rechazo de ${item.referenceNumber}`}
+                  className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-white p-3 shadow-lg dark:bg-[#162744]"
+                  style={{ borderColor: 'rgba(255,78,0,0.28)' }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {motivoRechazo ? (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[#c2410c]">
+                        Motivo del OT
+                      </p>
+                      <p className="mt-1 text-sm text-[#162744] dark:text-white/90 whitespace-pre-wrap">
+                        {motivoRechazo}
+                      </p>
+                    </div>
+                  ) : null}
+                  {enSubsanacion || subsanacionCount > 0 ? (
+                    <div
+                      className={`flex flex-wrap gap-1.5 ${motivoRechazo ? 'mt-2.5 border-t pt-2.5' : ''}`}
+                      style={
+                        motivoRechazo
+                          ? { borderColor: 'rgba(223,229,237,0.8)' }
+                          : undefined
+                      }
+                    >
+                      {enSubsanacion ? (
+                        <span
+                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
+                          style={{
+                            background: 'rgba(245,158,11,0.12)',
+                            color: '#b45309',
+                            borderColor: 'rgba(245,158,11,0.3)',
+                          }}
+                        >
+                          En subsanación
+                        </span>
+                      ) : null}
+                      {subsanacionCount > 0 ? (
+                        <span
+                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
+                          style={{
+                            background: 'rgba(99,102,241,0.10)',
+                            color: '#4f46e5',
+                            borderColor: 'rgba(99,102,241,0.28)',
+                          }}
+                        >
+                          Subsanado ×{subsanacionCount}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          </span>
+          {/* ICT — "Pausado" (solo texto, sin ícono): apilado bajo el estado; no invade Organismo. */}
+          {item.isPaused ? (
+            <span
+              className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#162744]/20 bg-[#162744]/[0.06] px-2 py-0.5 text-[10px] font-semibold text-[#162744]/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
+              title={item.pausedObservation ?? 'Trámite pausado'}
+              aria-label={
+                item.pausedObservation
+                  ? `Trámite pausado: ${item.pausedObservation}`
+                  : 'Trámite pausado'
+              }
+            >
+              Pausado
+            </span>
+          ) : null}
+          {plateHint ? (
+            <span
+              className="text-[10px] leading-tight text-[#162744]/45 dark:text-white/40 truncate"
+              title={plateHint}
+            >
+              {plateHint}
+            </span>
+          ) : null}
         </span>
         <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
           {shortDate(item.createdAt)}
         </span>
-        <span className="flex justify-end">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpen(item.id, item.tenantId);
-            }}
-            className="rounded-full px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition"
-            style={
-              isDraft
-                ? { background: 'linear-gradient(135deg,#557EFF,#00DBD5)', color: '#fff' }
-                : { border: '1px solid #DFE5ED', color: '#162744' }
-            }
-            aria-label={`${actionLabel} trámite ${item.referenceNumber}`}
-          >
-            {actionLabel}
-          </button>
+        {/* Sin modificaciones desde que se creó ⇒ no hay fecha de actualización que mostrar. */}
+        <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+          {item.updatedAt ? shortDate(item.updatedAt) : '—'}
+        </span>
+        <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
+          {item.organismoTransito ?? '—'}
+        </span>
+        {/* Gestor = empresa que radica + persona que la operó. Sustituye a la antigua columna
+            "Compañía" del SuperAdmin: era exactamente la misma razón social, sin la persona. El
+            filtro por compañía sigue existiendo (arriba), y ahora todos los perfiles ven el dato. */}
+        <span className="block min-w-0">
+          <span className="block truncate text-xs font-semibold text-[#162744] dark:text-white">
+            {item.companiaNombre ?? '—'}
+          </span>
+          <span className="block truncate text-[10px] text-[#162744]/60 dark:text-white/50">
+            {item.gestorNombre ?? '—'}
+          </span>
+        </span>
+        <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
+          {FUENTE_LABEL[item.fuente ?? 'dashboard']}
+        </span>
+        {/* La fila entera navega al wizard, así que las acciones detienen la propagación en un
+            envoltorio: el menú no recibe el evento y no hay que filtrarlo acción por acción.
+            Se conserva el `ActionsMenu` que introdujo el subflujo de placa (HU #11037): las acciones
+            de documentos y consolidado entran como ítems suyos, en vez de montar un segundo grupo de
+            botones en la misma celda. */}
+        <span
+          className="flex justify-end"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <ActionsMenu
+            ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
+            items={actionItems}
+            className="bg-white dark:bg-[#162744]"
+            attention={puedeProcesar}
+            attentionHint="Pendiente por procesar: el OT ya asignó la placa"
+          />
         </span>
       </div>
+      {/* ICT — confirmación FLIT (Modal con blur/overlay/CTA degradado) al continuar un trámite pausado. */}
+      <Modal
+        open={confirmPauseOpen}
+        onClose={() => setConfirmPauseOpen(false)}
+        title="Trámite pausado"
+        icon={Pause}
+        iconBg="#162744"
+        description={`Trámite ${item.referenceNumber}`}
+        size="sm"
+      >
+        <p className="text-sm text-[#162744]/80 dark:text-white/80">
+          Este trámite está <strong>pausado</strong>. Recuerda reanudarlo (despausarlo) para poder
+          radicarlo. ¿Deseas continuar de todos modos?
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setConfirmPauseOpen(false)}
+            className="rounded-full border border-[#DFE5ED] px-4 py-1.5 text-xs font-semibold text-[#162744] transition hover:bg-[#162744]/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/20 dark:text-white"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmPauseOpen(false);
+              onOpen(item.id, item.tenantId);
+            }}
+            className="rounded-full px-4 py-1.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+          >
+            Continuar de todos modos
+          </button>
+        </div>
+      </Modal>
     </li>
   );
 }

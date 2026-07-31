@@ -80,10 +80,40 @@ internal sealed class AlertRuleRepository(FlitDbContext db) : IAlertRuleReposito
         var items = rows
             .Select(x => new AlertEventDto(
                 x.e.Id, x.e.AlertRuleId, x.Name, x.e.TriggeredAt,
-                x.e.MetricValue, x.e.Threshold, x.e.Notified, x.e.Message))
+                x.e.MetricValue, x.e.Threshold, x.e.Notified, x.e.Message,
+                x.e.AcknowledgedAt, x.e.AcknowledgedBy))
             .ToList();
 
         return new AlertEventsPageDto(items, total);
+    }
+
+    public async Task<AlertEventDto?> AckEventAsync(
+        Guid tenantId, Guid eventId, Guid? acknowledgedBy, CancellationToken ct)
+    {
+        // Evento tracked por (tenant, id); un id de otro tenant "no existe" (§4.7 → 404).
+        var entity = await db.Set<AlertEvent>()
+            .FirstOrDefaultAsync(e => e.TenantId == tenantId && e.Id == eventId, ct);
+        if (entity is null)
+            return null;
+
+        // Set-once idempotente: si ya estaba reconocido, se conserva el primer acknowledged_at/by.
+        if (entity.AcknowledgedAt is null)
+        {
+            entity.AcknowledgedAt = DateTimeOffset.UtcNow;
+            entity.AcknowledgedBy = acknowledgedBy;
+            await db.SaveChangesAsync(ct);
+        }
+
+        // ruleName por join (contrato AlertEventDto), igual que ListEventsAsync.
+        var ruleName = await db.Set<AlertRule>().AsNoTracking()
+            .Where(r => r.Id == entity.AlertRuleId)
+            .Select(r => r.Name)
+            .FirstOrDefaultAsync(ct) ?? string.Empty;
+
+        return new AlertEventDto(
+            entity.Id, entity.AlertRuleId, ruleName, entity.TriggeredAt,
+            entity.MetricValue, entity.Threshold, entity.Notified, entity.Message,
+            entity.AcknowledgedAt, entity.AcknowledgedBy);
     }
 
     private IQueryable<AlertRule> Active(Guid tenantId) =>

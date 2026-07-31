@@ -10,6 +10,9 @@ const counts = {
   aprobado: 7,
   rechazado: 1,
   anulado: 0,
+  // HU #10874 — Record<EstadoTramite, number> ahora incluye 'subsanacion' (sin tarjeta propia en
+  // el funnel; FUNNEL_ORDER no la lista).
+  subsanacion: 0,
 };
 
 describe('EstadoFunnel', () => {
@@ -19,10 +22,14 @@ describe('EstadoFunnel', () => {
     expect(borrador).toBeInTheDocument();
     expect(borrador.textContent).toContain('5');
     expect(screen.getByRole('button', { name: 'Aprobado' }).textContent).toContain('7');
-    // Los 6 estados de negocio están presentes.
+    // HU #10785: los 6 estados de negocio (== develop); la ruta de placa NO añade tarjetas (su
+    // progreso es un sub-estado interno que vive bajo 'entregado').
     for (const label of ['Borrador', 'Preparado', 'Entregado', 'Aprobado', 'Rechazado', 'Anulado']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
     }
+    // preasignado/asignado ya no son tarjetas del funnel.
+    expect(screen.queryByRole('button', { name: 'Preasignado' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Asignado' })).toBeNull();
   });
 
   it('al hacer clic en un estado inactivo lo selecciona como filtro', () => {

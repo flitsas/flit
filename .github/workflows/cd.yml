@@ -19,6 +19,7 @@ env:
   # el pull del docker-compose.prod.yml en el VPS. El ambiente se diferencia por TAG
   # (dev/qa/pdn), no por nombre de repo.
   CORE_API_IMAGE: ghcr.io/flitsas/flitpdn/core-api
+  CORE_ICT_IMAGE: ghcr.io/flitsas/flitpdn/core-ict
   FRONTEND_IMAGE: ghcr.io/flitsas/flitpdn/frontend
   PYTHON_ML_IMAGE: ghcr.io/flitsas/flitpdn/python-ml
 
@@ -147,13 +148,15 @@ jobs:
       - name: Build and push core-api
         uses: docker/build-push-action@v6
         with:
-          context: ./services/core-api
+          # Context = services/ para incluir Flit.Ict.Grpc.Contracts (ProjectReference desde core-api).
+          context: ./services
           file: ./services/core-api/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=core-api
           cache-to: type=gha,mode=max,scope=core-api
+
 
   build-frontend:
     name: Build & push frontend image
@@ -272,9 +275,61 @@ jobs:
           cache-from: type=gha,scope=python-ml
           cache-to: type=gha,mode=max,scope=python-ml
 
+  build-core-ict:
+    name: Build & push core-ict (.NET) image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata — core-ict
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.CORE_ICT_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push core-ict
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/core-ict
+          file: ./services/core-ict/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=core-ict
+          cache-to: type=gha,mode=max,scope=core-ict
+
   deploy-to-vps:
     name: Deploy to VPS (${{ needs.setup.outputs.env_name }})
-    needs: [setup, build-core-api, build-frontend, build-python-ml]
+    needs: [setup, build-core-api, build-core-ict, build-frontend, build-python-ml]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # GitHub Environment por ambiente: cada uno (dev/qa/pdn) tiene SUS PROPIOS secrets
@@ -298,7 +353,9 @@ jobs:
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
           port: 22
           source: docker-compose.prod.yml
-          target: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
+          # target debe ser directorio (trailing slash) para no anidar rutas.
+          target: ${{ secrets.HOSTINGER_DEPLOY_PATH }}/
+          overwrite: true
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -308,12 +365,27 @@ jobs:
           key: ${{ secrets.HOSTINGER_SSH_KEY }}
           port: 22
           script: |
-            set -euo pipefail
-            cd "${{ secrets.HOSTINGER_DEPLOY_PATH }}"
+            set -eo pipefail
+            DEPLOY_PATH="${{ secrets.HOSTINGER_DEPLOY_PATH }}"
+            cd "$DEPLOY_PATH"
+
+            if [ ! -f docker-compose.prod.yml ]; then
+              echo "::error::docker-compose.prod.yml no encontrado en $DEPLOY_PATH"
+              ls -la "$DEPLOY_PATH" || true
+              exit 1
+            fi
+
+            # Carpeta de intercambio del migrador V1->V2 (perfil `migracion`): por aqui
+            # entran los archivos de ids y salen los reportes. Se crea aqui, con el
+            # usuario del deploy, y no se deja que la cree Docker al montar el bind:
+            # Docker la crearia como root y quien entre por SSH no podria escribir
+            # dentro, con un "permission denied" que no dice de donde viene.
+            mkdir -p migracion
 
             # Tag + puertos segun ambiente (override del .env del VPS).
             # deploy_tag: sha-<commit> inmutable en PDN; tag movil (dev/qa) en DEV/QA.
             export CORE_API_TAG=${{ needs.setup.outputs.deploy_tag }}
+            export CORE_ICT_TAG=${{ needs.setup.outputs.deploy_tag }}
             export FRONTEND_TAG=${{ needs.setup.outputs.deploy_tag }}
             export PYTHON_ML_TAG=${{ needs.setup.outputs.deploy_tag }}
             export FRONTEND_PORT=${{ needs.setup.outputs.front_port }}
@@ -321,8 +393,21 @@ jobs:
             export CORE_API_PORT=${{ needs.setup.outputs.core_port }}
             export PYTHON_ML_PORT=${{ needs.setup.outputs.python_port }}
 
-            # Authenticate to GHCR on the VPS to pull private images
-            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # GHCR login: el usuario DEBE ser el dueño del PAT (GHCR_USERNAME), NO github.actor.
+            # Si el merge lo hace otro usuario, login con github.actor falla en ~10s (exit 1).
+            GHCR_USER="${{ secrets.GHCR_USERNAME }}"
+            if [ -z "$GHCR_USER" ]; then
+              GHCR_USER="${{ vars.GHCR_USERNAME }}"
+            fi
+            if [ -z "$GHCR_USER" ]; then
+              # Fallback histórico: PAT del equipo asociado a deploys exitosos previos.
+              GHCR_USER="jormancopeteflit"
+              echo "::warning::GHCR_USERNAME no configurado; usando fallback $GHCR_USER. Configura secret GHCR_USERNAME en el repo."
+            fi
+            if ! echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "$GHCR_USER" --password-stdin; then
+              echo "::error::docker login ghcr.io falló para usuario $GHCR_USER"
+              exit 1
+            fi
 
             # Pull latest images and restart services
             docker compose -f docker-compose.prod.yml pull

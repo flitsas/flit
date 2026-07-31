@@ -156,4 +156,142 @@ public sealed class TenantEnforcementMiddlewareTests
         next.Should().BeFalse();
         ctx.Response.StatusCode.Should().Be(401);
     }
+
+    // Feature #10587 (bug de validación manual) — el endpoint de placas disponibles del wizard (Flujo A)
+    // es runtime tenant-scoped: el radicador de la compañía queda atado al tenant del token. Antes NO
+    // estaba en IsRuntimeScoped → http.Items no traía el tenant → el endpoint daba 403 al radicador.
+    [Fact]
+    public async Task PlatePreassignAvailable_CompanyUser_ResuelveTenantDelToken()
+    {
+        var ctx = Context("/api/v1/tramites/plate-preassign/available",
+            User("Radicador", CompanyTenant));
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(CompanyTenant));
+        ctx.Items[TenantEnforcementMiddleware.SuperAdminItemKey].Should().Be(false);
+    }
+
+    // CF-02 (HU #10879) — la consulta del paso 1 corre ANTES de crear el trámite, así que su ruta no
+    // cuelga de /instances. Igual es tenant-scoped: sin estar en IsRuntimeScoped, http.Items no traía
+    // el tenant y el endpoint respondía 403 "sin compañía asignada" a un radicador que sí la tiene.
+    [Fact]
+    public async Task PreflightPreview_CompanyUser_ResuelveTenantDelToken()
+    {
+        var ctx = Context("/api/v1/tramites/preflight-preview",
+            User("Radicador", CompanyTenant), headerTenant: OtherTenant);
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        // El header del cliente NO manda: el tenant sale del token, igual que en el resto del runtime.
+        ctx.Request.Headers["X-Tenant-Id"].ToString().Should().Be(CompanyTenant);
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(CompanyTenant));
+        ctx.Items[TenantEnforcementMiddleware.SuperAdminItemKey].Should().Be(false);
+    }
+
+    [Fact]
+    public async Task PreflightPreview_NoAutenticado_Returns401()
+    {
+        var ctx = Context("/api/v1/tramites/preflight-preview");
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(401);
+    }
+
+    // HU #10943 (hallazgo de review, IDOR cross-tenant) — antes IsRuntimeScoped comparaba
+    // "/api/v1/tramites/biometric-validations" con Equals EXACTO: el listado/create quedaban
+    // scopeados, pero las rutas HIJAS (PATCH /{id} y POST /{id}/resend — editar/reenviar una
+    // prevalidación con PII) caían FUERA del enforcement y el endpoint confiaba en el
+    // X-Tenant-Id crudo del cliente. Con StartsWithSegments el tenant se impone SIEMPRE desde
+    // el JWT, igual que en el resto del runtime.
+
+    [Fact]
+    public async Task BiometricValidationEdit_CompanyUser_SobreescribeHeaderConTenantDelToken()
+    {
+        var ctx = Context("/api/v1/tramites/biometric-validations/22222222-2222-2222-2222-222222222222",
+            User("AdminCompany", CompanyTenant), headerTenant: OtherTenant);
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        // Antes del fix, esta ruta NO entraba en IsRuntimeScoped: el header del atacante (OtherTenant)
+        // habría pasado intacto. Con el fix, el tenant SIEMPRE sale del JWT del caller.
+        ctx.Request.Headers["X-Tenant-Id"].ToString().Should().Be(CompanyTenant);
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(CompanyTenant));
+        ctx.Items[TenantEnforcementMiddleware.SuperAdminItemKey].Should().Be(false);
+    }
+
+    [Fact]
+    public async Task BiometricValidationEdit_NoAutenticado_Returns401()
+    {
+        var ctx = Context("/api/v1/tramites/biometric-validations/22222222-2222-2222-2222-222222222222");
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(401);
+    }
+
+    [Fact]
+    public async Task BiometricValidationResend_CompanyUser_SobreescribeHeaderConTenantDelToken()
+    {
+        var ctx = Context(
+            "/api/v1/tramites/biometric-validations/22222222-2222-2222-2222-222222222222/resend",
+            User("AdminCompany", CompanyTenant), headerTenant: OtherTenant);
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        ctx.Request.Headers["X-Tenant-Id"].ToString().Should().Be(CompanyTenant);
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(CompanyTenant));
+        ctx.Items[TenantEnforcementMiddleware.SuperAdminItemKey].Should().Be(false);
+    }
+
+    [Fact]
+    public async Task BiometricValidationResend_NoAutenticado_Returns401()
+    {
+        var ctx = Context(
+            "/api/v1/tramites/biometric-validations/22222222-2222-2222-2222-222222222222/resend");
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(401);
+    }
+
+    [Fact]
+    public async Task BiometricValidationEdit_SuperAdmin_ConHeader_AcotaAEsaCompania()
+    {
+        // El superadmin sigue pudiendo acotar por header (comportamiento existente, sin cambios).
+        var ctx = Context("/api/v1/tramites/biometric-validations/22222222-2222-2222-2222-222222222222",
+            User("SuperAdmin", tenantId: CompanyTenant), headerTenant: OtherTenant);
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(OtherTenant));
+    }
+
+    // HU #10955 (AC5) — lookup de contacto de actores por documento: sin instancia en la ruta, pero
+    // igual de tenant-scoped que el resto del runtime (mismo bug de fondo que b68b71e3 si se quedara
+    // fuera de IsRuntimeScoped: el operador podría leer el contacto capturado por OTRA compañía
+    // cambiando X-Tenant-Id).
+    [Fact]
+    public async Task ActorContactLookup_CompanyUser_SobreescribeHeaderConTenantDelToken()
+    {
+        var ctx = Context("/api/v1/tramites/actors/contact-lookup",
+            User("AdminCompany", CompanyTenant), headerTenant: OtherTenant);
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeTrue();
+        ctx.Request.Headers["X-Tenant-Id"].ToString().Should().Be(CompanyTenant);
+        ctx.Items[TenantEnforcementMiddleware.TenantItemKey].Should().Be(Guid.Parse(CompanyTenant));
+        ctx.Items[TenantEnforcementMiddleware.SuperAdminItemKey].Should().Be(false);
+    }
+
+    [Fact]
+    public async Task ActorContactLookup_NoAutenticado_Returns401()
+    {
+        var ctx = Context("/api/v1/tramites/actors/contact-lookup");
+        var next = await InvokeAsync(ctx);
+
+        next.Should().BeFalse();
+        ctx.Response.StatusCode.Should().Be(401);
+    }
 }

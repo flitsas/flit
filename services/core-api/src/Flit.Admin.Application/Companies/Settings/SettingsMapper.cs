@@ -16,7 +16,13 @@ internal static class SettingsMapper
         SettingsWire.ToWire(settings.NotificationTarget),
         settings.PaymentMethods,
         settings.RuntFailoverTimeoutMs,
-        ToChoices(settings.ConsultationProviderConfig));
+        ToChoices(settings.ConsultationProviderConfig),
+        settings.PlatePreassignEnabled,
+        settings.PlateFlowSkipToTerminado,
+        new AvaluoProviderConfigDto(
+            settings.AvaluoProviderConfig.Primary,
+            settings.AvaluoProviderConfig.Enabled),
+        settings.FinesQuerySource);
 
     private static Dictionary<string, ConsultationProviderChoice> ToChoices(
         ConsultationProviderConfig config)

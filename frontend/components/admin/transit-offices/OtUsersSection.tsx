@@ -25,6 +25,8 @@ import { DeleteUserDialog } from "@/components/atom/modules/users/DeleteUserDial
 import { RestoreUserDialog } from "@/components/atom/modules/users/RestoreUserDialog";
 import { ResendInvitationButton } from "@/components/atom/modules/users/ResendInvitationButton";
 import { CancelInvitationDialog } from "@/components/atom/modules/users/CancelInvitationDialog";
+// HU19 — misma area clickeable minima que la columna de acciones unificada (RowActions).
+import { ICON_BUTTON_HIT_AREA } from "@/components/atom/RowActions";
 import { formatOtDate } from "./ot-utils";
 import {
   SuspendOrDeactivateModal,
@@ -188,7 +190,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-bold" style={{ color: "#162744" }}>
+          <h2 className="text-sm font-bold text-foreground">
             Usuarios
           </h2>
           <p className="text-xs mt-0.5" style={{ color: "#557EFF" }}>
@@ -230,10 +232,10 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           errorMessage="No se pudo cargar el listado de usuarios eliminados."
           onRetry={() => void loadDeleted()}
         >
-          <div className="rounded-xl border overflow-hidden" style={{ background: "#FFFFFF" }}>
+          <div className="rounded-xl border overflow-hidden bg-card">
             <table className="w-full text-sm">
               <thead>
-                <tr style={{ borderBottom: "1px solid #DFE5ED", background: "#F7F9FC" }}>
+                <tr className="border-b bg-muted">
                   <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "#557EFF" }}>
                     Usuario
                   </th>
@@ -249,8 +251,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                 {deletedUsers.map((u) => (
                   <tr
                     key={u.id}
-                    className="transition hover:bg-blue-50/40"
-                    style={{ borderBottom: "1px solid #EEF5FF" }}
+                    className="transition hover:bg-blue-50/40 dark:hover:bg-white/5 border-b"
                   >
                     <td className="px-4 py-3">
                       <div className="font-medium text-sm">{u.fullName}</div>
@@ -265,7 +266,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                         title="Restaurar usuario"
                         aria-label={`Restaurar usuario ${u.fullName}`}
                         onClick={() => setRestoreTarget(u)}
-                        className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                        className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-blue-50`}
                         style={{ color: "#557EFF" }}
                       >
                         <RotateCcw className="h-4 w-4" />
@@ -297,12 +298,11 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
         onRetry={() => void load()}
       >
         <div
-          className="rounded-xl border overflow-hidden"
-          style={{ background: "#FFFFFF" }}
+          className="rounded-xl border overflow-hidden bg-card"
         >
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ borderBottom: "1px solid #DFE5ED", background: "#F7F9FC" }}>
+              <tr className="border-b bg-muted">
                 <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "#557EFF" }}>
                   Usuario
                 </th>
@@ -318,8 +318,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               {users.map((u) => (
                 <tr
                   key={u.id}
-                  className="transition hover:bg-blue-50/40"
-                  style={{ borderBottom: "1px solid #EEF5FF" }}
+                  className="transition hover:bg-blue-50/40 dark:hover:bg-white/5 border-b"
                 >
                   <td className="px-4 py-3">
                     <div className="font-medium text-sm">{u.fullName}</div>
@@ -340,7 +339,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                           title="Editar usuario"
                           aria-label={`Editar usuario ${u.fullName}`}
                           onClick={() => setEditTarget(u)}
-                          className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                          className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-blue-50`}
                           style={{ color: "#557EFF" }}
                         >
                           <Pencil className="h-4 w-4" />
@@ -355,7 +354,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                             title="Reactivar usuario"
                             aria-label={`Reactivar usuario ${u.fullName}`}
                             onClick={() => void handleUnsuspend(u.id)}
-                            className="p-1.5 rounded-lg transition hover:bg-green-50"
+                            className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-green-50`}
                             style={{ color: "#00DBD5" }}
                           >
                             <ShieldOff className="h-4 w-4" />
@@ -367,7 +366,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                               title="Suspender temporalmente"
                               aria-label={`Suspender temporalmente a ${u.fullName}`}
                               onClick={() => setSuspendTarget({ user: u, mode: "temporary" })}
-                              className="p-1.5 rounded-lg transition hover:bg-orange-50"
+                              className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-orange-50`}
                               style={{ color: "#FF4E00" }}
                             >
                               <Clock className="h-4 w-4" />
@@ -377,7 +376,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                               title="Desactivar indefinidamente"
                               aria-label={`Desactivar indefinidamente a ${u.fullName}`}
                               onClick={() => setSuspendTarget({ user: u, mode: "indefinite" })}
-                              className="p-1.5 rounded-lg transition hover:bg-red-50"
+                              className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-red-50`}
                               style={{ color: "#557EFF" }}
                             >
                               <Ban className="h-4 w-4" />
@@ -393,7 +392,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                           title="Eliminar usuario"
                           aria-label={`Eliminar usuario ${u.fullName}`}
                           onClick={() => setDeleteTarget(u)}
-                          className="p-1.5 rounded-lg transition hover:bg-red-50"
+                          className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-red-50`}
                           style={{ color: "#FF4E00" }}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -424,7 +423,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
                           title="Cancelar invitación"
                           aria-label={`Cancelar invitación a ${u.fullName}`}
                           onClick={() => setCancelTarget(u)}
-                          className="p-1.5 rounded-lg transition hover:bg-red-50"
+                          className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-red-50`}
                           style={{ color: "#FF4E00" }}
                         >
                           <MailX className="h-4 w-4" />
@@ -591,11 +590,11 @@ function OtInviteUserDialog({
       aria-modal="true"
       aria-labelledby="ot-invite-user-title"
     >
-      <div className="w-full max-w-md rounded-2xl p-6 shadow-2xl" style={{ background: "#FFFFFF" }}>
-        <h2 id="ot-invite-user-title" className="text-base font-bold mb-1" style={{ color: "#162744" }}>
+      <div className="w-full max-w-md rounded-2xl p-6 shadow-2xl bg-card">
+        <h2 id="ot-invite-user-title" className="text-base font-bold mb-1 text-foreground">
           Invitar usuario
         </h2>
-        <p className="text-xs mb-4" style={{ color: "#9CA3AF" }}>
+        <p className="text-xs mb-4 text-muted-foreground">
           El usuario invitado tendrá el mismo acceso operativo que un Admin OT.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -625,8 +624,7 @@ function OtInviteUserDialog({
               type="button"
               onClick={onClose}
               disabled={busy}
-              className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50 disabled:opacity-60"
-              style={{ color: "#162744" }}
+              className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50 disabled:opacity-60 text-foreground"
             >
               Cancelar
             </button>
@@ -656,7 +654,7 @@ function OtField({
 }) {
   return (
     <div>
-      <label htmlFor={htmlFor} className="block text-xs font-medium mb-1" style={{ color: "#162744" }}>
+      <label htmlFor={htmlFor} className="block text-xs font-medium mb-1 text-foreground">
         {label}
       </label>
       {children}

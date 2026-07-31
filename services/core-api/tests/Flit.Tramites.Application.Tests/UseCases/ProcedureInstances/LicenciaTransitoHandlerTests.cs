@@ -53,6 +53,10 @@ public sealed class LicenciaTransitoHandlerTests
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>
             Task.FromResult<Stream?>(
                 Contents.TryGetValue(storagePath, out var bytes) ? new MemoryStream(bytes) : null);
+
+        public Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(
+            string storagePath, CancellationToken ct = default) =>
+            Task.FromResult<(string Url, DateTimeOffset ExpiresAt)?>(null);
     }
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status) =>
@@ -91,6 +95,23 @@ public sealed class LicenciaTransitoHandlerTests
         instance.Attachments.Should().ContainSingle(a => a.Tipo == "licencia_transito");
         instance.Events.Should().ContainSingle(e => e.Tipo == "lt_adjuntada");
         await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task AdjuntarLt_InvalidaLaMarcaDeConsolidadoMaestro()
+    {
+        // Feature #10701 — adjuntar la LT cambia el expediente: baja la marca de vigencia a false
+        // para que el próximo "Ver consolidado" regenere el PDF incluyéndola.
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        var instance = Instance(id, tenantId, TramiteEstado.Aprobado);
+        instance.ConsolidadoMaestroVigente = true;
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        var (_, error) = await _adjuntar.HandleAsync(id, tenantId, LtPdf(), null, ct);
+
+        error.Should().BeNull();
+        instance.ConsolidadoMaestroVigente.Should().BeFalse();
     }
 
     [Theory]
@@ -219,6 +240,67 @@ public sealed class LicenciaTransitoHandlerTests
         result.Mimetype.Should().Be("application/pdf");
     }
 
+    [Fact]
+    public async Task DescargarConsolidado_SoloMaestro_LoDevuelve()
+    {
+        // F2 (Feature #10701): "Ver consolidado" debe mostrar el maestro cuando es lo único
+        // que el OT generó (antes solo consideraba el tipo "consolidado").
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        var instance = Instance(id, tenantId, TramiteEstado.Aprobado);
+        _storage.Contents["path/maestro"] = Encoding.UTF8.GetBytes("pdf-maestro");
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            Tipo = "consolidado_maestro",
+            Filename = "consolidado_maestro_TRM.pdf",
+            Mimetype = "application/pdf",
+            StoragePath = "path/maestro",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        var (result, error) = await _descargar.HandleAsync(id, tenantId, ct);
+
+        error.Should().BeNull();
+        result!.Filename.Should().Be("consolidado_maestro_TRM.pdf");
+    }
+
+    [Fact]
+    public async Task DescargarConsolidado_MaestroMasReciente_GanaSobreConsolidado()
+    {
+        // Entre {consolidado, consolidado_maestro} devuelve el más reciente por UploadedAt.
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        var instance = Instance(id, tenantId, TramiteEstado.Aprobado);
+        _storage.Contents["path/std"] = Encoding.UTF8.GetBytes("pdf-std");
+        _storage.Contents["path/maestro"] = Encoding.UTF8.GetBytes("pdf-maestro");
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            Tipo = "consolidado",
+            Filename = "consolidado_std.pdf",
+            Mimetype = "application/pdf",
+            StoragePath = "path/std",
+            UploadedAt = DateTimeOffset.UtcNow.AddHours(-1),
+        });
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            Tipo = "consolidado_maestro",
+            Filename = "consolidado_maestro.pdf",
+            Mimetype = "application/pdf",
+            StoragePath = "path/maestro",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithAttachmentsAsync(id, tenantId, ct).Returns(instance);
+
+        var (result, error) = await _descargar.HandleAsync(id, tenantId, ct);
+
+        error.Should().BeNull();
+        result!.Filename.Should().Be("consolidado_maestro.pdf");
+    }
+
     // ── Trazabilidad: historial ordenado + LT en el consolidado ───────────────
 
     [Fact]
@@ -301,6 +383,9 @@ public sealed class LicenciaTransitoHandlerTests
         public byte[] NormalizeToPdf(byte[] content, string mimetype) => content;
 
         public byte[] Merge(IReadOnlyList<byte[]> pdfParts) => pdfParts.SelectMany(x => x).ToArray();
+
+        public byte[] Compose(Flit.Tramites.Application.Documents.MergeRequest request) =>
+            Merge(request.Parts.Select(p => p.Pdf).ToList());
     }
 
     private async Task AddPdf(ProcedureInstance instance, string tipo)

@@ -9,8 +9,12 @@ var generator = new FurOverlayDocumentGenerator();
 
 var scenarios = new (string Slug, FurDocumentData Data)[]
 {
-    ("matricula-YYY090", MatriculaData()),
-    ("traspaso-IWL38D", TraspasoData()),
+    // Uno por formato (Feature #10918). TemplateFormat se fija EXPLÍCITO para forzar la plantilla blank
+    // correcta sin depender del catálogo/BD; la clase del vehículo es la real que mapearía a ese formato.
+    ("01-automotor-camioneta", AutomotorData()),
+    ("02-maquinaria-retroexcavadora", MaquinariaData()),
+    ("03-remolques-semirremolque", RemolquesData()),
+    ("04-automotor-traspaso", AutomotorTraspasoData()),
 };
 
 foreach (var (slug, data) in scenarios)
@@ -23,7 +27,8 @@ foreach (var (slug, data) in scenarios)
 
 return 0;
 
-static FurDocumentData MatriculaData() => new(
+// AUTOMOTOR — matrícula de una camioneta (plantilla histórica HU #10256).
+static FurDocumentData AutomotorData() => new(
     ProcedureInstanceId: Guid.Parse("11111111-1111-1111-1111-111111111111"),
     ReferenceNumber: "TRM-2026-YYY090",
     Modalidad: "matricula_inicial",
@@ -59,47 +64,124 @@ static FurDocumentData MatriculaData() => new(
     ValorVenta: null,
     Causal: null,
     SellosFirma: [],
-    FechaTramite: new DateTime(2026, 6, 25, 0, 0, 0, DateTimeKind.Utc));
+    FechaTramite: new DateTime(2026, 6, 25, 0, 0, 0, DateTimeKind.Utc),
+    TemplateFormat: FurTemplateFormat.Automotor);
 
-static FurDocumentData TraspasoData() => MatriculaData() with
+// AUTOMOTOR traspaso — vendedor (propietario) + comprador con sellos de identidad, para verificar
+// las secciones 21/22 y las firmas en la plantilla nueva (HU #10921).
+static FurDocumentData AutomotorTraspasoData() => AutomotorData() with
 {
     ReferenceNumber = "TRM-2026-IWL38D",
     Modalidad = "traspaso",
     TipologiaCodigo = "traspaso_standard",
-    Vehiculo = MatriculaData().Vehiculo with
+    Vehiculo = AutomotorData().Vehiculo with
     {
-        Marca = "BAJAJ",
-        Linea = "PULSAR 200 NS",
-        Modelo = "2023",
-        Color = "NEGRO",
-        Clase = "MOTOCICLETA",
-        Combustible = "GASOLINA",
-        Cilindraje = "200",
-        Placa = "IWL38D",
-        Vin = "MD2BRYDZ8NWC12345",
-        NumeroChasis = "MD2BRYDZ8NWC12345",
+        Marca = "BAJAJ", Linea = "PULSAR 200", Modelo = "2023", Color = "NEGRO",
+        Clase = "MOTOCICLETA", Combustible = "GASOLINA", Cilindraje = "200",
+        Placa = "IWL38D", Vin = "MD2BRYDZ8NWC12345", NumeroChasis = "MD2BRYDZ8NWC12345",
+        TipoCarroceria = "SIN CARROCERIA", Capacidad = "2",
+    },
+    Partes =
+    [
+        new DocumentParte("vendedor", "AMOR JIMENEZ GUERRA", "1000445459", null, DocumentType: "CC",
+            Phone: "3109876543", Address: "CRA 10 # 20-30", City: "BOGOTA"),
+        new DocumentParte("comprador", "STEFFEN REICHERT", "C27WKYL7", null, DocumentType: "PAS",
+            Phone: "3201112233", Address: "AV 68 # 45-12", City: "MEDELLIN"),
+    ],
+    IdentidadValidada = true,
+    SellosIdentidad = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["vendedor"] = "Validacion biometrica CC 1000445459\nUUID ven-001\nFirma a1b2c3\nAprob 25/06/2026 · Vence 25/07/2026",
+        ["comprador"] = "Validacion biometrica PAS C27WKYL7\nUUID com-002\nFirma d4e5f6\nAprob 25/06/2026 · Vence 25/07/2026",
+    },
+};
+
+// MAQUINARIA — matrícula de una retroexcavadora (plantilla MAQUINARIA, HU #10922).
+static FurDocumentData MaquinariaData() => AutomotorData() with
+{
+    ReferenceNumber = "TRM-2026-MAQ001",
+    Vehiculo = AutomotorData().Vehiculo with
+    {
+        Marca = "CATERPILLAR",
+        Linea = "420F2",
+        Modelo = "2024",
+        Color = "AMARILLO",
+        Clase = "RETROEXCAVADORA",
+        Combustible = "DIESEL",
+        Cilindraje = "4400",
+        Vin = "CAT0420FLKMH12345",
+        Placa = "MAQ001",
+        NumeroMotor = "MT-CAT420F2",
+        NumeroChasis = "CAT0420FLKMH12345",
+        NumeroSerie = "SN-420F2-9981",
         TipoCarroceria = "SIN CARROCERIA",
-        Capacidad = "2",
+        TipoServicio = "PARTICULAR",
+        Capacidad = "1",
+        PesoBruto = "8200",
+    },
+    Partes =
+    [
+        new DocumentParte(
+            "comprador",
+            "CONSTRUCCIONES ANDINAS S.A.S.",
+            "9007654321",
+            "compras@construandinas.com",
+            DocumentType: "NIT",
+            Phone: "6041234567",
+            Address: "CRA 43A # 14-27",
+            City: "MEDELLIN",
+            EsJuridica: true),
+    ],
+    TemplateFormat = FurTemplateFormat.Maquinaria,
+};
+
+// REMOLQUES — traspaso de un semirremolque (plantilla REMOLQUES, HU #10923).
+static FurDocumentData RemolquesData() => AutomotorData() with
+{
+    ReferenceNumber = "TRM-2026-REM001",
+    Modalidad = "traspaso",
+    TipologiaCodigo = "traspaso_standard",
+    Vehiculo = AutomotorData().Vehiculo with
+    {
+        Marca = "PLANATRAILER",
+        Linea = "PORTACONTENEDOR 40FT",
+        Modelo = "2022",
+        Color = "GRIS",
+        Clase = "SEMIREMOLQUE",
+        Combustible = "NO APLICA",
+        Cilindraje = "0",
+        Vin = "3H3V532C1NT123456",
+        Placa = "R12345",
+        NumeroMotor = "-",
+        NumeroChasis = "3H3V532C1NT123456",
+        TipoCarroceria = "PLATAFORMA",
+        TipoServicio = "CARGA",
+        Capacidad = "0",
+        PesoBruto = "34000",
+        NumeroEjes = "3",
     },
     Partes =
     [
         new DocumentParte(
             "vendedor",
-            "AMOR Y CERVEZA JIMENEZ GUERRA",
-            "1000445459",
-            "vendedor@example.com",
-            DocumentType: "CC",
-            Phone: "3109876543",
-            Address: "CRA 10 # 20-30",
-            City: "BOGOTA"),
+            "TRANSPORTES DEL NORTE LTDA",
+            "8301112223",
+            "flota@transnorte.com",
+            DocumentType: "NIT",
+            Phone: "6057778899",
+            Address: "VIA 40 # 72-15",
+            City: "BARRANQUILLA",
+            EsJuridica: true),
         new DocumentParte(
             "comprador",
-            "STEFFEN REICHERT",
-            "C27WKYL7",
-            "comprador@example.com",
-            DocumentType: "PAS",
-            Phone: "3201112233",
-            Address: "AV 68 # 45-12",
-            City: "MEDELLIN"),
+            "LOGISTICA CARIBE S.A.S.",
+            "9012223334",
+            "activos@logcaribe.com",
+            DocumentType: "NIT",
+            Phone: "6053334455",
+            Address: "CALLE 30 # 8-40",
+            City: "CARTAGENA",
+            EsJuridica: true),
     ],
+    TemplateFormat = FurTemplateFormat.Remolques,
 };

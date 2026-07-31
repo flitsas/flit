@@ -1,0 +1,12 @@
+═══════════════════════════════════════════════════════════════
+  Migración Flit V1 → V2 · TRASPASO · instancia 1 (data plana)
+═══════════════════════════════════════════════════════════════
+  Modo      : REAL (escribe en V2)
+  Tipo      : transfer
+  Tabla V1  : vehicle_transfer_master
+  Tipo V2   : TRASPASO_STANDARD
+  Lote      : pdn-20260805-ola-3
+  Trámites  : 1 → 8617
+  Origen V1 : pdn_copy_updated @ localhost:5432
+  Destino V2: flitdev_backup_updated @ localhost:5432
+

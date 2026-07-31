@@ -11,6 +11,8 @@
     <Project Path="src/Flit.Modules.Security.Application/Flit.Modules.Security.Application.csproj" />
     <Project Path="src/Flit.Modules.Security.Domain/Flit.Modules.Security.Domain.csproj" />
     <Project Path="src/Flit.Modules.Improntas.Domain/Flit.Modules.Improntas.Domain.csproj" />
+    <Project Path="src/Flit.Modules.Quipux.Domain/Flit.Modules.Quipux.Domain.csproj" />
+    <Project Path="src/Flit.Modules.Quipux.Application/Flit.Modules.Quipux.Application.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Flit.Infrastructure.Tests/Flit.Infrastructure.Tests.csproj" />
@@ -19,5 +21,17 @@
     <Project Path="tests/Flit.Modules.Security.Application.Tests/Flit.Modules.Security.Application.Tests.csproj" />
     <Project Path="tests/Flit.Admin.Tests/Flit.Admin.Tests.csproj" />
     <Project Path="tests/Flit.Analytics.Application.Tests/Flit.Analytics.Application.Tests.csproj" />
+    <Project Path="tests/Flit.Modules.Quipux.Application.Tests/Flit.Modules.Quipux.Application.Tests.csproj" />
+    <Project Path="tests/Flit.DataMigration.Tests/Flit.DataMigration.Tests.csproj" />
+  </Folder>
+  <!--
+    Migracion V1 -> V2. Vive en tools/ y no en src/ a proposito: es andamiaje temporal que se
+    borra entero el dia que V1 se apague, sin tocar el arbol de producto. Sonar solo mira src
+    (sonar-project.properties), asi que tampoco entra en las puertas de cobertura.
+  -->
+  <Folder Name="/tools/">
+    <Project Path="tools/Flit.DataMigration.Core/Flit.DataMigration.Core.csproj" />
+    <Project Path="tools/Flit.DataMigration.V1/Flit.DataMigration.V1.csproj" />
+    <Project Path="tools/Flit.DataMigration.Api/Flit.DataMigration.Api.csproj" />
   </Folder>
 </Solution>

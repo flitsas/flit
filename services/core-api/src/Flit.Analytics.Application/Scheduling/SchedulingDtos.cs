@@ -39,7 +39,9 @@ public sealed record AlertEventDto(
     decimal MetricValue,
     decimal Threshold,
     bool Notified,
-    string? Message);
+    string? Message,
+    DateTimeOffset? AcknowledgedAt,
+    Guid? AcknowledgedBy);
 
 /// <summary>Página del historial de disparos (<c>GET /analytics/alert-events</c>).</summary>
 public sealed record AlertEventsPageDto(IReadOnlyList<AlertEventDto> Items, int TotalCount);

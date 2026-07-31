@@ -17,8 +17,8 @@ public static class FurFieldMapper
         var propietario = ResolvePropietario(data, esTraspaso);
         var comprador = esTraspaso ? ResolveComprador(data) : null;
         var (placaLetras, placaNumeros) = SplitPlaca(data.Placa);
-        var (propAp1, propAp2, propNom) = SplitName(propietario?.Nombre);
-        var (compAp1, compAp2, compNom) = SplitName(comprador?.Nombre);
+        var (propAp1, propAp2, propNom) = NameParts(propietario);
+        var (compAp1, compAp2, compNom) = NameParts(comprador);
         var fecha = data.FechaTramite ?? DateTime.UtcNow;
 
         var dict = new Dictionary<string, FurFieldValue>(StringComparer.OrdinalIgnoreCase)
@@ -78,7 +78,15 @@ public static class FurFieldMapper
             dict["vehicle_buyer_address"] = Text(DisplayOrDash(comprador.Address));
             dict["vehicle_buyer_city"] = Text(DisplayOrDash(comprador.City));
             dict["vehicle_buyer_phone"] = Text(DisplayOrDash(comprador.Phone));
-            SetSignature(dict, "vehicle_buyer_signature", data, comprador.Rol, IdentidadOrSello(data, "comprador", ["comprador"]));
+            // HU #11035 — el sello del comprador baja 4pt (el campo declara 8pt, frente a 6,5pt del
+            // propietario): con la reducción uniforme de 2pt seguía saliéndose del recuadro.
+            SetSignature(
+                dict,
+                "vehicle_buyer_signature",
+                data,
+                comprador.Rol,
+                IdentidadOrSello(data, "comprador", ["comprador"]),
+                selloFontSizeDelta: -4);
             MarkDocType(dict, comprador.Documento, comprador.DocumentType, "vehicle_buyer");
         }
         else
@@ -112,22 +120,72 @@ public static class FurFieldMapper
         return dict;
     }
 
+    /// <param name="selloFontSizeDelta">
+    /// Ajuste de cuerpo del SELLO de identidad respecto al manifiesto (HU #11031/#11035). El campo del
+    /// comprador declara 8pt frente a los 6,5pt del propietario, así que necesita bajar más para que el
+    /// bloque de cuatro líneas quepa en su recuadro.
+    /// </param>
     private static void SetSignature(
         Dictionary<string, FurFieldValue> dict,
         string fieldId,
         FurDocumentData data,
         string? rol,
-        string fallbackText)
+        string fallbackText,
+        double selloFontSizeDelta = -2)
     {
         if (!string.IsNullOrWhiteSpace(rol)
             && data.FirmaImagenes is not null
             && TryGetFirmaImagen(data.FirmaImagenes, rol, out var image))
         {
-            dict[fieldId] = new FurFieldValue(null, image);
+            var sidecar = TryBuildFirmaBaulSidecar(data.FirmaBaulMetadatos, rol);
+            dict[fieldId] = new FurFieldValue(null, image, sidecar);
             return;
         }
 
-        dict[fieldId] = Text(fallbackText);
+        // HU #11031 — el sello de la validación de identidad se imprime 2pt más pequeño que el resto
+        // del campo: son cuatro líneas dentro del espacio de firma y con el cuerpo del manifiesto se
+        // salían del recuadro. El sello previo de firma electrónica conserva su tamaño.
+        var esSelloIdentidad = !string.IsNullOrWhiteSpace(rol)
+            && data.SellosIdentidad is not null
+            && data.SellosIdentidad.TryGetValue(rol, out var selloIdentidad)
+            && !string.IsNullOrWhiteSpace(selloIdentidad)
+            && string.Equals(selloIdentidad, fallbackText, StringComparison.Ordinal);
+
+        dict[fieldId] = new FurFieldValue(Val(fallbackText), FontSizeDelta: esSelloIdentidad ? selloFontSizeDelta : 0);
+    }
+
+    private static string? TryBuildFirmaBaulSidecar(
+        IReadOnlyDictionary<string, FirmaBaulMetadata>? metadata,
+        string rol)
+    {
+        if (metadata is null)
+            return null;
+
+        foreach (var key in FirmaRolKeys(rol))
+        {
+            if (!metadata.TryGetValue(key, out var meta))
+                continue;
+
+            var lines = new List<string>
+            {
+                $"Doc. {meta.DocumentNumber}",
+                meta.FullName,
+                // HU #11018 — formato de negocio unico en documentos: AÑO/MES/DIA.
+                $"Vig. {meta.VigenciaDesde:yyyy/MM/dd} — {meta.VigenciaHasta:yyyy/MM/dd}",
+            };
+
+            // HU #10930 (Feature #10929): se estampa el codigo_hash digitado en el baúl (meta.Hash), NO el
+            // UUID de la fila. Si el baúl no trae código (firmas previas / null), se OMITE la línea "Hash"
+            // en vez de imprimir el GUID (que confundía al operador).
+            if (!string.IsNullOrWhiteSpace(meta.Hash))
+            {
+                lines.Add($"Hash: {meta.Hash}");
+            }
+
+            return string.Join('\n', lines);
+        }
+
+        return null;
     }
 
     private static bool TryGetFirmaImagen(IReadOnlyDictionary<string, byte[]> images, string rol, out byte[] bytes)
@@ -367,6 +425,18 @@ public static class FurFieldMapper
         var letras = new string(clean.TakeWhile(char.IsLetter).ToArray());
         var numeros = new string(clean.SkipWhile(char.IsLetter).ToArray());
         return (letras, numeros);
+    }
+
+    /// <summary>
+    /// HU #10688 — reparte el nombre de la parte en las casillas del FUR. Persona jurídica: la razón social
+    /// va COMPLETA en la casilla de nombre (sin trocear), apellidos vacíos. Persona natural: se trocea con
+    /// <see cref="SplitName"/> como antes.
+    /// </summary>
+    private static (string Ap1, string Ap2, string Nom) NameParts(DocumentParte? parte)
+    {
+        if (parte is null)
+            return ("", "", "");
+        return parte.EsJuridica ? ("", "", parte.Nombre?.Trim() ?? "") : SplitName(parte.Nombre);
     }
 
     private static (string Ap1, string Ap2, string Nom) SplitName(string? full)

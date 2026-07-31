@@ -3,6 +3,7 @@
 import { Pencil } from "lucide-react";
 import type { DocumentType } from "@/lib/api/types-documents";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RowActions } from "@/components/atom/RowActions";
 import { Pagination } from "@/components/atom/Pagination";
 
@@ -32,7 +33,8 @@ export function DocumentTypeListTable({
 }: DocumentTypeListTableProps) {
   return (
     <div className="flex flex-1 flex-col">
-      <table className="w-full border-separate border-spacing-y-2 text-xs">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px] border-separate border-spacing-y-2 text-xs">
         <thead>
           <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
             <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
@@ -65,12 +67,10 @@ export function DocumentTypeListTable({
                   {d.descripcion && <p className="mt-0.5 text-[10px] font-normal opacity-60">{d.descripcion}</p>}
                 </td>
                 <td className="border-y px-4 py-3">
-                  <span
-                    className="rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
-                    style={{ background: activo ? "#00DBD5" : "#FF4E00" }}
-                  >
-                    {activo ? "Activo" : "Inactivo"}
-                  </span>
+                  <StatusBadge
+                    label={activo ? "Activo" : "Inactivo"}
+                    tone={activo ? "success" : "danger"}
+                  />
                 </td>
                 <td className="border-y px-4 py-3 opacity-70">
                   {formatDate(d.fechaCreacion)}
@@ -99,6 +99,7 @@ export function DocumentTypeListTable({
           })}
         </tbody>
       </table>
+      </div>
 
       <Pagination
         page={page}

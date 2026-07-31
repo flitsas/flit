@@ -1,0 +1,76 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Migrador de trámites Flit V1 -> V2. HOST DE CONSOLA.
+
+    Consola de un solo uso operativo: recibe una ORDEN DE TRABAJO (lista de ids de V1)
+    y migra esos trámites a V2. La SELECCIÓN de qué migrar NO es responsabilidad de este
+    programa: se la entregan por parámetro. Ver README.md.
+
+    Este proyecto ya NO contiene el motor: vive en Flit.DataMigration.Core y lo comparte
+    con el host HTTP (Flit.DataMigration.Api), para que el comando y el endpoint ejecuten
+    exactamente el mismo código. Aquí solo quedan los argumentos y la impresión del reporte.
+
+    El AssemblyName NO se toca: el Dockerfile publica a /app/migrador y el docker-compose
+    de los tres ambientes arranca `dotnet /app/migrador/Flit.DataMigration.V1.dll`.
+
+    AOT desactivado (igual que Flit.Infrastructure): EF Core usa reflexión y no es
+    AOT-compatible. Es el "JIT como escape documentado" de ADR-0002 §2 Decisión 5.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Flit.DataMigration.V1</RootNamespace>
+    <AssemblyName>Flit.DataMigration.V1</AssemblyName>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+    <NuGetAuditMode>direct</NuGetAuditMode>
+    <!-- CA1848: LoggerMessage delegates son ruido en una consola de migración de un solo uso;
+         aquí el log es salida para el operador, no telemetría de alto volumen.
+         CA1031: el bucle por trámite captura Exception a propósito para que un registro malo
+         mande a cuarentena sin abortar el lote completo. -->
+    <NoWarn>$(NoWarn);CA1848;CA1031</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Los metodos que imprimen el reporte son `internal`: son salida para el operador, no API
+      publica. El proyecto de tests los congela con golden files, para poder DEMOSTRAR que un
+      refactor no cambio una sola linea de lo que el operador lee.
+    -->
+    <InternalsVisibleTo Include="Flit.DataMigration.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Flit.DataMigration.Core/Flit.DataMigration.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Solo lo que necesita el HOST: leer appsettings.json y las variables FLITMIG_, y armar
+      el contenedor minimo del que sale IHttpClientFactory. EF Core, Npgsql y el resto llegan
+      por Flit.DataMigration.Core.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <!--
+      Config local del desarrollador: no está versionada, por eso Condition.
+
+      CopyToPublishDirectory=Never es una medida de SEGURIDAD, no una optimización. Este archivo
+      contiene credenciales reales (cadenas de conexión a producción, token de Cognito). Sin esta
+      línea, `dotnet publish` lo metía en la salida, y como la imagen de Docker se construye con
+      publish, el token del desarrollador que hiciera el build acabaría dentro de la imagen y
+      viajaría al registro de contenedores.
+
+      En el servidor este archivo se crea a mano (o se monta como volumen); nunca se hornea.
+    -->
+    <None Update="appsettings.Local.json" CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="Never"
+          Condition="Exists('appsettings.Local.json')" />
+  </ItemGroup>
+
+</Project>

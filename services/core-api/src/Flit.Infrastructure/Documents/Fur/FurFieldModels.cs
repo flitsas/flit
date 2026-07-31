@@ -43,4 +43,14 @@ public sealed class FurFieldManifest
 }
 
 /// <summary>Valor resuelto de un campo para el overlay.</summary>
-public sealed record FurFieldValue(string? Text, byte[]? ImageBytes = null);
+/// <param name="ImageSidecarText">
+/// Texto multilínea pintado a la derecha de <see cref="ImageBytes"/> (metadatos del baúl de firmas).
+/// </param>
+public sealed record FurFieldValue(
+    string? Text,
+    byte[]? ImageBytes = null,
+    string? ImageSidecarText = null,
+    // HU #11031 — ajuste de cuerpo respecto al tamaño declarado en el manifiesto. El sello de la
+    // validación de identidad se imprime 2pt más pequeño: son cuatro líneas dentro del espacio de
+    // firma y con el cuerpo del manifiesto se salían del recuadro.
+    double FontSizeDelta = 0);

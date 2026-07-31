@@ -30,22 +30,28 @@ describe('VIN (ISO 3779)', () => {
 });
 
 describe('Placa Colombia', () => {
-  it('acepta carro, moto (actual/antigua) y remolque', () => {
+  it('acepta carro, moto (actual/antigua), remolque y maquinaria', () => {
     expect(validatePlate('ABC123')).toBeNull(); // carro
     expect(validatePlate('ABC12D')).toBeNull(); // moto actual
     expect(validatePlate('ABC12')).toBeNull(); // moto antigua
-    expect(validatePlate('R12345')).toBeNull(); // remolque
-    expect(validatePlate('S12345')).toBeNull(); // semirremolque
+    expect(validatePlate('R12345')).toBeNull(); // remolque (5 dígitos)
+    expect(validatePlate('S12345')).toBeNull(); // semirremolque (5 dígitos)
+    expect(validatePlate('R123456')).toBeNull(); // remolque (6 dígitos, HU #10999)
+    expect(validatePlate('S123456')).toBeNull(); // semirremolque (6 dígitos, HU #10999)
+    expect(validatePlate('MC029554')).toBeNull(); // maquinaria (2 letras + 6 dígitos)
   });
 
   it('rechaza formatos inválidos', () => {
     expect(validatePlate('AB123')).not.toBeNull();
     expect(validatePlate('ABCD12')).not.toBeNull();
     expect(validatePlate('123ABC')).not.toBeNull();
+    expect(validatePlate('MC02955')).not.toBeNull(); // maquinaria incompleta (5 dígitos)
+    expect(validatePlate('MC0295544')).not.toBeNull(); // maquinaria con dígito de más
   });
 
   it('sanea a mayúsculas y quita separadores', () => {
     expect(sanitizePlate('abc-123')).toBe('ABC123');
+    expect(sanitizePlate('mc-029554')).toBe('MC029554'); // maquinaria: no se trunca a 6
   });
 });
 

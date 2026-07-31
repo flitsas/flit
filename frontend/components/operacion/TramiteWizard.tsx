@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Briefcase,
@@ -17,6 +17,7 @@ import {
   Layers,
   Lock,
   Palette,
+  RefreshCw,
   Search,
   Shield,
   Tag,
@@ -27,18 +28,33 @@ import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
 import { useWizardTelemetry } from '@/hooks/useWizardTelemetry'; // Reportes2 HU-A
 import { PreflightPanel } from './PreflightPanel';
+import { ActiveDeedsCollapse } from './ActiveDeedsCollapse';
 import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
 import { PrendaForm } from './PrendaForm';
+import { SubsanacionPanel } from './SubsanacionPanel';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
 import { reasonCopy, blockerCopy } from './wizard-copy';
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
+import { VehicleTransformationsCard } from './VehicleTransformationsCard';
 import { useToast } from '@/components/admin/Toast';
-import { tramitesClient } from '@/lib/api/tramites-client';
+import {
+  tramitesClient,
+  getDuplicateActiveProcedureId,
+  getVehicleStateBlock,
+  type VehicleStateBlockInfo,
+} from '@/lib/api/tramites-client';
+import { getToken } from '@/lib/api/client';
+import { decodeJwtPayload } from '@/lib/auth/jwt';
+import {
+  isTenantOwnDocument,
+  normalizeNitDigits,
+  OWNER_NOT_TENANT_MESSAGE,
+} from '@/lib/tramites/vehicleOwnership';
 import {
   sanitizeVin,
   validateVin,
@@ -55,6 +71,8 @@ import type {
   InstanceStatus,
   PreflightSnapshot,
   ProcedureConfiguration,
+  ProcedureInstanceSummary,
+  StatusHistory,
   WizardModalidad,
   WizardStep,
   WizardStepStatus,
@@ -66,19 +84,44 @@ import type {
  *
  * - Instancia existente (Track B): `existingInstanceId` — el wizard opera sobre
  *   un draft ya creado (ruta /tramites/[instanceId]). NO crea nada.
- * - Entrada por modalidad (M0): `modalidad` + `title` — crea la instancia draft
- *   al montar. Se conserva para los tests legacy de auto-create.
- * - Entrada legacy por tipo publicado: `configuration` + `procedureTypeId`.
+ * - Entrada por modalidad (M0 + CF-02): `modalidad` + `title` — NO crea nada al
+ *   montar. El paso 1 (consulta del vehículo) opera sin instancia y el trámite
+ *   se crea al avanzar al paso 2, avisando por `onCreated`.
+ * - Entrada legacy por tipo publicado: `configuration` + `procedureTypeId` —
+ *   conserva el auto-create al montar (selector de tipos publicados).
  *
  * Exactamente una de las tres vías debe estar presente.
  */
 type Props = {
   onExit: () => void;
 } & (
-  | { existingInstanceId: string; modalidad?: undefined; title?: undefined; configuration?: undefined; procedureTypeId?: undefined }
-  | { modalidad: WizardModalidad; title: string; existingInstanceId?: undefined; configuration?: undefined; procedureTypeId?: undefined }
-  | { configuration: ProcedureConfiguration; procedureTypeId: string; existingInstanceId?: undefined; modalidad?: undefined; title?: undefined }
+  | { existingInstanceId: string; modalidad?: undefined; title?: undefined; configuration?: undefined; procedureTypeId?: undefined; onCreated?: undefined; seedVin?: undefined; seedPlaca?: undefined }
+  | {
+      modalidad: WizardModalidad;
+      title: string;
+      /** CF-02 — el trámite acaba de crearse al avanzar al paso 2; la página navega a su ruta. */
+      onCreated?: (summary: ProcedureInstanceSummary) => void;
+      /** R3 (HU #10539) — vehículo sembrado desde el CTA "Iniciar traspaso": solo prellena el paso 1. */
+      seedVin?: string;
+      seedPlaca?: string;
+      existingInstanceId?: undefined;
+      configuration?: undefined;
+      procedureTypeId?: undefined;
+    }
+  | { configuration: ProcedureConfiguration; procedureTypeId: string; existingInstanceId?: undefined; modalidad?: undefined; title?: undefined; onCreated?: undefined; seedVin?: undefined; seedPlaca?: undefined }
 );
+
+/**
+ * CF-02 — consulta del paso 1 resuelta SIN trámite creado: lo que hace falta para dar de alta el
+ * registro al avanzar al paso 2. `previewToken` evita repetir la consulta al RUNT en la creación.
+ */
+type PendingConsulta = {
+  previewToken: string;
+  vin?: string;
+  plate?: string;
+  ownerDocumentType?: string;
+  ownerDocumentNumber?: string;
+};
 
 const STATUS_BADGE: Record<
   WizardStepStatus,
@@ -101,7 +144,7 @@ const STEP_SUBTITLE: Record<string, string> = {
   consulta: 'Ingresa la placa y el propietario para consultar los datos del RUNT.',
   documentos: 'Adjunta los documentos que exige el trámite (PDF, JPG, PNG o WEBP, máx 20 MB).',
   comercial: 'Valor de la venta, causal e impuestos del traspaso.',
-  fur: 'Generación opcional del FUR y expediente consolidado. Puedes enviar el trámite y generarlos después.',
+  fur: 'Fecha y observaciones del FUR. El expediente (FUR, certificados y consolidado) se genera al Preparar.',
   identidad:
     'Validación de identidad de cada parte. La biométrica real llegará en una iteración futura; por ahora puedes simular la validación de cada parte.',
 };
@@ -121,6 +164,81 @@ function isIdentityApproved(steps: WizardStep[], modalidad: WizardModalidad): bo
   const identidad = steps.find((s) => s.key === 'identidad');
   // HU #10549 — sin paso de identidad (el OT la deshabilitó y el wizard lo ocultó) ⇒ no se exige.
   return identidad ? identidad.status === 'complete' : true;
+}
+
+/**
+ * Aviso del detalle en los estados no editables (HU #11053).
+ *
+ * Antes se imprimía un texto fijo —«Enviado a tránsito … aún puedes generar o descargar el FUR y el
+ * expediente consolidado»— para CUALQUIER estado no editable, así que un trámite aprobado, rechazado o
+ * anulado anunciaba un envío a tránsito que ya no era su situación y ofrecía una generación que, desde
+ * la HU #11051, el backend rechaza en estado final. Ahora el mensaje se deriva del estado real y solo
+ * menciona generar donde de verdad se puede.
+ */
+const READ_ONLY_NOTICE: Record<string, { titulo: string; detalle: string; color: string; bg: string }> = {
+  entregado: {
+    titulo: 'Enviado a tránsito — solo visualización.',
+    detalle:
+      'Este trámite ya no puede editarse, pero aún puedes generar o descargar el expediente consolidado.',
+    color: '#557EFF',
+    bg: 'rgba(85,126,255,0.06)',
+  },
+  aprobado: {
+    titulo: 'Trámite aprobado — solo visualización.',
+    detalle:
+      'El organismo de tránsito lo aprobó. Su documentación es definitiva: puedes consultarla y descargarla, pero ya no se regenera.',
+    color: '#5B8A1F',
+    bg: 'rgba(140,198,63,0.10)',
+  },
+  rechazado: {
+    titulo: 'Trámite rechazado — solo visualización.',
+    detalle:
+      'El organismo de tránsito lo rechazó. Revisa el motivo para saber qué corregir; mientras no se active la subsanación no puede editarse.',
+    color: '#c2410c',
+    bg: 'rgba(255,78,0,0.06)',
+  },
+  anulado: {
+    titulo: 'Trámite anulado — solo visualización.',
+    detalle:
+      'Este trámite quedó sin efecto. Puedes consultar y descargar su documentación, pero no editarlo ni regenerarlo.',
+    color: '#b91c1c',
+    bg: 'rgba(185,28,28,0.06)',
+  },
+  preparado: {
+    titulo: 'Borrador preparado — solo visualización.',
+    detalle:
+      'Los datos quedaron en firme. Desde el paso de decisión puedes radicar el trámite a tránsito.',
+    color: '#B45309',
+    bg: 'rgba(249,172,0,0.08)',
+  },
+};
+
+/** Fallback para un estado no editable no contemplado (nunca debería ocurrir con los estados de N 03). */
+const READ_ONLY_NOTICE_FALLBACK = {
+  titulo: 'Solo visualización.',
+  detalle: 'Este trámite no puede editarse en su estado actual.',
+  color: '#557EFF',
+  bg: 'rgba(85,126,255,0.06)',
+};
+
+function ReadOnlyStateNotice({ estado }: { estado: InstanceStatus | null }) {
+  const notice = (estado && READ_ONLY_NOTICE[estado]) || READ_ONLY_NOTICE_FALLBACK;
+  return (
+    <div
+      className="rounded-xl p-3 text-xs border shrink-0 flex items-start gap-2"
+      style={{ borderColor: notice.color, background: notice.bg, color: '#162744' }}
+      role="status"
+      aria-live="polite"
+    >
+      <Eye className="h-4 w-4 shrink-0 mt-0.5" style={{ color: notice.color }} aria-hidden="true" />
+      <span>
+        <span className="font-semibold" style={{ color: notice.color }}>
+          {notice.titulo}
+        </span>{' '}
+        {notice.detalle}
+      </span>
+    </div>
+  );
 }
 
 /** Icono/marcador por status del paso (✓ / • / 🔒). */
@@ -151,28 +269,74 @@ function StepMarker({ status, index }: { status: WizardStepStatus; index: number
  * `refresh()` para re-consultar el estado autoritativo.
  */
 export function TramiteWizard(props: Props) {
-  const { configuration, procedureTypeId, modalidad: entryModalidad, title, existingInstanceId, onExit } = props;
+  const {
+    configuration,
+    procedureTypeId,
+    modalidad: entryModalidad,
+    title,
+    existingInstanceId,
+    onCreated,
+    seedVin,
+    seedPlaca,
+    onExit,
+  } = props;
   const { state, start } = useProcedureInstance();
   // Con instancia existente (Track B) no se crea nada: el id viene por prop.
-  // En las vías de auto-create el id lo produce `start()` → state.instanceId.
+  // En la vía legacy por tipo publicado el id lo produce `start()` → state.instanceId.
   const instanceId = existingInstanceId ?? state.instanceId;
+
+  // CF-02 (HU #10883, AC3) — entrada por modalidad: el trámite NO existe todavía. El paso 1 corre
+  // contra la consulta desacoplada y el registro se crea al avanzar al paso 2 (AC4). Solo aplica
+  // mientras no haya instancia: en cuanto se crea, el wizard es el de siempre.
+  const deferredCreation = !existingInstanceId && !!entryModalidad && !instanceId;
+  // Consulta resuelta en el paso 1 (token + identificadores) a la espera de crear el trámite.
+  const [pendingConsulta, setPendingConsulta] = useState<PendingConsulta | null>(null);
+  // Condiciones marcadas en el paso 1 antes de que el trámite exista (leasing, carrocería, paz y
+  // salvo, riesgo aceptado, transformaciones). Se persisten en el mismo acto de la creación, para
+  // que el paso 1 ofrezca lo MISMO que antes y solo cambie el momento del guardado.
+  const pendingFieldValuesRef = useRef<Map<string, string>>(new Map());
+  const collectPendingFieldValues = useCallback(
+    (items: { fieldKey: string; valueText: string }[]) => {
+      for (const item of items) pendingFieldValuesRef.current.set(item.fieldKey, item.valueText);
+    },
+    [],
+  );
 
   // Estado de la instancia existente + sello de borrador finalizado (HU #10350). Se derivan
   // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
   const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
   const [draftFinalizedAt, setDraftFinalizedAt] = useState<string | null>(null);
+  // HU #10874 (AC1) — historial de estados de la instancia: fuente única de datos del panel de
+  // subsanación (motivo/checklist de la última transición a `subsanacion`). Loading/error propios
+  // (no el `.catch` silencioso de arriba) porque sin ellos el panel no podría distinguir "cargando"
+  // de "sin observación" (4 estados de UI).
+  const [statusHistory, setStatusHistory] = useState<StatusHistory[]>([]);
+  // Estado inicial derivado de `existingInstanceId` (prop estable durante el ciclo de vida del
+  // wizard: la página lo remonta por `key` en cada refresh) para no llamar setState de forma
+  // síncrona dentro del efecto (react-hooks/set-state-in-effect).
+  const [instanceDetailLoading, setInstanceDetailLoading] = useState(!!existingInstanceId);
+  const [instanceDetailError, setInstanceDetailError] = useState<string | null>(null);
   useEffect(() => {
     if (!existingInstanceId) return;
     let active = true;
     tramitesClient
       .getInstance(existingInstanceId)
       .then((d) => {
-        if (active) {
-          setInstanceStatus(d.status ?? null);
-          setDraftFinalizedAt(d.draftFinalizedAt ?? null);
-        }
+        if (!active) return;
+        setInstanceStatus(d.status ?? null);
+        setDraftFinalizedAt(d.draftFinalizedAt ?? null);
+        setStatusHistory(d.statusHistory ?? []);
+        setInstanceDetailError(null);
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (!active) return;
+        setInstanceDetailError(
+          err instanceof Error ? err.message : 'No se pudo cargar el detalle del trámite.',
+        );
+      })
+      .finally(() => {
+        if (active) setInstanceDetailLoading(false);
+      });
     return () => {
       active = false;
     };
@@ -192,17 +356,16 @@ export function TramiteWizard(props: Props) {
   // que `start()` corra UNA sola vez por entrada.
   const startedForRef = useRef<string | null>(null);
 
-  // Crea la instancia draft al montar (una sola vez por entrada). Si ya existe
-  // (existingInstanceId), NO crea: el wizard solo hidrata el draft vía GET /wizard.
+  // Crea la instancia draft al montar SOLO en la vía legacy por tipo publicado. Con instancia
+  // existente no hay nada que crear, y en la entrada por modalidad la creación se difiere al avance
+  // al paso 2 (CF-02): entrar al wizard ya no da de alta ningún registro.
   useEffect(() => {
-    if (existingInstanceId) return;
+    if (existingInstanceId || entryModalidad) return;
     if (startedForRef.current === startKey) return;
     startedForRef.current = startKey;
-    void start(
-      entryModalidad ? { modalidad: entryModalidad } : { procedureTypeId: procedureTypeId! },
-    );
+    void start({ procedureTypeId: procedureTypeId! });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startKey, existingInstanceId]);
+  }, [startKey, existingInstanceId, entryModalidad]);
 
   const {
     wizard,
@@ -212,7 +375,7 @@ export function TramiteWizard(props: Props) {
     loading: wizardLoading,
     error: wizardError,
     refresh,
-  } = useWizard(instanceId);
+  } = useWizard(instanceId, undefined, deferredCreation ? entryModalidad : undefined);
 
   // N 03 — estado de negocio del trámite: manda el del wizard (se refresca tras cada acción);
   // fallback al fetch inicial de la instancia existente mientras el wizard carga.
@@ -226,7 +389,14 @@ export function TramiteWizard(props: Props) {
   //  • Preparado: solo lectura, con la acción "Radicar a tránsito" (preparado→entregado) en el
   //    paso de decisión.
   //  • Solo visualización (Track C): estados posteriores (entregado, aprobado, rechazado, anulado).
-  const fullReadOnly = !!estadoTramite && estadoTramite !== 'borrador';
+  // Subsanación: flag sobre rechazado (o legado status `subsanacion`) reabre la edición COMPLETA.
+  const inSubsanacion =
+    estadoTramite === 'subsanacion' ||
+    (estadoTramite === 'rechazado' && !!wizard?.subsanacionActiva);
+  const fullReadOnly =
+    !!estadoTramite &&
+    estadoTramite !== 'borrador' &&
+    !inSubsanacion;
   const draftFinalized = estadoTramite === 'borrador' && !!draftFinalizedAt;
   // Captura de datos deshabilitada en todos los modos no-editables (provider de solo lectura).
   const editLocked = fullReadOnly || draftFinalized;
@@ -247,11 +417,27 @@ export function TramiteWizard(props: Props) {
   const stepInitializedRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Feature #11066 — estado informativo del paquete (FUR/certs/impronta). No bloquea Preparar.
+  const [paqueteDocsStatus, setPaqueteDocsStatus] = useState<
+    'idle' | 'loading' | 'ready' | 'error'
+  >('idle');
+  // HU #10646 — partes (NIT/jurídicas) cuya identidad quedó cubierta por la firma electrónica del baúl.
+  // El backend no expone un flag "cubierto por baúl" por parte en el estado biométrico, así que la señal
+  // se captura del outcome `firma_baul` que devuelve ensureIdentity al guardar la parte, y desde aquí se
+  // propaga a BiometricStep para pintar el estado "cubierto por el baúl" (sin botones de biométrica).
+  const [vaultCoveredPartes, setVaultCoveredPartes] = useState<BiometricParte[]>([]);
   const { show } = useToast();
   // Guardar+continuar de los pasos con form embebido (actores y comercial): la
   // shell dispara save() vía ref desde el footer "Guardar y continuar".
   const stepFormRef = useRef<WizardStepFormHandle>(null);
   const [continuing, setContinuing] = useState(false);
+  /** Feature #11066 — cambios locales pendientes de Guardar (docs/forms). */
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  /**
+   * Subsanación: se pone en true tras un Guardar y continuar exitoso (tras haber editado).
+   * Habilita Re-radicar solo cuando además no hay dirty pendiente.
+   */
+  const [subsanacionSavedEdits, setSubsanacionSavedEdits] = useState(false);
 
   // Preflight local (semáforo) para los pasos consulta/validación.
   const [preflight, setPreflight] = useState<PreflightSnapshot | null>(null);
@@ -278,6 +464,21 @@ export function TramiteWizard(props: Props) {
     configuration?.name ??
     (modalidad === 'traspaso' ? 'Traspaso estándar' : 'Matrícula inicial');
 
+  // AC1 (HU #10883) — autosave del paso: al AVANZAR (no al retroceder) persiste la `key` del paso
+  // destino vía PATCH /instances/{id}/current-step (HU #10879), para retomar ahí al reabrir el
+  // borrador (AC2). Fire-and-forget: el backend valida internamente (borrador + vehículo consultado,
+  // HU #10879) y un 409/400 no debe bloquear la navegación del wizard — el autosave es best-effort.
+  const persistCurrentStep = useCallback(
+    (stepKey: string) => {
+      if (!instanceId) return;
+      void tramitesClient.setCurrentStep(instanceId, stepKey).catch(() => {
+        // Silencioso a propósito: p.ej. aún no se consultó el vehículo (409) o el trámite ya no es
+        // borrador. No es una acción explícita del usuario, así que no se interrumpe ni se avisa.
+      });
+    },
+    [instanceId],
+  );
+
   // Navegación en cascada: solo a pasos completos o a la frontera (primer
   // incompleto). No basta con que el paso no esté 'locked'.
   const goToStep = (index: number) => {
@@ -285,6 +486,9 @@ export function TramiteWizard(props: Props) {
     // Reportes2 HU-A — retroceso o salto de paso = wizard_step_exit con duración
     // de permanencia (el avance +1 con éxito lo reporta handleContinue como complete).
     if (index < activeIndex || index > activeIndex + 1) telemetry.trackStepExit();
+    // AC1 (HU #10883) — solo se persiste al avanzar (index > activeIndex), no al retroceder ni al
+    // reabrir un paso ya visitado: retroceder a revisar un paso no debe mover el punto de retoma.
+    if (index > activeIndex && steps[index]) persistCurrentStep(steps[index].key);
     setActiveIndex(index);
   };
 
@@ -298,10 +502,22 @@ export function TramiteWizard(props: Props) {
     if (steps.length === 0) return;
     stepInitializedRef.current = true;
     if (existingInstanceId) {
+      // AC2 (HU #10883) — el paso persistido (autosave, HU #10879) PRIMA como punto de retoma: si el
+      // wizard trae `persistedCurrentStep`, corresponde a un paso visible Y sigue siendo alcanzable por
+      // la cascada (`canNavigateToStep`: por construcción el paso solo se persistió al avanzar, cuando
+      // SÍ era navegable — ver `persistCurrentStep`/`goToStep`), arranca ahí. Se revalida la cascada aquí
+      // (y no solo la existencia del paso) para no pelear con el efecto de corrección de abajo si algún
+      // gate previo retrocedió entre la persistencia y la reapertura (p.ej. se eliminó un documento): en
+      // ese caso cae al primer paso incompleto derivado de los gates (comportamiento previo, sin
+      // regresión — el backend #10879 ya provee ese mismo fallback null-safe cuando no hay paso persistido).
+      const persistedKey = wizard?.persistedCurrentStep;
+      const persistedIndex = persistedKey ? steps.findIndex((s) => s.key === persistedKey) : -1;
+      const persistedNavigable =
+        persistedIndex !== -1 && canNavigateToStep(steps, persistedIndex, navViewOnly);
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setActiveIndex(frontierIndex(steps));
+      setActiveIndex(persistedNavigable ? persistedIndex : frontierIndex(steps));
     }
-  }, [steps, existingInstanceId]);
+  }, [steps, existingInstanceId, wizard?.persistedCurrentStep, navViewOnly]);
 
   // Tras refrescar el estado, si el paso activo dejó de ser navegable (p.ej. un
   // gate previo cambió y el flujo retrocedió), reubica en la frontera del flujo.
@@ -339,10 +555,60 @@ export function TramiteWizard(props: Props) {
     }
   }, [instanceId, activeStep?.key]);
 
+  // Feature #11066 — genera FUR/impronta/consolidado sin bloquear la UI de negocio.
+  // Reintenta ante fallos transitorios o consolidado incompleto (p.ej. FUR aún en vuelo).
+  // Devuelve mensaje de error o null si el consolidado quedó completo.
+  const ensureExpedienteDocs = useCallback(async (id: string): Promise<string | null> => {
+    const maxAttempts = 3;
+    // En tests, backoff mínimo para no alargar la suite.
+    const retryMs =
+      typeof process !== 'undefined' && process.env.NODE_ENV === 'test' ? 10 : 1_500;
+
+    setPaqueteDocsStatus('loading');
+    let lastError: string | null = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        try {
+          await tramitesClient.generarFur(id);
+        } catch {
+          // Puede existir ya; el consolidado fallará si realmente falta.
+        }
+        try {
+          await tramitesClient.generarImpronta(id);
+        } catch {
+          // Best-effort: sin impronta no bloquea el consolidado en backend (HU #11017).
+        }
+        const result = await tramitesClient.generarConsolidado(id, undefined, true);
+        if (!result.incompleto) {
+          setPaqueteDocsStatus('ready');
+          return null;
+        }
+        const faltantes = (result.documentosFaltantes ?? []).filter(Boolean).join(', ');
+        lastError = faltantes
+          ? `Expediente incompleto: faltan ${faltantes}.`
+          : 'Expediente incompleto: faltan documentos obligatorios.';
+      } catch (genErr) {
+        lastError =
+          genErr instanceof Error
+            ? genErr.message
+            : 'No se pudieron generar los documentos del expediente.';
+      }
+
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, retryMs * attempt));
+      }
+    }
+
+    setPaqueteDocsStatus('error');
+    return lastError ?? 'No se pudieron generar los documentos del expediente.';
+  }, []);
+
   // N 03 (radicación en dos pasos) — Preparar: borrador→preparado vía POST /transition. El backend
   // valida el gate RF03 (identidad aprobada + documentos); solo se habilita cuando el wizard reporta
   // canSubmit Y la identidad está aprobada (ver `canRadicar`). El wizard permanece abierto: pasa a
   // solo lectura y ofrece "Radicar a tránsito".
+  // Feature #11066 — la generación de FUR/paquete corre en segundo plano: NO bloquea la transición.
   const handlePreparar = async () => {
     if (!instanceId || !canRadicar) return;
     setSubmitting(true);
@@ -350,8 +616,24 @@ export function TramiteWizard(props: Props) {
     try {
       await tramitesClient.transitionInstance(instanceId, 'preparado');
       setInstanceStatus('preparado');
-      show('Trámite preparado: validaciones completas, listo para radicar.', 'success');
+      show(
+        'Trámite preparado. Generando expediente en segundo plano…',
+        'success',
+      );
       await refresh();
+
+      const id = instanceId;
+      void (async () => {
+        const docsError = await ensureExpedienteDocs(id);
+        if (docsError) {
+          show(
+            `Trámite preparado, pero faltó el expediente tras reintentos: ${docsError} Regenera antes de radicar.`,
+            'error',
+          );
+        } else {
+          show('Expediente listo (FUR y consolidado). Ya puedes radicar.', 'success');
+        }
+      })();
     } catch (err) {
       setSubmitError(
         err instanceof Error ? err.message : 'No se pudo preparar el trámite.',
@@ -362,14 +644,22 @@ export function TramiteWizard(props: Props) {
   };
 
   // N 03 (radicación en dos pasos) — Radicar a tránsito: preparado→entregado vía POST /transition
-  // (los gates OT —organismo habilitado, reglas— los valida el backend en esta transición). Sin
-  // pantalla intermedia: toast de éxito + volver al listado de inmediato (onExit redirige a
+  // (los gates OT —organismo habilitado, reglas— los valida el backend en esta transición).
+  // Feature #11066 — gate estricto de expediente: exige consolidado completo antes de entregar.
+  // Sin pantalla intermedia: toast de éxito + volver al listado de inmediato (onExit redirige a
   // /tramites; el ToastProvider del layout no se desmonta).
   const handleRadicar = async () => {
     if (!instanceId || !canEntregar) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
+      const docsError = await ensureExpedienteDocs(instanceId);
+      if (docsError) {
+        setSubmitError(`No se puede radicar: ${docsError}`);
+        setSubmitting(false);
+        return;
+      }
+
       await tramitesClient.transitionInstance(instanceId, 'entregado');
       // Reportes2 HU-A — trámite radicado desde el wizard: wizard_complete con duración total.
       telemetry.trackComplete();
@@ -427,16 +717,83 @@ export function TramiteWizard(props: Props) {
     !activeStep ||
     activeIndex >= steps.length - 1 ||
     continuing ||
-    (!isSavableStep && activeStep.status !== 'complete' && !nextStepNavigable);
+    // CF-02 — sin trámite creado, "Continuar" es justamente lo que lo crea: se habilita en cuanto la
+    // consulta del vehículo salió bien (sin bloqueos), que es el único requisito del paso 1.
+    (deferredCreation
+      ? !pendingConsulta
+      : !isSavableStep && activeStep.status !== 'complete' && !nextStepNavigable);
 
   // "Guardar y continuar" para pasos con form embebido: valida + persiste (vía
   // ref), refresca el wizard y avanza solo si el paso quedó complete. Otros
   // pasos: navegación directa al siguiente.
   const handleContinue = async () => {
+    // CF-02 (HU #10883, AC4) — avance del paso 1 al paso 2 SIN trámite todavía: aquí y solo aquí
+    // nace el registro, con el vehículo ya consultado. Si la creación falla no se avanza y no queda
+    // nada persistido; el operador puede reintentar sobre la misma consulta.
+    if (deferredCreation) {
+      if (!pendingConsulta || !entryModalidad) return;
+      setContinuing(true);
+      setSubmitError(null);
+      try {
+        const created = await tramitesClient.createInstanceFromConsulta({
+          modalidad: entryModalidad,
+          vin: pendingConsulta.vin,
+          plate: pendingConsulta.plate,
+          ownerDocumentType: pendingConsulta.ownerDocumentType,
+          ownerDocumentNumber: pendingConsulta.ownerDocumentNumber,
+          previewToken: pendingConsulta.previewToken,
+        });
+
+        // Condiciones marcadas en el paso 1 (leasing, carrocería, paz y salvo, riesgo,
+        // transformaciones): se persisten ahora, contra el trámite recién creado, para que el
+        // resultado sea idéntico al del flujo anterior — donde cada casilla hacía su PATCH al
+        // instante. Best-effort: un fallo aquí no debe atrapar al operador en el paso 1 (las
+        // casillas siguen editables en el paso 1 del trámite ya creado).
+        const extras = [...pendingFieldValuesRef.current.entries()].map(([fieldKey, valueText]) => ({
+          formFieldId: null,
+          fieldKey,
+          valueText,
+          valueJson: null,
+        }));
+        if (extras.length > 0) {
+          try {
+            await tramitesClient.patchFieldValues(created.instance.id, extras, created.instance.tenantId);
+          } catch {
+            // Silencioso: el trámite ya existe y el operador puede re-marcarlas en el paso 1.
+          }
+        }
+        pendingFieldValuesRef.current.clear();
+
+        telemetry.trackStepComplete();
+        // AC1 (HU #10883) — el paso de retoma queda en el segundo paso, que es donde continúa el
+        // operador. Best-effort, igual que el resto del autosave: no bloquea la navegación.
+        const nextKey = steps[1]?.key;
+        if (nextKey) {
+          void tramitesClient
+            .setCurrentStep(created.instance.id, nextKey, created.instance.tenantId)
+            .catch(() => {});
+        }
+        onCreated?.(created.instance);
+      } catch (err) {
+        setSubmitError(
+          err instanceof Error ? err.message : 'No se pudo crear el trámite. Reintenta.',
+        );
+      } finally {
+        setContinuing(false);
+      }
+      return;
+    }
+
     if (!isSavableStep) {
       // Reportes2 HU-A — avance con éxito desde un paso sin form embebido.
       if (canNavigateToStep(steps, activeIndex + 1, navViewOnly)) telemetry.trackStepComplete();
       goToStep(activeIndex + 1);
+      // Subsanación: docs/checklist ya persisten al editar; Continuar confirma y habilita Re-radicar.
+      if (inSubsanacion) {
+        setHasUnsavedChanges(false);
+        setSubsanacionSavedEdits(true);
+        show('Cambios guardados. Ya puedes re-radicar cuando termines.', 'success');
+      }
       return;
     }
     setContinuing(true);
@@ -461,12 +818,24 @@ export function TramiteWizard(props: Props) {
       if (parteIdentidad && instanceId) {
         try {
           const ensured = await tramitesClient.ensureIdentity(instanceId, parteIdentidad);
-          if (ensured.outcome === 'requiere_validacion') {
-            const { provider } = await tramitesClient.getBiometricState(instanceId);
-            if (provider === 'kyverum') {
-              await tramitesClient.iniciarBiometric(instanceId, { parte: parteIdentidad });
-            } else {
-              await tramitesClient.simulateBiometric(instanceId, { parte: parteIdentidad });
+          // HU #10646 — actor jurídico (NIT) cubierto por la firma del baúl: NO se lanza biométrica.
+          // El backend ya deja el paso de identidad completo y la parte aprobada; aquí solo registramos
+          // la cobertura por baúl para que BiometricStep muestre el estado "cubierto por el baúl".
+          if (ensured.outcome === 'firma_baul') {
+            setVaultCoveredPartes((prev) =>
+              prev.includes(parteIdentidad) ? prev : [...prev, parteIdentidad],
+            );
+          } else {
+            // Si la parte deja de estar cubierta (p.ej. se reemplazó el NIT por una persona natural),
+            // se limpia la marca para no arrastrar el estado del baúl de un guardado anterior.
+            setVaultCoveredPartes((prev) => prev.filter((p) => p !== parteIdentidad));
+            if (ensured.outcome === 'requiere_validacion') {
+              const { provider } = await tramitesClient.getBiometricState(instanceId);
+              if (provider === 'kyverum') {
+                await tramitesClient.iniciarBiometric(instanceId, { parte: parteIdentidad });
+              } else {
+                await tramitesClient.simulateBiometric(instanceId, { parte: parteIdentidad });
+              }
             }
           }
         } catch (ensureErr) {
@@ -485,7 +854,18 @@ export function TramiteWizard(props: Props) {
       if (fresh?.steps?.[activeIndex]?.status === 'complete') {
         // Reportes2 HU-A — guardado + avance con éxito = wizard_step_complete.
         telemetry.trackStepComplete();
-        setActiveIndex((i) => Math.min(i + 1, steps.length - 1));
+        const nextIndex = Math.min(activeIndex + 1, steps.length - 1);
+        // AC1 (HU #10883) — mismo autosave de `goToStep`, pero este avance mueve `activeIndex`
+        // directamente (no pasa por `goToStep`) porque primero guarda el formulario embebido.
+        if (nextIndex > activeIndex && steps[nextIndex]) persistCurrentStep(steps[nextIndex].key);
+        setActiveIndex(nextIndex);
+      }
+      setHasUnsavedChanges(false);
+      if (inSubsanacion) {
+        setSubsanacionSavedEdits(true);
+        show('Cambios guardados. Ya puedes re-radicar cuando termines.', 'success');
+      } else {
+        show('Cambios guardados en el borrador.', 'success');
       }
     } catch (err) {
       setSubmitError(
@@ -524,21 +904,7 @@ export function TramiteWizard(props: Props) {
       </div>
 
       {fullReadOnly && (
-        <div
-          className="rounded-xl p-3 text-xs border shrink-0 flex items-start gap-2"
-          style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)', color: '#162744' }}
-          role="status"
-          aria-live="polite"
-        >
-          <Eye className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#557EFF' }} aria-hidden="true" />
-          <span>
-            <span className="font-semibold" style={{ color: '#557EFF' }}>
-              Enviado a tránsito — solo visualización.
-            </span>{' '}
-            Este trámite ya no puede editarse, pero aún puedes generar o
-            descargar el FUR y el expediente consolidado.
-          </span>
-        </div>
+        <ReadOnlyStateNotice estado={estadoTramite} />
       )}
 
       {draftFinalized && (
@@ -558,6 +924,34 @@ export function TramiteWizard(props: Props) {
             bloquea la radicación (HU #10661).
           </span>
         </div>
+      )}
+
+      {/* HU #10874 (AC1/AC2) — panel de subsanación: motivo + checklist de ítems a subsanar y la
+          acción "Re-radicar". El trámite sigue editable (campos/documentos) mientras se muestra. */}
+      {inSubsanacion && (
+        <SubsanacionPanel
+          instanceId={instanceId}
+          statusHistory={statusHistory}
+          loading={instanceDetailLoading}
+          error={instanceDetailError}
+          hasUnsavedChanges={hasUnsavedChanges}
+          canReradicar={subsanacionSavedEdits && !hasUnsavedChanges}
+          showCancel={estadoTramite === 'rechazado' && !!wizard?.subsanacionActiva}
+          onCancelSubsanacion={async () => {
+            if (!instanceId) return;
+            await tramitesClient.cancelSubsanacion(instanceId);
+            setHasUnsavedChanges(false);
+            setSubsanacionSavedEdits(false);
+            show('Subsanación cancelada. El trámite sigue rechazado.', 'success');
+            await refresh();
+            onExit();
+          }}
+          onReradicado={() => {
+            telemetry.trackComplete();
+            show('Trámite re-radicado a tránsito correctamente.', 'success');
+            onExit();
+          }}
+        />
       )}
 
       {(wizardError || submitError || state.error) && (
@@ -650,6 +1044,7 @@ export function TramiteWizard(props: Props) {
                 step={activeStep}
                 modalidad={modalidad}
                 instanceId={instanceId}
+                instanceStatus={estadoTramite}
                 preflight={preflight}
                 preflightLoading={preflightLoading}
                 onRunPreflight={runPreflight}
@@ -657,6 +1052,16 @@ export function TramiteWizard(props: Props) {
                 stepFormRef={stepFormRef}
                 identityOperable={draftFinalized}
                 identityApproved={identityApproved}
+                vaultCoveredPartes={vaultCoveredPartes}
+                rnmcEnabled={wizard?.rnmcEnabled ?? false}
+                deferredModalidad={deferredCreation ? entryModalidad : undefined}
+                seedVin={seedVin}
+                seedPlaca={seedPlaca}
+                onPreviewDone={setPendingConsulta}
+                onPendingFieldValues={collectPendingFieldValues}
+                paqueteDocsStatus={paqueteDocsStatus}
+                onPaqueteStatusChange={setPaqueteDocsStatus}
+                onMarkDirty={() => setHasUnsavedChanges(true)}
               />
             </div>
           )}
@@ -683,7 +1088,7 @@ export function TramiteWizard(props: Props) {
           )}
 
           <div
-            className="flex items-center justify-between mt-6 pt-4 border-t"
+            className="flex flex-wrap gap-2 items-center justify-between mt-6 pt-4 border-t"
           >
             <button
               onClick={() => goToStep(Math.max(0, activeIndex - 1))}
@@ -700,7 +1105,8 @@ export function TramiteWizard(props: Props) {
                   identidad ya está aprobada (canRadicar); si no, "Finalizar" (finalize-draft) cuando
                   los datos están completos. En borrador ya finalizado solo se ofrece "Preparar"
                   (deshabilitado hasta que el cliente valide su identidad).
-                · Pasos de datos: en borrador finalizado solo se navega; editable usa Continuar/Guardar. */}
+                · Pasos de datos: editable usa "Guardar y continuar" (sin Guardar aparte), igual
+                  en borrador y en subsanación. */}
             {fullReadOnly ? (
               isDecisionStep && canEntregar ? (
                 <button
@@ -714,13 +1120,48 @@ export function TramiteWizard(props: Props) {
                 </button>
               ) : null
             ) : isDecisionStep ? (
-              canRadicar ? (
+              // HU #10874 — en subsanación NO Preparar/Finalizar: re-radicar vive en SubsanacionPanel.
+              // En el último paso de subsanación: "Guardar y continuar" habilita Re-radicar.
+              inSubsanacion ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void (async () => {
+                      setContinuing(true);
+                      try {
+                        if (stepFormRef.current?.save) {
+                          const ok = await stepFormRef.current.save();
+                          if (!ok) {
+                            setSubmitError('No se pudo guardar. Por favor, reintenta.');
+                            return;
+                          }
+                          await refresh();
+                        }
+                        setHasUnsavedChanges(false);
+                        setSubsanacionSavedEdits(true);
+                        show(
+                          'Cambios guardados. Ya puedes re-radicar cuando termines.',
+                          'success',
+                        );
+                      } finally {
+                        setContinuing(false);
+                      }
+                    })();
+                  }}
+                  disabled={continuing}
+                  className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  title="Guarda los cambios de este paso y habilita Re-radicar"
+                >
+                  {continuing ? 'Guardando…' : 'Guardar y continuar'}
+                </button>
+              ) : canRadicar ? (
                 <button
                   onClick={() => void handlePreparar()}
                   disabled={submitting}
                   className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-                  title="Deja el trámite validado y listo para radicar"
+                  title="Deja el trámite validado y listo para radicar (la generación de documentos no bloquea)"
                 >
                   {submitting ? 'Preparando…' : 'Preparar'}
                 </button>
@@ -761,7 +1202,11 @@ export function TramiteWizard(props: Props) {
                 className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
                 style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
               >
-                {continuing ? 'Guardando…' : isSavableStep ? 'Guardar y continuar' : 'Continuar'}
+                {continuing
+                  ? 'Guardando…'
+                  : inSubsanacion || isSavableStep
+                    ? 'Guardar y continuar'
+                    : 'Continuar'}
                 <ChevronRight className="h-3 w-3" />
               </button>
             )}
@@ -965,6 +1410,25 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
   );
 }
 
+// AC1/AC2 (HU #10884) — copy UX por `vehicleStatus` del bloqueo 422 VEHICLE_STATE_INVALID_FOR_TYPE
+// (CF-03, HU #10877): distingue "ya matriculado" (ACTIVO en RUNT | APROBADO_FLIT en FLIT, AC1) de
+// "RUNT sin dato" (DESCONOCIDO, AC2). Fallback genérico ante un vehicleStatus futuro no mapeado.
+const VEHICLE_STATE_BLOCK_COPY: Record<string, string> = {
+  ACTIVO:
+    'El vehículo ya se encuentra matriculado según el RUNT. No es posible continuar con este trámite.',
+  APROBADO_FLIT:
+    'Este vehículo ya cuenta con una matrícula aprobada. No es posible continuar con este trámite.',
+  DESCONOCIDO:
+    'No fue posible confirmar el estado del vehículo en el RUNT. No es posible continuar hasta poder verificarlo; vuelve a intentarlo en unos minutos.',
+};
+
+function vehicleStateBlockMessage(vehicleStatus: string): string {
+  return (
+    VEHICLE_STATE_BLOCK_COPY[vehicleStatus] ??
+    'No fue posible validar el estado del vehículo. No es posible continuar con este trámite.'
+  );
+}
+
 /**
  * Paso de consulta inicial. Captura el identificador del vehículo
  * (VIN en matrícula; placa + propietario en traspaso) y, al consultar,
@@ -979,6 +1443,11 @@ function ConsultaStep({
   preflightLoading,
   onRunPreflight,
   onRefresh,
+  deferredModalidad,
+  seedVin,
+  seedPlaca,
+  onPreviewDone,
+  onPendingFieldValues,
 }: {
   step: WizardStep;
   instanceId: string | null;
@@ -986,8 +1455,19 @@ function ConsultaStep({
   preflightLoading: boolean;
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
+  /** CF-02 — modalidad en curso cuando el trámite aún no existe: la consulta va contra el preview. */
+  deferredModalidad?: WizardModalidad;
+  seedVin?: string;
+  seedPlaca?: string;
+  onPreviewDone?: (consulta: PendingConsulta | null) => void;
+  /** CF-02 — condiciones marcadas antes de existir el trámite; el shell las guarda al crearlo. */
+  onPendingFieldValues?: (items: { fieldKey: string; valueText: string }[]) => void;
 }) {
   const isVin = step.key === 'consulta_vin';
+  // CF-02 (HU #10883, AC3) — sin trámite creado: la consulta no persiste nada y sus resultados viven
+  // en este componente hasta que "Continuar" cree el registro. El paso ofrece EXACTAMENTE los mismos
+  // controles que antes; lo único que cambia es que su guardado se difiere a la creación.
+  const deferred = !!deferredModalidad && !instanceId;
   const readOnly = useWizardReadOnly();
   const router = useRouter();
   // Confirmación de paz y salvo de impuesto (traspaso, paso 1): se ofrece cuando el
@@ -998,20 +1478,47 @@ function ConsultaStep({
   // alimentan el motor de reglas condicionales del checklist (RF33/37/38) vía field_values.
   const [atributosSaving, setAtributosSaving] = useState(false);
 
-  const [vin, setVin] = useState('');
-  const [plate, setPlate] = useState('');
+  // R3 (HU #10539) — el CTA "Iniciar traspaso" siembra el vehículo por query param. Con la creación
+  // diferida ya no hay instancia donde persistirlo: simplemente prellena el input del paso 1.
+  const [vin, setVin] = useState(seedVin ?? '');
+  const [plate, setPlate] = useState(seedPlaca ?? '');
   const [ownerDocType, setOwnerDocType] = useState<ActorDocumentType>('CC');
   const [ownerDocNumber, setOwnerDocNumber] = useState('');
   const [persisting, setPersisting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // AC1 (HU #10882) — id del trámite existente cuando el preflight bloquea por duplicidad (409
+  // DUPLICATE_ACTIVE_PROCEDURE, HU #10876). Presente ⇒ se ofrece "Retomar" (AC2) en vez del error genérico.
+  const [duplicateInstanceId, setDuplicateInstanceId] = useState<string | null>(null);
+  // AC1/AC2 (HU #10884) — detalle del bloqueo DURO "vehículo ya matriculado" (422
+  // VEHICLE_STATE_INVALID_FOR_TYPE, CF-03 de HU #10877). Presente ⇒ banner de bloqueo no
+  // subsanable (sin acción de continuar): el preflight no se persiste, así que el paso nunca
+  // queda 'complete' y el avance del wizard permanece bloqueado (mismo mecanismo que AC1/#10882).
+  const [vehicleStateBlock, setVehicleStateBlock] = useState<VehicleStateBlockInfo | null>(null);
   // field_values frescos de la instancia: rehidratan inputs y alimentan la
   // tarjeta "Datos del vehículo · RUNT" tras la consulta.
   const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
+  // CF-02 — snapshot de la consulta desacoplada (sin instancia que lo persista todavía).
+  const [previewSnapshot, setPreviewSnapshot] = useState<PreflightSnapshot | null>(null);
   // HU #10478 — proveedor de consulta por placa resuelto para el tenant. Con Kyverum RUNT NO se pide
   // el tipo de documento del propietario (lo resuelve el RUNT y lo devuelve); con Verifik sí se necesita.
   // null = aún sin resolver ⇒ se muestra el campo (default seguro para no ocultarlo con Verifik).
   const [platePrimaryProvider, setPlatePrimaryProvider] = useState<string | null>(null);
-  const hideOwnerDocType = !isVin && platePrimaryProvider === 'kyverum_runt';
+  // HU #10478 (novedad maquinaria/remolques) — con Kyverum como primario el tipo de documento del
+  // propietario se oculta (Kyverum lo resuelve por placa). Pero maquinaria y remolques NO están en el RUNT
+  // de Kyverum: el backend cae a Verifik, que SÍ exige el tipo real del dueño para hallar el vehículo. Si la
+  // consulta devuelve "vehículo no encontrado", este flag revela el selector para corregir el tipo (p. ej. NIT).
+  const [ownerDocTypeSuggested, setOwnerDocTypeSuggested] = useState(false);
+  const hideOwnerDocType =
+    !isVin && platePrimaryProvider === 'kyverum_runt' && !ownerDocTypeSuggested;
+
+  // FEATURE 02 — política "solo vehículos propios" del tenant y NIT de la compañía (del JWT). Cuando la
+  // política está activa, en traspaso se autorrellena el documento del propietario con el NIT del tenant
+  // y, si el gestor lo edita a otro, se bloquea la consulta al RUNT con un mensaje claro.
+  const [onlyOwnVehicles, setOnlyOwnVehicles] = useState(false);
+  const tenantNitDigits = normalizeNitDigits(
+    (decodeJwtPayload(getToken())?.company_nit as string | undefined) ?? '',
+  );
+  const ownershipAutofilled = useRef(false);
 
   // Carga (o recarga) la instancia y rehidrata inputs + field_values.
   const loadInstance = async () => {
@@ -1045,9 +1552,42 @@ function ConsultaStep({
     if (isVin) return;
     void tramitesClient
       .getConsultationConfig()
-      .then((cfg) => setPlatePrimaryProvider(cfg.vehiclePlate))
+      .then((cfg) => {
+        setPlatePrimaryProvider(cfg.vehiclePlate);
+        // FEATURE 02 — flag para adaptar la captura del propietario en traspaso.
+        setOnlyOwnVehicles(cfg.onlyOwnVehicles);
+      })
       .catch(() => {});
   }, [isVin]);
+
+  // FEATURE 02 — autorrelleno del documento del tenant (NIT) cuando la política está activa. Una sola
+  // vez y solo si el campo está vacío: no pisa lo hidratado de la instancia ni lo que el gestor escriba.
+  useEffect(() => {
+    if (isVin || !onlyOwnVehicles || !tenantNitDigits || ownershipAutofilled.current) return;
+    ownershipAutofilled.current = true;
+    if (ownerDocNumber.trim()) return;
+    // Autorrelleno del NIT del tenant: set state en efecto, misma excepción aceptada en el wizard
+    // que la rehidratación de la instancia (el valor viene de una consulta async, no del render).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOwnerDocType('NIT');
+    setOwnerDocNumber(tenantNitDigits);
+  }, [isVin, onlyOwnVehicles, tenantNitDigits, ownerDocNumber]);
+
+  // HU #10478 (novedad maquinaria/remolques) — revela el selector de tipo de documento del propietario
+  // cuando una consulta por placa (Kyverum primario) devuelve "vehículo no encontrado" (check 'vehiculo' en
+  // fail). Probablemente es maquinaria/remolque, fuera del RUNT de Kyverum; el fallback a Verifik solo lo
+  // halla con el tipo correcto del dueño (p. ej. NIT). Sticky: una vez revelado, permanece visible.
+  useEffect(() => {
+    if (isVin || platePrimaryProvider !== 'kyverum_runt' || ownerDocTypeSuggested) return;
+    const pf = deferred ? previewSnapshot : preflight;
+    const noEncontrado = (pf?.checks ?? []).some(
+      (c) => c.key === 'vehiculo' && c.status === 'fail',
+    );
+    // Set state en efecto: misma excepción aceptada arriba (el valor deriva de una consulta
+    // async — checks del preflight/preview —, no del render). Sticky por el guard de arriba.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (noEncontrado) setOwnerDocTypeSuggested(true);
+  }, [isVin, platePrimaryProvider, ownerDocTypeSuggested, deferred, previewSnapshot, preflight]);
 
   const buildItems = (): FieldValueInput[] | null => {
     if (isVin) {
@@ -1082,7 +1622,7 @@ function ConsultaStep({
   };
 
   const handleRun = async () => {
-    if (!instanceId) return;
+    if (!instanceId && !deferred) return;
     const items = buildItems();
     if (!items) {
       setError(
@@ -1090,6 +1630,13 @@ function ConsultaStep({
           ? 'Ingresa el VIN antes de consultar.'
           : 'Ingresa la placa y el documento del propietario antes de consultar.',
       );
+      return;
+    }
+    // FEATURE 02 — "solo vehículos propios": en traspaso, si el documento del propietario no es el NIT
+    // del tenant, se bloquea ANTES de consultar el RUNT con un mensaje claro (no se gasta la consulta).
+    if (!isVin && onlyOwnVehicles &&
+        !isTenantOwnDocument(ownerDocType, ownerDocNumber.trim(), tenantNitDigits)) {
+      setError(OWNER_NOT_TENANT_MESSAGE);
       return;
     }
     // Validación de formato antes de gastar una consulta al RUNT.
@@ -1101,8 +1648,34 @@ function ConsultaStep({
       return;
     }
     setError(null);
+    setDuplicateInstanceId(null);
+    setVehicleStateBlock(null);
     setPersisting(true);
     try {
+      // CF-02 (HU #10879, AC3) — sin trámite creado la consulta va al preview desacoplado: mismos
+      // checks y mismos bloqueos, pero no se persiste NADA. El token queda a la espera de "Continuar",
+      // que es lo que crea el registro reusando esta misma consulta.
+      if (deferred) {
+        const result = await tramitesClient.runPreflightPreview({
+          modalidad: deferredModalidad!,
+          vin: isVin ? vin.trim() : null,
+          plate: isVin ? null : plate.trim(),
+          ownerDocumentType: isVin ? null : ownerDocType,
+          ownerDocumentNumber: isVin ? null : ownerDocNumber.trim(),
+        });
+        setPreviewSnapshot(result.preflight);
+        setFieldValues(result.vehicleFields);
+        onPreviewDone?.({
+          previewToken: result.previewToken,
+          vin: isVin ? vin.trim() : undefined,
+          plate: isVin ? undefined : plate.trim(),
+          ownerDocumentType: isVin ? undefined : ownerDocType,
+          ownerDocumentNumber: isVin ? undefined : ownerDocNumber.trim(),
+        });
+        return;
+      }
+
+      if (!instanceId) return;
       // UNA sola consulta a Verifik: 1) persistir identificador → 2) preflight,
       // que con la MISMA respuesta del RUNT compone el semáforo Y hidrata los
       // atributos del vehículo en field_values → 3) recargar la instancia para
@@ -1112,29 +1685,96 @@ function ConsultaStep({
       await onRunPreflight();
       await loadInstance();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo consultar.');
+      // CF-02 — una consulta fallida (o bloqueada) invalida la anterior: sin consulta válida no se
+      // puede crear el trámite, así que "Continuar" vuelve a deshabilitarse.
+      onPreviewDone?.(null);
+      setPreviewSnapshot(null);
+      // AC1 (HU #10882) — el preflight puede bloquear por duplicidad (409 DUPLICATE_ACTIVE_PROCEDURE,
+      // HU #10876): en vez del error genérico, se ofrece el aviso con "Retomar" (AC2).
+      const duplicateId = getDuplicateActiveProcedureId(err);
+      if (duplicateId) {
+        setDuplicateInstanceId(duplicateId);
+      } else {
+        // AC1/AC2 (HU #10884) — bloqueo DURO "vehículo ya matriculado" (422
+        // VEHICLE_STATE_INVALID_FOR_TYPE, CF-03 de HU #10877): banner específico según vehicleStatus,
+        // en vez del error genérico.
+        const stateBlock = getVehicleStateBlock(err);
+        if (stateBlock) {
+          setVehicleStateBlock(stateBlock);
+        } else {
+          setError(err instanceof Error ? err.message : 'No se pudo consultar.');
+        }
+      }
     } finally {
       setPersisting(false);
     }
+  };
+
+  // AC2 (HU #10882) — "Retomar": abre el trámite existente que reportó el bloqueo de duplicidad,
+  // en su propia ruta de wizard (misma ruta que usa el listado de trámites para abrir un trámite).
+  const handleRetomarDuplicado = () => {
+    if (!duplicateInstanceId) return;
+    router.push(`/tramites/${duplicateInstanceId}`);
   };
 
   const inputClass =
     'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]';
 
   const loading = preflightLoading || persisting;
-  const hasResult = !!preflight?.overall;
+  // Con creación diferida el semáforo vive en memoria (no hay snapshot persistido que releer).
+  const effectivePreflight = deferred ? previewSnapshot : preflight;
+  const hasResult = !!effectivePreflight?.overall;
+
+  // CF-02 — editar el identificador invalida la consulta previa: el trámite solo puede crearse con
+  // una consulta vigente para los datos que están en pantalla.
+  const invalidatePreview = () => {
+    if (!deferred) return;
+    setPreviewSnapshot(null);
+    onPreviewDone?.(null);
+  };
+
+  /**
+   * CF-02 — el paso 1 ofrece EXACTAMENTE los mismos controles que antes (condiciones del trámite,
+   * transformaciones, paz y salvo, aceptación de riesgo). Lo único que cambia es CUÁNDO se guardan:
+   * sin trámite creado se anotan en memoria y se persisten junto con la creación, al continuar al
+   * paso 2. Con trámite ya creado, cada control sigue haciendo su PATCH inmediato como siempre.
+   */
+  const upsertLocal = (items: { fieldKey: string; valueText: string }[]) => {
+    setFieldValues((prev) => {
+      const next = [...prev];
+      for (const item of items) {
+        const i = next.findIndex((f) => f.fieldKey === item.fieldKey);
+        const value: FieldValue = {
+          formFieldId: '',
+          fieldKey: item.fieldKey,
+          valueText: item.valueText,
+          valueJson: null,
+          source: 'user',
+        };
+        if (i >= 0) next[i] = value;
+        else next.push(value);
+      }
+      return next;
+    });
+    onPendingFieldValues?.(items);
+  };
 
   // Paz y salvo de impuesto: solo traspaso (placa-first) y solo si el preflight dejó el
   // check de impuesto sin verificar (unknown/warn). Estado leído de field_values.
-  const impuestoCheck = preflight?.checks?.find((c) =>
+  const impuestoCheck = effectivePreflight?.checks?.find((c) =>
     c.key.toLowerCase().includes('impuesto'),
   );
   const mostrarPazSalvo =
-    !isVin && !!impuestoCheck && (impuestoCheck.status === 'unknown' || impuestoCheck.status === 'warn');
+    !isVin && !!impuestoCheck &&
+    (impuestoCheck.status === 'unknown' || impuestoCheck.status === 'warn');
   const pazSalvoConfirmado =
     fieldValues.find((f) => f.fieldKey === 'paz_salvo_impuesto')?.valueText === 'true';
 
   const handlePazSalvo = async (checked: boolean) => {
+    if (deferred) {
+      upsertLocal([{ fieldKey: 'paz_salvo_impuesto', valueText: checked ? 'true' : 'false' }]);
+      return;
+    }
     if (!instanceId) return;
     setPazSalvoSaving(true);
     try {
@@ -1155,6 +1795,10 @@ function ConsultaStep({
     fieldValues.find((f) => f.fieldKey === 'riesgo_aceptado')?.valueText === 'true';
 
   const handleRiesgo = async (checked: boolean) => {
+    if (deferred) {
+      upsertLocal([{ fieldKey: 'riesgo_aceptado', valueText: checked ? 'true' : 'false' }]);
+      return;
+    }
     if (!instanceId) return;
     setRiesgoSaving(true);
     try {
@@ -1176,12 +1820,39 @@ function ConsultaStep({
   const cambioCarroceria = fieldValues.find((f) => f.fieldKey === 'cambio_carroceria')?.valueText === 'true';
 
   const saveAtributo = async (fieldKey: string, valueText: string) => {
+    if (deferred) {
+      upsertLocal([{ fieldKey, valueText }]);
+      return;
+    }
     if (!instanceId) return;
     setAtributosSaving(true);
     try {
       await tramitesClient.patchFieldValues(instanceId, [
         { formFieldId: null, fieldKey, valueText, valueJson: null },
       ]);
+      await loadInstance();
+      onRefresh();
+    } finally {
+      setAtributosSaving(false);
+    }
+  };
+
+  // A4/B4 (HU #10674) — transformaciones color/combustible: patch atómico de varias claves
+  // (efectivo + flag) en una sola llamada, para que el valor declarado y su bandera queden
+  // consistentes tras la re-consulta del RUNT (el backend no pisa el efectivo si el flag está activo).
+  const saveTransformacion = async (items: { fieldKey: string; valueText: string }[]) => {
+    if (items.length === 0) return;
+    if (deferred) {
+      upsertLocal(items);
+      return;
+    }
+    if (!instanceId) return;
+    setAtributosSaving(true);
+    try {
+      await tramitesClient.patchFieldValues(
+        instanceId,
+        items.map((i) => ({ formFieldId: null, fieldKey: i.fieldKey, valueText: i.valueText, valueJson: null })),
+      );
       await loadInstance();
       onRefresh();
     } finally {
@@ -1222,6 +1893,9 @@ function ConsultaStep({
 
   return (
     <div className="space-y-4">
+      {/* HU #10906 — collapse (contraído, carga perezosa) de las escrituras vigentes de la compañía.
+          Tenant-scoped por el header; el NIT del tenant (tenantNitDigits) queda disponible arriba. */}
+      <ActiveDeedsCollapse />
       {isVin ? (
         <div
           className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
@@ -1231,7 +1905,10 @@ function ConsultaStep({
               id="consulta-vin"
               type="text"
               value={vin}
-              onChange={(e) => setVin(sanitizeVin(e.target.value))}
+              onChange={(e) => {
+                setVin(sanitizeVin(e.target.value));
+                invalidatePreview();
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void handleRun();
               }}
@@ -1256,7 +1933,10 @@ function ConsultaStep({
                 id="consulta-plate"
                 type="text"
                 value={plate}
-                onChange={(e) => setPlate(sanitizePlate(e.target.value))}
+                onChange={(e) => {
+                  setPlate(sanitizePlate(e.target.value));
+                  invalidatePreview();
+                }}
                 disabled={readOnly}
                 className={`${inputClass} disabled:opacity-60`}
                 placeholder="Ej. ABC123"
@@ -1278,6 +1958,7 @@ function ConsultaStep({
                     setOwnerDocType(next);
                     // Re-sanea el número al cambiar de tipo (p.ej. PAS→CC quita letras).
                     setOwnerDocNumber((n) => sanitizeDocNumber(n, next));
+                    invalidatePreview();
                   }}
                   disabled={readOnly}
                   className={`${inputClass} disabled:opacity-60`}
@@ -1288,6 +1969,12 @@ function ConsultaStep({
                     </option>
                   ))}
                 </select>
+                {ownerDocTypeSuggested && (
+                  <p className="mt-1 text-[11px] leading-tight opacity-70">
+                    No se encontró el vehículo en RUNT. Si es maquinaria o remolque, verifica el tipo de
+                    documento del propietario (p. ej. NIT) y vuelve a consultar.
+                  </p>
+                )}
               </div>
             )}
             <div className="sm:col-span-2">
@@ -1301,7 +1988,10 @@ function ConsultaStep({
                 id="consulta-owner-doc-number"
                 type="text"
                 value={ownerDocNumber}
-                onChange={(e) => setOwnerDocNumber(sanitizeDocNumber(e.target.value, ownerDocType))}
+                onChange={(e) => {
+                  setOwnerDocNumber(sanitizeDocNumber(e.target.value, ownerDocType));
+                  invalidatePreview();
+                }}
                 disabled={readOnly}
                 className={`${inputClass} disabled:opacity-60`}
                 placeholder="Ej. 1020304050"
@@ -1323,7 +2013,57 @@ function ConsultaStep({
         </p>
       )}
 
+      {/* AC1/AC2 (HU #10882) — bloqueo de duplicidad: ya hay un trámite en curso para este
+          VIN/placa (409 DUPLICATE_ACTIVE_PROCEDURE del preflight, HU #10876). "Retomar" abre
+          ese trámite existente en vez de continuar este borrador duplicado. */}
+      {duplicateInstanceId && (
+        <div
+          className="flex flex-col gap-2 rounded-xl p-3 sm:flex-row sm:items-center sm:justify-between"
+          style={{ background: 'rgba(255,78,0,0.08)', border: '1px solid rgba(255,78,0,0.30)' }}
+          role="alert"
+          aria-live="assertive"
+        >
+          <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>
+            Ya existe un trámite en curso para este vehículo.
+          </span>
+          <button
+            type="button"
+            onClick={handleRetomarDuplicado}
+            className="shrink-0 rounded-xl px-4 py-2 text-xs font-semibold text-white"
+            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+            aria-label="Retomar el trámite existente"
+          >
+            Retomar
+          </button>
+        </div>
+      )}
+
+      {/* AC1/AC2 (HU #10884) — bloqueo DURO "vehículo ya matriculado": el RUNT reporta el vehículo
+          ACTIVO (AC1), ya hay una matrícula APROBADA en FLIT para el mismo VIN (AC1), o el RUNT no
+          respondió el estado (AC2, "RUNT sin dato"). 422 VEHICLE_STATE_INVALID_FOR_TYPE del preflight
+          (CF-03, HU #10877). Sin acción de continuar: no es subsanable (mismo patrón visual que el
+          aviso de duplicidad de HU #10882, sin el botón "Retomar"). */}
+      {vehicleStateBlock && (
+        <div
+          className="flex flex-col gap-2 rounded-xl p-3 sm:flex-row sm:items-center sm:justify-between"
+          style={{ background: 'rgba(255,78,0,0.08)', border: '1px solid rgba(255,78,0,0.30)' }}
+          role="alert"
+          aria-live="assertive"
+        >
+          <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>
+            {vehicleStateBlockMessage(vehicleStateBlock.vehicleStatus)}
+          </span>
+        </div>
+      )}
+
       <VehicleDataCard fieldValues={fieldValues} />
+
+      <VehicleTransformationsCard
+        fieldValues={fieldValues}
+        readOnly={readOnly}
+        saving={atributosSaving}
+        onPatch={saveTransformacion}
+      />
 
       <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
         <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
@@ -1387,7 +2127,7 @@ function ConsultaStep({
       )}
 
       <PreflightPanel
-        snapshot={preflight}
+        snapshot={effectivePreflight}
         loading={loading}
         onRun={() => void handleRun()}
         riesgoAceptado={riesgoAceptado}
@@ -1408,6 +2148,7 @@ function StepBody({
   step,
   modalidad,
   instanceId,
+  instanceStatus,
   preflight,
   preflightLoading,
   onRunPreflight,
@@ -1415,15 +2156,37 @@ function StepBody({
   stepFormRef,
   identityOperable = false,
   identityApproved = false,
+  vaultCoveredPartes = [],
+  rnmcEnabled = false,
+  deferredModalidad,
+  seedVin,
+  seedPlaca,
+  onPreviewDone,
+  onPendingFieldValues,
+  paqueteDocsStatus = 'idle',
+  onPaqueteStatusChange,
+  onMarkDirty,
 }: {
   step: WizardStep;
   modalidad: WizardModalidad;
   instanceId: string | null;
+  /** Para remount del paso FUR tras Preparar y mostrar adjuntos generados. */
+  instanceStatus?: InstanceStatus | null;
+  /** CF-02 — modalidad en curso cuando el trámite AÚN no existe (paso 1 desacoplado). */
+  deferredModalidad?: WizardModalidad;
+  seedVin?: string;
+  seedPlaca?: string;
+  /** CF-02 — resultado de la consulta desacoplada: habilita "Continuar" (que crea el trámite). */
+  onPreviewDone?: (consulta: PendingConsulta | null) => void;
+  /** CF-02 — condiciones marcadas en el paso 1 antes de existir el trámite; se guardan al crearlo. */
+  onPendingFieldValues?: (items: { fieldKey: string; valueText: string }[]) => void;
   preflight: PreflightSnapshot | null;
   preflightLoading: boolean;
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
   stepFormRef: RefObject<WizardStepFormHandle | null>;
+  /** FEATURE 05 — el RNMC aplica al trámite: los actores muestran la fecha de expedición. */
+  rnmcEnabled?: boolean;
   /**
    * HU #10350 — borrador finalizado: aunque el wizard esté en solo lectura para los datos, el paso
    * de Identidad debe seguir operable (iniciar/compartir/refrescar Kyverum) porque la validación del
@@ -1433,6 +2196,14 @@ function StepBody({
   /** Identidad aprobada (deriva del estado server-driven). Con identidad pendiente, el paso FUR
    * informa que el FUR/firma se generarán automáticamente, en vez de empujar la generación manual. */
   identityApproved?: boolean;
+  /** HU #10646 — partes (NIT) cubiertas por la firma electrónica del baúl (señal capturada del outcome
+   * `firma_baul` de ensureIdentity). BiometricStep pinta el estado "cubierto por el baúl" para ellas. */
+  vaultCoveredPartes?: BiometricParte[];
+  /** Feature #11066 — estado de pre-generación del paquete al entrar al paso FUR. */
+  paqueteDocsStatus?: 'idle' | 'loading' | 'ready' | 'error';
+  onPaqueteStatusChange?: (status: 'idle' | 'loading' | 'ready' | 'error') => void;
+  /** Feature #11066 — marca dirty en el shell (p.ej. checklist de docs editado). */
+  onMarkDirty?: () => void;
 }) {
   switch (step.key) {
     // Consulta inicial: VIN (matrícula) o placa+propietario (traspaso).
@@ -1448,6 +2219,11 @@ function StepBody({
           preflightLoading={preflightLoading}
           onRunPreflight={onRunPreflight}
           onRefresh={onRefresh}
+          deferredModalidad={deferredModalidad}
+          seedVin={seedVin}
+          seedPlaca={seedPlaca}
+          onPreviewDone={onPreviewDone}
+          onPendingFieldValues={onPendingFieldValues}
         />
       );
 
@@ -1459,7 +2235,10 @@ function StepBody({
         <div className="space-y-4">
           <DocumentChecklist
             instanceId={instanceId}
-            onChanged={onRefresh}
+            onChanged={() => {
+              onMarkDirty?.();
+              onRefresh?.();
+            }}
             hideHeader
             modalidad={modalidad}
           />
@@ -1487,6 +2266,7 @@ function StepBody({
           onSaved={onRefresh}
           embeddedInWizard
           layout="split"
+          rnmcEnabled={rnmcEnabled}
         />
       );
 
@@ -1502,8 +2282,10 @@ function StepBody({
           embeddedInWizard
           layout="split"
           // El vendedor es el propietario registrado validado en el paso 1:
-          // siembra su documento (editable) desde owner_document_* de la consulta.
+          // siembra su documento desde owner_document_* y consulta RUNT al llegar.
           seedDocumentoFromOwner
+          autoConsultRunt
+          rnmcEnabled={rnmcEnabled}
         />
       );
 
@@ -1541,6 +2323,7 @@ function StepBody({
           modalidad={modalidad}
           onRefresh={onRefresh}
           hideIntro
+          vaultCoveredPartes={vaultCoveredPartes}
         />
       );
       // Borrador finalizado: reabre la captura SOLO para la biométrica (provider readOnly=false).
@@ -1561,10 +2344,38 @@ function StepBody({
           instanceId={instanceId}
           modalidad={modalidad}
           onRefresh={onRefresh}
+          vaultCoveredPartes={vaultCoveredPartes}
         />
       );
       return (
         <div className="space-y-6">
+          {/* Feature #11066 — banner de pre-gen primero, antes de identidad y el resto del paso. */}
+          {(paqueteDocsStatus === 'loading' || paqueteDocsStatus === 'error') && (
+            <div
+              className="rounded-xl border p-3 text-xs"
+              style={
+                paqueteDocsStatus === 'error'
+                  ? { borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }
+                  : { borderColor: '#DFE5ED', background: 'rgba(85,126,255,0.06)' }
+              }
+              role="status"
+              aria-live="polite"
+              aria-label="Estado de generación del expediente"
+            >
+              {paqueteDocsStatus === 'loading' ? (
+                <span className="inline-flex items-center gap-2">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  Generando documentos del expediente (FUR, certificados
+                  {modalidad === 'traspaso' ? ', compraventa' : ''} e impronta)… No bloquea Preparar.
+                </span>
+              ) : (
+                <span>
+                  No se pudieron generar los documentos del expediente (tras reintentos). Puedes
+                  Preparar igual y regenerarlos al Radicar.
+                </span>
+              )}
+            </div>
+          )}
           {/* HU #10350 — con la identidad pendiente, el FUR/firma se generan AUTOMÁTICAMENTE al
               aprobarse la validación del cliente (consumidor de outbox #10349). Se avisa aquí para que
               el gestor no intente generarlos a mano y entienda que solo debe "Finalizar". */}
@@ -1594,9 +2405,12 @@ function StepBody({
             biometric
           )}
           <FirmaFurStep
+            key={`${instanceId ?? 'new'}-${instanceStatus ?? 'borrador'}`}
             instanceId={instanceId}
             modalidad={modalidad}
             onRefresh={onRefresh}
+            rnmcEnabled={rnmcEnabled}
+            onPaqueteStatusChange={onPaqueteStatusChange}
           />
         </div>
       );

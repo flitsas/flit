@@ -14,13 +14,20 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Persistence\Sql\Ddl\*.sql" />
-    <EmbeddedResource Include="Documents\Fur\fur-field-manifest.json" />
+    <EmbeddedResource Include="Documents\Fur\fur-field-manifest*.json" />
     <!-- HU #10256 fix — fuentes embebidas para el resolutor de PdfSharpCore (overlay del FUR).
          PdfSharpCore no trae fuentes y resuelve contra el SO; el runtime aspnet:10.0-alpine no
          tiene ninguna, por lo que XFont("Arial", ...) lanzaba y el endpoint respondía HTTP 500.
          DejaVu Sans (licencia Bitstream Vera/Arev, ver Documents/Fur/Fonts/DejaVu-LICENSE.txt). -->
     <EmbeddedResource Include="Documents\Fur\Fonts\*.ttf" />
     <Content Include="Documents\Fur\Templates\*.pdf" CopyToOutputDirectory="PreserveNewest" />
+    <!-- HU #10855 (Feature #10852) — módulo base de marca documental FLIT: tipografía Poppins
+         (OFL, ver Documents/Branding/Fonts/OFL-LICENSE.txt) y assets de membrete/portada (SVG
+         vectorial + PNG @72x de respaldo). Embebidos para el tema, el membrete, el stamper de
+         pie/marca de agua y la portada del expediente consolidado. -->
+    <EmbeddedResource Include="Documents\Branding\Fonts\*.ttf" />
+    <EmbeddedResource Include="Documents\Branding\Assets\*.svg" />
+    <EmbeddedResource Include="Documents\Branding\Assets\*.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,6 +38,16 @@
     <ProjectReference Include="..\Flit.Modules.Security.Domain\Flit.Modules.Security.Domain.csproj" />
     <ProjectReference Include="..\Flit.Admin.Domain\Flit.Admin.Domain.csproj" />
     <ProjectReference Include="..\Flit.Modules.Improntas.Domain\Flit.Modules.Improntas.Domain.csproj" />
+    <ProjectReference Include="..\Flit.Modules.Quipux.Application\Flit.Modules.Quipux.Application.csproj" />
+    <ProjectReference Include="..\Flit.Modules.Quipux.Domain\Flit.Modules.Quipux.Domain.csproj" />
+    <!-- Contratos gRPC compartidos con core-ict (ICT). Plano C: core-api es CLIENTE de IctStateCallback
+         (reflejo de estado del trámite → core-ict). El .csproj vive en services/core-ict/. -->
+    <ProjectReference Include="..\..\..\core-ict\src\Flit.Ict.Grpc.Contracts\Flit.Ict.Grpc.Contracts.csproj" />
+    <!-- Quipux: el PDF consolidado se publica en el bucket S3 DE QUIPUX (qxinterconnect), que lee
+         el documento de ahí — por eso el payload de radicación lleva la key y no el binario. Es el
+         único punto de FLIT 2.0 con credenciales AWS directas: el File Manager corporativo no
+         aplica porque el bucket es de un tercero. -->
+    <PackageReference Include="AWSSDK.S3" />
   </ItemGroup>
 
   <ItemGroup>

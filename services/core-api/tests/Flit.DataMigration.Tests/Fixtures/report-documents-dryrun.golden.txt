@@ -1,0 +1,32 @@
+── Materialización de documentos generados por V1 ─────────────
+  Origen    : https://3g5y4b08il.execute-api.us-east-1.amazonaws.com/dev/api/v1/vehicle-registration-migration
+  Destino   : https://devfilemanager.flitsas.online/api/v1/files
+  Alcance   : include=generated · consolidado=auto
+
+── Resultado por trámite ──────────────────────────────────────
+  ✓ V1 #301  Materialized
+      → V2 77777777-7777-4000-8000-000000000000
+      → 9 documento(s) · 2 ya materializados · 1 fallidos · 4 ya venían como adjunto
+      ⚠ V1 no entregó: carta selfie del comprador: V1 no la pudo construir.
+  ◇ V1 #302  Simulated
+      → V2 88888888-8888-4000-8000-000000000000
+      → 6 documento(s) · 0 ya materializados · 0 fallidos · 0 ya venían como adjunto
+      ⚠ El consolidado llegó degradado (faltan 2 piezas).
+  ✓ V1 #303  Materialized
+      → V2 99999999-9999-4000-8000-000000000000
+      → 0 documento(s) · 0 ya materializados · 0 fallidos · 0 ya venían como adjunto
+  ✗ V1 #304  NotFoundInV1
+      motivo: V1 respondió 404 para el snapshot.
+  ✗ V1 #305  Failed
+      motivo: V1 respondió 500 al construir el expediente.
+
+── Reconciliación ─────────────────────────────────────────────
+  documentos materializados  15
+  ya materializados (saltados) 2
+  fallidos                   1
+  ya venían como adjunto     4
+  piezas no entregadas por V1 1
+
+  ◇ DRY-RUN: no se subió ningún binario ni se escribió en V2.
+
+  ⚠ 1 trámite(s) no materializaron ninguna pieza: revisa los motivos arriba.

@@ -1,8 +1,11 @@
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
+using Flit.Infrastructure.Persistence.Entities.Quipux;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
+using Flit.Modules.Quipux.Domain.Envios;
+using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Domain.Entities;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -50,10 +53,46 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
 
+    // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
+    public DbSet<TenantTransitOfficeConsultationRestriction> TenantTransitOfficeConsultationRestrictions =>
+        Set<TenantTransitOfficeConsultationRestriction>();
+
+    // FEATURE 05 — política de bloqueo de preflight (soat/rtm/estado/fines/rnmc) por OT de la compañía.
+    public DbSet<TenantTransitOfficeBlockingPolicy> TenantTransitOfficeBlockingPolicies =>
+        Set<TenantTransitOfficeBlockingPolicy>();
+
     // ── Admin OT — mandatarios (firmantes de mandato) y sus compañías (ADR-0023) ──
     public DbSet<MandateSigner> MandateSigners => Set<MandateSigner>();
 
     public DbSet<MandateSignerCompany> MandateSignerCompanies => Set<MandateSignerCompany>();
+
+    // ── Admin OT — configuración de mandato por OT (ADR-0036, HU #10912) ───────────
+    public DbSet<TransitOfficeMandateConfigEntity> TransitOfficeMandateConfigs =>
+        Set<TransitOfficeMandateConfigEntity>();
+
+    // ── Admin Compañías — baúl de firmas precargadas (HU #10642, ADR-0025) ─────────
+    public DbSet<SignatureVaultEntity> SignatureVault => Set<SignatureVaultEntity>();
+
+    // ── Admin Compañías — representantes legales por compañía + escrituras (HU #10900, ADR-0033) ──
+    public DbSet<RepresentedCompanyEntity> RepresentedCompanies => Set<RepresentedCompanyEntity>();
+
+    public DbSet<CompanyLegalRepresentativeEntity> CompanyLegalRepresentatives =>
+        Set<CompanyLegalRepresentativeEntity>();
+
+    public DbSet<CompanyLegalRepresentativeProcedureTypeEntity> CompanyLegalRepresentativeProcedureTypes =>
+        Set<CompanyLegalRepresentativeProcedureTypeEntity>();
+
+    // Puente representante ↔ compañía (HU #10932, Feature #10929): representante multiempresa.
+    public DbSet<LegalRepresentativeCompanyEntity> LegalRepresentativeCompanies =>
+        Set<LegalRepresentativeCompanyEntity>();
+
+    public DbSet<CompanyDeedEntity> CompanyDeeds => Set<CompanyDeedEntity>();
+
+    public DbSet<CompanyDeedCompanyEntity> CompanyDeedCompanies => Set<CompanyDeedCompanyEntity>();
+
+    // ── Admin Compañías — validación de identidad administrativa desacoplada (HU #10907, ADR-0034) ──
+    public DbSet<AdminIdentityValidationEntity> AdminIdentityValidations =>
+        Set<AdminIdentityValidationEntity>();
 
     public DbSet<TransitOffice> TransitOffices => Set<TransitOffice>();
 
@@ -64,6 +103,11 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // HU #10545 — requisitos configurables por OT (RNMC, ruta de placa, validación de identidad).
     public DbSet<OtRequirementsEntity> OtRequirements => Set<OtRequirementsEntity>();
+
+    // HU #10650 (Feature #10587) — inventario de preasignación de placa.
+    public DbSet<PlateRangeEntity> PlateRanges => Set<PlateRangeEntity>();
+
+    public DbSet<PlateRangeDetailEntity> PlateRangeDetails => Set<PlateRangeDetailEntity>();
 
     public DbSet<OtWebhookSubscriptionEntity> OtWebhookSubscriptions => Set<OtWebhookSubscriptionEntity>();
 
@@ -134,6 +178,38 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // Trámites — prenda / gravamen (IT-3, Feature #10585): agregado compañero con versionado por estado.
     public DbSet<ProcedureInstancePrenda> ProcedureInstancePrendas => Set<ProcedureInstancePrenda>();
+
+    // Trámites — avalúo comercial (Feature #10707): valores de referencia por VIN/placa y fuente.
+    public DbSet<AvaluoMockValue> AvaluoMockValues => Set<AvaluoMockValue>();
+
+    // Trámites — caché cross-trámite de consultas externas + gate de consentimiento Habeas Data
+    // (HU #10878, Feature #10862, CF-04, ADR-0030/ADR-0031).
+    public DbSet<ExternalQueryCacheEntry> ExternalQueryCache => Set<ExternalQueryCacheEntry>();
+    public DbSet<PersonDataConsent> PersonDataConsents => Set<PersonDataConsent>();
+
+    // Trámites — entidad persona/sujeto a nivel tenant para prevalidaciones de identidad
+    // (HU #10865, Feature #10864, CF-00, ADR-0030).
+    public DbSet<Person> Persons => Set<Person>();
+
+    // FEATURE-08 / Fase 2b — catálogo global de fuentes por tipo (CFD-04, ADR-0019 excepción A4/A20).
+    public DbSet<ProcedureTypeSource> ProcedureTypeSources => Set<ProcedureTypeSource>();
+
+    // FEATURE-08 / Fase 2b — snapshots inmutables del tipo al crear instancia (CFD-01/AC#5).
+    public DbSet<ProcedureTypeSnapshot> ProcedureTypeSnapshots => Set<ProcedureTypeSnapshot>();
+
+    // Quipux — radicación de trámites en secretarías de tránsito. El activador es el modo QX del
+    // perfil OT (admin.transit_office_profiles.operation_mode = 'quipux').
+    public DbSet<QuipuxSubmission> QuipuxSubmissions => Set<QuipuxSubmission>();
+
+    // Quipux — bitácora por radicación (trazabilidad de la ejecución a la finalización).
+    public DbSet<QuipuxSubmissionEvent> QuipuxSubmissionEvents => Set<QuipuxSubmissionEvent>();
+
+    // Quipux — bitácora por ejecución del worker (¿corrió el cron? ¿cuántos falló?).
+    public DbSet<QuipuxJobRun> QuipuxJobRuns => Set<QuipuxJobRun>();
+
+    // Quipux — configuración operativa (fila única, secretos cifrados). Entidad de persistencia:
+    // el dominio los ve en claro, la BD solo cifrados.
+    internal DbSet<QuipuxSettingsRow> QuipuxSettings => Set<QuipuxSettingsRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

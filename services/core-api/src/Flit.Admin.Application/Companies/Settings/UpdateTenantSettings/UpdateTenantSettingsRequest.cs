@@ -13,4 +13,12 @@ public sealed record UpdateTenantSettingsRequest(
     IReadOnlyList<string>? MetodosRecaudo,
     // HU #10478 — opcionales: si llegan null se conserva el valor previo (update parcial).
     int? RuntFailoverTimeoutMs = null,
-    IReadOnlyDictionary<string, ConsultationProviderChoice>? ConsultationProviderConfig = null);
+    IReadOnlyDictionary<string, ConsultationProviderChoice>? ConsultationProviderConfig = null,
+    // Feature #10587 — preasignación de placa por compañía (opcional: default false = retrocompatible).
+    bool PreasignacionPlacaActiva = false,
+    // Con placa completa/rango al radicar → Terminado (omite checks gestor). Default false.
+    bool PlateFlowSkipToTerminado = false,
+    // Feature #10707 — proveedores de avalúo (opcional: si llega null se conserva el valor previo).
+    AvaluoProviderConfigDto? AvaluoProviderConfig = null,
+    // FEATURE 02 — fuente de comparendos (internal | external); null conserva el valor previo.
+    string? FinesQuerySource = null);

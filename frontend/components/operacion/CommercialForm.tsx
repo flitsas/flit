@@ -2,8 +2,9 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { digitsOnly, groupThousands } from '@/lib/format/currency';
+import { digitsOnly, groupThousands, sanitizeDecimalInput } from '@/lib/format/currency';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { AvaluoComercialCard } from './AvaluoComercialCard';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import type {
   CommercialCausal,
@@ -47,9 +48,17 @@ const EMPTY: CommercialData = {
   metodoPago: null,
 };
 
-function numberOrNull(v: string): number | null {
-  if (v.trim() === '') return null;
-  const n = Number(v);
+function integerOrNull(v: string): number | null {
+  const digits = digitsOnly(v);
+  if (digits === '') return null;
+  const n = Number(digits);
+  return Number.isFinite(n) ? n : null;
+}
+
+function decimalOrNull(v: string): number | null {
+  const cleaned = sanitizeDecimalInput(v);
+  if (cleaned === '' || cleaned === '.') return null;
+  const n = Number(cleaned);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -66,6 +75,8 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
   // Solo lectura (Track C): inputs deshabilitados + sin botón guardar.
   const readOnly = useWizardReadOnly();
   const [data, setData] = useState<CommercialData>(EMPTY);
+  /** Borrador de tasa para permitir tipar "1." sin perder el separador. */
+  const [tasaText, setTasaText] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -80,7 +91,10 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
       setLoading(true);
       try {
         const d = await tramitesClient.getCommercial(instanceId);
-        if (active && d) setData({ ...EMPTY, ...d });
+        if (active && d) {
+          setData({ ...EMPTY, ...d });
+          setTasaText(d.tasaImpuesto != null ? String(d.tasaImpuesto) : '');
+        }
       } catch {
         /* sin datos previos: se queda el form vacío */
       } finally {
@@ -168,6 +182,23 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
         </div>
       )}
 
+      {!readOnly && (
+        <AvaluoComercialCard
+          instanceId={instanceId}
+          disabled={readOnly}
+          accepted={data.valueOrigin === 'suggestion'}
+          onAccept={(value, source, sugerido) =>
+            setData((d) => ({
+              ...d,
+              valorVenta: value,
+              valueOrigin: 'suggestion',
+              suggestedSource: source,
+              suggestedValue: sugerido,
+            }))
+          }
+        />
+      )}
+
      <fieldset disabled={readOnly} className="contents">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -194,6 +225,8 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
                 setData((d) => ({
                   ...d,
                   valorVenta: digits === '' ? null : Number(digits),
+                  // Edición manual: el valor deja de ser el sugerido (trazabilidad).
+                  valueOrigin: 'manual',
                 }));
               }}
               placeholder="0"
@@ -233,13 +266,15 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
           </label>
           <input
             id="comercial-tasa"
-            type="number"
-            min={0}
-            step="0.01"
-            value={data.tasaImpuesto ?? ''}
-            onChange={(e) =>
-              setData((d) => ({ ...d, tasaImpuesto: numberOrNull(e.target.value) }))
-            }
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            value={tasaText}
+            onChange={(e) => {
+              const raw = sanitizeDecimalInput(e.target.value);
+              setTasaText(raw);
+              setData((d) => ({ ...d, tasaImpuesto: decimalOrNull(raw) }));
+            }}
             className={INPUT_BASE}
           />
         </div>
@@ -250,11 +285,13 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
           </label>
           <input
             id="comercial-derechos"
-            type="number"
-            min={0}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
             value={data.derechos ?? ''}
             onChange={(e) =>
-              setData((d) => ({ ...d, derechos: numberOrNull(e.target.value) }))
+              setData((d) => ({ ...d, derechos: integerOrNull(e.target.value) }))
             }
             className={INPUT_BASE}
           />

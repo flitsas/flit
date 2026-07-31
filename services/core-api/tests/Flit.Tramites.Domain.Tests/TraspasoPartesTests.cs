@@ -8,8 +8,10 @@ namespace Flit.Tramites.Domain.Tests;
 
 public sealed class TraspasoPartesTests
 {
+    // HU #11019 — el correo compartido se DETECTA (dato) pero ya NO bloquea: es legítimo que ambas
+    // partes usen el mismo buzón. Solo el mismo documento las convierte en la misma persona.
     [Fact]
-    public void DetectarDuplicadas_MismoEmail()
+    public void DetectarDuplicadas_MismoEmail_NoBloquea()
     {
         var dup = TraspasoPartes.DetectarDuplicadas(
             new ParteDatos("V", "1000445469", "a@x.co"),
@@ -17,7 +19,7 @@ public sealed class TraspasoPartesTests
 
         dup.MismoEmail.Should().BeTrue();
         dup.MismoDocumento.Should().BeFalse();
-        TraspasoPartes.MensajeDuplicadas(dup).Should().Contain("correo");
+        TraspasoPartes.MensajeDuplicadas(dup).Should().BeNull();
     }
 
     [Fact]
@@ -42,13 +44,15 @@ public sealed class TraspasoPartesTests
     }
 
     [Fact]
-    public void DetectarDuplicadas_AmbosIguales_MensajeCombinado()
+    public void DetectarDuplicadas_AmbosIguales_ReportaSoloElDocumento()
     {
         var dup = TraspasoPartes.DetectarDuplicadas(
             new ParteDatos("V", "111", "x@x.co"),
             new ParteDatos("C", "111", "x@x.co"));
 
-        TraspasoPartes.MensajeDuplicadas(dup).Should().Contain("ni el mismo");
+        // HU #11019 — con documento y correo iguales el bloqueo lo causa el DOCUMENTO.
+        TraspasoPartes.MensajeDuplicadas(dup).Should().Contain("documento");
+        TraspasoPartes.MensajeDuplicadas(dup).Should().NotContain("correo");
     }
 
     [Fact]

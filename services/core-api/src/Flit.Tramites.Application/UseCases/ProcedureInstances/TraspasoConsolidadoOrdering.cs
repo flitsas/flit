@@ -15,12 +15,22 @@ internal static class TraspasoConsolidadoOrdering
         "fur",
         // Licencia de Tránsito emitida por el OT al decidir el trámite (misma posición que en matrícula).
         "licencia_transito",
+        // ADR-0036 (HU #10915/#10914) — autorizaciones de radicación tras el FUR: el mandato
+        // (condicional) y la solicitud de trámite virtual (siempre), antes de los certificados.
+        "mandato",
+        "tramite_virtual",
         "certificado_identidad",
         // Certificado de identidad del vendedor (traspaso), tras el del comprador.
         "certificado_identidad_vendedor",
         // HU #10589 — certificado RUES de la persona jurídica, tras el de identidad.
         "certificado_rues",
+        // HU #10762 — certificado RNMC (medidas correctivas), junto a los demás certificados generados.
+        "certificado_rnmc",
         "compraventa",
+        // HU #10926 — escritura de la compañía (NIT) de cada actor, tras la compraventa: vendedor/
+        // propietario ('escritura') y comprador ('escritura_comprador').
+        "escritura",
+        "escritura_comprador",
         "factura",
         "aduana",
         "impronta",
@@ -32,9 +42,15 @@ internal static class TraspasoConsolidadoOrdering
         "otro",
     ];
 
+    // Ningún expediente consolidado puede ser PARTE de otro: se excluyen los dos tipos.
+    // Faltaba `consolidado_maestro`, y por eso al aprobar el organismo de tránsito se duplicaba todo
+    // el expediente: la aprobación genera el maestro (que ya contiene TODOS los documentos) e invalida
+    // el consolidado del wizard, así que la siguiente regeneración lo mezclaba como un adjunto más y
+    // cada documento salía dos veces.
     private static readonly HashSet<string> Excluded = new(StringComparer.OrdinalIgnoreCase)
     {
         "consolidado",
+        "consolidado_maestro",
     };
 
     internal static IReadOnlyList<ProcedureInstanceAttachment> SelectOrdered(

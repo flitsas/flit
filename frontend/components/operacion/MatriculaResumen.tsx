@@ -25,6 +25,8 @@ interface Props {
   archivosCount: number;
   identidadAprobada: boolean;
   orgTransito: { nombre?: string; ciudad?: string };
+  /** SOAT del vehículo (ruta de placa, HU #10611): estado registrado + vencimiento si lo hay. */
+  soat?: { estado?: string | null; vencimiento?: string | null };
 }
 
 // N 03 — labels/tonos desde la fuente única lib/tramites/estados.ts (6 estados de negocio).
@@ -49,9 +51,22 @@ export default function MatriculaResumen({
   archivosCount,
   identidadAprobada,
   orgTransito,
+  soat,
 }: Props) {
   const tone = estadoChipStyle(status).color;
   const orgTxt = [orgTransito?.nombre, orgTransito?.ciudad].filter(Boolean).join(' · ');
+  // SOAT (ruta de placa): el field soat_estado se registra en 'asignado' (RUNT o PDF, HU #10611).
+  const soatEstado = (soat?.estado ?? '').toLowerCase();
+  const soatLabel =
+    soatEstado === 'vigente'
+      ? 'Vigente'
+      : soatEstado === 'vencido'
+        ? 'Vencido'
+        : soatEstado === 'unknown'
+          ? 'No reportado'
+          : '—';
+  const soatColor =
+    soatEstado === 'vigente' ? '#15803d' : soatEstado === 'vencido' ? '#c2410c' : undefined;
   // Traspaso y matrícula son procesos distintos: el resumen se rotula acorde.
   const resumenTitulo =
     modalidad === 'traspaso' ? 'Resumen del traspaso' : 'Resumen de la matrícula';
@@ -79,7 +94,13 @@ export default function MatriculaResumen({
           <span className="font-mono text-2xl font-bold tracking-widest" style={{ color: tone }}>
             {placa}
           </span>
-          <span className="text-xs opacity-70">SOAT: —</span>
+          <span
+            className="text-xs opacity-70"
+            style={soatColor ? { color: soatColor, opacity: 1 } : undefined}
+          >
+            SOAT: {soatLabel}
+            {soatEstado === 'vigente' && soat?.vencimiento ? ` · vence ${soat.vencimiento}` : ''}
+          </span>
         </div>
       )}
 

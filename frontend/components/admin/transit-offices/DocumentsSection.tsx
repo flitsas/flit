@@ -13,6 +13,7 @@ import {
   updateOtDocumentPrecedence,
 } from "@/lib/api/admin-ot";
 import type { OtDocumentPrecedenceItem, OtDocumentTag } from "@/lib/api/types-ot";
+import { PledgeDocumentOverrideToggle } from "@/components/admin/documents/panels/PledgeDocumentOverrideToggle";
 import { DocumentPrecedenceList } from "./DocumentPrecedenceList";
 import { OtTabBar } from "./OtTabBar";
 import { OT_INPUT_CLS } from "./ot-form-styles";
@@ -25,8 +26,13 @@ interface ProcedureTypeOption {
   name: string;
 }
 
+export interface DocumentsSectionProps {
+  /** OT del hub actual (route param `[id]`); llave del override de obligatoriedad (HU #10887). */
+  transitOfficeId: string;
+}
+
 /** Prelación documental DnD y CRUD etiquetas OT (HU #10224). */
-export function DocumentsSection() {
+export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
   const { show } = useToast();
   const [tab, setTab] = useState<Tab>("precedence");
   const [procedureTypes, setProcedureTypes] = useState<ProcedureTypeOption[]>([]);
@@ -139,7 +145,7 @@ export function DocumentsSection() {
 
       {tab === "precedence" && (
         <div role="tabpanel" className="space-y-3 pt-2">
-          <label className="block max-w-md text-xs font-semibold" style={{ color: "#162744" }}>
+          <label className="block max-w-md text-xs font-semibold text-foreground">
             Tipo de trámite
             <select
               className={`mt-1 ${OT_INPUT_CLS}`}
@@ -154,6 +160,18 @@ export function DocumentsSection() {
               ))}
             </select>
           </label>
+
+          {procedureTypeId && (
+            <section className="space-y-2 rounded-2xl border p-4">
+              <h3 className="text-xs font-semibold text-foreground">
+                Documento de prenda por Organismo de Tránsito
+              </h3>
+              <PledgeDocumentOverrideToggle
+                procedureTypeId={procedureTypeId}
+                transitOfficeId={transitOfficeId}
+              />
+            </section>
+          )}
 
           <UiStateBoundary
             status={precStatus}
@@ -245,9 +263,9 @@ export function DocumentsSection() {
             role="alertdialog"
             aria-labelledby="delete-tag-title"
             aria-describedby="delete-tag-desc"
-            className="relative w-full max-w-md rounded-2xl border bg-white p-6 shadow-xl"
+            className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border bg-card p-6 shadow-xl"
           >
-            <h3 id="delete-tag-title" className="text-sm font-bold" style={{ color: "#162744" }}>
+            <h3 id="delete-tag-title" className="text-sm font-bold text-foreground">
               Eliminar etiqueta
             </h3>
             <p id="delete-tag-desc" className="mt-2 text-xs opacity-80">

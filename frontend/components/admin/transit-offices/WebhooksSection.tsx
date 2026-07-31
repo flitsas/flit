@@ -13,7 +13,7 @@ import {
 } from "@/lib/api/admin-ot";
 import type { OtApiCallLog, OtWebhook } from "@/lib/api/types-ot";
 import { OtSidePanel } from "./OtSidePanel";
-import { OtStatusBadge } from "./OtStatusBadge";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { OtTabBar } from "./OtTabBar";
 import { OtTablePagination } from "./OtTablePagination";
 import { OT_FILTER_FORM_CLS, OT_INPUT_CLS } from "./ot-form-styles";
@@ -146,29 +146,30 @@ export function WebhooksSection() {
             errorMessage="Error al cargar webhooks."
             onRetry={() => void loadWebhooks()}
           >
+            <div className="overflow-x-auto">
             <table className="w-full border-separate border-spacing-y-2 text-xs">
               <thead>
-                <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
-                  <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
+                  <th className="rounded-l-xl px-4 py-2.5 bg-muted">
                     Evento
                   </th>
-                  <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                  <th className="px-4 py-2.5 bg-muted">
                     URL destino
                   </th>
-                  <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                  <th className="px-4 py-2.5 bg-muted">
                     Estado
                   </th>
-                  <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                  <th className="px-4 py-2.5 bg-muted">
                     Creado
                   </th>
-                  <th className="rounded-r-xl px-4 py-2.5 text-right" style={{ background: "#DFE5ED" }}>
+                  <th className="rounded-r-xl px-4 py-2.5 text-right bg-muted">
                     Acciones
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {webhooks.map((w) => (
-                  <tr key={w.id} className="bg-white dark:bg-[#0B0F14]">
+                  <tr key={w.id} className="bg-card">
                     <td className="rounded-l-xl border-y border-l px-4 py-3">
                       {w.eventType}
                     </td>
@@ -176,7 +177,7 @@ export function WebhooksSection() {
                       {maskTargetUrl(w.targetUrl)}
                     </td>
                     <td className="border-y px-4 py-3">
-                      <OtStatusBadge
+                      <StatusBadge
                         label={w.isActive ? "Activo" : "Inactivo"}
                         tone={w.isActive ? "success" : "danger"}
                       />
@@ -205,6 +206,7 @@ export function WebhooksSection() {
                 ))}
               </tbody>
             </table>
+            </div>
           </UiStateBoundary>
         </div>
       )}
@@ -219,7 +221,7 @@ export function WebhooksSection() {
             }}
             aria-label="Filtros de bitácora"
           >
-            <label className="text-xs font-semibold" style={{ color: "#162744" }}>
+            <label className="text-xs font-semibold text-foreground">
               Desde
               <input
                 type="date"
@@ -228,7 +230,7 @@ export function WebhooksSection() {
                 onChange={(e) => setDateFrom(e.target.value)}
               />
             </label>
-            <label className="text-xs font-semibold" style={{ color: "#162744" }}>
+            <label className="text-xs font-semibold text-foreground">
               Hasta
               <input
                 type="date"
@@ -237,7 +239,7 @@ export function WebhooksSection() {
                 onChange={(e) => setDateTo(e.target.value)}
               />
             </label>
-            <label className="text-xs font-semibold" style={{ color: "#162744" }}>
+            <label className="text-xs font-semibold text-foreground">
               Dirección
               <select
                 aria-label="Dirección"
@@ -249,7 +251,7 @@ export function WebhooksSection() {
                 <option value="inbound">inbound</option>
               </select>
             </label>
-            <label className="text-xs font-semibold" style={{ color: "#162744" }}>
+            <label className="text-xs font-semibold text-foreground">
               Código HTTP
               <select
                 aria-label="Código HTTP"
@@ -279,22 +281,23 @@ export function WebhooksSection() {
             onRetry={() => void loadLogs()}
             skeletonRows={5}
           >
-            <table className="w-full border-separate border-spacing-y-2 text-xs">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-separate border-spacing-y-2 text-xs">
               <thead>
-                <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
-                  <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
+                  <th className="rounded-l-xl px-4 py-2.5 bg-muted">
                     Endpoint
                   </th>
-                  <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                  <th className="px-4 py-2.5 bg-muted">
                     Método
                   </th>
-                  <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                  <th className="px-4 py-2.5 bg-muted">
                     Código
                   </th>
-                  <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                  <th className="px-4 py-2.5 bg-muted">
                     Duración (ms)
                   </th>
-                  <th className="rounded-r-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                  <th className="rounded-r-xl px-4 py-2.5 bg-muted">
                     Fecha
                   </th>
                 </tr>
@@ -303,7 +306,7 @@ export function WebhooksSection() {
                 {logs.map((log, i) => (
                   <tr
                     key={`${log.calledAt}-${i}`}
-                    className="cursor-pointer bg-white hover:opacity-90 dark:bg-[#0B0F14]"
+                    className="cursor-pointer bg-card hover:opacity-90"
                     onClick={() => setSelectedLog(log)}
                   >
                     <td
@@ -329,6 +332,7 @@ export function WebhooksSection() {
                 ))}
               </tbody>
             </table>
+            </div>
             <OtTablePagination
               totalCount={logTotal}
               page={logPage}

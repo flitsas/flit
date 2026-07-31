@@ -24,6 +24,8 @@ internal sealed class ProcedureInstanceAttachmentConfiguration : IEntityTypeConf
         builder.Property(x => x.Source).HasColumnName("source").HasMaxLength(20).IsRequired().HasDefaultValue("user");
         builder.Property(x => x.UploadedAt).HasColumnName("uploaded_at").IsRequired();
         builder.Property(x => x.UploadedBy).HasColumnName("uploaded_by");
+        // HU #10936 — escritura utilizada (admin.company_deeds.id) para las escrituras de sistema.
+        builder.Property(x => x.SourceDeedId).HasColumnName("source_deed_id");
 
         builder.HasIndex(x => new { x.TenantId, x.ProcedureInstanceId })
             .HasDatabaseName("ix_procedure_instance_attachments_tenant_id_instance");

@@ -16,7 +16,8 @@ const REASON_COPY: Record<string, string> = {
   preflight_pendiente: 'Falta correr el pre-vuelo',
   preflight_red: 'Hay bloqueos críticos',
   preflight_provider_error: 'No se pudo verificar la consulta; vuelve a intentarla',
-  preflight_yellow: 'Hay advertencias por revisar',
+  // Sin `preflight_yellow`: el amarillo NO bloquea y este canal es el de "Antes de enviar,
+  // resuelve:". Las advertencias se informan en PreflightPanel, no como razón de incompletitud.
   validacion_pendiente: 'Falta validar el resultado legal',
   // documentos
   documentos_incompletos: 'Faltan documentos obligatorios',
@@ -24,8 +25,17 @@ const REASON_COPY: Record<string, string> = {
   comprador_incompleto: 'Faltan datos del comprador',
   vendedor_incompleto: 'Faltan datos del vendedor',
   actores_incompletos: 'Faltan datos de los participantes',
+  comprador_doc: 'Falta el documento del comprador',
+  // Comparendos del comprador (traspaso). Sin estas entradas el código crudo se "humanizaba"
+  // a "Simit Pendiente", que no le dice al operador ni qué falta ni dónde resolverlo.
+  simit_pendiente:
+    'Falta la consulta de comparendos del comprador: vuelve al paso 1 y ejecuta "Consultar RUNT" para generar el pre-vuelo',
+  simit_doc:
+    'La consulta de comparendos no corresponde al documento del comprador: vuelve al paso 1 y repite la consulta',
+  simit_multas: 'El comprador tiene comparendos pendientes en el SIMIT',
   // datos comerciales
   comercial_incompleto: 'Faltan datos comerciales (valor, causal, impuestos)',
+  comercial_valor: 'Ingresa un valor de venta mayor a cero',
   // identidad / firma / FUR (Slice 6-7)
   identidad_pendiente: 'Validación biométrica pendiente',
   pendiente_biometria: 'Validación biométrica pendiente',
@@ -37,9 +47,9 @@ const REASON_COPY: Record<string, string> = {
     'El vehículo tiene gravámenes: registra una decisión de prenda para continuar',
   prenda_documento_requerido:
     'La decisión de prenda seleccionada requiere adjuntar su documento de soporte',
-  // R19 (HU #10604/#10605) — medida correctiva RNMC: se puede registrar, pero no enviar al OT.
-  rnmc_medida_bloquea_envio:
-    'Medida correctiva RNMC: carga el paz y salvo RNMC para poder enviar al OT',
+  // R19 (HU #10604/#10605/#10697) — RNMC ya NO bloquea: la medida correctiva es informativa.
+  rnmc_medida_pendiente:
+    'Medida correctiva RNMC registrada (informativa, no bloquea el envío)',
 };
 
 /** Bloqueos que impiden enviar/finalizar el trámite. */
@@ -62,9 +72,7 @@ const BLOCKER_COPY: Record<string, string> = {
     'El vehículo tiene gravámenes: registra una decisión de prenda antes de preparar o radicar el trámite',
   prenda_documento_requerido:
     'La decisión de prenda seleccionada requiere adjuntar su documento de soporte',
-  // R19 (HU #10604/#10605) — gate de envío al OT por medida correctiva RNMC ("Imponer Medida").
-  rnmc_medida_bloquea_envio:
-    'Medida correctiva RNMC pendiente: carga el paz y salvo RNMC para poder enviar el trámite al organismo de tránsito',
+  // R19 (HU #10697) — RNMC ya NO bloquea el envío al OT; no hay blocker de medida correctiva.
 };
 
 /** Convierte un código a copy legible (fallback: el código humanizado). */

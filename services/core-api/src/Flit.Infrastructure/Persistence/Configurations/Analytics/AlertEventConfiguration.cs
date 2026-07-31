@@ -27,6 +27,8 @@ internal sealed class AlertEventConfiguration : IEntityTypeConfiguration<AlertEv
             .HasColumnType("jsonb").HasDefaultValueSql("'[]'").IsRequired();
 
         builder.Property(x => x.Message);
+        builder.Property(x => x.AcknowledgedAt);
+        builder.Property(x => x.AcknowledgedBy);
 
         builder.HasOne<AlertRule>()
             .WithMany()

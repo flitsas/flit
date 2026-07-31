@@ -6,3 +6,9 @@ allowBuilds:
   unrs-resolver: true
   esbuild: true
   '@biomejs/biome': true
+
+# next@16.2.x pinnea sharp ^0.34.5 (CVE libvips). Forzar parche hasta que Next actualice.
+# next@16.2.x pinnea postcss 8.4.31 (GHSA-6g55-p6wh-862q). Forzar >=8.5.12.
+overrides:
+  sharp: 0.35.3
+  postcss: 8.5.22

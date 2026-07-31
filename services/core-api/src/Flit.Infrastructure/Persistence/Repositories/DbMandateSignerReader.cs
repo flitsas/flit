@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.Companies.MandateSigners;
+using Flit.Admin.Domain.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
@@ -40,9 +41,12 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                 var companiesBySigner = await LoadActiveCompanyIdsBySignerAsync(
                     transitOfficeId, cancellationToken).ConfigureAwait(false);
 
+                var vigenciaBySigner = await LoadIdentityVigenciaAsync(
+                    [.. signers.Select(s => s.Id)], cancellationToken).ConfigureAwait(false);
+
                 IReadOnlyList<MandateSignerItem> items =
                 [
-                    .. signers.Select(s => Project(s, companiesBySigner)),
+                    .. signers.Select(s => Project(s, companiesBySigner, vigenciaBySigner)),
                 ];
                 return items;
             },
@@ -71,13 +75,27 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
 
+                var vigenciaBySigner = await LoadIdentityVigenciaAsync(
+                    [signer.Id], cancellationToken).ConfigureAwait(false);
+
                 return new MandateSignerItem
                 {
                     Id = signer.Id,
                     TransitOfficeId = signer.TransitOfficeId,
                     FullName = signer.FullName,
+                    DocumentType = signer.DocumentType,
                     DocumentNumber = signer.DocumentNumber,
                     IntegrityHash = signer.IntegrityHash,
+                    Email = signer.Email,
+                    SignatureVaultId = signer.SignatureVaultId,
+                    IdentityValidationRef = signer.IdentityValidationRef,
+                    IdentityStatus = vigenciaBySigner
+                        .GetValueOrDefault(signer.Id, new AdminIdentityVigencia.Resultado(
+                            AdminIdentityVigencia.None, null)).Status,
+                    IdentityValidUntil = vigenciaBySigner
+                        .GetValueOrDefault(signer.Id, new AdminIdentityVigencia.Resultado(
+                            AdminIdentityVigencia.None, null)).ValidUntil,
+                    UserId = signer.UserId,
                     RegisteredAt = signer.RegisteredAt,
                     IsActive = signer.IsActive,
                     CompanyTenantIds = companyIds,
@@ -189,18 +207,64 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
 
     private static MandateSignerItem Project(
         Entities.Admin.MandateSigner signer,
-        Dictionary<Guid, List<Guid>> companiesBySigner) =>
-        new()
+        Dictionary<Guid, List<Guid>> companiesBySigner,
+        Dictionary<Guid, AdminIdentityVigencia.Resultado> vigenciaBySigner)
+    {
+        var vigencia = vigenciaBySigner.GetValueOrDefault(
+            signer.Id, new AdminIdentityVigencia.Resultado(AdminIdentityVigencia.None, null));
+
+        return new MandateSignerItem
         {
             Id = signer.Id,
             TransitOfficeId = signer.TransitOfficeId,
             FullName = signer.FullName,
+            DocumentType = signer.DocumentType,
             DocumentNumber = signer.DocumentNumber,
             IntegrityHash = signer.IntegrityHash,
+            Email = signer.Email,
+            SignatureVaultId = signer.SignatureVaultId,
+            IdentityValidationRef = signer.IdentityValidationRef,
+            IdentityStatus = vigencia.Status,
+            IdentityValidUntil = vigencia.ValidUntil,
+            UserId = signer.UserId,
             RegisteredAt = signer.RegisteredAt,
             IsActive = signer.IsActive,
             CompanyTenantIds = companiesBySigner.GetValueOrDefault(signer.Id, []),
         };
+    }
+
+    /// <summary>
+    /// Vigencia de la identidad (HU #10994) por mandatario. La precedencia vive en
+    /// <see cref="AdminIdentityVigencia"/>, compartida con el representante legal (HU #11059): aquí solo
+    /// queda la consulta en lote. Desde la HU #11060 se devuelve TAMBIÉN hasta cuándo es válida, que es
+    /// lo que la consola necesita para informar la vigencia en curso en vez de ofrecer renovar.
+    /// Se lee dentro del scope cross-tenant (row_security off) que abre <c>ExecuteCrossTenantReadAsync</c>.
+    /// </summary>
+    private async Task<Dictionary<Guid, AdminIdentityVigencia.Resultado>> LoadIdentityVigenciaAsync(
+        IReadOnlyList<Guid> signerIds,
+        CancellationToken cancellationToken)
+    {
+        if (signerIds.Count == 0)
+        {
+            return [];
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var rows = await _context.AdminIdentityValidations
+            .AsNoTracking()
+            .Where(v => v.SubjectType == AdminIdentitySubjectTypes.MandateSigner
+                && signerIds.Contains(v.SubjectRef))
+            .Select(v => new { v.SubjectRef, v.Status, v.ValidUntil })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.SubjectRef)
+            .ToDictionary(
+                g => g.Key,
+                g => AdminIdentityVigencia.Resumir(
+                    g.Select(r => new AdminIdentityVigencia.Entrada(r.Status, r.ValidUntil)), now));
+    }
 
     private async Task<T> ExecuteCrossTenantReadAsync<T>(
         Func<Task<T>> action,
@@ -208,6 +272,16 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
     {
         if (!_context.Database.IsRelational())
         {
+            return await action().ConfigureAwait(false);
+        }
+
+        // HU #11000 — misma guarda que MandateSignerDirectory (HU #10992) y PlateRangeRepository: dentro de
+        // una transacción ya abierta NO se puede anidar otra ("The connection is already in a transaction").
+        // Se aplica el SET LOCAL sobre la transacción en curso; muere con su commit.
+        if (_context.Database.CurrentTransaction is not null)
+        {
+            await _context.Database.ExecuteSqlRawAsync(
+                "SET LOCAL row_security = off", cancellationToken).ConfigureAwait(false);
             return await action().ConfigureAwait(false);
         }
 

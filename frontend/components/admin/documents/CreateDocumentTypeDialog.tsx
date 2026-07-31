@@ -16,6 +16,7 @@ import {
   sanitizeNoAngleBrackets,
   validateReadableName,
 } from "@/lib/validation/fieldRules";
+import { sanitizeDecimalInput } from "@/lib/format/currency";
 
 // Modal de alta/edición de tipo de documento (HU #10198, AC1). Valida campos
 // obligatorios (código, nombre) en cliente antes de enviar y mapea los errores 422
@@ -216,11 +217,11 @@ export function CreateDocumentTypeDialog({
           <Field label="Tamaño máximo (MB)" htmlFor="dt-maxsize" hint="Opcional; vacío ⇒ tamaño global por defecto (20 MB).">
             <input
               id="dt-maxsize"
-              type="number"
-              min={0}
-              step="0.5"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
               value={maxSizeMb}
-              onChange={(e) => setMaxSizeMb(e.target.value)}
+              onChange={(e) => setMaxSizeMb(sanitizeDecimalInput(e.target.value))}
               className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
             />
           </Field>

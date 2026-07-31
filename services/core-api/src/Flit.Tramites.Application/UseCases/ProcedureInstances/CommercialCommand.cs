@@ -13,7 +13,11 @@ public sealed record CommercialDto(
     string? Causal,
     decimal? TasaImpuesto,
     decimal? Derechos,
-    string? MetodoPago);
+    string? MetodoPago,
+    // Feature #10707 — trazabilidad del avalúo (opcionales, backward-compatible).
+    string? ValueOrigin = null,
+    string? SuggestedSource = null,
+    decimal? SuggestedValue = null);
 
 /// <summary>
 /// Captura de datos comerciales del traspaso (1:1 con la instancia). Persiste en
@@ -43,7 +47,7 @@ public sealed class PutCommercialHandler(IProcedureInstanceRepository repo)
         if (instance is null)
             return (null, "not_found");
 
-        if (instance.Status != TramiteEstado.Borrador)
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft");
 
         // Validación de forma. valorVenta es obligatorio (> 0) en el paso comercial.
@@ -74,6 +78,9 @@ public sealed class PutCommercialHandler(IProcedureInstanceRepository repo)
                 TasaImpuesto = request.TasaImpuesto,
                 Derechos = request.Derechos,
                 MetodoPago = string.IsNullOrWhiteSpace(request.MetodoPago) ? null : request.MetodoPago.Trim(),
+                ValueOrigin = NormalizeOrigin(request.ValueOrigin),
+                SuggestedSource = string.IsNullOrWhiteSpace(request.SuggestedSource) ? null : request.SuggestedSource.Trim(),
+                SuggestedValue = request.SuggestedValue,
                 CreatedAt = now,
             };
             // PK store-generated (uuidv7) con Id ya seteado: marcar Added explícito para forzar
@@ -87,6 +94,9 @@ public sealed class PutCommercialHandler(IProcedureInstanceRepository repo)
             instance.Commercial.TasaImpuesto = request.TasaImpuesto;
             instance.Commercial.Derechos = request.Derechos;
             instance.Commercial.MetodoPago = string.IsNullOrWhiteSpace(request.MetodoPago) ? null : request.MetodoPago.Trim();
+            instance.Commercial.ValueOrigin = NormalizeOrigin(request.ValueOrigin);
+            instance.Commercial.SuggestedSource = string.IsNullOrWhiteSpace(request.SuggestedSource) ? null : request.SuggestedSource.Trim();
+            instance.Commercial.SuggestedValue = request.SuggestedValue;
             instance.Commercial.UpdatedAt = now;
         }
 
@@ -99,7 +109,17 @@ public sealed class PutCommercialHandler(IProcedureInstanceRepository repo)
     }
 
     internal static CommercialDto ToDto(ProcedureInstanceCommercial c) =>
-        new(c.ValorVenta, c.Causal, c.TasaImpuesto, c.Derechos, c.MetodoPago);
+        new(c.ValorVenta, c.Causal, c.TasaImpuesto, c.Derechos, c.MetodoPago,
+            c.ValueOrigin, c.SuggestedSource, c.SuggestedValue);
+
+    // value_origin ∈ {suggestion, manual}; cualquier otro valor se descarta a null.
+    private static string? NormalizeOrigin(string? origin)
+    {
+        if (string.IsNullOrWhiteSpace(origin))
+            return null;
+        var v = origin.Trim().ToLowerInvariant();
+        return v is "suggestion" or "manual" ? v : null;
+    }
 }
 
 /// <summary>GET de datos comerciales. Devuelve null si aún no se han capturado.</summary>

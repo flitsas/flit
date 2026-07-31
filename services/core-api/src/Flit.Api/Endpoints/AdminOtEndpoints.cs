@@ -18,6 +18,9 @@ using Flit.Admin.Application.OtRules.CreateOtRule;
 using Flit.Admin.Application.OtRules.ListOtRules;
 using Flit.Admin.Application.OtRules.UpdateOtRule;
 using Flit.Admin.Application.OtProfile.GetOtProfile;
+using Flit.Admin.Domain.OtClientProcedures;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Admin.Application.OtProfile.UpdateOtFeatureFlag;
 using Flit.Admin.Application.OtProfile.UpdateOtProfile;
 using Flit.Admin.Application.OtRequirements.GetOtRequirements;
@@ -30,6 +33,7 @@ using Flit.Admin.Application.OtWebhooks.UpdateOtWebhook;
 using Flit.Api.Authorization;
 using Flit.Api.Endpoints.Auditing;
 using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Admin.Domain.OtRequirements;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CancelInvitation;
@@ -104,7 +108,8 @@ public static class AdminOtEndpoints
             .WithSummary("Configura los requisitos del OT (auditado por trigger de BD)")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
+            .Produces(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status422UnprocessableEntity);
 
         group.MapPost("/webhooks", CreateWebhookAsync)
             .WithName("AdminOtCreateWebhook")
@@ -190,6 +195,39 @@ public static class AdminOtEndpoints
         group.MapGet("/client-procedures/{id:guid}/consolidado", DownloadClientProcedureConsolidadoAsync)
             .WithName("AdminOtDownloadClientProcedureConsolidado")
             .WithSummary("Descarga el PDF del expediente consolidado de un trámite de cliente OT")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPost("/client-procedures/{id:guid}/consolidado-maestro", GenerateClientProcedureConsolidadoMaestroAsync)
+            .WithName("AdminOtGenerateClientProcedureConsolidadoMaestro")
+            .WithSummary("Genera/regenera el expediente consolidado maestro desde la tabla maestra (sin gate FUR)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        group.MapGet("/client-procedures/{id:guid}/documents", ListClientProcedureDocumentsAsync)
+            .WithName("AdminOtListClientProcedureDocuments")
+            .WithSummary("Lista los adjuntos del trámite de un cliente OT (sin binarios, con flags de consolidado)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/client-procedures/{id:guid}/documents/{attachmentId:guid}/preview-url", GetClientProcedureDocumentPreviewUrlAsync)
+            .WithName("AdminOtGetClientProcedureDocumentPreviewUrl")
+            .WithSummary("Obtiene la URL de previsualización inline de un adjunto del trámite de un cliente OT")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/client-procedures/{id:guid}/documents/{attachmentId:guid}/download", DownloadClientProcedureDocumentAsync)
+            .WithName("AdminOtDownloadClientProcedureDocument")
+            .WithSummary("Descarga el binario de un adjunto del trámite de un cliente OT")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -503,14 +541,25 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
-        var result = await handler.HandleAsync(new UpdateOtRequirementsCommand
+        try
         {
-            TenantId = tenantId,
-            ChangedBy = ResolveUserId(httpContext.User),
-            Request = request,
-        }, cancellationToken).ConfigureAwait(false);
+            var result = await handler.HandleAsync(new UpdateOtRequirementsCommand
+            {
+                TenantId = tenantId,
+                ChangedBy = ResolveUserId(httpContext.User),
+                Request = request,
+            }, cancellationToken).ConfigureAwait(false);
 
-        return Results.Ok(result.Requirements);
+            return Results.Ok(result.Requirements);
+        }
+        catch (OtRequirementsScopeException ex)
+        {
+            // El tenant no es un OT aprovisionado (o la oficina es de otro OT): 422, no 500 (ADR-0022).
+            return Results.Problem(
+                title: "ot_requirements_scope",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
     }
 
     private static async Task<IResult> UpdateFeatureFlagAsync(
@@ -814,7 +863,14 @@ public static class AdminOtEndpoints
     private static async Task<IResult> ApproveClientProcedureAsync(
         Guid id,
         HttpContext httpContext,
+        ApproveOtClientProcedureRequest? request,
         ApproveOtClientProcedureHandler handler,
+        IOtClientProcedureRepository otRepository,
+        MandatoApprovalHandler mandatoApproval,
+        GenerarFurHandler furHandler,
+        ILoggerFactory loggerFactory,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
         if (!TryResolveTenantId(httpContext.User, out var tenantId))
@@ -824,12 +880,87 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
+        var approvingUserId = ResolveUserId(httpContext.User);
+
+        // ADR-0036 §D9 (HU #10916) — la aprobación del OT NO pasa por TramiteLifecycleService, así que la
+        // resolución del mandatario se orquesta aquí (el API referencia Admin y Trámites; el módulo Admin
+        // no puede referenciar Trámites). 1) Validar acceso y obtener el tenant cliente. 2) Resolver el
+        // firmante en el scope RLS del cliente. 3) 409 si hay que elegir. 4) Aprobar (persiste el
+        // firmante en el mismo save). 5) Regenerar el mandato con el firmante (best-effort).
+        var procedure = await otRepository
+            .GetByIdAsync(tenantId, id, scopedOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (procedure is null)
+        {
+            return Results.NotFound(new { error = "Trámite no encontrado" });
+        }
+
+        var decision = await otRepository
+            .ExecuteInClientTenantScopeAsync(
+                procedure.ClientTenantId,
+                () => mandatoApproval.CheckAsync(
+                    id, procedure.ClientTenantId, approvingUserId, request?.MandateSignerId, cancellationToken),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (decision.Outcome == MandatoApprovalOutcome.RequiereSeleccion)
+        {
+            // Varios mandatarios y ninguno cotejó: el aprobador debe elegir uno y reintentar con mandateSignerId.
+            return Results.Json(
+                new { error = "mandatario_requerido" },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
+        if (decision.Outcome == MandatoApprovalOutcome.IdentidadRequerida)
+        {
+            // ADR-0036 §D9 (HU #10911/#10916) — el mandatario resuelto no tiene identidad validada vigente:
+            // debe validarla (se valida una vez y se apalanca mientras esté vigente) antes de firmar.
+            return Results.Json(
+                new { error = "mandatario_identidad_requerida" },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
         var result = await handler.HandleAsync(new ApproveOtClientProcedureCommand
         {
             OtTenantId = tenantId,
             ProcedureInstanceId = id,
-            ApprovedBy = ResolveUserId(httpContext.User),
+            ApprovedBy = approvingUserId,
+            MandateSignerId = decision.MandateSignerId,
+            TransitOfficeId = scopedOfficeId,
         }, cancellationToken).ConfigureAwait(false);
+
+        // HU #10996 — regenerar los documentos en caliente (FUR, mandato, trámite virtual y certificados)
+        // SIEMPRE que se apruebe, no solo cuando hubo un mandatario que resolver: así el consolidado y los
+        // formularios reflejan las firmas y la documentación actualizada al aprobar. La regeneración del FUR
+        // invalida además los consolidados (se rehacen en la próxima consulta). Best-effort: un fallo aquí
+        // NO revierte la aprobación ya persistida.
+        if (result.Status == ApproveOtClientProcedureStatus.Approved)
+        {
+            try
+            {
+                await otRepository
+                    .ExecuteInClientTenantScopeAsync(
+                        procedure.ClientTenantId,
+                        () => furHandler.HandleAsync(id, procedure.ClientTenantId, cancellationToken),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                AdminOtMandatoLog.RegeneracionMandatoOmitida(
+                    loggerFactory.CreateLogger("AdminOt.ApproveMandato"), ex, id);
+            }
+        }
 
         return result.Status switch
         {
@@ -847,6 +978,8 @@ public static class AdminOtEndpoints
         HttpContext httpContext,
         RejectOtClientProcedureRequest request,
         RejectOtClientProcedureHandler handler,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
         if (!TryResolveTenantId(httpContext.User, out var tenantId))
@@ -856,11 +989,22 @@ public static class AdminOtEndpoints
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
+        if (!TryResolveScopedTransitOfficeId(
+                httpContext.User,
+                transitOfficeId,
+                transitOfficeCatalog,
+                out var scopedOfficeId,
+                out var officeError))
+        {
+            return officeError!;
+        }
+
         var result = await handler.HandleAsync(new RejectOtClientProcedureCommand
         {
             OtTenantId = tenantId,
             ProcedureInstanceId = id,
             RejectedBy = ResolveUserId(httpContext.User),
+            TransitOfficeId = scopedOfficeId,
             Request = request,
         }, cancellationToken).ConfigureAwait(false);
 
@@ -956,10 +1100,11 @@ public static class AdminOtEndpoints
         {
             "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
             "modalidad_no_soportada" => Results.Conflict(new { error = "modalidad_no_soportada" }),
+            // HU #11017 — el consolidado ya no rechaza por documentos obligatorios faltantes (se genera
+            // marcado como incompleto), así que ese código dejó de emitirse. `fur_requerido` solo llega
+            // cuando la regeneración en cascada tampoco pudo producirlo y no dio un motivo propio.
             Flit.Tramites.Application.UseCases.ProcedureInstances.SubmitGate.FurRequerido =>
                 Results.Conflict(new { error = "fur_requerido" }),
-            Flit.Tramites.Application.UseCases.ProcedureInstances.SubmitGate.DocumentosIncompletos =>
-                Results.Conflict(new { error = "documentos_incompletos" }),
             "sin_adjuntos" => Results.Conflict(new { error = "sin_adjuntos" }),
             "adjunto_no_disponible" => Results.Conflict(new { error = "adjunto_no_disponible" }),
             "mimetype_no_soportado" => Results.Conflict(new { error = "mimetype_no_soportado" }),
@@ -1051,6 +1196,165 @@ public static class AdminOtEndpoints
             "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
             "estado_invalido" => Results.Conflict(new { error = "INVALID_STATE", message = "La Licencia de Tránsito solo se adjunta con el trámite entregado o aprobado." }),
             _ => Results.Created($"/api/v1/admin/ot/client-procedures/{id}/attachments/{result!.Id}", result),
+        };
+    }
+
+    // ── Consolidado Maestro OT (Feature #10701 / HU #10706) ─────────────────────────────────────
+
+    private static async Task<IResult> GenerateClientProcedureConsolidadoMaestroAsync(
+        Guid id,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        Flit.Admin.Domain.OtProfile.IQuipuxReadOnlyGuard quipuxReadOnlyGuard,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Admin.Domain.DocumentOrderOverrides.IResolvedDocumentMatrixResolver matrixResolver,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.GenerarConsolidadoMaestroHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (access, tenantId, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        var guardResult = await quipuxReadOnlyGuard
+            .ValidateActionAsync(tenantId, "generar_consolidado_maestro", cancellationToken)
+            .ConfigureAwait(false);
+        if (!guardResult.IsAllowed)
+            return Results.Json(new { error = "QUIPUX_READONLY" }, statusCode: StatusCodes.Status403Forbidden);
+
+        var (result, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            async () =>
+            {
+                // HU #10706 AC1 — orden por la matriz documental resuelta del trámite con la
+                // precedencia del OT. Se resuelve DENTRO del scope RLS del tenant cliente (los
+                // requisitos base viven en tramites del cliente). Si el resolver falla o no hay
+                // matriz configurada, la lista vacía hace que el handler caiga al orden por modalidad.
+                IReadOnlyList<string> precedencia;
+                try
+                {
+                    var matriz = await matrixResolver
+                        .ResolveAsync(access.ProcedureTypeId, access.TransitOfficeId, cancellationToken)
+                        .ConfigureAwait(false);
+                    precedencia = matriz.Select(m => m.Codigo).ToList();
+                }
+                catch
+                {
+                    precedencia = [];
+                }
+
+                return await handler
+                    .HandleAsync(id, access.ClientTenantId, precedencia, cancellationToken)
+                    .ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            "not_found" => Results.NotFound(new { error = "Trámite no encontrado" }),
+            "sin_adjuntos" => Results.Conflict(new { error = "sin_adjuntos" }),
+            "adjunto_no_disponible" => Results.Conflict(new { error = "adjunto_no_disponible" }),
+            "mimetype_no_soportado" => Results.Conflict(new { error = "mimetype_no_soportado" }),
+            _ => Results.Ok(result),
+        };
+    }
+
+    // ── Documentos y preview inline del trámite de cliente OT (Feature #10701 / HU #10704) ────────
+
+    private static async Task<IResult> ListClientProcedureDocumentsAsync(
+        Guid id,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.ListAttachmentsHandler listHandler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (access, _, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        var (attachments, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            () => listHandler.HandleAsync(id, access.ClientTenantId, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        if (error is "not_found")
+            return Results.NotFound(new { error = "Trámite no encontrado" });
+
+        var docs = attachments!.Attachments;
+        var hasConsolidado = docs.Any(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
+        var hasConsolidadoMaestro = docs.Any(a => string.Equals(a.Tipo, "consolidado_maestro", StringComparison.OrdinalIgnoreCase));
+
+        return Results.Ok(new
+        {
+            data = docs,
+            consolidado = hasConsolidado,
+            consolidado_maestro = hasConsolidadoMaestro,
+        });
+    }
+
+    private static async Task<IResult> GetClientProcedureDocumentPreviewUrlAsync(
+        Guid id,
+        Guid attachmentId,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.GetAttachmentPreviewUrlHandler previewHandler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (access, _, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        var (previewResult, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            () => previewHandler.HandleAsync(id, access.ClientTenantId, attachmentId, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            "not_found" => Results.NotFound(new { error = "Adjunto no encontrado" }),
+            "storage_unavailable" => Results.Json(
+                new { error = "storage_unavailable" },
+                statusCode: StatusCodes.Status503ServiceUnavailable),
+            _ => Results.Ok(new { url = previewResult!.Url, expiresAt = previewResult.ExpiresAt }),
+        };
+    }
+
+    private static async Task<IResult> DownloadClientProcedureDocumentAsync(
+        Guid id,
+        Guid attachmentId,
+        HttpContext httpContext,
+        Flit.Admin.Domain.OtClientProcedures.IOtClientProcedureRepository repository,
+        ITransitOfficeCatalog transitOfficeCatalog,
+        Flit.Tramites.Application.UseCases.ProcedureInstances.DownloadAttachmentHandler downloadHandler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (access, _, accessError) = await ResolveClientProcedureAccessAsync(
+            id, httpContext, repository, transitOfficeCatalog, transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        if (accessError is not null)
+            return accessError;
+
+        var (download, error) = await repository.ExecuteInClientTenantScopeAsync(
+            access!.ClientTenantId,
+            () => downloadHandler.HandleAsync(id, access.ClientTenantId, attachmentId, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+        return error switch
+        {
+            "not_found" => Results.NotFound(new { error = "Adjunto no encontrado" }),
+            "file_missing" => Results.NotFound(new { error = "file_missing" }),
+            _ => Results.File(download!.Content, download.Mimetype, download.Filename),
         };
     }
 
@@ -1863,4 +2167,12 @@ public static class AdminOtEndpoints
         bool IsSuspended,
         long RowVersion,
         DateTimeOffset? DeletedAt = null);
+}
+
+/// <summary>Logging source-generated (CA1848) de la aprobación OT. Sin PII.</summary>
+internal static partial class AdminOtMandatoLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se pudo regenerar el mandato al aprobar el trámite {InstanceId}; se conserva el mandato previo.")]
+    public static partial void RegeneracionMandatoOmitida(ILogger logger, Exception ex, Guid instanceId);
 }

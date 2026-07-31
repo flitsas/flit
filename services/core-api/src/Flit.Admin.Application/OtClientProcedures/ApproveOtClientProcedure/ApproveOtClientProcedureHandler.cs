@@ -6,7 +6,9 @@ namespace Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
 /// <summary>Aprueba un trámite entregado de un cliente OT (HU #10217 AC2 · N 03: entregado→aprobado).</summary>
 public sealed class ApproveOtClientProcedureHandler
 {
-    // N 03 (ADR-0022): el OT decide sobre trámites en estado 'entregado' (antes pending_ot).
+    // N 03 (ADR-0022): el OT decide sobre trámites en estado 'entregado' (antes pending_ot). La ruta de
+    // placa (Feature #10587 / HU #10785) NO cambia el status: el trámite siempre está 'entregado' cuando
+    // el OT decide (el progreso de placa es un sub-estado interno).
     private const string EstadoEntregado = "entregado";
 
     private readonly IOtClientProcedureRepository _repository;
@@ -36,7 +38,11 @@ public sealed class ApproveOtClientProcedureHandler
         }
 
         var existing = await _repository
-            .GetByIdAsync(command.OtTenantId, command.ProcedureInstanceId, cancellationToken)
+            .GetByIdAsync(
+                command.OtTenantId,
+                command.ProcedureInstanceId,
+                command.TransitOfficeId,
+                cancellationToken)
             .ConfigureAwait(false);
 
         if (existing is null)
@@ -54,6 +60,8 @@ public sealed class ApproveOtClientProcedureHandler
             command.ProcedureInstanceId,
             command.ApprovedBy,
             OtTransitionSource.OtAdmin,
+            command.MandateSignerId,
+            command.TransitOfficeId,
             cancellationToken).ConfigureAwait(false);
 
         return updated is null

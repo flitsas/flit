@@ -12,10 +12,21 @@ import type {
 // ── OCR de documentos ────────────────────────────────────────────────
 // Tipos que pasan por OCR semántico antes de subir al expediente, por modalidad.
 // Matrícula: factura + aduana + impronta + soat. Traspaso: sólo impronta + soat.
+// HU #10977 (Feature #10972) — se añade `rtm` en AMBAS modalidades: el certificado de vigencia
+// SOAT y RTM pide número, entidad, expedición y vigencia de la revisión, y esos tres últimos no
+// los entrega ningún proveedor de consulta. Salen del propio certificado del CDA.
 export const OCR_TIPOS: Record<WizardModalidad, readonly string[]> = {
-  matricula_inicial: ['factura', 'aduana', 'impronta', 'soat'],
-  traspaso: ['impronta', 'soat'],
+  matricula_inicial: ['factura', 'aduana', 'impronta', 'soat', 'rtm'],
+  traspaso: ['impronta', 'soat', 'rtm'],
 };
+
+/**
+ * HU #10975 — tipos cuyo JSON de OCR se PERSISTE en `field_values` además de analizarse.
+ * Es un subconjunto de OCR_TIPOS: factura/aduana/impronta se analizan para validar el documento,
+ * pero no alimentan ningún certificado. La whitelist real (y la regla de precedencia frente al
+ * RUNT) vive en el backend; esto solo evita mandar peticiones que se descartarían.
+ */
+const OCR_TIPOS_PERSISTIBLES: readonly string[] = ['soat', 'rtm'];
 
 /** Límite del OCR (10 MB, el del endpoint). Archivos mayores (≤20 MB) se suben sin analizar. */
 export const OCR_MAX_BYTES = 10 * 1024 * 1024;
@@ -94,10 +105,13 @@ export interface ProcedureDocumentsState {
   checklist: ChecklistView | null;
   attachments: ProcedureAttachment[];
   loading: boolean;
-  /** tipo del ítem cuya subida está en curso (null = ninguna). */
-  uploadingTipo: string | null;
-  /** tipo del ítem que se está analizando por OCR (null = ninguno). */
-  analyzingTipo: string | null;
+  /**
+   * Tipos con subida en curso (varios en paralelo). Feature #11066 — evidencia por documento
+   * aunque el operador lance otra carga de inmediato.
+   */
+  uploadingTipos: ReadonlySet<string>;
+  /** tipos con OCR en curso (varios en paralelo). */
+  analyzingTipos: ReadonlySet<string>;
   /** id del adjunto en proceso de borrado (null = ninguno). */
   deletingId: string | null;
   /** Resultado OCR por tipo (verificado / rechazado / no analizado). Vive sólo en sesión. */
@@ -109,12 +123,24 @@ const INITIAL_STATE: ProcedureDocumentsState = {
   checklist: null,
   attachments: [],
   loading: false,
-  uploadingTipo: null,
-  analyzingTipo: null,
+  uploadingTipos: new Set(),
+  analyzingTipos: new Set(),
   deletingId: null,
   ocrResults: {},
   error: null,
 };
+
+function withTipoInSet(set: ReadonlySet<string>, tipo: string): Set<string> {
+  const next = new Set(set);
+  next.add(tipo);
+  return next;
+}
+
+function withoutTipoInSet(set: ReadonlySet<string>, tipo: string): Set<string> {
+  const next = new Set(set);
+  next.delete(tipo);
+  return next;
+}
 
 export interface UseProcedureDocumentsOptions {
   /** Modalidad del trámite: decide qué tipos pasan por OCR. */
@@ -194,7 +220,7 @@ export function useProcedureDocuments(
       setState((s) => {
         const rest = { ...s.ocrResults };
         delete rest[tipo];
-        return { ...s, error: null, analyzingTipo: null, ocrResults: rest };
+        return { ...s, error: null, ocrResults: rest };
       });
 
       let fileToUpload = file;
@@ -202,7 +228,10 @@ export function useProcedureDocuments(
 
       if (usaOcr && file.size <= OCR_MAX_BYTES) {
         // 1) OCR antes de subir.
-        setState((s) => ({ ...s, analyzingTipo: tipo }));
+        setState((s) => ({
+          ...s,
+          analyzingTipos: withTipoInSet(s.analyzingTipos, tipo),
+        }));
         let ocr: DocumentOcrResult;
         try {
           ocr = await tramitesClient.analyzeDocument(tipo, file, tenantId);
@@ -210,7 +239,7 @@ export function useProcedureDocuments(
           // Fallo HTTP del OCR → NO se sube. El operador puede reintentar / adjuntar manualmente.
           setState((s) => ({
             ...s,
-            analyzingTipo: null,
+            analyzingTipos: withoutTipoInSet(s.analyzingTipos, tipo),
             error:
               err instanceof Error ? err.message : 'Error al analizar el documento',
           }));
@@ -233,9 +262,23 @@ export function useProcedureDocuments(
         // el cargue, solo queda marcado en la UI (ocrResults[tipo].status = 'rejected').
         setState((s) => ({
           ...s,
-          analyzingTipo: null,
+          analyzingTipos: withoutTipoInSet(s.analyzingTipos, tipo),
           ocrResults: { ...s.ocrResults, [tipo]: ocrUi },
         }));
+
+        // HU #10975 — persistir en field_values lo que el OCR extrajo, para que el certificado de
+        // vigencia SOAT y RTM deje de salir con celdas en blanco. Solo con el documento VERIFICADO:
+        // de un documento rechazado (tipo equivocado o VIN que no cruza) no se toma ningún dato.
+        // Best-effort deliberado: si esta llamada falla, el adjunto ya se sube igual — el documento
+        // es el entregable y los field_values son un enriquecimiento del certificado, así que un
+        // fallo aquí no puede costarle al operador el cargue que ya hizo.
+        if (!evaluation.rechazado && ocr.data && OCR_TIPOS_PERSISTIBLES.includes(tipo)) {
+          try {
+            await tramitesClient.persistOcrFields(instanceId, tipo, ocr.data, tenantId);
+          } catch {
+            // Silencio intencionado: ver comentario de arriba.
+          }
+        }
       } else if (usaOcr && file.size > OCR_MAX_BYTES) {
         // 10–20 MB: se salta el OCR (excede el límite del análisis), se sube igual y se marca "no analizado".
         setState((s) => ({
@@ -251,17 +294,23 @@ export function useProcedureDocuments(
         }));
       }
 
-      // 2) Subida a S3 (flujo presign → S3 → register existente).
-      setState((s) => ({ ...s, uploadingTipo: tipo }));
+      // 2) Subida a S3 (flujo presign → S3 → register existente). Varios tipos en paralelo.
+      setState((s) => ({
+        ...s,
+        uploadingTipos: withTipoInSet(s.uploadingTipos, tipo),
+      }));
       try {
         await tramitesClient.uploadAttachment(instanceId, tipo, fileToUpload, tenantId);
-        setState((s) => ({ ...s, uploadingTipo: null }));
+        setState((s) => ({
+          ...s,
+          uploadingTipos: withoutTipoInSet(s.uploadingTipos, tipo),
+        }));
         await refresh();
         return true;
       } catch (err) {
         setState((s) => ({
           ...s,
-          uploadingTipo: null,
+          uploadingTipos: withoutTipoInSet(s.uploadingTipos, tipo),
           error:
             err instanceof Error ? err.message : 'Error al subir el documento',
         }));

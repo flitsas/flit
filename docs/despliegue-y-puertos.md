@@ -265,6 +265,49 @@ que define una clave gana.
   ambiente** (`core-api:${CORE_API_PORT}` / `python-ml:${PYTHON_ML_PORT}`). Por eso no
   hay que tocar el JSON al cambiar de ambiente: basta el número de puerto que inyecta el CD.
 
+### Validaciones de trámite configurables por ambiente (HU #10970)
+
+Dos reglas transversales del ciclo de vida del trámite se pueden **bloquear, degradar a
+advertencia o apagar por ambiente**, para poder repetir pruebas con los mismos VIN y placas
+sin relajar producción:
+
+| Validación | Sección | Qué bloquea cuando está en `block` |
+|------------|---------|------------------------------------|
+| CF-01 duplicidad de trámite en curso | `TramiteValidations:DuplicateActiveProcedure:Mode` | `409 DUPLICATE_ACTIVE_PROCEDURE` (VIN en Matrícula Inicial, placa en Traspaso) |
+| CF-03 precondición registral | `TramiteValidations:VehicleRegistrationState:Mode` | `422 VEHICLE_STATE_INVALID_FOR_TYPE` (vehículo ya matriculado, fuente RUNT o FLIT) |
+
+| Modo | Efecto |
+|------|--------|
+| `block` | **Default.** Corta el flujo con el error correspondiente |
+| `warn` | No corta: deja el hallazgo como check `warn` (semáforo amarillo) y el operador sigue |
+| `off` | La validación no se evalúa: ni bloquea ni deja señal |
+
+**Por qué no se resuelve con `appsettings.{Environment}.json`:** DEV, QA y PDN corren los tres con
+`ASPNETCORE_ENVIRONMENT=Development` (ver el `environment:` de `docker-compose.prod.yml`), así que
+ese archivo no distingue ambientes — de hecho `appsettings.QA.json` **nunca se carga** en el VPS de
+QA. El canal real por ambiente es el **`.env` de cada VPS**, que alimenta las variables del compose:
+
+```bash
+# .env del VPS — valores de la matriz acordada
+TRAMITE_VALIDATION_DUPLICATE_MODE=warn        # DEV: warn · QA: block · PDN: block
+TRAMITE_VALIDATION_VEHICLE_STATE_MODE=warn    # DEV: warn · QA: warn  · PDN: block
+```
+
+Sin esas variables el compose inyecta `block` en ambas: **un ambiente nunca se relaja por olvido**.
+Un valor no reconocido (`false`, `desactivado`, …) también resuelve a `block` y deja un `warning` en
+el log de arranque. El modo efectivo de cada validación se registra al arrancar con la categoría
+`Flit.TramiteValidations`.
+
+En **local**, como `appsettings.Development.json` está gitignored, cada desarrollador añade la
+sección a su copia:
+
+```jsonc
+"TramiteValidations": {
+  "DuplicateActiveProcedure": { "Mode": "off" },
+  "VehicleRegistrationState": { "Mode": "off" }
+}
+```
+
 ---
 
 ## 5. Comunicación detallada Front → Gateway → Core
@@ -300,9 +343,17 @@ correspondiente. Reglas actuales:
 | `/api/**` | core-api `:4003` | passthrough `/api/**` | `JwtRequired` |
 | `/hubs/**` | core-api `:4003` | — (WebSocket/SignalR) | `JwtRequired` |
 | `/ml/**` | python-ml `:4012` | quita el prefijo `/ml` → `/**` | `JwtRequired` |
+| `/api/v1/migracion/**` | migracion-api `:4030` | — | cabecera `X-Migration-Key` |
 
 > Las rutas más específicas (`/api/v1/auth`, `/api/public/idsecure`) se evalúan antes
 > que la genérica `/api/**`, por eso los endpoints públicos no caen bajo `JwtRequired`.
+
+> **`migracion-cluster` tiene `ActivityTimeout: 00:30:00`, no los 30 s de
+> `core-api-cluster`.** Esa es la razón de que sea un cluster aparte: una migración de
+> instancia 3 (snapshot de PDFs de V1 + subidas de 9–12 MB) tarda más de 30 s, y bajo el
+> timeout de core-api el gateway devolvería 504 sobre migraciones que **sí** se
+> completaron. En YARP el `ActivityTimeout` es por cluster, así que esto no afecta al
+> resto del tráfico. **No mover esa ruta a `core-api-cluster`.**
 
 Flujo de una petición autenticada típica:
 
@@ -437,6 +488,7 @@ secrets*) — compartidos por todos los ambientes (un solo VPS):
 |--------|----------|
 | `HOSTINGER_SSH_HOST` / `HOSTINGER_SSH_USER` / `HOSTINGER_SSH_KEY` | Acceso SSH al VPS |
 | `GHCR_PAT` | Login a GHCR en el VPS para `pull` (scope `read:packages`) |
+| `GHCR_USERNAME` | Usuario GitHub **dueño del PAT** usado en `docker login` en el VPS (no usar `github.actor` — rompe deploys si mergea otro usuario). Secret de repositorio o variable `GHCR_USERNAME`. |
 
 **Secrets de Environment** (*Settings → Environments → {develop, staging, production}*)
 — específicos por ambiente:

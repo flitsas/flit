@@ -8,11 +8,13 @@ import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBounda
 import { ToastProvider } from "@/components/admin/Toast";
 import { CompanyConfigTabs } from "@/components/admin/companies/CompanyConfigTabs";
 import { WhitelistPanel } from "@/components/admin/companies/panels/WhitelistPanel";
-import { OTMatrixPanel } from "@/components/admin/companies/panels/OTMatrixPanel";
+import { OTConfigTablePanel } from "@/components/admin/companies/panels/OTConfigTablePanel";
 import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel";
+import { PlatePreassignViewer } from "@/components/admin/companies/panels/PlatePreassignViewer";
 import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
-import { fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
-import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
+import { RepresentativesAndVaultTab } from "@/components/admin/companies/legal-representatives/RepresentativesAndVaultTab";
+import { fetchCompany, fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
+import type { CompanyListItem, TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 
 // Consola admin — detalle de compañía (HU #10194, AC2–AC5/AC7). Carga la
 // configuración y orquesta las pestañas con guardado atómico + slots de whitelist,
@@ -33,15 +35,23 @@ function CompanyDetail() {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [settings, setSettings] = useState<TenantSettings | null>(null);
   const [isNew, setIsNew] = useState(false);
+  // HU #11062 — identidad de la compañía para el encabezado. Se pide APARTE de la configuración: la
+  // de configuración devuelve 404 en una compañía sin parametrizar, que es justo cuando más importa
+  // saber sobre qué compañía se está escribiendo.
+  const [company, setCompany] = useState<CompanyListItem | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const data = await fetchTenantSettings(tenantId, signal);
+        const [data, identity] = await Promise.all([
+          fetchTenantSettings(tenantId, signal),
+          fetchCompany(tenantId, signal),
+        ]);
         if (signal?.aborted) {
           return;
         }
+        setCompany(identity);
         // 404 → compañía sin configurar: se muestra el formulario en blanco para
         // que el SuperAdmin defina y guarde (el PUT hace upsert).
         setIsNew(data === null);
@@ -107,11 +117,19 @@ function CompanyDetail() {
               )}
               <CompanyConfigTabs
                 settings={settings}
+                company={company}
                 onSaveSettings={handleSaveSettings}
                 whitelistSlot={<WhitelistPanel tenantId={tenantId} />}
-                otSlot={<OTMatrixPanel tenantId={tenantId} />}
+                otSlot={<OTConfigTablePanel tenantId={tenantId} />}
                 auditSlot={<AuditLogPanel tenantId={tenantId} />}
                 documentosSlot={<CompanyDocumentParamsPanel tenantId={tenantId} />}
+                platesSlot={<PlatePreassignViewer tenantId={tenantId} />}
+                legalRepresentativesSlot={
+                  <RepresentativesAndVaultTab
+                    tenantId={tenantId}
+                    baulVisible={settings.baulFirmasActivo}
+                  />
+                }
               />
             </>
           )}
@@ -132,6 +150,7 @@ function defaultSettings(tenantId: string): TenantSettings {
       onlyOwnVehicles: false,
     },
     baulFirmasActivo: false,
+    preasignacionPlacaActiva: false,
     enrutamientoSMTP: "FLIT_SMTP",
     notificationTarget: "NINGUNO",
     metodosRecaudo: [],

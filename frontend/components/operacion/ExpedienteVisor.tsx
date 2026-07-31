@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Car, Check, Download, FileText, ShieldCheck, User } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { documentLabel } from '@/lib/tramites/document-labels';
 import type {
   Actor,
   BiometricValidation,
@@ -24,6 +25,11 @@ interface Props {
   vin: string;
   attachments: ProcedureAttachment[];
   biometric: BiometricValidation[];
+  /**
+   * HU #11014 — partes cuya identidad queda cubierta por la firma del baúl (ADR-0025 §4). Se rotulan
+   * como «firmado desde el baúl»: no hay validación biométrica ni certificado que mostrar.
+   */
+  firmaBaulPartes?: string[];
   orgTransito: { nombre?: string; ciudad?: string; codigo?: string };
 }
 
@@ -39,6 +45,15 @@ function D({ label, value }: { label: string; value?: string | null }) {
       <p className="text-xs font-medium break-words">{value || '—'}</p>
     </div>
   );
+}
+
+/**
+ * Una parte es persona jurídica cuando su documento es NIT (HU #10856): valida el representante legal.
+ * HU #11014 — mismo criterio que el wizard (`isJuridical` de ActorsForm), que además admite el tipo de
+ * persona explícito; aquí el detalle solo expone el documento, así que el NIT manda.
+ */
+function esPersonaJuridica(actor: Actor | null | undefined): boolean {
+  return actor?.documentType === 'NIT';
 }
 
 function SectionTitle({ children }: { children: string }) {
@@ -58,9 +73,21 @@ export default function ExpedienteVisor({
   vin,
   attachments,
   biometric,
+  firmaBaulPartes = [],
   orgTransito,
 }: Props) {
   const [mainTab, setMainTab] = useState<MainTab>('vehiculo');
+
+  // Caché del certificado de identidad por validación (HU #10861): se descarga una vez por parte y
+  // se conserva al cambiar de pestaña; los objectURL se liberan al desmontar el visor.
+  const certCache = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    const cache = certCache.current;
+    return () => {
+      for (const url of cache.values()) URL.revokeObjectURL(url);
+      cache.clear();
+    };
+  }, []);
 
   const fv = useMemo(
     () => (key: string) => fieldValues.find((f) => f.fieldKey === key)?.valueText ?? '',
@@ -193,13 +220,20 @@ export default function ExpedienteVisor({
                 <D label="Nombre" value={vendedor?.fullName} />
                 <D label="Tipo doc" value={vendedor?.documentType || 'CC'} />
                 <D label="Número" value={vendedor?.documentNumber} />
-                <D label="Email" value={vendedorBio?.email} />
+                <D label="Email" value={vendedorBio?.email || vendedor?.email || undefined} />
               </div>
             </div>
 
+            {esPersonaJuridica(vendedor) && <RepresentanteLegalBlock bio={vendedorBio} />}
+
             <div>
               <SectionTitle>Validación de identidad</SectionTitle>
-              <IdentidadBlock bio={vendedorBio} />
+              <IdentidadBlock
+                bio={vendedorBio}
+                firmaBaul={firmaBaulPartes.includes('vendedor')}
+                instanceId={instanceId}
+                certCache={certCache}
+              />
             </div>
           </>
         )}
@@ -215,13 +249,20 @@ export default function ExpedienteVisor({
                 <D label="Nombre" value={comprador?.fullName} />
                 <D label="Tipo doc" value={comprador?.documentType || 'CC'} />
                 <D label="Número" value={comprador?.documentNumber} />
-                <D label="Email" value={compradorBio?.email} />
+                <D label="Email" value={compradorBio?.email || comprador?.email || undefined} />
               </div>
             </div>
 
+            {esPersonaJuridica(comprador) && <RepresentanteLegalBlock bio={compradorBio} />}
+
             <div>
               <SectionTitle>Validación de identidad</SectionTitle>
-              <IdentidadBlock bio={compradorBio} />
+              <IdentidadBlock
+                bio={compradorBio}
+                firmaBaul={firmaBaulPartes.includes('comprador')}
+                instanceId={instanceId}
+                certCache={certCache}
+              />
             </div>
 
             {(orgTransito?.nombre || orgTransito?.codigo) && (
@@ -250,20 +291,100 @@ export default function ExpedienteVisor({
   );
 }
 
-/** Bloque de estado de identidad (sin fotos: placeholder «Sin foto»). */
-function IdentidadBlock({ bio }: { bio: BiometricValidation | null }) {
-  const estado = bio?.status;
-  const aprobado = estado === 'aprobado';
-  const rechazado = estado === 'rechazado';
-  const pendiente = estado === 'enviado' || estado === 'en_proceso';
+/**
+ * Datos del representante legal de una persona jurídica (HU #10856): cuando la parte es jurídica (NIT),
+ * la validación de identidad la realiza el representante legal, así que se muestran sus datos (tomados de
+ * la validación biométrica) junto al certificado de validación (que aparece en el bloque de identidad).
+ */
+function RepresentanteLegalBlock({ bio }: { bio: BiometricValidation | null }) {
+  return (
+    <div>
+      <SectionTitle>Representante legal</SectionTitle>
+      <div
+        className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl border"
+        style={{ borderColor: BORDER }}
+      >
+        <D label="Nombre" value={bio?.name} />
+        <D label="Tipo doc" value={bio?.documentType} />
+        <D label="Número" value={bio?.documentNumber} />
+        <D label="Email" value={bio?.email} />
+      </div>
+      <p className="text-[10px] opacity-60 mt-1">
+        La validación de identidad y su certificado corresponden al representante legal.
+      </p>
+    </div>
+  );
+}
 
-  const { label, color } = aprobado
+/**
+ * Bloque de estado de identidad (HU #10861): además del estado, muestra el certificado de validación
+ * de identidad del proveedor en un visor embebido, cargado de forma perezosa al abrir la pestaña. Si la
+ * validación no está aprobada, se muestra solo el estado (sin visor).
+ */
+function IdentidadBlock({
+  bio,
+  firmaBaul = false,
+  instanceId,
+  certCache,
+}: {
+  bio: BiometricValidation | null;
+  /** HU #11014 — la identidad de la parte está cubierta por su firma del baúl (ADR-0025 §4). */
+  firmaBaul?: boolean;
+  instanceId: string | null;
+  certCache: React.RefObject<Map<string, string>>;
+}) {
+  const estado = bio?.status;
+  const aprobado = !firmaBaul && estado === 'aprobado';
+  const rechazado = !firmaBaul && estado === 'rechazado';
+  const pendiente = !firmaBaul && (estado === 'enviado' || estado === 'en_proceso');
+
+  const { label, color } = firmaBaul
+    ? { label: 'Firmado desde el baúl de firmas', color: '#5B8A1F' }
+    : aprobado
     ? { label: 'Validada', color: '#5B8A1F' }
     : rechazado
       ? { label: 'Rechazada', color: '#FF4E00' }
       : pendiente
         ? { label: 'Pendiente', color: '#F9AC00' }
         : { label: 'Sin validación', color: '#9AA5B1' };
+
+  // HU #11014 — con firma del baúl NO hay validación biométrica ni certificado: se rotula como firmada
+  // desde el baúl y no se intenta descargar nada (antes hablaba de un certificado inexistente).
+  const validationId = firmaBaul ? null : (bio?.id ?? null);
+  const [certUrl, setCertUrl] = useState<string | null>(
+    () => (validationId ? (certCache.current.get(validationId) ?? null) : null),
+  );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!aprobado || !validationId || !instanceId) return;
+
+    // Ya en caché (lo tomó el inicializador de useState al montar): no volver a descargar.
+    if (certCache.current.has(validationId)) return;
+
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { blob } = await tramitesClient.downloadBiometricCertificado(instanceId, validationId);
+        if (cancelled) return;
+        const objectUrl = URL.createObjectURL(blob);
+        certCache.current.set(validationId, objectUrl);
+        setCertUrl(objectUrl);
+      } catch (e: unknown) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'No se pudo cargar el certificado.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [aprobado, validationId, instanceId, certCache]);
 
   return (
     <div className="p-3 rounded-xl border space-y-3" style={{ borderColor: BORDER }}>
@@ -273,7 +394,7 @@ function IdentidadBlock({ bio }: { bio: BiometricValidation | null }) {
           style={{ background: `color-mix(in srgb, ${color} 16%, transparent)`, color }}
           aria-hidden="true"
         >
-          {aprobado ? <Check className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+          {aprobado || firmaBaul ? <Check className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
         </span>
         <div>
           <p className="text-xs font-semibold" style={{ color }}>
@@ -285,20 +406,44 @@ function IdentidadBlock({ bio }: { bio: BiometricValidation | null }) {
         </div>
       </div>
 
-      {/* Sin fotos por ahora (identidad/biométrica mock hasta acuerdo con proveedor). */}
-      <div className="grid grid-cols-3 gap-2">
-        {['Selfie', 'Frente', 'Reverso'].map((slot) => (
-          <div key={slot} className="text-center">
+      {/* HU #11014 — con firma del baúl no hay certificado del proveedor: se explica la fuente de la firma. */}
+      {firmaBaul && (
+        <p className="text-[11px] opacity-70" data-testid="identidad-firma-baul">
+          La identidad de esta parte se acredita con su firma registrada en el baúl de firmas; no
+          requiere validación biométrica ni certificado de identidad.
+        </p>
+      )}
+
+      {/* Certificado de validación de identidad (visor perezoso). Solo cuando la validación está aprobada. */}
+      {aprobado ? (
+        <div className="rounded-xl border overflow-hidden" style={{ borderColor: BORDER }}>
+          {loading && (
             <div
-              className="aspect-[3/4] rounded-xl border grid place-items-center text-[9px] opacity-50"
-              style={{ borderColor: BORDER }}
+              className="h-[420px] grid place-items-center text-[11px] opacity-60 animate-pulse bg-[#F4F7FC] dark:bg-white/5"
+              data-testid="cert-loading"
             >
-              Sin foto
+              Cargando certificado de identidad…
             </div>
-            <p className="text-[8px] font-semibold opacity-60 mt-0.5 uppercase">{slot}</p>
-          </div>
-        ))}
-      </div>
+          )}
+          {!loading && error && (
+            <div className="p-3 text-[11px]" style={{ color: '#FF4E00' }} role="alert">
+              {error}
+            </div>
+          )}
+          {!loading && !error && certUrl && (
+            <iframe
+              src={certUrl}
+              title="Certificado de validación de identidad"
+              className="w-full h-[420px]"
+              data-testid="cert-iframe"
+            />
+          )}
+        </div>
+      ) : (
+        <p className="text-[11px] opacity-60">
+          El certificado de identidad estará disponible cuando la validación sea aprobada.
+        </p>
+      )}
     </div>
   );
 }
@@ -361,11 +506,16 @@ function DocRow({
     setBusy(true);
     setError(false);
     try {
-      const { blob, filename } = await tramitesClient.downloadAttachment(instanceId, d.id);
+      const { blob, filename } = await tramitesClient.downloadAttachment(
+        instanceId,
+        d.id,
+        undefined,
+        d.filename,
+      );
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = filename || d.filename;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -381,8 +531,8 @@ function DocRow({
     <li className="rounded-xl border p-3 flex items-center gap-3" style={{ borderColor: BORDER }}>
       <FileText className="h-4 w-4 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold capitalize">
-          {d.tipo} · {d.filename}
+        <p className="text-xs font-semibold">
+          {documentLabel(d.tipo)} <span className="opacity-50 font-normal">· {d.filename}</span>
         </p>
         <p className="text-[10px] opacity-60 truncate" title={d.sha256}>
           SHA-256: {d.sha256}

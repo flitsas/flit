@@ -1,4 +1,5 @@
 using Flit.Tramites.Application.Identity;
+using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -38,7 +39,7 @@ internal static class BiometricaEndpoints
                     "datos_incompletos" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Completa nombre, tipo de documento, documento y email."),
                     "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor o vacío)."),
                     "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                    "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en estado borrador."),
+                    "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en borrador o con subsanación activa."),
                     "actor_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Captura el actor de la parte antes de iniciar la validación de identidad."),
                     "biometria_activa" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe una biométrica activa o aprobada para esta parte."),
                     "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor de validación de identidad rechazó la solicitud."),
@@ -55,7 +56,7 @@ internal static class BiometricaEndpoints
                 "datos_incompletos" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Completa nombre, tipo de documento, documento y email."),
                 "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor o vacío)."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en estado borrador."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en borrador o con subsanación activa."),
                 "biometria_activa" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe una biométrica activa o aprobada para esta parte."),
                 _ => Results.Created($"/api/v1/tramites/instances/{id}/biometric/{result!.Validation.Id}", result),
             };
@@ -104,6 +105,8 @@ internal static class BiometricaEndpoints
             [FromQuery] int? venceEnDias,
             [FromQuery] int? page,
             [FromQuery] int? pageSize,
+            // HU #10867 — true = solo standalone; false = solo ligadas a trámite; omitido = todas.
+            [FromQuery] bool? standalone,
             ListTenantBiometricValidationsHandler handler,
             CancellationToken ct) =>
         {
@@ -129,7 +132,8 @@ internal static class BiometricaEndpoints
                 expiraHasta,
                 venceEnDias,
                 page ?? 1,
-                pageSize ?? TenantBiometricValidationListQuery.DefaultPageSize);
+                pageSize ?? TenantBiometricValidationListQuery.DefaultPageSize,
+                standalone);
 
             var (result, error) = await handler.HandleAsync(tenantId.Value, query, ct);
             return error is not null
@@ -184,6 +188,43 @@ internal static class BiometricaEndpoints
             var count = await handler.HandleAsync(tenantId.Value, ct);
             return Results.Ok(new { requeued = count });
         }).WithName("RequeueAllStuckIdentityValidations");
+
+        // GET alertas/recordatorios de validación de identidad del TENANT (HU #10873, AC1/AC2): clasifica
+        // cada validación en rechazada|expirada|por_vencer|atascada y marca la que amerita recordatorio de
+        // reenvío (pendiente|por_vencer). Entrega POR PULL — consumida por el submódulo de Validaciones
+        // (HU #10875); NO hay push/notificación in-app (ver nota de alcance en el handler).
+        group.MapGet("/identity-validation/alerts", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ListIdentityValidationAlertsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var result = await handler.HandleTenantAsync(tenantId.Value, ct);
+            return Results.Ok(result);
+        })
+        .WithName("ListIdentityValidationAlerts")
+        .Produces<IdentityValidationAlertsResponse>(StatusCodes.Status200OK);
+
+        // GET alertas/recordatorios de validación de identidad de UN trámite puntual (HU #10873): misma
+        // clasificación que el endpoint del tenant, acotada a las partes de esta instancia.
+        group.MapGet("/instances/{id:guid}/identity-validation/alerts", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ListIdentityValidationAlertsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleInstanceAsync(id, tenantId.Value, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
+                : Results.Ok(result);
+        })
+        .WithName("ListProcedureInstanceIdentityValidationAlerts")
+        .Produces<IdentityValidationAlertsResponse>(StatusCodes.Status200OK);
 
         // POST simular biométrica (mock, sin fotos) -> 200 BiometricValidationDto aprobada.
         group.MapPost("/instances/{id:guid}/biometric/simulate", async (
@@ -280,6 +321,174 @@ internal static class BiometricaEndpoints
         })
         .WithName("ReconciliarProcedureInstanceIdentity")
         .Produces<ReconciliarIdentidadResult>(StatusCodes.Status200OK);
+
+        // POST crear prevalidación standalone (HU #10866, CF-01): crea una validación biométrica sin
+        // trámite previo. Hace upsert de la entidad Person por (tenant, docType, docNum) y delega
+        // la captura al proveedor activo (Kyverum → captureUrl real; mock → magic-link).
+        // 201 creada, 202 encolada (fallo transitorio Kyverum), 409 prevalidación activa existente.
+        group.MapPost("/biometric-validations", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            [FromBody] IniciarPrevalidacionRequest? body,
+            IniciarPrevalidacionHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+            if (body is null)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el cuerpo de la solicitud.");
+
+            var (result, error) = await handler.HandleAsync(tenantId.Value, body, ct);
+            return error switch
+            {
+                "datos_incompletos" => Results.Problem(statusCode: 400, title: "Bad Request",
+                    detail: "Completa tipo de documento, número de documento, nombre y correo."),
+                // CF-01/D1 (ADR-0036, Feature #11004) — la prevalidación standalone solo admite persona
+                // natural; la validación de personas jurídicas queda exclusiva del flujo de trámite.
+                "prevalidacion_solo_natural" => Results.Problem(statusCode: 422, title: "Unprocessable Entity",
+                    detail: "La prevalidación solo admite persona natural. Para personas jurídicas, valida la identidad dentro de un trámite."),
+                "prevalidacion_activa" => Results.Problem(statusCode: 409, title: "Conflict",
+                    detail: "Ya existe una prevalidación activa para este documento."),
+                "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
+                    detail: "El proveedor de validación de identidad rechazó la solicitud."),
+                "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable",
+                    detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+                _ when result!.Queued => Results.Accepted(
+                    $"/api/v1/tramites/biometric-validations/{result.Validation.Id}", result),
+                _ => Results.Created(
+                    $"/api/v1/tramites/biometric-validations/{result!.Validation.Id}", result),
+            };
+        })
+        .WithName("IniciarPrevalidacionIdentidad")
+        .Produces<IniciarPrevalidacionResult>(StatusCodes.Status201Created)
+        .Produces<IniciarPrevalidacionResult>(StatusCodes.Status202Accepted);
+
+        // PATCH editar los datos de contacto de una prevalidación standalone (HU #10943, CF-03, D7):
+        // solo nombre/correo (titular) y nombre/correo del representante legal (persona jurídica).
+        // Un cambio de correo dispara el reenvío automático en la misma transacción (D8); solo el
+        // nombre NO reenvía. Editable ⟺ ProcedureInstanceId IS NULL AND PersonId IS NOT NULL (D12).
+        group.MapPatch("/biometric-validations/{id:guid}", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            [FromBody] EditarPrevalidacionRequest? body,
+            EditarPrevalidacionHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+            if (body is null)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el cuerpo de la solicitud.");
+
+            var (result, error, cooldownMinutos) = await handler.HandleAsync(tenantId.Value, id, body, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Prevalidación no encontrada."),
+                "no_editable" => Results.Problem(statusCode: 403, title: "Forbidden",
+                    detail: "Esta validación pertenece a un trámite; edítala desde el trámite."),
+                "identidad_aprobada" => Results.Problem(statusCode: 409, title: "Conflict",
+                    detail: "La identidad ya está aprobada. Para revalidar, crea una prevalidación nueva."),
+                // D11 — RESERVADO, hoy inalcanzable: el reuso del CF-02 solo toma validaciones aprobadas
+                // y vigentes, que ya quedan bloqueadas por el guard D9 (identidad_aprobada). Se mantiene
+                // el mapeo para no cambiar el contrato si el guard llega a implementarse por separado.
+                "referenciada_por_tramite" => Results.Problem(statusCode: 409, title: "Conflict",
+                    detail: "Esta prevalidación ya está referenciada por un trámite."),
+                "documento_no_editable" => Results.Problem(statusCode: 422, title: "Unprocessable Entity",
+                    detail: "El tipo/número de documento no es editable. Anula el registro y crea una prevalidación nueva."),
+                "reenvio_en_cooldown" => Results.Problem(statusCode: 429, title: "Too Many Requests",
+                    detail: $"Espera {cooldownMinutos} minuto(s) antes de reenviar de nuevo."),
+                "tope_reenvios" => Results.Problem(statusCode: 429, title: "Too Many Requests",
+                    detail: "Se agotaron los reenvíos disponibles. Anula el registro y crea una prevalidación nueva."),
+                "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
+                    detail: "El proveedor de validación de identidad rechazó la solicitud."),
+                "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable",
+                    detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+                _ => Results.Ok(result),
+            };
+        })
+        .WithName("EditarPrevalidacionIdentidad")
+        .Produces<EditarPrevalidacionResult>(StatusCodes.Status200OK);
+
+        // POST reenviar manualmente la validación de identidad de una prevalidación standalone (HU #10943,
+        // CF-03, D8): mismo registro, token/enlace nuevo, TTL 24h, intentos/sondeos reiniciados. 200 si el
+        // envío se completó; 202 si quedó encolada (falla transitoria del proveedor).
+        group.MapPost("/biometric-validations/{id:guid}/resend", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ReenviarPrevalidacionHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error, cooldownMinutos) = await handler.HandleAsync(tenantId.Value, id, ct);
+            return error switch
+            {
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Prevalidación no encontrada."),
+                "no_editable" => Results.Problem(statusCode: 403, title: "Forbidden",
+                    detail: "Esta validación pertenece a un trámite; reenvíala desde el trámite."),
+                "identidad_aprobada" => Results.Problem(statusCode: 409, title: "Conflict",
+                    detail: "La identidad ya está aprobada. Para revalidar, crea una prevalidación nueva."),
+                // D11 — RESERVADO, hoy inalcanzable: el reuso del CF-02 solo toma validaciones aprobadas
+                // y vigentes, que ya quedan bloqueadas por el guard D9 (identidad_aprobada). Se mantiene
+                // el mapeo para no cambiar el contrato si el guard llega a implementarse por separado.
+                "referenciada_por_tramite" => Results.Problem(statusCode: 409, title: "Conflict",
+                    detail: "Esta prevalidación ya está referenciada por un trámite."),
+                "reenvio_en_cooldown" => Results.Problem(statusCode: 429, title: "Too Many Requests",
+                    detail: $"Espera {cooldownMinutos} minuto(s) antes de reenviar de nuevo."),
+                "tope_reenvios" => Results.Problem(statusCode: 429, title: "Too Many Requests",
+                    detail: "Se agotaron los reenvíos disponibles. Anula el registro y crea una prevalidación nueva."),
+                "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
+                    detail: "El proveedor de validación de identidad rechazó la solicitud."),
+                "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable",
+                    detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+                _ when result!.Queued => Results.Accepted(
+                    $"/api/v1/tramites/biometric-validations/{id}", result),
+                _ => Results.Ok(result),
+            };
+        })
+        .WithName("ReenviarPrevalidacionIdentidad")
+        .Produces<ReenviarPrevalidacionResult>(StatusCodes.Status200OK)
+        .Produces<ReenviarPrevalidacionResult>(StatusCodes.Status202Accepted);
+
+        // GET detalle de UNA validación de identidad por id (CF-06, Feature #11004, ADR-0036): tenant-scoped,
+        // sirve tanto para prevalidaciones standalone (sin instanceId) como para validaciones de trámite.
+        // Mismo DTO que el listado por-instancia (BiometricValidationDto), pensado para poll de detalle.
+        group.MapGet("/biometric-validations/{id:guid}", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetPrevalidacionDetailHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(tenantId.Value, id, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada.")
+                : Results.Ok(result);
+        })
+        .WithName("GetPrevalidacionDetail")
+        .Produces<BiometricValidationDto>(StatusCodes.Status200OK);
+
+        // GET bitácora de una validación de identidad SIN depender de instancia (CF-07, Feature #11004,
+        // ADR-0036): equivalente al endpoint por-instancia, mismo query/saneamiento, pero sirve tanto a
+        // prevalidaciones standalone como a validaciones de trámite. Autorización genérica del módulo
+        // (D2 — cualquier usuario autenticado del tenant, NO restringido a SuperAdmin).
+        group.MapGet("/biometric-validations/{validationId:guid}/audit", async (
+            Guid validationId,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            GetIdentityAuditByValidationHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(tenantId.Value, validationId, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada.")
+                : Results.Ok(result);
+        })
+        .WithName("GetIdentityAuditByValidation")
+        .Produces<IdentityAuditResponse>(StatusCodes.Status200OK);
 
         // POST asegurar identidad de una parte (HU #10350): reutiliza una validación vigente de la
         // persona (clonándola) o responde que requiere validación, para que el front la dispare sin clic.

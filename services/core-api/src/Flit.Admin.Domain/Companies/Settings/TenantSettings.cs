@@ -21,6 +21,19 @@ public sealed class TenantSettings
     /// <summary>Baúl de firmas activo (<c>signature_vault_enabled</c>).</summary>
     public required bool SignatureVaultEnabled { get; init; }
 
+    /// <summary>
+    /// Preasignación de placa activa (<c>plate_preassign_enabled</c>, Feature #10587). Nace apagada;
+    /// habilita la ruta de placa (matrícula inicial) cuando además el OT tiene <c>allow_plate_preassign</c>
+    /// y existe grant vigente. No <c>required</c>: default false para no romper construcciones existentes.
+    /// </summary>
+    public bool PlatePreassignEnabled { get; init; }
+
+    /// <summary>
+    /// Omite Asignado (checks gestor) cuando hay placa completa al radicar → Terminado
+    /// (<c>plate_flow_skip_to_terminado</c>).
+    /// </summary>
+    public bool PlateFlowSkipToTerminado { get; init; }
+
     /// <summary>Canal de enrutamiento de notificaciones (<c>notification_channel</c>).</summary>
     public required NotificationChannel NotificationChannel { get; init; }
 
@@ -45,6 +58,20 @@ public sealed class TenantSettings
     public ConsultationProviderConfig ConsultationProviderConfig { get; init; } = ConsultationProviderConfig.Empty;
 
     /// <summary>
+    /// Proveedores de avalúo comercial habilitados por tenant
+    /// (<c>avaluo_provider_config</c>, jsonb, Feature #10707). Default = solo Fasecolda.
+    /// </summary>
+    public AvaluoProviderConfig AvaluoProviderConfig { get; init; } = AvaluoProviderConfig.Default;
+
+    /// <summary>
+    /// Fuente de la consulta de comparendos (<c>fines_query_source</c>, FEATURE 02):
+    /// <see cref="TenantSettingsCodes.FinesSourceInternal"/> o
+    /// <see cref="TenantSettingsCodes.FinesSourceExternal"/>. Default <c>external</c> (SIMIT en línea).
+    /// Su USO en el flujo del trámite llega en FEATURE 05.
+    /// </summary>
+    public string FinesQuerySource { get; init; } = TenantSettingsCodes.FinesSourceExternal;
+
+    /// <summary>
     /// Configuración por defecto cuando aún no existe fila para el tenant. La matrícula
     /// inicial nace APAGADA (default false): la compañía debe habilitarla explícitamente.
     /// </summary>
@@ -55,10 +82,14 @@ public sealed class TenantSettings
         AllowMiscNewVehicles = true,
         OnlyOwnVehicles = false,
         SignatureVaultEnabled = false,
+        PlatePreassignEnabled = false,
+        PlateFlowSkipToTerminado = false,
         NotificationChannel = NotificationChannel.FlitSmtp,
         NotificationTarget = NotificationTarget.Radicador,
         PaymentMethods = [],
         RuntFailoverTimeoutMs = 60_000,
         ConsultationProviderConfig = ConsultationProviderConfig.Empty,
+        AvaluoProviderConfig = AvaluoProviderConfig.Default,
+        FinesQuerySource = TenantSettingsCodes.FinesSourceExternal,
     };
 }

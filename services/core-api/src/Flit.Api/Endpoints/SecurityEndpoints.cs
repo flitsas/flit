@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Security.Claims;
+using Flit.Admin.Application.Auditing;
 using Flit.Api.Authorization;
+using Flit.Api.Endpoints.Auditing;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CancelInvitation;
@@ -150,7 +152,8 @@ public static class SecurityEndpoints
                     new ErrorResponse("EMAIL_BELONGS_TO_DELETED_USER", ex.Message),
                     statusCode: StatusCodes.Status409Conflict);
             }
-        });
+        }).AddEndpointFilter(new AdminAuditFilter(
+            AuditVocabulary.Modules.Users, AuditVocabulary.Operations.Invite, "invitation", "INVITATION"));
 
         // HU #10625 — reenviar invitación pendiente: SIEMPRE regenera el token de activación
         // (el enlace anterior queda invalidado) y reenvía el correo. Mismo alcance que crear
@@ -210,7 +213,9 @@ public static class SecurityEndpoints
                         retryAfterSeconds),
                     statusCode: StatusCodes.Status429TooManyRequests);
             }
-        });
+        }).AddEndpointFilter(new AdminAuditFilter(
+            AuditVocabulary.Modules.Users, AuditVocabulary.Operations.ResendInvite, "invitation",
+            "INVITATION", "invitationId"));
 
         // HU #10627 — cancelar invitación pendiente. Distinto de reenviar (HU #10625): anula la
         // invitación en vez de reenviar el correo. Mismo patrón de alcance que POST /invitations:
@@ -258,7 +263,10 @@ public static class SecurityEndpoints
                     new ErrorResponse("INVITATION_NOT_PENDING", "La invitación ya no está pendiente (fue aceptada o cancelada previamente)."),
                     statusCode: StatusCodes.Status409Conflict);
             }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Users, AuditVocabulary.Operations.Delete, "invitation",
+              "INVITATION", "invitationId"));
 
         // GET /security/modules — módulos y acciones accesibles al caller según sus permisos JWT.
         // RBAC puro (HU #10664): los módulos son transversales (sin habilitación por empresa). El
@@ -383,7 +391,9 @@ public static class SecurityEndpoints
                     new ErrorResponse("ASSIGN_ROLE_ERROR", ex.Message),
                     statusCode: StatusCodes.Status500InternalServerError);
             }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Roles, AuditVocabulary.Operations.AssignRole, "user", "USER", "userId"));
 
         // HU #10621 — PATCH /users/{userId} — edita nombre y/o correo de un usuario del
         // alcance del caller. rowVersion es obligatorio (concurrencia optimista, AC4).
@@ -465,7 +475,9 @@ public static class SecurityEndpoints
                     new ErrorResponse("UPDATE_USER_ERROR", ex.Message),
                     statusCode: StatusCodes.Status500InternalServerError);
             }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Users, AuditVocabulary.Operations.Update, "user", "USER", "userId"));
 
         // HU #10506 AC3 — DELETE /users/{userId}/roles/{roleId} — quita un rol puntual sin
         // afectar los demás roles activos del usuario (modelo aditivo).
@@ -496,7 +508,9 @@ public static class SecurityEndpoints
                     new ErrorResponse("ROLE_ASSIGNMENT_NOT_FOUND", "El usuario no tiene ese rol asignado activamente."),
                     statusCode: StatusCodes.Status404NotFound);
             }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy);
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Roles, AuditVocabulary.Operations.RevokeRole, "user", "USER", "userId"));
 
         // GET /users — lista usuarios activos + invitaciones pendientes
         // SuperAdmin ve todos los usuarios de todas las compañías (excluye su propio tenant interno)
@@ -764,7 +778,9 @@ public static class SecurityEndpoints
                 return Results.Conflict(new ErrorResponse(
                     "LAST_ACTIVE_ADMIN", "No es posible suspender/desactivar al último administrador activo."));
             }
-        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy);
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Users, AuditVocabulary.Operations.Suspend, "user", "USER", "userId"));
 
         // DELETE /security/users/{userId}/suspend — levanta la suspensión/desactivación activa.
         // Reactivar es EXCLUSIVO de SuperAdmin (contraparte de suspender).
@@ -808,7 +824,9 @@ public static class SecurityEndpoints
             {
                 return Results.NotFound(new ErrorResponse("NO_ACTIVE_SUSPENSION", "El usuario no tiene una suspensión activa."));
             }
-        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy);
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Users, AuditVocabulary.Operations.Unsuspend, "user", "USER", "userId"));
 
         // DELETE /security/users/{userId} — elimina (soft-delete reversible) a un usuario.
         // Eliminar es EXCLUSIVO de SuperAdmin (AdminCompany/ot_admin no pueden). rowVersion
@@ -868,7 +886,9 @@ public static class SecurityEndpoints
                     new ErrorResponse("CONCURRENCY_CONFLICT", ex.Message),
                     statusCode: StatusCodes.Status409Conflict);
             }
-        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy);
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Users, AuditVocabulary.Operations.DeleteUser, "user", "USER", "userId"));
 
         return app;
     }

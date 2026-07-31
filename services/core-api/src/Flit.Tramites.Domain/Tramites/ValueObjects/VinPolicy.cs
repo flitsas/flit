@@ -23,7 +23,8 @@ public sealed record VinTramiteExistente(
     string? Placa,
     string Vin,
     string? Secretaria = null,
-    DateTimeOffset? FechaRegistro = null);
+    DateTimeOffset? FechaRegistro = null,
+    bool SubsanacionActiva = false);
 
 /// <summary>Conflicto VIN detectado, con mensaje accionable (paridad <c>TramiteVinConflict</c> de Johan).</summary>
 public sealed record VinConflict(

@@ -12,7 +12,9 @@ public sealed class StateMachineTests
 {
     // ---- Máquina de estados de negocio N 03 (RF01–RF02, RF04 · ADR-0022) ----
 
-    /// <summary>Únicas transiciones permitidas por RF02; TODO el resto del producto 6×6 es inválido.</summary>
+    /// <summary>Únicas transiciones permitidas por RF02; TODO el resto del producto 6×6 es inválido.
+    /// La ruta de placa (Feature #10587 / HU #10785) NO añade estados de trámite: su progreso vive en el
+    /// sub-estado interno <see cref="PlateFlowStatus"/> (ver PlateFlowStateMachineTests).</summary>
     private static readonly (string From, string To)[] TransicionesValidas =
     [
         (TramiteEstado.Borrador, TramiteEstado.Anulado),
@@ -22,6 +24,8 @@ public sealed class StateMachineTests
         (TramiteEstado.Entregado, TramiteEstado.Rechazado),
         (TramiteEstado.Rechazado, TramiteEstado.Borrador),
         (TramiteEstado.Rechazado, TramiteEstado.Anulado),
+        // Re-radicar tras activar flag de subsanación (lifecycle exige el flag).
+        (TramiteEstado.Rechazado, TramiteEstado.Entregado),
     ];
 
     [Theory]
@@ -32,6 +36,7 @@ public sealed class StateMachineTests
     [InlineData("entregado", "rechazado")]
     [InlineData("rechazado", "borrador")]
     [InlineData("rechazado", "anulado")]
+    [InlineData("rechazado", "entregado")]
     public void Negocio_TransicionesValidasRf02(string from, string to)
     {
         TramiteStateMachine.IsValidTransition(from, to).Should().BeTrue();
@@ -88,11 +93,13 @@ public sealed class StateMachineTests
     }
 
     [Fact]
-    public void Negocio_EsValidoReconoceSoloLosSeisEstados()
+    public void Negocio_EsValidoReconoceLosEstadosDelCicloDeVida()
     {
+        // 6 estados de negocio: la subsanación es flag sobre rechazado, no un 7º estado.
         TramiteEstado.Todos.Should().HaveCount(6);
         foreach (var estado in TramiteEstado.Todos)
             TramiteEstado.EsValido(estado).Should().BeTrue();
+        TramiteEstado.EsValido("subsanacion").Should().BeFalse();
         TramiteEstado.EsValido("draft").Should().BeFalse();
         TramiteEstado.EsValido("Borrador").Should().BeFalse(); // case-sensitive: se persiste en minúscula
         TramiteEstado.EsValido(null).Should().BeFalse();

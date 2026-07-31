@@ -65,6 +65,51 @@ internal sealed class AlertMetricsReadRepository(FlitDbContext db) : IAlertMetri
           AND status IN ({PendingBiometricStatuses});
         """;
 
+    // ── Métricas ICT (HU5 / E1) — cross-schema sobre ict.* (mismo Postgres). El GUC de tenant y el
+    //    filtro tenant_id = @tenant aplican igual que para las métricas de trámite.
+
+    // Pre-trámites aún en validación (no materializados) creados hace más de la ventana.
+    private const string IctStuckInValidationSql = """
+        SELECT count(*)::numeric
+        FROM ict.external_integration_master
+        WHERE tenant_id = @tenant
+          AND deleted_at IS NULL
+          AND procedure_instance_id IS NULL
+          AND process_status_id IN (1, 2)
+          AND created_at < now() - make_interval(mins => @window);
+        """;
+
+    // % de pre-trámites que cayeron en novedad (process_status_id = 4) sobre los creados en la ventana.
+    private const string IctNoveltyRatePctSql = """
+        SELECT CASE
+                 WHEN count(*) = 0 THEN 0::numeric
+                 ELSE round(count(*) FILTER (WHERE process_status_id = 4)::numeric * 100 / count(*), 2)
+               END
+        FROM ict.external_integration_master
+        WHERE tenant_id = @tenant
+          AND deleted_at IS NULL
+          AND created_at >= now() - make_interval(mins => @window);
+        """;
+
+    // Webhooks entregados con respuesta no OK en la ventana.
+    private const string IctWebhookDeliveryFailuresSql = """
+        SELECT count(*)::numeric
+        FROM ict.external_integration_webhook_master
+        WHERE tenant_id = @tenant
+          AND is_notified = true
+          AND response_ok = false
+          AND created_at >= now() - make_interval(mins => @window);
+        """;
+
+    // Corridas de job que incumplieron SLA en la ventana. job_runs es GLOBAL (jobs cross-tenant):
+    // métrica platform-wide, NO filtra por @tenant (por eso @tenant se agrega condicionalmente abajo).
+    private const string IctJobsOutOfSlaSql = """
+        SELECT count(*)::numeric
+        FROM ict.job_runs
+        WHERE breached_sla = true
+          AND started_at >= now() - make_interval(mins => @window);
+        """;
+
     public async Task<decimal> GetMetricValueAsync(
         Guid tenantId, string metric, int windowMinutes, CancellationToken ct)
     {
@@ -74,6 +119,10 @@ internal sealed class AlertMetricsReadRepository(FlitDbContext db) : IAlertMetri
             "stuck_count" => StuckCountSql,
             "external_api_errors" => ExternalApiErrorsSql,
             "pending_identity_validations" => PendingIdentityValidationsSql,
+            "ict_stuck_in_validation" => IctStuckInValidationSql,
+            "ict_novelty_rate_pct" => IctNoveltyRatePctSql,
+            "ict_webhook_delivery_failures" => IctWebhookDeliveryFailuresSql,
+            "ict_jobs_out_of_sla" => IctJobsOutOfSlaSql,
             _ => throw new ArgumentOutOfRangeException(nameof(metric), metric,
                 "Métrica de alerta desconocida."),
         };
@@ -92,7 +141,10 @@ internal sealed class AlertMetricsReadRepository(FlitDbContext db) : IAlertMetri
                 await using var cmd = conn.CreateCommand();
                 cmd.Transaction = transaction.GetDbTransaction();
                 cmd.CommandText = sql;
-                AddParam(cmd, "tenant", tenantId);
+                // @tenant es condicional: las métricas platform-wide (p.ej. ict_jobs_out_of_sla sobre
+                // ict.job_runs, tabla global) no filtran por tenant. El GUC RLS se fija igual arriba.
+                if (sql.Contains("@tenant", StringComparison.Ordinal))
+                    AddParam(cmd, "tenant", tenantId);
                 if (sql.Contains("@window", StringComparison.Ordinal))
                     AddParam(cmd, "window", windowMinutes);
 

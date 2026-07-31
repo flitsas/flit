@@ -96,6 +96,7 @@ export function CompanyDocumentParamsPanel({ tenantId }: CompanyDocumentParamsPa
       ) : items.length === 0 ? (
         <p className="text-sm text-gray-500">Sin parámetros: se aplica el comportamiento base.</p>
       ) : (
+        <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
             <tr>
@@ -125,6 +126,7 @@ export function CompanyDocumentParamsPanel({ tenantId }: CompanyDocumentParamsPa
             ))}
           </tbody>
         </table>
+        </div>
       )}
 
       <div className="flex items-end gap-2">

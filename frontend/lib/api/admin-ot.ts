@@ -93,6 +93,18 @@ export function fetchOtClientProcedures(
   });
 }
 
+/** Detalle de un trámite de cliente (GET /client-procedures/{id}). */
+export function fetchOtClientProcedure(
+  id: string,
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtClientProcedure> {
+  return apiFetch<OtClientProcedure>(`${base}/client-procedures/${id}`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
+}
+
 /** Diagnóstico de la bandeja OT (HU #10541 / R09): entregados con/sin grant vigente. */
 export function fetchOtBandejaHealth(
   signal?: AbortSignal,
@@ -104,19 +116,33 @@ export function fetchOtBandejaHealth(
   });
 }
 
-export function approveOtClientProcedure(id: string): Promise<OtClientProcedure> {
+/**
+ * Aprueba un trámite entregado. ADR-0036 §D9 (HU #10916): si el trámite exige mandato y hay varios
+ * mandatarios sin cotejo, el backend responde 409 con `{ error: "mandatario_requerido" }` (ApiError,
+ * status 409); el llamador debe reintentar pasando `mandateSignerId` con el mandatario elegido.
+ * SuperAdmin debe pasar `scope.transitOfficeId` (mismo override que list/consolidado).
+ */
+export function approveOtClientProcedure(
+  id: string,
+  mandateSignerId?: string,
+  scope?: OtApiScope,
+): Promise<OtClientProcedure> {
   return apiFetch<OtClientProcedure>(`${base}/client-procedures/${id}/approve`, {
     method: "POST",
+    body: mandateSignerId ? { mandateSignerId } : undefined,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
   });
 }
 
 export function rejectOtClientProcedure(
   id: string,
   body: RejectOtClientProcedureRequest,
+  scope?: OtApiScope,
 ): Promise<OtClientProcedure> {
   return apiFetch<OtClientProcedure>(`${base}/client-procedures/${id}/reject`, {
     method: "POST",
     body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
   });
 }
 
@@ -192,6 +218,57 @@ export async function adjuntarOtLicenciaTransito(
   }
 
   return (await response.json()) as OtProcedureAttachment;
+}
+
+/** Lista documentos del expediente OT (HU #10704/#10705). Respuesta BE: data + flags consolidado. */
+export function fetchOtDocuments(
+  id: string,
+  scope?: OtApiScope,
+): Promise<{
+  data: OtProcedureAttachment[];
+  consolidado: boolean;
+  consolidado_maestro: boolean;
+}> {
+  return apiFetch<{
+    data: OtProcedureAttachment[];
+    consolidado: boolean;
+    consolidado_maestro: boolean;
+  }>(`${base}/client-procedures/${id}/documents`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
+}
+
+/** URL presignada de previsualización inline para un adjunto de trámite OT (ADR-0029). */
+export function fetchOtAttachmentPreviewUrl(
+  id: string,
+  attachmentId: string,
+  scope?: OtApiScope,
+): Promise<{ url: string; expiresAt: string }> {
+  return apiFetch<{ url: string; expiresAt: string }>(
+    `${base}/client-procedures/${id}/documents/${attachmentId}/preview-url`,
+    {
+      query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    },
+  );
+}
+
+/**
+ * Genera (o reutiliza) el expediente consolidado maestro de un trámite OT — botón único
+ * (Feature #10701). El backend es idempotente por la marca `consolidado_maestro_vigente`: si el
+ * consolidado está vigente lo devuelve sin regenerar (`regenerado: false`); si no (nunca generado o
+ * invalidado por un cambio de estado / LT) lo reconstruye (`regenerado: true`).
+ */
+export function generarOtConsolidadoMaestro(
+  id: string,
+  scope?: OtApiScope,
+): Promise<{
+  document: { attachmentId: string; tipo: string; filename: string; sha256: string };
+  regenerado: boolean;
+}> {
+  return apiFetch(`${base}/client-procedures/${id}/consolidado-maestro`, {
+    method: "POST",
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
 }
 
 export function fetchOtWebhooks(signal?: AbortSignal): Promise<OtWebhooksListResult> {

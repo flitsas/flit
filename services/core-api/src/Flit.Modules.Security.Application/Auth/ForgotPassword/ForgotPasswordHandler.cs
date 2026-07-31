@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Modules.Security.Domain.Auth;
 
 namespace Flit.Modules.Security.Application.Auth.ForgotPassword;
@@ -13,7 +14,9 @@ public sealed class ForgotPasswordHandler(
     IPasswordResetTokenRepository tokenRepository,
     ISecureTokenGenerator tokenGenerator,
     IEmailSender emailSender,
-    PasswordRecoveryOptions options)
+    PasswordRecoveryOptions options,
+    IAdminAuditWriter auditWriter,
+    IAuditContextAccessor auditContext)
 {
     private const string Purpose = "password_reset";
 
@@ -41,6 +44,23 @@ public sealed class ForgotPasswordHandler(
             BuildHtmlBody(user.DisplayName, link, options.TokenLifetimeMinutes));
 
         await emailSender.SendAsync(message, cancellationToken);
+
+        // HU #10678 — sin PII/token en el rastro: solo desenlace + actor/afectado (el mismo usuario).
+        await auditWriter.WriteAsync(
+            new AdminAuditEntry(
+                TenantId: null,
+                TenantType: null,
+                AuditVocabulary.Modules.Authentication,
+                EntityName: "user",
+                AuditVocabulary.Operations.ForgotPassword,
+                AuditVocabulary.Results.Success,
+                ErrorCode: null,
+                ActorUserId: user.UserId,
+                TargetEntityType: "USER",
+                TargetEntityId: user.UserId,
+                auditContext.ClientIp,
+                UserAgent: null),
+            cancellationToken).ConfigureAwait(false);
     }
 
     private static string BuildResetLink(string resetUrlBase, string rawToken)

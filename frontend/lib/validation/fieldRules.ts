@@ -76,17 +76,20 @@ export const validateVin = (value: string): string | null =>
 
 /**
  * Placa colombiana (unión de formatos): carro/público `AAA123`, moto actual
- * `AAA12A` o antigua `AAA12`, y remolque/semirremolque `R12345`/`S12345`. La placa
- * la valida en definitiva el RUNT; este patrón es un chequeo anti-error de tipeo.
+ * `AAA12A` o antigua `AAA12`, remolque/semirremolque `R12345`/`S12345` o de 6 dígitos
+ * `R123456`/`S123456` (HU #10999 — así el paso 1 no bloquea la consulta de remolques,
+ * igual que maquinaria), y maquinaria (agrícola/industrial/construcción) `AA123456`
+ * (2 letras + 6 dígitos, p. ej. `MC029554`). La placa la valida en definitiva el RUNT;
+ * este patrón es un chequeo anti-error de tipeo.
  */
-export const PLATE_PATTERN = /^([A-Z]{3}[0-9]{3}|[A-Z]{3}[0-9]{2}[A-Z]?|[RS][0-9]{5})$/;
-/** Deja solo alfanumérico en mayúsculas, tope de 6 (el más largo válido). */
+export const PLATE_PATTERN = /^([A-Z]{3}[0-9]{3}|[A-Z]{3}[0-9]{2}[A-Z]?|[RS][0-9]{5,6}|[A-Z]{2}[0-9]{6})$/;
+/** Deja solo alfanumérico en mayúsculas, tope de 8 (maquinaria `AA123456`). */
 export const sanitizePlate = (v: string): string =>
-  v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+  v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
 export const validatePlate = (value: string): string | null =>
   PLATE_PATTERN.test(value)
     ? null
-    : "Placa inválida. Ej: ABC123 (carro), ABC12D (moto) o R12345 (remolque).";
+    : "Placa inválida. Ej: ABC123 (carro), ABC12D (moto), R12345 (remolque) o MC029554 (maquinaria).";
 
 /** ¿El tipo de documento es pasaporte? (admite letras y números). */
 export const isPassport = (docType: string): boolean => docType.trim().toUpperCase() === "PAS";

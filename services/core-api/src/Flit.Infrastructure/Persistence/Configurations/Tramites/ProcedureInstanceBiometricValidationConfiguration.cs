@@ -40,6 +40,10 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
 
+        // HU #10943 (CF-03) — tope + cooldown de reenvíos de la prevalidación standalone.
+        builder.Property(x => x.ResendCount).HasColumnName("resend_count").IsRequired().HasDefaultValue(0);
+        builder.Property(x => x.LastResentAt).HasColumnName("last_resent_at");
+
         // HU #10233 — Kyverum Verify.
         builder.Property(x => x.Provider).HasColumnName("provider").HasMaxLength(20).IsRequired().HasDefaultValue("mock");
         builder.Property(x => x.KyverumVerificationId).HasColumnName("kyverum_verification_id").HasMaxLength(200);
@@ -60,6 +64,9 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
             .HasDatabaseName("uq_procedure_instance_biometric_validations_kyverum_verification_id")
             .HasFilter("kyverum_verification_id IS NOT NULL");
 
+        // HU #10865 — person_id FK → tramites.persons (nullable para backcompat histórico).
+        builder.Property(x => x.PersonId).HasColumnName("person_id");
+
         builder.HasIndex(x => new { x.TenantId, x.ProcedureInstanceId })
             .HasDatabaseName("ix_procedure_instance_biometric_validations_tenant_id_instance");
 
@@ -67,10 +74,29 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
             .IsUnique()
             .HasDatabaseName("uq_procedure_instance_biometric_validations_token_hash");
 
+        // HU #10865 — índice FK person_id (checklist §A9; parcial sobre no-nulos).
+        builder.HasIndex(x => x.PersonId)
+            .HasDatabaseName("ix_procedure_instance_biometric_validations_person_id")
+            .HasFilter("person_id IS NOT NULL");
+
+        // HU #10865 — índice de cobertura para FindVigenteApprovedByDocumentAsync (CF-02).
+        // Incluye standalone (procedure_instance_id IS NULL) — crítico para el reuso.
+        builder.HasIndex(x => new { x.TenantId, x.DocumentType, x.DocumentNumber, x.Status, x.ValidUntil })
+            .HasDatabaseName("ix_biometric_validations_vigente_approved")
+            .HasFilter("status = 'aprobado' AND deleted_at IS NULL");
+
+        // HU #10865 — ON DELETE CASCADE → SET NULL (protege validaciones standalone).
         builder.HasOne(x => x.ProcedureInstance)
             .WithMany(x => x.BiometricValidations)
             .HasForeignKey(x => x.ProcedureInstanceId)
-            .OnDelete(DeleteBehavior.Cascade)
+            .OnDelete(DeleteBehavior.SetNull)
             .HasConstraintName("fk_procedure_instance_biometric_validations_procedure_instances");
+
+        // HU #10865 — FK a persons. ON DELETE RESTRICT: no se elimina persona si tiene validaciones.
+        builder.HasOne(x => x.Person)
+            .WithMany(x => x.BiometricValidations)
+            .HasForeignKey(x => x.PersonId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_procedure_instance_biometric_validations_persons");
     }
 }

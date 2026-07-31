@@ -1,8 +1,10 @@
 using Flit.Analytics.Application.Abstractions;
 using Flit.Infrastructure.Consultations;
+using Flit.Infrastructure.Consultations.Avaluos;
 using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Infrastructure.Email;
+using Flit.Infrastructure.Ict;
 using Flit.Infrastructure.Improntas;
 using Flit.Infrastructure.KyverumRunt;
 using Flit.Infrastructure.Rues;
@@ -26,8 +28,18 @@ using Flit.Modules.Security.Domain.Permissions;
 using Flit.Modules.Security.Domain.Roles;
 using Flit.Modules.Security.Domain.UserManagement;
 using Flit.Modules.Security.Domain.UserRoles;
+using Flit.Infrastructure.Quipux;
+using Flit.Modules.Quipux.Application;
+using Flit.Modules.Quipux.Application.UseCases.EncolarEnvio;
+using Flit.Modules.Quipux.Domain.Configuracion;
+using Flit.Modules.Quipux.Domain.Consola;
+using Flit.Modules.Quipux.Domain.Envios;
+using Flit.Modules.Quipux.Domain.LogQx;
+using Flit.Modules.Quipux.Domain.Puertos;
+using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Application.UseCases.Avaluos;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.AspNetCore.DataProtection;
@@ -36,6 +48,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Infrastructure;
@@ -68,17 +81,35 @@ public static class InfrastructureExtensions
 
         // ── Runtime de trámites (rework #10128) ──────────────────────────────
         services.AddScoped<IProcedureTypeRepository, ProcedureTypeRepository>();
+        // FEATURE-08 / HU-BE-01 (CFD-01/AC#5) — snapshot inmutable del tipo por instancia.
+        services.AddScoped<IProcedureTypeSnapshotRepository, ProcedureTypeSnapshotRepository>();
+        // FEATURE-08 / HU-BE-03 (CFD-04) — fuentes externas por tipo (catálogo global).
+        services.AddScoped<IProcedureTypeSourceRepository, ProcedureTypeSourceRepository>();
+        // FEATURE-08 / HU-BE-04 (CFD-06) — requisitos documentales por tipo (configurador dinámico).
+        services.AddScoped<IProcedureTypeDocumentRepository, ProcedureTypeDocumentRepository>();
+        // FEATURE-08 / HU-BE-06 (CFD-09) — feature flag F08_DynamicProcedures (por tenant, ot_feature_flags).
+        services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.IDynamicProceduresPolicy,
+            OtRules.DynamicProceduresPolicy>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
         // IT-3 (Feature #10585) — persistencia del agregado de prenda.
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
         services.AddScoped<ICatalogRepository, CatalogRepository>();
+        // HU #10878 (Feature #10862, CF-04) — caché cross-trámite de consultas externas (ADR-0030)
+        // + gate de consentimiento Habeas Data para el reúso de datos de persona (ADR-0031).
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IExternalQueryCacheRepository, ExternalQueryCacheRepository>();
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonDataConsentRepository, PersonDataConsentRepository>();
+        // HU #10865 — entidad persona/sujeto a nivel tenant (Feature #10864, CF-00, ADR-0030).
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonRepository, PersonRepository>();
         // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IDocumentTypeCatalog, DocumentTypeCatalog>();
         // HU #10521 (RF31) — puente de parámetros documentales por gestora hacia el checklist condicional.
         services.AddScoped<Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider, ChecklistCompanyParamsProvider>();
         // HU #10522 (RF17/RF22) — puente de la matriz documental resuelta del gestor hacia el checklist (matriz viva).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IResolvedChecklistMatrixProvider, Services.ResolvedChecklistMatrixProvider>();
+        // CF-06 (HU #10881) — override OT del documento de prenda (independiente del semáforo de gravámenes),
+        // SNAPSHOT: solo overrides activos antes de crear el trámite.
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IPrendaDocumentRequirementPolicy, Services.PrendaDocumentRequirementPolicy>();
         // HU #10522 (RF40) — política de validación por IA de improntas (por defecto: advertir).
         services.Configure<Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions>(
             configuration.GetSection(
@@ -88,9 +119,34 @@ public static class InfrastructureExtensions
         services.AddSingleton(sp =>
             sp.GetRequiredService<IOptions<Flit.Tramites.Application.UseCases.ProcedureInstances.ImprontaValidationPolicyOptions>>().Value);
 
+        // HU #10970 — modo por ambiente de CF-01 (duplicidad) y CF-03 (precondición registral):
+        // block (default fail-safe) / warn / off. Se configura por el .env de cada VPS
+        // (TramiteValidations__<Validación>__Mode) porque DEV, QA y PDN corren TODOS con
+        // ASPNETCORE_ENVIRONMENT=Development y appsettings.{Environment}.json no los distingue.
+        services.Configure<Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicyOptions>(
+            configuration.GetSection(
+                Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicyOptions.SectionName));
+        // Igual que ImprontaValidation: Application consume la política YA resuelta, sin IOptions.
+        services.AddSingleton(sp =>
+        {
+            var options = sp.GetRequiredService<
+                IOptions<Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicyOptions>>().Value;
+            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("Flit.TramiteValidations");
+            var policy = Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicy.Resolve(
+                options,
+                (name, raw) => TramiteValidationLog.UnrecognizedMode(logger, name, raw));
+            TramiteValidationLog.PolicyResolved(
+                logger,
+                policy.DuplicateActiveProcedure,
+                policy.VehicleRegistrationState);
+            return policy;
+        });
+
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
         services.AddScoped<IAnalyticsMetricsReadRepository, AnalyticsMetricsReadRepository>(); // Reportes2 HU-B
+        services.AddScoped<Flit.Analytics.Application.Abstractions.IDetailedReportReadRepository, DetailedReportReadRepository>(); // Feature #10813
+        services.AddScoped<Flit.Analytics.Application.Queries.IDetailedReportExcelExporter, Documents.DetailedReportExcelExporter>(); // Feature #10813 HU #10816
         services.AddScoped<IProcedureExcelExporter, Documents.ProcedureExcelExporter>();
         services.AddSingleton<IExecutiveSummaryPdfGenerator, Documents.ExecutiveSummaryPdfGenerator>();
 
@@ -110,17 +166,32 @@ public static class InfrastructureExtensions
 
         // HU #10256 — FUR por overlay PdfSharpCore sobre plantillas blank.
         services.AddSingleton<IFurDocumentGenerator, FurOverlayDocumentGenerator>();
+        // HU #10919 (Feature #10918) — plantilla de FUR según la clasificación del vehículo (catálogo
+        // tramites.vehicle_classification_fur). Singleton: cachea el catálogo una sola vez.
+        services.AddSingleton<IFurTemplateResolver, Documents.Fur.VehicleClassificationFurResolver>();
         services.AddSingleton<IExpedienteConsolidadoMerger, PdfExpedienteConsolidadoMerger>();
         // HU #10458 — certificado de identidad en PDF real (QuestPDF). Reemplaza el mock text/plain
         // para que pase IsMergeableMime y se fusione en el Expediente Consolidado.
         services.AddSingleton<IIdentityCertificateGenerator, Documents.IdentityCertificatePdfGenerator>();
         services.AddSingleton<IRuesCertificateGenerator, Documents.RuesCertificatePdfGenerator>();
+        // HU #10926 (ADR-0033) — resolutor de escrituras vigentes por actor NIT para adjuntarlas al
+        // consolidado. Scoped: depende de los readers de escrituras/directorio (DbContext) + storage.
+        services.AddScoped<Flit.Tramites.Application.Documents.IProcedureDeedResolver, Documents.ProcedureDeedResolver>();
+        // HU #10762 — certificado RNMC suelto (PDF real) con el resultado de medidas correctivas por parte.
+        services.AddSingleton<IRnmcCertificateGenerator, Documents.RnmcCertificatePdfGenerator>();
+        // ADR-0036 (HU #10914) — Solicitud de trámite de forma virtual (PDF real, siempre).
+        services.AddSingleton<ISolicitudVirtualGenerator, Documents.SolicitudVirtualPdfGenerator>();
+        // ADR-0036 (HU #10915) — Contrato Privado de Mandato (PDF real, condicional por OT/persona).
+        services.AddSingleton<IMandatoGenerator, Documents.MandatoPdfGenerator>();
+        // HU #10856 — certificados de vigencia SOAT/RTM (PDF real con membrete FLIT) desde el RUNT.
+        services.AddSingleton<ISoatRtmCertificateGenerator, Documents.SoatRtmCertificatePdfGenerator>();
 
         AddConsultationProviders(services, configuration);
         AddIdentityValidation(services, configuration);
         AddImprontas(services, configuration);
         AddRues(services, configuration);
         AddOcr(services, configuration);
+        AddQuipux(services);
 
         // ── Seguridad / login (HU #10168, #10169) ────────────────────────────
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
@@ -234,6 +305,10 @@ public static class InfrastructureExtensions
             o.VerifikConductorMode = Cfg("Consultations:VerifikConductorMode", "VERIFIK_CONDUCTOR_MODE") ?? "mock";
             o.VerifikRuesMode = Cfg("Consultations:VerifikRuesMode", "VERIFIK_RUES_MODE") ?? "mock";
             o.IntempoMode = Cfg("Consultations:IntempoMode", "INTEMPO_MODE") ?? "mock";
+            o.FasecoldaMode = Cfg("Consultations:FasecoldaMode", "FASECOLDA_MODE") ?? "mock";
+            // FEATURE 05 — comparendos. Ambos en mock por defecto: ver ConsultationProviderModeOptions.
+            o.FlitFinesMode = Cfg("Consultations:FlitFinesMode", "FLIT_FINES_MODE") ?? "mock";
+            o.KyverumFinesMode = Cfg("Consultations:KyverumFinesMode", "KYVERUM_FINES_MODE") ?? "mock";
         });
 
         // Config Verifik. Clave de config `Verifik:BearerToken` (alineada con el
@@ -251,6 +326,27 @@ public static class InfrastructureExtensions
         {
             o.BaseUrl = Cfg("Intempo:BaseUrl", "INTEMPO_BASE_URL") ?? "https://www.moviliza.com.co";
             o.TimeoutSeconds = int.TryParse(Cfg("Intempo:TimeoutSeconds", "INTEMPO_TIMEOUT_SECONDS"), out var t) ? t : 15;
+        });
+
+        // FEATURE 05 — API de registro de FLIT (fuente interna de comparendos). Sin credenciales.
+        services.Configure<FlitRegistrationApiOptions>(o =>
+        {
+            o.BaseUrl = Cfg("RegistrationApi:BaseUrl", "REGISTRATION_API_BASE_URL")
+                        ?? "https://knli4dcix0.execute-api.us-east-1.amazonaws.com/pdn";
+            o.InfractionPath = Cfg("RegistrationApi:InfractionPath", "REGISTRATION_API_INFRACTION_PATH")
+                        ?? "api/v1/registration/simit";
+            o.TimeoutSeconds = int.TryParse(Cfg("RegistrationApi:TimeoutSeconds", "REGISTRATION_API_TIMEOUT_SECONDS"), out var t) ? t : 30;
+        });
+
+        // FEATURE 05 — KYVERUM comparendos (persona jurídica). URL/ruta provisionales; en mock
+        // hasta que el proveedor entregue especificación y credenciales.
+        services.Configure<KyverumFinesOptions>(o =>
+        {
+            o.BaseUrl = Cfg("KyverumFines:BaseUrl", "KYVERUM_FINES_BASE_URL") ?? "https://runt.kyverum.com";
+            o.InfractionPath = Cfg("KyverumFines:InfractionPath", "KYVERUM_FINES_INFRACTION_PATH") ?? "/v1/comparendos:consultar";
+            o.ApiKey = Cfg("KyverumFines:ApiKey", "KYVERUM_FINES_API_KEY") ?? "";
+            o.AuthScheme = Cfg("KyverumFines:AuthScheme", "KYVERUM_FINES_AUTH_SCHEME") ?? "Bearer";
+            o.TimeoutSeconds = int.TryParse(Cfg("KyverumFines:TimeoutSeconds", "KYVERUM_FINES_TIMEOUT_SECONDS"), out var t) ? t : 30;
         });
 
         // Typed HttpClients (compatibles con PublishAot).
@@ -296,6 +392,23 @@ public static class InfrastructureExtensions
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
 
+        // FEATURE 05 — fuente interna de comparendos. NormalizedBaseUrl conserva la barra final:
+        // el BaseUrl trae el stage del API Gateway (/pdn) y sin ella la ruta relativa lo descarta.
+        services.AddHttpClient<FlitFinesConsultationProvider>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<FlitRegistrationApiOptions>>().Value;
+            c.BaseAddress = new Uri(o.NormalizedBaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
+        // FEATURE 05 — KYVERUM comparendos (persona jurídica). Config propia, no la del RUNT.
+        services.AddHttpClient<KyverumFinesConsultationProvider>((sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<KyverumFinesOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
         // Kyverum RUNT (HU #10478): cliente de consultas compartido, mismo config que improntas
         // (ImprontaRuntOptions / KYVERUM_RUNT_*, configurado en AddImprontas). Los providers
         // kyverum_runt / kyverum_runt_conductor lo consumen; convergen al mismo ConsultationResult
@@ -316,6 +429,10 @@ public static class InfrastructureExtensions
         services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<IntempoConsultationProvider>());
         services.AddTransient<IConsultationProvider, KyverumRuntVehicleConsultationProvider>();
         services.AddTransient<IConsultationProvider, KyverumRuntConductorConsultationProvider>();
+        // FEATURE 05 — comparendos por fuente. Quedan registrados pero SIN TRÁFICO hasta HU10758,
+        // que es la que cablea fines_query_source al preflight y empieza a resolverlos.
+        services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<FlitFinesConsultationProvider>());
+        services.AddTransient<IConsultationProvider>(sp => sp.GetRequiredService<KyverumFinesConsultationProvider>());
         services.AddSingleton<IConsultationProvider, FlitIntegrationsGatewayProvider>();
         services.AddScoped<IConsultationProviderRegistry, ConsultationProviderRegistry>();
 
@@ -332,6 +449,53 @@ public static class InfrastructureExtensions
         // Puente tenant → override de cadena/timeout (HU #10478, Fase 5). Lee
         // admin.tenant_operational_policies vía ITenantSettingsRepository.
         services.AddScoped<IConsultationTenantOverrideProvider, TenantConsultationOverrideProvider>();
+
+        // Avalúo comercial multi-proveedor (Feature #10707, ADR-0029): capa aparte de la de
+        // consultas (verificación) — agrega VALOR de varias fuentes en paralelo.
+        AddAvaluoProviders(services, configuration);
+    }
+
+    private static void AddAvaluoProviders(IServiceCollection services, IConfiguration configuration)
+    {
+        string? Cfg(string key, string env) =>
+            configuration[key] ?? Environment.GetEnvironmentVariable(env);
+
+        services.Configure<FasecoldaOptions>(o =>
+        {
+            o.ByVinBaseUrl = Cfg("Fasecolda:ByVinBaseUrl", "FASECOLDA_BY_VIN_API_BASE_URL") ?? o.ByVinBaseUrl;
+            o.ByVinPath = Cfg("Fasecolda:ByVinPath", "FASECOLDA_BY_VIN_API_PATH") ?? o.ByVinPath;
+            o.ApiBaseUrl = Cfg("Fasecolda:ApiBaseUrl", "FASECOLDA_API_BASE_URL") ?? o.ApiBaseUrl;
+            o.AuthPath = Cfg("Fasecolda:AuthPath", "FASECOLDA_AUTH_API_PATH") ?? o.AuthPath;
+            o.ListCodePath = Cfg("Fasecolda:ListCodePath", "FASECOLDA_LIST_CODE_API_PATH") ?? o.ListCodePath;
+            o.GrantType = Cfg("Fasecolda:GrantType", "FASECOLDA_API_GRANT_TYPE") ?? o.GrantType;
+            o.Username = Cfg("Fasecolda:Username", "FASECOLDA_API_USERNAME") ?? "";
+            o.Password = Cfg("Fasecolda:Password", "FASECOLDA_API_PASSWORD") ?? "";
+            o.TimeoutSeconds = int.TryParse(Cfg("Fasecolda:TimeoutSeconds", "FASECOLDA_API_SECONDS_TIMEOUT"), out var t) ? t : o.TimeoutSeconds;
+        });
+
+        // Dos hosts (búsqueda por VIN sin auth; guía de valores con token). Clientes con nombre.
+        services.AddHttpClient("fasecolda-vin", (sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<FasecoldaOptions>>().Value;
+            c.BaseAddress = new Uri(o.ByVinBaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+        services.AddHttpClient("fasecolda-api", (sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<FasecoldaOptions>>().Value;
+            c.BaseAddress = new Uri(o.ApiBaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+
+        services.AddSingleton<FasecoldaTokenCache>();
+        services.AddScoped<AvaluoMockValueReader>();
+        services.AddScoped<IAvaluoProvider, FasecoldaAvaluoProvider>();
+        // Fase 1: mock, activables por configuración a real sin tocar el handler (ADR-0029).
+        services.AddScoped<IAvaluoProvider, BaseGravableAvaluoProvider>();
+        services.AddScoped<IAvaluoProvider, MercadoLibreAvaluoProvider>();
+        services.AddScoped<IAvaluoProviderRegistry, AvaluoProviderRegistry>();
+        // Feature #10707 — proveedores habilitados por tenant (lee tenant_operational_policies).
+        services.AddScoped<IAvaluoProviderPolicy, TenantAvaluoPolicyProvider>();
     }
 
     private static void AddIdentityValidation(IServiceCollection services, IConfiguration configuration)
@@ -354,6 +518,17 @@ public static class InfrastructureExtensions
             Provider = Cfg("Biometrics:Provider", "BIOMETRICS_PROVIDER") ?? Flit.Tramites.Domain.Entities.BiometricProviders.Mock,
         };
         services.AddSingleton(biometrics);
+
+        // HU #11028 — simulación de validaciones de identidad admin: APAGADA salvo que el ambiente la
+        // encienda explícitamente. Una identidad simulada habilita la firma del mandato, así que el
+        // default seguro es no permitirla.
+        services.AddSingleton(new Flit.Admin.Application.Identity.AdminIdentityMockOptions
+        {
+            Enabled = string.Equals(
+                Cfg("AdminIdentity:Mock:Enabled", "ADMIN_IDENTITY_MOCK_ENABLED"),
+                "true",
+                StringComparison.OrdinalIgnoreCase),
+        });
 
         services.Configure<KyverumOptions>(o =>
         {
@@ -420,6 +595,10 @@ public static class InfrastructureExtensions
         // despacha las filas pendientes hacia IProcedureStateChangeNotifier (webhooks OT) tras el commit.
         services.AddScoped<ITramiteTransitionPublisher, ProcedureStateChangeOutboxPublisher>();
         services.AddHostedService<ProcedureStateChangeOutboxProcessor>();
+
+        // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
+        // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.
+        services.AddIctStateReflection(configuration);
     }
 
     private static void AddImprontas(IServiceCollection services, IConfiguration configuration)
@@ -484,6 +663,69 @@ public static class InfrastructureExtensions
             c.BaseAddress = new Uri(o.BaseUrl);
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
         });
+    }
+
+    /// <summary>
+    /// Integración Quipux: radicación de trámites en las secretarías de tránsito.
+    /// </summary>
+    /// <remarks>
+    /// <para>A diferencia del resto de integraciones, <b>no recibe <see cref="IConfiguration"/> ni
+    /// tiene gate de registro</b>. La configuración de Quipux (credenciales, URLs, cadencia) vive
+    /// en <c>admin.quipux_settings</c>, no en appsettings/env vars, por requisito explícito:
+    /// rotar una credencial o cambiar el intervalo debe ser un UPDATE, sin desplegar. Por eso todo
+    /// se registra siempre y el gate real es <c>settings.Enabled</c>, releído por los workers en
+    /// cada ciclo. Sin fila o con <c>enabled = false</c> la integración es inerte.</para>
+    /// <para>El corolario es que el patrón de "no registrar el cliente y dejar la dependencia en
+    /// null" (el de RUES) aquí no aplica: no se puede decidir en el arranque algo que la BD puede
+    /// cambiar en caliente.</para>
+    /// <para>Tampoco se usa <c>IsDevelopment()</c> como gate de mock/real: el compose de PDN corre
+    /// con <c>ASPNETCORE_ENVIRONMENT=Development</c>.</para>
+    /// </remarks>
+    private static void AddQuipux(IServiceCollection services)
+    {
+        // Los handlers del módulo. Se registran aquí —y no en Program.cs— igual que
+        // AddSecurityApplication(): quien consume estos handlers son los workers de este mismo
+        // ensamblado, así que registrarlos juntos evita que un módulo quede a medio cablear.
+        // Sin esta línea todo COMPILA pero los workers revientan en el primer ciclo al resolverlos.
+        services.AddQuipuxApplication();
+
+        // Configuración y secretos. El protector cifra password_enc / aws_secret_access_key_enc con
+        // Data Protection (keyring ya persistido en Postgres): el claro nunca toca la BD.
+        services.AddSingleton<IQuipuxSecretProtector, DataProtectionQuipuxSecretProtector>();
+        services.AddScoped<IQuipuxSettingsRepository, QuipuxSettingsRepository>();
+
+        // Estado de la radicación y trazabilidad.
+        services.AddScoped<IQuipuxSubmissionRepository, QuipuxSubmissionRepository>();
+
+        // Consola de cola QX (HU #10774): lectura por secretaría destino + acciones manuales. Puerto
+        // aparte del de los workers — sin claim/lease, con filtro explícito por transit_office_id.
+        services.AddScoped<IQuipuxSubmissionConsoleRepository, DbQuipuxSubmissionConsoleRepository>();
+
+        // LOG QX (HU #10793): lectura de trazabilidad para soporte/admin. Solo consulta (sin claim ni
+        // transiciones), cross-tenant por el mismo motivo que la consola de cola.
+        services.AddScoped<IQuipuxLogRepository, DbQuipuxLogRepository>();
+        services.AddSingleton<IQuipuxAuditLog, QuipuxSubmissionAuditLog>();
+        services.AddSingleton<IQuipuxJobRunLog, QuipuxJobRunLog>();
+
+        // Adaptadores de los puertos que declara Quipux.Application, para que el módulo no dependa
+        // de Tramites.Application ni del DbContext.
+        services.AddScoped<IQuipuxConsolidadoMaestroPort, QuipuxConsolidadoMaestroAdapter>();
+        services.AddScoped<IQuipuxOrganismoPort, QuipuxOrganismoAdapter>();
+        services.AddScoped<IQuipuxTenantPort, QuipuxTenantAdapter>();
+
+        // Publicación del PDF en el bucket S3 DE QUIPUX. Scoped: resuelve el adjunto vía DbContext.
+        services.AddScoped<IQuipuxDocumentUploader, QuipuxS3DocumentUploader>();
+
+        // Cliente HTTP. Sin BaseAddress: las URLs son absolutas y salen de la BD en cada llamada,
+        // porque un BaseAddress fijado aquí se congelaría en el arranque y no podría cambiar en
+        // caliente. El Timeout sí queda fijado (limitación de HttpClient) con un valor holgado.
+        services.AddHttpClient<IQuipuxClient, QuipuxApiClient>(c =>
+            c.Timeout = TimeSpan.FromSeconds(120));
+
+        // Los dos workers (el "cron"). ADR-0024 rechaza cron/broker externo: van dentro de core-api
+        // con claim FOR UPDATE SKIP LOCKED. Registrados siempre; el gate es la BD.
+        services.AddHostedService<QuipuxRegisterProcessor>();
+        services.AddHostedService<QuipuxStatusPollProcessor>();
     }
 
     private static void AddOcr(IServiceCollection services, IConfiguration configuration)

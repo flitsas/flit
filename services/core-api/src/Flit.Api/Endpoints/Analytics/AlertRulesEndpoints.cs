@@ -65,6 +65,15 @@ public static class AlertRulesEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        group.MapPost("/alert-events/{id:guid}/ack", AckEventAsync)
+            .WithName("AnalyticsAlertEventsAck")
+            .WithSummary("Marca un disparo de alerta como reconocido (set-once)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         return app;
     }
 
@@ -147,5 +156,20 @@ public static class AlertRulesEndpoints
 
         var pageResult = await handler.HandleAsync(tenant, ruleId, page, pageSize, ct);
         return Results.Ok(pageResult);
+    }
+
+    private static async Task<IResult> AckEventAsync(
+        HttpContext httpContext,
+        Guid id,
+        AckAlertEventsHandler handler,
+        CancellationToken ct,
+        [FromQuery] Guid? tenantId = null)
+    {
+        if (!SchedulingTenantResolver.TryResolveConcreteTenant(httpContext.User, tenantId, out var tenant, out var error))
+            return error!;
+
+        var dto = await handler.HandleAsync(
+            tenant, id, SchedulingTenantResolver.TryResolveUserId(httpContext.User), ct);
+        return dto is null ? SchedulingTenantResolver.AlertEventNotFound() : Results.Ok(dto);
     }
 }

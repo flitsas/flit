@@ -17,6 +17,8 @@ import type { InstanceStatus } from '@/lib/api/types/procedure-runtime';
 
 // Orden de embudo (ciclo de vida): borrador → preparado → entregado → aprobado,
 // con los desenlaces (rechazado/anulado) al final.
+// La ruta de placa (Feature #10587 / HU #10785) NO añade tarjetas: su progreso es un sub-estado
+// interno que vive bajo 'entregado' (se muestra como badge secundario en la fila, no en el funnel).
 const FUNNEL_ORDER: EstadoTramite[] = [
   'borrador',
   'preparado',
@@ -40,7 +42,7 @@ export function EstadoFunnel({ counts, active, onSelect }: EstadoFunnelProps) {
     <div
       role="group"
       aria-label="Estados de los trámites"
-      className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6"
+      className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8"
     >
       {FUNNEL_ORDER.map((estado, i) => {
         const style = ESTADO_CHIP_STYLES[estado];

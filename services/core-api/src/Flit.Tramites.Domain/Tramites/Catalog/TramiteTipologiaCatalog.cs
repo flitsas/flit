@@ -82,6 +82,19 @@ public static class TramiteTipologiaCatalog
             ]),
     ];
 
+    // TODO(ICT-LEASING-CHECKLIST): promover a ChecklistItem los DocTipos "loose" que la integración ICT
+    // ya clasifica (ict.external_integration_attachment_association) pero que NO existen aquí, por lo que
+    // hoy el adjunto ICT se muestra sin etiqueta amigable, no aparece como ítem del checklist y no puede
+    // satisfacer uno. Obligatoriedad según ict.external_integration_configuration_documents:
+    //   matrícula (matricula_inicial): certificado_cepd "Certificado CEPD" (opcional),
+    //       poder_comprador "Poder Comprador-Apoderado" (opcional)
+    //   traspaso (traspaso_standard): poder_comprador (opcional), poder_vendedor "Poder Vendedor-
+    //       Apoderado" (opcional), contrato_leasing "Contrato LEASING" (obligatorio en traspaso unilat.)
+    //   leasing / otros (tipologías aún no modeladas): contrato_leasing y declaracion_arrendadora
+    //       "Declaración cía arrendadora" (matrícula leasing), blindaje "Blindaje" (otros trámites)
+    // Al agregarlos como ChecklistItem, el adjunto ICT quedará etiquetado en el frontend (DocumentChecklist
+    // usa item.label del backend). Contraparte del TODO en core-ict 15-ICT-attachment-association.sql.
+
     private static readonly Dictionary<string, TramiteTipologia> ByCode =
         Tipologias.ToDictionary(t => t.Codigo);
 

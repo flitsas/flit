@@ -150,11 +150,15 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         policy.AllowMiscNewVehicles = settings.AllowMiscNewVehicles;
         policy.OnlyOwnVehicles = settings.OnlyOwnVehicles;
         policy.SignatureVaultEnabled = settings.SignatureVaultEnabled;
+        policy.PlatePreassignEnabled = settings.PlatePreassignEnabled;
+        policy.PlateFlowSkipToTerminado = settings.PlateFlowSkipToTerminado;
         policy.NotificationChannel = TenantSettingsCodes.ToDb(settings.NotificationChannel);
         policy.NotificationTarget = TenantSettingsCodes.ToDb(settings.NotificationTarget);
         policy.PaymentMethods = JsonSerializer.Serialize(settings.PaymentMethods);
         policy.RuntFailoverTimeoutMs = settings.RuntFailoverTimeoutMs;
         policy.ConsultationProviderConfig = SerializeConsultationConfig(settings.ConsultationProviderConfig);
+        policy.AvaluoProviderConfig = SerializeAvaluoConfig(settings.AvaluoProviderConfig);
+        policy.FinesQuerySource = settings.FinesQuerySource;
     }
 
     private static TenantSettings Map(TenantOperationalPolicy entity) => new()
@@ -164,11 +168,15 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         AllowMiscNewVehicles = entity.AllowMiscNewVehicles,
         OnlyOwnVehicles = entity.OnlyOwnVehicles,
         SignatureVaultEnabled = entity.SignatureVaultEnabled,
+        PlatePreassignEnabled = entity.PlatePreassignEnabled,
+        PlateFlowSkipToTerminado = entity.PlateFlowSkipToTerminado,
         NotificationChannel = TenantSettingsCodes.ParseChannelDb(entity.NotificationChannel),
         NotificationTarget = TenantSettingsCodes.ParseTargetDb(entity.NotificationTarget),
         PaymentMethods = DeserializePaymentMethods(entity.PaymentMethods),
         RuntFailoverTimeoutMs = entity.RuntFailoverTimeoutMs,
         ConsultationProviderConfig = DeserializeConsultationConfig(entity.ConsultationProviderConfig),
+        AvaluoProviderConfig = DeserializeAvaluoConfig(entity.AvaluoProviderConfig),
+        FinesQuerySource = TenantSettingsCodes.ParseFinesSource(entity.FinesQuerySource) ?? TenantSettingsCodes.FinesSourceExternal,
     };
 
     private static List<string> DeserializePaymentMethods(string json)
@@ -205,5 +213,29 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         }
 
         return new ConsultationProviderConfig(byKind);
+    }
+
+    // ── Avalúo (Feature #10707) ─────────────────────────────────────────────
+    private sealed record AvaluoConfigJson(string? Primary, List<string>? Enabled);
+
+    private static string SerializeAvaluoConfig(AvaluoProviderConfig config) =>
+        JsonSerializer.Serialize(new AvaluoConfigJson(config.Primary, [.. config.Enabled]), WebJson);
+
+    private static AvaluoProviderConfig DeserializeAvaluoConfig(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return AvaluoProviderConfig.Default;
+        }
+
+        var raw = JsonSerializer.Deserialize<AvaluoConfigJson>(json, WebJson);
+        if (raw is null || raw.Enabled is null || raw.Enabled.Count == 0)
+        {
+            return AvaluoProviderConfig.Default;
+        }
+
+        return new AvaluoProviderConfig(
+            raw.Primary ?? AvaluoProviderConfig.BaseProvider,
+            raw.Enabled);
     }
 }

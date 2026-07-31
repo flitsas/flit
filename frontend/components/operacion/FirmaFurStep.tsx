@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Building2,
   Check,
@@ -12,18 +12,25 @@ import {
   X,
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import {
+  getPlatePreassignStatus,
+  listAvailablePlatesForCompany,
+  type PlateDetail,
+} from '@/lib/api/admin-plate-ranges';
 import MatriculaResumen from './MatriculaResumen';
 import ExpedienteVisor from './ExpedienteVisor';
 import ExpedienteTimeline from './ExpedienteTimeline';
+import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { documentLabel } from '@/lib/tramites/document-labels';
 import type {
   Actor,
   BiometricValidation,
   FieldValue,
-  FurDocument,
   InstanceStatus,
   Participant,
   ParticipantRol,
+  PreflightCheck,
   ProcedureAttachment,
   Signature,
   SignatureParte,
@@ -32,17 +39,91 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
+/** Estado de la pre-generación del paquete al entrar al paso FUR (Feature #11066). */
+export type PaqueteDocsStatus = 'idle' | 'loading' | 'ready' | 'error';
+
 interface Props {
   instanceId: string | null;
   modalidad: WizardModalidad;
   /** Re-consulta el estado del wizard tras una acción (server-driven). */
   onRefresh?: () => void;
+  /** FEATURE 05 — el RNMC aplica al trámite: se consulta por actor y se muestra en el resumen. */
+  rnmcEnabled?: boolean;
+  /**
+   * Feature #11066 — avisa al wizard si el paquete (FUR + impronta) ya se pre-generó al entrar
+   * al paso. La generación NO bloquea Preparar ni Guardar; Radicar sí exige consolidado completo.
+   */
+  onPaqueteStatusChange?: (status: PaqueteDocsStatus) => void;
 }
 
 const PARTE_LABEL: Record<SignatureParte, string> = {
   comprador: 'Comprador',
   vendedor: 'Vendedor',
 };
+
+// FEATURE 05 — colores por estado del check RNMC (mismo semáforo del pre-vuelo: ok verde, warn ámbar).
+const RNMC_STATUS_STYLE: Record<string, { dot: string; text: string }> = {
+  ok: { dot: '#8CC63F', text: '#8CC63F' },
+  warn: { dot: '#F9AC00', text: '#F9AC00' },
+  fail: { dot: '#FF4E00', text: '#FF4E00' },
+  unknown: { dot: '#9AA5B1', text: '#9AA5B1' },
+  error: { dot: '#FF4E00', text: '#FF4E00' },
+};
+
+/**
+ * FEATURE 05 — resultado de la consulta RNMC (medidas correctivas de la Policía) por actor. Se
+ * consulta al entrar al paso final (ya con la fecha de expedición de cada actor), no en el pre-vuelo.
+ * Reutiliza `sourceLabel` (verifik_rnmc→RNMC) y `checkRoleSuffix` (comprador/vendedor) del pre-vuelo.
+ */
+function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: boolean }) {
+  return (
+    <div className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]">
+      <div className="mb-3 flex items-center gap-2">
+        <Search className="h-4 w-4 opacity-60" aria-hidden="true" />
+        <h3 className="text-sm font-semibold">Consulta RNMC — Medidas correctivas</h3>
+        {loading && <RefreshCw className="h-3.5 w-3.5 animate-spin opacity-60" aria-hidden="true" />}
+      </div>
+      {loading && checks.length === 0 ? (
+        <p className="text-[11px] opacity-60">Consultando el RNMC de los actores…</p>
+      ) : checks.length === 0 ? (
+        <p className="text-[11px] opacity-60">Sin resultados del RNMC para los actores del trámite.</p>
+      ) : (
+        <ul className="space-y-1.5" aria-label="Resultados RNMC por actor">
+          {checks.map((c) => {
+            const s = RNMC_STATUS_STYLE[c.status] ?? RNMC_STATUS_STYLE.unknown;
+            return (
+              <li key={c.key} className="flex items-start gap-2.5 rounded-xl border p-2.5">
+                <span
+                  className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ background: s.dot }}
+                  aria-hidden="true"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-semibold">
+                      {c.label}
+                      {checkRoleSuffix(c.key)}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold" style={{ color: s.text }}>
+                      {c.status}
+                    </span>
+                    <span
+                      className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+                      style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
+                    >
+                      {sourceLabel(c.source)}
+                    </span>
+                  </div>
+                  {c.message && <p className="mt-0.5 text-[11px] opacity-70">{c.message}</p>}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 const ROL_OPTIONS: { value: ParticipantRol; label: string }[] = [
   { value: 'comprador', label: 'Comprador' },
@@ -122,7 +203,13 @@ function CopyLink({ link, label }: { link: string; label: string }) {
  * wizard tras cada acción y delega la verificación autoritativa al backend
  * (submit hard-gate). La firma de compraventa solo aplica a traspaso.
  */
-export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
+export function FirmaFurStep({
+  instanceId,
+  modalidad,
+  onRefresh,
+  rnmcEnabled = false,
+  onPaqueteStatusChange,
+}: Props) {
   // Solo lectura (Track C): sin acciones (organismo, firma, participantes, FUR);
   // se conserva la visualización (resumen, expediente, timeline, descargas).
   const readOnly = useWizardReadOnly();
@@ -137,6 +224,20 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
   // Adjuntos + biométrica del expediente (alimentan MatriculaResumen y ExpedienteVisor).
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
   const [biometric, setBiometric] = useState<BiometricValidation[]>([]);
+  // HU #11014 — partes cubiertas por la firma del baúl: el expediente las rotula como firmadas desde
+  // el baúl en vez de hablar del certificado de validación de identidad.
+  const [firmaBaulPartes, setFirmaBaulPartes] = useState<string[]>([]);
+  // FEATURE 05 — resultado RNMC por actor (medidas correctivas). Se consulta al entrar a este paso
+  // (cuando ya se capturó la fecha de expedición de cada actor), no en el pre-vuelo.
+  const [rnmcChecks, setRnmcChecks] = useState<PreflightCheck[]>([]);
+  const [rnmcLoading, setRnmcLoading] = useState(false);
+  // Feature #11066 — pre-generación del paquete al entrar al paso (antes de Preparar).
+  const [paqueteStatus, setPaqueteStatus] = useState<PaqueteDocsStatus>('idle');
+  const paqueteKickoffRef = useRef(false);
+  const onPaqueteStatusChangeRef = useRef(onPaqueteStatusChange);
+  useEffect(() => {
+    onPaqueteStatusChangeRef.current = onPaqueteStatusChange;
+  }, [onPaqueteStatusChange]);
 
   const loadDetail = useCallback(async () => {
     if (!instanceId) return;
@@ -161,21 +262,41 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
       // pierde el listado de adjuntos, y viceversa. Ambos son informativos.
       const [att, bio] = await Promise.allSettled([
         tramitesClient.getAttachments(instanceId),
-        tramitesClient.listBiometric(instanceId),
+        tramitesClient.listBiometricExpediente(instanceId),
       ]);
       if (att.status === 'fulfilled') setAttachments(att.value);
-      if (bio.status === 'fulfilled') setBiometric(bio.value);
+      if (bio.status === 'fulfilled') {
+        setBiometric(bio.value.validations);
+        setFirmaBaulPartes(bio.value.firmaBaulPartes);
+      }
     } catch {
       // El expediente es informativo; no bloquea el render del paso.
     }
   }, [instanceId]);
+
+  // FEATURE 05 — al entrar a este paso (ya con la fecha de expedición de cada actor) se dispara la
+  // consulta RNMC: POST corre la consulta por actor natural y persiste, y devuelve los checks. Si el
+  // RNMC no aplica al trámite (rnmcEnabled=false) no se llama nada.
+  const loadRnmc = useCallback(async () => {
+    if (!instanceId || !rnmcEnabled) return;
+    setRnmcLoading(true);
+    try {
+      const checks = await tramitesClient.runRnmc(instanceId);
+      setRnmcChecks(checks);
+    } catch {
+      // El RNMC es informativo en este paso; su fallo no bloquea la firma/FUR.
+    } finally {
+      setRnmcLoading(false);
+    }
+  }, [instanceId, rnmcEnabled]);
 
   useEffect(() => {
     // Carga al montar: el setState ocurre tras el await (no es setState síncrono).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDetail();
     void loadExpediente();
-  }, [loadDetail, loadExpediente]);
+    void loadRnmc();
+  }, [loadDetail, loadExpediente, loadRnmc]);
 
   const fv = useCallback(
     (key: string): string =>
@@ -234,6 +355,66 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
     onRefresh?.();
     void loadExpediente();
   }, [onRefresh, loadExpediente]);
+  // Feature #11066 — token para que Fur/Impronta re-listen adjuntos tras la pre-gen (sin
+  // refrescar el wizard: eso remonta el paso y puede adelantar el estado de negocio).
+  const [docsReloadToken, setDocsReloadToken] = useState(0);
+
+  // Feature #11066 — reporta al shell el estado del paquete (banner: no bloquea Preparar).
+  useEffect(() => {
+    onPaqueteStatusChangeRef.current?.(paqueteStatus);
+  }, [paqueteStatus]);
+
+  // Feature #11066 — al entrar al paso FUR (con organismo y en borrador/subsanación) pre-genera
+  // el paquete + impronta. Preparar/Guardar NO esperan a que termine; Radicar sí exige consolidado.
+  useEffect(() => {
+    if (!instanceId || readOnly || !organismoSelected || !detail) return;
+    if (detail.status !== 'borrador' && detail.status !== 'subsanacion') return;
+    if (paqueteKickoffRef.current) return;
+    paqueteKickoffRef.current = true;
+
+    let cancelled = false;
+    void (async () => {
+      setPaqueteStatus('loading');
+      try {
+        let atts: ProcedureAttachment[] = [];
+        try {
+          atts = await tramitesClient.getAttachments(instanceId);
+          if (!cancelled) setAttachments(atts);
+        } catch {
+          // Si falla el listado, intentamos generar de todas formas.
+        }
+
+        const hasFurDoc = atts.some((a) => a.tipo === 'fur');
+        const hasImpronta = atts.some((a) => a.tipo === 'impronta');
+
+        if (!hasFurDoc) {
+          await tramitesClient.generarFur(instanceId);
+        }
+
+        if (!hasImpronta) {
+          try {
+            await tramitesClient.generarImpronta(instanceId);
+          } catch {
+            // Best-effort: sin impronta no bloquea el paso ni Preparar.
+          }
+        }
+
+        if (cancelled) return;
+        setPaqueteStatus('ready');
+        // Solo adjuntos locales — no onRefresh del wizard (evita remount / cambio de estado).
+        void loadExpediente();
+        setDocsReloadToken((t) => t + 1);
+      } catch {
+        if (cancelled) return;
+        paqueteKickoffRef.current = false;
+        setPaqueteStatus('error');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [instanceId, readOnly, organismoSelected, detail, loadExpediente]);
 
   return (
     <div className="space-y-8">
@@ -243,6 +424,23 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         modalidad={modalidad}
         onOpenModal={() => setOrganismoModalOpen(true)}
       />
+
+      {/* HU #10799 — selección de placa preasignada como SECCIÓN explícita (Flujo A), solo en matrícula
+          inicial y una vez elegido el OT. No aplica si el VIN ya tiene placa del RUNT (AC2). */}
+      {modalidad === 'matricula_inicial' && organismoSelected && organismo.id && instanceId && (
+        <PlacaPreasignadaSection
+          instanceId={instanceId}
+          organismoId={organismo.id}
+          plateValue={fv('plate')}
+          plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
+          preferredDigitValue={fv('plate_preferred_last_digit')}
+          readOnly={readOnly}
+          onRefresh={() => {
+            void loadDetail();
+            onRefresh?.();
+          }}
+        />
+      )}
 
       <MatriculaResumen
         modalidad={modalidad}
@@ -273,7 +471,10 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         archivosCount={attachments.length}
         identidadAprobada={identidadAprobada}
         orgTransito={{ nombre: organismo.name, ciudad: organismo.city }}
+        soat={{ estado: fv('soat_estado'), vencimiento: fv('soat_vencimiento') }}
       />
+
+      {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
 
       <ExpedienteVisor
         instanceId={instanceId}
@@ -283,6 +484,7 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         vin={fv('vin')}
         attachments={attachments}
         biometric={biometric}
+        firmaBaulPartes={firmaBaulPartes}
         orgTransito={{ nombre: organismo.name, ciudad: organismo.city, codigo: organismo.code }}
       />
 
@@ -290,11 +492,13 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         <FirmaSection instanceId={instanceId} onRefresh={onRefresh} />
       )}
       <ParticipantesSection instanceId={instanceId} />
-      <ImprontaSection instanceId={instanceId} onRefresh={handleDocumentGenerated} />
+      <ImprontaSection instanceId={instanceId} reloadToken={docsReloadToken} />
       <FurSection
         instanceId={instanceId}
         modalidad={modalidad}
+        status={detail?.status ?? 'borrador'}
         onRefresh={handleDocumentGenerated}
+        reloadToken={docsReloadToken}
       />
 
       <ExpedienteTimeline statusHistory={detail?.statusHistory ?? []} />
@@ -308,6 +512,292 @@ export function FirmaFurStep({ instanceId, modalidad, onRefresh }: Props) {
         />
       )}
     </div>
+  );
+}
+
+// ── Placa preasignada (Flujo A, HU #10799) ────────────────────────────
+
+/**
+ * Sección explícita del paso FUR para elegir la placa preasignada del rango del OT (Flujo A). Reemplaza
+ * la antigua fase modal. No aplica si el VIN ya tiene placa del RUNT (source 'consultation', AC2). Si no
+ * hay placas disponibles, informa que el OT la asignará (Flujo B, AC3). Con buscador para rangos grandes.
+ */
+export function PlacaPreasignadaSection({
+  instanceId,
+  organismoId,
+  plateValue,
+  plateSource,
+  preferredDigitValue = '',
+  readOnly,
+  onRefresh,
+}: {
+  instanceId: string;
+  organismoId: string;
+  plateValue: string;
+  plateSource: string;
+  /** HU #10805 — dígito de preferencia persistido (field_value `plate_preferred_last_digit`). */
+  preferredDigitValue?: string;
+  readOnly: boolean;
+  onRefresh?: () => void;
+}) {
+  const [plates, setPlates] = useState<PlateDetail[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [query, setQuery] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [changing, setChanging] = useState(false);
+  // HU #10805 — dígito de preferencia (0-9) para radicar sin placa: guía para el OT al asignar.
+  const [preferredDigit, setPreferredDigit] = useState(() => preferredDigitValue ?? '');
+  const [savingDigit, setSavingDigit] = useState(false);
+  // HU #10806 (AC3) — ¿la ruta de preasignación está activa para esta compañía/OT? null = cargando.
+  const [preassignEnabled, setPreassignEnabled] = useState<boolean | null>(null);
+
+  const placa = plateValue.trim();
+  // AC2 — el VIN ya tiene placa del RUNT (no la eligió el usuario): no aplica la preasignación.
+  const vinTienePlacaRunt = placa !== '' && plateSource === 'consultation';
+  const placaElegida = placa !== '' && plateSource === 'user';
+  const mostrarSelector = !readOnly && !vinTienePlacaRunt && (!placaElegida || changing);
+
+  useEffect(() => {
+    if (!mostrarSelector) return;
+    let active = true;
+    // HU #10806 — consulta el estado de la ruta antes de ofrecer el selector: si no está habilitada,
+    // se avisa (el trámite se entregará estándar) en vez de simular que preasigna.
+    // HU #10806 (Alternativa C) — persiste la decisión de ruta en borrador como field_value
+    // `plate_route_active`. Es la fuente que consume el trigger de BD para fijar automáticamente
+    // `plate_flow_status = 'preasignado'` al radicar sin placa, aunque el binario del API esté desfasado.
+    const persistRouteActive = (enabled: boolean) => {
+      void tramitesClient
+        .patchFieldValues(instanceId, [
+          { formFieldId: null, fieldKey: 'plate_route_active', valueText: String(enabled) },
+        ])
+        .catch(() => {
+          /* no bloquear el wizard si la persistencia falla; el submit sigue decidiendo la ruta */
+        });
+    };
+    getPlatePreassignStatus(organismoId)
+      .then((s) => {
+        if (active) {
+          setPreassignEnabled(s.enabled);
+          persistRouteActive(s.enabled);
+        }
+      })
+      .catch(() => {
+        // Ante un fallo de la consulta, no bloquear el flujo: se asume habilitada (default previo).
+        if (active) {
+          setPreassignEnabled(true);
+          persistRouteActive(true);
+        }
+      });
+    listAvailablePlatesForCompany(organismoId)
+      .then((data) => {
+        if (active) {
+          setPlates(data);
+          setLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (active) setLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [organismoId, mostrarSelector, instanceId]);
+
+  const pick = async (plate: string) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'plate', valueText: plate },
+      ]);
+      setChanging(false);
+      onRefresh?.();
+    } catch {
+      setError('No se pudo asignar la placa. Inténtalo de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // HU #10806 (AC1) — deshacer la selección de placa: limpia el field `plate` (='') y reabre el
+  // selector + el dígito de preferencia. Sin placa, DecideAsync enruta por preasignación (Flujo B),
+  // así que esto es lo que permite volver a la ruta sin placa o al dígito tras haber elegido una.
+  const clearPlate = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'plate', valueText: '' },
+      ]);
+      setChanging(true);
+      onRefresh?.();
+    } catch {
+      setError('No se pudo quitar la placa. Inténtalo de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // HU #10805 — persiste el dígito de preferencia (o lo limpia con ''). Solo es una guía para el OT;
+  // no cambia el enrutamiento: sin placa el trámite sigue cayendo por preasignación.
+  const saveDigit = async (value: string) => {
+    setPreferredDigit(value);
+    setSavingDigit(true);
+    setError(null);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'plate_preferred_last_digit', valueText: value },
+      ]);
+      onRefresh?.();
+    } catch {
+      setError('No se pudo guardar el dígito de preferencia. Inténtalo de nuevo.');
+    } finally {
+      setSavingDigit(false);
+    }
+  };
+
+  const filtered = query.trim()
+    ? plates.filter((p) => p.plate.toLowerCase().includes(query.trim().toLowerCase()))
+    : plates;
+
+  const shell = (children: ReactNode) => (
+    <section className="rounded-2xl border border-[#DFE5ED] p-5 dark:border-white/10">
+      <h3 className="text-sm font-bold">Placa preasignada</h3>
+      {children}
+    </section>
+  );
+
+  if (vinTienePlacaRunt) {
+    return shell(
+      <p className="mt-2 text-xs opacity-80">
+        El vehículo ya tiene placa asignada según el RUNT (
+        <span className="font-mono font-semibold">{placa}</span>
+        ). No aplica la preasignación de placa.
+      </p>,
+    );
+  }
+
+  if (placaElegida && !changing) {
+    return shell(
+      <div className="mt-2 flex items-center gap-3">
+        <p className="text-xs opacity-80">
+          Placa seleccionada: <span className="font-mono font-semibold">{placa}</span>
+        </p>
+        {!readOnly && (
+          <>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => setChanging(true)}
+              className="rounded-lg border px-3 py-1 text-[11px] font-semibold disabled:opacity-50"
+            >
+              Cambiar
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void clearPlate()}
+              className="rounded-lg border px-3 py-1 text-[11px] font-semibold disabled:opacity-50"
+            >
+              Quitar placa
+            </button>
+          </>
+        )}
+      </div>,
+    );
+  }
+
+  if (!mostrarSelector) {
+    return null;
+  }
+
+  // HU #10806 (AC3) — la ruta de placa NO está habilitada para esta compañía/OT: avisar que el
+  // trámite se entregará de forma estándar, en vez de mostrar el selector como si preasignara.
+  if (preassignEnabled === false) {
+    return shell(
+      <p className="mt-2 text-xs opacity-80" role="status">
+        La preasignación de placa no está habilitada para este organismo de tránsito o tu compañía. El
+        trámite se entregará de forma estándar (sin asignación de placa por el OT).
+      </p>,
+    );
+  }
+
+  return shell(
+    <div className="mt-2 flex flex-col gap-3">
+      <p className="text-[11px] opacity-70">
+        Selecciona una placa del rango asignado por el organismo de tránsito. Si no seleccionas ninguna, el
+        trámite se enviará al OT para que asigne la placa.
+      </p>
+      {error && (
+        <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }} role="alert">
+          {error}
+        </p>
+      )}
+      {loaded && plates.length === 0 ? (
+        <p className="text-xs opacity-80">
+          No hay placas disponibles en el rango; el trámite se enviará al OT para que asigne la placa.
+        </p>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 rounded-xl border px-3 py-2">
+            <Search className="h-4 w-4 opacity-60" aria-hidden="true" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar placa…"
+              aria-label="Buscar placa disponible"
+              className="w-full bg-transparent text-xs outline-none"
+            />
+          </div>
+          <div className="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
+            {filtered.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                disabled={saving}
+                onClick={() => void pick(p.plate)}
+                className="rounded-xl border p-2 text-center font-mono text-xs font-semibold hover:border-[#557EFF] disabled:opacity-50"
+              >
+                {p.plate}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {/* HU #10805 — dígito de preferencia para radicar sin placa (guía para el OT; opcional). */}
+      <label className="mt-1 flex flex-col gap-1 text-[11px] font-semibold">
+        Dígito de preferencia (opcional)
+        <span className="text-[10px] font-normal opacity-70">
+          Si radicas sin placa, indica el número en el que prefieres que termine. El OT lo toma como
+          guía: puede asignar una placa que termine en ese dígito u otra.
+        </span>
+        <select
+          value={preferredDigit}
+          disabled={savingDigit}
+          onChange={(e) => void saveDigit(e.target.value)}
+          aria-label="Dígito de preferencia de placa"
+          className="mt-1 w-44 rounded-lg border px-2 py-1 text-xs"
+        >
+          <option value="">Sin preferencia</option>
+          {['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
+            <option key={d} value={d}>
+              Termina en {d}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {changing && placa !== '' && (
+        <button
+          type="button"
+          onClick={() => setChanging(false)}
+          className="self-start rounded-lg border px-3 py-1 text-[11px] font-semibold"
+        >
+          Cancelar
+        </button>
+      )}
+    </div>,
   );
 }
 
@@ -494,6 +984,8 @@ function OrganismoModal({
         { formFieldId: null, fieldKey: 'transit_office_name', valueText: org.name },
         { formFieldId: null, fieldKey: 'transit_office_city', valueText: org.cityCode },
       ]);
+      // HU #10799 — la selección de placa (Flujo A) ya no vive aquí: es una SECCIÓN explícita del paso FUR
+      // (PlacaPreasignadaSection). El modal solo confirma el OT.
       onConfirmed();
     } catch {
       setError('No se pudo guardar el organismo. Inténtalo de nuevo.');
@@ -638,17 +1130,22 @@ function FirmaSection({
     onRefresh?.();
   };
 
-  const partes: SignatureParte[] = ['comprador', 'vendedor'];
+  // HU #11019 — saliente antes que entrante, igual que el expediente y el dashboard.
+  const partes: SignatureParte[] = ['vendedor', 'comprador'];
 
   return (
     <section className="space-y-4" aria-label="Firma de la compraventa">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h4 className="text-sm font-bold">Firma de la compraventa</h4>
+          {/* La firma del documento NO se captura aquí: se apalanca de lo que la parte ya acreditó.
+              Decirlo evita que el gestor busque un paso de firma que no existe. */}
           <p className="text-xs opacity-70">
-            Estado informativo de la firma electrónica por parte. La lógica
-            definitiva de firmas está pendiente de definición de negocio, por lo
-            que <strong>no bloquea</strong> preparar ni radicar el traspaso.
+            La firma de cada parte se apalanca de su{' '}
+            <strong>validación de identidad</strong> o de su{' '}
+            <strong>firma del baúl</strong>, según el mecanismo seleccionado al registrar el trámite.
+            El estado que ves aquí es informativo y <strong>no bloquea</strong> preparar ni radicar el
+            traspaso.
           </p>
         </div>
         {!readOnly && (
@@ -712,25 +1209,6 @@ function FirmaParteCard({
   const [error, setError] = useState<string | null>(null);
   const readOnly = useWizardReadOnly();
 
-  const handleSolicitar = async () => {
-    if (!instanceId) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await tramitesClient.solicitarFirma(instanceId, { parte });
-      onChanged();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      setError(
-        msg.startsWith('409')
-          ? 'La firma de la compraventa solo aplica a traspaso.'
-          : 'No se pudo solicitar la firma.',
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const handleSimular = async () => {
     if (!instanceId || !signature) return;
     setBusy(true);
@@ -780,18 +1258,11 @@ function FirmaParteCard({
             </button>
           )}
         </div>
-      ) : readOnly ? (
-        <p className="text-[11px] opacity-60">Firma no solicitada.</p>
       ) : (
-        <button
-          type="button"
-          onClick={() => void handleSolicitar()}
-          disabled={busy || !instanceId}
-          className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: '#557EFF' }}
-        >
-          {busy ? 'Solicitando…' : 'Solicitar firma'}
-        </button>
+        // HU #11019 — se retira el botón de solicitar la firma de la compraventa. El gate ya no la exige
+        // desde ADR-0028 (B12/HU #10661), así que pedirla solo añadía un paso que no desbloquea nada.
+        // El estado de una firma ya solicitada se sigue mostrando arriba.
+        <p className="text-[11px] opacity-60">Firma no solicitada.</p>
       )}
 
       {error && (
@@ -1125,23 +1596,18 @@ function StatusChip({
 // ── Impronta integrada al trámite ────────────────────────────────────
 
 /**
- * Botón "Generar Impronta" del paso FUR: genera el Certificado de Improntas Digitales (Kyverum
- * RUNT) con los datos ya disponibles del trámite (placa/VIN, documento del propietario, organismo
- * de tránsito, operador) y lo adjunta al expediente (mismo flujo que una subida manual). Solo se
- * muestra si aún no existe un adjunto tipo 'impronta' (cargado a mano o generado antes) — la
- * generación es idempotente por NO-regeneración en el backend.
+ * Impronta en el paso FUR: Feature #11066 la pre-genera al entrar al paso (best-effort).
+ * Aquí solo se informa / descarga; sin botón manual de generación.
  */
 function ImprontaSection({
   instanceId,
-  onRefresh,
+  reloadToken = 0,
 }: {
   instanceId: string | null;
-  onRefresh?: () => void;
+  /** Feature #11066 — se incrementa tras la pre-gen para reconsultar adjuntos. */
+  reloadToken?: number;
 }) {
   const [attachment, setAttachment] = useState<ProcedureAttachment | null | undefined>(undefined);
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [radicado, setRadicado] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!instanceId) return;
@@ -1157,102 +1623,34 @@ function ImprontaSection({
     // load solo hace setState DESPUÉS del await (no es cascada síncrona).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [load]);
+  }, [load, reloadToken]);
 
-  const handleGenerate = async () => {
-    if (!instanceId) return;
-    setGenerating(true);
-    setError(null);
-    setRadicado(null);
-    try {
-      const result = await tramitesClient.generarImpronta(instanceId);
-      setRadicado(result.radicado);
-      await load();
-      onRefresh?.();
-
-      // Descarga automática al equipo del usuario (además de quedar cargada en el trámite).
-      const { blob, filename } = await tramitesClient.downloadAttachment(instanceId, result.attachmentId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename || result.filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      setError(
-        msg.includes('organismo de tránsito')
-          ? 'Selecciona el organismo de tránsito antes de generar la impronta.'
-          : msg.includes('placa o el VIN')
-            ? 'Falta la placa o el VIN del vehículo para generar la impronta.'
-            : msg.includes('documento del propietario')
-              ? 'Falta el documento del propietario para generar la impronta.'
-              : msg.includes('ya existe un documento de impronta')
-                ? 'Ya existe una impronta cargada para este trámite.'
-                : msg.includes('operador')
-                  ? 'No se pudo resolver el operador que solicita la impronta.'
-                  : msg.includes('Kyverum RUNT')
-                    ? 'Kyverum RUNT no pudo generar la impronta. Intenta de nuevo en unos minutos.'
-                    : 'No se pudo generar la impronta.',
-      );
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  // Aún no se sabe si existe (carga inicial): no se muestra nada para evitar parpadeo del botón.
+  // Aún no se sabe si existe (carga inicial): no se muestra nada para evitar parpadeo.
   if (attachment === undefined) return null;
-  // Ya existía un adjunto de impronta ANTES de esta sesión (manual o generado antes): la sección
-  // no aparece. Si se acaba de generar en esta sesión (radicado con valor), se mantiene visible
-  // para mostrar el mensaje de éxito aunque el botón ya no se necesite.
-  if (attachment && radicado === null) return null;
-
+  // Ya hay impronta: descarga. Sin impronta: copy (pre-gen / consolidado la intentarán).
   return (
-    <section className="space-y-4" aria-label="Generación de la impronta">
+    <section className="space-y-3" aria-label="Impronta de motor y chasis">
       <div>
         <h4 className="text-sm font-bold">Impronta de motor y chasis</h4>
         <p className="text-xs opacity-70">
-          Genera el Certificado de Improntas Digitales (Kyverum RUNT) con los datos del trámite y
-          adjúntalo automáticamente al expediente. Se descargará también a tu equipo. Si ya tienes
-          tu propia impronta generada, puedes subirla manualmente en su lugar.
+          {attachment
+            ? 'Certificado de Improntas Digitales adjunto al expediente.'
+            : 'Se genera automáticamente al entrar a este paso (Kyverum RUNT) y al Preparar/consolidar. Si ya tienes una impronta propia, súbela en Documentos. No bloquea Preparar ni Guardar.'}
         </p>
       </div>
-
-      {error && (
+      {attachment && (
         <div
-          className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
-          role="alert"
-          aria-live="polite"
+          className="rounded-xl border p-3 flex items-center gap-3"
+          style={{ borderColor: '#8CC63F' }}
         >
-          {error}
+          <FileText className="h-4 w-4 shrink-0" style={{ color: '#5B8A1F' }} aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold">
+              Impronta <span className="opacity-50 font-normal">· {attachment.filename}</span>
+            </p>
+          </div>
+          <DownloadButton instanceId={instanceId} attachment={attachment} />
         </div>
-      )}
-
-      {radicado && !error && (
-        <div
-          className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#8CC63F', background: 'rgba(140,198,63,0.08)', color: '#5B8A1F' }}
-          role="status"
-          aria-live="polite"
-        >
-          Impronta generada (radicado {radicado}) y cargada al trámite. La descarga se inició en tu
-          navegador.
-        </div>
-      )}
-
-      {!attachment && (
-        <button
-          type="button"
-          onClick={() => void handleGenerate()}
-          disabled={generating || !instanceId}
-          className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-        >
-          {generating ? 'Generando…' : 'Generar Improntas'}
-        </button>
       )}
     </section>
   );
@@ -1261,24 +1659,76 @@ function ImprontaSection({
 // ── FUR / compraventa ─────────────────────────────────────────────────
 
 /** Tipos de documento generados por el FUR. */
-const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad', 'certificado_identidad_vendedor']);
+const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad', 'certificado_identidad_vendedor', 'certificado_rnmc']);
+
+/** Feature #11066 — fecha local YYYY-MM-DD para precargar "Fecha del trámite". */
+function todayIsoDate(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * HU #10987 — tope de las observaciones manuales. El recuadro OBSERVACIONES del FUR es un campo
+ * `multiline` de alto fijo en el manifest: un texto más largo se desbordaría del formulario. El
+ * límite es de presentación, no de negocio.
+ */
+const FUR_OBSERVACIONES_MAX = 300;
+
+/**
+ * HU #11050 (AC3) — traduce un aviso de la cascada (`"impronta: provider_unavailable"`) a algo que el
+ * gestor entienda. El backend manda `documento: motivo`; aquí se nombra el documento con su etiqueta
+ * conocida y se explica el motivo cuando es uno de los previsibles.
+ */
+function consolidadoAvisoLabel(aviso: string): string {
+  const [documento, motivo = ''] = aviso.split(':').map((s) => s.trim());
+  const nombre =
+    documento === 'documentos_del_expediente'
+      ? 'algunos documentos del expediente'
+      : documentLabel(documento);
+  const causa =
+    motivo.includes('organismo_requerido')
+      ? ' (falta el organismo de tránsito)'
+      : motivo.includes('provider_unavailable')
+        ? ' (el proveedor no está disponible; vuelve a generar el expediente en unos minutos)'
+        : motivo.includes('provider_validation')
+          ? ' (el proveedor rechazó los datos del trámite)'
+          : motivo
+            ? ` (${motivo})`
+            : '';
+  return `${nombre}${causa}`;
+}
 
 function FurSection({
   instanceId,
   modalidad,
+  status,
   onRefresh,
+  reloadToken = 0,
 }: {
   instanceId: string | null;
   modalidad: WizardModalidad;
+  /** Estado de negocio del trámite: en estado final no se ofrece generar (HU #11052/#11051). */
+  status: InstanceStatus;
   onRefresh?: () => void;
+  /** Feature #11066 — se incrementa tras la pre-gen para reconsultar adjuntos. */
+  reloadToken?: number;
 }) {
   const [docs, setDocs] = useState<ProcedureAttachment[] | null>(null);
   const [consolidado, setConsolidado] = useState<ProcedureAttachment | null>(null);
-  const [generating, setGenerating] = useState(false);
   const [generatingConsolidado, setGeneratingConsolidado] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [consolidadoError, setConsolidadoError] = useState<string | null>(null);
-  const [lastResult, setLastResult] = useState<FurDocument[] | null>(null);
+  // HU #10924 — plantilla de FUR que aplica según la clasificación del vehículo (backend = fuente de verdad).
+  const [furFormat, setFurFormat] = useState<string | null>(null);
+  // HU #10987 / #10988 (Feature #10972) — el recuadro OBSERVACIONES y la fecha del trámite del FUR
+  // leían `fur_observations` y `fur_processing_date`, dos llaves que NADIE escribía: el gestor no
+  // podía aportar observaciones y la fecha era la de generación, impuesta por un fallback silencioso.
+  // Feature #11066 — por defecto hoy; si el trámite ya tiene `fur_processing_date`, load() la respeta.
+  const [observaciones, setObservaciones] = useState('');
+  const [fechaTramite, setFechaTramite] = useState(todayIsoDate);
+  const [savingCampos, setSavingCampos] = useState(false);
 
   const load = useCallback(async () => {
     if (!instanceId) return;
@@ -1286,106 +1736,192 @@ function FurSection({
       const list = await tramitesClient.getAttachments(instanceId);
       setDocs(list.filter((a) => FUR_TIPOS.has(a.tipo)));
       setConsolidado(list.find((a) => a.tipo === 'consolidado') ?? null);
+      const fmt = await tramitesClient.getFurTemplateFormat(instanceId);
+      setFurFormat(fmt.format);
+      const detail = await tramitesClient.getInstance(instanceId);
+      const valor = (key: string) =>
+        detail?.fieldValues?.find((f) => f.fieldKey === key)?.valueText ?? '';
+      setObservaciones(valor('fur_observations'));
+      const fechaGuardada = valor('fur_processing_date').slice(0, 10);
+      const fecha = fechaGuardada || todayIsoDate();
+      setFechaTramite(fecha);
+      // Si no había fecha persistida, guardamos la de hoy para que el paquete/FUR la usen.
+      if (!fechaGuardada) {
+        try {
+          await tramitesClient.patchFieldValues(instanceId, [
+            { formFieldId: null, fieldKey: 'fur_processing_date', valueText: fecha },
+          ]);
+        } catch {
+          // Best-effort: el input ya muestra hoy; el backend puede caer al fallback.
+        }
+      }
     } catch {
-      // El listado de adjuntos es secundario; el error de generar se muestra abajo.
+      // El listado de adjuntos y el formato son secundarios; el error de generar se muestra abajo.
     }
   }, [instanceId]);
+
+  /**
+   * Persiste observaciones y fecha del trámite. Se dispara al perder el foco y ANTES de generar, para
+   * que el PDF salga con lo que el gestor tiene en pantalla y no con lo último guardado.
+   * Best-effort: fuera de borrador/subsanación el backend responde `not_draft` y el campo queda de
+   * solo lectura de hecho — no tiene sentido bloquear la generación por eso.
+   */
+  const guardarCampos = useCallback(async () => {
+    if (!instanceId) return;
+    setSavingCampos(true);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'fur_observations', valueText: observaciones.trim() || null },
+        { formFieldId: null, fieldKey: 'fur_processing_date', valueText: fechaTramite || null },
+      ]);
+    } catch {
+      // Silencio intencionado: ver comentario de arriba.
+    } finally {
+      setSavingCampos(false);
+    }
+  }, [instanceId, observaciones, fechaTramite]);
 
   useEffect(() => {
     // load solo hace setState DESPUÉS del await (no es cascada síncrona).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [load]);
-
-  const handleGenerate = async () => {
-    if (!instanceId) return;
-    setGenerating(true);
-    setError(null);
-    try {
-      const result = await tramitesClient.generarFur(instanceId);
-      setLastResult(result.documents);
-      await load();
-      onRefresh?.();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      setError(
-        msg.includes('biometria_gate')
-          ? 'Falta validar identidad: primero debe aprobarse la biométrica requerida de las partes.'
-          : msg.includes('organismo_requerido')
-            ? 'Selecciona el organismo de tránsito antes de generar el FUR.'
-            : msg.startsWith('409')
-              ? 'No se pudo generar el FUR: revisa la identidad y el organismo de tránsito.'
-              : 'No se pudo generar el FUR.',
-      );
-    } finally {
-      setGenerating(false);
-    }
-  };
+  }, [load, reloadToken]);
 
   const handleGenerateConsolidado = async () => {
     if (!instanceId) return;
     setGeneratingConsolidado(true);
     setConsolidadoError(null);
     try {
-      await tramitesClient.generarConsolidado(instanceId);
+      // HU #11052 — el consolidado es el ÚNICO disparador de generación, así que hereda el guardado
+      // previo que hacía el botón del FUR (HU #10987/#10988): si el gestor escribe la fecha o las
+      // observaciones y pulsa generar sin que el campo pierda el foco, el PDF saldría sin ese texto.
+      await guardarCampos();
+      // HU #11017 — el consolidado se genera aunque falten documentos obligatorios: si vuelve marcado
+      // como incompleto se avisa qué falta, en vez de dejar al gestor con un expediente que el
+      // organismo rechazará sin explicación.
+      const generado = await tramitesClient.generarConsolidado(instanceId);
+      const avisos: string[] = [];
+      if (generado?.incompleto) {
+        const faltantes = (generado.documentosFaltantes ?? []).map(documentLabel).join(', ');
+        avisos.push(
+          faltantes
+            ? `Faltan documentos obligatorios: ${faltantes}.`
+            : 'Faltan documentos obligatorios.',
+        );
+      }
+      // HU #11050 (AC3) — documentos que la cascada no pudo generar. Importa desde que el gestor ya no
+      // tiene botones para generarlos a mano (HU #11052): sin este aviso, el documento simplemente no
+      // aparecería en el expediente y no habría forma de saber por qué.
+      for (const aviso of generado?.avisosCascada ?? []) {
+        avisos.push(`No se pudo generar ${consolidadoAvisoLabel(aviso)}.`);
+      }
+      if (avisos.length > 0) {
+        setConsolidadoError(`Expediente consolidado generado. ${avisos.join(' ')}`);
+      }
       await load();
       onRefresh?.();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
+      const msg = (err instanceof Error ? err.message : '').trim();
       setConsolidadoError(
-        msg.includes('fur_requerido')
-          ? 'Genera el FUR antes de crear el consolidado.'
-          : msg.includes('documentos_incompletos')
-            ? 'Sube los documentos obligatorios antes de generar el consolidado.'
-            : msg.includes('modalidad_no_soportada')
-              ? 'El consolidado no está disponible para esta modalidad.'
-              : 'No se pudo generar el consolidado.',
+        // HU #11051 — el trámite aprobado/anulado ya no admite regeneración del gestor.
+        msg.includes('generacion_bloqueada_estado_final')
+          ? 'El trámite ya está aprobado o anulado: su documentación es definitiva y no se regenera.'
+          : msg.includes('organismo_requerido')
+            ? 'El organismo de tránsito del trámite no está seleccionado o no está activo en el sistema. Verifícalo antes de generar el expediente.'
+            : msg.includes('fur_requerido')
+              ? 'No se pudo generar el FUR del expediente: revisa los datos del trámite e inténtalo de nuevo.'
+              : msg.includes('documentos_incompletos')
+                ? 'Sube los documentos obligatorios antes de generar el consolidado.'
+                : msg.includes('modalidad_no_soportada')
+                  ? 'El consolidado no está disponible para esta modalidad.'
+                  // El cliente ya trae el `detail` del ProblemDetails: se muestra en vez de un genérico
+                  // que descarta justo el motivo. Sin mensaje (fallo de red) sí cae al genérico.
+                  : msg || 'No se pudo generar el consolidado. Revisa la conexión e inténtalo de nuevo.',
       );
     } finally {
       setGeneratingConsolidado(false);
     }
   };
 
-  const generated = (docs ?? []).length > 0 || (lastResult ?? []).length > 0;
+  const generated = (docs ?? []).length > 0;
   const consolidadoGenerated = consolidado !== null;
+  // HU #11052 (AC3) / HU #11051 — en estado final la documentación es definitiva: solo descarga.
+  const estadoFinal = status === 'aprobado' || status === 'anulado';
 
   return (
     <section className="space-y-4" aria-label="Generación del FUR">
       <div>
-        <h4 className="text-sm font-bold">FUR / contrato de compraventa</h4>
+        <div className="flex items-center gap-2">
+          <h4 className="text-sm font-bold">FUR / contrato de compraventa</h4>
+          {furFormat && (
+            <span
+              className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+              style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+              title="Plantilla de FUR determinada por la clasificación del vehículo"
+            >
+              Plantilla: {furFormat}
+            </span>
+          )}
+        </div>
+        {/* Feature #11066 — al entrar al paso se pre-generan FUR (+ paquete) e impronta.
+            El botón de consolidado (HU #11052) fusiona el expediente ya persistido; no es cascada
+            caliente del paquete. Preparar/Guardar no esperan la pre-gen; Radicar sí exige consolidado. */}
         <p className="text-xs opacity-70">
-          Genera el FUR y el certificado de identidad (y, en traspaso, el
-          contrato de compraventa) con los datos del trámite. Este paso es
-          opcional para guardar o enviar el trámite: puedes generar los PDF
-          ahora o más adelante. Requiere biométrica aprobada y organismo
-          seleccionado.
+          Al entrar a este paso se generan automáticamente el FUR
+          {modalidad === 'traspaso' ? ', el contrato de compraventa' : ''}, la solicitud de trámite
+          virtual, el mandato (si aplica) y los certificados. Aquí configuras fecha y observaciones;
+          cuando existan, puedes descargarlos abajo. Preparar no espera esta generación: si falla,
+          puedes regenerar el expediente consolidado después.
         </p>
       </div>
 
-      {error && (
-        <div
-          className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
-          role="alert"
-          aria-live="polite"
-        >
-          {error}
+      {/* HU #10987 / #10988 — datos del FUR que aporta el gestor. Antes de esta HU el recuadro
+          OBSERVACIONES del formulario oficial era de solo-lectura automática y la fecha era la de
+          generación del PDF. */}
+      <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: '#DFE5ED' }}>
+        <div>
+          <label htmlFor="fur-fecha-tramite" className="text-xs font-semibold mb-1.5 block">
+            Fecha del trámite
+          </label>
+          <input
+            id="fur-fecha-tramite"
+            type="date"
+            value={fechaTramite}
+            onChange={(e) => setFechaTramite(e.target.value)}
+            onBlur={() => void guardarCampos()}
+            disabled={!instanceId}
+            className="rounded-lg border px-3 py-2 text-xs"
+            style={{ borderColor: '#DFE5ED' }}
+          />
+          <p className="text-[10px] opacity-60 mt-1">
+            Se estampa en el FUR y en el resto de documentos del trámite. Por defecto es hoy; puedes
+            cambiarla si el trámite corresponde a otra fecha.
+          </p>
         </div>
-      )}
 
-      <button
-        type="button"
-        onClick={() => void handleGenerate()}
-        disabled={generating || !instanceId}
-        className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-        style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-      >
-        {generating
-          ? 'Generando…'
-          : generated
-            ? 'Re-generar FUR / certificado'
-            : 'Generar FUR / certificado'}
-      </button>
+        <div>
+          <label htmlFor="fur-observaciones" className="text-xs font-semibold mb-1.5 block">
+            Observaciones
+          </label>
+          <textarea
+            id="fur-observaciones"
+            value={observaciones}
+            onChange={(e) => setObservaciones(e.target.value)}
+            onBlur={() => void guardarCampos()}
+            disabled={!instanceId}
+            rows={3}
+            maxLength={FUR_OBSERVACIONES_MAX}
+            placeholder="Particularidades del vehículo o del negocio que el formulario no contempla."
+            className="w-full rounded-lg border px-3 py-2 text-xs"
+            style={{ borderColor: '#DFE5ED' }}
+          />
+          <p className="text-[10px] opacity-60 mt-1">
+            {observaciones.length}/{FUR_OBSERVACIONES_MAX} · Se imprimen en el recuadro OBSERVACIONES
+            del FUR, junto a las transformaciones declaradas y, si aplica, el gravamen.
+            {savingCampos && ' · Guardando…'}
+          </p>
+        </div>
+      </div>
 
       {generated && (
         <ul className="space-y-2" aria-label="Documentos generados">
@@ -1397,8 +1933,8 @@ function FurSection({
             >
               <FileText className="h-4 w-4 shrink-0" style={{ color: '#5B8A1F' }} aria-hidden="true" />
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold capitalize">
-                  {d.tipo} · {d.filename}
+                <p className="text-xs font-semibold">
+                  {documentLabel(d.tipo)} <span className="opacity-50 font-normal">· {d.filename}</span>
                 </p>
                 <p className="text-[10px] opacity-60 truncate" title={d.sha256}>
                   SHA-256: {d.sha256}
@@ -1415,10 +1951,10 @@ function FurSection({
           <div>
             <h5 className="text-xs font-bold">Expediente consolidado</h5>
             <p className="text-[11px] opacity-70">
-              Un solo PDF con el FUR, el certificado de identidad y los documentos
+              Un solo PDF con el FUR, el certificado de identidad, la impronta y los documentos
               cargados en el trámite
-              {modalidad === 'traspaso' ? ' (incluye el contrato de compraventa)' : ''}.
-              Opcional: puedes generarlo cuando el FUR esté listo.
+              {modalidad === 'traspaso' ? ' (incluye el contrato de compraventa)' : ''}. Al generarlo se
+              producen también los documentos que falten.
             </p>
           </div>
 
@@ -1433,19 +1969,28 @@ function FurSection({
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => void handleGenerateConsolidado()}
-            disabled={generatingConsolidado || !instanceId}
-            className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-            style={{ background: '#162744' }}
-          >
-            {generatingConsolidado
-              ? 'Generando consolidado…'
-              : consolidadoGenerated
-                ? 'Re-generar consolidado'
-                : 'Generar consolidado'}
-          </button>
+          {/* HU #11052 (AC3) / HU #11051 — en estado final la documentación es definitiva: no se
+              ofrece generar, solo consultar y descargar lo que ya existe. */}
+          {estadoFinal ? (
+            <p className="text-[11px] font-medium" style={{ color: '#557EFF' }} role="status">
+              El trámite ya está {status === 'aprobado' ? 'aprobado' : 'anulado'}: su documentación es
+              definitiva. Puedes consultarla y descargarla.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handleGenerateConsolidado()}
+              disabled={generatingConsolidado || !instanceId}
+              className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+              style={{ background: '#162744' }}
+            >
+              {generatingConsolidado
+                ? 'Generando expediente…'
+                : consolidadoGenerated
+                  ? 'Re-generar expediente consolidado'
+                  : 'Generar expediente consolidado'}
+            </button>
+          )}
 
           {consolidadoGenerated && consolidado && (
             <div
@@ -1466,7 +2011,124 @@ function FurSection({
           )}
         </div>
       )}
+
+      {/* HU #10611 (Feature #10587) — asignación de SOAT de la ruta de placa, ubicada bajo el
+          Expediente consolidado (movida desde EstadoAcciones). Se auto-oculta salvo sub-estado
+          de placa 'asignado' (el OT ya asignó la placa). */}
+      <PlateFlowCompleteSection instanceId={instanceId} onRefresh={onRefresh} />
     </section>
+  );
+}
+
+/**
+ * Proceso del gestor en sub-estado Asignado: checks opcionales (SOAT / impuesto) y
+ * avance a Terminado para desbloquear Aprobar/Rechazar del OT.
+ */
+function PlateFlowCompleteSection({
+  instanceId,
+  onRefresh,
+}: {
+  instanceId: string | null;
+  onRefresh?: () => void;
+}) {
+  const [plateFlowStatus, setPlateFlowStatus] = useState<string | null>(null);
+  const [soatPagado, setSoatPagado] = useState(false);
+  const [impuestoPagado, setImpuestoPagado] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!instanceId) return;
+    let active = true;
+    tramitesClient
+      .getInstance(instanceId)
+      .then((d) => {
+        if (!active) return;
+        setPlateFlowStatus(d?.plateFlowStatus ?? null);
+        const fields = d?.fieldValues ?? [];
+        setSoatPagado(fields.some((f) => f.fieldKey === 'soat_pagado' && f.valueText === 'true'));
+        setImpuestoPagado(
+          fields.some(
+            (f) => f.fieldKey === 'impuesto_departamental_pagado' && f.valueText === 'true',
+          ),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [instanceId]);
+
+  const completar = async () => {
+    if (!instanceId) return;
+    setWorking(true);
+    setError(null);
+    setMsg(null);
+    try {
+      await tramitesClient.completePlateFlow(instanceId, {
+        soatPagado,
+        impuestoDepartamentalPagado: impuestoPagado,
+      });
+      setPlateFlowStatus('terminado');
+      setMsg('Trámite marcado como Terminado. El OT ya puede aprobar o rechazar.');
+      onRefresh?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo completar el proceso de placa.');
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  if (plateFlowStatus !== 'asignado') return null;
+
+  return (
+    <div className="space-y-3 pt-2 border-t">
+      <div>
+        <h5 className="text-xs font-bold">Procesar trámite (Asignado → Terminado)</h5>
+        <p className="text-[11px] opacity-70">
+          Marca los checks opcionales si aplican y procesa el trámite. Sin pasar a Terminado el OT
+          no puede aprobar ni rechazar.
+        </p>
+      </div>
+
+      <label className="flex cursor-pointer items-center gap-2 text-xs">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-[#557EFF]"
+          checked={soatPagado}
+          onChange={(e) => setSoatPagado(e.target.checked)}
+          disabled={working}
+        />
+        SOAT pagado
+      </label>
+      <label className="flex cursor-pointer items-center gap-2 text-xs">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-[#557EFF]"
+          checked={impuestoPagado}
+          onChange={(e) => setImpuestoPagado(e.target.checked)}
+          disabled={working}
+        />
+        Impuesto departamental pagado
+      </label>
+
+      <button
+        type="button"
+        disabled={working}
+        onClick={() => void completar()}
+        className="rounded-lg bg-[#557eff] px-3.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+      >
+        {working ? 'Procesando…' : 'Marcar como Terminado'}
+      </button>
+
+      {msg ? <p className="m-0 text-xs text-green-700">{msg}</p> : null}
+      {error ? (
+        <p role="alert" className="m-0 text-xs text-orange-700">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

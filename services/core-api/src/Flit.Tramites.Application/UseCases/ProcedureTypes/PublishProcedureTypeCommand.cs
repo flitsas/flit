@@ -23,6 +23,13 @@ public sealed class PublishProcedureTypeHandler(
         if (!validationResult.IsValid)
             return (null, "validation_failed", validationResult);
 
+        // CFD-01 / AC#5 (BE-01-AC-07): re-publicar un tipo YA publicado antes (PublishedAt != null)
+        // incrementa la versión semántica; la primera publicación conserva version=1. Los trámites en
+        // curso no se ven afectados: leen su snapshot inmutable (procedure_type_snapshots), no la
+        // versión live del tipo.
+        if (entity.PublishedAt is not null)
+            entity.Version += 1;
+
         entity.PublicationStatus = PublicationStatus.Published;
         entity.PublishedAt = DateTimeOffset.UtcNow;
         entity.UpdatedAt = DateTimeOffset.UtcNow;

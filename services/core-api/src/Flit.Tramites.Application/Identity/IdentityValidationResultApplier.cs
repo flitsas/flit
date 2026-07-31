@@ -44,8 +44,24 @@ public sealed class IdentityValidationResultApplier(
         ArgumentNullException.ThrowIfNull(result);
 
         // Idempotencia: los estados terminales no se re-aplican ni re-emiten evento.
+        // HU #11015 — EXCEPCIÓN: una validación ya APROBADA a la que le falta la serie del certificado
+        // sí se enriquece cuando un resultado posterior la trae. Pasa cuando el webhook se pierde y
+        // aprueba la reconciliación por GET, que no siempre expone `firmaSerie`: sin este enriquecimiento
+        // el hash quedaba null PARA SIEMPRE y el sello de firma del FUR salía sin valor. No cambia el
+        // estado ni re-emite eventos: solo rellena el hueco (mismo criterio que AdminIdentityValidation).
         if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+        {
+            if (v.Status == BiometricEstados.Aprobado
+                && string.IsNullOrWhiteSpace(v.CertificateHash)
+                && result.Approved
+                && !string.IsNullOrWhiteSpace(result.CertificateHash))
+            {
+                v.CertificateHash = result.CertificateHash;
+                v.UpdatedAt = now;
+            }
+
             return false;
+        }
 
         if (result.Approved)
         {
@@ -69,7 +85,9 @@ public sealed class IdentityValidationResultApplier(
         v.Score = result.Score;
 
         // RF40 — política informar: por debajo del umbral se deja constancia en el timeline sin bloquear.
-        if (repo is not null && policy is not null && result.Score is int score)
+        // Solo aplica a validaciones ligadas a un trámite (ProcedureInstanceId != null); las standalone
+        // no tienen instancia donde escribir el evento de bitácora — HU #10865.
+        if (repo is not null && policy is not null && result.Score is int score && v.ProcedureInstanceId.HasValue)
         {
             var decision = ImprontaPolicyEvaluator.Evaluate(score, policy.MatchThreshold, policy.BlockBelowThreshold);
             if (decision != ImprontaPolicyDecision.Ok)
@@ -78,7 +96,7 @@ public sealed class IdentityValidationResultApplier(
                 {
                     Id = Guid.NewGuid(),
                     TenantId = v.TenantId,
-                    ProcedureInstanceId = v.ProcedureInstanceId,
+                    ProcedureInstanceId = v.ProcedureInstanceId.Value,
                     Tipo = "validacion_biometrica_advertencia",
                     Payload = JsonSerializer.Serialize(new
                     {

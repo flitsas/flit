@@ -12,6 +12,12 @@ export interface OtSidePanelProps {
   children: ReactNode;
   footer?: ReactNode;
   disabled?: boolean;
+  /** Clase de z-index del overlay (p. ej. cuando hay otro modal encima). */
+  zClassName?: string;
+  /**
+   * Ancho del drawer. `lg` para paneles de detalle densos (trámites clientes).
+   */
+  width?: "md" | "lg";
 }
 
 export function OtSidePanel({
@@ -22,13 +28,17 @@ export function OtSidePanel({
   children,
   footer,
   disabled = false,
+  zClassName = "z-50",
+  width = "md",
 }: OtSidePanelProps) {
   if (!open) {
     return null;
   }
 
+  const maxW = width === "lg" ? "max-w-lg" : "max-w-md";
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className={`fixed inset-0 ${zClassName} flex justify-end`}>
       <button
         type="button"
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
@@ -37,7 +47,7 @@ export function OtSidePanel({
         disabled={disabled}
       />
       <aside
-        className="relative flex h-full w-full max-w-md flex-col border-l bg-white shadow-2xl dark:bg-[#0B0F14]"
+        className={`relative flex h-full w-full ${maxW} flex-col border-l bg-card shadow-2xl`}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
@@ -45,7 +55,7 @@ export function OtSidePanel({
         <div
           className="flex items-center justify-between border-b px-4 py-3"
         >
-          <h2 className="text-sm font-bold" style={{ color: "#162744" }}>
+          <h2 className="text-sm font-bold text-foreground">
             {title}
           </h2>
           <button type="button" aria-label="Cerrar" onClick={onClose} disabled={disabled}>

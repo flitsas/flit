@@ -12,9 +12,18 @@ export interface SwitchToggleProps {
   label: string;
   disabled?: boolean;
   id?: string;
+  /** Id de un elemento que explica por qué está deshabilitado (aria-describedby). */
+  describedById?: string;
 }
 
-export function SwitchToggle({ checked, onChange, label, disabled = false, id }: SwitchToggleProps) {
+export function SwitchToggle({
+  checked,
+  onChange,
+  label,
+  disabled = false,
+  id,
+  describedById,
+}: SwitchToggleProps) {
   return (
     <label
       title={label}
@@ -25,6 +34,7 @@ export function SwitchToggle({ checked, onChange, label, disabled = false, id }:
         type="checkbox"
         role="switch"
         aria-label={label}
+        aria-describedby={describedById}
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}

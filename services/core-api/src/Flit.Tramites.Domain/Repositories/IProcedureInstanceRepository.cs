@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.ReadModels;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Domain.Repositories;
@@ -19,6 +20,20 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<IReadOnlyList<VinTramiteExistente>> FindTramitesByVinAsync(
         Guid tenantId, string vinNormalizado, Guid excludeInstanceId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lista los trámites de TRASPASO del tenant (no eliminados) cuya placa coincide con
+    /// <paramref name="placaNormalizada"/>, EXCLUYENDO <paramref name="excludeInstanceId"/> (el
+    /// trámite en curso, para que no se detecte a sí mismo). Simétrico a
+    /// <see cref="FindTramitesByVinAsync"/> pero para la familia Traspaso (llave placa): el CF-01 de
+    /// duplicidad de trámite EN PROCESO (HU #10876) usa este método cuando la familia es Traspaso, tal
+    /// como <see cref="FindTramitesByVinAsync"/> se usa cuando la familia es Matrícula Inicial. La
+    /// placa almacenada se compara normalizada (mayúsculas + trim) contra
+    /// <paramref name="placaNormalizada"/>. Set vacío si no hay coincidencias. Solo lectura.
+    /// </summary>
+    Task<IReadOnlyList<PlacaTramiteExistente>> FindTramitesByPlacaAsync(
+        Guid tenantId, string placaNormalizada, Guid excludeInstanceId, CancellationToken ct = default);
+
     Task<ProcedureInstance?> GetByIdWithDetailsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
@@ -67,6 +82,29 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<IReadOnlyDictionary<Guid, string>> GetTenantNamesAsync(
         IReadOnlyCollection<Guid> tenantIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #11056 — resuelve el nombre visible de cada usuario indicado, para la columna "Gestor" del
+    /// listado (la persona que radica, <c>created_by_user_id</c>). Devuelve un mapa id→nombre en UNA
+    /// consulta (<c>WHERE id IN …</c>): la columna no debe costar una petición por fila. Los ids sin
+    /// usuario o con nombre vacío se omiten, y la columna cae al identificador de la fila.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetUserDisplayNamesAsync(
+        IReadOnlyCollection<Guid> userIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Estado de la firma del BAÚL por persona (clave <see cref="Entities.BiometricRules.IdentidadKey"/>),
+    /// para las columnas "Firmado" del listado: <c>true</c> = hay firma vigente hoy; <c>false</c> = hay
+    /// firma pero ya no sirve (vencida o revocada); AUSENTE = esa persona no tiene ninguna firma.
+    /// <para>
+    /// Existe porque la columna necesita distinguir «firmada por baúl» de «baúl vencido», y la ruta de
+    /// lote de la identidad biométrica (<see cref="ListVigenteApprovedIdentityKeysAsync"/>)
+    /// deliberadamente no consulta el baúl para no caer en N+1. Aquí se resuelve en UNA consulta por los
+    /// tenants del listado, que es lo que permite usarlo fila a fila.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyDictionary<string, bool>> ListFirmaBaulVigenciaKeysAsync(
+        IReadOnlyCollection<Guid> tenantIds, DateOnly hoy, CancellationToken ct = default);
 
     /// <summary>Carga la instancia con sus validaciones biométricas (Slice 6).</summary>
     Task<ProcedureInstance?> GetByIdWithBiometricsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
@@ -142,6 +180,17 @@ public interface IProcedureInstanceRepository
         IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
+    /// Feature #11066 / HU #11069 — trámites del tenant asociados a la misma identidad
+    /// (<paramref name="documents"/> = pares tipo+número): por validación biométrica de la instancia
+    /// y/o por actores con ese documento. Mapa por <see cref="Entities.BiometricRules.IdentidadKey"/>.
+    /// Solo lectura.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, IReadOnlyList<LinkedProcedureSummary>>> ListLinkedProceduresByIdentityDocumentsAsync(
+        Guid tenantId,
+        IReadOnlyCollection<(string DocumentType, string DocumentNumber)> documents,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Resuelve una validación biométrica por el hash SHA-256 de su token (acceso PÚBLICO vía
     /// magic-link, sin tenant). Devuelve null si no existe — el caller NO debe filtrar existencia.
     /// </summary>
@@ -154,6 +203,16 @@ public interface IProcedureInstanceRepository
     /// filtrar existencia (HU #10233, AC2/AC3).
     /// </summary>
     Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #10943 (CF-03) — resuelve una validación biométrica por id, aislada por tenant y TRACKEADA
+    /// (para editar/reenviar), incluyendo su <see cref="Person"/> (necesaria para
+    /// <c>IniciarPrevalidacionHandler.ResolveSubject</c>). Devuelve null si no existe o no pertenece al
+    /// tenant. Aplica tanto a validaciones standalone como ligadas a trámite (el handler decide
+    /// editabilidad con <c>ProcedureInstanceId</c>/<c>PersonId</c>).
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdWithPersonAsync(
+        Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
     /// Cuenta un intento rechazado de Kyverum de forma ATÓMICA e idempotente: en un ÚNICO <c>UPDATE</c>
@@ -242,6 +301,15 @@ public interface IProcedureInstanceRepository
     Task SaveChangesAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// Olvida TODO lo rastreado por el contexto (HU #11029). Necesario cuando un flujo encadena varios
+    /// handlers que guardan sobre la misma instancia: los adjuntos borrados por el handler anterior
+    /// quedan como referencias muertas en las colecciones de navegación ya cargadas, y volver a
+    /// borrarlos o leerlos revienta con un error de concurrencia («se esperaba afectar 1 fila, se
+    /// afectaron 0») o intenta abrir del almacenamiento un archivo que ya no existe.
+    /// </summary>
+    void ResetTracking();
+
+    /// <summary>
     /// Persiste la unidad de trabajo protegiendo la concurrencia optimista de
     /// <c>procedure_instances.row_version</c> (RNF01, N 03): si otro proceso transicionó la
     /// instancia entre la carga y el commit, devuelve <c>false</c> SIN efectos parciales
@@ -264,6 +332,38 @@ public interface IProcedureInstanceRepository
     /// una generación de impronta desde el trámite). Null si el usuario no existe.
     /// </summary>
     Task<string?> GetUserDisplayNameAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #10872 (AC1) — field values ACTUALES de la instancia, proyección lean (sin el resto del
+    /// grafo del wizard). Lo usan los callers que transicionan a <c>subsanacion</c> pero no cargan
+    /// <c>GetByIdWithWizardGraphAsync</c> (p. ej. <c>ConsultarEstadoQuipuxHandler</c>) para capturar el
+    /// snapshot baseline (<see cref="Tramites.Services.FieldValueSnapshot.Capture"/>) del diff que la
+    /// re-radicación computará. Lista vacía si la instancia no existe o no tiene field values.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceFieldValue>> GetFieldValuesAsync(
+        Guid instanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #10872 (AC1) — <c>metadata</c> (jsonb, deserializable con
+    /// <c>SubsanacionObservation.FromJson</c>) del registro MÁS RECIENTE de historial con
+    /// snapshot de field values (activación de subsanación, observación OT, o legado
+    /// <c>to_status = 'subsanacion'</c>): baseline del DIFF al re-radicar
+    /// (<c>rechazado → entregado</c>). <c>null</c> si no hay baseline (fail-safe del caller:
+    /// re-evalúa todos los gates).
+    /// </summary>
+    Task<string?> GetLatestSubsanacionMetadataAsync(Guid instanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #10955 (AC2/AC3/AC5) — actor MÁS RECIENTE (por <c>CreatedAt</c>) de esa persona
+    /// (<paramref name="documentType"/> + <paramref name="documentNumber"/>) en CUALQUIER trámite NO
+    /// eliminado del tenant, para precargar sus datos de CONTACTO (ciudad, email, dirección, teléfono)
+    /// en el paso de actores. Aislamiento por tenant explícito en el <c>WHERE</c> (AC5), como el resto
+    /// del repositorio. Devuelve <c>null</c> si la persona nunca ha sido actor de un trámite del
+    /// tenant — el caller responde 200 con los campos vacíos, NUNCA 404 (AC3). Solo lectura
+    /// (AsNoTracking).
+    /// </summary>
+    Task<ProcedureInstanceActor?> FindLatestActorContactAsync(
+        Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -277,4 +377,12 @@ public sealed record ProcedureInstanceStatusHistoryEntry(
     DateTimeOffset ChangedAt,
     Guid? ChangedByUserId,
     string? ChangedByName,
-    string? Reason);
+    string? Reason)
+{
+    /// <summary>
+    /// Metadata jsonb crudo del evento. En eventos de migración V1→V2 conserva el actor REAL de V1
+    /// (<c>usuario</c>/<c>usuario_rol</c>/<c>usuario_email</c>) y el marcador <c>origen=migration_v1</c>,
+    /// que la capa de aplicación usa para mostrar el usuario real en vez del sistema "Migración V1".
+    /// </summary>
+    public string? Metadata { get; init; }
+}

@@ -1,3 +1,5 @@
+using Flit.Tramites.Domain.Tramites.Services;
+
 namespace Flit.Tramites.Application.UseCases.Consultations;
 
 /// <summary>
@@ -70,14 +72,21 @@ public static class KyverumRuntVehicleResultMapper
 
     private static ConsultationCheck MapTecnomecanica(List<KyverumRuntRtm>? rtm)
     {
-        // Vacío/ausente → unknown (NO fail): muchos vehículos nuevos no tienen RTM aún.
+        // Array de revisiones (histórico). Mismo criterio que Verifik sobre el campo "vigente":
+        // vacío/ausente → unknown (muchos vehículos nuevos no tienen RTM aún); alguna "SI" → ok;
+        // todas "NO APLICA" → unknown; alguna "NO" → fail (vencida); resto → unknown.
         if (rtm is null || rtm.Count == 0)
             return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Unknown, Provider, "Sin información de tecnomecánica");
 
-        if (rtm.Any(t => string.Equals(t?.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase)))
+        if (rtm.Any(t => string.Equals(t?.Vigente, "SI", StringComparison.OrdinalIgnoreCase)))
             return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Ok, Provider, null);
 
-        // Registros presentes pero sin señal clara de vigencia → unknown (conservador, no bloquea).
+        if (rtm.All(t => string.Equals(t?.Vigente, "NO APLICA", StringComparison.OrdinalIgnoreCase)))
+            return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Unknown, Provider, "No aplica para este vehículo");
+
+        if (rtm.Any(t => string.Equals(t?.Vigente, "NO", StringComparison.OrdinalIgnoreCase)))
+            return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Fail, Provider, "Tecnomecánica no vigente");
+
         return new ConsultationCheck("tecnomecanica", "Revisión técnico-mecánica", Unknown, Provider, "Sin información de tecnomecánica");
     }
 
@@ -138,12 +147,19 @@ public static class KyverumRuntVehicleResultMapper
             ?? data?.Soat?.FirstOrDefault();
         Add(fields, "soat_vencimiento", soat?.FechaVencimSoat);
         Add(fields, "soat_aseguradora", soat?.RazonSocialAsegur);
+        // HU #10856 — estado real del SOAT para el certificado.
+        // HU #10973 — NORMALIZADO al vocabulario de SoatGate: esta llave alimenta también el gate de
+        // aprobación del OT, y el frontend compara estricto contra "vigente" en minúscula
+        // (lib/tramites/estados.ts). Antes se escribía el crudo del RUNT ("VIGENTE"), que bloqueaba
+        // la aprobación en trámites con SOAT vigente.
+        Add(fields, SoatGate.FieldKey, SoatGate.Normalize(soat?.Estado));
 
-        // RTM: preferir vigente; si no, la primera.
+        // RTM: preferir la vigente ("SI"); si no, la primera.
         var rtm = data?.Rtm?.FirstOrDefault(t =>
-            string.Equals(t?.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase))
+            string.Equals(t?.Vigente, "SI", StringComparison.OrdinalIgnoreCase))
             ?? data?.Rtm?.FirstOrDefault();
-        Add(fields, "rtm_vencimiento", rtm?.FechaVencimiento);
+        Add(fields, "rtm_vencimiento", rtm?.FechaVencimientoRvt);
+        Add(fields, "rtm_estado", MapVigencia(rtm?.Vigente)); // HU #10856 — estado real de la RTM para el certificado.
 
         return fields;
     }
@@ -164,6 +180,18 @@ public static class KyverumRuntVehicleResultMapper
             "E" => "CE",
             "T" => "TI",
             "P" => "PAS",
+            _ => null,
+        };
+
+    // Normaliza el "vigente" del RUNT ("SI"/"NO"/"NO APLICA") al vocabulario de vigencia que ya usa
+    // soat_estado ("VIGENTE"/"NO VIGENTE"), para que el certificado (HU #10856) muestre lo mismo sin
+    // importar el proveedor.
+    private static string? MapVigencia(string? vigente) =>
+        vigente?.Trim().ToUpperInvariant() switch
+        {
+            "SI" => "VIGENTE",
+            "NO" => "NO VIGENTE",
+            "NO APLICA" => "NO APLICA",
             _ => null,
         };
 

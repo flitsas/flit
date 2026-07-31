@@ -56,6 +56,8 @@ public interface IOtClientProcedureRepository
         Guid procedureInstanceId,
         Guid? approvedBy,
         string source,
+        Guid? mandateSignerId = null,
+        Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
 
     Task<OtClientProcedure?> RejectAsync(
@@ -63,6 +65,49 @@ public interface IOtClientProcedureRepository
         Guid procedureInstanceId,
         string reason,
         Guid? rejectedBy,
+        string source,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Observación subsanable del OT: transiciona a <c>rechazado</c> con checklist HÍBRIDO
+    /// (motivo + ítems) en metadata. El operador activa la edición con POST /subsanar.
+    /// </summary>
+    Task<OtClientProcedure?> ObserveAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string reason,
+        IReadOnlyList<OtProcedureObservationItem> items,
+        Guid? observedBy,
+        string source,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #10654 / #10800 (Feature #10587) — el OT asigna una placa a un trámite en <c>preasignado</c>
+    /// (Flujo B): reserva la placa (del rango, o FUERA DE RANGO si <paramref name="outOfRange"/> — la
+    /// registra como rango ad-hoc de 1 placa), la escribe en el trámite y avanza el sub-estado a
+    /// <c>asignado</c>. Devuelve <c>null</c> si el trámite no es accesible, no está en preasignado, o la
+    /// placa no está disponible / no se pudo registrar (formato inválido o ya registrada).
+    /// </summary>
+    Task<OtClientProcedure?> AssignPlateAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string plate,
+        Guid? changedBy,
+        string source,
+        bool outOfRange = false,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #10655 (Feature #10587) — el OT revoca la preasignación: libera la placa
+    /// (preasignada→revocada) y devuelve el trámite a <c>preasignado</c> si estaba <c>asignado</c>.
+    /// </summary>
+    Task<OtClientProcedure?> RevokePlateAsync(
+        Guid otTenantId,
+        Guid procedureInstanceId,
+        string reason,
+        Guid? changedBy,
         string source,
         CancellationToken cancellationToken = default);
 }

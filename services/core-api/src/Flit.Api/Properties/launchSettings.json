@@ -4,7 +4,33 @@
       "commandName": "Project",
       "applicationUrl": "http://localhost:4003",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Ict__GrpcPort": "4021",
+        "//": "Consultas ICT en local: modo mock y cadena Verifik-first (kyverum no tiene mock ni credenciales locales). Solo afecta 'dotnet run'; docker/QA/PDN usan su propia config.",
+        "VERIFIK_VEHICLE_MODE": "mock",
+        "VERIFIK_CONDUCTOR_MODE": "mock",
+        "VERIFIK_SIMIT_MODE": "mock",
+        "VERIFIK_RNMC_MODE": "mock",
+        "Consultations__DefaultChains__vehicle_vin__0": "verifik",
+        "Consultations__DefaultChains__vehicle_plate__0": "verifik",
+        "Consultations__DefaultChains__conductor__0": "verifik_conductor"
+      }
+    },
+    "http-real": {
+      "commandName": "Project",
+      "applicationUrl": "http://localhost:4003",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Ict__GrpcPort": "4021",
+        "//": "FUENTES REALES en local (dotnet run --launch-profile http-real). Consulta Verifik real con el token de appsettings.Development.json (Verifik:BearerToken). OJO precedencia: el helper Cfg lee configuration[key] ?? envVar, y appsettings.Development.json fija Consultations:Verifik*Mode=mock -> hay que overridear por la CLAVE DE CONFIG con doble guion bajo (Consultations__Verifik*Mode), NO por la env cruda VERIFIK_*_MODE (queda sombreada). kyverum_runt no tiene creds locales -> cadena Verifik-first. Requiere placas/VIN/documentos que EXISTAN en el RUNT; datos inventados -> novedad (vehiculo no encontrado). Igual posture que prod (docker-compose.prod: VERIFIK_VEHICLE_MODE=real).",
+        "Consultations__VerifikVehicleMode": "real",
+        "Consultations__VerifikConductorMode": "real",
+        "Consultations__VerifikSimitMode": "real",
+        "Consultations__VerifikRnmcMode": "real",
+        "Consultations__DefaultChains__vehicle_vin__0": "verifik",
+        "Consultations__DefaultChains__vehicle_plate__0": "verifik",
+        "Consultations__DefaultChains__conductor__0": "verifik_conductor",
+        "Logging__LogLevel__System.Net.Http.HttpClient": "Information"
       }
     }
   }

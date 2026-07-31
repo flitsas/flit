@@ -14,6 +14,10 @@ namespace Flit.Tramites.Domain.Tramites.ValueObjects;
 /// <param name="TieneTramitador">Hay un tramitador (processor) activo (⇒ poderes de mandato).</param>
 /// <param name="CambioCarroceria">Cambio de carrocería (⇒ factura de carrocería).</param>
 /// <param name="ServicioEspecial">Servicio especial (⇒ anexos de servicio especial).</param>
+/// <param name="ExigeMandato">
+/// El trámite exige mandato (ADR-0036, HU #10913): persona jurídica siempre, o persona natural en un
+/// OT que lo exija (Sabaneta). ⇒ el mandato aparece en el checklist como documento autogenerado.
+/// </param>
 public sealed record TramiteDocumentContext(
     bool EsImportado = false,
     bool EsPersonaNatural = false,
@@ -22,4 +26,5 @@ public sealed record TramiteDocumentContext(
     bool TienePrenda = false,
     bool TieneTramitador = false,
     bool CambioCarroceria = false,
-    bool ServicioEspecial = false);
+    bool ServicioEspecial = false,
+    bool ExigeMandato = false);

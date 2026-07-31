@@ -125,16 +125,12 @@ public sealed class PreflightHandlerTests
         params (string key, IConsultationProvider provider)[] providers) =>
         BuildHandler(tenantOverride, providers);
 
-    private RunPreflightHandler HandlerWithRnmc(
-        bool rnmcRequired,
-        params (string key, IConsultationProvider provider)[] providers) =>
-        BuildHandler(null, providers, rnmcRequired);
-
     private RunPreflightHandler BuildHandler(
         ConsultationTenantOverride? tenantOverride,
         (string key, IConsultationProvider provider)[] providers,
-        bool rnmcRequired = false,
-        ITransitOfficeResolver? transitOfficeResolver = null)
+        ITransitOfficeResolver? transitOfficeResolver = null,
+        IConsultationRestrictionPolicy? restrictionPolicy = null,
+        IConsultationBlockingPolicy? blockingPolicy = null)
     {
         var dict = providers.ToDictionary(p => p.key, p => p.provider);
         var registry = new StaticRegistry(dict);
@@ -143,14 +139,46 @@ public sealed class PreflightHandlerTests
             ? new NullOverrideProvider()
             : new FixedOverrideProvider(tenantOverride);
         return new RunPreflightHandler(
-            _repo, registry, resolver, overrideProvider, new StubRnmcPolicy(rnmcRequired),
-            transitOfficeResolver ?? NullTransitOfficeResolver.Instance);
+            _repo, registry, resolver, overrideProvider,
+            // Permisivo por defecto: los tests que no ejercitan HU #10760 no cambian de comportamiento.
+            restrictionPolicy ?? NullConsultationRestrictionPolicy.Instance,
+            transitOfficeResolver ?? NullTransitOfficeResolver.Instance,
+            // FEATURE 05 — permisivo por defecto (defaults por criterio).
+            blockingPolicy ?? NullConsultationBlockingPolicy.Instance);
     }
 
-    private sealed class StubRnmcPolicy(bool required) : IRnmcRequirementPolicy
+    /// <summary>Reglas de bloqueo fijas para probar la severidad configurable del preflight (FEATURE 05).</summary>
+    private sealed class StubBlockingPolicy(params (string criterion, bool blocks)[] overrides) : IConsultationBlockingPolicy
     {
-        public Task<bool> IsRnmcRequiredAsync(Guid tenantId, Guid? transitOfficeId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(required);
+        public Task<ConsultationBlockingRules> GetAsync(
+            Guid tenantId, Guid? transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ConsultationBlockingRules.From(
+                overrides.Select(o => new KeyValuePair<string, bool>(o.criterion, o.blocks))));
+    }
+
+    /// <summary>
+    /// Restricciones fijas, contando invocaciones para probar que el preflight lee la política UNA
+    /// sola vez por corrida (las guardas del fan-out son lookups en memoria, no I/O por consulta).
+    /// </summary>
+    private sealed class CountingRestrictionPolicy(params string[] disabledKinds) : IConsultationRestrictionPolicy
+    {
+        public int Calls { get; private set; }
+
+        public Task<ConsultationRestrictions> GetAsync(
+            Guid tenantId, Guid? transitOfficeId, CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            return Task.FromResult(ConsultationRestrictions.From(disabledKinds));
+        }
+    }
+
+    /// <summary>Restricciones con ajustes EXPLÍCITOS por kind (kind → enabled), para probar el opt-in RNMC.</summary>
+    private sealed class SettingRestrictionPolicy(params (string kind, bool enabled)[] settings) : IConsultationRestrictionPolicy
+    {
+        public Task<ConsultationRestrictions> GetAsync(
+            Guid tenantId, Guid? transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ConsultationRestrictions.FromSettings(
+                settings.Select(s => new KeyValuePair<string, bool>(s.kind, s.enabled))));
     }
 
     /// <summary>Resolver de OT que devuelve un match fijo (o null) sin tocar catálogo/grants reales.</summary>
@@ -175,7 +203,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
         var handler = HandlerWith();
 
-        var (result, error) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+        var (result, error, _, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
         error.Should().Be("not_found");
         result.Should().BeNull();
@@ -189,7 +217,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWith(("verifik", new StubProvider("verifik", Result("green", Check("ok")))));
 
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().Be("not_draft");
     }
@@ -254,7 +282,7 @@ public sealed class PreflightHandlerTests
             ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
             ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Provider.Should().Be("verifik"); // SIMIT no corre en matrícula.
@@ -287,7 +315,7 @@ public sealed class PreflightHandlerTests
             ],
             transitOfficeResolver: resolver);
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         resolver.LastName.Should().Be("SDM BOGOTÁ");
@@ -319,7 +347,7 @@ public sealed class PreflightHandlerTests
             ],
             transitOfficeResolver: resolver);
 
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         // Se conserva el nombre RUNT pero NO se inventa un transit_office_id.
@@ -343,7 +371,7 @@ public sealed class PreflightHandlerTests
 
         var handler = BuildHandler(null, [("kyverum_runt", vehiculo)], transitOfficeResolver: resolver);
 
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         // Matrícula: el operador elige libremente; el preflight NO consulta el resolver ni fija el id.
@@ -363,7 +391,7 @@ public sealed class PreflightHandlerTests
             ("kyverum_runt", new StubProvider("kyverum_runt", Result("green", Check("ok")))),
             ("verifik", new StubProvider("verifik", Result("green", Check("ok")))));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Provider.Should().Be("kyverum_runt"); // Kyverum-first: gana al fallback Verifik.
@@ -379,7 +407,7 @@ public sealed class PreflightHandlerTests
             ("kyverum_runt", new StubProvider("kyverum_runt", Result("red", Check("error")))),
             ("verifik", new StubProvider("verifik", Result("green", Check("ok")))));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Provider.Should().Be("verifik"); // fallback al proveedor de contingencia.
@@ -403,7 +431,7 @@ public sealed class PreflightHandlerTests
         var verifik = new StubProvider("verifik", Result("green", Check("ok")));
         var handler = HandlerWith(tenantOverride, ("kyverum_runt", kyverum), ("verifik", verifik));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Provider.Should().Be("verifik");
@@ -425,7 +453,7 @@ public sealed class PreflightHandlerTests
         var handler = HandlerWith(
             ("verifik", new StubProvider("verifik", Result("red", EstadoVehiculoCheck("fail")))));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Overall.Should().Be("yellow");
@@ -444,143 +472,75 @@ public sealed class PreflightHandlerTests
             ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
             ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", Check("ok")))));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Overall.Should().Be("red");
         result.Checks.Should().ContainSingle(c => c.Key == "estado_vehiculo" && c.Status == "fail");
     }
 
+    // ── CF-03 (HU #10877): precondición registral — vehículo ya matriculado (RUNT/FLIT) ─────────
+
     [Fact]
-    public async Task Post_Traspaso_RnmcRequerido_CorreParaCompradorYVendedorPN()
+    public async Task Post_Matricula_EstadoVehiculoActivoEnRunt_Bloquea422VehicleStateInvalid()
     {
-        // HU #10602: con OT que exige RNMC, se consulta por cada actor persona natural (comprador+vendedor).
+        // AC1: el RUNT reporta el vehículo con estado_vehiculo "ok" (ACTIVO ⇒ ya matriculado/
+        // circulando): bloqueo DURO 422 VEHICLE_STATE_INVALID_FOR_TYPE, snapshot NO se persiste.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(
+            ("verifik", new StubProvider("verifik", Result("green", EstadoVehiculoCheck("ok")))));
+
+        var (result, error, _, vehicleState) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().Be(VehicleStatePolicy.ErrorCode);
+        result.Should().BeNull();
+        vehicleState.Should().NotBeNull();
+        vehicleState!.VehicleStatus.Should().Be(VehicleStatePolicy.VehicleStatusActivoRunt);
+        vehicleState.ProcedureType.Should().Be(VehicleStatePolicy.ProcedureTypeMatriculaInicial);
+        vehicleState.Source.Should().Be(VehicleStateSource.Runt);
+        await _repo.DidNotReceive().AddPreflightSnapshotAsync(Arg.Any<ProcedureInstancePreflightSnapshot>(), ct);
+    }
+
+    [Fact]
+    public async Task Post_Matricula_EstadoVehiculoDesconocido_Bloquea422VehicleStateInvalid()
+    {
+        // AC3: el RUNT no responde el estado del vehículo (check "unknown"): bloqueo DURO hasta poder
+        // confirmar el estado — unknown YA NO preserva el semáforo en verde para esta familia.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(
+            ("verifik", new StubProvider("verifik", Result("yellow", EstadoVehiculoCheck("unknown")))));
+
+        var (result, error, _, vehicleState) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().Be(VehicleStatePolicy.ErrorCode);
+        result.Should().BeNull();
+        vehicleState.Should().NotBeNull();
+        vehicleState!.VehicleStatus.Should().Be(VehicleStatePolicy.VehicleStatusDesconocido);
+        vehicleState.Source.Should().Be(VehicleStateSource.RuntDesconocido);
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_EstadoVehiculoActivo_NoActivaCF03()
+    {
+        // CF-03 aplica SOLO a la familia Matrícula Inicial: en traspaso, "ok" (ACTIVO) es el estado
+        // esperado (vehículo en circulación) y sigue sin bloquear.
         var ct = TestContext.Current.CancellationToken;
         var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
-        var handler = HandlerWithRnmc(true,
-            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+        var handler = HandlerWith(
+            ("verifik", new StubProvider("verifik", Result("green", EstadoVehiculoCheck("ok")))),
             ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
-            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))));
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", Check("ok")))));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
-
-        error.Should().BeNull();
-        result!.Provider.Should().Contain("verifik_rnmc");
-        // vehiculo + simit comprador + simit vendedor + rnmc comprador + rnmc vendedor = 5 checks.
-        result.Checks.Should().HaveCount(5);
-        result.Checks.Should().Contain(c => c.Key == "rnmc_comprador_medidas_correctivas");
-        result.Checks.Should().Contain(c => c.Key == "rnmc_vendedor_medidas_correctivas");
-    }
-
-    [Fact]
-    public async Task Post_Traspaso_RnmcNoRequerido_NoCorreRnmc()
-    {
-        // OT sin requires_rnmc (default) → no se consulta RNMC ni aparece el check.
-        var ct = TestContext.Current.CancellationToken;
-        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
-        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
-        var handler = HandlerWithRnmc(false,
-            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
-            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
-            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))));
-
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _, vehicleState) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
-        result!.Provider.Should().NotContain("verifik_rnmc");
-        result.Checks.Should().NotContain(c => c.Key.StartsWith("rnmc_"));
-    }
-
-    [Fact]
-    public async Task Post_Traspaso_RnmcRequerido_ActorJuridicoNIT_NoConsultaRnmc()
-    {
-        // El actor jurídico (NIT) nunca consulta RNMC; el comprador PN sí.
-        var ct = TestContext.Current.CancellationToken;
-        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), ActorNit("vendedor", "900123456")]);
-        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
-        var handler = HandlerWithRnmc(true,
-            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
-            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
-            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))));
-
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
-
-        error.Should().BeNull();
-        result!.Checks.Should().Contain(c => c.Key == "rnmc_comprador_medidas_correctivas");
-        result.Checks.Should().NotContain(c => c.Key == "rnmc_vendedor_medidas_correctivas");
-    }
-
-    [Fact]
-    public async Task Post_Matricula_RnmcRequerido_CorreParaComprador()
-    {
-        // R18: RNMC también corre en matrícula (antes solo en traspaso).
-        var ct = TestContext.Current.CancellationToken;
-        var instance = Instance("matricula_inicial", actors: Actor("comprador", "111"));
-        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
-        var handler = HandlerWithRnmc(true,
-            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
-            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))));
-
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
-
-        error.Should().BeNull();
-        result!.Checks.Should().Contain(c => c.Key == "rnmc_comprador_medidas_correctivas");
-    }
-
-    [Fact]
-    public async Task Post_Rnmc_ContextIncludesDocumentIssueDate()
-    {
-        // El contexto RNMC lleva document_issue_date (por rol o genérico) para el modo real.
-        var ct = TestContext.Current.CancellationToken;
-        var instance = Instance("matricula_inicial", actors: Actor("comprador", "111"));
-        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "comprador_document_issue_date", ValueText = "01/02/2010", Source = "user" });
-        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
-        var rnmc = new CapturingProvider("verifik_rnmc", Result("green", RnmcCheck("ok")));
-        var handler = HandlerWithRnmc(true,
-            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
-            ("verifik_rnmc", rnmc));
-
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
-
-        error.Should().BeNull();
-        rnmc.LastContext.Should().NotBeNull();
-        rnmc.LastContext!.FieldValues.Should().Contain("owner_document_number", "111");
-        rnmc.LastContext.FieldValues.Should().Contain("document_issue_date", "01/02/2010");
-    }
-
-    [Fact]
-    public async Task Post_RnmcMedidaCorrectiva_PersisteSenalPendiente()
-    {
-        // HU #10604: una medida correctiva (rnmc fail) deja la señal rnmc_medida_pendiente=true.
-        var ct = TestContext.Current.CancellationToken;
-        var instance = Instance("matricula_inicial", actors: Actor("comprador", "111"));
-        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
-        var handler = HandlerWithRnmc(true,
-            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
-            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("red", RnmcCheck("fail")))));
-
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
-
-        error.Should().BeNull();
-        instance.FieldValues.Should().Contain(f => f.FieldKey == "rnmc_medida_pendiente" && f.ValueText == "true");
-    }
-
-    [Fact]
-    public async Task Post_RnmcSinMedida_NoDejaSenalPendienteTrue()
-    {
-        // Sin medida (rnmc ok) no queda la señal en true.
-        var ct = TestContext.Current.CancellationToken;
-        var instance = Instance("matricula_inicial", actors: Actor("comprador", "111"));
-        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
-        var handler = HandlerWithRnmc(true,
-            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
-            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", RnmcCheck("ok")))));
-
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
-
-        error.Should().BeNull();
-        instance.FieldValues.Should().NotContain(f => f.FieldKey == "rnmc_medida_pendiente" && f.ValueText == "true");
+        result.Should().NotBeNull();
+        vehicleState.Should().BeNull();
     }
 
     [Fact]
@@ -600,7 +560,7 @@ public sealed class PreflightHandlerTests
             ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
             ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", Check("ok")))));
 
-        var (_, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         vehiculo.LastContext.Should().NotBeNull();
@@ -619,7 +579,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWith(("verifik", new StubProvider("verifik", Result("red", Check("fail")))));
 
-        var (result, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, _, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         result!.Overall.Should().Be("red");
         await _repo.Received(1).AddPreflightSnapshotAsync(
@@ -644,7 +604,7 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWith(("verifik", new ThrowingProvider("verifik")));
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Overall.Should().Be("red"); // error bloquea (dato vital no verificable).
@@ -659,23 +619,25 @@ public sealed class PreflightHandlerTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
         var handler = HandlerWith(); // registry vacío → no se puede verificar.
 
-        var (result, error) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Checks.Should().ContainSingle(c => c.Status == "error");
         result.Overall.Should().Be("red");
     }
 
-    // ── HU #10538 (R3): VIN ya matriculado → check informativo + señal de traspaso ─────────────
+    // ── HU #10538 (R3) / CF-03 (HU #10877, AC2): VIN ya matriculado ─────────────────────────────
 
     private RunPreflightHandler VehiculoOkHandler() =>
         HandlerWith(("verifik", new StubProvider("verifik", Result("green", Check("ok")))));
 
     [Fact]
-    public async Task Post_Matricula_VinYaMatriculado_AgregaCheckInformativoYSenalTraspaso()
+    public async Task Post_Matricula_VinConAprobadaEnFlit_Bloquea422VehicleStateInvalid()
     {
-        // AC1: un VIN con matrícula previa registrada en el mismo tenant → check informativo
-        // (warn) con secretaría + fecha, y señal vin_conflicto_traspaso = true en field_values.
+        // CF-03 (HU #10877, AC2) — un VIN con una matrícula APROBADA en FLIT bloquea con
+        // VEHICLE_STATE_INVALID_FOR_TYPE (422). ENDURECIDO: HU #10538/#10876 dejaban esto como check
+        // informativo (warn) ofreciendo traspaso; CF-03 lo eleva a bloqueo DURO no subsanable — un VIN
+        // aprobado no puede volver a matricularse (fuente FLIT, doble fuente con RUNT).
         var ct = TestContext.Current.CancellationToken;
         var instance = Instance("matricula_inicial", actors: Actor("comprador"));
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
@@ -687,15 +649,17 @@ public sealed class PreflightHandlerTests
                     FechaRegistro: new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero)),
             });
 
-        var (result, error) = await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _, vehicleState) =
+            await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
 
-        error.Should().BeNull();
-        var check = result!.Checks.Should().ContainSingle(c => c.Key == "vin_matricula").Subject;
-        check.Status.Should().Be("warn");
-        check.Message.Should().Contain("Secretaría de Movilidad de Bogotá").And.Contain("2026-01-15");
-        result.Overall.Should().Be("yellow"); // informativo: nunca bloquea en rojo.
-        instance.FieldValues.Should().ContainSingle(f =>
-            f.FieldKey == "vin_conflicto_traspaso" && f.ValueText == "true" && f.Source == "system");
+        error.Should().Be(VehicleStatePolicy.ErrorCode);
+        result.Should().BeNull();
+        vehicleState.Should().NotBeNull();
+        vehicleState!.VehicleStatus.Should().Be(VehicleStatePolicy.VehicleStatusAprobadoFlit);
+        vehicleState.ProcedureType.Should().Be(VehicleStatePolicy.ProcedureTypeMatriculaInicial);
+        vehicleState.Source.Should().Be(VehicleStateSource.Flit);
+        // Bloqueo DURO: el snapshot no se persiste (mismo patrón que CF-01/DUPLICATE_ACTIVE_PROCEDURE).
+        await _repo.DidNotReceive().AddPreflightSnapshotAsync(Arg.Any<ProcedureInstancePreflightSnapshot>(), ct);
     }
 
     [Fact]
@@ -713,7 +677,7 @@ public sealed class PreflightHandlerTests
                     Vin: "1HGCM82633A004352"),
             });
 
-        var (result, error) = await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _, _) = await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Checks.Should().NotContain(c => c.Key == "vin_matricula");
@@ -731,11 +695,638 @@ public sealed class PreflightHandlerTests
         _repo.FindTramitesByVinAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
             .Returns(new List<VinTramiteExistente>());
 
-        var (result, error) = await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+        var (result, error, _, _) = await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
         result!.Checks.Should().NotContain(c => c.Key == "vin_matricula");
         result.Overall.Should().Be("green");
         instance.FieldValues.Should().NotContain(f => f.FieldKey == "vin_conflicto_traspaso");
+    }
+
+    // ── CF-01 (HU #10876): bloqueo DURO de duplicidad EN PROCESO por familia ───────────────────
+
+    [Fact]
+    public async Task Post_Matricula_DuplicadoActivoPorVin_Bloquea409()
+    {
+        // AC1: un trámite EN PROCESO (borrador) con el mismo VIN bloquea con
+        // DUPLICATE_ACTIVE_PROCEDURE, sin persistir el snapshot.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        var existingId = Guid.NewGuid();
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        _repo.FindTramitesByVinAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
+            .Returns(new List<VinTramiteExistente>
+            {
+                new(existingId, TramiteEstado.Borrador, Paso: 2, Placa: null, Vin: "1HGCM82633A004352"),
+            });
+
+        var (result, error, existingProcedureInstanceId, _) =
+            await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().Be("DUPLICATE_ACTIVE_PROCEDURE");
+        result.Should().BeNull();
+        existingProcedureInstanceId.Should().Be(existingId);
+        await _repo.DidNotReceive().AddPreflightSnapshotAsync(Arg.Any<ProcedureInstancePreflightSnapshot>(), ct);
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_DuplicadoActivoPorPlaca_Bloquea409()
+    {
+        // AC2: un trámite EN PROCESO (preparado) con la misma placa bloquea con
+        // DUPLICATE_ACTIVE_PROCEDURE.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        var existingId = Guid.NewGuid();
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        _repo.FindTramitesByPlacaAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
+            .Returns(new List<PlacaTramiteExistente>
+            {
+                new(existingId, TramiteEstado.Preparado, Placa: "ABC123"),
+            });
+        var handler = HandlerWith(
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", Check("ok")))));
+
+        var (result, error, existingProcedureInstanceId, _) =
+            await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().Be("DUPLICATE_ACTIVE_PROCEDURE");
+        result.Should().BeNull();
+        existingProcedureInstanceId.Should().Be(existingId);
+    }
+
+    [Fact]
+    public async Task Post_OtraFamilia_NoActivaBloqueoDeDuplicidad()
+    {
+        // AC3: la activación es HARDCODED por familia — solo Matrícula Inicial y Traspaso bloquean.
+        // Otro tipo de trámite ni siquiera consulta placa (FindTramitesByPlacaAsync no se invoca).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("otro_tipo", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var (result, error, existingProcedureInstanceId, _) =
+            await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        existingProcedureInstanceId.Should().BeNull();
+        await _repo.DidNotReceive().FindTramitesByPlacaAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid>(), ct);
+    }
+
+    [Fact]
+    public async Task Post_Matricula_DuplicadoEnEstadoFinalAprobado_NoBloqueaPorCF01PeroBloqueaPorCF03()
+    {
+        // AC4 (CF-01/HU #10876): el estado final "aprobado" NO cuenta como "en proceso" — libera la
+        // llave del VIN para la duplicidad EN PROCESO (nunca dispara 409 DUPLICATE_ACTIVE_PROCEDURE).
+        // ENDURECIDO (CF-03/HU #10877, AC2): esa MISMA aprobada SÍ es fuente FLIT del bloqueo registral
+        // — bloquea con 422 VEHICLE_STATE_INVALID_FOR_TYPE por una regla independiente (ver
+        // Post_Matricula_VinConAprobadaEnFlit_Bloquea422VehicleStateInvalid).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        _repo.FindTramitesByVinAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
+            .Returns(new List<VinTramiteExistente>
+            {
+                new(Guid.NewGuid(), TramiteEstado.Aprobado, Paso: 5, Placa: null, Vin: "1HGCM82633A004352"),
+            });
+
+        var (result, error, existingProcedureInstanceId, _) =
+            await VehiculoOkHandler().HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().Be(VehicleStatePolicy.ErrorCode); // CF-03, no CF-01.
+        error.Should().NotBe("DUPLICATE_ACTIVE_PROCEDURE");
+        result.Should().BeNull();
+        existingProcedureInstanceId.Should().BeNull(); // CF-01 nunca se activó (no es "en proceso").
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_DuplicadoEnEstadoFinalAnulado_NoBloquea()
+    {
+        // AC4: "anulado" (final) libera la llave de placa.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        _repo.FindTramitesByPlacaAsync(instance.TenantId, Arg.Any<string>(), instance.Id, ct)
+            .Returns(new List<PlacaTramiteExistente>
+            {
+                new(Guid.NewGuid(), TramiteEstado.Anulado, Placa: "ABC123"),
+            });
+        var handler = HandlerWith(
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+            ("verifik_rnmc", new StubProvider("verifik_rnmc", Result("green", Check("ok")))));
+
+        var (result, error, existingProcedureInstanceId, _) =
+            await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        existingProcedureInstanceId.Should().BeNull();
+    }
+
+// ── A4/B4 (HU #10673) — transformaciones color/combustible: snapshots *_runt + no pisar ────
+
+    private RunPreflightHandler VehiculoHydratesHandler(params HydratedField[] hydrated) =>
+        BuildHandler(null,
+        [
+            ("kyverum_runt", new StubProvider("kyverum_runt",
+                new ConsultationResult("kyverum_runt", "green", [Check("ok")], hydrated))),
+        ]);
+
+    private static string? ValueOf(ProcedureInstance instance, string key) =>
+        instance.FieldValues.FirstOrDefault(f => f.FieldKey == key)?.ValueText;
+
+    [Fact]
+    public async Task Preflight_PrimeraConsulta_EscribeEfectivoYSnapshotRunt()
+    {
+        // Primera hidratación: no hay transformación → el efectivo y el snapshot RUNT quedan iguales al RUNT.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = VehiculoHydratesHandler(
+            new HydratedField("vehicle_color", "PLATA", null),
+            new HydratedField("vehicle_fuel", "GASOLINA", null));
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "vehicle_color" && f.ValueText == "PLATA" && f.Source == "consultation");
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "vehicle_color_runt" && f.ValueText == "PLATA" && f.Source == "consultation");
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "vehicle_fuel" && f.ValueText == "GASOLINA");
+        instance.FieldValues.Should().ContainSingle(f =>
+            f.FieldKey == "vehicle_fuel_runt" && f.ValueText == "GASOLINA");
+    }
+
+    [Fact]
+    public async Task Preflight_SinTransformacion_ReconsultaRefrescaEfectivoYSnapshot()
+    {
+        // Re-consulta sin transformación (efectivo == snapshot, sin flag): el RUNT nuevo pisa AMBOS.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_color", ValueText = "PLATA", Source = "consultation" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_color_runt", ValueText = "PLATA", Source = "consultation" });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = VehiculoHydratesHandler(new HydratedField("vehicle_color", "AZUL", null));
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        ValueOf(instance, "vehicle_color").Should().Be("AZUL");
+        ValueOf(instance, "vehicle_color_runt").Should().Be("AZUL");
+    }
+
+    [Fact]
+    public async Task Preflight_FlagCambioActivo_NoPisaEfectivo_RefrescaSnapshot()
+    {
+        // Transformación DECLARADA (cambio_color = true): el efectivo se preserva; el snapshot RUNT sí se refresca.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_color", ValueText = "NEGRO", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_color_runt", ValueText = "PLATA", Source = "consultation" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "cambio_color", ValueText = "true", Source = "user" });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = VehiculoHydratesHandler(new HydratedField("vehicle_color", "PLATA", null));
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        ValueOf(instance, "vehicle_color").Should().Be("NEGRO");       // cambio declarado intacto
+        ValueOf(instance, "vehicle_color_runt").Should().Be("PLATA");  // snapshot RUNT refrescado
+    }
+
+    [Fact]
+    public async Task Preflight_CambioImplicito_SinFlag_NoPisaEfectivo()
+    {
+        // Sin flag pero el efectivo YA difiere del snapshot previo → se trata como transformación activa.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_fuel", ValueText = "ELECTRICO", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_fuel_runt", ValueText = "GASOLINA", Source = "consultation" });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = VehiculoHydratesHandler(new HydratedField("vehicle_fuel", "GASOLINA", null));
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        ValueOf(instance, "vehicle_fuel").Should().Be("ELECTRICO");
+        ValueOf(instance, "vehicle_fuel_runt").Should().Be("GASOLINA");
+    }
+
+    [Fact]
+    public async Task Preflight_ColorYCombustibleSimultaneos_PreservaAmbosCambios()
+    {
+        // Color y combustible declarados a la vez: la re-consulta conserva ambos efectivos y refresca ambos snapshots.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: Actor("comprador"), status: TramiteEstado.Borrador);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_color", ValueText = "NEGRO", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_color_runt", ValueText = "PLATA", Source = "consultation" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "cambio_color", ValueText = "true", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_fuel", ValueText = "ELECTRICO", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_fuel_runt", ValueText = "GASOLINA", Source = "consultation" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "cambio_combustible", ValueText = "true", Source = "user" });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = BuildHandler(null,
+        [
+            ("kyverum_runt", new StubProvider("kyverum_runt", new ConsultationResult("kyverum_runt", "green", [Check("ok")],
+            [
+                new HydratedField("vehicle_color", "PLATA", null),
+                new HydratedField("vehicle_fuel", "GASOLINA", null),
+            ]))),
+            ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+        ]);
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        ValueOf(instance, "vehicle_color").Should().Be("NEGRO");
+        ValueOf(instance, "vehicle_fuel").Should().Be("ELECTRICO");
+        ValueOf(instance, "vehicle_color_runt").Should().Be("PLATA");
+        ValueOf(instance, "vehicle_fuel_runt").Should().Be("GASOLINA");
+    }
+
+    // ── FEATURE 05 (HU #10758) — fuente de comparendos → proveedor ───────────
+
+    /// <summary>Override del tenant con solo la fuente de comparendos (sin cadenas ni timeout).</summary>
+    private static ConsultationTenantOverride FuenteDeComparendos(string source) =>
+        new(null, null, false, source);
+
+    /// <summary>Los tres proveedores de comparendos registrados, cada uno devolviendo green.</summary>
+    private static (string, IConsultationProvider)[] TodosLosProveedoresDeComparendos() =>
+    [
+        ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+        ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+        ("flit_fines", new StubProvider("flit_fines", Result("green", Check("ok")))),
+        ("kyverum_fines", new StubProvider("kyverum_fines", Result("green", Check("ok")))),
+    ];
+
+    [Fact]
+    public async Task Post_Traspaso_FuenteInterna_UsaFlitFinesParaAmbosActores()
+    {
+        // AC1: con fuente interna, ambos actores se consultan contra el API de FLIT.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(FuenteDeComparendos("internal"), TodosLosProveedoresDeComparendos());
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("flit_fines");
+        result.Provider.Should().NotContain("verifik_simit");
+        result.Provider.Should().NotContain("kyverum_fines");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_FuenteInterna_ActorJuridico_TambienUsaFlitFines()
+    {
+        // AC1: la fuente manda — el tipo de persona NO desvía a Kyverum cuando la fuente es interna.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [ActorNit("comprador", "900123456"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(FuenteDeComparendos("internal"), TodosLosProveedoresDeComparendos());
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("flit_fines");
+        result.Provider.Should().NotContain("kyverum_fines");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_FuenteExterna_CompradorNatural_UsaVerifikSimit()
+    {
+        // AC2: fuente externa + persona natural → proveedor SIMIT actual.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(FuenteDeComparendos("external"), TodosLosProveedoresDeComparendos());
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("verifik_simit");
+        result.Provider.Should().NotContain("flit_fines");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_FuenteExterna_CompradorConNit_UsaKyverumFines()
+    {
+        // AC2: fuente externa + persona jurídica → KYVERUM.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [ActorNit("comprador", "900123456"), ActorNit("vendedor", "900999888")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(FuenteDeComparendos("external"), TodosLosProveedoresDeComparendos());
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("kyverum_fines");
+        result.Provider.Should().NotContain("verifik_simit");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_FuenteExterna_CompradorNitVendedorCc_UsaUnProveedorDistintoPorActor()
+    {
+        // AC3 — el caso que rompería un resolver "por trámite" en vez de "por actor": en el MISMO
+        // traspaso, el comprador jurídico va a Kyverum y el vendedor natural a Verifik.
+        // Se verifica con providers que capturan su contexto: cada uno debe recibir EL DOCUMENTO DEL
+        // ACTOR QUE LE CORRESPONDE, que es la prueba real del enrutado (el Source de los checks lo
+        // pone el provider real, no el orquestador, así que no sirve para asertarlo aquí).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [ActorNit("comprador", "900123456"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var kyverum = new CapturingProvider("kyverum_fines", Result("green", Check("ok")));
+        var verifikSimit = new CapturingProvider("verifik_simit", Result("green", Check("ok")));
+        var handler = HandlerWith(FuenteDeComparendos("external"),
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("kyverum_fines", kyverum),
+            ("verifik_simit", verifikSimit));
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        // El comprador (NIT) fue a Kyverum...
+        kyverum.LastContext!.FieldValues["owner_document_type"].Should().Be("NIT");
+        kyverum.LastContext.FieldValues["owner_document_number"].Should().Be("900123456");
+        // ...y el vendedor (CC) a Verifik, en el mismo trámite.
+        verifikSimit.LastContext!.FieldValues["owner_document_type"].Should().Be("CC");
+        verifikSimit.LastContext.FieldValues["owner_document_number"].Should().Be("222");
+        // Ambos proveedores quedan registrados en la traza del snapshot.
+        result!.Provider.Should().Contain("kyverum_fines").And.Contain("verifik_simit");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_SinOverrideDeTenant_CaeAExterna()
+    {
+        // AC4: compañía sin fila de configuración operativa (GetAsync ⇒ null) ⇒ fuente externa,
+        // el default del DDL. Es un camino distinto al de "fila con el valor por defecto".
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(TodosLosProveedoresDeComparendos()); // NullOverrideProvider
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("verifik_simit");
+        result.Provider.Should().NotContain("flit_fines");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_ProveedorDeComparendosNoRegistrado_AgregaCheckError()
+    {
+        // Si el resolver apunta a un proveedor ausente del registro, degrada a check "error" con la
+        // key del actor, sin lanzar. Es la ventana que evita registrar los proveedores antes de
+        // cablear el resolver (HU10756/10757 van antes que esta).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        // flit_fines NO registrado, pero la compañía pide fuente interna.
+        var handler = HandlerWith(FuenteDeComparendos("internal"),
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))));
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Checks.Should().Contain(c => c.Key == "simit_comprador" && c.Status == "error");
+        result.Checks.Single(c => c.Key == "simit_comprador").Source.Should().Be("flit_fines");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_ActorSinDocumento_AgregaUnknownConElProveedorResuelto()
+    {
+        // Sin actor no hay a quién consultar: unknown (no bloquea), etiquetado con el proveedor que
+        // la fuente resolvería. Las guardas van en este orden porque elegir proveedor exige el actor.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: Actor("comprador", "111")); // sin vendedor
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = HandlerWith(FuenteDeComparendos("internal"), TodosLosProveedoresDeComparendos());
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        var vendedor = result!.Checks.Single(c => c.Key == "simit_vendedor");
+        vendedor.Status.Should().Be("unknown");
+        vendedor.Source.Should().Be("flit_fines");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_ComparendosWarn_OverallEsYellowNoRed()
+    {
+        // AC5 del Feature, end-to-end en el orquestador: los comparendos advierten y el pre-vuelo
+        // queda amarillo, así que el wizard no añade el blocker preflight_red.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var multasWarn = Result("yellow",
+            new ConsultationCheck(FinesCheckFactory.KeyMultas, FinesCheckFactory.LabelMultas, "warn", "flit_fines",
+                "2 multa(s) pendiente(s) por $500.000 COP"));
+        var handler = HandlerWith(FuenteDeComparendos("internal"),
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("flit_fines", new StubProvider("flit_fines", multasWarn)));
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Overall.Should().Be("yellow");
+        result.Checks.Should().Contain(c => c.Key == $"simit_comprador_{FinesCheckFactory.KeyMultas}" && c.Status == "warn");
+    }
+
+    // ── FEATURE 05 — severidad de bloqueo configurable por criterio y OT ──────────
+
+    [Fact]
+    public async Task Post_Matricula_SoatFail_ConBlocksFalse_SeDegradaAWarn_YOverallEsYellow()
+    {
+        // La compañía marcó SOAT como informativo para el OT destino: el fail del RUNT se baja a warn
+        // y el pre-vuelo queda amarillo (no rojo), así que el wizard no bloquea con preflight_red.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var vehiculo = new StubProvider("kyverum_runt", new ConsultationResult("kyverum_runt", "red",
+            [new ConsultationCheck("soat", "SOAT", "fail", "kyverum_runt", "SOAT vencido o no vigente")], []));
+        var handler = BuildHandler(null, [("kyverum_runt", vehiculo)],
+            blockingPolicy: new StubBlockingPolicy(("soat", false)));
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Checks.Single(c => c.Key == "soat").Status.Should().Be("warn");
+        result.Overall.Should().Be("yellow");
+    }
+
+    [Fact]
+    public async Task Post_Matricula_SoatFail_SinConfig_SigueBloqueandoEnRojo()
+    {
+        // Sin configuración (default del criterio soat=bloquea) el comportamiento previo se preserva.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var vehiculo = new StubProvider("kyverum_runt", new ConsultationResult("kyverum_runt", "red",
+            [new ConsultationCheck("soat", "SOAT", "fail", "kyverum_runt", "SOAT vencido o no vigente")], []));
+        var handler = BuildHandler(null, [("kyverum_runt", vehiculo)]);
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Checks.Single(c => c.Key == "soat").Status.Should().Be("fail");
+        result.Overall.Should().Be("red");
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_ComparendosWarn_ConBlocksTrue_SeElevaAFail_YOverallEsRed()
+    {
+        // La compañía marcó comparendos como bloqueantes para el OT destino: el warn se eleva a fail
+        // y el pre-vuelo queda rojo (el OT no admite trámites con multas pendientes).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var multasWarn = Result("yellow",
+            new ConsultationCheck(FinesCheckFactory.KeyMultas, FinesCheckFactory.LabelMultas, "warn", "flit_fines",
+                "2 multa(s) pendiente(s) por $500.000 COP"));
+        var handler = BuildHandler(FuenteDeComparendos("internal"),
+            [
+                ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+                ("flit_fines", new StubProvider("flit_fines", multasWarn)),
+            ],
+            blockingPolicy: new StubBlockingPolicy(("fines", true)));
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Checks.Should().Contain(c =>
+            c.Key == $"simit_comprador_{FinesCheckFactory.KeyMultas}" && c.Status == "fail");
+        result.Overall.Should().Be("red");
+    }
+
+    // ── FEATURE 05 (HU #10760) — el preflight omite lo que la compañía inhabilitó para el OT ─────
+
+    /// <summary>Traspaso con OT destino ya elegido: es el par (tenant, OT) sobre el que hay política.</summary>
+    private static ProcedureInstance TraspasoConOtDestino()
+    {
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            FieldKey = "transit_office_id",
+            ValueText = Guid.NewGuid().ToString(),
+            Source = "user",
+        });
+        return instance;
+    }
+
+    [Fact]
+    public async Task Post_Traspaso_ComparendosRestringidos_NoConsultaNingunActor_YLoIndica()
+    {
+        // AC2: la restricción es del par (tenant, OT), no del rol → ni comprador ni vendedor se
+        // consultan, y se deja UN solo check de omisión (no uno por actor).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoConOtDestino();
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var simit = new CapturingProvider("verifik_simit", Result("green", Check("ok")));
+        var handler = BuildHandler(
+            null,
+            [
+                ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+                ("verifik_simit", simit),
+            ],
+            restrictionPolicy: new CountingRestrictionPolicy(ConsultationRestrictionKinds.Fines));
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        simit.LastContext.Should().BeNull(); // ningún actor se consultó.
+        result!.Provider.Should().NotContain("verifik_simit");
+        result.Checks.Should().NotContain(c => c.Key.StartsWith("simit_comprador", StringComparison.Ordinal));
+        result.Checks.Should().NotContain(c => c.Key.StartsWith("simit_vendedor", StringComparison.Ordinal));
+
+        var omitida = result.Checks.Should().ContainSingle(c => c.Key == "simit_omitida").Subject;
+        omitida.Status.Should().Be("unknown");
+        omitida.Source.Should().Be("system");
+        omitida.Label.Should().Be("Consulta de comparendos omitida");
+        omitida.Message.Should().Be(
+            "No se consultaron los comparendos: la compañía tiene esta consulta inhabilitada para el organismo de tránsito de destino.");
+        result.Overall.Should().Be("green");
+    }
+
+    [Fact]
+    public async Task Post_Restricciones_SeLeenUnaSolaVezPorCorrida()
+    {
+        // AC3: una sola lectura por corrida, aunque el fan-out consulte varios actores y tipos.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoConOtDestino();
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var policy = new CountingRestrictionPolicy(); // sin restricciones: corre todo el fan-out.
+        var handler = BuildHandler(
+            null,
+            [
+                ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+                ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+            ],
+            restrictionPolicy: policy);
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        policy.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Post_SinOtResoluble_SinRestricciones_LasConsultasCorrenNormalmente()
+    {
+        // Sin OT destino en field_values la política no tiene par al que aplicar → default permisivo.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = BuildHandler(
+            null,
+            [
+                ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+                ("verifik_simit", new StubProvider("verifik_simit", Result("green", Check("ok")))),
+            ],
+            restrictionPolicy: new CountingRestrictionPolicy()); // sin kinds inhabilitados.
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result!.Provider.Should().Contain("verifik_simit");
+        result.Checks.Should().NotContain(c => c.Key == "simit_omitida");
+    }
+
+    [Fact]
+    public void ComposeOverall_SoloUnknownDeOmision_EsGreen()
+    {
+        // La razón de elegir unknown y no warn: una compañía con restricciones activas NO vive en
+        // amarillo permanente (el amarillo sigue significando "hallazgo").
+        RunPreflightHandler.ComposeOverall(
+        [
+            new PreflightCheckDto("rnmc_omitida", "Consulta RNMC omitida", "unknown", "system", null),
+            new PreflightCheckDto("simit_omitida", "Consulta de comparendos omitida", "unknown", "system", null),
+        ]).Should().Be("green");
+    }
+
+    [Fact]
+    public void ComposeOverall_OmisionMasWarn_SigueSiendoYellow()
+    {
+        // La omisión no ENMASCARA un hallazgo real de otra consulta.
+        RunPreflightHandler.ComposeOverall(
+        [
+            new PreflightCheckDto("rnmc_omitida", "Consulta RNMC omitida", "unknown", "system", null),
+            new PreflightCheckDto("b", "B", "warn", "s", null),
+        ]).Should().Be("yellow");
+    }
+
+    [Fact]
+    public void ComposeOverall_OmisionMasFail_SigueSiendoRed()
+    {
+        RunPreflightHandler.ComposeOverall(
+        [
+            new PreflightCheckDto("simit_omitida", "Consulta de comparendos omitida", "unknown", "system", null),
+            new PreflightCheckDto("b", "B", "fail", "s", null),
+        ]).Should().Be("red");
     }
 }

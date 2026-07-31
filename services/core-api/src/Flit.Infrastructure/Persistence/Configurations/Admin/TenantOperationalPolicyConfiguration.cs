@@ -24,6 +24,8 @@ internal sealed class TenantOperationalPolicyConfiguration
         builder.Property(x => x.AllowMiscNewVehicles).HasDefaultValue(true);
         builder.Property(x => x.OnlyOwnVehicles).HasDefaultValue(false);
         builder.Property(x => x.SignatureVaultEnabled).HasDefaultValue(false);
+        builder.Property(x => x.PlatePreassignEnabled).HasDefaultValue(false);
+        builder.Property(x => x.PlateFlowSkipToTerminado).HasDefaultValue(false);
 
         builder.Property(x => x.NotificationChannel)
             .HasMaxLength(20).HasDefaultValue("flit_smtp").IsRequired();
@@ -39,6 +41,13 @@ internal sealed class TenantOperationalPolicyConfiguration
 
         builder.Property(x => x.ConsultationProviderConfig)
             .HasColumnType("jsonb").HasDefaultValueSql("'{}'").IsRequired();
+
+        builder.Property(x => x.AvaluoProviderConfig)
+            .HasColumnType("jsonb").HasDefaultValueSql("'{}'").IsRequired();
+
+        // FEATURE 02 — fuente de comparendos (internal | external).
+        builder.Property(x => x.FinesQuerySource)
+            .HasColumnType("text").HasDefaultValue("external").IsRequired();
 
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();

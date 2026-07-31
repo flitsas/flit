@@ -18,6 +18,8 @@ const settings: TenantSettings = {
     onlyOwnVehicles: true,
   },
   baulFirmasActivo: true,
+  preasignacionPlacaActiva: false,
+  plateFlowSkipToTerminado: false,
   enrutamientoSMTP: "FLIT_SMTP",
   notificationTarget: "COMPRADOR",
   metodosRecaudo: ["Pasarela FLIT"],
@@ -40,6 +42,9 @@ describe("CompanyConfigTabs (AC2)", () => {
     await user.click(within(dialog).getByRole("button", { name: /guardar cambios/i }));
 
     expect(onSaveSettings).toHaveBeenCalledTimes(1);
+    // Este objeto afirma el contrato COMPLETO que emite `formToUpdate` (settingsForm.ts): es una
+    // aserción exacta, no un `objectContaining`. Al añadir un campo nuevo al PUT de configuración
+    // hay que reflejarlo aquí, o este test queda obsoleto y falla con el campo ausente.
     expect(onSaveSettings).toHaveBeenCalledWith({
       switchesMatricula: {
         allowInitialRegistration: true,
@@ -47,6 +52,8 @@ describe("CompanyConfigTabs (AC2)", () => {
         onlyOwnVehicles: true,
       },
       baulFirmasActivo: true,
+      preasignacionPlacaActiva: false,
+      plateFlowSkipToTerminado: false,
       enrutamientoSMTP: "FLIT_SMTP",
       notificationTarget: "COMPRADOR",
       metodosRecaudo: ["Pasarela FLIT"],
@@ -57,6 +64,13 @@ describe("CompanyConfigTabs (AC2)", () => {
         vehicle_plate: { primary: "kyverum_runt", fallback: ["verifik"] },
         conductor: { primary: "kyverum_runt_conductor", fallback: ["verifik_conductor"] },
       },
+      // Feature #10707 — default sin config: solo Fasecolda, sugerido Fasecolda.
+      avaluoProviderConfig: {
+        primary: "fasecolda",
+        enabled: ["fasecolda"],
+      },
+      // FEATURE 02 (HU #10723/#10724) — default sin config: 'external' (SIMIT en línea).
+      finesQuerySource: "external",
     });
 
     // El resultado se muestra en la misma ventana (fase éxito), no como banner fijo.
@@ -120,6 +134,27 @@ describe("CompanyConfigTabs (AC2)", () => {
     );
   });
 
+  it("HU #10929: la pestaña Representantes agrupa el contenido y ya no hay pestañas Escrituras ni Baúl", async () => {
+    const user = userEvent.setup();
+    const onSaveSettings = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <CompanyConfigTabs
+        settings={settings}
+        onSaveSettings={onSaveSettings}
+        legalRepresentativesSlot={<div>slot representantes</div>}
+      />,
+    );
+
+    // Existe la pestaña de representantes; ya NO existen pestañas propias de Escrituras ni Baúl.
+    const repTab = screen.getByRole("tab", { name: /representantes legales/i });
+    expect(screen.queryByRole("tab", { name: /escrituras/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /baúl de firmas/i })).not.toBeInTheDocument();
+
+    await user.click(repTab);
+    expect(screen.getByText("slot representantes")).toBeInTheDocument();
+  });
+
   it("cancela la confirmación sin guardar", async () => {
     const user = userEvent.setup();
     const onSaveSettings = vi.fn().mockResolvedValue(undefined);
@@ -158,5 +193,51 @@ describe("CompanyConfigTabs (AC2)", () => {
     await waitFor(() =>
       expect(screen.getByText(/valor inválido para el canal/i)).toBeInTheDocument(),
     );
+  });
+});
+
+// HU #11062 — el tenant solo vivía en la URL: nada en pantalla confirmaba sobre qué compañía se
+// guardaba, mientras "Guardar todo" persiste con un único PUT atómico.
+describe("CompanyConfigTabs — identificación de la compañía (HU #11062)", () => {
+  const company = { razonSocial: "Transportes ACME SAS", nit: "900123456-7" };
+
+  it("rotula la compañía y el encabezado sobrevive al cambio de pestaña", async () => {
+    const user = userEvent.setup();
+    render(
+      <CompanyConfigTabs settings={settings} company={company} onSaveSettings={vi.fn()} />,
+    );
+
+    const header = screen.getByLabelText("Compañía en configuración");
+    expect(within(header).getByText("Transportes ACME SAS")).toBeInTheDocument();
+    expect(within(header).getByText(/900123456-7/)).toBeInTheDocument();
+
+    // El encabezado va POR ENCIMA de la barra de pestañas: cambiar de pestaña no lo quita.
+    await user.click(screen.getByRole("tab", { name: /historial de cambios/i }));
+    expect(screen.getByLabelText("Compañía en configuración")).toBeInTheDocument();
+  });
+
+  it("identifica la compañía en la confirmación de guardado", async () => {
+    const user = userEvent.setup();
+    render(
+      <CompanyConfigTabs settings={settings} company={company} onSaveSettings={vi.fn()} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /guardar todo/i }));
+
+    const callout = within(screen.getByRole("dialog")).getByTestId("save-config-company");
+    expect(within(callout).getByText("Transportes ACME SAS")).toBeInTheDocument();
+    expect(within(callout).getByText(/900123456-7/)).toBeInTheDocument();
+  });
+
+  it("sin identidad resuelta la pantalla funciona igual, sin hueco", async () => {
+    const user = userEvent.setup();
+    render(<CompanyConfigTabs settings={settings} company={null} onSaveSettings={vi.fn()} />);
+
+    expect(screen.queryByLabelText("Compañía en configuración")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /guardar todo/i }));
+    expect(
+      within(screen.getByRole("dialog")).queryByTestId("save-config-company"),
+    ).not.toBeInTheDocument();
   });
 });

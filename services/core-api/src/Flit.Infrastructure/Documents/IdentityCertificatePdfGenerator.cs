@@ -1,4 +1,5 @@
 using System.Globalization;
+using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
 using QuestPDF;
 using QuestPDF.Fluent;
@@ -28,11 +29,9 @@ public sealed class IdentityCertificatePdfGenerator : IIdentityCertificateGenera
         {
             doc.Page(page =>
             {
-                page.Size(PageSizes.A4);
-                page.Margin(2f, Unit.Centimetre);
-                page.DefaultTextStyle(t => t.FontSize(10).FontFamily(Fonts.Arial));
+                FlitLetterhead.ApplyTo(page); // HU #10856 — Carta + membrete FLIT + Poppins
 
-                page.Content().Column(col =>
+                FlitLetterhead.Content(page).Column(col =>
                 {
                     col.Spacing(10);
                     col.Item().Text(txt => txt.Span("CERTIFICADO DE VALIDACIÓN DE IDENTIDAD").Bold().FontSize(15));
@@ -68,7 +67,8 @@ public sealed class IdentityCertificatePdfGenerator : IIdentityCertificateGenera
                     });
 
                     col.Item().PaddingTop(10)
-                        .Text($"Documento generado por FLIT el {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm} UTC.")
+                        // HU #11049 — AÑO/MES/DÍA sin hora (sin hora, el sufijo UTC ya no aporta).
+                        .Text($"Documento generado por FLIT el {FlitDocumentDate.Format(DateTimeOffset.UtcNow)}.")
                         .FontSize(7).FontColor(Colors.Grey.Medium);
                 });
             });

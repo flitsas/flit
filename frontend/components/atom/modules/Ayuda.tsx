@@ -12,7 +12,7 @@ export function Ayuda() {
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle title="Centro de Ayuda" subtitle="Soporte 24/7, documentación y guías de operación." />
-      <div className="grid grid-cols-4 gap-3 shrink-0">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
         {[
           { l: "Chat en vivo", d: "Respuesta < 2 min", i: MessageCircle },
           { l: "Base de conocimiento", d: "+120 artículos", i: BookOpen },

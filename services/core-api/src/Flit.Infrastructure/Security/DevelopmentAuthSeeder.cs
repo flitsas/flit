@@ -1,6 +1,7 @@
 using System.Data;
 using System.Security.Cryptography;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Infrastructure.Persistence.Sql;
@@ -17,6 +18,10 @@ public static class DevelopmentAuthSeeder
     public const string DemoPassword = "DemoPass1!";
     public const string OtAdminEmail = "otadmin@flit.local";
     public const string OtAdminPassword = "OtAdminPass1!";
+
+    /// <summary>Admin OT Sabaneta (DEV) — tenant vinculado al catálogo RUNT 5631000.</summary>
+    public const string OtSabanetaEmail = "otsabaneta@flit.local";
+    public const string OtSabanetaPassword = "OtSabaneta1!";
 
     /// <summary>Usuario fijo del tab Operación (HU #10200); el SQL seed crea la fila sin credencial.</summary>
     public const string DevOperacionEmail = "dev@flitsas.io";
@@ -36,9 +41,23 @@ public static class DevelopmentAuthSeeder
     public static readonly Guid OtDevTenantId =
         Guid.Parse("bbbbbbbb-0001-4000-8000-000000000001");
 
+    /// <summary>Tenant OT Sabaneta (DEV) — perfil → catálogo <c>5631000</c>.</summary>
+    public static readonly Guid OtSabanetaTenantId =
+        Guid.Parse("bbbbbbbb-0003-4000-8000-000000000001");
+
+    /// <summary>Oficina Sabaneta en <c>catalogs.transit_offices</c> (seed RUNT HU #10659).</summary>
+    public static readonly Guid OtSabanetaCatalogOfficeId =
+        Guid.Parse("ba575641-ea48-5cd2-ac51-ebba02584ba5");
+
     /// <summary>Usuario ot_admin fijo — alineado con seed SQL y FK changed_by en trámites.</summary>
     public static readonly Guid OtAdminUserId =
         Guid.Parse("ec4dddb9-ade5-43e8-b33b-c6036eba49d0");
+
+    public static readonly Guid OtSabanetaUserId =
+        Guid.Parse("ec4dddb9-ade5-43e8-b33b-c6036eba49d1");
+
+    public static readonly Guid OtSabanetaProfileId =
+        Guid.Parse("b9ec839d-7b78-4165-8860-cf29b104c76d");
 
     public static async Task SeedAsync(
         FlitDbContext db,
@@ -57,8 +76,12 @@ public static class DevelopmentAuthSeeder
         await SeedSuperAdminAsync(db, passwordHasher, cancellationToken);
         await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
         await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
+        await SeedSabanetaOtAdminAsync(db, passwordHasher, cancellationToken);
         await SeedBaseModulesAsync(db, cancellationToken);
         await SeedReportesPermissionsAsync(db, cancellationToken);
+        await SeedDetailedReportPermissionsAsync(db, cancellationToken);
+        await SeedLogQxPermissionsAsync(db, cancellationToken);
+        await SeedIctLogsPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
     }
 
@@ -374,6 +397,104 @@ public static class DevelopmentAuthSeeder
         });
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Tenant OT Sabaneta + perfil sobre catálogo RUNT 5631000 + usuario
+    /// <see cref="OtSabanetaEmail"/> / <see cref="OtSabanetaPassword"/> (DEV).
+    /// Idempotente. Requiere que el seed del catálogo RUNT (HU #10659) haya corrido.
+    /// </summary>
+    private static async Task SeedSabanetaOtAdminAsync(
+        FlitDbContext db,
+        IPasswordHasher passwordHasher,
+        CancellationToken cancellationToken)
+    {
+        var catalogExists = await db.TransitOffices
+            .AnyAsync(o => o.Id == OtSabanetaCatalogOfficeId, cancellationToken);
+        if (!catalogExists)
+            return;
+
+        var now = DateTimeOffset.UtcNow;
+
+        // 1. Tenant OT-SABANETA
+        var tenant = await db.Tenants
+            .FirstOrDefaultAsync(t => t.Id == OtSabanetaTenantId || t.Code == "OT-SABANETA", cancellationToken);
+        if (tenant is null)
+        {
+            tenant = new Tenant
+            {
+                Id = OtSabanetaTenantId,
+                Code = "OT-SABANETA",
+                LegalName = "Secretaría de Tránsito y Transporte de Sabaneta (DEV)",
+                TaxId = "900273813-7",
+                TenantType = "RENTING",
+                IsActive = true,
+                CreatedAt = now,
+                RowVersion = 0,
+            };
+            db.Tenants.Add(tenant);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        var tenantId = tenant.Id;
+
+        // 2. Perfil OT → catálogo Sabaneta (una oficina física = un solo tenant)
+        var existingProfileForOffice = await db.TransitOfficeProfiles
+            .FirstOrDefaultAsync(p => p.TransitOfficeId == OtSabanetaCatalogOfficeId, cancellationToken);
+        if (existingProfileForOffice is null)
+        {
+            db.TransitOfficeProfiles.Add(new TransitOfficeProfile
+            {
+                Id = OtSabanetaProfileId,
+                TenantId = tenantId,
+                TransitOfficeId = OtSabanetaCatalogOfficeId,
+                OperationMode = "dashboard",
+                QuipuxReadOnly = false,
+                CreatedAt = now,
+                RowVersion = 0,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            // Si ya hay perfil (p. ej. creado por UI), asignar el usuario a ESE tenant.
+            tenantId = existingProfileForOffice.TenantId;
+        }
+
+        // 3. Usuario + credencial
+        var existingUser = await db.Users
+            .FirstOrDefaultAsync(u => u.Email == OtSabanetaEmail, cancellationToken);
+        if (existingUser is not null)
+        {
+            await EnsureUserCredentialsAsync(
+                db, existingUser.Id, OtSabanetaPassword, passwordHasher, cancellationToken);
+            await EnsureOtAdminAssignmentAsync(db, existingUser.Id, tenantId, cancellationToken);
+            return;
+        }
+
+        db.Users.Add(new User
+        {
+            Id = OtSabanetaUserId,
+            Email = OtSabanetaEmail,
+            DisplayName = "Administrador OT Sabaneta",
+            Status = "active",
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        db.UserCredentials.Add(new UserCredential
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = OtSabanetaUserId,
+            PasswordHash = passwordHasher.Hash(OtSabanetaPassword),
+            MustChangePassword = false,
+            FailedLoginAttempts = 0,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        await EnsureOtAdminAssignmentAsync(db, OtSabanetaUserId, tenantId, cancellationToken);
     }
 
     /// <summary>
@@ -793,6 +914,230 @@ public static class DevelopmentAuthSeeder
                         PermissionId = a.Id,
                         CreatedAt = now,
                     }));
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Feature #10813 — módulo dock "Reportes Detallados" + permisos de lectura y export.
+    /// Idempotente sobre BDs ya sembradas.
+    /// </summary>
+    private static async Task SeedDetailedReportPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "reportes-detallados" && m.DeletedAt == null, ct);
+
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "reportes-detallados",
+                Name = "Reportes Detallados",
+                SortOrder = 8,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var slugs = new (string Slug, string Name, string RoutePattern, string Method)[]
+        {
+            ("reportes.detallados.read",   "Ver reportes detallados",   "/api/v1/detailed-report/procedures",        "GET"),
+            ("reportes.detallados.export", "Exportar reportes detallados", "/api/v1/detailed-report/procedures/export", "GET"),
+        };
+
+        var existingSlugs = await db.RbacActions
+            .Where(a => a.ModuleId == module.Id)
+            .Select(a => a.Slug)
+            .ToListAsync(ct);
+
+        var newActions = slugs
+            .Where(s => !existingSlugs.Contains(s.Slug))
+            .Select(s => new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = s.Slug,
+                Name = s.Name,
+                HttpMethod = s.Method,
+                RoutePattern = s.RoutePattern,
+                IsActive = true,
+                CreatedAt = now,
+            })
+            .ToArray();
+
+        if (newActions.Length == 0)
+            return;
+
+        db.RbacActions.AddRange(newActions);
+        await db.SaveChangesAsync(ct);
+
+        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        {
+            var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
+            foreach (var role in roles)
+            {
+                var existing = await db.RoleGrants
+                    .Where(g => g.RoleId == role.Id)
+                    .Select(g => g.PermissionId)
+                    .ToListAsync(ct);
+
+                db.RoleGrants.AddRange(newActions
+                    .Where(a => !existing.Contains(a.Id))
+                    .Select(a => new RoleGrant
+                    {
+                        Id = Guid.CreateVersion7(),
+                        RoleId = role.Id,
+                        PermissionId = a.Id,
+                        CreatedAt = now,
+                    }));
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// LOG QX (HU #10794) — módulo <c>logqx</c> + permiso <c>logqx.read</c> que protege
+    /// <c>GET /api/v1/admin/log-qx</c>. Idempotente y separado de <see cref="SeedBaseModulesAsync"/>
+    /// (que hace early-return en BDs ya sembradas): crea el módulo y el permiso si faltan y concede el
+    /// permiso a SuperAdmin. SuperAdmin además bypassa por rol en runtime; el grant deja el permiso
+    /// asignado y visible para gestión RBAC (p. ej. para asignarlo luego a un rol de soporte). No se
+    /// concede a AdminCompany: el LOG QX es una herramienta de diagnóstico cross-tenant de
+    /// soporte/administración FLIT, no de administradores de compañía.
+    /// </summary>
+    private static async Task SeedLogQxPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "logqx" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "logqx",
+                Name = "LOG QX",
+                SortOrder = 8,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var action = await db.RbacActions
+            .FirstOrDefaultAsync(a => a.Slug == "logqx.read", ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = "logqx.read",
+                Name = "Ver LOG QX",
+                HttpMethod = "GET",
+                RoutePattern = "/api/v1/admin/log-qx",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // Grant a SuperAdmin (idempotente): solo si aún no lo tiene.
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin")
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
+            {
+                db.RoleGrants.Add(new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Observabilidad ICT (Feature #10888, §A.11) — módulo <c>ict-logs</c> + permiso <c>ict.logs.read</c>
+    /// que protege <c>GET /api/v1/ict/logs</c> (submódulo frontend de logs/alertas ICT). Mismo patrón e
+    /// idempotencia que <see cref="SeedLogQxPermissionsAsync"/>: crea módulo y permiso si faltan y concede
+    /// el permiso a SuperAdmin (que además bypassa por rol). Sin este seed, ningún usuario no-superadmin
+    /// podía recibir el permiso por el flujo RBAC estándar.
+    /// </summary>
+    private static async Task SeedIctLogsPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "ict-logs" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "ict-logs",
+                Name = "Logs ICT",
+                SortOrder = 9,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var action = await db.RbacActions
+            .FirstOrDefaultAsync(a => a.Slug == "ict.logs.read", ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = "ict.logs.read",
+                Name = "Ver logs ICT",
+                HttpMethod = "GET",
+                RoutePattern = "/api/v1/ict/logs",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        // Grant a SuperAdmin (idempotente): solo si aún no lo tiene.
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin")
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
+            {
+                db.RoleGrants.Add(new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
             }
         }
 

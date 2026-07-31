@@ -166,8 +166,10 @@ describe('M6 — tabla de trámites en curso', () => {
     expect(within(rows[0]).getByText('2/6')).toBeInTheDocument();
     expect(within(rows[0]).getByText('Borrador')).toBeInTheDocument();
 
-    // Fila entregado: placa nula -> "—", chip azul "Entregado" (N 03).
-    expect(within(rows[1]).getByText('—')).toBeInTheDocument();
+    // Fila entregado: placa nula -> "—", chip azul "Entregado" (N 03). HU #11020 — la columna
+    // Vendedor también pinta "—" cuando no hay parte saliente, así que se cuentan las celdas vacías
+    // en vez de exigir una sola.
+    expect(within(rows[1]).getAllByText('—').length).toBeGreaterThan(0);
     expect(within(rows[1]).getByText('Entregado')).toBeInTheDocument();
     expect(within(rows[1]).getByText('5/5')).toBeInTheDocument();
   });
@@ -265,23 +267,30 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     expect(within(rows[0]).getByText('Entregado')).toBeInTheDocument();
   });
 
-  it('el botón Continuar de una fila borrador navega al wizard de esa instancia', async () => {
+  // Desde HU #11037 las acciones de la fila viven dentro de un `ActionsMenu` (dropdown): hay que
+  // abrirlo antes de pulsar el ítem.
+  it('la acción Continuar de una fila borrador navega al wizard de esa instancia', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT]);
     const user = userEvent.setup();
     render(<OperacionView onStartTramite={vi.fn()} />);
 
-    const btn = await screen.findByRole('button', { name: /Continuar trámite TR-001/ });
-    await user.click(btn);
+    await user.click(
+      await screen.findByRole('button', { name: /Acciones del trámite TR-001/ }),
+    );
+    await user.click(screen.getByRole('menuitem', { name: /Continuar/ }));
     expect(routerPush).toHaveBeenCalledWith('/tramites/inst-1');
   });
 
-  it('el botón Ver de una fila submitted navega al wizard de esa instancia', async () => {
+  it('la acción Ver de una fila submitted navega al wizard de esa instancia', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
     render(<OperacionView onStartTramite={vi.fn()} />);
 
-    const btn = await screen.findByRole('button', { name: /Ver trámite MA-002/ });
-    await user.click(btn);
+    await user.click(
+      await screen.findByRole('button', { name: /Acciones del trámite MA-002/ }),
+    );
+    // "Ver" abre el wizard; "Ver documentos" es otra acción, de ahí el ancla al final.
+    await user.click(screen.getByRole('menuitem', { name: /^Ver$/ }));
     expect(routerPush).toHaveBeenCalledWith('/tramites/inst-2');
   });
 

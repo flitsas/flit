@@ -1,5 +1,6 @@
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -22,11 +23,31 @@ internal static class PreflightEndpoints
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
+            var (result, error, existingProcedureInstanceId, vehicleState) = await handler.HandleAsync(id, tenantId.Value, ct);
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede correr preflight en estado borrador."),
+                "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede correr preflight en borrador o con subsanación activa."),
+                // CF-01 (HU #10876) — duplicidad de trámite EN PROCESO por familia (VIN en Matrícula
+                // Inicial, placa en Traspaso). El id del trámite existente viaja en las extensions
+                // RFC7807 para que el frontend pueda ofrecer "continuar el trámite existente".
+                "DUPLICATE_ACTIVE_PROCEDURE" => Results.Problem(
+                    statusCode: 409,
+                    title: "DUPLICATE_ACTIVE_PROCEDURE",
+                    detail: "Ya existe un trámite en proceso para este VIN/placa.",
+                    extensions: new Dictionary<string, object?> { ["procedureInstanceId"] = existingProcedureInstanceId }),
+                // CF-03 (HU #10877) — precondición registral "vehículo ya matriculado" (doble fuente
+                // RUNT/FLIT), bloqueo DURO no subsanable. vehicleStatus/procedureType viajan en las
+                // extensions RFC7807 (contrato cerrado en la Feature #10862).
+                VehicleStatePolicy.ErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: VehicleStatePolicy.ErrorCode,
+                    detail: "El vehículo ya se encuentra matriculado: no es válido para este tipo de trámite.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["vehicleStatus"] = vehicleState?.VehicleStatus,
+                        ["procedureType"] = vehicleState?.ProcedureType,
+                    }),
                 _ => Results.Ok(result),
             };
         }).WithName("RunProcedureInstancePreflight");

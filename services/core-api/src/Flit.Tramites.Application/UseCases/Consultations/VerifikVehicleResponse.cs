@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -122,8 +123,36 @@ public sealed class VerifikSoat
 
     [JsonPropertyName("entidadExpideSoat")]
     public string? EntidadExpideSoat { get; set; }
+
+    // HU #11134 — el registro de SOAT del RUNT trae la póliza y sus fechas; el modelo solo declaraba
+    // tres campos y descartaba el resto al deserializar, así que media tabla del certificado dependía
+    // del OCR del PDF que cargara el operador. Los mismos nombres que ya declara el modelo de Intempo,
+    // que representa el mismo registro del RUNT.
+    [JsonPropertyName("noPoliza")]
+    public string? NoPoliza { get; set; }
+
+    [JsonPropertyName("fechaExpedicion")]
+    public string? FechaExpedicion { get; set; }
+
+    [JsonPropertyName("fechaVigencia")]
+    public string? FechaVigencia { get; set; }
 }
 
+/// <summary>
+/// Registro de revisión técnico-mecánica del RUNT.
+///
+/// <para><b>HU #11135 — número de certificado y fechas de expedición/vigencia.</b> El certificado
+/// del expediente los pinta, pero <b>ningún contrato disponible confirma cómo se llaman</b>: las
+/// muestras reales capturadas traen la lista vacía (<c>tecnoMecanica: []</c> en Verifik, <c>rtm: []</c>
+/// en Kyverum) y el modelo de Intempo no tiene bloque de RTM. Inventar nombres sería repetir el fallo
+/// que originó este Feature: quedarían en null y el hueco volvería a esconderse tras un modelo que
+/// aparenta cubrirlo.</para>
+///
+/// <para>En vez de adivinar, se conserva <b>todo</b> lo que mande el proveedor en
+/// <see cref="CamposNoModelados"/> y se resuelven esos tres valores probando los nombres candidatos
+/// documentados en <c>VerifikResultMapper</c>. Si el proveedor usa cualquiera de ellos, el dato entra
+/// hoy; si usa otro, queda capturado y visible en vez de perdido, y el OCR del PDF sigue de respaldo.</para>
+/// </summary>
 public sealed class VerifikTecnomecanica
 {
     [JsonPropertyName("vigente")]
@@ -137,4 +166,8 @@ public sealed class VerifikTecnomecanica
 
     [JsonPropertyName("cdaExpide")]
     public string? CdaExpide { get; set; }
+
+    /// <summary>Todo lo que el proveedor envía y el modelo no declara. Sin esto se descartaba en silencio.</summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? CamposNoModelados { get; set; }
 }

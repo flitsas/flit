@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Modules.Security.Application.Auth.Login;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
@@ -17,11 +18,13 @@ public sealed class LoginHandlerInactiveRolesTests
     private readonly IAuthUserRepository _repository = Substitute.For<IAuthUserRepository>();
     private readonly IPasswordHasher _passwordHasher = Substitute.For<IPasswordHasher>();
     private readonly IJwtTokenIssuer _jwtTokenIssuer = Substitute.For<IJwtTokenIssuer>();
+    private readonly IAdminAuditWriter _auditWriter = Substitute.For<IAdminAuditWriter>();
+    private readonly IAuditContextAccessor _auditContext = NullAuditContextAccessor.Instance;
     private readonly LoginHandler _handler;
 
     public LoginHandlerInactiveRolesTests()
     {
-        _handler = new LoginHandler(_repository, _passwordHasher, _jwtTokenIssuer);
+        _handler = new LoginHandler(_repository, _passwordHasher, _jwtTokenIssuer, _auditWriter, _auditContext);
     }
 
     [Fact]

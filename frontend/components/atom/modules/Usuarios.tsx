@@ -11,7 +11,7 @@ import { RestoreUserDialog } from "./users/RestoreUserDialog";
 import { ResendInvitationButton } from "./users/ResendInvitationButton";
 import { CancelInvitationDialog } from "./users/CancelInvitationDialog";
 import { ModuleTitle } from "./ModuleTitle";
-import { StatusBadge } from "@/components/atom/StatusBadge";
+import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import { fetchTransitOfficeTenants, type TransitOfficeTenantItem } from "@/lib/api/admin-transit-office-tenants";
 import type { CompanyListItem } from "@/lib/api/types";
@@ -31,21 +31,21 @@ const ALL_TABS = [
 
 type TabId = (typeof ALL_TABS)[number]["id"];
 
-// Chips tintados (HU #10494 · decisión D1). Mismo vocabulario (Activo/Inactivo/Pendiente),
-// convención tintada: fondo translúcido + texto de color legible + borde.
+// Chips tintados (HU #10494 · decisión D1, tones HU #10844). Mismo vocabulario
+// (Activo/Inactivo/Pendiente); el color lo resuelve el `tone` semántico desde globals.css.
 const STATUS_BADGE: Record<
   TenantUser["status"],
-  { label: string; bg: string; color: string; border: string }
+  { label: string; tone: StatusTone }
 > = {
-  active: { label: "Activo", bg: "rgba(0,219,213,0.15)", color: "#0f766e", border: "rgba(0,219,213,0.35)" },
-  inactive: { label: "Inactivo", bg: "rgba(255,78,0,0.10)", color: "#c2410c", border: "rgba(255,78,0,0.3)" },
-  pending: { label: "Pendiente", bg: "rgba(245,158,11,0.14)", color: "#b45309", border: "rgba(245,158,11,0.35)" },
+  active: { label: "Activo", tone: "success" },
+  inactive: { label: "Inactivo", tone: "danger" },
+  pending: { label: "Pendiente", tone: "warning" },
 };
 
 // Ajuste QA (flujo completo HU #10619-#10628): un usuario suspendido/desactivado seguía
 // mostrando el chip "Activo" — solo cambiaba el ícono de acción (Ban → ShieldOff), sin
 // ninguna señal visible al escanear la tabla. Prevalece sobre STATUS_BADGE[status].
-const SUSPENDED_BADGE = { label: "Bloqueado", bg: "rgba(255,78,0,0.10)", color: "#c2410c", border: "rgba(255,78,0,0.3)" };
+const SUSPENDED_BADGE: { label: string; tone: StatusTone } = { label: "Bloqueado", tone: "danger" };
 
 function userBadge(u: TenantUser) {
   return u.isSuspended ? SUSPENDED_BADGE : STATUS_BADGE[u.status];
@@ -189,7 +189,7 @@ export function Usuarios() {
         }
       />
 
-      <div className="flex items-center gap-1 border-b border-[#DFE5ED] dark:border-white/10 shrink-0">
+      <div className="flex flex-wrap items-center gap-1 border-b border-[#DFE5ED] dark:border-white/10 shrink-0">
         {tabs.map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
@@ -216,9 +216,9 @@ export function Usuarios() {
 
       {tab === "usuarios" && (
         <>
-          <div className="flex flex-col">
+          <div className="flex flex-col overflow-x-auto">
             <div
-              className="grid px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
+              className="grid min-w-[720px] px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
               style={{
                 gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 40px",
                 background: "#DFE5ED",
@@ -254,7 +254,7 @@ export function Usuarios() {
                     // de rol). u.id solo no es único — se compone con u.roleId para evitar el
                     // warning de React "two children with the same key".
                     key={`${u.id}-${u.roleId ?? "sin-rol"}`}
-                    className="grid items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
+                    className="grid min-w-[720px] items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
                     style={{
                       gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 40px",
                       }}
@@ -280,7 +280,7 @@ export function Usuarios() {
                       )}
                     </div>
                     <div>
-                      <StatusBadge label={badge.label} bg={badge.bg} color={badge.color} border={badge.border} />
+                      <StatusBadge label={badge.label} tone={badge.tone} />
                     </div>
                     <div className="opacity-70">{formatDateTime(u.createdAt)}</div>
                     <div className="flex items-center justify-end gap-1">
@@ -391,9 +391,9 @@ export function Usuarios() {
         // HU #10624 (AC3) — GET /api/v1/security/users?onlyDeleted=true: usuarios eliminados
         // (soft-delete) de CUALQUIER tenant, exclusivo de SuperAdmin. Restaurar (1 clic de
         // confirmación en RestoreUserDialog) deshace el soft-delete vía restoreUser().
-        <div className="flex flex-col">
+        <div className="flex flex-col overflow-x-auto">
           <div
-            className="grid px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
+            className="grid min-w-[560px] px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
             style={{ gridTemplateColumns: "3fr 2fr 2fr 40px", background: "#DFE5ED", color: "#162744" }}
           >
             <div>Usuario</div>
@@ -419,7 +419,7 @@ export function Usuarios() {
                 // Mismo criterio que la tabla de "Usuarios": u.id + u.roleId evita colisión de
                 // key cuando el JOIN produce N filas por usuario con N roles.
                 key={`${u.id}-${u.roleId ?? "sin-rol"}`}
-                className="grid items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
+                className="grid min-w-[560px] items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
                 style={{ gridTemplateColumns: "3fr 2fr 2fr 40px" }}
               >
                 <div>
@@ -488,8 +488,8 @@ export function Usuarios() {
               No hay roles configurados para este tenant. Contacta al Super Admin.
             </div>
           ) : (
-            <div className="flex flex-col">
-              <div className="grid grid-cols-12 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0" style={{ background: "#DFE5ED", color: "#162744" }}>
+            <div className="flex flex-col overflow-x-auto">
+              <div className="grid grid-cols-12 min-w-[560px] px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0" style={{ background: "#DFE5ED", color: "#162744" }}>
                 <div className="col-span-2">Código</div>
                 <div className="col-span-4">Nombre</div>
                 <div className="col-span-4">Descripción</div>
@@ -497,7 +497,7 @@ export function Usuarios() {
               </div>
               <div className="space-y-2 pt-2">
                 {roles.map((r) => (
-                  <div key={r.id} className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs">
+                  <div key={r.id} className="grid grid-cols-12 min-w-[560px] items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs">
                     <div className="col-span-2 font-mono opacity-80">{r.code}</div>
                     <div className="col-span-4 font-semibold">{r.name}</div>
                     <div className="col-span-4 opacity-70">{r.description ?? "—"}</div>
@@ -741,8 +741,8 @@ function InviteModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4">
-      <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md border">
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/40 backdrop-blur-sm px-4 py-6">
+      <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md max-h-[90dvh] overflow-y-auto border">
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="text-lg font-bold">Invitar usuario</h3>
@@ -848,7 +848,7 @@ function InviteModal({
               // enviar se deshabilita y se muestra un mensaje de ayuda mientras no haya ninguno.
               <fieldset>
                 <legend className="text-xs font-semibold block mb-1">Roles *</legend>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl border px-3 py-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl border px-3 py-2.5">
                   {roles.map((r) => (
                     <label key={r.id} className="flex items-center gap-2 cursor-pointer text-xs">
                       <input

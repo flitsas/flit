@@ -36,10 +36,10 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
             return (null, "ot_traspaso_no_modificable");
         }
 
-        if (instance.Status != TramiteEstado.Borrador)
+        // Subsanación (flag sobre rechazado) o borrador: edición completa. Fuera de eso, tras el
+        // envío solo se permiten claves de organismo de tránsito (generación diferida del FUR).
+        if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
         {
-            // Tras el envío solo se permiten claves de organismo de tránsito (generación
-            // diferida del FUR). Cualquier otro campo sigue bloqueado en not_draft.
             var blocked = request.Items.Where(i =>
                 !IsPostSubmitTransitOfficeKey(i.FieldKey)).ToList();
             if (blocked.Count > 0)
@@ -103,7 +103,10 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
     private static bool IsPostSubmitTransitOfficeKey(string fieldKey) =>
         string.Equals(fieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase)
         || string.Equals(fieldKey, "transit_office_name", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(fieldKey, "transit_office_city", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(fieldKey, "transit_office_city", StringComparison.OrdinalIgnoreCase)
+        // Feature #10587 — la compañía registra el estado del SOAT tras la asignación de placa
+        // (la máquina de estados / el trigger de BD restringen a 'asignado').
+        || string.Equals(fieldKey, "soat_estado", StringComparison.OrdinalIgnoreCase);
 
     // B11 — toda clave del organismo de tránsito (incluye transit_office_id), para el bloqueo en traspaso.
     private static bool IsTransitOfficeKey(string fieldKey) =>

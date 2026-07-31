@@ -1,5 +1,7 @@
 "use client";
 
+import { formatFecha } from "@/lib/format/date";
+
 /** Muestra los últimos 6 caracteres visibles de una URL (HU #10219 AC1). */
 export function maskTargetUrl(url: string): string {
   if (url.length <= 6) {
@@ -31,10 +33,9 @@ export function procedureStatusTone(status: string): "success" | "warning" | "da
   return "neutral";
 }
 
+// HU #11018 — formato de negocio unico: AÑO/MES/DIA, sin hora.
 export function formatOtDate(iso: string): string {
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return iso;
-  return parsed.toLocaleDateString("es-CO", { year: "numeric", month: "2-digit", day: "2-digit" });
+  return formatFecha(iso, iso);
 }
 
 export const OT_RULE_FIELDS = [

@@ -22,6 +22,12 @@ export interface SaveConfigDialogProps {
   phase: SaveConfigPhase;
   /** Error genérico (no de validación) al guardar; se muestra en la fase de confirmación. */
   error?: string | null;
+  /**
+   * HU #11062 — compañía afectada por el guardado. El PUT es atómico y no hay vuelta atrás, así que
+   * la confirmación nombra explícitamente sobre qué compañía se va a escribir. Opcional: si aún no se
+   * resolvió la identidad, el diálogo se comporta como antes en vez de mostrar un hueco.
+   */
+  company?: { razonSocial: string; nit: string } | null;
   onConfirm: () => void;
   onCancel: () => void;
   onClose: () => void;
@@ -31,6 +37,7 @@ export function SaveConfigDialog({
   changes,
   phase,
   error,
+  company,
   onConfirm,
   onCancel,
   onClose,
@@ -50,6 +57,7 @@ export function SaveConfigDialog({
       title={phase === "success" ? "Cambios guardados" : "Confirmar guardado"}
       titleClassName="text-lg font-semibold text-[#162744] dark:text-white"
     >
+        {company && <CompanyCallout company={company} />}
         {phase === "success" ? (
           <>
             <p className="mt-2 text-sm opacity-80">
@@ -104,6 +112,25 @@ export function SaveConfigDialog({
           </>
         )}
     </Modal>
+  );
+}
+
+/**
+ * HU #11062 — compañía afectada, destacada en la confirmación. El riesgo que reporta el negocio es
+ * real: el tenant solo vive en la URL, así que nada impedía confirmar un guardado creyendo estar en
+ * otra compañía.
+ */
+function CompanyCallout({ company }: { company: { razonSocial: string; nit: string } }) {
+  return (
+    <div
+      className="mt-2 rounded-xl border px-3 py-2"
+      style={{ borderColor: "#557EFF", background: "rgba(85,126,255,0.06)" }}
+      data-testid="save-config-company"
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-wider opacity-60">Compañía</p>
+      <p className="text-sm font-bold text-[#162744] dark:text-white">{company.razonSocial}</p>
+      <p className="text-xs opacity-70">NIT {company.nit}</p>
+    </div>
   );
 }
 

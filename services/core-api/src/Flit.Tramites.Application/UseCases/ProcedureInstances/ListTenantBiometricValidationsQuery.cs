@@ -6,16 +6,30 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 // ── DTOs del submódulo "Validaciones de Identidad" (HU #10234) ───────────────
 
 /// <summary>
+/// Trámite del tenant que comparte la misma identidad (tipo + número de documento) que una validación
+/// biométrica. Feature #11066 — una identidad puede vincularse a varios trámites sin tabla puente.
+/// </summary>
+public sealed record LinkedProcedureDto(
+    Guid InstanceId,
+    string ReferenceNumber,
+    string Status,
+    string Modalidad);
+
+/// <summary>
 /// Fila de la tabla transversal del submódulo de Validaciones: una validación biométrica con el
-/// trámite al que pertenece (para navegar) y los datos que la vista del gestor necesita. NO incluye
-/// email ni la URL de captura (vista de monitoreo, no de gestión de la captura). El documento viaja
-/// completo (vista autenticada del gestor del tenant); la FE lo enmascara al pintarlo.
+/// trámite al que pertenece (para navegar) y los datos que la vista del gestor necesita. Documento y
+/// correo viajan completos (vista autenticada del gestor del tenant, D3/CF-05, Feature #11004); la FE
+/// decide si enmascara al pintarlos. NO incluye la URL de captura salvo cuando está vigente (ver
+/// <see cref="EnlaceVigente"/> más abajo, HU #10886).
 /// </summary>
 public sealed record TenantBiometricValidationDto(
     Guid Id,
-    Guid InstanceId,
-    string ReferenceNumber,
-    string Modalidad,
+    /// <summary>HU #10865 — nullable para prevalidaciones standalone (sin trámite).</summary>
+    Guid? InstanceId,
+    /// <summary>HU #10867 — null para prevalidaciones standalone (sin trámite asociado).</summary>
+    string? ReferenceNumber,
+    /// <summary>HU #10867 — null para prevalidaciones standalone (sin trámite asociado).</summary>
+    string? Modalidad,
     string? PartyRole,
     string Name,
     string DocumentType,
@@ -27,10 +41,29 @@ public sealed record TenantBiometricValidationDto(
     string? RejectionReason,
     DateTimeOffset CreatedAt,
     DateTimeOffset? ValidatedAt,
+    // CF-05 (Feature #11004, ADR-0036) — correo de la validación. Vista autenticada del gestor del
+    // tenant: viaja completo, sin enmascarar (D3). Revierte la omisión intencional de HU #10234.
+    string Email,
+    // CF-06/tracking (Feature #11004) — intentos y reenvíos, para que Validaciones/Prevalidaciones
+    // muestren el mismo dato que ya usa el detalle/BiometricValidationDto, sin llamada adicional.
+    int Attempts,
+    int MaxAttempts,
+    int ResendCount,
+    DateTimeOffset? LastResentAt,
     // Vigencia de la identidad APROBADA (30 días calendario desde la aprobación): fecha de fin de
     // vigencia y días que le restan. Null cuando no hay aprobación (ValidatedAt) → no aplica vigencia.
     DateTimeOffset? ValidUntil,
-    int? DaysRemaining);
+    int? DaysRemaining,
+    // CF-05 (HU #10886, AC2) — enlace de captura VIGENTE, para reenviarlo por otros medios desde el
+    // submódulo de Validaciones de Identidad. Null cuando no hay nada que compartir: proveedor sin
+    // enlace (mock), validación en estado terminal (aprobado/rechazado/expirado) o enlace ya vencido.
+    string? CaptureUrl,
+    // Vencimiento del enlace de captura (distinto de ValidUntil, que es la vigencia de la identidad
+    // ya APROBADA). Se expone siempre que exista, para poder mostrar "vigente hasta …".
+    DateTimeOffset? LinkExpiresAt,
+    // Feature #11066 — otros trámites del tenant con validaciones de la misma identidad (documento).
+    // El trámite primario sigue en InstanceId/ReferenceNumber para compatibilidad.
+    IReadOnlyList<LinkedProcedureDto> LinkedProcedures);
 
 /// <summary>KPIs del submódulo: totales por estado (exactos, sin el cap de filas de la tabla).</summary>
 public sealed record BiometricValidationStatsDto(
@@ -88,8 +121,9 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
         {
             var scan = await repo.ListBiometricValidationsByTenantAsync(tenantId, 0, MotivoScanCap, activeFilter, now, ct);
             var term = filter.MotivoRechazo;
+            var linkedByIdentity = await LoadLinkedProceduresAsync(tenantId, scan, ct);
             var all = scan
-                .Select(v => ToDto(v, now))
+                .Select(v => ToDto(v, now, linkedByIdentity))
                 .Where(d => d.RejectionReason is not null
                     && d.RejectionReason.Contains(term, StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -103,18 +137,58 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
         var stats = BuildStats(await repo.CountBiometricValidationsByEstadoAsync(tenantId, activeFilter, now, ct));
         var rows = await repo.ListBiometricValidationsByTenantAsync(
             tenantId, (page - 1) * pageSize, pageSize, activeFilter, now, ct);
-        var dtos = rows.Select(v => ToDto(v, now)).ToList();
+        var linked = await LoadLinkedProceduresAsync(tenantId, rows, ct);
+        var dtos = rows.Select(v => ToDto(v, now, linked)).ToList();
 
         return (new TenantBiometricValidationsResponse(dtos, stats, page, pageSize, stats.Total), null);
     }
 
+    /// <summary>
+    /// Resuelve en lote los trámites vinculados por identidad (documento) para las filas de la página.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, IReadOnlyList<LinkedProcedureDto>>> LoadLinkedProceduresAsync(
+        Guid tenantId,
+        IReadOnlyList<ProcedureInstanceBiometricValidation> rows,
+        CancellationToken ct)
+    {
+        if (rows.Count == 0)
+            return new Dictionary<string, IReadOnlyList<LinkedProcedureDto>>();
+
+        var documents = rows
+            .Where(v => !string.IsNullOrWhiteSpace(v.DocumentType) && !string.IsNullOrWhiteSpace(v.DocumentNumber))
+            .Select(v => (v.DocumentType, v.DocumentNumber))
+            .Distinct()
+            .ToList();
+
+        if (documents.Count == 0)
+            return new Dictionary<string, IReadOnlyList<LinkedProcedureDto>>();
+
+        var summaries = await repo.ListLinkedProceduresByIdentityDocumentsAsync(tenantId, documents, ct);
+        return summaries.ToDictionary(
+            kv => kv.Key,
+            kv => (IReadOnlyList<LinkedProcedureDto>)kv.Value
+                .Select(s => new LinkedProcedureDto(s.InstanceId, s.ReferenceNumber, s.Status, s.Modalidad))
+                .ToList());
+    }
+
     /// <summary>Mapea una validación a su DTO de fila (incluye flag expirada + motivo sanitizado).</summary>
-    private static TenantBiometricValidationDto ToDto(ProcedureInstanceBiometricValidation v, DateTimeOffset now) =>
-        new(
+    private static TenantBiometricValidationDto ToDto(
+        ProcedureInstanceBiometricValidation v,
+        DateTimeOffset now,
+        IReadOnlyDictionary<string, IReadOnlyList<LinkedProcedureDto>> linkedByIdentity)
+    {
+        var identityKey = BiometricRules.IdentidadKey(v.TenantId, v.DocumentType, v.DocumentNumber);
+        var linked = linkedByIdentity.GetValueOrDefault(identityKey) ?? [];
+        var linkedOthers = v.ProcedureInstanceId is { } primaryId
+            ? linked.Where(p => p.InstanceId != primaryId).ToList()
+            : linked;
+
+        return new TenantBiometricValidationDto(
             v.Id,
             v.ProcedureInstanceId,
-            v.ProcedureInstance?.ReferenceNumber ?? string.Empty,
-            v.ProcedureInstance?.ModalidadEntrada ?? string.Empty,
+            // HU #10867 — null para prevalidaciones standalone; la FE muestra "—" / badge "Prevalidación".
+            v.ProcedureInstance?.ReferenceNumber,
+            v.ProcedureInstance?.ModalidadEntrada,
             v.PartyRole,
             v.Name,
             v.DocumentType,
@@ -127,11 +201,38 @@ public sealed class ListTenantBiometricValidationsHandler(IProcedureInstanceRepo
             IniciarBiometriaHandler.ExtractMotivoRechazo(v),
             v.CreatedAt,
             v.ValidatedAt,
+            v.Email,
+            v.Attempts,
+            v.MaxAttempts,
+            v.ResendCount,
+            v.LastResentAt,
             // Vigencia (HU #10350): la fecha de fin se PERSISTE (la estampa el código al aprobar) y se lee
             // de la columna; los días restantes NO se persisten — se calculan al vuelo contra HOY, así que
             // siempre van frescos sin job ni columna materializada.
             v.ValidUntil,
-            BiometricRules.DiasRestantesVigencia(v, now));
+            BiometricRules.DiasRestantesVigencia(v, now),
+            EnlaceVigente(v, now),
+            v.ExpiresAt,
+            linkedOthers);
+    }
+
+    /// <summary>
+    /// CF-05 (HU #10886, AC2) — enlace de captura solo mientras SIRVE para algo: la validación sigue en
+    /// curso (pendiente de envío / enviada / en proceso) y el enlace no ha vencido. En estados terminales
+    /// (aprobado, rechazado, expirado) no se expone: no hay nada que reenviar y el enlace es un dato
+    /// sensible que no debe pasearse más allá de su utilidad.
+    /// </summary>
+    private static string? EnlaceVigente(ProcedureInstanceBiometricValidation v, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(v.CaptureUrl))
+            return null;
+
+        var enCurso = v.Status is BiometricEstados.PendienteEnvio
+            or BiometricEstados.Enviado
+            or BiometricEstados.EnProceso;
+
+        return enCurso && now <= v.ExpiresAt ? v.CaptureUrl : null;
+    }
 
     /// <summary>
     /// KPIs derivados de las filas ya materializadas (usado cuando el filtro de motivo se resuelve en

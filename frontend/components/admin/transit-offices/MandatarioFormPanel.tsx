@@ -1,19 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, MailCheck, ShieldAlert, ShieldCheck } from "lucide-react";
 import { OtSidePanel } from "./OtSidePanel";
 import { OT_INPUT_CLS } from "./ot-form-styles";
 import { ApiValidationError } from "@/lib/api/types";
-import type {
-  MandateSigner,
-  MandateSignerInput,
-  MandateSignerSaved,
-  OtCompany,
+import { hasPriorIdentity, identityUi } from "./mandatario-identity";
+import {
+  resendMandateSignerIdentity,
+  sendMandateSignerIdentity,
+  type MandateSigner,
+  type MandateSignerInput,
+  type MandateSignerSaved,
+  type OtCompany,
 } from "@/lib/api/admin-mandate-signers";
+import { fetchOtUsers, type OtUserItem } from "@/lib/api/admin-ot-security";
+import { digitsOnly } from "@/lib/format/currency";
 
 export interface MandatarioFormPanelProps {
   open: boolean;
+  transitOfficeId: string;
   /** Mandatario en edición, o `null` para alta. */
   editing: MandateSigner | null;
   companies: OtCompany[];
@@ -23,14 +29,25 @@ export interface MandatarioFormPanelProps {
   onError: (message: string) => void;
 }
 
+/** Tipos de documento de una persona mandataria (el mandatario firma como persona natural). */
+const DOCUMENT_TYPES: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "CC", label: "Cédula de ciudadanía" },
+  { value: "CE", label: "Cédula de extranjería" },
+  { value: "PA", label: "Pasaporte" },
+  { value: "TI", label: "Tarjeta de identidad" },
+];
+
 /**
- * Formulario mínimo de mandatario (ADR-0023): nombre + número de documento + huella
- * (readonly, autogenerada) + multiselect de compañías del OT. Las compañías ya tomadas por
- * OTRO mandatario, o bloqueadas/inactivas en el OT (RF33), aparecen deshabilitadas con su
- * motivo (patrón OTMatrix).
+ * Formulario de mandatario (ADR-0023, ampliado por ADR-0036): nombre, tipo + número de documento,
+ * correo (para la validación de identidad), cuenta de usuario de OT (cotejo del firmante al aprobar,
+ * §D9), huella (readonly) y multiselect de compañías. Con la MULTIPLICIDAD (ADR-0036) las compañías
+ * YA NO se deshabilitan por estar tomadas por otro mandatario; solo se deshabilitan las bloqueadas o
+ * inactivas en el OT (RF33). En edición muestra el estado de identidad y permite enviar/reenviar la
+ * validación por correo.
  */
 export function MandatarioFormPanel({
   open,
+  transitOfficeId,
   editing,
   companies,
   onClose,
@@ -39,9 +56,16 @@ export function MandatarioFormPanel({
   onError,
 }: MandatarioFormPanelProps) {
   const [fullName, setFullName] = useState("");
+  const [documentType, setDocumentType] = useState("CC");
   const [documentNumber, setDocumentNumber] = useState("");
+  const [email, setEmail] = useState("");
+  const [userId, setUserId] = useState("");
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [submitting, setSubmitting] = useState(false);
+
+  const [otUsers, setOtUsers] = useState<OtUserItem[]>([]);
+  const [identityBusy, setIdentityBusy] = useState(false);
+  const [identityMsg, setIdentityMsg] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -50,9 +74,24 @@ export function MandatarioFormPanel({
     // Precarga (edición) o limpieza (alta) al abrir el panel.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza el formulario con el registro editado al abrir
     setFullName(editing?.fullName ?? "");
+    setDocumentType(editing?.documentType ?? "CC");
     setDocumentNumber(editing?.documentNumber ?? "");
+    setEmail(editing?.email ?? "");
+    setUserId(editing?.userId ?? "");
     setSelected(new Set(editing?.companyTenantIds ?? []));
+    setIdentityMsg(null);
   }, [open, editing]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const controller = new AbortController();
+    fetchOtUsers({ transitOfficeId }, controller.signal)
+      .then((res) => setOtUsers(res.data))
+      .catch(() => setOtUsers([]));
+    return () => controller.abort();
+  }, [open, transitOfficeId]);
 
   const toggleCompany = (companyTenantId: string) => {
     setSelected((current) => {
@@ -71,7 +110,10 @@ export function MandatarioFormPanel({
     try {
       const saved = await onSubmit({
         fullName: fullName.trim(),
+        documentType,
         documentNumber: documentNumber.trim(),
+        email: email.trim() ? email.trim() : null,
+        userId: userId ? userId : null,
         companyTenantIds: [...selected],
       });
       onSaved(saved);
@@ -84,8 +126,42 @@ export function MandatarioFormPanel({
     }
   };
 
+  const handleIdentity = async () => {
+    if (!editing) {
+      return;
+    }
+    setIdentityBusy(true);
+    setIdentityMsg(null);
+    try {
+      // Con validación previa (vigente, vencida o en proceso) se REENVÍA/RENUEVA; sin ninguna, se ENVÍA.
+      const result = hasPriorIdentity(editing.identityStatus)
+        ? await resendMandateSignerIdentity(transitOfficeId, editing.id)
+        : await sendMandateSignerIdentity(transitOfficeId, editing.id);
+      setIdentityMsg({
+        tone: "success",
+        text: result.reused
+          ? "El mandatario ya tiene una validación de identidad vigente."
+          : "Validación de identidad enviada al correo del mandatario.",
+      });
+    } catch (err) {
+      const serverMessage =
+        err instanceof ApiValidationError ? err.errors[0]?.message : undefined;
+      setIdentityMsg({
+        tone: "error",
+        text: serverMessage ?? "No se pudo enviar la validación de identidad.",
+      });
+    } finally {
+      setIdentityBusy(false);
+    }
+  };
+
   const canSubmit =
     fullName.trim().length > 0 && documentNumber.trim().length > 0 && selected.size > 0 && !submitting;
+
+  // HU #10994 — estado de identidad para la UI: validada/vencida/en proceso/sin validar. La opción
+  // "Renovar validación" aparece cuando está vencida (rechazada/expirada), reusando el reenvío. La
+  // presentación vive en `mandatario-identity` para compartirla con la tabla (HU #11000).
+  const identity = identityUi(editing?.identityStatus);
 
   const footer = (
     <button
@@ -123,19 +199,120 @@ export function MandatarioFormPanel({
           />
         </div>
 
+        <div className="grid grid-cols-[8rem_1fr] gap-2">
+          <div>
+            <label htmlFor="ms-doctype" className="mb-1 block text-xs font-semibold">
+              Tipo de documento
+            </label>
+            <select
+              id="ms-doctype"
+              value={documentType}
+              onChange={(e) => setDocumentType(e.target.value)}
+              className={OT_INPUT_CLS}
+            >
+              {DOCUMENT_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.value}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="ms-document" className="mb-1 block text-xs font-semibold">
+              Número de documento
+            </label>
+            <input
+              id="ms-document"
+              value={documentNumber}
+              onChange={(e) => setDocumentNumber(digitsOnly(e.target.value))}
+              className={OT_INPUT_CLS}
+              placeholder="Número de documento"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="off"
+            />
+          </div>
+        </div>
+
         <div>
-          <label htmlFor="ms-document" className="mb-1 block text-xs font-semibold">
-            Número de documento
+          <label htmlFor="ms-email" className="mb-1 block text-xs font-semibold">
+            Correo electrónico
           </label>
           <input
-            id="ms-document"
-            value={documentNumber}
-            onChange={(e) => setDocumentNumber(e.target.value)}
+            id="ms-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className={OT_INPUT_CLS}
-            placeholder="Número de documento"
-            inputMode="numeric"
+            placeholder="correo@dominio.com"
+            aria-describedby="ms-email-help"
           />
+          <p id="ms-email-help" className="mt-1 text-[10px] opacity-60">
+            Necesario para enviarle la validación de identidad.
+          </p>
         </div>
+
+        <div>
+          <label htmlFor="ms-user" className="mb-1 block text-xs font-semibold">
+            Cuenta de usuario de OT
+          </label>
+          <select
+            id="ms-user"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            className={OT_INPUT_CLS}
+            aria-describedby="ms-user-help"
+          >
+            <option value="">— Sin vincular —</option>
+            {otUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.fullName} · {u.email}
+              </option>
+            ))}
+          </select>
+          <p id="ms-user-help" className="mt-1 text-[10px] opacity-60">
+            Al aprobar un trámite, el mandatario cuyo usuario coincide con quien aprueba firma
+            automáticamente el mandato.
+          </p>
+        </div>
+
+        {editing && (
+          <div className="rounded-xl border p-3" data-testid="ms-identity">
+            <div className="flex items-center justify-between gap-2">
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                style={identity.style}
+              >
+                {identity.isValid ? <ShieldCheck className="h-3.5 w-3.5" /> : <ShieldAlert className="h-3.5 w-3.5" />}
+                {identity.label}
+              </span>
+              <button
+                type="button"
+                disabled={identityBusy || !editing.email}
+                onClick={() => void handleIdentity()}
+                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+                style={{ color: "#557EFF", borderColor: "#557EFF" }}
+              >
+                {identityBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MailCheck className="h-3.5 w-3.5" />}
+                {identity.action}
+              </button>
+            </div>
+            {!editing.email && (
+              <p className="mt-2 text-[10px] opacity-60">
+                Agrega un correo y guarda para poder enviar la validación de identidad.
+              </p>
+            )}
+            {identityMsg && (
+              <p
+                role="status"
+                className="mt-2 text-[11px]"
+                style={{ color: identityMsg.tone === "success" ? "#3f7a15" : "#c2410c" }}
+              >
+                {identityMsg.text}
+              </p>
+            )}
+          </div>
+        )}
 
         <div>
           <label htmlFor="ms-hash" className="mb-1 block text-xs font-semibold">
@@ -164,15 +341,18 @@ export function MandatarioFormPanel({
           ) : (
             <ul className="space-y-2" data-testid="ms-company-list">
               {companies.map((company) => {
-                const takenByOther =
-                  company.assignedSignerId !== null && company.assignedSignerId !== editing?.id;
+                // ADR-0036 — MULTIPLICIDAD: una compañía puede tener varios mandatarios, así que ya no
+                // se deshabilita por estar "tomada por otro". Solo se bloquea si está inactiva/deshabilitada
+                // en el OT (RF33) y no estaba ya seleccionada.
                 const blockedInOt = !company.isEnabled || !company.isActive;
                 const checked = selected.has(company.companyTenantId);
-                const disabled = takenByOther || (blockedInOt && !checked);
-                const reason = takenByOther
-                  ? `ya tiene mandatario: ${company.assignedSignerName}`
-                  : blockedInOt
-                    ? "bloqueada o inactiva en el OT"
+                const disabled = blockedInOt && !checked;
+                // Otros mandatarios que ya cubren esta compañía (informativo, no bloquea).
+                const otherSigners = company.assignedSigners.filter((s) => s.mandateSignerId !== editing?.id);
+                const note = blockedInOt
+                  ? "bloqueada o inactiva en el OT"
+                  : otherSigners.length > 0
+                    ? `${otherSigners.length} mandatario${otherSigners.length > 1 ? "s" : ""} más`
                     : null;
                 return (
                   <li
@@ -184,7 +364,7 @@ export function MandatarioFormPanel({
                       type="checkbox"
                       checked={checked}
                       disabled={disabled}
-                      aria-describedby={reason ? `ms-company-${company.companyTenantId}-reason` : undefined}
+                      aria-describedby={note ? `ms-company-${company.companyTenantId}-reason` : undefined}
                       onChange={() => toggleCompany(company.companyTenantId)}
                       className="h-4 w-4 accent-[#557EFF]"
                     />
@@ -193,13 +373,17 @@ export function MandatarioFormPanel({
                       className={`flex-1 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
                     >
                       <span className="font-semibold">{company.legalName}</span>
-                      {reason && (
+                      {note && (
                         <span
                           id={`ms-company-${company.companyTenantId}-reason`}
                           className="ml-2 inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold"
-                          style={{ color: "#b25a00", borderColor: "#f0c38e", background: "#fff7ed" }}
+                          style={
+                            blockedInOt
+                              ? { background: "rgba(255,78,0,0.1)", color: "#FF4E00" }
+                              : { background: "rgba(85,126,255,0.1)", color: "#557EFF" }
+                          }
                         >
-                          {reason}
+                          {note}
                         </span>
                       )}
                     </label>

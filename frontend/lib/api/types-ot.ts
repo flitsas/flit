@@ -47,11 +47,50 @@ export interface OtClientProcedure {
   clientTenantName?: string;
   referenceNumber: string;
   status: string;
+  /**
+   * Sub-estado interno de la ruta de placa (null | preasignado | asignado | terminado),
+   * ortogonal al status (que permanece en 'entregado').
+   */
+  plateFlowStatus?: string | null;
+  /**
+   * Estado del SOAT (null | unknown | vencido | vigente). Informativo; la decisión OT
+   * en ruta de placa requiere `terminado`.
+   */
+  soatEstado?: string | null;
+  /**
+   * Dígito de preferencia de placa (0-9) indicado al radicar sin placa. Guía para el OT.
+   */
+  platePreferredLastDigit?: string | null;
+  /** Check opcional del gestor; badge en bandeja OT solo en Terminado. */
+  soatPagado?: boolean;
+  /** Check opcional del gestor; badge en bandeja OT solo en Terminado. */
+  impuestoDepartamentalPagado?: boolean;
   transitOfficeId?: string | null;
   createdAt: string;
   submittedAt?: string | null;
   /** HU #10536 — trámite marcado como prioritario: el OT lo revisa con primacía (solo indicador). */
   prioritario?: boolean;
+  /** Detalle (GET by id): actores del trámite. */
+  actors?: OtClientProcedureActor[];
+  placa?: string | null;
+  vin?: string | null;
+  marca?: string | null;
+  linea?: string | null;
+  modelo?: string | null;
+  color?: string | null;
+  clase?: string | null;
+  servicio?: string | null;
+  combustible?: string | null;
+}
+
+export interface OtClientProcedureActor {
+  actorType: string;
+  documentType: string;
+  documentNumber: string;
+  fullName: string;
+  email?: string | null;
+  phone?: string | null;
+  personType?: string | null;
 }
 
 export interface OtClientProcedurePagedResult {

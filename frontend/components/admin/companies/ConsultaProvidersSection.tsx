@@ -6,6 +6,7 @@ import {
   type ConsultationProviderOption,
   type SettingsForm,
 } from "./settingsForm";
+import { digitsOnly } from "@/lib/format/currency";
 
 // Sección "Proveedores de consulta RUNT" (HU #10478). Tres selectores (VIN, placa, conductor) con
 // Kyverum como default y Verifik como alternativa; Intempo se lista deshabilitado (aún no disponible).
@@ -71,12 +72,15 @@ export function ConsultaProvidersSection({
         </label>
         <input
           id="runtFailoverTimeoutMs"
-          type="number"
-          min={500}
-          max={60000}
-          step={100}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="off"
           value={form.runtFailoverTimeoutMs}
-          onChange={(e) => onChange({ runtFailoverTimeoutMs: e.target.valueAsNumber || 0 })}
+          onChange={(e) => {
+            const raw = digitsOnly(e.target.value);
+            onChange({ runtFailoverTimeoutMs: raw === "" ? 0 : Number(raw) });
+          }}
           className="w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF]"
           style={{ borderColor: timeoutError ? "#FF4E00" : "#DFE5ED" }}
         />
