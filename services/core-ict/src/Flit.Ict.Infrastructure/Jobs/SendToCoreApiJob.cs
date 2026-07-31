@@ -31,17 +31,19 @@ namespace Flit.Ict.Infrastructure.Jobs;
 public sealed class SendToCoreApiJob(
     IServiceScopeFactory scopeFactory,
     IOptions<IctJobOptions> options,
-    ILogger<SendToCoreApiJob> logger) : IctPollingJob(scopeFactory, options, logger)
+    IIctJobSettingsProvider settings,
+    ILogger<SendToCoreApiJob> logger) : IctPollingJob(scopeFactory, options, settings, logger)
 {
-    protected override TimeSpan PollInterval => TimeSpan.FromSeconds(Options.SendPollSeconds);
+    protected override TimeSpan PollInterval => TimeSpan.FromSeconds(JobSettings.SendPollSeconds);
 
     protected override string JobName => "send-to-core-api";
 
     protected override Task RunCycleAsync(IServiceScope scope, CancellationToken ct) =>
         // Advisory lock: guarda multi-réplica (evita doble materialización del mismo master).
-        RunUnderAdvisoryLockAsync(scope, IctAdvisoryLock.Keys.SendToCoreApi, _ => MaterializeAsync(scope, ct), ct);
+        RunUnderAdvisoryLockAsync(
+            scope, IctAdvisoryLock.Keys.SendToCoreApi, _ => MaterializeAsync(scope, JobSettings.SendBatchSize, ct), ct);
 
-    private static async Task MaterializeAsync(IServiceScope scope, CancellationToken ct)
+    private static async Task MaterializeAsync(IServiceScope scope, int batchSize, CancellationToken ct)
     {
         var db = scope.ServiceProvider.GetRequiredService<IctDbContext>();
         var draftClient = scope.ServiceProvider.GetRequiredService<IProcedureDraftClient>();
@@ -50,7 +52,7 @@ public sealed class SendToCoreApiJob(
             .ToDictionaryAsync(m => m.ExternalTransactionType, m => m, ct);
 
         // Solo masters cuyas fuentes externas ya fueron TODAS consultadas por el orquestador.
-        var readyIds = await ReadReadyMasterIdsAsync(db, ct);
+        var readyIds = await ReadReadyMasterIdsAsync(db, batchSize, ct);
         if (readyIds.Count == 0)
         {
             return;
@@ -117,7 +119,7 @@ public sealed class SendToCoreApiJob(
     /// fuentes (ninguna source_query) también pasa el NOT EXISTS. RLS la saltan los jobs (superusuario dev
     /// / BYPASSRLS prod).
     /// </summary>
-    private static async Task<List<Guid>> ReadReadyMasterIdsAsync(IctDbContext db, CancellationToken ct)
+    private static async Task<List<Guid>> ReadReadyMasterIdsAsync(IctDbContext db, int limit, CancellationToken ct)
     {
         var connection = db.Database.GetDbConnection();
         var wasClosed = connection.State != ConnectionState.Open;
@@ -139,8 +141,9 @@ public sealed class SendToCoreApiJob(
                       SELECT 1 FROM ict.external_integration_source_query sq
                       WHERE sq.eim_id = m.id AND sq.is_data_queried = false)
                 ORDER BY m.created_at
-                LIMIT 50
+                LIMIT @limit
                 """;
+            AddParam(cmd, "limit", limit);
             var ids = new List<Guid>();
             await using var reader = await cmd.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
@@ -157,6 +160,14 @@ public sealed class SendToCoreApiJob(
                 await connection.CloseAsync();
             }
         }
+    }
+
+    private static void AddParam(DbCommand cmd, string name, object value)
+    {
+        var p = cmd.CreateParameter();
+        p.ParameterName = name;
+        p.Value = value;
+        cmd.Parameters.Add(p);
     }
 
     private static async Task FlagNoveltyAsync(IctDbContext db, ExternalIntegrationMaster master, string message, CancellationToken ct)

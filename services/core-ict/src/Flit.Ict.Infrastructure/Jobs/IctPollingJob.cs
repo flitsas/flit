@@ -33,9 +33,21 @@ public sealed class IctJobOptions
     /// <summary>Concurrencia del orquestador (Job 3): consultas a fuentes externas en paralelo por ciclo.</summary>
     public int OrchestratorConcurrency { get; init; } = 10;
 
+    /// <summary>Tamaño de lote del orquestador (Job 3): source_query reclamadas por ciclo.</summary>
+    public int OrchestratorBatchSize { get; init; } = 50;
+
     public int SendPollSeconds { get; init; } = 20;
 
+    /// <summary>Concurrencia del envío a core-api (Job 4): materializaciones gRPC en paralelo por ciclo.</summary>
+    public int SendConcurrency { get; init; } = 5;
+
+    /// <summary>Tamaño de lote del envío a core-api (Job 4): masters reclamados por ciclo.</summary>
+    public int SendBatchSize { get; init; } = 50;
+
     public int WebhookPollSeconds { get; init; } = 10;
+
+    /// <summary>Tamaño de lote de webhooks (Job 5): entregas reclamadas por ciclo.</summary>
+    public int WebhookBatchSize { get; init; } = 50;
 
     // Retención/purga (HU5): corre 24/7 (sin ventana horaria), cadencia en horas.
     public bool RetentionEnabled { get; init; } = true;
@@ -59,9 +71,17 @@ public sealed class IctJobOptions
 public abstract class IctPollingJob(
     IServiceScopeFactory scopeFactory,
     IOptions<IctJobOptions> options,
+    IIctJobSettingsProvider settings,
     ILogger logger) : BackgroundService
 {
     protected IctJobOptions Options => options.Value;
+
+    /// <summary>
+    /// Parámetros VIGENTES (cadencia/concurrencia/lote), leídos de <c>ict.job_settings</c> y refrescados
+    /// al inicio de cada ciclo. Los jobs derivan de aquí su PollInterval, concurrencia y LIMIT de lote,
+    /// de modo que un cambio en BD aplica en caliente sin redeploy.
+    /// </summary>
+    protected IctJobSettings JobSettings => settings.Current;
 
     /// <summary>Fábrica de scopes DI, expuesta para procesar ítems en scopes/conexiones propios (concurrencia).</summary>
     protected IServiceScopeFactory ScopeFactory => scopeFactory;
@@ -92,7 +112,11 @@ public abstract class IctPollingJob(
         {
             try
             {
-                if (IctWindowEvaluator.IsWithinWindow(DateTime.UtcNow, Options.WindowStartHour, Options.WindowEndHour))
+                // Refresca los parámetros desde ict.job_settings (con throttle interno) antes de decidir
+                // ventana/cadencia, para que los cambios de config apliquen en el ciclo actual.
+                await settings.RefreshAsync(stoppingToken).ConfigureAwait(false);
+
+                if (IctWindowEvaluator.IsWithinWindow(DateTime.UtcNow, JobSettings.WindowStartHour, JobSettings.WindowEndHour))
                 {
                     using var scope = scopeFactory.CreateScope();
                     var startedAt = DateTime.UtcNow;
