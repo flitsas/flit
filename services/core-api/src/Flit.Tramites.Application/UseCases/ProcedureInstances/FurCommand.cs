@@ -599,16 +599,15 @@ public sealed class GenerarFurHandler(
         {
             var actor = instance.Actors.FirstOrDefault(a =>
                 string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-            if (actor is null || !EsActorJuridico(actor.DocumentType))
-                continue;
 
             // HU #11061 — si el gestor eligió EXPLÍCITAMENTE el sello de identidad, no se consume el
             // baúl aunque tenga firma vigente. Es el único punto donde se resuelve la imagen del baúl,
             // así que el guard aquí honra la elección en TODOS los documentos (FUR, mandato, solicitud
             // de trámite virtual y compraventa consumen `FirmaImagenes` de este mismo ensamblado).
             // Sin elección explícita se mantiene la precedencia del baúl (HU #11031).
-            var (_, _, rl, _) = PutActorsHandler.ParseMetadata(actor.Metadata);
-            if (!MecanismoFirma.ConsumeBaul(rl?.MecanismoFirma))
+            // Bug #11141 — la decisión vive en un único predicado, compartido con la consulta que
+            // alimenta la interfaz: lo que se muestra debe ser lo que se plasma.
+            if (actor is null || !FirmaBaulCobertura.Aplica(actor))
                 continue;
 
             // HU #10930/#10937 — la firma del baúl es de la PERSONA: se resuelve por el documento del
@@ -657,12 +656,10 @@ public sealed class GenerarFurHandler(
     }
 
     /// <summary>¿El actor es persona JURÍDICA (NIT/N)? Solo estos consumen el baúl de firmas (ADR-0025 §4).</summary>
-    private static bool EsActorJuridico(string? documentType)
-    {
-        var t = documentType?.Trim();
-        return string.Equals(t, "NIT", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(t, "N", StringComparison.OrdinalIgnoreCase);
-    }
+    // Bug #11141 — delega en el predicado compartido para que no queden dos definiciones de
+    // "persona jurídica" que puedan separarse con el tiempo.
+    private static bool EsActorJuridico(string? documentType) =>
+        FirmaBaulCobertura.EsJuridico(documentType);
 
     /// <summary>Huso horario de Colombia (UTC-5) para presentar las fechas del sello de identidad.</summary>
     private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
