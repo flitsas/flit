@@ -108,10 +108,15 @@ public sealed class GenerarFurHandler(
         if (instance is null)
             return (null, "not_found");
 
-        // Migración V1→V2 — un trámite migrado es una FOTO de solo lectura: NO se regeneran sus
-        // documentos. La generación BORRA y re-inserta cada tipo (fur/compraventa/certificado), así que
-        // regenerar aquí destruiría los PDFs históricos migrados y los reemplazaría por mocks del sistema.
-        if (instance.IsMigrated)
+        // Migración V1→V2 — el "modo foto" solo aplica a los migrados en estado FINAL. La generación
+        // BORRA y re-inserta cada tipo (fur/compraventa/certificado), así que regenerar sobre un
+        // aprobado o anulado destruiría los PDF históricos de V1 y los reemplazaría por mocks del
+        // sistema.
+        //
+        // Un BORRADOR migrado sí debe poder generar: se trajo para seguir trabajándolo en V2, y sin FUR
+        // no puede avanzar al consolidado ni radicarse. Ver el guard equivalente en ConsolidadoCommand,
+        // que explica por qué no basta con el gate del gestor (HU #11051).
+        if (instance.IsMigrated && TramiteEstado.EsFinal(instance.Status))
             return (null, "migrado_solo_lectura");
 
         var codigo = TipologiaResolver.ResolveCodigo(instance.TipologiaCodigo, instance.ModalidadEntrada);

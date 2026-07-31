@@ -4,6 +4,7 @@ using Flit.DataMigration.V1.Source;
 using Flit.DataMigration.V1.Storage;
 using Flit.Infrastructure.Persistence;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.DataMigration.V1.Loading;
@@ -99,10 +100,23 @@ public sealed class SnapshotLoader(
             };
         }
 
+        // El modo de consolidado lo decide el MIGRADOR, no quien lanza la migración. Quien opera
+        // recibe una lista de ids y no puede ponerse a mirar uno por uno cuáles son borradores; y el
+        // dato para decidirlo (el estado en V1) ya lo tenemos aquí.
+        //
+        // En borrador se pide `never`: ese trámite se sigue trabajando en V2 y su consolidado se
+        // regenera allí (ver el guard de ConsolidadoCommand, que desde ahora lo permite), así que
+        // traerse el de V1 solo transporta 9-12 MB de un PDF provisional que quedará superado.
+        // En cualquier otro estado se respeta la configuración del lote.
+        var consolidatedOverride = string.Equals(
+            kind.StateMap.ToV2(record.ProcessStatus), TramiteEstado.Borrador, StringComparison.Ordinal)
+            ? "never"
+            : null;
+
         V1Snapshot? snapshot;
         try
         {
-            snapshot = await snapshotClient.GetAsync(record.Id, cancellationToken);
+            snapshot = await snapshotClient.GetAsync(record.Id, consolidatedOverride, cancellationToken);
         }
 #pragma warning disable CA1031 // Un trámite que falla no debe tumbar el lote.
         catch (Exception ex)

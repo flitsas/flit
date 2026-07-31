@@ -17,13 +17,22 @@ namespace Flit.DataMigration.V1.Mapping;
 /// </para>
 ///
 /// <para>
-/// La decisión es POR PARTE y replica exactamente la condición con la que V1 decide construir la
-/// carta: la parte tiene la identidad validada y tiene selfie. Es literalmente el mismo <c>if</c> en
-/// los dos trámites —<c>vehicleTransferPdfUnionDraftService</c> y
-/// <c>vehicleRegistrationConsolidatePdfService</c>—, solo cambian los nombres de las columnas. Si
-/// esa condición no se cumple, V1 tampoco produce la carta y las imágenes son la única evidencia
-/// que existe: entonces se migran. En la copia de producción eso ocurre en 375 traspasos (36 del
-/// comprador, 339 del vendedor).
+/// Las imágenes NO se migran NUNCA, pero por dos motivos distintos según la parte, y el reporte
+/// dice cuál le tocó a cada una:
+/// </para>
+/// <list type="bullet">
+///   <item><b>Identidad validada en V1</b> — misma condición con la que V1 decide construir la
+///   carta (bandera de validación + selfie; literalmente el mismo <c>if</c> de
+///   <c>vehicleTransferPdfUnionDraftService</c> y <c>vehicleRegistrationConsolidatePdfService</c>):
+///   la carta que trae la instancia 3 ya las contiene.</item>
+///   <item><b>Identidad NO validada</b> (pendiente o rechazada) — V1 tampoco produjo la carta, y esa
+///   validación no sirve en V2: se rehace con Kyverum. Arrastrar los JPG de un intento que no
+///   prosperó ensucia el expediente con evidencia de algo que no ocurrió. En la copia de producción
+///   son 375 traspasos (36 del comprador, 339 del vendedor).</item>
+/// </list>
+/// <para>
+/// Por eso <see cref="PartiesSinCartaSelfie"/> sigue existiendo: avisa solo cuando la parte SÍ
+/// estaba validada y aun así la carta no llegó, que es el único caso en que se pierde evidencia.
 /// </para>
 ///
 /// <para>
@@ -84,8 +93,8 @@ public sealed class IdentityAttachmentPolicy
     ]);
 
     /// <summary>
-    /// Columnas de imagen que la carta selfie ya cubre para este trámite, con el motivo listo para
-    /// el reporte. Vacío si ninguna parte cumple la condición.
+    /// Columnas de imagen de identidad que NO se migran, con el motivo listo para el reporte.
+    /// Siempre las tres por parte: cambia el porqué, no el resultado.
     /// </summary>
     public IReadOnlyDictionary<string, string> RedundantColumns(V1SourceRecord record)
     {
@@ -95,14 +104,16 @@ public sealed class IdentityAttachmentPolicy
 
         foreach (var party in _parties)
         {
-            if (!CartaSelfieAplica(record, party))
-            {
-                continue;
-            }
+            // El motivo importa tanto como la exclusión: son dos situaciones distintas y el operador
+            // tiene que poder distinguirlas leyendo el reporte, sin ir a consultar V1.
+            var motivo = CartaSelfieAplica(record, party)
+                ? $"la carta selfie del {party.Nombre} ya contiene esta imagen"
+                : $"la identidad del {party.Nombre} no quedó validada en V1, así que esa validación se "
+                    + "rehace en V2: sus imágenes no se migran";
 
             foreach (var column in party.ImageColumns)
             {
-                redundant[column] = $"la carta selfie del {party.Nombre} ya contiene esta imagen";
+                redundant[column] = motivo;
             }
         }
 
