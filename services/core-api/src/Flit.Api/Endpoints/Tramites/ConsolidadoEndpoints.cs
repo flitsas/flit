@@ -19,7 +19,13 @@ internal static class ConsolidadoEndpoints
         group.MapPost("/instances/{id:guid}/consolidado", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
-            [FromQuery] bool force,
+            // Bug #11139 — NULLABLE a propósito. Un `bool` de query sin `?` y sin valor por defecto es
+            // OBLIGATORIO para Minimal APIs: omitirlo devuelve 400 antes siquiera de entrar al handler.
+            // El asistente lo omite en su camino normal (solo manda ?force=true cuando regenera), así
+            // que el expediente consolidado fallaba justo en el último paso del trámite. Se corrige en
+            // el servidor y no en el cliente porque el defecto está en el contrato: omitir un flag
+            // opcional debe dar el comportamiento normal, no un 400. Misma forma que el resto de la API.
+            [FromQuery] bool? force,
             HttpContext http,
             GenerarConsolidadoHandler handler,
             GeneracionDocumentalGestorGuard estadoGuard,
@@ -36,7 +42,7 @@ internal static class ConsolidadoEndpoints
                 return GeneracionEstadoProblem.From(estadoError);
 
             // HU #11017 - el usuario habilita la generacion en cascada de la impronta (el proveedor la exige).
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ResolveUserId(http.User), force, ct);
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ResolveUserId(http.User), force ?? false, ct);
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
