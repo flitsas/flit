@@ -125,11 +125,20 @@ public static class FurCompraventaDocumentGenerator
     {
         col.Item().PaddingTop(8).Text(titulo);
 
-        if (data.FirmaImagenes is not null
+        // Bug #11147 — la imagen del baúl y el sello de identidad son EXCLUYENTES: una parte firma de
+        // una sola manera. Antes se pintaba la imagen y, más abajo, el sello sin condición alguna, así
+        // que quien firmaba por el baúl y además tenía identidad vigente aparecía firmando dos veces
+        // por vías distintas. El mandato y la solicitud de trámite virtual ya lo resolvían así.
+        var firmaBaul =
+            data.FirmaImagenes is not null
             && data.FirmaImagenes.TryGetValue(rol, out var imagen)
-            && imagen.Length > 0)
+            && imagen.Length > 0
+                ? imagen
+                : null;
+
+        if (firmaBaul is not null)
         {
-            col.Item().PaddingTop(2).Height(32).Image(imagen).FitHeight();
+            col.Item().PaddingTop(2).Height(32).Image(firmaBaul).FitHeight();
         }
         else
         {
@@ -157,7 +166,8 @@ public static class FurCompraventaDocumentGenerator
             col.Item().Text($"{TipoDocParte(parte)}: {Val(parte.Documento)}").FontSize(9);
         }
 
-        var sello = Sello(data, rol);
+        // Con firma del baúl, esa ES la firma: el sello de identidad no se añade (ver arriba).
+        var sello = firmaBaul is null ? Sello(data, rol) : null;
         if (sello is not null)
             col.Item().Text(sello).FontSize(6.5f).FontColor(Colors.Grey.Darken2);
     }

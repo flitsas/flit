@@ -164,6 +164,24 @@ public sealed class GenerarFurHandler(
         // espacio de firma en vez del sello de texto. Si la descarga falla, NO rompe el FUR (cae al sello).
         var (firmaImagenes, firmaBaulMetadatos) = await ResolveVaultSignaturesAsync(instance, esTraspaso, ct);
 
+        // Bug #11147 — UNA parte firma de UNA sola manera. Quien firma por el baúl no lleva sello de
+        // validación de identidad en ningún documento, aunque su identidad esté vigente; quien firma con
+        // la validación de identidad no lleva imagen del baúl. Los dos juntos dejaban el documento como
+        // si la parte hubiera firmado dos veces por vías distintas.
+        //
+        // Se decide por el MECANISMO y no por lo que se haya podido resolver: si el baúl es el elegido y
+        // su imagen falla, la firma queda en blanco para que se note, en vez de rellenarse a escondidas
+        // con un sello de identidad que el negocio no eligió.
+        //
+        // Va aquí, en el único punto donde se ensamblan los datos de TODOS los documentos, y no en cada
+        // generador: la compraventa pintaba ambos y el mandato y la solicitud virtual resolvían la
+        // exclusividad cada uno por su cuenta.
+        foreach (var role in esTraspaso ? new[] { "comprador", "vendedor" } : ["comprador"])
+        {
+            if (FirmaLaParteConElBaul(instance, role))
+                sellosIdentidad.Remove(role);
+        }
+
         // HU #10920 — plantilla de FUR según la clasificación del vehículo (vehicle_class). Sin resolver → AUTOMOTOR.
         var templateFormat = _templateResolver is not null
             ? await _templateResolver.ResolveAsync(Get(fv, "vehicle_class"), ct)
@@ -597,19 +615,18 @@ public sealed class GenerarFurHandler(
 
         foreach (var role in roles)
         {
-            var actor = instance.Actors.FirstOrDefault(a =>
-                string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
-            if (actor is null || !EsActorJuridico(actor.DocumentType))
-                continue;
-
             // HU #11061 — si el gestor eligió EXPLÍCITAMENTE el sello de identidad, no se consume el
             // baúl aunque tenga firma vigente. Es el único punto donde se resuelve la imagen del baúl,
             // así que el guard aquí honra la elección en TODOS los documentos (FUR, mandato, solicitud
             // de trámite virtual y compraventa consumen `FirmaImagenes` de este mismo ensamblado).
             // Sin elección explícita se mantiene la precedencia del baúl (HU #11031).
-            var (_, _, rl, _) = PutActorsHandler.ParseMetadata(actor.Metadata);
-            if (!MecanismoFirma.ConsumeBaul(rl?.MecanismoFirma))
+            // Bug #11147 — misma condición que retira el sello de identidad de esa parte, para que la
+            // imagen y el sello no puedan aparecer los dos ni desaparecer los dos.
+            if (!FirmaLaParteConElBaul(instance, role))
                 continue;
+
+            var actor = instance.Actors.First(a =>
+                string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
 
             // HU #10930/#10937 — la firma del baúl es de la PERSONA: se resuelve por el documento del
             // REPRESENTANTE LEGAL seleccionado (sujeto de identidad del actor jurídico), no por el NIT.
@@ -662,6 +679,28 @@ public sealed class GenerarFurHandler(
         var t = documentType?.Trim();
         return string.Equals(t, "NIT", StringComparison.OrdinalIgnoreCase)
             || string.Equals(t, "N", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Bug #11147 — ¿esta parte firma con el BAÚL? Es la pregunta que decide, para cada parte y para
+    /// TODOS los documentos, cuál de las dos estampas se pinta y cuál no existe.
+    ///
+    /// <para>Depende del MECANISMO elegido, no de si la imagen llegó a resolverse: así, cuando el baúl
+    /// es el elegido y su descarga falla, la firma queda en blanco —visible— en vez de rellenarse a
+    /// escondidas con un sello de identidad que el negocio no eligió.</para>
+    ///
+    /// <para>Misma condición que aplica <see cref="ResolveVaultSignaturesAsync"/> al decidir si baja la
+    /// imagen: persona jurídica y sin elección explícita del sello de identidad.</para>
+    /// </summary>
+    private static bool FirmaLaParteConElBaul(ProcedureInstance instance, string role)
+    {
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase));
+        if (actor is null || !EsActorJuridico(actor.DocumentType))
+            return false;
+
+        var (_, _, rl, _) = PutActorsHandler.ParseMetadata(actor.Metadata);
+        return MecanismoFirma.ConsumeBaul(rl?.MecanismoFirma);
     }
 
     /// <summary>Huso horario de Colombia (UTC-5) para presentar las fechas del sello de identidad.</summary>
