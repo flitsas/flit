@@ -72,6 +72,21 @@ public sealed record WizardStateDto(
 
     /// <summary>Veces que se activó la subsanación en este expediente.</summary>
     public int SubsanacionCount { get; init; }
+
+    /// <summary>
+    /// Migración V1→V2 — el trámite viene de V1; no se capturó paso a paso en V2.
+    /// <para>
+    /// Lo consume el frontend para PEDIRLE al gestor las consultas que el trámite no trae: los
+    /// resultados de RUNT y SIMIT de V1 no se migran —son perecederos, la propia configuración de V1
+    /// caduca el SIMIT a los cinco minutos, y no quedan atados al trámite—, así que un borrador
+    /// migrado llega al pre-vuelo en blanco y hay que correrlas antes de radicar.
+    /// </para>
+    /// <para>
+    /// Ese porqué se queda AQUÍ: la UI solo destaca la acción. Contarle al operador de dónde viene el
+    /// trámite no le cambia lo que tiene que hacer y siembra la duda de si llegó incompleto.
+    /// </para>
+    /// </summary>
+    public bool EsMigrado { get; init; }
 }
 
 /// <summary>
@@ -305,6 +320,7 @@ public sealed class GetWizardStateHandler(
             SubsanacionCount = instance.SubsanacionCount,
             AllowedTransitions = allowed,
             Status = instance.Status,
+            EsMigrado = instance.IsMigrated,
         };
     }
 

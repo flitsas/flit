@@ -762,6 +762,13 @@ export interface WizardState {
   subsanacionActiva?: boolean;
   /** Veces que se activó la subsanación en este expediente. */
   subsanacionCount?: number;
+  /**
+   * Migración V1→V2 — el trámite viene de V1 y no se capturó paso a paso aquí, así que llega sin las
+   * consultas de RUNT/SIMIT hechas (no se migran: caducan en minutos y no quedan atadas al trámite).
+   * El wizard lo usa para DESTACAR la petición de correrlas, sin exponer ese porqué en la UI.
+   * Ausente/false ⇒ trámite nativo de V2.
+   */
+  esMigrado?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──

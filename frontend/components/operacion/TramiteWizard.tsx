@@ -1054,6 +1054,7 @@ export function TramiteWizard(props: Props) {
                 identityApproved={identityApproved}
                 vaultCoveredPartes={vaultCoveredPartes}
                 rnmcEnabled={wizard?.rnmcEnabled ?? false}
+                esMigrado={wizard?.esMigrado ?? false}
                 deferredModalidad={deferredCreation ? entryModalidad : undefined}
                 seedVin={seedVin}
                 seedPlaca={seedPlaca}
@@ -1448,6 +1449,7 @@ function ConsultaStep({
   seedPlaca,
   onPreviewDone,
   onPendingFieldValues,
+  esMigrado = false,
 }: {
   step: WizardStep;
   instanceId: string | null;
@@ -1462,6 +1464,8 @@ function ConsultaStep({
   onPreviewDone?: (consulta: PendingConsulta | null) => void;
   /** CF-02 — condiciones marcadas antes de existir el trámite; el shell las guarda al crearlo. */
   onPendingFieldValues?: (items: { fieldKey: string; valueText: string }[]) => void;
+  /** Migración V1→V2 — explica en el panel por qué el pre-vuelo llega vacío. */
+  esMigrado?: boolean;
 }) {
   const isVin = step.key === 'consulta_vin';
   // CF-02 (HU #10883, AC3) — sin trámite creado: la consulta no persiste nada y sus resultados viven
@@ -2135,6 +2139,7 @@ function ConsultaStep({
         saving={riesgoSaving}
         showRunButton={false}
         onIniciarTraspaso={isVin ? handleIniciarTraspaso : undefined}
+        esMigrado={esMigrado}
       />
     </div>
   );
@@ -2158,6 +2163,7 @@ function StepBody({
   identityApproved = false,
   vaultCoveredPartes = [],
   rnmcEnabled = false,
+  esMigrado = false,
   deferredModalidad,
   seedVin,
   seedPlaca,
@@ -2187,6 +2193,8 @@ function StepBody({
   stepFormRef: RefObject<WizardStepFormHandle | null>;
   /** FEATURE 05 — el RNMC aplica al trámite: los actores muestran la fecha de expedición. */
   rnmcEnabled?: boolean;
+  /** Migración V1→V2 — el trámite viene de V1; el paso de consulta lo explica en el pre-vuelo. */
+  esMigrado?: boolean;
   /**
    * HU #10350 — borrador finalizado: aunque el wizard esté en solo lectura para los datos, el paso
    * de Identidad debe seguir operable (iniciar/compartir/refrescar Kyverum) porque la validación del
@@ -2224,6 +2232,7 @@ function StepBody({
           seedPlaca={seedPlaca}
           onPreviewDone={onPreviewDone}
           onPendingFieldValues={onPendingFieldValues}
+          esMigrado={esMigrado}
         />
       );
 

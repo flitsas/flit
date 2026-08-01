@@ -31,6 +31,17 @@ interface Props {
   // vehículo. El wizard inyecta la navegación (sembrando placa/VIN); el panel es
   // presentacional. Ausente ⇒ no se ofrece el CTA (p. ej. en traspaso).
   onIniciarTraspaso?: () => void;
+  /**
+   * El trámite viene de una migración: llega sin consultas hechas y hay que correrlas antes de
+   * radicar. Sube el aviso de "aún no hay consulta" de nota gris a llamada a la acción destacada.
+   *
+   * <p>El texto NO menciona la migración ni por qué no hay resultados —los de RUNT/SIMIT caducan en
+   * minutos y por eso no viajan desde el sistema anterior—: eso es interioridad del sistema, no le
+   * cambia nada a quien opera y solo siembra la duda de si el expediente llegó incompleto.</p>
+   *
+   * Ausente/false ⇒ trámite nativo, nota de siempre.
+   */
+  esMigrado?: boolean;
 }
 
 const STATUS_STYLE: Record<PreflightCheckStatus, { dot: string; text: string }> = {
@@ -141,6 +152,7 @@ export function PreflightPanel({
   saving = false,
   showRunButton = true,
   onIniciarTraspaso,
+  esMigrado = false,
 }: Props) {
   // En solo lectura nunca se ofrece el disparo de la consulta (Track C).
   const readOnly = useWizardReadOnly();
@@ -201,10 +213,34 @@ export function PreflightPanel({
         </div>
       </div>
 
-      {!hasResult && !loading && (
+      {!hasResult && !loading && !esMigrado && (
         <p className="text-[11px] opacity-60">
           Ejecuta la consulta para ver el semáforo de requisitos del vehículo.
         </p>
+      )}
+
+      {/* Un trámite migrado llega sin consultas y el operador tiene que correrlas antes de radicar.
+          El aviso lo PIDE, no lo justifica: destacarlo basta para que actúe, y el porqué —que los
+          resultados de RUNT/SIMIT caducan en minutos y por eso no viajan desde el sistema anterior—
+          es interioridad del sistema que a quien opera no le aporta nada y solo invita a preguntar
+          si algo salió mal. Mismo motivo para no nombrar la migración: el trámite es uno solo. */}
+      {!hasResult && !loading && esMigrado && (
+        <div
+          className="flex flex-wrap items-start gap-2 rounded-xl border p-2.5 text-[11px]"
+          style={{ borderColor: 'rgba(85,126,255,0.30)', background: 'rgba(85,126,255,0.06)' }}
+          role="status"
+          aria-live="polite"
+        >
+          <span
+            className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+            style={{ background: 'rgba(85,126,255,0.15)', color: '#557EFF' }}
+          >
+            Consulta pendiente
+          </span>
+          <span className="flex-1 opacity-80">
+            Ejecuta la consulta para ver el estado actual del vehículo antes de continuar.
+          </span>
+        </div>
       )}
 
       {/* AC1 (HU #10885) — origen + fecha del dato precargado, solo cuando el snapshot viene de una
