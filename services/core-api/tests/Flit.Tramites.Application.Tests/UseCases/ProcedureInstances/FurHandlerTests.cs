@@ -7,8 +7,10 @@ using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.Enums;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -561,6 +563,136 @@ public sealed class FurHandlerTests
     private GenerarFurHandler HandlerConRues(IRuesActorDataResolver resolver) =>
         new(_repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
             NullLogger<GenerarFurHandler>.Instance, ruesResolver: resolver);
+
+    // ── Bug #11146 — una parte firma de UNA sola manera ──────────────────────
+
+    /// <summary>Baúl que siempre resuelve firma vigente para la persona consultada.</summary>
+    private sealed class VaultConFirma : ISignatureVaultPolicy
+    {
+        public Task<SignatureVaultMatch?> ResolveAsync(
+            Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default) =>
+            Task.FromResult<SignatureVaultMatch?>(new SignatureVaultMatch(
+                Guid.NewGuid(), "REPRESENTANTE DEMO", "hash", "ruta", "sha",
+                new DateOnly(2026, 1, 1), new DateOnly(2027, 1, 1), "52082029"));
+    }
+
+    private static ProcedureInstanceActor ActorJuridicoCon(string? mecanismo, string rol = "comprador")
+    {
+        var actor = ActorJuridico(Instance(Guid.NewGuid(), Guid.NewGuid(), TramiteTipologiaCatalog.CodigoTraspasoStandard));
+        actor.ActorType = rol;
+        // El sujeto de identidad de una persona JURÍDICA es su representante legal, y eso lo decide
+        // `PersonType`: sin marcarlo, el sujeto sería el NIT y la validación no casaría.
+        actor.PersonType = "juridical";
+        actor.Metadata = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["representanteLegal"] = new Dictionary<string, object?>
+            {
+                ["tipoDocumento"] = "CC",
+                ["numeroDocumento"] = "52082029",
+                ["nombreCompleto"] = "REPRESENTANTE DEMO",
+                // null = sin eleccion explicita, que es el caso normal.
+                ["mecanismoFirma"] = mecanismo,
+            },
+        });
+        return actor;
+    }
+
+    private Task<FurDocumentData> DatosDelDocumentoCon(string mecanismo) =>
+        DatosDelDocumento(mecanismo, conBaul: true, rol: "comprador");
+
+    /// <summary>
+    /// Traspaso con comprador Y vendedor jurídicos, ambos con identidad aprobada y vigente. Es
+    /// traspaso siempre porque el vendedor solo existe ahí, y ambos validan porque el gate del FUR
+    /// exige las dos partes.
+    /// </summary>
+    private async Task<FurDocumentData> DatosDelDocumento(string? mecanismo, bool conBaul, string rol)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        WithOrganismo(instance);
+
+        foreach (var parte in new[] { "comprador", "vendedor" })
+        {
+            var actor = ActorJuridicoCon(mecanismo, parte);
+            actor.TenantId = tenant;
+            actor.ProcedureInstanceId = id;
+            instance.Actors.Add(actor);
+
+            // El sujeto de identidad de un actor jurídico es su REPRESENTANTE LEGAL: la validación va
+            // con el documento del representante, o no casaría y el sello no se emitiría por motivos
+            // ajenos a lo que se prueba. Aprobada Y vigente.
+            var bio = Bio(parte);
+            bio.DocumentType = "CC";
+            bio.DocumentNumber = "52082029";
+            bio.ValidatedAt = DateTimeOffset.UtcNow;
+            bio.ValidUntil = DateTimeOffset.UtcNow.AddDays(20);
+            instance.BiometricValidations.Add(bio);
+        }
+
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance,
+            vaultPolicy: conBaul ? new VaultConFirma() : null);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+        error.Should().BeNull();
+        capturing.Captured.Should().NotBeNull();
+        _ = rol;
+        return capturing.Captured!;
+    }
+
+    [Fact]
+    public async Task Generar_ConFirmaDelBaul_NoDejaSelloDeIdentidadEnLosDocumentos()
+    {
+        // Lo reportado: con firma de baúl E identidad vigente, la compraventa imprimía las dos estampas.
+        // La exclusividad se decide en el ensamblado, así que la arrastran TODOS los documentos.
+        var data = await DatosDelDocumentoCon(MecanismoFirma.Baul);
+
+        (data.SellosIdentidad ?? new Dictionary<string, string>())
+            .Should().NotContainKey("comprador", "con firma del baúl, esa ES la firma del documento");
+    }
+
+    [Fact]
+    public async Task Generar_ConIdentidadElegida_NoApalancaImagenDelBaul()
+    {
+        var data = await DatosDelDocumentoCon(MecanismoFirma.Identidad);
+
+        (data.FirmaImagenes ?? new Dictionary<string, byte[]>())
+            .Should().NotContainKey("comprador", "se eligió el sello de identidad: no se toca el baúl");
+        (data.SellosIdentidad ?? new Dictionary<string, string>())
+            .Should().ContainKey("comprador");
+    }
+
+    [Theory]
+    [InlineData("comprador")]
+    [InlineData("vendedor")]
+    public async Task Generar_SinBaulYSinEleccion_CONSERVA_ElSelloDeIdentidad(string rol)
+    {
+        // Regresion: al retirar el sello por el mero hecho de ser persona juridica, una parte con
+        // identidad validada y SIN firma de baul se quedaba sin firma en los documentos. Sin eleccion
+        // explicita manda la precedencia del baul, pero solo si la firma existe de verdad.
+        var data = await DatosDelDocumento(mecanismo: null, conBaul: false, rol: rol);
+
+        (data.SellosIdentidad ?? new Dictionary<string, string>())
+            .Should().ContainKey(rol, "sin firma del baul, la identidad validada es la firma");
+    }
+
+    [Theory]
+    [InlineData("comprador")]
+    [InlineData("vendedor")]
+    public async Task Generar_ConBaulExplicitoSinImagen_DejaLaFirmaEnBlanco(string rol)
+    {
+        // Elegido el baul a proposito, no se rellena con un sello que el negocio no eligio: la firma
+        // queda en blanco y se nota.
+        var data = await DatosDelDocumento(MecanismoFirma.Baul, conBaul: true, rol: rol);
+
+        (data.SellosIdentidad ?? new Dictionary<string, string>()).Should().NotContainKey(rol);
+    }
 
     private static ProcedureInstanceActor ActorJuridicoVendedor(ProcedureInstance instance) =>
         new()

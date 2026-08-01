@@ -125,11 +125,20 @@ public static class FurCompraventaDocumentGenerator
     {
         col.Item().PaddingTop(8).Text(titulo);
 
-        if (data.FirmaImagenes is not null
+        // Bug #11146 — la imagen del baúl y el sello de identidad son EXCLUYENTES: una parte firma de
+        // una sola manera. Antes se pintaba la imagen y, más abajo, el sello sin condición alguna, así
+        // que quien firmaba por el baúl y además tenía identidad vigente aparecía firmando dos veces
+        // por vías distintas. El mandato y la solicitud de trámite virtual ya lo resolvían así.
+        var firmaBaul =
+            data.FirmaImagenes is not null
             && data.FirmaImagenes.TryGetValue(rol, out var imagen)
-            && imagen.Length > 0)
+            && imagen.Length > 0
+                ? imagen
+                : null;
+
+        if (firmaBaul is not null)
         {
-            col.Item().PaddingTop(2).Height(32).Image(imagen).FitHeight();
+            col.Item().PaddingTop(2).Height(32).Image(firmaBaul).FitHeight();
         }
         else
         {
@@ -157,7 +166,15 @@ public static class FurCompraventaDocumentGenerator
             col.Item().Text($"{TipoDocParte(parte)}: {Val(parte.Documento)}").FontSize(9);
         }
 
-        var sello = Sello(data, rol);
+        // Trazabilidad de la firma, en el mismo lugar sea cual sea el mecanismo:
+        //  · Con firma del baúl, esa ES la firma (Bug #11146): el sello de identidad no se añade, y en su
+        //    lugar va la vigencia y el hash de la firma custodiada (HU #11170). Antes no iba nada, así
+        //    que la imagen quedaba sin ningún dato que permitiera verificarla —la carencia solo se hizo
+        //    visible al retirar el sello de identidad que se pintaba de más—.
+        //  · Sin ella, el sello de la validación biométrica.
+        var sello = firmaBaul is null
+            ? Sello(data, rol)
+            : FlitFirmaBaulSello.Resolve(data.FirmaBaulMetadatos, rol, incluirIdentificacion: false);
         if (sello is not null)
             col.Item().Text(sello).FontSize(6.5f).FontColor(Colors.Grey.Darken2);
     }
