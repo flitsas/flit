@@ -26,7 +26,7 @@ export const OCR_TIPOS: Record<WizardModalidad, readonly string[]> = {
  * pero no alimentan ningún certificado. La whitelist real (y la regla de precedencia frente al
  * RUNT) vive en el backend; esto solo evita mandar peticiones que se descartarían.
  */
-const OCR_TIPOS_PERSISTIBLES: readonly string[] = ['soat', 'rtm'];
+export const OCR_TIPOS_PERSISTIBLES: readonly string[] = ['soat', 'rtm'];
 
 /** Límite del OCR (10 MB, el del endpoint). Archivos mayores (≤20 MB) se suben sin analizar. */
 export const OCR_MAX_BYTES = 10 * 1024 * 1024;

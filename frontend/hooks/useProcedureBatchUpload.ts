@@ -2,7 +2,12 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { OCR_TIPOS, evaluateOcr, type OcrEvaluation } from './useProcedureDocuments';
+import {
+  OCR_TIPOS,
+  OCR_TIPOS_PERSISTIBLES,
+  evaluateOcr,
+  type OcrEvaluation,
+} from './useProcedureDocuments';
 import type {
   BatchOcrFileError,
   BatchOcrPiece,
@@ -69,6 +74,14 @@ const INITIAL_STATE: BatchReviewState = {
 /** Identidad de una pieza dentro del lote: archivo + tipo + páginas la distinguen sin ambigüedad. */
 function pieceId(piece: BatchOcrPiece): string {
   return `${piece.sourceFilename}#${piece.tipo}#${piece.paginas.join('-')}`;
+}
+
+/** Reconstruye el binario de una pieza para subirlo por el flujo de adjuntos de siempre. */
+export function base64ToFile(base64: string, filename: string, mimetype: string): File {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], filename, { type: mimetype });
 }
 
 /**
@@ -248,6 +261,77 @@ export function useProcedureBatchUpload(
     });
   }, []);
 
+  /**
+   * Adjunta las piezas marcadas por el flujo presign→S3→register de siempre. Secuencial a propósito:
+   * son pocas y así un fallo se atribuye a su pieza sin ambigüedad.
+   *
+   * Si el operador marcó una pieza que pisaba un adjunto existente, se borra el anterior primero —
+   * es lo que dice la advertencia que aceptó al marcarla.
+   *
+   * Devuelve true si todo entró. Si algo falla, las que sí entraron desaparecen de la lista y las
+   * fallidas quedan con su motivo, de modo que reintentar no duplica adjuntos.
+   */
+  const confirm = useCallback(async (): Promise<boolean> => {
+    if (!instanceId) return false;
+
+    const seleccionadas = state.items.filter((i) => i.decision === 'accept');
+    if (seleccionadas.length === 0) return false;
+
+    setState((s) => ({ ...s, phase: 'uploading', error: null }));
+
+    const subidas: string[] = [];
+    const fallos: BatchOcrFileError[] = [];
+
+    for (const item of seleccionadas) {
+      const { piece } = item;
+      try {
+        if (item.conflicto) {
+          await tramitesClient.deleteAttachment(instanceId, item.conflicto.id, tenantId);
+        }
+
+        await tramitesClient.uploadAttachment(
+          instanceId,
+          piece.tipo,
+          base64ToFile(piece.contentBase64, piece.filename, piece.mimetype),
+          tenantId,
+        );
+        subidas.push(item.id);
+
+        // Mismo enriquecimiento que el cargue campo a campo: sólo de documentos verificados, y
+        // best-effort — el adjunto ya está y un fallo aquí no puede costarle al operador el cargue.
+        if (
+          !item.evaluation.rechazado &&
+          piece.data &&
+          OCR_TIPOS_PERSISTIBLES.includes(piece.tipo)
+        ) {
+          try {
+            await tramitesClient.persistOcrFields(instanceId, piece.tipo, piece.data, tenantId);
+          } catch {
+            // Silencio intencionado: ver comentario de arriba.
+          }
+        }
+      } catch (err) {
+        fallos.push({
+          filename: piece.filename,
+          motivo: err instanceof Error ? err.message : 'No se pudo adjuntar.',
+        });
+      }
+    }
+
+    if (fallos.length === 0) {
+      setState(INITIAL_STATE);
+      return true;
+    }
+
+    setState((s) => ({
+      ...s,
+      phase: 'reviewing',
+      items: s.items.filter((i) => !subidas.includes(i.id)),
+      errores: [...s.errores, ...fallos],
+    }));
+    return false;
+  }, [instanceId, tenantId, state.items]);
+
   /** Descarta la revisión sin subir nada. */
   const reset = useCallback(() => setState(INITIAL_STATE), []);
 
@@ -258,5 +342,5 @@ export function useProcedureBatchUpload(
     [state.items],
   );
 
-  return { state, aceptadas, analyze, setDecision, reset, clearError };
+  return { state, aceptadas, analyze, setDecision, confirm, reset, clearError };
 }

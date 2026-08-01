@@ -6,6 +6,9 @@ import {
   useProcedureDocuments,
   type OcrUiResult,
 } from '@/hooks/useProcedureDocuments';
+import { useProcedureBatchUpload } from '@/hooks/useProcedureBatchUpload';
+import { BatchDropzone } from './BatchDropzone';
+import { BatchReviewPanel } from './BatchReviewPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
@@ -530,6 +533,11 @@ export function DocumentChecklist({
   const { checklist, attachments, uploadingTipos, analyzingTipos, deletingId, ocrResults } =
     state;
 
+  // Cargue masivo. Vive junto al cargue campo a campo, no en su lugar: quien ya sabe qué archivo va en
+  // cada casilla sigue usando el checklist de abajo exactamente igual que antes.
+  const batch = useProcedureBatchUpload(instanceId, { modalidad });
+  const readOnly = useWizardReadOnly();
+
   const attachmentByTipo = new Map<string, ProcedureAttachment>();
   for (const a of attachments) {
     if (!attachmentByTipo.has(a.tipo)) attachmentByTipo.set(a.tipo, a);
@@ -669,6 +677,57 @@ export function DocumentChecklist({
           >
             ×
           </button>
+        </div>
+      )}
+
+      {/* Cargue masivo: una sola carga que se reparte sola, con revisión antes de adjuntar. En solo
+          lectura no aparece — el checklist ahí es visualización. */}
+      {!readOnly && instanceId && items.length > 0 && (
+        <div className="mb-3">
+          {batch.state.phase === 'reviewing' || batch.state.phase === 'uploading' ? (
+            <BatchReviewPanel
+              state={batch.state}
+              aceptadas={batch.aceptadas}
+              onToggle={batch.setDecision}
+              onCancel={batch.reset}
+              onConfirm={() =>
+                void batch.confirm().then((ok) => {
+                  // Aunque falle alguna pieza, las que sí entraron cambian el checklist.
+                  void refresh();
+                  onChanged?.();
+                  return ok;
+                })
+              }
+            />
+          ) : (
+            <BatchDropzone
+              busy={batch.state.phase === 'analyzing'}
+              onFiles={(files) => void batch.analyze(files, items, attachments)}
+            />
+          )}
+
+          {batch.state.error && (
+            <div
+              className="mt-2 flex items-center justify-between gap-3 rounded-xl border p-3 text-xs"
+              style={{
+                borderColor: '#FF4E00',
+                background: 'rgba(255,78,0,0.06)',
+                color: '#FF4E00',
+              }}
+              role="alert"
+              aria-live="polite"
+            >
+              <span>{batch.state.error}</span>
+              <button
+                type="button"
+                onClick={batch.clearError}
+                className="font-bold"
+                aria-label="Descartar error de la carga masiva"
+              >
+                ×
+              </button>
+            </div>
+          )}
         </div>
       )}
 
