@@ -359,27 +359,77 @@ export function FirmaFurStep({
   // refrescar el wizard: eso remonta el paso y puede adelantar el estado de negocio).
   const [docsReloadToken, setDocsReloadToken] = useState(0);
 
+  /**
+   * Bug #11145 — <b>el aviso se decide por el expediente, no solo por la petición.</b>
+   *
+   * El estado solo pasaba a «listo» cuando respondía la generación del FUR, y esa petición puede
+   * tardar bastante. El documento, en cambio, se materializa antes: el gestor veía el FUR en el
+   * expediente mientras el aviso seguía girando. Con el FUR ya adjunto no hay nada en curso que
+   * anunciar, así que el estado efectivo es «listo» pase lo que pase con la petición.
+   */
+  const furGenerado = useMemo(() => attachments.some((a) => a.tipo === 'fur'), [attachments]);
+  const paqueteStatusEfectivo: PaqueteDocsStatus =
+    paqueteStatus === 'loading' && furGenerado ? 'ready' : paqueteStatus;
+
+  /**
+   * …y para enterarse de que el documento ya está, hay que volver a mirar. Mientras la generación
+   * sigue en vuelo se re-lista el expediente periódicamente: en cuanto aparece el FUR, el aviso se
+   * retira y el gestor ve el documento sin esperar a que la petición cierre. El sondeo se detiene
+   * solo (deja de cumplirse la condición) y nunca corre fuera de ese hueco.
+   */
+  useEffect(() => {
+    if (paqueteStatus !== 'loading' || !instanceId || furGenerado) return;
+    const intervalo = setInterval(() => {
+      void loadExpediente();
+    }, 3_000);
+    return () => clearInterval(intervalo);
+  }, [paqueteStatus, instanceId, furGenerado, loadExpediente]);
+
   // Feature #11066 — reporta al shell el estado del paquete (banner: no bloquea Preparar).
   useEffect(() => {
-    onPaqueteStatusChangeRef.current?.(paqueteStatus);
-  }, [paqueteStatus]);
+    onPaqueteStatusChangeRef.current?.(paqueteStatusEfectivo);
+  }, [paqueteStatusEfectivo]);
+
+  /**
+   * Bug #11145 (endurecimiento) — la guarda de "ya no aplica" es el DESMONTAJE, no un cambio de
+   * dependencias.
+   *
+   * Antes se usaba un `cancelled` por ejecución del efecto. Con el guard de arranque
+   * (`paqueteKickoffRef`) eso abre un hueco: si una dependencia cambia mientras la generación está en
+   * vuelo, React limpia y marca `cancelled`, la ejecución en curso descarta su resultado, y el efecto
+   * que vuelve a entrar sale de inmediato porque el guard ya está activo. Nadie deja el estado en
+   * «listo». No es el camino que reportó el negocio —ese era la espera larga, resuelta arriba— pero es
+   * la misma avería esperando otra ocasión.
+   */
+  const montadoRef = useRef(true);
+  useEffect(() => {
+    montadoRef.current = true;
+    return () => {
+      montadoRef.current = false;
+    };
+  }, []);
+
+  /** Estado del trámite como PRIMITIVO: `detail` es un objeto nuevo en cada recarga (ver arriba). */
+  const estadoDetalle = detail?.status;
 
   // Feature #11066 — al entrar al paso FUR (con organismo y en borrador/subsanación) pre-genera
   // el paquete + impronta. Preparar/Guardar NO esperan a que termine; Radicar sí exige consolidado.
   useEffect(() => {
-    if (!instanceId || readOnly || !organismoSelected || !detail) return;
-    if (detail.status !== 'borrador' && detail.status !== 'subsanacion') return;
+    if (!instanceId || readOnly || !organismoSelected) return;
+    // Bug #11145 — depende del ESTADO del trámite, no del objeto `detail`: ese objeto se sustituye
+    // en cada recarga del detalle y volvía a disparar la limpieza del efecto en mitad de la
+    // generación.
+    if (estadoDetalle !== 'borrador' && estadoDetalle !== 'subsanacion') return;
     if (paqueteKickoffRef.current) return;
     paqueteKickoffRef.current = true;
 
-    let cancelled = false;
     void (async () => {
       setPaqueteStatus('loading');
       try {
         let atts: ProcedureAttachment[] = [];
         try {
           atts = await tramitesClient.getAttachments(instanceId);
-          if (!cancelled) setAttachments(atts);
+          if (montadoRef.current) setAttachments(atts);
         } catch {
           // Si falla el listado, intentamos generar de todas formas.
         }
@@ -399,22 +449,18 @@ export function FirmaFurStep({
           }
         }
 
-        if (cancelled) return;
+        if (!montadoRef.current) return;
         setPaqueteStatus('ready');
         // Solo adjuntos locales — no onRefresh del wizard (evita remount / cambio de estado).
         void loadExpediente();
         setDocsReloadToken((t) => t + 1);
       } catch {
-        if (cancelled) return;
+        if (!montadoRef.current) return;
         paqueteKickoffRef.current = false;
         setPaqueteStatus('error');
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [instanceId, readOnly, organismoSelected, detail, loadExpediente]);
+  }, [instanceId, readOnly, organismoSelected, estadoDetalle, loadExpediente]);
 
   return (
     <div className="space-y-8">

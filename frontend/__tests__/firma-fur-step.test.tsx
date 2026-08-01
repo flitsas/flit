@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   getAttachments: vi.fn(),
   getInstance: vi.fn(),
   listBiometric: vi.fn(),
+  listBiometricExpediente: vi.fn(),
   patchFieldValues: vi.fn(),
   submitInstance: vi.fn(),
   downloadAttachment: vi.fn(),
@@ -45,6 +46,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     getAttachments: mocks.getAttachments,
     getInstance: mocks.getInstance,
     listBiometric: mocks.listBiometric,
+    listBiometricExpediente: mocks.listBiometricExpediente,
     patchFieldValues: mocks.patchFieldValues,
     submitInstance: mocks.submitInstance,
     downloadAttachment: mocks.downloadAttachment,
@@ -136,6 +138,7 @@ beforeEach(() => {
   mocks.getAttachments.mockResolvedValue([]);
   mocks.getInstance.mockResolvedValue(INSTANCE_DETAIL);
   mocks.listBiometric.mockResolvedValue([]);
+  mocks.listBiometricExpediente.mockResolvedValue({ validations: [], provider: 'mock', firmaBaulPartes: [] });
   mocks.patchFieldValues.mockResolvedValue(INSTANCE_DETAIL);
   mocks.listTransitOffices.mockResolvedValue([]);
   mocks.runRnmc.mockResolvedValue([]);
@@ -673,4 +676,88 @@ describe('FirmaFurStep — firma no bloqueante en traspaso (B12, HU #10661)', ()
     // …pero no hay forma de solicitar una nueva.
     expect(within(card).queryByRole('button', { name: 'Solicitar firma' })).toBeNull();
   });
+});
+
+// ── Bug #11145 — el aviso de generación del expediente ──────────────────────
+//
+// El aviso ("Generando documentos del expediente… No bloquea Preparar") se quedaba girando
+// indefinidamente aunque los documentos ya estuvieran generados. FirmaFurStep no lo pinta: reporta
+// su estado al shell vía `onPaqueteStatusChange`, y es ese estado el que se quedaba en 'loading'.
+describe('FirmaFurStep — estado del paquete de documentos (Bug #11145)', () => {
+  const FUR_ATT: ProcedureAttachment = {
+    id: 'att-fur',
+    tipo: 'fur',
+    filename: 'fur.pdf',
+    mimetype: 'application/pdf',
+    sizeBytes: 10,
+    sha256: 'abc',
+    uploadedAt: '2026-07-31T00:00:00Z',
+    source: 'system',
+  };
+
+  it('termina en «listo» y no se queda en «generando»', async () => {
+    const estados: string[] = [];
+    render(
+      <FirmaFurStep
+        instanceId={INSTANCE}
+        modalidad="traspaso"
+        onPaqueteStatusChange={(s) => estados.push(s)}
+      />,
+    );
+
+    await waitFor(() => expect(estados).toContain('ready'));
+    expect(estados.at(-1)).toBe('ready');
+  });
+
+  it('con el FUR ya adjunto NUNCA reporta «generando»', async () => {
+    // La red de seguridad que pidió el negocio: si el gestor ya ve los documentos, el aviso sobra.
+    mocks.getAttachments.mockResolvedValue([FUR_ATT]);
+    const estados: string[] = [];
+
+    render(
+      <FirmaFurStep
+        instanceId={INSTANCE}
+        modalidad="traspaso"
+        onPaqueteStatusChange={(s) => estados.push(s)}
+      />,
+    );
+
+    await waitFor(() => expect(estados).toContain('ready'));
+    expect(estados).not.toContain('loading');
+    // Y no se regenera lo que ya existe.
+    expect(mocks.generarFur).not.toHaveBeenCalled();
+  });
+
+  it('con la generación aún en vuelo, el aviso se retira en cuanto el FUR aparece', async () => {
+    // Causa raíz: el estado solo pasaba a «listo» cuando RESPONDÍA la generación del FUR, y esa
+    // petición puede tardar. El documento se materializa antes, así que el gestor veía el FUR en el
+    // expediente mientras el aviso seguía girando. Aquí la generación no resuelve nunca y el FUR
+    // aparece en el expediente al segundo listado: el aviso debe retirarse igual.
+    // La generación NUNCA responde: es el escenario que dejaba el aviso girando para siempre.
+    mocks.generarFur.mockImplementation(() => new Promise(() => {}));
+    // El expediente empieza vacío —para que la generación llegue a dispararse— y el FUR aparece al
+    // cabo de un segundo, como haría el backend mientras la petición sigue abierta. Se controla por
+    // TIEMPO y no por número de llamadas: varios componentes del paso listan adjuntos.
+    let furEnElExpediente = false;
+    mocks.getAttachments.mockImplementation(() =>
+      Promise.resolve(furEnElExpediente ? [FUR_ATT] : []),
+    );
+    setTimeout(() => {
+      furEnElExpediente = true;
+    }, 1_000);
+    const estados: string[] = [];
+
+    render(
+      <FirmaFurStep
+        instanceId={INSTANCE}
+        modalidad="traspaso"
+        onPaqueteStatusChange={(s) => estados.push(s)}
+      />,
+    );
+
+    await waitFor(() => expect(estados).toContain('loading'));
+    await waitFor(() => expect(estados.at(-1)).toBe('ready'), { timeout: 10_000 });
+    // Se llegó a disparar la generación y aun así el aviso se retiró sin esperar su respuesta.
+    expect(mocks.generarFur).toHaveBeenCalled();
+  }, 15_000);
 });
