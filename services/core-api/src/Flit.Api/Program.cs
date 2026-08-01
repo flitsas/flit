@@ -218,6 +218,7 @@ app.MapGrpcService<Flit.Api.Grpc.IctConsultationService>()
 // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
 app.MapAuthEndpoints();
 app.MapSecurityEndpoints();
+app.MapUserUiPreferencesEndpoints();
 app.MapAdminCompaniesEndpoints();
 app.MapAdminOtEndpoints();
 app.MapAdminPlateRangesEndpoints();

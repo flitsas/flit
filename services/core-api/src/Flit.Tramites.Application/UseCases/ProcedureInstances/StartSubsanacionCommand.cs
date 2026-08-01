@@ -1,4 +1,3 @@
-using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -47,23 +46,10 @@ public sealed class StartSubsanacionHandler(IProcedureInstanceRepository repo)
             FieldSnapshot = FieldValueSnapshot.Capture(instance.FieldValues),
         };
 
-        // Id pre-asignado + PK store-generated (uuidv7): hay que marcar Added explícito
-        // (mismo patrón que TramiteTransitionRecorder / PatchFieldValues). Si solo se agrega a la
-        // colección, EF infiere Modified → UPDATE de 0 filas → falso conflicto_concurrencia.
-        var history = new ProcedureInstanceStatusHistory
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            ProcedureInstanceId = instance.Id,
-            FromStatus = TramiteEstado.Rechazado,
-            ToStatus = TramiteEstado.Rechazado,
-            ChangedAt = now,
-            ChangedBy = changedBy,
-            Reason = null,
-            Metadata = observation.ToJson(),
-        };
-        instance.StatusHistory.Add(history);
-        repo.Add(history);
+        // El baseline va en la instancia, NO en el historial de estados. Activar la subsanación no
+        // es una transición: antes se escribía una fila rechazado → rechazado solo para transportar
+        // este snapshot, y el timeline del trámite la mostraba como un segundo rechazo.
+        instance.SubsanacionBaseline = observation.ToJson();
 
         var committed = await repo.SaveChangesWithConcurrencyGuardAsync(ct).ConfigureAwait(false);
         if (!committed)

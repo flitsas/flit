@@ -15,9 +15,12 @@ export interface OtHubTab {
   segment: OtHubTabId;
 }
 
+/**
+ * Pestañas visibles del hub. "Trámites" y "Webhooks" quedaron fuera de la navegación: sus rutas
+ * siguen respondiendo si se entra por URL, pero no se ofrecen en la consola. Al retirarse "Trámites"
+ * el hub pasa a abrir en "Trámites clientes" (ver la página índice del hub).
+ */
 export const OT_HUB_TABS: OtHubTab[] = [
-  { id: "tramites", label: "Trámites", segment: "tramites" },
-  { id: "webhooks", label: "Webhooks", segment: "webhooks" },
   { id: "client-procedures", label: "Trámites clientes", segment: "client-procedures" },
   { id: "rules", label: "Reglas", segment: "rules" },
   { id: "documents", label: "Documentos", segment: "documents" },

@@ -454,6 +454,11 @@ export function TramiteWizard(props: Props) {
   // shell dispara save() vía ref desde el footer "Guardar y continuar".
   const stepFormRef = useRef<WizardStepFormHandle>(null);
   const [continuing, setContinuing] = useState(false);
+  /**
+   * Pasos comprador/vendedor: Continuar solo si la consulta RUNT/RUES del actor fue exitosa.
+   * El formulario notifica el gate; al salir del paso se resetea.
+   */
+  const [actorsConsultationReady, setActorsConsultationReady] = useState(false);
   /** Feature #11066 — cambios locales pendientes de Guardar (docs/forms). */
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   /**
@@ -733,6 +738,7 @@ export function TramiteWizard(props: Props) {
     activeStep?.key === 'comprador' ||
     activeStep?.key === 'vendedor' ||
     activeStep?.key === 'comercial';
+  const isActorStep = activeStep?.key === 'comprador' || activeStep?.key === 'vendedor';
   // El siguiente paso es navegable (no hay paso de datos incompleto por delante). Permite "Continuar"
   // desde un paso diferido incompleto (Identidad) hacia el FUR para finalizar/radicar.
   const nextStepNavigable = canNavigateToStep(steps, activeIndex + 1, navViewOnly);
@@ -740,6 +746,8 @@ export function TramiteWizard(props: Props) {
     !activeStep ||
     activeIndex >= steps.length - 1 ||
     continuing ||
+    // Sin consulta RUNT/RUES exitosa no se avanza en pasos de actores.
+    (isActorStep && !actorsConsultationReady) ||
     // CF-02 — sin trámite creado, "Continuar" es justamente lo que lo crea: se habilita en cuanto la
     // consulta del vehículo salió bien (sin bloqueos), que es el único requisito del paso 1.
     (deferredCreation
@@ -826,7 +834,11 @@ export function TramiteWizard(props: Props) {
     try {
       const ok = await stepFormRef.current?.save();
       if (!ok) {
-        setSubmitError('No se pudo guardar. Por favor, reintenta.');
+        setSubmitError(
+          isActorStep
+            ? 'Consulta RUNT o RUES con éxito antes de continuar. Sin datos de la consulta no se puede avanzar.'
+            : 'No se pudo guardar. Por favor, reintenta.',
+        );
         return;
       }
 
@@ -1075,10 +1087,12 @@ export function TramiteWizard(props: Props) {
                 onRunPreflight={runPreflight}
                 onRefresh={() => void refresh()}
                 stepFormRef={stepFormRef}
+                onActorsConsultationGateChange={setActorsConsultationReady}
                 identityOperable={draftFinalized}
                 identityApproved={identityApproved}
                 vaultCoveredPartes={vaultCoveredPartes}
                 rnmcEnabled={wizard?.rnmcEnabled ?? false}
+                esMigrado={wizard?.esMigrado ?? false}
                 deferredModalidad={deferredCreation ? entryModalidad : undefined}
                 seedVin={seedVin}
                 seedPlaca={seedPlaca}
@@ -1473,6 +1487,7 @@ function ConsultaStep({
   seedPlaca,
   onPreviewDone,
   onPendingFieldValues,
+  esMigrado = false,
 }: {
   step: WizardStep;
   instanceId: string | null;
@@ -1487,6 +1502,8 @@ function ConsultaStep({
   onPreviewDone?: (consulta: PendingConsulta | null) => void;
   /** CF-02 — condiciones marcadas antes de existir el trámite; el shell las guarda al crearlo. */
   onPendingFieldValues?: (items: { fieldKey: string; valueText: string }[]) => void;
+  /** Migración V1→V2 — explica en el panel por qué el pre-vuelo llega vacío. */
+  esMigrado?: boolean;
 }) {
   const isVin = step.key === 'consulta_vin';
   // CF-02 (HU #10883, AC3) — sin trámite creado: la consulta no persiste nada y sus resultados viven
@@ -2236,6 +2253,7 @@ function ConsultaStep({
         saving={riesgoSaving}
         showRunButton={false}
         onIniciarTraspaso={isVin ? handleIniciarTraspaso : undefined}
+        esMigrado={esMigrado}
       />
     </div>
   );
@@ -2255,10 +2273,12 @@ function StepBody({
   onRunPreflight,
   onRefresh,
   stepFormRef,
+  onActorsConsultationGateChange,
   identityOperable = false,
   identityApproved = false,
   vaultCoveredPartes = [],
   rnmcEnabled = false,
+  esMigrado = false,
   deferredModalidad,
   seedVin,
   seedPlaca,
@@ -2286,8 +2306,12 @@ function StepBody({
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
   stepFormRef: RefObject<WizardStepFormHandle | null>;
+  /** Gate Continuar en pasos de actores (consulta RUNT/RUES exitosa). */
+  onActorsConsultationGateChange?: (ready: boolean) => void;
   /** FEATURE 05 — el RNMC aplica al trámite: los actores muestran la fecha de expedición. */
   rnmcEnabled?: boolean;
+  /** Migración V1→V2 — el trámite viene de V1; el paso de consulta lo explica en el pre-vuelo. */
+  esMigrado?: boolean;
   /**
    * HU #10350 — borrador finalizado: aunque el wizard esté en solo lectura para los datos, el paso
    * de Identidad debe seguir operable (iniciar/compartir/refrescar Kyverum) porque la validación del
@@ -2325,6 +2349,7 @@ function StepBody({
           seedPlaca={seedPlaca}
           onPreviewDone={onPreviewDone}
           onPendingFieldValues={onPendingFieldValues}
+          esMigrado={esMigrado}
         />
       );
 
@@ -2368,6 +2393,7 @@ function StepBody({
           embeddedInWizard
           layout="split"
           rnmcEnabled={rnmcEnabled}
+          onConsultationGateChange={onActorsConsultationGateChange}
         />
       );
 
@@ -2387,6 +2413,7 @@ function StepBody({
           seedDocumentoFromOwner
           autoConsultRunt
           rnmcEnabled={rnmcEnabled}
+          onConsultationGateChange={onActorsConsultationGateChange}
         />
       );
 

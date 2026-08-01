@@ -160,6 +160,9 @@ export function LegalRepresentativesFormPanel({
   // detalle ya está en caché y no se vuelve a pedir, evitando el parpadeo que AC2 prohíbe.
   useEffect(() => {
     if (!open) {
+      // Limpieza al cerrar: el detalle cacheado es de otro representante y reutilizarlo mostraría
+      // datos ajenos al reabrir.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDetail(null);
       setDetailLoading(false);
       setDetailError(false);

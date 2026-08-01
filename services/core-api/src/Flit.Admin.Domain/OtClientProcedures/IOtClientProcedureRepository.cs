@@ -87,10 +87,11 @@ public interface IOtClientProcedureRepository
     /// HU #10654 / #10800 (Feature #10587) — el OT asigna una placa a un trámite en <c>preasignado</c>
     /// (Flujo B): reserva la placa (del rango, o FUERA DE RANGO si <paramref name="outOfRange"/> — la
     /// registra como rango ad-hoc de 1 placa), la escribe en el trámite y avanza el sub-estado a
-    /// <c>asignado</c>. Devuelve <c>null</c> si el trámite no es accesible, no está en preasignado, o la
-    /// placa no está disponible / no se pudo registrar (formato inválido o ya registrada).
+    /// <c>asignado</c>. Si no se puede, el resultado trae la causa concreta en
+    /// <see cref="PlateAssignmentFailure"/> — en particular distingue la placa YA asignada, que es el
+    /// error habitual en operación y antes llegaba al usuario como un mensaje genérico.
     /// </summary>
-    Task<OtClientProcedure?> AssignPlateAsync(
+    Task<PlateAssignmentOutcome> AssignPlateAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
         string plate,

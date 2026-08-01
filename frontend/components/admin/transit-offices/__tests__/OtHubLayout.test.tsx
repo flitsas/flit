@@ -47,20 +47,30 @@ describe("OtHubLayout — HU #10236", () => {
 
   it("AC2 renderiza pestañas de módulos OT", () => {
     render(
-      <OtHubLayout transitOfficeId="ot-1" activeTab="tramites" moduleTitle="Test OT">
+      <OtHubLayout transitOfficeId="ot-1" activeTab="client-procedures" moduleTitle="Test OT">
         <p>Contenido módulo</p>
       </OtHubLayout>,
     );
-    expect(screen.getByRole("tab", { name: "Trámites" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Webhooks" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Trámites clientes" }))
+      .toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Reglas" })).toBeInTheDocument();
     expect(screen.getByText("Contenido módulo")).toBeInTheDocument();
+  });
+
+  it("no ofrece las pestañas retiradas de la consola", () => {
+    render(
+      <OtHubLayout transitOfficeId="ot-1" activeTab="client-procedures" moduleTitle="Test OT">
+        <p>Contenido módulo</p>
+      </OtHubLayout>,
+    );
+    expect(screen.queryByRole("tab", { name: "Trámites" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Webhooks" })).not.toBeInTheDocument();
   });
 
   it("AC2 cambia de módulo al seleccionar pestaña", async () => {
     const user = userEvent.setup();
     render(
-      <OtHubLayout transitOfficeId="ot-1" activeTab="tramites" moduleTitle="Test OT">
+      <OtHubLayout transitOfficeId="ot-1" activeTab="client-procedures" moduleTitle="Test OT">
         <p>Contenido</p>
       </OtHubLayout>,
     );

@@ -87,6 +87,9 @@ export function SignatureVaultSelector({
 
   useEffect(() => {
     if (!hasDoc) {
+      // Sin documento no hay a quién buscarle firmas: conservar las de la persona anterior
+      // ofrecería la firma equivocada.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setItems([]);
       setFetched(false);
       setError(false);

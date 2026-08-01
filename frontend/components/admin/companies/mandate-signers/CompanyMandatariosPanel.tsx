@@ -14,6 +14,7 @@ import {
   type CompanyTransitOfficeOption,
   type MandateSigner,
 } from "@/lib/api/admin-mandate-signers";
+import { formatDocumentWithType } from "@/lib/display/document-number";
 import { CompanyMandatarioForm } from "./CompanyMandatarioForm";
 
 /**
@@ -157,7 +158,7 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
                     )}
                   </td>
                   <td className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"}`}>
-                    {signer.documentType} {signer.documentNumber}
+                    {formatDocumentWithType(signer.documentType, signer.documentNumber)}
                   </td>
                   <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}>
                     {(signer.transitOfficeIds ?? []).length === 0

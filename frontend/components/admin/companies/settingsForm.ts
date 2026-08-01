@@ -115,6 +115,7 @@ export interface SettingsForm {
   preasignacionPlacaActiva: boolean;
   /** Con placa completa → Terminado directo (omite Asignado). */
   plateFlowSkipToTerminado: boolean;
+  validarSoatConRunt: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
   notificationTarget: NotificationTarget;
   metodosRecaudo: string[];
@@ -140,6 +141,7 @@ export function formFromSettings(settings: TenantSettings): SettingsForm {
     baulFirmasActivo: settings.baulFirmasActivo,
     preasignacionPlacaActiva: settings.preasignacionPlacaActiva,
     plateFlowSkipToTerminado: settings.plateFlowSkipToTerminado ?? false,
+    validarSoatConRunt: settings.validarSoatConRunt ?? false,
     enrutamientoSMTP: settings.enrutamientoSMTP,
     notificationTarget: settings.notificationTarget,
     metodosRecaudo: [...settings.metodosRecaudo],
@@ -176,6 +178,7 @@ export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
     baulFirmasActivo: form.baulFirmasActivo,
     preasignacionPlacaActiva: form.preasignacionPlacaActiva,
     plateFlowSkipToTerminado: form.plateFlowSkipToTerminado,
+    validarSoatConRunt: form.validarSoatConRunt,
     enrutamientoSMTP: form.enrutamientoSMTP,
     notificationTarget: form.notificationTarget,
     metodosRecaudo: [...form.metodosRecaudo],
@@ -257,6 +260,12 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
     module: "Configuración Empresa",
     label: "Omitir proceso del gestor (placa → Terminado)",
     describe: (_i, c) => onOff(c.plateFlowSkipToTerminado),
+  },
+  {
+    key: "validarSoatConRunt",
+    module: "Configuración Empresa",
+    label: "Validar SOAT ante el RUNT al procesar",
+    describe: (_i, c) => onOff(c.validarSoatConRunt),
   },
   {
     key: "enrutamientoSMTP",

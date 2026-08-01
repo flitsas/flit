@@ -26,6 +26,7 @@ using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.Modules;
 using Flit.Modules.Security.Domain.Permissions;
 using Flit.Modules.Security.Domain.Roles;
+using Flit.Modules.Security.Domain.UiPreferences;
 using Flit.Modules.Security.Domain.UserManagement;
 using Flit.Modules.Security.Domain.UserRoles;
 using Flit.Infrastructure.Quipux;
@@ -90,6 +91,9 @@ public static class InfrastructureExtensions
         // FEATURE-08 / HU-BE-06 (CFD-09) — feature flag F08_DynamicProcedures (por tenant, ot_feature_flags).
         services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.IDynamicProceduresPolicy,
             OtRules.DynamicProceduresPolicy>();
+        // Validación del SOAT contra el RUNT al procesar, activable por compañía.
+        services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.ISoatRuntValidationPolicy,
+            OtRules.SoatRuntValidationPolicy>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
         // IT-3 (Feature #10585) — persistencia del agregado de prenda.
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
@@ -227,6 +231,9 @@ public static class InfrastructureExtensions
         // HU #10621 — Editar nombre/correo de un usuario; HU #10619 — repositorio compartido de
         // suspensión/desactivación/reactivación de usuarios (mismo repositorio, IUserManagementRepository).
         services.AddScoped<IUserManagementRepository, UserManagementRepository>();
+
+        // Preferencias de UI por usuario (base compartida: elegir columnas visibles en tablas).
+        services.AddScoped<IUserUiPreferenceRepository, UserUiPreferenceRepository>();
 
         // Invitaciones (HU #10175) y activación de cuenta (HU #10177).
         services.AddScoped<IInvitationRepository, InvitationRepository>();

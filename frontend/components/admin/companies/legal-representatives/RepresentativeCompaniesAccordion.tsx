@@ -8,7 +8,6 @@ import {
   FileText,
   Loader2,
   Pencil,
-  Plus,
   Star,
   Trash2,
 } from "lucide-react";
@@ -198,7 +197,7 @@ export function RepresentativeCompaniesAccordion({
             className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold"
             style={{ color: "#557EFF", borderColor: "#557EFF" }}
           >
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Agregar empresa
+            Agregar empresa
           </button>
         </div>
       )}
@@ -528,7 +527,7 @@ function DeedBlock({
             style={{ color: "#557EFF", borderColor: "#557EFF" }}
             aria-label="Asociar escritura a esta compañía"
           >
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Asociar escritura
+            Asociar escritura
           </button>
         ) : null}
       </div>

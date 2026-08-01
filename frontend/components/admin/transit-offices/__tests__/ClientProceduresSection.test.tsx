@@ -196,6 +196,7 @@ describe("ClientProceduresSection — HU #10220", () => {
         undefined,
       ),
     );
+    await user.click(screen.getByRole("button", { name: /^Filtros/i }));
     await user.selectOptions(screen.getByLabelText(/Filtrar por tipo de trámite/i), "matricula_inicial-type-id");
     await user.click(screen.getByRole("button", { name: /Aplicar filtros/i }));
     await waitFor(() =>

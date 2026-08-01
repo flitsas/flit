@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
@@ -341,6 +342,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && v.Status == BiometricEstados.Aprobado
                 && v.DocumentType == tipoDoc
                 && v.DocumentNumber == documento
+                // Migración V1→V2: una identidad traída de V1 vale SOLO para su trámite (ver
+                // BiometricProviders.MigracionV1). Sin esta exclusión apalancaría trámites nativos de V2.
+                && v.Provider != BiometricProviders.MigracionV1
                 && ((v.ValidUntil != null && v.ValidUntil > now)
                     || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
                 // HU #10867 — incluir prevalidaciones standalone (sin trámite) y las ligadas a instancias no eliminadas.
@@ -370,6 +374,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && v.Status == BiometricEstados.Aprobado
                 && v.DocumentType != null
                 && v.DocumentNumber != null
+                // Migración V1→V2: una identidad traída de V1 vale SOLO para su trámite (ver
+                // BiometricProviders.MigracionV1). Sin esta exclusión apalancaría trámites nativos de V2.
+                && v.Provider != BiometricProviders.MigracionV1
                 && ((v.ValidUntil != null && v.ValidUntil > now)
                     || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
                 // HU #10867 — incluir prevalidaciones standalone (sin trámite) y las ligadas a instancias no eliminadas.
@@ -698,6 +705,26 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     public async Task AddEventAsync(ProcedureInstanceEvent evt, CancellationToken ct) =>
         await db.ProcedureInstanceEvents.AddAsync(evt, ct);
 
+    public async Task<IReadOnlySet<string>> ListRuntConsultedDocumentKeysAsync(
+        Guid id, Guid tenantId, CancellationToken ct)
+    {
+        // El payload es jsonb: se traen los eventos del tipo y la clave se arma en memoria (mismo
+        // motivo que GetLatestSubsanacionMetadataAsync — no se puede parsear jsonb desde LINQ).
+        var payloads = await db.ProcedureInstanceEvents.AsNoTracking()
+            .Where(e => e.ProcedureInstanceId == id
+                && e.TenantId == tenantId
+                && e.Tipo == RuntPersonaConsultada.Tipo)
+            .Select(e => e.Payload)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return payloads
+            .Select(RuntPersonaConsultada.KeyFromPayload)
+            .Where(k => k is not null)
+            .Select(k => k!)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
     public Task<ProcedureInstancePreflightSnapshot?> GetLatestPreflightAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstancePreflightSnapshots
             .Where(x => x.ProcedureInstanceId == id && x.TenantId == tenantId)
@@ -881,6 +908,19 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     public async Task<string?> GetLatestSubsanacionMetadataAsync(
         Guid instanceId, Guid tenantId, CancellationToken ct)
     {
+        // Fuente primaria: la columna de la instancia, que es donde escribe la activación de la
+        // subsanación desde que dejó de fabricar una transición rechazado → rechazado.
+        var baseline = await db.ProcedureInstances.AsNoTracking()
+            .Where(i => i.Id == instanceId && i.TenantId == tenantId)
+            .Select(i => i.SubsanacionBaseline)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+
+        if (!string.IsNullOrWhiteSpace(baseline))
+            return baseline;
+
+        // Respaldo: expedientes anteriores a la columna y observaciones de rechazo del OT/Quipux,
+        // que siguen trayendo el snapshot en el metadata de su transición real.
         var candidates = await db.ProcedureInstanceStatusHistories.AsNoTracking()
             .Where(h => h.ProcedureInstanceId == instanceId
                 && h.TenantId == tenantId
@@ -912,4 +952,154 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 && a.ProcedureInstance!.DeletedAt == null)
             .OrderByDescending(a => a.CreatedAt)
             .FirstOrDefaultAsync(ct);
+
+    // HU filtrado/ordenamiento server-side del listado — ver IProcedureInstanceRepository. El WHERE y
+    // el ORDER BY se resuelven ACÁ, en SQL, sobre columnas propias o denormalizadas; el grafo completo
+    // (Include) se carga solo para las filas de la página ya resuelta por el motor (mismo patrón de
+    // ListWithSummaryGraphAsync: AsSplitQuery + Include + Where + OrderBy + Take, con Skip agregado).
+    public async Task<(IReadOnlyList<ProcedureInstance> Items, int Total)> ListWithSummaryGraphFilteredAsync(
+        Guid? tenantId,
+        int skip,
+        int take,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        CancellationToken ct)
+    {
+        // AsNoTracking: lectura pura para un listado, sin intención de modificar las entidades cargadas
+        // (checklist B6).
+        var baseQuery = db.ProcedureInstances.AsNoTracking().Where(x => x.DeletedAt == null);
+        if (tenantId is { } tid)
+            baseQuery = baseQuery.Where(x => x.TenantId == tid);
+
+        baseQuery = ApplyListFilters(baseQuery, filter);
+
+        var total = await baseQuery.CountAsync(ct);
+
+        var ordered = ApplyListSort(baseQuery, sortBy, direction);
+
+        var items = await ordered
+            .AsSplitQuery()
+            .Include(x => x.FieldValues)
+            .Include(x => x.Actors)
+            .Include(x => x.Attachments)
+            .Include(x => x.Commercial)
+            .Include(x => x.PreflightSnapshots)
+            .Include(x => x.BiometricValidations)
+            .Include(x => x.Signatures)
+            .Include(x => x.StatusHistory)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(ct);
+
+        return (items, total);
+    }
+
+    /// <summary>
+    /// Aplica los filtros de <see cref="ProcedureInstanceListFilter"/>. VIN/placa comparan por IGUALDAD
+    /// case-insensitive (<c>ToUpper() == ...</c>, mismo criterio de <see cref="FindTramitesByVinAsync"/>);
+    /// vendedor/comprador/gestor por SUBCADENA con <c>ToLower().Contains(...)</c> en vez de
+    /// <c>EF.Functions.ILike</c> (el patrón usado en <see cref="ApplyBiometricValidationFilters"/>) a
+    /// propósito: <c>Contains</c> es traducible tanto por Npgsql (a <c>LIKE</c>, escapando comodines del
+    /// término automáticamente) como por el proveedor InMemory usado en los tests de este repositorio —
+    /// <c>EF.Functions.ILike</c> es específico de Npgsql y no se puede ejercitar con InMemory.
+    /// </summary>
+    private IQueryable<ProcedureInstance> ApplyListFilters(
+        IQueryable<ProcedureInstance> query, ProcedureInstanceListFilter filter)
+    {
+        if (!string.IsNullOrWhiteSpace(filter.Vin))
+        {
+            var vin = filter.Vin.Trim().ToUpperInvariant();
+            query = query.Where(x => x.Vin != null && x.Vin.ToUpper() == vin);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Placa))
+        {
+            var placa = filter.Placa.Trim().ToUpperInvariant();
+            query = query.Where(x => x.Plate != null && x.Plate.ToUpper() == placa);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Vendedor))
+        {
+            var term = filter.Vendedor.Trim().ToLowerInvariant();
+            query = query.Where(x => x.VendedorNombre != null && x.VendedorNombre.ToLower().Contains(term));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Comprador))
+        {
+            var term = filter.Comprador.Trim().ToLowerInvariant();
+            query = query.Where(x => x.CompradorNombre != null && x.CompradorNombre.ToLower().Contains(term));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Gestor))
+        {
+            var term = filter.Gestor.Trim().ToLowerInvariant();
+            query = query.Where(x => db.Users.Any(u => u.Id == x.CreatedByUserId && u.DisplayName.ToLower().Contains(term)));
+        }
+
+        if (filter.Firmado is { } firmadoCompleto)
+        {
+            // "Completa" = firma de compraventa FIRMADA del comprador y, si aplica (traspaso), también
+            // del vendedor (la matrícula inicial no lleva compraventa, así que el vendedor no cuenta).
+            // Espejo del cálculo de ListProcedureInstancesHandler.DeriveSignaturePending, pero comparado
+            // contra el booleano pedido (positivo = completa) en vez de negado.
+            query = query.Where(x =>
+                (x.Signatures.Any(s => s.Parte == SignatureRules.ParteComprador
+                        && s.DocTipo == SignatureDocTipos.Compraventa && s.Estado == SignatureEstados.Firmada)
+                    && (x.ModalidadEntrada != TramiteModalidadEntradaCodes.Traspaso
+                        || x.Signatures.Any(s => s.Parte == SignatureRules.ParteVendedor
+                            && s.DocTipo == SignatureDocTipos.Compraventa && s.Estado == SignatureEstados.Firmada)))
+                == firmadoCompleto);
+        }
+
+        if (filter.CreatedFrom is { } createdFrom)
+            query = query.Where(x => x.CreatedAt >= createdFrom);
+        if (filter.CreatedTo is { } createdTo)
+            query = query.Where(x => x.CreatedAt <= createdTo);
+        if (filter.UpdatedFrom is { } updatedFrom)
+            query = query.Where(x => x.UpdatedAt != null && x.UpdatedAt >= updatedFrom);
+        if (filter.UpdatedTo is { } updatedTo)
+            query = query.Where(x => x.UpdatedAt != null && x.UpdatedAt <= updatedTo);
+
+        return query;
+    }
+
+    /// <summary>
+    /// Aplica el <c>ORDER BY</c> ya resuelto contra la lista blanca (<see cref="ProcedureInstanceSortBy"/>).
+    /// Todas las ramas desempatan por <c>Id</c> para que la paginación sea DETERMINISTA (sin esto, filas
+    /// con el mismo valor de orden —p. ej. muchos VIN nulos— podrían repetirse o saltarse entre páginas).
+    /// "Gestor" ordena por el <c>DisplayName</c> resuelto vía subconsulta correlacionada a
+    /// <c>identity.users</c> (no se denormaliza — ver justificación en Ddl/47-tramites-campos-busqueda.sql).
+    /// </summary>
+    private IOrderedQueryable<ProcedureInstance> ApplyListSort(
+        IQueryable<ProcedureInstance> query, ProcedureInstanceSortBy sortBy, SortDirection direction)
+    {
+        var descending = direction == SortDirection.Descending;
+        return sortBy switch
+        {
+            ProcedureInstanceSortBy.Vin => descending
+                ? query.OrderByDescending(x => x.Vin).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.Vin).ThenBy(x => x.Id),
+            ProcedureInstanceSortBy.Placa => descending
+                ? query.OrderByDescending(x => x.Plate).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.Plate).ThenBy(x => x.Id),
+            ProcedureInstanceSortBy.Comprador => descending
+                ? query.OrderByDescending(x => x.CompradorNombre).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.CompradorNombre).ThenBy(x => x.Id),
+            ProcedureInstanceSortBy.UpdatedAt => descending
+                ? query.OrderByDescending(x => x.UpdatedAt).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.UpdatedAt).ThenBy(x => x.Id),
+            ProcedureInstanceSortBy.CreatedAt => descending
+                ? query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
+                : query.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            ProcedureInstanceSortBy.Gestor => descending
+                ? query.OrderByDescending(x => db.Users.Where(u => u.Id == x.CreatedByUserId).Select(u => u.DisplayName).FirstOrDefault())
+                    .ThenByDescending(x => x.Id)
+                : query.OrderBy(x => db.Users.Where(u => u.Id == x.CreatedByUserId).Select(u => u.DisplayName).FirstOrDefault())
+                    .ThenBy(x => x.Id),
+            // Default: mismo orden histórico de ListWithSummaryGraphAsync (prioritarios primero, luego
+            // recencia), con el desempate determinista añadido.
+            _ => query.OrderByDescending(x => x.Prioritario).ThenByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id),
+        };
+    }
 }

@@ -24,6 +24,7 @@ import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { MandatarioSection } from './MandatarioSection';
 import { documentLabel } from '@/lib/tramites/document-labels';
+import { InlineAlert } from '@/components/atom/InlineAlert';
 import type {
   Actor,
   BiometricValidation,
@@ -2135,6 +2136,8 @@ function PlateFlowCompleteSection({
   const [working, setWorking] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Salvedad con la que el trámite avanzó (no bloquea, pero el gestor debe verla). */
+  const [warning, setWarning] = useState<string | null>(null);
 
   useEffect(() => {
     if (!instanceId) return;
@@ -2163,13 +2166,16 @@ function PlateFlowCompleteSection({
     setWorking(true);
     setError(null);
     setMsg(null);
+    setWarning(null);
     try {
-      await tramitesClient.completePlateFlow(instanceId, {
+      const res = await tramitesClient.completePlateFlow(instanceId, {
         soatPagado,
         impuestoDepartamentalPagado: impuestoPagado,
       });
       setPlateFlowStatus('terminado');
       setMsg('Trámite marcado como Terminado. El OT ya puede aprobar o rechazar.');
+      // El trámite pudo avanzar con salvedades (p. ej. sin SOAT vigente): hay que decirlo.
+      setWarning(res?.warningMessage ?? null);
       onRefresh?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo completar el proceso de placa.');
@@ -2221,6 +2227,11 @@ function PlateFlowCompleteSection({
       </button>
 
       {msg ? <p className="m-0 text-xs text-green-700">{msg}</p> : null}
+      {warning ? (
+        <InlineAlert tone="warning" title="Trámite enviado al OT con advertencia">
+          {warning}
+        </InlineAlert>
+      ) : null}
       {error ? (
         <p role="alert" className="m-0 text-xs text-orange-700">
           {error}

@@ -25,7 +25,7 @@ import {
   LegalRepresentativesFormPanel,
   type PanelMode,
 } from "./LegalRepresentativesFormPanel";
-import { fullName, maskDocument, procedureTypeLabels, signatureStatus } from "./legalRepresentativesDisplay";
+import { formatDocumentNumber, fullName, procedureTypeLabels, signatureStatus } from "./legalRepresentativesDisplay";
 
 const PAGE_SIZE = 20;
 
@@ -33,7 +33,8 @@ const PAGE_SIZE = 20;
  * Pestaña "Representantes legales" (HU #10904, Feature #10852): CRUD paginado del directorio de
  * representantes por compañía. HU #11178: una sola superficie — el panel unificado `view`/`create`/`edit`
  * reemplaza la ventana de detalle separada (`LegalRepresentativeDetailModal`, retirada en esta HU).
- * El número de documento (PII, Ley 1581) se enmascara en la tabla.
+ * El número de documento se muestra completo: los últimos cuatro dígitos no bastan para identificar
+ * al representante durante la operación (decisión traída de develop al integrar).
  */
 export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
   const { show } = useToast();
@@ -310,7 +311,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
                         {fullName(item)}
                       </td>
                       <td className="border-y px-4 py-3 font-mono">
-                        {item.documentType} {maskDocument(item.documentNumber)}
+                        {item.documentType} {formatDocumentNumber(item.documentNumber)}
                       </td>
                       <td className="border-y px-4 py-3">
                         <div className="flex flex-wrap gap-1">

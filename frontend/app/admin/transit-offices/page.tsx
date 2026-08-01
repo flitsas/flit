@@ -50,7 +50,7 @@ function AdminTransitOfficesPageInner() {
         if (controller.signal.aborted) {
           return;
         }
-        router.replace(otHubModulePath(profile.transitOfficeId, "tramites"));
+        router.replace(otHubModulePath(profile.transitOfficeId, "client-procedures"));
       })
       .catch(() => undefined);
     return () => controller.abort();
@@ -118,7 +118,7 @@ function AdminTransitOfficesPageInner() {
           setCreateOpen(false);
           show(`Organismo de tránsito «${tenant.legalName}» creado.`, "success");
           setListVersion((v) => v + 1);
-          router.push(otHubModulePath(tenant.transitOfficeId, "tramites"));
+          router.push(otHubModulePath(tenant.transitOfficeId, "client-procedures"));
         }}
       />
     </div>

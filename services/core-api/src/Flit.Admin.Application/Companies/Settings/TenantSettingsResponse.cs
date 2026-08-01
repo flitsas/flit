@@ -19,6 +19,8 @@ public sealed record TenantSettingsResponse(
     bool PreasignacionPlacaActiva,
     // Sub-flujo post-radicación: con placa completa, omitir Asignado → Terminado.
     bool PlateFlowSkipToTerminado,
+    // Validación del SOAT ante el RUNT al procesar (sub-estado asignado).
+    bool ValidarSoatConRunt,
     AvaluoProviderConfigDto AvaluoProviderConfig,
     // FEATURE 02 — fuente de comparendos (internal | external).
     string FinesQuerySource);
