@@ -49,11 +49,16 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
     RunPreflightHandler preflightHandler,
     IPreflightPreviewStore previewStore,
     ITransitOfficeResolver transitOfficeResolver,
-    TramiteValidationPolicy? validationPolicy = null)
+    TramiteValidationPolicy? validationPolicy = null,
+    IOtOperabilityGate? otOperability = null)
 {
     // HU #10970 — mismo modo por ambiente que el resto del flujo. Sin inyectar ⇒ bloqueo duro.
     private readonly TramiteValidationPolicy _validationPolicy =
         validationPolicy ?? TramiteValidationPolicy.BlockAll;
+
+    // HU #11200 — misma pareja de comprobaciones que el paso 1 y que la radicación: grant vigente +
+    // organismo operativo. Sin inyectar ⇒ permisivo (solo queda el grant).
+    private readonly IOtOperabilityGate _otOperability = otOperability ?? NullOtOperabilityGate.Instance;
 
     public async Task<(CreateFromConsultaResult? Result, string? Error, Guid? ExistingProcedureInstanceId, VehicleStateBlock? VehicleState)> HandleAsync(
         CreateFromConsultaRequest request,
@@ -84,7 +89,8 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
             secretaria = await transitOfficeResolver
                 .ResolveEnabledByIdAsync(request.TenantId, elegido, ct)
                 .ConfigureAwait(false);
-            if (secretaria is null)
+            if (secretaria is null
+                || !await _otOperability.IsOperableAsync(secretaria.Id, ct).ConfigureAwait(false))
                 return (null, TransitOfficeSelectionPolicy.UnavailableErrorCode, null, null);
         }
 

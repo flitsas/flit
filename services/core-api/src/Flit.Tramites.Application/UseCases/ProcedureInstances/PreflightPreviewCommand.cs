@@ -136,10 +136,17 @@ public sealed class RunPreflightPreviewHandler(
     IPreflightPreviewStore previewStore,
     ITransitOfficeResolver transitOfficeResolver,
     IConsultationBlockingPolicy? blockingPolicy = null,
-    TramiteValidationPolicy? validationPolicy = null)
+    TramiteValidationPolicy? validationPolicy = null,
+    IOtOperabilityGate? otOperability = null)
 {
     private readonly IConsultationBlockingPolicy _blockingPolicy =
         blockingPolicy ?? NullConsultationBlockingPolicy.Instance;
+
+    // HU #11200 — el gate del paso 1 comprueba lo MISMO que el de radicación: grant vigente (resolver)
+    // + organismo operativo en la plataforma (esta compuerta). Si comprobara menos, el paso 1 dejaría
+    // pasar trámites que la radicación rechaza, que es justamente lo que la HU viene a evitar. Sin
+    // inyectar ⇒ permisivo, para no bloquear a los tests que no ejercitan la operabilidad.
+    private readonly IOtOperabilityGate _otOperability = otOperability ?? NullOtOperabilityGate.Instance;
 
     // HU #10970 — mismos modos por ambiente que RunPreflightHandler: el paso 1 del wizard no puede
     // divergir del preflight que se persiste al crear el trámite. Sin inyectar ⇒ bloqueo duro.
@@ -178,7 +185,8 @@ public sealed class RunPreflightPreviewHandler(
             secretaria = await transitOfficeResolver
                 .ResolveEnabledByIdAsync(request.TenantId, elegido, ct)
                 .ConfigureAwait(false);
-            if (secretaria is null)
+            if (secretaria is null
+                || !await _otOperability.IsOperableAsync(secretaria.Id, ct).ConfigureAwait(false))
                 return (null, TransitOfficeSelectionPolicy.UnavailableErrorCode, null, null);
         }
 
@@ -232,6 +240,18 @@ public sealed class RunPreflightPreviewHandler(
         checks.AddRange(vehicleChecks);
         foreach (var p in vehicleProviders)
             providersUsed.Add(p);
+
+        // HU #11200 — TRASPASO: el organismo no se elige, lo impone el RUNT (donde está matriculado el
+        // vehículo). Lo que se adelanta al paso 1 es la comprobación de que ahí se puede radicar. Va
+        // aquí, justo después de la consulta del vehículo y antes de los comparendos, para no gastar
+        // consultas de un trámite que no va a poder seguir.
+        if (!esMatricula)
+        {
+            var bloqueoOt = await ValidarOrganismoDelRuntAsync(request.TenantId, vehicleFields, ct)
+                .ConfigureAwait(false);
+            if (bloqueoOt is not null)
+                return (null, bloqueoOt, null, null);
+        }
 
         VehicleStateBlock? vehicleStateBlock = null;
 
@@ -299,6 +319,36 @@ public sealed class RunPreflightPreviewHandler(
             null,
             null,
             null);
+    }
+
+    /// <summary>
+    /// HU #11200 (AC1/AC2/AC3) — comprueba que el organismo donde el RUNT dice que está matriculado el
+    /// vehículo sirve para radicar: activo en el catálogo y con grant vigente (resolver), y operativo en
+    /// la plataforma (compuerta). Devuelve el código de bloqueo, o <c>null</c> si se puede continuar.
+    ///
+    /// <para>Si el RUNT no devolvió el nombre del organismo NO se bloquea: no hay nada que validar y
+    /// negarle el trámite al gestor por un dato que no vino sería castigarlo por un fallo ajeno. Ese caso
+    /// lo sigue cubriendo la comprobación de la radicación, que es la que no se puede eludir.</para>
+    /// </summary>
+    private async Task<string?> ValidarOrganismoDelRuntAsync(
+        Guid tenantId,
+        IReadOnlyList<HydratedField> vehicleFields,
+        CancellationToken ct)
+    {
+        var runtName = vehicleFields
+            .FirstOrDefault(f => string.Equals(f.FieldKey, "transit_office_name", StringComparison.OrdinalIgnoreCase))
+            ?.ValueText;
+        if (string.IsNullOrWhiteSpace(runtName))
+            return null;
+
+        var organismo = await transitOfficeResolver
+            .ResolveEnabledByNameAsync(tenantId, runtName, ct)
+            .ConfigureAwait(false);
+
+        return organismo is null
+            || !await _otOperability.IsOperableAsync(organismo.Id, ct).ConfigureAwait(false)
+            ? TransitOfficeSelectionPolicy.UnavailableErrorCode
+            : null;
     }
 
     /// <summary>
