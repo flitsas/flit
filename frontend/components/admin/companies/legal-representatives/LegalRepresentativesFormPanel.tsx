@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Building2, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
 import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
+import { StatusBadge } from "@/components/atom/StatusBadge";
 import { ApiValidationError } from "@/lib/api/types";
 import type {
   AssignableProcedureType,
@@ -12,8 +13,15 @@ import type {
   LegalRepresentativeItem,
   LegalRepresentativeSaved,
 } from "@/lib/api/admin-legal-representatives";
+import { fetchLegalRepresentative } from "@/lib/api/admin-legal-representatives";
 import { digitsOnly } from "@/lib/format/currency";
 import { sanitizeDocNumber } from "@/lib/validation/fieldRules";
+import { identityUi, vigenciaLabel } from "@/lib/admin/identity-vigencia";
+import { formatFecha } from "@/lib/format/date";
+import { procedureTypeLabels } from "./legalRepresentativesDisplay";
+
+/** Modo del panel: consulta (solo lectura), alta (formulario en blanco) o edición (formulario precargado). */
+export type PanelMode = "view" | "create" | "edit";
 
 // Tipos de documento del representante — mismos que en el resto de la app (ActorsForm / Baúl).
 const DOC_TYPE_OPTIONS: { value: string; label: string }[] = [
@@ -25,18 +33,23 @@ const DOC_TYPE_OPTIONS: { value: string; label: string }[] = [
 
 export interface LegalRepresentativesFormPanelProps {
   open: boolean;
-  /** Representante a editar; `null` = alta. */
-  editing: LegalRepresentativeItem | null;
-  /** Catálogo de tipos de trámite asignables (activos + publicados) cargado del backend. */
+  /** Modo del panel: consulta, alta o edición. */
+  mode: PanelMode;
+  /** ID del representante a cargar (view/edit); null en alta. */
+  representativeId: string | null;
+  /** TenantId necesario para la llamada a GET /{id}. */
+  tenantId: string;
+  /** Catálogo de tipos de trámite asignables (activos + publicados). */
   procedureTypes: AssignableProcedureType[];
   onClose: () => void;
   onSubmit: (input: LegalRepresentativeInput) => Promise<LegalRepresentativeSaved>;
   onSaved: (saved: LegalRepresentativeSaved) => void;
   onError: (message: string) => void;
+  /** AC2: el usuario eligió editar desde la vista de consulta; el padre cambia el modo sin cerrar. */
+  onSwitchToEdit: () => void;
 }
 
-// Una fila de empresa dentro del formulario (HU #10934): el representante se crea una vez y se le
-// agregan empresas. La primera fila es la compañía primaria.
+// Una fila de empresa dentro del formulario (HU #10934).
 interface CompanyRow {
   nit: string;
   name: string;
@@ -78,10 +91,7 @@ const EMPTY: FormState = {
 
 // HU #11058 — la precarga tiene que traer TODAS las compañías del representante y el contacto COMPLETO
 // de cada una. El guardado reenvía esta lista y el backend hace upsert con lo que reciba: un campo que
-// llegue en blanco se persiste como null. Antes solo se precargaban NIT y razón social, así que cada
-// edición del representante borraba el correo, la dirección, la ciudad y el teléfono de sus compañías.
-// Si por compatibilidad la respuesta no trae `companies`, cae a la compañía primaria denormalizada
-// (que no proyecta contacto: es el camino legado y el backend siempre envía `companies`).
+// llegue en blanco se persiste como null.
 function fromItem(item: LegalRepresentativeItem): FormState {
   const companies: CompanyRow[] =
     item.companies && item.companies.length > 0
@@ -110,33 +120,89 @@ function fromItem(item: LegalRepresentativeItem): FormState {
 }
 
 /**
- * Panel de alta/edición de un representante legal (HU #10904): datos de la compañía representada,
- * datos del representante y los tipos de trámite que puede firmar. Los errores 422 del backend se
- * muestran por campo. El guardado puede emitir la señal `sin_firma_ni_identidad` (no bloqueante):
- * la resuelve el contenedor tras `onSaved`.
+ * Panel lateral unificado del representante legal (HU #11178): una sola superficie con tres modos:
+ * - `view`: consulta con toda la información (identidad, firma, compañías, persona, trámites).
+ *   El botón «Editar» llama a `onSwitchToEdit` para pasar a `edit` SIN cerrar (AC2).
+ * - `create`: formulario en blanco para el alta. Tras guardar emite `onSaved` y el padre decide
+ *   (típicamente: no cierra y pasa a `edit` sobre el recién creado — AC5).
+ * - `edit`: formulario precargado con `GET /{id}` completo (compañías, identidad, firma — AC3).
+ *   Muestra skeleton de carga mientras obtiene el detalle.
  */
 export function LegalRepresentativesFormPanel({
   open,
-  editing,
+  mode,
+  representativeId,
+  tenantId,
   procedureTypes,
   onClose,
   onSubmit,
   onSaved,
   onError,
+  onSwitchToEdit,
 }: LegalRepresentativesFormPanelProps) {
+  const [detail, setDetail] = useState<LegalRepresentativeItem | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [banner, setBanner] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // AC3 — al abrir en view/edit se carga el representante completo desde GET /{id}. Si ya se cargó
+  // en view y el usuario pulsa «Editar» (AC2), el padre solo cambia el modo (mode: view → edit); el
+  // detalle ya está en caché y no se vuelve a pedir, evitando el parpadeo que AC2 prohíbe.
   useEffect(() => {
-    if (!open) return;
-    // Reinicia el formulario al abrir (alta en blanco o edición precargada).
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza el formulario al abrir el panel
-    setForm(editing ? fromItem(editing) : EMPTY);
+    if (!open) {
+      setDetail(null);
+      setDetailLoading(false);
+      setDetailError(false);
+      return;
+    }
+
     setFieldErrors({});
     setBanner(null);
-  }, [open, editing]);
+
+    if (mode === "create") {
+      setForm(EMPTY);
+      setDetail(null);
+      return;
+    }
+
+    if (!representativeId) return;
+
+    // Detalle ya en caché para este representante → no re-pedir.
+    if (detail?.id === representativeId) {
+      if (mode === "edit") {
+        setForm(fromItem(detail));
+      }
+      return;
+    }
+
+    setDetailLoading(true);
+    setDetailError(false);
+    const controller = new AbortController();
+
+    fetchLegalRepresentative(tenantId, representativeId, controller.signal)
+      .then((full) => {
+        if (controller.signal.aborted) return;
+        setDetail(full);
+        setDetailLoading(false);
+        if (mode === "edit") {
+          setForm(fromItem(full));
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setDetailLoading(false);
+          setDetailError(true);
+        }
+      });
+
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, mode, representativeId, tenantId]);
+
+  // ── Helpers de formulario ────────────────────────────────────────────────────
 
   const patch = (p: Partial<FormState>) => setForm((f) => ({ ...f, ...p }));
 
@@ -152,7 +218,6 @@ export function LegalRepresentativesFormPanel({
   const removeCompany = (index: number) =>
     setForm((f) => ({
       ...f,
-      // Nunca queda sin empresas: si se elimina la última, se deja una fila en blanco.
       companies: f.companies.length <= 1 ? [{ ...EMPTY_COMPANY }] : f.companies.filter((_, i) => i !== index),
     }));
 
@@ -164,8 +229,6 @@ export function LegalRepresentativesFormPanel({
         : [...f.procedureTypeIds, id],
     }));
 
-  // Validación en cliente (los mismos requeridos que valida el backend): al menos una empresa con NIT
-  // y razón social, y los datos del representante-persona.
   const companiesValid =
     form.companies.length > 0 &&
     form.companies.every((c) => c.nit.trim() !== "" && c.name.trim() !== "");
@@ -224,7 +287,7 @@ export function LegalRepresentativesFormPanel({
         setBanner("Revisa los campos marcados: hay valores inválidos.");
       } else {
         onError(
-          editing
+          mode === "edit"
             ? "No se pudo actualizar el representante. Intenta de nuevo."
             : "No se pudo registrar el representante. Intenta de nuevo.",
         );
@@ -234,31 +297,239 @@ export function LegalRepresentativesFormPanel({
     }
   };
 
-  const footer = (
-    <button
-      type="button"
-      disabled={!canSubmit}
-      onClick={() => void handleSubmit()}
-      className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white disabled:opacity-50"
-      style={{ background: "#557EFF" }}
-    >
-      {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-      {editing ? "Guardar cambios" : "Registrar representante"}
-    </button>
-  );
-
   const errStyle = (field: string) =>
     fieldErrors[field] ? { borderColor: "#FF4E00" } : undefined;
+
+  // ── Metadatos del panel ──────────────────────────────────────────────────────
+
+  const title =
+    mode === "view"
+      ? "Detalle del representante"
+      : mode === "edit"
+        ? "Editar representante legal"
+        : "Nuevo representante legal";
+
+  const ariaLabel =
+    mode === "view"
+      ? "Ver representante legal"
+      : mode === "edit"
+        ? "Editar representante legal"
+        : "Registrar representante legal";
+
+  const footer =
+    mode === "view" ? (
+      <button
+        type="button"
+        onClick={onSwitchToEdit}
+        className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white"
+        style={{ background: "#557EFF" }}
+        aria-label="Pasar a modo edición"
+      >
+        <Pencil className="h-4 w-4" aria-hidden="true" />
+        Editar
+      </button>
+    ) : (
+      <button
+        type="button"
+        disabled={!canSubmit}
+        onClick={() => void handleSubmit()}
+        className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white disabled:opacity-50"
+        style={{ background: "#557EFF" }}
+      >
+        {submitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+        {mode === "edit" ? "Guardar cambios" : "Registrar representante"}
+      </button>
+    );
+
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <OtSidePanel
       open={open}
-      title={editing ? "Editar representante legal" : "Nuevo representante legal"}
-      ariaLabel={editing ? "Editar representante legal" : "Registrar representante legal"}
+      title={title}
+      ariaLabel={ariaLabel}
       onClose={onClose}
       disabled={submitting}
       footer={footer}
     >
+      {mode === "view" ? renderView() : renderForm()}
+    </OtSidePanel>
+  );
+
+  // ── Vista de consulta (modo view) ────────────────────────────────────────────
+
+  function renderView() {
+    if (detailLoading) return <PanelSkeleton />;
+    if (detailError) {
+      return (
+        <p
+          role="alert"
+          className="rounded-xl border px-3 py-2 text-[11px] font-medium"
+          style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+        >
+          No se pudo cargar la información del representante. Cierra e inténtalo de nuevo.
+        </p>
+      );
+    }
+    if (!detail) return <PanelSkeleton />;
+
+    const idUi = identityUi(detail.identityStatus);
+    const vigLabel = vigenciaLabel(detail.identityStatus, detail.identityValidUntil);
+    const tramites = procedureTypeLabels(detail.procedureTypeIds, procedureTypes);
+
+    return (
+      <div className="space-y-5">
+        {/* Bloques de identidad y firma del baúl */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div
+            className="rounded-xl border border-[#DFE5ED] p-3"
+            data-testid="rl-identidad"
+          >
+            <p className="text-[11px] font-bold uppercase tracking-wide opacity-60">
+              Validación de identidad
+            </p>
+            <div className="mt-1.5 space-y-1.5">
+              <span
+                className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                style={idUi.style}
+              >
+                {idUi.label}
+              </span>
+              {vigLabel && (
+                <p className="text-[10px] opacity-60" data-testid="rl-identidad-vigencia">
+                  {vigLabel}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div
+            className="rounded-xl border border-[#DFE5ED] p-3"
+            data-testid="rl-firma-baul"
+          >
+            <p className="text-[11px] font-bold uppercase tracking-wide opacity-60">
+              Firma del baúl
+            </p>
+            <div className="mt-1.5">
+              <span
+                className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                style={
+                  detail.firmaBaulVigente
+                    ? { background: "rgba(112,207,58,0.14)", color: "#3f7a15" }
+                    : { background: "rgba(245,158,11,0.16)", color: "#b45309" }
+                }
+              >
+                {detail.firmaBaulVigente
+                  ? "Firma vigente"
+                  : detail.signatureVaultId
+                    ? "Firma vencida"
+                    : "Sin firma registrada"}
+              </span>
+              {detail.firmaBaulVigente && detail.firmaBaulVigenteHasta && (
+                <p className="mt-1 text-[10px] opacity-60">
+                  Válida hasta {formatFecha(detail.firmaBaulVigenteHasta)}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Datos personales del representante */}
+        <section aria-label="Datos del representante">
+          <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wide opacity-60">
+            Representante legal
+          </h3>
+          <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+            <DlField label="Tipo de documento" value={detail.documentType} />
+            <DlField label="Número de documento" value={detail.documentNumber} />
+            <DlField label="Nombres" value={detail.name} />
+            <DlField label="Primer apellido" value={detail.firstLastName} />
+            {detail.secondLastName && (
+              <DlField label="Segundo apellido" value={detail.secondLastName} />
+            )}
+            {detail.email && <DlField label="Correo" value={detail.email} />}
+            {detail.phone && <DlField label="Teléfono" value={detail.phone} />}
+            {detail.city && <DlField label="Ciudad" value={detail.city} />}
+          </dl>
+        </section>
+
+        {/* Empresas representadas (sin acordeón de escrituras — HU #11179) */}
+        {detail.companies.length > 0 && (
+          <section aria-label="Empresas representadas">
+            <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wide opacity-60">
+              Empresas representadas
+            </h3>
+            <div className="space-y-2">
+              {detail.companies.map((company) => (
+                <div
+                  key={company.id}
+                  className="space-y-1 rounded-xl border px-3 py-3"
+                  style={{ borderColor: "#DFE5ED" }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Building2
+                      className="h-4 w-4 shrink-0"
+                      style={{ color: "#557EFF" }}
+                      aria-hidden="true"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold">
+                        {company.name}
+                        {company.isPrimary && (
+                          <span
+                            className="ml-1.5 text-[10px] font-normal opacity-70"
+                            aria-label="Compañía principal"
+                          >
+                            (principal)
+                          </span>
+                        )}
+                      </p>
+                      <p className="font-mono text-[11px] opacity-60">{company.nit}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Tipos de trámite */}
+        <section aria-label="Tipos de trámite">
+          <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wide opacity-60">
+            Tipos de trámite que puede firmar
+          </h3>
+          {tramites.length === 0 ? (
+            <p className="text-[11px] opacity-60">Ninguno asignado.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {tramites.map((t, i) => (
+                <StatusBadge key={`${t}-${i}`} tone="info" label={t} />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  }
+
+  // ── Formulario (modos create y edit) ─────────────────────────────────────────
+
+  function renderForm() {
+    // En edit: skeleton mientras se carga el detalle completo (AC3).
+    if (mode === "edit" && detailLoading) return <PanelSkeleton />;
+    if (mode === "edit" && detailError) {
+      return (
+        <p
+          role="alert"
+          className="rounded-xl border px-3 py-2 text-[11px] font-medium"
+          style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+        >
+          No se pudo cargar la información del representante. Cierra el panel e inténtalo de nuevo.
+        </p>
+      );
+    }
+
+    return (
       <div className="space-y-5">
         {banner && (
           <p
@@ -270,6 +541,7 @@ export function LegalRepresentativesFormPanel({
           </p>
         )}
 
+        {/* Empresas representadas */}
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-[11px] font-bold uppercase tracking-wide opacity-60">
@@ -281,7 +553,7 @@ export function LegalRepresentativesFormPanel({
               className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold"
               style={{ color: "#557EFF", borderColor: "#557EFF" }}
             >
-              <Plus className="h-3.5 w-3.5" /> Agregar empresa
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Agregar empresa
             </button>
           </div>
           <p className="text-[11px] opacity-60">
@@ -292,7 +564,9 @@ export function LegalRepresentativesFormPanel({
           {form.companies.map((company, index) => {
             const err = (suffix: string) =>
               fieldErrors[`companies[${index}].${suffix}`] ??
-              (index === 0 ? fieldErrors[`company${suffix.charAt(0).toUpperCase()}${suffix.slice(1)}`] : undefined);
+              (index === 0
+                ? fieldErrors[`company${suffix.charAt(0).toUpperCase()}${suffix.slice(1)}`]
+                : undefined);
             return (
               <div
                 key={index}
@@ -311,7 +585,7 @@ export function LegalRepresentativesFormPanel({
                       className="flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold"
                       style={{ color: "#FF4E00", borderColor: "#f0c38e" }}
                     >
-                      <Trash2 className="h-3.5 w-3.5" /> Quitar
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Quitar
                     </button>
                   )}
                 </div>
@@ -340,7 +614,11 @@ export function LegalRepresentativesFormPanel({
                       placeholder="Razón social"
                     />
                   </Field>
-                  <Field id={`lr-companyEmail-${index}`} label="Correo (opcional)" error={err("email")}>
+                  <Field
+                    id={`lr-companyEmail-${index}`}
+                    label="Correo (opcional)"
+                    error={err("email")}
+                  >
                     <input
                       id={`lr-companyEmail-${index}`}
                       type="email"
@@ -349,7 +627,11 @@ export function LegalRepresentativesFormPanel({
                       className={OT_INPUT_CLS}
                     />
                   </Field>
-                  <Field id={`lr-companyPhone-${index}`} label="Teléfono (opcional)" error={err("phone")}>
+                  <Field
+                    id={`lr-companyPhone-${index}`}
+                    label="Teléfono (opcional)"
+                    error={err("phone")}
+                  >
                     <input
                       id={`lr-companyPhone-${index}`}
                       type="tel"
@@ -361,7 +643,11 @@ export function LegalRepresentativesFormPanel({
                       className={OT_INPUT_CLS}
                     />
                   </Field>
-                  <Field id={`lr-companyAddress-${index}`} label="Dirección (opcional)" error={err("address")}>
+                  <Field
+                    id={`lr-companyAddress-${index}`}
+                    label="Dirección (opcional)"
+                    error={err("address")}
+                  >
                     <input
                       id={`lr-companyAddress-${index}`}
                       value={company.address}
@@ -369,7 +655,11 @@ export function LegalRepresentativesFormPanel({
                       className={OT_INPUT_CLS}
                     />
                   </Field>
-                  <Field id={`lr-companyCity-${index}`} label="Ciudad (opcional)" error={err("city")}>
+                  <Field
+                    id={`lr-companyCity-${index}`}
+                    label="Ciudad (opcional)"
+                    error={err("city")}
+                  >
                     <input
                       id={`lr-companyCity-${index}`}
                       value={company.city}
@@ -383,6 +673,7 @@ export function LegalRepresentativesFormPanel({
           })}
         </section>
 
+        {/* Datos del representante-persona */}
         <section className="space-y-3">
           <h3 className="text-[11px] font-bold uppercase tracking-wide opacity-60">
             Representante legal
@@ -410,7 +701,11 @@ export function LegalRepresentativesFormPanel({
                 ))}
               </select>
             </Field>
-            <Field id="lr-docnumber" label="Número de documento" error={fieldErrors.documentNumber}>
+            <Field
+              id="lr-docnumber"
+              label="Número de documento"
+              error={fieldErrors.documentNumber}
+            >
               <input
                 id="lr-docnumber"
                 value={form.documentNumber}
@@ -446,7 +741,11 @@ export function LegalRepresentativesFormPanel({
                 style={errStyle("firstLastName")}
               />
             </Field>
-            <Field id="lr-secondLastName" label="Segundo apellido (opcional)" error={fieldErrors.secondLastName}>
+            <Field
+              id="lr-secondLastName"
+              label="Segundo apellido (opcional)"
+              error={fieldErrors.secondLastName}
+            >
               <input
                 id="lr-secondLastName"
                 value={form.secondLastName}
@@ -503,12 +802,17 @@ export function LegalRepresentativesFormPanel({
           </div>
         </section>
 
+        {/* Tipos de trámite */}
         <fieldset className="space-y-2">
           <legend className="text-[11px] font-bold uppercase tracking-wide opacity-60">
             Tipos de trámite que puede firmar
           </legend>
           {fieldErrors.procedureTypeIds && (
-            <p className="text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+            <p
+              className="text-[11px] font-medium"
+              style={{ color: "#FF4E00" }}
+              role="alert"
+            >
               {fieldErrors.procedureTypeIds}
             </p>
           )}
@@ -541,9 +845,11 @@ export function LegalRepresentativesFormPanel({
           )}
         </fieldset>
       </div>
-    </OtSidePanel>
-  );
+    );
+  }
 }
+
+// ── Componentes auxiliares ───────────────────────────────────────────────────
 
 function Field({
   id,
@@ -567,6 +873,30 @@ function Field({
           {error}
         </p>
       )}
+    </div>
+  );
+}
+
+function DlField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="font-semibold opacity-60">{label}</dt>
+      <dd className="mt-0.5">{value}</dd>
+    </div>
+  );
+}
+
+/** Skeleton de carga para el panel (vista/edición mientras llega el GET /{id}). */
+function PanelSkeleton() {
+  return (
+    <div className="space-y-4" aria-busy="true" aria-label="Cargando información del representante">
+      {[1, 2, 3, 4].map((n) => (
+        <div
+          key={n}
+          className="h-10 animate-pulse rounded-xl"
+          style={{ background: "#DFE5ED" }}
+        />
+      ))}
     </div>
   );
 }

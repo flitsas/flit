@@ -38,6 +38,12 @@ export interface LegalRepresentativeCompanySummary {
   name: string;
   deeds: RepresentativeDeed[];
   /**
+   * HU #11177 — bandera explícita que indica si esta es la compañía principal del representante.
+   * Exactamente UNA compañía viene marcada como principal en cada respuesta. No inferir de la
+   * columna denormalizada deprecada `representedCompanyId`.
+   */
+  isPrimary?: boolean;
+  /**
    * HU #11058 — contacto de la compañía. El formulario de edición reenvía la lista completa de
    * compañías y el backend hace upsert con lo que reciba, así que ESTOS CAMPOS TIENEN QUE
    * PRECARGARSE: mandarlos en blanco los borra.
