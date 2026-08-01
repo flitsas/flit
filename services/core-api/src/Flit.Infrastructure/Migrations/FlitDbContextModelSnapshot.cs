@@ -3636,11 +3636,21 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("description");
 
+                    b.Property<short?>("GeneratedSortOrder")
+                        .HasColumnType("smallint")
+                        .HasColumnName("generated_sort_order");
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
+
+                    b.Property<bool>("IsSystemGenerated")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_system_generated");
 
                     b.Property<long>("MaxSizeBytes")
                         .HasColumnType("bigint")

@@ -27,6 +27,19 @@ public sealed class DocumentType
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>
+    /// HU #11181 — el documento lo produce FLIT (FUR, certificados, mandato, escrituras) en vez de
+    /// adjuntarlo el gestor. Entra en la lista ordenable del OT; <b>no</b> excluye del checklist
+    /// (<c>compraventa</c> e <c>impronta</c> son generados y a la vez documentos del checklist).
+    /// </summary>
+    public bool IsSystemGenerated { get; set; }
+
+    /// <summary>
+    /// HU #11181 — orden por defecto del documento generado en el expediente mientras el OT no
+    /// configure su prelación. <c>null</c> en los documentos que solo se adjuntan.
+    /// </summary>
+    public short? GeneratedSortOrder { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public Guid? CreatedBy { get; set; }
