@@ -182,6 +182,59 @@ public sealed class ConsolidadoHandlerTests
         _storage.Saved.Should().BeEmpty(); // no generó/sobrescribió el consolidado
     }
 
+    /// <summary>
+    /// Índice de cada documento dentro del consolidado, por su nombre de archivo (las pruebas
+    /// guardan el filename como contenido, así que el PDF fusionado es su concatenación).
+    /// </summary>
+    private IReadOnlyList<int> PosicionesEnConsolidado(params string[] filenames)
+    {
+        var content = ConsolidadoContent();
+        return [.. filenames.Select(f => content.IndexOf(f, StringComparison.Ordinal))];
+    }
+
+    [Fact]
+    public async Task HU11183_AC3_TraspasoSinPrelacionConfigurada_ConservaElOrdenDeHoy()
+    {
+        // Golden test del orden vigente de traspaso: la HU #11174 hace configurable la prelación,
+        // pero un OT que no ha configurado nada debe seguir recibiendo EXACTAMENTE este expediente.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        // FUR, certificados, compraventa e impronta por prelación; los que la lista no nombra
+        // (rtm, paz y salvo, cédulas) al final por fecha de carga.
+        var posiciones = PosicionesEnConsolidado(
+            "fur.pdf", "cert.pdf", "cert_vend.pdf", "compraventa.pdf", "impronta.pdf",
+            "soat.pdf", "rtm.pdf", "paz_salvo.pdf", "cedulas.pdf");
+        posiciones.Should().NotContain(-1);
+        posiciones.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task HU11183_AC4_MatriculaSinPrelacionConfigurada_ConservaElOrdenDeHoy()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var posiciones = PosicionesEnConsolidado(
+            "fur.pdf", "cert.pdf", "factura.pdf", "aduana.pdf", "impronta.pdf");
+        posiciones.Should().NotContain(-1);
+        posiciones.Should().BeInAscendingOrder();
+    }
+
     [Fact]
     public async Task HandleAsync_Matricula_OrdenaPorModalidad()
     {
