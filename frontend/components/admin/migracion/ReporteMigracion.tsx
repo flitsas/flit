@@ -1,16 +1,20 @@
 "use client";
 
 import { AlertTriangle, ArrowUpRight, CheckCircle2, Info, XCircle } from "lucide-react";
-import { enlaceTramite, type MigracionRespuesta } from "@/lib/migracion/types";
+import {
+  enlaceTramite,
+  etiquetaConteo,
+  etiquetaEstadoInstancia,
+  type MigracionRespuesta,
+} from "@/lib/migracion/types";
 
 /**
  * El reporte de una migración, en el mismo orden en que lo imprime la consola por SSH: de dónde
  * salió, si ya estaba, qué hizo cada instancia y a dónde fue a parar.
  *
- * Los conteos se muestran TAL CUAL vienen del host, sin traducir las claves. Son las mismas
- * palabras que aparecen en el reporte de consola (`copiados`, `yaMigrados`, `excluidos`…), y quien
- * opera esta consola es quien ya lee esos reportes: renombrarlas aquí obligaría a mantener una
- * tabla de equivalencias en la cabeza para comparar una migración por UI con una por SSH.
+ * Los estados y los conteos se TRADUCEN (ver `ETIQUETA_CONTEO` y `ETIQUETA_ESTADO_INSTANCIA`).
+ * Llegan del motor en inglés y en camelCase porque son nombres de campo de C#; mostrarlos crudos
+ * hace que la pantalla se lea como un volcado de JSON en vez de como una interfaz.
  */
 export function ReporteMigracion({ respuesta }: { respuesta: MigracionRespuesta }) {
   const { origen, yaMigrado, instancias, destino, conProblemas } = respuesta;
@@ -20,7 +24,7 @@ export function ReporteMigracion({ respuesta }: { respuesta: MigracionRespuesta 
       <Encabezado respuesta={respuesta} />
 
       <Bloque titulo="Origen">
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 sm:grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
           <Dato etiqueta="Trámite" valor={`${origen.tramite} #${origen.v1Id}`} />
           <Dato etiqueta="Tipo en V2" valor={origen.tipoV2} />
           <Dato etiqueta="Tabla de V1" valor={origen.tablaV1} />
@@ -28,17 +32,11 @@ export function ReporteMigracion({ respuesta }: { respuesta: MigracionRespuesta 
           <Dato etiqueta="Base de V1" valor={origen.baseV1} />
           <Dato etiqueta="Base de V2" valor={origen.baseV2} />
         </dl>
-        {origen.dryRun && (
-          <p className="mt-2 flex items-start gap-1.5 opacity-80">
-            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            Simulación: se leyó todo y no se escribió nada. Ningún trámite quedó creado.
-          </p>
-        )}
       </Bloque>
 
       {yaMigrado && (
         <Bloque titulo="Ya venía migrado">
-          <dl className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 sm:grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
             <Dato etiqueta="Lote anterior" valor={yaMigrado.lote} />
             <Dato etiqueta="Estado" valor={yaMigrado.estadoFinal} />
             <Dato
@@ -58,7 +56,7 @@ export function ReporteMigracion({ respuesta }: { respuesta: MigracionRespuesta 
           <div className="flex flex-wrap items-center gap-2">
             <Insignia
               tono={instancia.conProblemas ? "malo" : "bueno"}
-              texto={instancia.estado}
+              texto={etiquetaEstadoInstancia(instancia.estado)}
             />
             {instancia.motivo && <span className="opacity-80">{instancia.motivo}</span>}
           </div>
@@ -67,7 +65,7 @@ export function ReporteMigracion({ respuesta }: { respuesta: MigracionRespuesta 
             <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
               {Object.entries(instancia.conteos).map(([clave, valor]) => (
                 <div key={clave} className="flex items-baseline gap-1.5">
-                  <dt className="text-xs opacity-70">{clave}</dt>
+                  <dt className="text-xs opacity-70">{etiquetaConteo(clave)}</dt>
                   <dd className="font-semibold tabular-nums">{valor}</dd>
                 </div>
               ))}
@@ -177,14 +175,22 @@ function Bloque({ titulo, children }: { titulo: string; children: React.ReactNod
   );
 }
 
+/**
+ * Etiqueta y valor en dos celdas contiguas de la rejilla (de ahí el fragmento: los hijos son <dt> y
+ * <dd> directos, no un <div> que los envuelva).
+ *
+ * La versión anterior los separaba con `justify-between` y una línea de puntos. En una tarjeta
+ * estrecha se leía bien; a 1440 px la línea medía media pantalla y costaba unir cada etiqueta con
+ * su valor.
+ */
 function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-dashed border-[#DFE5ED]/60 py-0.5 dark:border-white/5">
-      <dt className="text-xs opacity-70">{etiqueta}</dt>
+    <>
+      <dt className="whitespace-nowrap text-xs opacity-70">{etiqueta}</dt>
       <dd className="truncate font-medium" title={valor}>
         {valor}
       </dd>
-    </div>
+    </>
   );
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Play } from "lucide-react";
+import { FileSearch, Loader2, Play } from "lucide-react";
 import { ErrorMigracion, migrarTramite } from "@/lib/migracion/client";
 import {
   ETIQUETA_TRAMITE,
@@ -60,7 +60,7 @@ export function MigrarUno() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
       <form
         onSubmit={lanzar}
         className="flex flex-col gap-4 rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10"
@@ -115,8 +115,11 @@ export function MigrarUno() {
         <button
           type="submit"
           disabled={!idValido || corriendo}
-          className="flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-          style={{ backgroundColor: dryRun ? "#64748B" : "#557EFF" }}
+          // El color sigue al modo, no al revés: ámbar cuando va a escribir en V2. El gris de
+          // antes se leía como un botón deshabilitado justo cuando sí se podía pulsar.
+          className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
+            dryRun ? "bg-[#557EFF]" : "bg-amber-600 hover:bg-amber-700"
+          }`}
         >
           {corriendo ? (
             <>
@@ -126,7 +129,7 @@ export function MigrarUno() {
           ) : (
             <>
               <Play className="h-4 w-4" aria-hidden="true" />
-              {dryRun ? "Simular" : "Migrar"}
+              {dryRun ? "Simular" : "Migrar de verdad"}
             </>
           )}
         </button>
@@ -139,18 +142,33 @@ export function MigrarUno() {
         )}
       </form>
 
+      {/*
+        Con contenido, la tarjeta crece con él. Vacía, se queda en una caja discreta y centrada en
+        vez de un rectángulo de 400 px de alto esperando: la versión anterior dejaba media pantalla
+        en blanco y la página parecía a medio cargar.
+      */}
       <div className="rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10">
         {error && <AvisoError error={error} />}
         {!error && respuesta && <ReporteMigracion respuesta={respuesta} />}
-        {!error && !respuesta && !corriendo && (
-          <p className="text-sm opacity-60">
-            Elige un trámite y lanza la migración: el reporte aparecerá aquí.
-          </p>
-        )}
-        {!error && !respuesta && corriendo && (
-          <div className="flex items-center gap-2 text-sm opacity-70">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            Esperando al migrador…
+        {!error && !respuesta && (
+          <div className="flex min-h-[8rem] flex-col items-center justify-center gap-2 text-center">
+            {corriendo ? (
+              <>
+                <Loader2
+                  className="h-5 w-5 animate-spin"
+                  aria-hidden="true"
+                  style={{ color: "#557EFF" }}
+                />
+                <p className="text-sm opacity-70">Esperando al migrador…</p>
+              </>
+            ) : (
+              <>
+                <FileSearch className="h-6 w-6 opacity-30" aria-hidden="true" />
+                <p className="max-w-xs text-sm opacity-60">
+                  Elige un trámite y lanza la migración: el reporte aparecerá aquí.
+                </p>
+              </>
+            )}
           </div>
         )}
       </div>

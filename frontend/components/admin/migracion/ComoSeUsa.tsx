@@ -32,7 +32,13 @@ export function ComoSeUsa() {
       </button>
 
       {abierta && (
-        <div className="flex flex-col gap-4 border-t border-[#DFE5ED] px-4 py-4 text-sm dark:border-white/10">
+        <div className="border-t border-[#DFE5ED] px-4 py-4 text-sm dark:border-white/10">
+          {/*
+            `max-w-prose` en cada punto: a ancho completo las líneas pasaban de 200 caracteres y el
+            ojo se pierde al saltar de renglón. Dos columnas en pantalla ancha para no dejar la
+            mitad derecha vacía a cambio.
+          */}
+          <div className="grid grid-cols-1 gap-x-10 gap-y-4 lg:grid-cols-2 [&>*]:max-w-prose">
           <Punto titulo="Empieza por uno">
             Antes de cargar un archivo de veinte, migra uno solo con la pestaña «Un trámite» y mira
             el reporte. Es la forma barata de descubrir que el tipo estaba mal o que el ambiente no
@@ -40,8 +46,9 @@ export function ComoSeUsa() {
           </Punto>
 
           <Punto titulo="La simulación no escribe nada">
-            Con «Simulación» marcada el migrador lee todo, dice qué haría y no crea nada. Viene
-            marcada por defecto: para migrar de verdad hay que desmarcarla a conciencia.
+            En modo «Simulación» el migrador lee todo, dice qué haría y no crea nada. Es el modo por
+            defecto, y las filas simuladas siguen pendientes: para migrarlas de verdad, cambia a
+            «Migrar de verdad» y vuelve a lanzarlas.
           </Punto>
 
           <Punto titulo="Reintentar es seguro">
@@ -69,6 +76,7 @@ export function ComoSeUsa() {
             Dos columnas: el tipo (traspaso o matrícula) y el id de V1. Se aceptan .csv y .xlsx. Al
             cargarlo se revisa fila por fila y se dice cuáles no sirven, sin bloquear las demás.
           </Punto>
+          </div>
         </div>
       )}
     </section>

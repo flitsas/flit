@@ -18,6 +18,7 @@ const VERSION = 1;
 export type EstadoFila =
   | "pendiente"
   | "en_curso"
+  | "simulado"
   | "migrado"
   | "con_avisos"
   | "fallido"
@@ -45,7 +46,14 @@ export interface Lote {
   filas: FilaLote[];
 }
 
-/** Estados que NO hay que volver a intentar: ya se resolvieron. */
+/**
+ * Estados que NO hay que volver a encolar: ya se resolvieron.
+ *
+ * `simulado` NO está aquí, y es lo que hace que el flujo recomendado funcione. Una simulación no
+ * escribe nada, así que darla por terminada dejaría el lote entero bloqueado: quien simula las
+ * veinte filas —justo lo que la ayuda aconseja— se encontraría con que ya no puede migrarlas de
+ * verdad sin descartar el lote y volver a cargar el archivo.
+ */
 export const ESTADOS_TERMINADOS: readonly EstadoFila[] = ["migrado", "con_avisos", "ya_estaba"];
 
 export function estaTerminada(fila: FilaLote): boolean {
@@ -156,8 +164,17 @@ export function clasificar(respuesta: MigracionRespuesta): EstadoFila {
     return "fallido";
   }
 
+  // Antes que el dry-run: que el trámite ya esté en la libreta es un HECHO leído del servidor, no
+  // algo que dependa de si esta ejecución escribía o no. Y es información valiosa de una
+  // simulación — decir cuáles de los veinte ya estaban es media parte de para qué se simula.
   if (respuesta.yaMigrado) {
     return "ya_estaba";
+  }
+
+  // Una simulación no migró nada, y decir lo contrario sería mentir en la única pantalla donde
+  // alguien va a comprobar qué se hizo.
+  if (respuesta.origen.dryRun) {
+    return "simulado";
   }
 
   const hayAvisos = respuesta.instancias.some((i) => i.avisos.length > 0);
@@ -167,6 +184,7 @@ export function clasificar(respuesta: MigracionRespuesta): EstadoFila {
 export const ETIQUETA_ESTADO: Record<EstadoFila, string> = {
   pendiente: "Pendiente",
   en_curso: "Migrando…",
+  simulado: "Simulado, sin migrar",
   migrado: "Migrado",
   con_avisos: "Migrado con avisos",
   fallido: "Falló",

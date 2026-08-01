@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  DESCRIPCION_INSTANCIA,
-  INSTANCIAS,
-  type Instancia,
-} from "@/lib/migracion/types";
+import { FlaskConical, Flame } from "lucide-react";
+import { DESCRIPCION_INSTANCIA, INSTANCIAS, type Instancia } from "@/lib/migracion/types";
 
 /**
  * Las opciones que comparten la migración de uno y la masiva: qué instancias correr y si es
@@ -39,54 +36,137 @@ export function OpcionesMigracion({
   const todas = instancias.length === 0 || instancias.length === INSTANCIAS.length;
 
   return (
-    <fieldset className="flex flex-col gap-3" disabled={deshabilitado}>
-      <div>
-        <legend className="text-xs font-semibold uppercase tracking-wide opacity-60">
-          Qué migrar
-        </legend>
-        <p className="mt-0.5 text-xs opacity-70">
-          {todas
-            ? "Se correrán las tres instancias, en su orden obligatorio."
-            : "Solo las marcadas. Recuerda que los adjuntos y los documentos necesitan que los datos ya existan."}
-        </p>
-      </div>
+    <div className="flex flex-col gap-4">
+      <fieldset className="flex flex-col gap-3" disabled={deshabilitado}>
+        <div>
+          <legend className="text-xs font-semibold uppercase tracking-wide opacity-60">
+            Qué migrar
+          </legend>
+          <p className="mt-0.5 text-xs opacity-70">
+            {todas
+              ? "Se correrán las tres instancias, en su orden obligatorio."
+              : "Solo las marcadas. Recuerda que los adjuntos y los documentos necesitan que los datos ya existan."}
+          </p>
+        </div>
 
-      <div className="flex flex-col gap-2">
-        {INSTANCIAS.map((instancia) => (
-          <label
-            key={instancia}
-            className="flex cursor-pointer items-start gap-2 rounded-lg border border-[#DFE5ED] p-2.5 dark:border-white/10"
-          >
-            <input
-              type="checkbox"
-              className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF]"
-              checked={instancias.length === 0 || instancias.includes(instancia)}
-              onChange={() => alternar(instancia)}
-            />
-            <span className="min-w-0">
-              <span className="block text-sm font-medium capitalize">{instancia}</span>
-              <span className="block text-xs opacity-70">
-                {DESCRIPCION_INSTANCIA[instancia]}
+        <div className="flex flex-col gap-2">
+          {INSTANCIAS.map((instancia) => (
+            <label
+              key={instancia}
+              className="flex cursor-pointer items-start gap-2 rounded-lg border border-[#DFE5ED] p-2.5 dark:border-white/10"
+            >
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF]"
+                checked={instancias.length === 0 || instancias.includes(instancia)}
+                onChange={() => alternar(instancia)}
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium capitalize">{instancia}</span>
+                <span className="block text-xs opacity-70">
+                  {DESCRIPCION_INSTANCIA[instancia]}
+                </span>
               </span>
-            </span>
-          </label>
-        ))}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <ModoEjecucion dryRun={dryRun} onDryRun={onDryRun} deshabilitado={deshabilitado} />
+    </div>
+  );
+}
+
+/**
+ * El interruptor que separa «no pasa nada» de «esto escribe en producción».
+ *
+ * Va FUERA del bloque «Qué migrar» y con otra forma —dos botones, no una casilla— porque cuando era
+ * una casilla más, con el mismo aspecto que Datos/Adjuntos/Documentos, se leía como una cuarta cosa
+ * que migrar. Siendo la única opción de esta pantalla con consecuencias irreversibles, tiene que
+ * ser imposible confundirla, y el modo activo tiene que verse sin buscarlo.
+ */
+function ModoEjecucion({
+  dryRun,
+  onDryRun,
+  deshabilitado,
+}: {
+  dryRun: boolean;
+  onDryRun: (valor: boolean) => void;
+  deshabilitado: boolean;
+}) {
+  return (
+    <fieldset className="flex flex-col gap-2" disabled={deshabilitado}>
+      <legend className="text-xs font-semibold uppercase tracking-wide opacity-60">
+        Modo de ejecución
+      </legend>
+
+      <div
+        role="radiogroup"
+        aria-label="Modo de ejecución"
+        className="grid grid-cols-2 gap-2"
+      >
+        <Modo
+          activo={dryRun}
+          onClick={() => onDryRun(true)}
+          deshabilitado={deshabilitado}
+          icono={<FlaskConical className="h-4 w-4" aria-hidden="true" />}
+          titulo="Simulación"
+          detalle="No escribe nada"
+          clasesActivo="border-[#557EFF] bg-[#557EFF]/10 text-[#557EFF]"
+        />
+        <Modo
+          activo={!dryRun}
+          onClick={() => onDryRun(false)}
+          deshabilitado={deshabilitado}
+          icono={<Flame className="h-4 w-4" aria-hidden="true" />}
+          titulo="Migrar de verdad"
+          detalle="Escribe en V2"
+          clasesActivo="border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+        />
       </div>
 
-      <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-dashed border-[#DFE5ED] p-2.5 dark:border-white/10">
-        <input
-          type="checkbox"
-          className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF]"
-          checked={dryRun}
-          onChange={(e) => onDryRun(e.target.checked)}
-        />
-        <span className="min-w-0">
-          <span className="block text-sm font-medium">Simulación (dry run)</span>
-          <span className="block text-xs opacity-70">
-            Lee todo y no escribe nada. Sirve para ver qué haría antes de hacerlo.
-          </span>
-        </span>
-      </label>
+      <p className="text-xs opacity-70">
+        {dryRun
+          ? "Lee todo y reporta qué haría, sin crear nada."
+          : "Los trámites quedarán creados en V2. Reintentar sigue siendo seguro: no se duplican."}
+      </p>
     </fieldset>
+  );
+}
+
+function Modo({
+  activo,
+  onClick,
+  deshabilitado,
+  icono,
+  titulo,
+  detalle,
+  clasesActivo,
+}: {
+  activo: boolean;
+  onClick: () => void;
+  deshabilitado: boolean;
+  icono: React.ReactNode;
+  titulo: string;
+  detalle: string;
+  clasesActivo: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={activo}
+      onClick={onClick}
+      disabled={deshabilitado}
+      className={`flex flex-col items-start gap-1 rounded-lg border p-2.5 text-left transition-colors disabled:opacity-50 ${
+        activo ? clasesActivo : "border-[#DFE5ED] opacity-70 dark:border-white/10"
+      }`}
+    >
+      <span className="flex items-center gap-1.5 text-sm font-semibold">
+        {icono}
+        {titulo}
+      </span>
+      <span className="text-xs opacity-80">{detalle}</span>
+    </button>
   );
 }

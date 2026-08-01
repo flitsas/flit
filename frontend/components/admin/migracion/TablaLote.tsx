@@ -117,7 +117,7 @@ export function TablaLote({
                         <button
                           type="button"
                           onClick={() => setAbierta(desplegada ? null : clave)}
-                          className="flex items-center gap-1 text-xs opacity-70"
+                          className="flex items-center gap-1 text-xs font-semibold opacity-80 hover:opacity-100"
                         >
                           {desplegada ? (
                             <ChevronDown className="h-3 w-3" aria-hidden="true" />
@@ -156,6 +156,9 @@ export function TablaLote({
 const TONO: Record<EstadoFila, string> = {
   pendiente: "bg-black/5 dark:bg-white/10 opacity-70",
   en_curso: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  // Deliberadamente NO verde: una simulación no migró nada, y el verde es la señal universal de
+  // «hecho». Se parece más a un pendiente informado que a un logro.
+  simulado: "bg-[#557EFF]/10 text-[#557EFF] dark:text-[#8AA6FF]",
   migrado: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   con_avisos: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   fallido: "bg-red-500/10 text-red-600 dark:text-red-400",

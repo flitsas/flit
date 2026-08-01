@@ -55,6 +55,36 @@ describe("clasificar", () => {
     expect(clasificar(respuesta())).toBe("migrado");
   });
 
+  /**
+   * El caso que rompía el flujo recomendado: simular marcaba las filas como migradas, y como las
+   * migradas no se reencolan, después de simular un lote ya no se podía migrar de verdad sin
+   * descartarlo y volver a cargar el archivo.
+   */
+  it("una simulación NO cuenta como migrada", () => {
+    const simulada = respuesta({ origen: { ...respuesta().origen, dryRun: true } });
+
+    expect(clasificar(simulada)).toBe("simulado");
+    expect(estaTerminada({ tramite: "transfer", v1Id: 1, fila: 1, estado: "simulado" })).toBe(false);
+  });
+
+  /** Que ya esté en la libreta es un hecho del servidor, lo diga una simulación o una migración. */
+  it("el ya-migrado gana sobre la simulación", () => {
+    const previo = {
+      v2Id: "11111111-1111-1111-1111-111111111111",
+      tenantId: "22222222-2222-2222-2222-222222222222",
+      lote: "anterior",
+      estadoFinal: "aprobado",
+      migradoEl: "2026-07-01T00:00:00Z",
+      avisos: [],
+    };
+    const simulada = respuesta({
+      origen: { ...respuesta().origen, dryRun: true },
+      yaMigrado: previo,
+    });
+
+    expect(clasificar(simulada)).toBe("ya_estaba");
+  });
+
   it("separa la migración limpia de la que dejó avisos", () => {
     const conAviso = respuesta({
       instancias: [
@@ -93,6 +123,7 @@ describe("estaTerminada", () => {
     ["migrado", true],
     ["con_avisos", true],
     ["ya_estaba", true],
+    ["simulado", false],
     ["pendiente", false],
     ["en_curso", false],
     ["fallido", false],

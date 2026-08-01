@@ -98,6 +98,66 @@ export interface MigracionError {
 }
 
 /**
+ * Los estados que devuelve el motor, en castellano.
+ *
+ * Vienen de tres enums de C# (`LoadStatus`, `AttachmentLoadStatus`, `SnapshotLoadStatus`) que se
+ * serializan con `ToString()`, así que llegan en inglés y en PascalCase. En el reporte de consola
+ * eso pasa desapercibido; en una pantalla se lee como algo a medio traducir.
+ *
+ * Lo que no esté en el mapa se muestra tal cual: añadir un estado al motor no debe dejar la
+ * pantalla en blanco.
+ */
+export const ETIQUETA_ESTADO_INSTANCIA: Record<string, string> = {
+  Migrated: "Migrado",
+  Materialized: "Generado",
+  Simulated: "Simulado",
+  Skipped: "Ya estaba",
+  Quarantined: "En cuarentena",
+  NotMigrated: "Sin migrar",
+  NoAttachments: "Sin adjuntos",
+  NotFoundInV1: "No está en V1",
+  Failed: "Falló",
+};
+
+/**
+ * Las claves de los conteos, en castellano.
+ *
+ * Se traducen y no se muestran crudas: son claves de un JSON (`eventosHistorial`,
+ * `imagenesEnLaCarta`) y en pantalla delatan la tubería por la que llegaron. Que coincidan con el
+ * reporte de consola no compensa: quien mira esto está mirando una interfaz, no una terminal.
+ */
+export const ETIQUETA_CONTEO: Record<string, string> = {
+  campos: "Campos",
+  actores: "Actores",
+  eventosHistorial: "Eventos de historial",
+  copiados: "Copiados",
+  yaMigrados: "Ya migrados",
+  fallidos: "Fallidos",
+  excluidos: "Excluidos",
+  imagenesEnLaCarta: "Imágenes en la carta",
+  materializados: "Generados",
+  yaMaterializados: "Ya generados",
+  yaVenianComoAdjunto: "Ya venían como adjunto",
+  identidadesMarcadas: "Identidades acreditadas",
+  identidadesYaMarcadas: "Identidades ya acreditadas",
+};
+
+/**
+ * Etiqueta legible de una clave de conteo. Si no está en el mapa, se parte el camelCase en
+ * palabras — feo, pero legible, y mejor que un hueco cuando el motor añada un contador nuevo.
+ */
+export function etiquetaConteo(clave: string): string {
+  return (
+    ETIQUETA_CONTEO[clave] ??
+    clave.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase())
+  );
+}
+
+export function etiquetaEstadoInstancia(estado: string): string {
+  return ETIQUETA_ESTADO_INSTANCIA[estado] ?? estado;
+}
+
+/**
  * Identidad de un trámite dentro de un lote: tipo + id, NUNCA el id solo.
  *
  * Los ids de V1 se repiten entre tipos porque viven en tablas distintas (hay 12.807 ids que

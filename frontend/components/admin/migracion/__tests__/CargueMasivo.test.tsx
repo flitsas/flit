@@ -24,7 +24,7 @@ vi.mock("@/lib/migracion/client", async () => {
 
 const { CargueMasivo } = await import("@/components/admin/migracion/CargueMasivo");
 
-function respuestaOk(v1Id: number): MigracionRespuesta {
+function respuestaOk(v1Id: number, dryRun = false): MigracionRespuesta {
   return {
     origen: {
       tramite: "transfer",
@@ -34,7 +34,7 @@ function respuestaOk(v1Id: number): MigracionRespuesta {
       baseV1: "v1 @ h:5432",
       baseV2: "v2 @ h:5432",
       v1Id,
-      dryRun: false,
+      dryRun,
     },
     yaMigrado: null,
     instancias: [],
@@ -89,10 +89,38 @@ describe("CargueMasivo", () => {
     render(<CargueMasivo />);
     await cargarCsv(usuario, "tipo,id\ntraspaso,1\ntraspaso,2\ntraspaso,3");
 
-    await usuario.click(await screen.findByRole("button", { name: /Simular 3 seleccionados/i }));
+    await usuario.click(await screen.findByRole("button", { name: /Simular 3 trámites/i }));
 
     await waitFor(() => expect(migrarTramite).toHaveBeenCalledTimes(3));
     expect(maximo).toBe(1);
+  });
+
+  /**
+   * El flujo que la propia ayuda recomienda —simular las veinte y luego migrarlas— y que estuvo
+   * roto: al dar la simulación por terminada, el lote quedaba bloqueado y había que descartarlo y
+   * volver a cargar el archivo para migrar de verdad.
+   */
+  it("tras simular, las filas siguen disponibles para migrar de verdad", async () => {
+    const usuario = userEvent.setup();
+    migrarTramite.mockImplementation(async (p: { v1Id: number; dryRun: boolean }) =>
+      respuestaOk(p.v1Id, p.dryRun),
+    );
+
+    render(<CargueMasivo />);
+    await cargarCsv(usuario, "tipo,id\ntraspaso,1\ntraspaso,2");
+
+    await usuario.click(await screen.findByRole("button", { name: /Simular 2 trámites/i }));
+    await waitFor(() => expect(migrarTramite).toHaveBeenCalledTimes(2));
+
+    // Ninguna quedó como migrada, y el botón sigue ofreciendo las dos.
+    expect(screen.getAllByText("Simulado, sin migrar")).toHaveLength(2);
+    expect(screen.queryByText("Migrado")).not.toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("radio", { name: /Migrar de verdad/i }));
+    await usuario.click(await screen.findByRole("button", { name: /^Migrar 2 trámites/i }));
+
+    await waitFor(() => expect(migrarTramite).toHaveBeenCalledTimes(4));
+    expect(await screen.findAllByText("Migrado")).toHaveLength(2);
   });
 
   /** Que el tercero falle no es motivo para no intentar los demás. */
@@ -109,7 +137,7 @@ describe("CargueMasivo", () => {
     render(<CargueMasivo />);
     await cargarCsv(usuario, "tipo,id\ntraspaso,1\ntraspaso,2\ntraspaso,3");
 
-    await usuario.click(await screen.findByRole("button", { name: /Simular 3 seleccionados/i }));
+    await usuario.click(await screen.findByRole("button", { name: /Simular 3 trámites/i }));
 
     await waitFor(() => expect(migrarTramite).toHaveBeenCalledTimes(3));
     expect(await screen.findByText("el migrador dijo que no")).toBeInTheDocument();
@@ -137,6 +165,48 @@ describe("CargueMasivo", () => {
     expect(await screen.findByText("ola.csv")).toBeInTheDocument();
     expect(screen.getByText("Migrado")).toBeInTheDocument();
     expect(screen.getByText("Pendiente")).toBeInTheDocument();
+  });
+
+  /**
+   * Carrera real, vista en el navegador: la reconciliación del arranque tarda (consulta al
+   * servidor) y puede terminar DESPUÉS de que alguien cargue otro archivo. Al aplicarse pisaba el
+   * lote nuevo con el viejo y —peor— dejaba la selección del viejo sobre las filas del nuevo, con
+   * un contador que decía «3 en el archivo · 1 por simular» sin nada que lo explicara.
+   */
+  it("una reconciliación lenta no pisa el archivo que se acaba de cargar", async () => {
+    const usuario = userEvent.setup();
+
+    let resolver: (v: unknown) => void = () => {};
+    consultarEstado.mockImplementation(
+      () => new Promise((r) => { resolver = r; }),
+    );
+
+    window.localStorage.setItem(
+      "flit:migracion:progreso",
+      JSON.stringify({
+        version: 1,
+        archivo: "lote-viejo.csv",
+        creadoEl: "2026-08-01T00:00:00Z",
+        instancias: [],
+        dryRun: false,
+        filas: [{ tramite: "transfer", v1Id: 999, fila: 2, estado: "pendiente" }],
+      }),
+    );
+
+    render(<CargueMasivo />);
+
+    // Llega un archivo nuevo mientras la consulta sigue en vuelo…
+    await cargarCsv(usuario, "tipo,id\ntraspaso,1\ntraspaso,2\ntraspaso,3");
+    expect(await screen.findByText("ola.csv")).toBeInTheDocument();
+
+    // …y solo entonces responde el servidor.
+    resolver({ tramite: "transfer", tablaV1: "transfers", items: [] });
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Simular 3 trámites/i })).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("lote-viejo.csv")).not.toBeInTheDocument();
+    expect(screen.queryByText("999")).not.toBeInTheDocument();
   });
 
   /**

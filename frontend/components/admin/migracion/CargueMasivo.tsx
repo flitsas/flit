@@ -52,6 +52,12 @@ export function CargueMasivo() {
   const detener = useRef(false);
   const entradaArchivo = useRef<HTMLInputElement>(null);
 
+  // La restauración del arranque es ASÍNCRONA (consulta al servidor), así que puede terminar
+  // después de que alguien haya cargado un archivo nuevo. Sin esta bandera, al volver pisaría el
+  // lote recién cargado con el guardado, y —más traicionero— dejaría la selección del lote viejo
+  // sobre las filas del nuevo: el contador diría «3 en el archivo · 1 por migrar» sin explicación.
+  const loteReemplazado = useRef(false);
+
   const persistir = useCallback((siguiente: Lote) => {
     setLote(siguiente);
     guardarLote(siguiente);
@@ -110,8 +116,15 @@ export function CargueMasivo() {
       }
     }
 
-    /** Deja el lote recuperado como estado de la pantalla. */
+    /** Deja el lote recuperado como estado de la pantalla, salvo que ya no venga a cuento. */
     function aplicar(recuperado: Lote, confirmado: boolean) {
+      // Quien está mirando ya cargó otro archivo (o descartó el lote) mientras esto consultaba al
+      // servidor: lo recuperado es historia y pisarlo sería quitarle de delante lo que acaba de
+      // hacer.
+      if (loteReemplazado.current) {
+        return;
+      }
+
       setLote(recuperado);
       setInstancias(recuperado.instancias);
       setDryRun(recuperado.dryRun);
@@ -132,6 +145,8 @@ export function CargueMasivo() {
     }
 
     setError(null);
+    // Desde este momento la restauración pendiente ya no debe aplicarse: el archivo nuevo manda.
+    loteReemplazado.current = true;
     try {
       const { validas, invalidas: malas } = await leerArchivo(archivo);
       setInvalidas(malas);
@@ -211,6 +226,7 @@ export function CargueMasivo() {
   }
 
   function limpiar() {
+    loteReemplazado.current = true;
     borrarLote();
     setLote(null);
     setInvalidas([]);
@@ -218,8 +234,11 @@ export function CargueMasivo() {
     setError(null);
   }
 
+  // Lo que se va a correr al pulsar el botón: seleccionado Y no terminado. Es el número que manda
+  // en toda la pantalla — el de casillas marcadas a secas engaña en cuanto hay filas ya migradas.
   const pendientes =
     lote?.filas.filter((f) => seleccion.has(claveFila(f)) && !estaTerminada(f)) ?? [];
+  const listas = lote?.filas.filter(estaTerminada).length ?? 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -312,11 +331,16 @@ export function CargueMasivo() {
             <div className="flex flex-col gap-3 rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10">
               <div>
                 <p className="text-sm font-semibold">{lote.archivo}</p>
+                {/*
+                  Se cuenta lo que se va a CORRER, no lo que está marcado. Antes decía «4
+                  seleccionados» junto a un botón que decía «Simular 1»: ambos eran ciertos —tres
+                  ya estaban migradas— pero juntos no había forma de entenderlos.
+                */}
                 <p className="text-xs opacity-70">
-                  {lote.filas.length} trámite{lote.filas.length === 1 ? "" : "s"} ·{" "}
-                  {lote.filas.filter(estaTerminada).length} listo
-                  {lote.filas.filter(estaTerminada).length === 1 ? "" : "s"} ·{" "}
-                  {seleccion.size} seleccionado{seleccion.size === 1 ? "" : "s"}
+                  {lote.filas.length} en el archivo · {listas} ya migrado{listas === 1 ? "" : "s"} ·{" "}
+                  <strong className="font-semibold opacity-100">
+                    {pendientes.length} por {dryRun ? "simular" : "migrar"}
+                  </strong>
                 </p>
               </div>
 
@@ -337,8 +361,9 @@ export function CargueMasivo() {
                   type="button"
                   onClick={migrarSeleccionadas}
                   disabled={corriendo || pendientes.length === 0}
-                  className="flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-                  style={{ backgroundColor: dryRun ? "#64748B" : "#557EFF" }}
+                  className={`flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
+                    dryRun ? "bg-[#557EFF]" : "bg-amber-600 hover:bg-amber-700"
+                  }`}
                 >
                   {corriendo ? (
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -347,7 +372,7 @@ export function CargueMasivo() {
                   )}
                   {corriendo
                     ? "Migrando…"
-                    : `${dryRun ? "Simular" : "Migrar"} ${pendientes.length} seleccionado${
+                    : `${dryRun ? "Simular" : "Migrar"} ${pendientes.length} trámite${
                         pendientes.length === 1 ? "" : "s"
                       }`}
                 </button>
