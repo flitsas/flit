@@ -396,6 +396,18 @@ services:
       # Next.js (next dev/start) escucha en este puerto interno.
       PORT: "${FRONTEND_PORT:-4001}"
       HOSTNAME: "0.0.0.0"
+      # ── Consola de migración (/admin/migracion) ─────────────────────────────
+      # Estas dos NO llevan NEXT_PUBLIC_: se leen en el servidor, dentro del BFF de
+      # `app/api/migracion/*`. Con ese prefijo quedarían horneadas en el JS que descarga el
+      # navegador, y X-Migration-Key es la llave maestra del host que reescribe trámites.
+      #
+      # No hay ninguna variable NUEVA en el .env: se reutiliza la MISMA llave que ya consume
+      # migracion-api, que es justo lo que se quiere. Si fueran dos, podrían divergir y el
+      # frontend hablaría con un host que no lo reconoce, con un 401 que no dice por qué.
+      MIGRACION_API_KEY: ${FLITMIG_MIGRACION_API_KEY:-}
+      # Por la red interna de Docker, NO por el dominio público: ese salto pasa por nginx, cuyo
+      # proxy_read_timeout de 60 s corta migraciones de instancia 3 que sí se completan.
+      MIGRACION_API_URL: http://gateway:${GATEWAY_PORT:-4002}
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-4001}:${FRONTEND_PORT:-4001}"
     depends_on:
