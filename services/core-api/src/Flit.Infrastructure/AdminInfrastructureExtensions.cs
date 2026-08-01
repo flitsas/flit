@@ -105,6 +105,11 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Tramites.Domain.Integration.IRepresentanteLegalDirectory,
             RepresentanteLegalDirectory>();
 
+        // HU #11196 (AC4) — tras firmar el lote diferido, el directorio queda apuntando a la identidad
+        // recién validada; si no, el siguiente trámite volvería a pedirle la validación a esa persona.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IRepresentanteLegalIdentityUpdater,
+            RepresentanteLegalIdentityUpdater>();
+
         // HU #10912 (ADR-0036) — configuración de mandato por OT (plantilla + exige-PN + mandatario
         // institucional), leída por código de OT para el flujo de trámite.
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandateRequirementPolicy,

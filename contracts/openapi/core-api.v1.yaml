@@ -6005,6 +6005,74 @@ paths:
                 required: [error]
         "422": { description: "Solicitud inválida." }
 
+  /api/v1/tramites/instances/{id}/deferred-signature:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: "#/components/parameters/TenantIdHeader"
+    get:
+      operationId: getProcedureInstanceDeferredSignature
+      tags: ["Trámites · Traspaso"]
+      security:
+        - bearerAuth: []
+      summary: "¿Aplica la firma a posteriori para esta parte y ya está marcada?"
+      description: >
+        HU #11197 (AC1/AC2/AC4). `aplica` es true solo cuando la parte es una empresa cuyo representante
+        legal tiene la identidad Y la firma del baúl vencidas: con cualquiera de las dos vigente el
+        trámite puede firmarse ya y la opción no se ofrece. En persona natural responde
+        `{aplica:false, marcado:false}`, no un error.
+      parameters:
+        - name: parte
+          in: query
+          required: true
+          schema: { type: string, enum: [comprador, vendedor] }
+      responses:
+        "200":
+          description: "Estado de la firma a posteriori para esa parte."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeferredSignatureStateResponse"
+        "400": { description: "Falta el header X-Tenant-Id, o parte inválida." }
+        "401": { description: "No autenticado." }
+        "404": { description: "Trámite no encontrado." }
+    post:
+      operationId: markProcedureInstanceDeferredSignature
+      tags: ["Trámites · Traspaso"]
+      security:
+        - bearerAuth: []
+      summary: "Marca el trámite para firmarse cuando el representante valide su identidad"
+      description: >
+        HU #11196 (AC1). Idempotente: volver a marcar no crea una segunda marca ni mueve la fecha
+        original. Cuando esa persona apruebe su validación, TODOS sus trámites marcados del tenant que
+        sigan en borrador o subsanación se firman de una (el estado se revalida al aplicar, no al marcar).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                parte: { type: string, enum: [comprador, vendedor] }
+              required: [parte]
+      responses:
+        "200":
+          description: "Trámite marcado."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeferredSignatureStateResponse"
+        "400": { description: "Falta el header X-Tenant-Id, o parte inválida." }
+        "401": { description: "No autenticado." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "not_draft — solo en borrador o subsanación; o la parte aún no tiene actor." }
+        "422":
+          description: >
+            no_aplica (la parte no es persona jurídica), sin_representante (el representante declarado no
+            tiene documento con el que validar) o firma_disponible (ya puede firmarse ahora).
+
   /api/v1/me/ui-preferences/{scope}:
     parameters:
       - name: scope
@@ -6090,6 +6158,25 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    # ── Trámites · Firma a posteriori (HU #11196 / #11197) ─────────────────────
+    DeferredSignatureStateResponse:
+      type: object
+      required: [aplica, marcado]
+      properties:
+        aplica:
+          type: boolean
+          description: "La opción debe ofrecerse: el representante no tiene firma ni identidad vigentes."
+        marcado:
+          type: boolean
+          description: "El trámite ya está esperando la validación de identidad del representante."
+        representanteNombre:
+          type: string
+          nullable: true
+          description: "Nombre del representante declarado en el trámite, para informar a quién se espera."
+        marcadoAt:
+          type: string
+          format: date-time
+          nullable: true
     # ── Preferencias de UI ─────────────────────────────────────────────────────
     UserUiPreferenceResponse:
       type: object

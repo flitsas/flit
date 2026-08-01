@@ -253,6 +253,8 @@ app.MapPublicKyverumWebhookEndpoints();
 app.MapPublicPortalEndpoints();
 app.MapTramitesInstanceEndpoints();
 app.MapTramitesActorEndpoints();
+// HU #11196 / #11197 — firma a posteriori: marcar el trámite y consultar si la opción aplica.
+app.MapTramitesFirmaPosteriorEndpoints();
 app.MapTramitesAttachmentEndpoints();
 app.MapTramitesOcrEndpoints();
 app.MapTramitesParticipantEndpoints();

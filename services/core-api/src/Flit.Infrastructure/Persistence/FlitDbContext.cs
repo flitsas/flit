@@ -171,6 +171,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Trámites — biométrica (Slice 6, mock)
     public DbSet<ProcedureInstanceBiometricValidation> ProcedureInstanceBiometricValidations => Set<ProcedureInstanceBiometricValidation>();
 
+    // Trámites — marcas de firma a posteriori (HU #11196): el lote que se firma cuando el representante valida
+    public DbSet<DeferredSignatureMark> DeferredSignatureMarks => Set<DeferredSignatureMark>();
+
     // Trámites — outbox de eventos de validación de identidad (HU #10233, fase 2 event-driven)
     public DbSet<IdentityValidationOutbox> IdentityValidationOutbox => Set<IdentityValidationOutbox>();
 
