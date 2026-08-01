@@ -33,6 +33,72 @@ public static class DocumentOcrPrompts
         _ => null,
     };
 
+    /// <summary>
+    /// Prompt de CLASIFICACIÓN del cargue masivo. A diferencia de los prompts por tipo (que son
+    /// dirigidos: "esto es una factura, verifícala"), este es el inverso — recibe un documento
+    /// cualquiera y decide QUÉ hay en cada página. Es la única pieza del OCR que no sabe de antemano
+    /// qué está mirando, y por eso corre en el modelo fuerte y una sola vez por archivo: de su mapa
+    /// <c>tipo → páginas</c> salen los recortes que después verifica el prompt por tipo de arriba.
+    /// <para><paramref name="tipos"/> son los tipos que el trámite espera (varían por modalidad:
+    /// traspaso no lleva factura ni aduana), así el modelo no propone tipos que nadie va a recibir.</para>
+    /// </summary>
+    public static string ClassificationPrompt(IEnumerable<string> tipos)
+    {
+        var solicitados = string.Join(", ", tipos.Where(IsSupported));
+        return $$"""
+Analiza este documento PDF o imagen. Puede contener UN solo documento, o VARIOS documentos distintos
+concatenados en un mismo archivo (un expediente completo). Tu tarea es decir QUÉ documento hay en CADA
+página, y agrupar las páginas que forman cada documento.
+
+TIPOS QUE DEBES IDENTIFICAR (y SOLO estos): {{solicitados}}
+
+Cómo reconocer cada tipo:
+- factura: FACTURA ELECTRONICA DE VENTA, factura de venta, cuenta de cobro o documento equivalente por la
+  compraventa del vehiculo. Lleva numero de factura, CUFE o resolucion DIAN, emisor con NIT, comprador,
+  descripcion del vehiculo y valores (subtotal, IVA, total).
+- aduana: DECLARACION DE IMPORTACION (formulario DIAN/MUISCA), manifiesto de importacion, certificado de
+  homologacion o licencia de importacion. Lleva numero de declaracion, subpartida arancelaria (8703, 8704,
+  8711...), importador o agente de aduana, pais de origen y valores FOB/CIF. Tambien cuenta la certificacion
+  de nacionalizacion que expide el importador citando el numero de declaracion.
+- impronta: CERTIFICADO DE IMPRONTAS, hoja de improntas digitales, acta de improntas o fotoimpronta. Lleva
+  los numeros fisicos del vehiculo (motor, chasis, VIN, serie), normalmente en recuadros o calcos.
+- soat: POLIZA SOAT o certificado de SOAT de una aseguradora colombiana. Lleva numero de poliza,
+  aseguradora, vigencia y datos del vehiculo.
+- rtm: CERTIFICADO DE REVISION TECNICO-MECANICA Y DE EMISIONES CONTAMINANTES expedido por un CDA. Lleva
+  numero de certificado, nombre del CDA, vigencia y resultado.
+
+DOCUMENTOS QUE NO SON NINGUNO DE LOS ANTERIORES:
+Los expedientes suelen traer muchas paginas que NO corresponden a ningun tipo solicitado. NO las fuerces
+dentro de un tipo: reportalas como no reconocidas. Ejemplos frecuentes:
+- Contrato privado de mandato o poder / autorizacion al apoderado
+- Solicitud de tramite de forma virtual
+- Carta de validacion de identidad, carta selfie, cedula o documento de identidad
+- Formulario del Ministerio de Transporte (FUR) y su hoja de instrucciones
+- Licencia de transito
+- Contrato de compraventa
+- Formato o datos de prenda / garantia
+- Certificado de paz y salvo de impuestos o de tradicion
+- Certificados de consulta al RUNT generados por una plataforma (NO son el SOAT ni el RTM originales:
+  son un reporte de consulta, no el certificado expedido por la aseguradora o el CDA)
+- Portadas, hojas de firmas, hashes y sellos de tiempo
+
+REGLAS CRITICAS:
+1. Una pagina pertenece a UN solo documento. No repitas el mismo numero de pagina en dos entradas.
+2. Un documento puede ocupar varias paginas consecutivas: agrupalas en una sola entrada.
+3. Un mismo tipo puede aparecer MAS DE UNA VEZ en el archivo (dos facturas, dos improntas). Devuelve una
+   entrada por cada aparicion; no las fusiones.
+4. Si una pagina esta escaneada, borrosa, torcida o ilegible y no puedes determinar que es, va a
+   paginas_no_reconocidas. NO adivines.
+5. NO inventes tipos fuera de la lista solicitada.
+6. confianza es tu certeza real de 0.0 a 1.0. Si dudas, baja la confianza en vez de omitir el documento.
+7. total_paginas es el numero total de paginas del archivo. Para una imagen, es 1.
+8. Los numeros de pagina son base 1.
+
+Devuelve UNICAMENTE este JSON, sin markdown y sin texto adicional:
+{"total_paginas":0,"documentos":[{"tipo":"factura","paginas":[1,2],"confianza":0.95,"motivo":"Factura electronica de venta con CUFE y datos del vehiculo"}],"paginas_no_reconocidas":[3,4]}
+""";
+    }
+
     private const string Factura =
 """
 Analiza este documento. Determina si contiene una FACTURA DE VENTA de vehiculo colombiana.
