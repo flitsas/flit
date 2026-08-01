@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   runPreflight: vi.fn(),
   getPreflight: vi.fn(),
   getConsultationConfig: vi.fn(),
+  listTransitOffices: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -32,6 +33,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
   DEV_USER_ID: 'user-dev',
   getDuplicateActiveProcedureId: () => null,
   getVehicleStateBlock: () => null,
+  isTransitOfficeUnavailable: () => false,
 }));
 
 vi.mock('@/components/admin/Toast', () => ({
@@ -77,6 +79,20 @@ const PREVIEW_RESULT = {
 
 const VIN_VALIDO = '9BWZZZ377VT004251';
 
+/** HU #11199 — la matrícula inicial ahora exige elegir la secretaría antes de consultar el VIN. */
+const SECRETARIA_ID = 'ot-medellin';
+const SECRETARIAS = [
+  { id: SECRETARIA_ID, code: '05001000', name: 'Secretaría de Movilidad de Medellín', cityCode: '05001' },
+];
+
+/** Deja el paso 1 listo para consultar: secretaría elegida y VIN escrito. */
+async function prepararConsulta(user: ReturnType<typeof userEvent.setup>) {
+  // El catálogo se carga de forma asíncrona: hay que esperar a que la opción exista.
+  await screen.findByRole('option', { name: /Medellín/ });
+  await user.selectOptions(screen.getByLabelText('Secretaría de tránsito'), SECRETARIA_ID);
+  await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+}
+
 function renderNuevaMatricula() {
   return render(
     <TramiteWizard
@@ -93,6 +109,7 @@ beforeEach(() => {
   mocks.getWizardPreview.mockResolvedValue(PREVIEW_MATRICULA);
   mocks.runPreflightPreview.mockResolvedValue(PREVIEW_RESULT);
   mocks.getConsultationConfig.mockResolvedValue({ vehiclePlate: 'kyverum_runt', onlyOwnVehicles: false });
+  mocks.listTransitOffices.mockResolvedValue(SECRETARIAS);
   mocks.setCurrentStep.mockResolvedValue({ id: 'inst-1', currentStep: 'documentos' });
   mocks.patchFieldValues.mockResolvedValue({ id: 'inst-1', fieldValues: [] });
   mocks.createInstanceFromConsulta.mockResolvedValue({
@@ -125,7 +142,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     const user = userEvent.setup();
     renderNuevaMatricula();
 
-    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+    await prepararConsulta(user);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
 
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(1));
@@ -141,7 +158,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     const user = userEvent.setup();
     renderNuevaMatricula();
 
-    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+    await prepararConsulta(user);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
 
@@ -169,7 +186,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     const user = userEvent.setup();
     renderNuevaMatricula();
 
-    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+    await prepararConsulta(user);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
 
@@ -201,7 +218,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     const user = userEvent.setup();
     renderNuevaMatricula();
 
-    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+    await prepararConsulta(user);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
     await waitFor(() =>
@@ -219,7 +236,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     mocks.createInstanceFromConsulta.mockRejectedValue(new Error('409 Ya existe un trámite en proceso'));
     renderNuevaMatricula();
 
-    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+    await prepararConsulta(user);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
     await user.click(screen.getByRole('button', { name: /Continuar/ }));

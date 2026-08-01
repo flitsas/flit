@@ -290,6 +290,23 @@ export function getVehicleStateBlock(err: unknown): VehicleStateBlockInfo | null
   return { vehicleStatus, procedureType: typeof procedureType === 'string' ? procedureType : '' };
 }
 
+/**
+ * HU #11199 (AC3) / HU #11200 (AC2/AC3) — detecta el bloqueo del organismo de tránsito (422
+ * `TRANSIT_OFFICE_NOT_AVAILABLE`): el organismo no está activo en FLIT o no está habilitado para la
+ * compañía gestora. En matrícula inicial es la secretaría que el gestor eligió; en traspaso es el
+ * organismo donde el RUNT dice que está matriculado el vehículo. Como en ambos casos lo que el gestor
+ * debe hacer es lo mismo (pedirle al administrador que lo active y lo habilite), no se distingue el
+ * motivo: la señal es booleana a propósito.
+ *
+ * Duck-typing sobre `{ status, problem }`, mismo patrón que `getVehicleStateBlock`.
+ */
+export function isTransitOfficeUnavailable(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return false;
+  return (problem as { title?: unknown }).title === 'TRANSIT_OFFICE_NOT_AVAILABLE';
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(apiUrl(path), {
@@ -936,6 +953,7 @@ export const tramitesClient = {
         plate: input.plate ?? null,
         ownerDocumentType: input.ownerDocumentType ?? null,
         ownerDocumentNumber: input.ownerDocumentNumber ?? null,
+        transitOfficeId: input.transitOfficeId ?? null,
       }),
     });
     return {
@@ -974,7 +992,9 @@ export const tramitesClient = {
         ownerDocumentType: input.ownerDocumentType ?? null,
         ownerDocumentNumber: input.ownerDocumentNumber ?? null,
         previewToken: input.previewToken ?? null,
-        transitOfficeId: null,
+        // HU #11199 — la secretaría elegida en el paso 1 viaja a la creación: es lo que la vuelve
+        // permanente y lo que hace que el paso del FUR ya no tenga que preguntarla.
+        transitOfficeId: input.transitOfficeId ?? null,
       }),
     });
     return {

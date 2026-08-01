@@ -65,6 +65,12 @@ export interface ConsultaVehiculoInput {
   plate?: string | null;
   ownerDocumentType?: string | null;
   ownerDocumentNumber?: string | null;
+  /**
+   * HU #11199 — secretaría de tránsito elegida en el primer paso. Obligatoria en matrícula inicial
+   * (sin ella el backend no consulta el VIN); en traspaso va nula, porque el organismo lo impone el
+   * RUNT según dónde esté matriculado el vehículo.
+   */
+  transitOfficeId?: string | null;
 }
 
 /**

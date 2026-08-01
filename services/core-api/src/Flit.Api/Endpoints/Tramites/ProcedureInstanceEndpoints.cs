@@ -591,13 +591,25 @@ internal static class ProcedureInstanceEndpoints
                     body.Vin,
                     body.Plate,
                     body.OwnerDocumentType,
-                    body.OwnerDocumentNumber),
+                    body.OwnerDocumentNumber,
+                    body.TransitOfficeId),
                 ct);
 
             return err switch
             {
                 "modalidad_not_available" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No hay un tipo de trámite publicado para la modalidad indicada."),
                 "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el VIN (matrícula inicial) o la placa (traspaso) para consultar."),
+                // HU #11199 (AC2) — en matrícula inicial la consulta por VIN no corre sin secretaría.
+                TransitOfficeSelectionPolicy.RequiredErrorCode => Results.Problem(
+                    statusCode: 400,
+                    title: TransitOfficeSelectionPolicy.RequiredErrorCode,
+                    detail: "Seleccione la secretaría de tránsito antes de consultar el vehículo."),
+                // HU #11199 (AC3) / HU #11200 (AC2/AC3) — el organismo no está activo en FLIT o no está
+                // habilitado para la compañía gestora.
+                TransitOfficeSelectionPolicy.UnavailableErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: TransitOfficeSelectionPolicy.UnavailableErrorCode,
+                    detail: "El organismo de tránsito no está activo en FLIT o no está habilitado para la compañía."),
                 InitialProcedureValidationGate.DuplicateActiveProcedure => Results.Problem(
                     statusCode: 409,
                     title: InitialProcedureValidationGate.DuplicateActiveProcedure,
@@ -647,6 +659,15 @@ internal static class ProcedureInstanceEndpoints
             return err switch
             {
                 "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el VIN (matrícula inicial) o la placa (traspaso) para crear el trámite."),
+                // HU #11199 (AC1/AC3) — la secretaría del paso 1 se re-confirma al crear el trámite.
+                TransitOfficeSelectionPolicy.RequiredErrorCode => Results.Problem(
+                    statusCode: 400,
+                    title: TransitOfficeSelectionPolicy.RequiredErrorCode,
+                    detail: "Seleccione la secretaría de tránsito antes de continuar."),
+                TransitOfficeSelectionPolicy.UnavailableErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: TransitOfficeSelectionPolicy.UnavailableErrorCode,
+                    detail: "El organismo de tránsito no está activo en FLIT o no está habilitado para la compañía."),
                 "modalidad_not_available" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No hay un tipo de trámite publicado para la modalidad indicada."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found."),
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
@@ -794,7 +815,9 @@ internal sealed record PreflightPreviewBody(
     string? Vin,
     string? Plate,
     string? OwnerDocumentType,
-    string? OwnerDocumentNumber);
+    string? OwnerDocumentNumber,
+    /// <summary>HU #11199 — secretaría del paso 1; obligatoria en matrícula inicial.</summary>
+    Guid? TransitOfficeId);
 
 /// <summary>
 /// Body de POST /instances/from-consulta (CF-02). <c>PreviewToken</c> es el de la consulta del paso 1:

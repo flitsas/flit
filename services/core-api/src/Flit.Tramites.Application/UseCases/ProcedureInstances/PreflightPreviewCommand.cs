@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -19,7 +20,12 @@ public sealed record PreflightPreviewRequest(
     string? Vin,
     string? Plate,
     string? OwnerDocumentType,
-    string? OwnerDocumentNumber);
+    string? OwnerDocumentNumber,
+    /// <summary>
+    /// HU #11199 — secretaría elegida en el primer paso. OBLIGATORIA en matrícula inicial: sin ella
+    /// no se consulta el VIN. En traspaso llega nula (el organismo lo impone el RUNT, HU #11200).
+    /// </summary>
+    Guid? TransitOfficeId = null);
 
 /// <summary>Atributo del vehículo hidratado por la consulta, en la forma que ya consume el wizard.</summary>
 public sealed record PreflightPreviewFieldDto(string FieldKey, string? ValueText, string? ValueJson);
@@ -128,6 +134,7 @@ public sealed class RunPreflightPreviewHandler(
     IConsultationTenantOverrideProvider overrideProvider,
     IConsultationRestrictionPolicy restrictionPolicy,
     IPreflightPreviewStore previewStore,
+    ITransitOfficeResolver transitOfficeResolver,
     IConsultationBlockingPolicy? blockingPolicy = null,
     TramiteValidationPolicy? validationPolicy = null)
 {
@@ -158,6 +165,23 @@ public sealed class RunPreflightPreviewHandler(
         if (esMatricula ? vin is null : plate is null)
             return (null, "identificador_requerido", null, null);
 
+        // HU #11199 (AC2/AC5) — en MATRÍCULA INICIAL la secretaría es requisito para consultar: sin ella
+        // no se gasta la consulta al RUNT. Se confirma contra los grants y el catálogo (AC3) porque la
+        // lista pudo cargarse antes de que un administrador desactivara el organismo o revocara el grant.
+        // En traspaso no aplica: allí el organismo lo impone el RUNT y se valida después (HU #11200).
+        ResolvedTransitOffice? secretaria = null;
+        if (esMatricula)
+        {
+            if (request.TransitOfficeId is not { } elegido || elegido == Guid.Empty)
+                return (null, TransitOfficeSelectionPolicy.RequiredErrorCode, null, null);
+
+            secretaria = await transitOfficeResolver
+                .ResolveEnabledByIdAsync(request.TenantId, elegido, ct)
+                .ConfigureAwait(false);
+            if (secretaria is null)
+                return (null, TransitOfficeSelectionPolicy.UnavailableErrorCode, null, null);
+        }
+
         var fieldValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         if (Trim(request.OwnerDocumentType) is { } docType) fieldValues["owner_document_type"] = docType;
         if (Trim(request.OwnerDocumentNumber) is { } docNumber) fieldValues["owner_document_number"] = docNumber;
@@ -177,11 +201,13 @@ public sealed class RunPreflightPreviewHandler(
         }
 
         var tenantOverride = await overrideProvider.GetAsync(request.TenantId, ct);
-        // Sin OT elegido todavía (se selecciona más adelante en el wizard): ambas políticas caen a su
-        // default —permisivo en restricciones, defaults por criterio en bloqueo—, igual que hoy hace el
-        // preflight del paso 1 cuando `transit_office_id` aún no está en field_values.
-        var restrictions = await restrictionPolicy.GetAsync(request.TenantId, null, ct);
-        var blockingRules = await _blockingPolicy.GetAsync(request.TenantId, null, ct);
+        // HU #11199 — en matrícula la secretaría YA se conoce en el paso 1, así que las políticas por OT
+        // se resuelven contra el organismo real y el semáforo del paso 1 deja de divergir del que se
+        // persiste al crear el trámite. En traspaso el OT aún no se conoce (lo trae el RUNT en la
+        // consulta que viene justo después) y ambas políticas siguen cayendo a su default —permisivo en
+        // restricciones, defaults por criterio en bloqueo—, igual que antes.
+        var restrictions = await restrictionPolicy.GetAsync(request.TenantId, secretaria?.Id, ct);
+        var blockingRules = await _blockingPolicy.GetAsync(request.TenantId, secretaria?.Id, ct);
 
         var checks = new List<PreflightCheckDto>();
         var providersUsed = new SortedSet<string>(StringComparer.Ordinal);

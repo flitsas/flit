@@ -192,6 +192,11 @@ public sealed class PreflightHandlerTests
             LastName = transitOfficeName;
             return Task.FromResult(match);
         }
+
+        /// <summary>El preflight de la instancia resuelve por nombre; la vía por id no se ejercita aquí.</summary>
+        public Task<ResolvedTransitOffice?> ResolveEnabledByIdAsync(
+            Guid tenantId, Guid transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<ResolvedTransitOffice?>(null);
     }
 
     // ── 404 / 409 ────────────────────────────────────────────────────────────
@@ -826,7 +831,7 @@ public sealed class PreflightHandlerTests
         existingProcedureInstanceId.Should().BeNull();
     }
 
-// ── A4/B4 (HU #10673) — transformaciones color/combustible: snapshots *_runt + no pisar ────
+    // ── A4/B4 (HU #10673) — transformaciones color/combustible: snapshots *_runt + no pisar ────
 
     private RunPreflightHandler VehiculoHydratesHandler(params HydratedField[] hydrated) =>
         BuildHandler(null,

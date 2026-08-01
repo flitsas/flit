@@ -646,6 +646,43 @@ describe('FirmaFurStep — OT fijado desde RUNT en traspaso (B11, HU #10659)', (
   });
 });
 
+describe('FirmaFurStep — la secretaría elegida en el paso 1 (HU #11199, AC4)', () => {
+  /** Trámite creado con el organismo ya elegido en el primer paso: trae la marca del origen. */
+  const MATRICULA_OT_PASO_1 = {
+    ...INSTANCE_DETAIL,
+    fieldValues: [
+      { formFieldId: null, fieldKey: 'transit_office_id', valueText: 'aaaaaaaa-0001-4000-8000-000000000010', valueJson: null, source: 'user' },
+      { formFieldId: null, fieldKey: 'transit_office_code', valueText: '05001000', valueJson: null, source: 'user' },
+      { formFieldId: null, fieldKey: 'transit_office_name', valueText: 'Secretaría de Movilidad de Medellín', valueJson: null, source: 'user' },
+      { formFieldId: null, fieldKey: 'transit_office_city', valueText: '05001', valueJson: null, source: 'user' },
+      { formFieldId: null, fieldKey: 'transit_office_origen', valueText: 'paso_1', valueJson: null, source: 'user' },
+    ],
+  };
+
+  it('AC4: el paso del FUR ya no pide el organismo, solo lo muestra', async () => {
+    mocks.getInstance.mockResolvedValue(MATRICULA_OT_PASO_1);
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    const seccion = await screen.findByRole('region', { name: 'Organismo de tránsito' });
+    expect(within(seccion).getByText('Secretaría de Movilidad de Medellín')).toBeInTheDocument();
+    expect(within(seccion).getByText(/Lo elegiste al comenzar el trámite/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Cambiar|Seleccionar/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Seleccionar organismo de tránsito' })).not.toBeInTheDocument();
+    expect(mocks.listTransitOffices).not.toHaveBeenCalled();
+  });
+
+  it('D8: un borrador anterior al cambio (sin la marca) conserva el selector del FUR', async () => {
+    // Convivencia: no hay migración de borradores. Sin `transit_office_origen` el paso se comporta
+    // exactamente como antes, incluido el modal que se auto-abre cuando aún no hay organismo.
+    mocks.getInstance.mockResolvedValue({ ...INSTANCE_DETAIL, fieldValues: [] });
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Seleccionar organismo de tránsito' }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe('FirmaFurStep — firma no bloqueante en traspaso (B12, HU #10661)', () => {
   it('traspaso: la sección de firma es informativa y aclara que no bloquea el trámite', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);

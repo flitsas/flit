@@ -22,6 +22,18 @@ public interface ITransitOfficeResolver
         Guid tenantId,
         string transitOfficeName,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #11199 — devuelve el OT habilitado con ese <paramref name="transitOfficeId"/>, o <c>null</c>
+    /// si no existe, si está INACTIVO en el catálogo o si la empresa no lo tiene habilitado. Es la
+    /// contraparte por id de <see cref="ResolveEnabledByNameAsync"/>: la usa el paso 1 del wizard, donde
+    /// el operador elige la secretaría de una lista y hay que confirmar en el servidor que sigue siendo
+    /// elegible (la lista pudo cargarse antes de que un administrador revocara el grant o la desactivara).
+    /// </summary>
+    Task<ResolvedTransitOffice?> ResolveEnabledByIdAsync(
+        Guid tenantId,
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -35,6 +47,12 @@ public sealed class NullTransitOfficeResolver : ITransitOfficeResolver
     public Task<ResolvedTransitOffice?> ResolveEnabledByNameAsync(
         Guid tenantId,
         string transitOfficeName,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<ResolvedTransitOffice?>(null);
+
+    public Task<ResolvedTransitOffice?> ResolveEnabledByIdAsync(
+        Guid tenantId,
+        Guid transitOfficeId,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<ResolvedTransitOffice?>(null);
 }

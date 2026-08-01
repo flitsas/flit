@@ -96,12 +96,21 @@ function getVehicleStateBlock(
   return { vehicleStatus, procedureType: typeof procedureType === 'string' ? procedureType : '' };
 }
 
+// HU #11199/#11200 — misma reimplementación local de `isTransitOfficeUnavailable`, por la misma razón.
+function isTransitOfficeUnavailable(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return false;
+  return (problem as { title?: unknown }).title === 'TRANSIT_OFFICE_NOT_AVAILABLE';
+}
+
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: mocks,
   DEV_TENANT_ID: 'tenant-dev',
   DEV_USER_ID: 'user-dev',
   getDuplicateActiveProcedureId,
   getVehicleStateBlock,
+  isTransitOfficeUnavailable,
 }));
 
 // El wizard usa useToast() para el aviso de "enviado a tránsito"; se stubea para

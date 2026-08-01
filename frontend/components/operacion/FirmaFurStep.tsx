@@ -329,6 +329,9 @@ export function FirmaFurStep({
     [fv],
   );
   const organismoSelected = organismo.code.trim() !== '' || organismo.name.trim() !== '';
+  // HU #11199 (AC4) — marca escrita al crear el trámite con la secretaría del primer paso. Su ausencia
+  // (borradores anteriores al cambio) deja el comportamiento de siempre.
+  const organismoElegidoEnPasoUno = fv('transit_office_origen') === 'paso_1' && organismoSelected;
 
   // Auto-abre el modal al entrar al paso si aún no hay organismo seleccionado.
   const [organismoModalOpen, setOrganismoModalOpen] = useState(false);
@@ -338,10 +341,14 @@ export function FirmaFurStep({
     // Auto-abrir una sola vez al cargar el detalle; el guard `autoOpened` evita el bucle.
     // En solo lectura nunca se abre el selector de organismo. B11 (HU #10659): en traspaso el OT
     // proviene del RUNT (auto-bind en preflight) y no se selecciona/cambia → nunca se auto-abre.
+    // HU #11199 (AC4): con la secretaría elegida en el paso 1 tampoco hay nada que preguntar (y de
+    // hecho `organismoSelected` ya es true, así que este guard es redundante pero explícito).
+    const faltaElegirlo =
+      !organismoSelected && !readOnly && modalidad !== 'traspaso' && !organismoElegidoEnPasoUno;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!organismoSelected && !readOnly && modalidad !== 'traspaso') setOrganismoModalOpen(true);
+    if (faltaElegirlo) setOrganismoModalOpen(true);
     setAutoOpened(true);
-  }, [detail, organismoSelected, autoOpened, readOnly, modalidad]);
+  }, [detail, organismoSelected, autoOpened, readOnly, modalidad, organismoElegidoEnPasoUno]);
 
   const handleOrganismoConfirmed = async () => {
     setOrganismoModalOpen(false);
@@ -468,6 +475,7 @@ export function FirmaFurStep({
         organismo={organismo}
         organismoSelected={organismoSelected}
         modalidad={modalidad}
+        elegidoEnPasoUno={organismoElegidoEnPasoUno}
         onOpenModal={() => setOrganismoModalOpen(true)}
       />
 
@@ -853,14 +861,45 @@ function OrganismoSection({
   organismo,
   organismoSelected,
   modalidad,
+  elegidoEnPasoUno,
   onOpenModal,
 }: {
   organismo: { id: string; code: string; name: string; city: string };
   organismoSelected: boolean;
   modalidad: WizardModalidad;
+  /** HU #11199 (AC4) — la secretaría se eligió en el primer paso: aquí solo se muestra. */
+  elegidoEnPasoUno: boolean;
   onOpenModal: () => void;
 }) {
   const readOnly = useWizardReadOnly();
+
+  // HU #11199 (AC4) — en las matrículas creadas eligiendo la secretaría en el paso 1, este paso ya no
+  // la pide: la muestra como dato en firme. Los borradores anteriores al cambio no traen la marca
+  // `transit_office_origen` y conservan el selector de siempre (convivencia, D8).
+  if (elegidoEnPasoUno) {
+    return (
+      <section className="space-y-3" aria-label="Organismo de tránsito">
+        <div>
+          <h4 className="text-sm font-bold">Organismo de tránsito</h4>
+          <p className="text-xs opacity-70">
+            Lo elegiste al comenzar el trámite, en el primer paso.
+          </p>
+        </div>
+        <div
+          className="rounded-xl border p-3 flex items-center gap-3"
+          style={{ borderColor: '#8CC63F' }}
+        >
+          <Building2 className="h-4 w-4 shrink-0" style={{ color: '#5B8A1F' }} aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="text-xs font-semibold">{organismo.name || 'Organismo seleccionado'}</p>
+            <p className="text-[11px] opacity-70">
+              {[organismo.city, organismo.code].filter(Boolean).join(' · ')}
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   // B11 (HU #10659) — en TRASPASO el organismo lo fija el RUNT (auto-bind en el preflight): solo
   // lectura, sin "Seleccionar"/"Cambiar". Si el nombre RUNT no está habilitado para la empresa
