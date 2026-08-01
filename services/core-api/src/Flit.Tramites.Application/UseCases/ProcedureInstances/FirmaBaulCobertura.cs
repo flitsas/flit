@@ -41,6 +41,26 @@ public static class FirmaBaulCobertura
     }
 
     /// <summary>
+    /// Bug #11146 — ¿el gestor eligió el baúl <b>a propósito</b>?
+    ///
+    /// <para>Distinto de <see cref="Aplica"/>, que también es cierto cuando NO hay elección: ahí manda
+    /// la precedencia del baúl (HU #11031), pero solo si de verdad existe la firma. Confundir las dos
+    /// preguntas deja sin firma a las partes con identidad validada y sin baúl, que son la mayoría.</para>
+    ///
+    /// <para>La diferencia importa cuando el baúl es el elegido y su imagen no se puede resolver: ahí
+    /// la firma debe quedar en blanco —visible— en vez de rellenarse con un sello de identidad que el
+    /// negocio no eligió.</para>
+    /// </summary>
+    public static bool EligioBaulExplicitamente(ProcedureInstanceActor? actor)
+    {
+        if (actor is null || !EsJuridico(actor.DocumentType))
+            return false;
+
+        var (_, _, representanteLegal, _) = PutActorsHandler.ParseMetadata(actor.Metadata);
+        return MecanismoFirma.Normalizar(representanteLegal?.MecanismoFirma) == MecanismoFirma.Baul;
+    }
+
+    /// <summary>
     /// Persona jurídica por su tipo de documento. <c>N</c> es el código del RUNT para NIT y llega así
     /// desde algunos proveedores de consulta.
     /// </summary>

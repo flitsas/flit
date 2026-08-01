@@ -91,7 +91,11 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
                                 SelloIdentidadDe(data, parte?.Rol),
                                 FirmaBlock(parte, esJuridica),
                                 FlitFirmaLinea.Grafica,
-                                datosBold: true));
+                                datosBold: true,
+                                // HU #11170 — vigencia y hash de la firma del baúl, como en el FUR: sin
+                                // ellos la imagen queda sin nada que permita verificarla.
+                                selloBaul: FlitFirmaBaulSello.Resolve(
+                                    data.FirmaBaulMetadatos, parte?.Rol, incluirIdentificacion: false)));
                     }
                 });
             });

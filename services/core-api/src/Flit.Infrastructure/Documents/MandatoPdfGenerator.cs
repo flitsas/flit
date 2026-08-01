@@ -263,12 +263,14 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                 // HU #11030 — la firma del mandatario no se pintaba nunca: siempre salía la línea vacía
                 // aunque tuviera firma en el baúl o identidad validada. Misma precedencia que el mandante.
                 // HU #11046 — la estampa va SOBRE la línea, igual que el mandante.
+                // HU #11170 — la firma del baúl del mandatario también lleva su vigencia y su hash.
                 FlitFirmaBlock.Render(
                     sig,
                     data.Mandatario?.FirmaImagen,
                     data.Mandatario?.SelloIdentidad,
                     MandatarioIdentificacion(data.Mandatario),
-                    FlitFirmaLinea.Underscores);
+                    FlitFirmaLinea.Underscores,
+                    selloBaul: SelloBaulDe(data.Mandatario));
             });
         });
     }
@@ -286,8 +288,20 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             FirmaBaulDe(tramite, parte?.Rol),
             SelloIdentidadDe(tramite, parte?.Rol),
             MandanteIdentificacion(parte, esJuridica),
-            FlitFirmaLinea.Underscores);
+            FlitFirmaLinea.Underscores,
+            // HU #11170 — vigencia y hash de la firma custodiada, como en el FUR.
+            selloBaul: FlitFirmaBaulSello.Resolve(tramite.FirmaBaulMetadatos, parte?.Rol, incluirIdentificacion: false));
     }
+
+    /// <summary>
+    /// HU #11170 — trazabilidad de la firma del baúl del MANDATARIO. Su firma no se resuelve por rol del
+    /// trámite (no es parte: es quien recibe el poder), así que los metadatos viajan en el propio
+    /// <see cref="MandatarioFirmante"/>.
+    /// </summary>
+    private static string? SelloBaulDe(MandatarioFirmante? mandatario) =>
+        mandatario?.FirmaBaulMetadatos is { } meta
+            ? FlitFirmaBaulSello.Build(meta, incluirIdentificacion: false)
+            : null;
 
     /// <summary>Imagen de la firma del baúl resuelta para el rol, o <c>null</c> si no tiene.</summary>
     private static byte[]? FirmaBaulDe(FurDocumentData tramite, string? rol) =>
