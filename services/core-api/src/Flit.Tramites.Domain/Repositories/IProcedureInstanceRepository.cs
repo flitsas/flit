@@ -252,6 +252,14 @@ public interface IProcedureInstanceRepository
     /// <summary>Encola un evento de bitácora (append-only) para persistir en el próximo SaveChanges.</summary>
     Task AddEventAsync(ProcedureInstanceEvent evt, CancellationToken ct = default);
 
+    /// <summary>
+    /// Documentos que se consultaron REALMENTE en el RUNT dentro de este trámite, en la forma
+    /// <c>TIPO|NUMERO</c> de <see cref="Tramites.Services.RuntPersonaConsultada.Key"/>. Lo usa el gate
+    /// de actores para exigir la consulta en vez de darla por hecha con el documento digitado.
+    /// </summary>
+    Task<IReadOnlySet<string>> ListRuntConsultedDocumentKeysAsync(
+        Guid id, Guid tenantId, CancellationToken ct = default);
+
     /// <summary>Último snapshot de preflight de la instancia (por created_at desc), o null.</summary>
     Task<ProcedureInstancePreflightSnapshot?> GetLatestPreflightAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
@@ -364,6 +372,25 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<ProcedureInstanceActor?> FindLatestActorContactAsync(
         Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default);
+
+    /// <summary>
+    /// Listado FILTRADO y ORDENADO server-side (a diferencia de <see cref="ListWithSummaryGraphAsync"/>,
+    /// que trae el TOP-N más reciente sin filtros ni paginación real): el <c>WHERE</c>/<c>ORDER BY</c> se
+    /// resuelve en SQL sobre columnas propias o denormalizadas (VIN/placa/vendedor/comprador — migración
+    /// TramitesCamposBusqueda), NUNCA en memoria. Carga el mismo grafo que
+    /// <see cref="ListWithSummaryGraphAsync"/> (necesario para <c>ListProcedureInstancesHandler.ToSummary</c>)
+    /// solo para las filas de la página pedida. <paramref name="tenantId"/> <c>null</c> = TODOS los
+    /// tenants (superadmin, #1). Devuelve también el TOTAL de filas que matchean el filtro (sin
+    /// paginar), para que el caller arme la paginación.
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstance> Items, int Total)> ListWithSummaryGraphFilteredAsync(
+        Guid? tenantId,
+        int skip,
+        int take,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        CancellationToken ct = default);
 }
 
 /// <summary>

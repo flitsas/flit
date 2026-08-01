@@ -83,7 +83,14 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   }
 
   if (response.status === 422) {
-    const data = (await safeJson(response)) as ValidationErrorResponse | null;
+    const data = (await safeJson(response)) as
+      | (ValidationErrorResponse & { detail?: string; title?: string })
+      | null;
+    // ProblemDetails (RFC 7807) con `detail`: no es el diccionario de validación de modelo.
+    // Antes se convertía en ApiValidationError vacío y la UI perdía el motivo (p.ej. placa).
+    if (typeof data?.detail === "string" && data.detail.trim()) {
+      throw new ApiError(422, data.detail, data);
+    }
     throw new ApiValidationError(data?.errors ?? [], 422);
   }
 

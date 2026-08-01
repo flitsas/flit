@@ -193,14 +193,21 @@ public sealed class TramiteLifecycleService(
             // Los gates de entrega (EvaluarEntregaAsync) ya corrieron y promovieron el OT elegido.
             instance.PlateFlowStatus = command.PlateFlowStatus;
 
-            // Cierra la ventana de edición de subsanación al re-radicar.
+            // Cierra la ventana de edición de subsanación al re-radicar. El baseline ya se consumió
+            // en el diff de gates de esta misma transición, así que se suelta con la ventana.
             if (instance.SubsanacionActiva)
+            {
                 instance.SubsanacionActiva = false;
+                instance.SubsanacionBaseline = null;
+            }
         }
 
         // Si se anula o se vuelve a borrador, apagar el flag de subsanación.
         if (command.ToStatus is TramiteEstado.Anulado or TramiteEstado.Borrador)
+        {
             instance.SubsanacionActiva = false;
+            instance.SubsanacionBaseline = null;
+        }
 
         // Feature #10701 / HU #10860 — un cambio de estado invalida los consolidados persistidos
         // (maestro y wizard): el expediente cambió, así que la próxima generación debe regenerarlos

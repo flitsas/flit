@@ -24,6 +24,14 @@ vi.mock('@/lib/api/tramites-client', () => ({
   DEV_USER_ID: 'user-dev',
 }));
 
+// Preferencias de columnas: sin mock, el put fallaba y el selector revertía la selección.
+vi.mock('@/lib/api/ui-preferences', () => ({
+  uiPreferencesClient: {
+    get: vi.fn().mockResolvedValue({ scope: 'tramites.columns', value: {} }),
+    put: vi.fn().mockResolvedValue({ scope: 'tramites.columns', value: { visible: [] } }),
+  },
+}));
+
 // La tabla usa useRouter para abrir cada fila; en jsdom no hay router montado.
 const routerPush = vi.hoisted(() => vi.fn());
 vi.mock('next/navigation', () => ({
@@ -400,6 +408,10 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
     render(<TramitesTable />);
 
     await screen.findByText('AAA111');
+    // Gestor es opcional en el default compacto: el SuperAdmin lo activa para ver la compañía.
+    await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^Gestor$/i }));
+
     expect(within(screen.getByRole('row')).getByText('Gestor')).toBeInTheDocument();
     expect(within(screen.getByRole('row')).queryByText('Compañía')).not.toBeInTheDocument();
     const rows = screen.getByRole('list', { name: 'Trámites en curso' });
@@ -422,8 +434,9 @@ describe('TramitesTable — actores del traspaso (HU #11020)', () => {
 
     await screen.findByText('P0001');
     // HU #11057 renombró la cabecera a "Propietario / vendedor" (rótulo del negocio).
-    expect(screen.getByText('Propietario / vendedor')).toBeInTheDocument();
-    expect(screen.getByText('Comprador')).toBeInTheDocument();
+    // El mismo texto aparece en el formulario de filtros; basta con que exista ≥1.
+    expect(screen.getAllByText('Propietario / vendedor').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Comprador').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Vendedor 0001')).toBeInTheDocument();
     expect(screen.getByText('Comprador 0001')).toBeInTheDocument();
   });
@@ -441,9 +454,9 @@ describe('TramitesTable — actores del traspaso (HU #11020)', () => {
   });
 });
 
-// HU #11057 — columnas acordadas con el negocio.
+// HU #11057 — columnas del listado; el default es compacto (el resto se activa con "Columnas").
 describe('TramitesTable — columnas del listado (HU #11057)', () => {
-  it('muestra las columnas acordadas con el negocio', async () => {
+  it('muestra por defecto las columnas esenciales (sin scroll de catálogo completo)', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
     render(<TramitesTable />);
 
@@ -451,27 +464,39 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     const header = screen.getByRole('row');
     for (const col of [
       'Radicado',
-      'VIN',
       'Placa',
       'Trámite / Modalidad',
       'Propietario / vendedor',
       'Comprador',
       'Fecha de creación',
-      'Fecha de actualización',
       'Secretaría',
-      'Gestor',
-      'Fuente',
       'Acciones',
     ]) {
       expect(within(header).getByText(col)).toBeInTheDocument();
     }
-    // Dos columnas "Firmado" (vendedor y comprador), distinguidas por su sufijo accesible.
-    expect(within(header).getAllByText(/^Firmado/)).toHaveLength(2);
-    expect(within(header).getByText('(vendedor)')).toBeInTheDocument();
-    expect(within(header).getByText('(comprador)')).toBeInTheDocument();
+    // Opcionales: disponibles en el selector, no en la cabecera por defecto.
+    expect(within(header).queryByText('VIN')).not.toBeInTheDocument();
+    expect(within(header).queryByText('Fuente')).not.toBeInTheDocument();
+    expect(within(header).queryByText('Gestor')).not.toBeInTheDocument();
+    expect(within(header).queryAllByText(/^Firmado/)).toHaveLength(0);
   });
 
-  it('proyecta gestor, fuente y fecha de actualización de la fila', async () => {
+  it('permite activar columnas opcionales desde el selector', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    // Preferencias: sin backend en test, setVisible actualiza estado local.
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^VIN$/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^Gestor$/i }));
+
+    const header = screen.getByRole('row');
+    expect(within(header).getByText('VIN')).toBeInTheDocument();
+    expect(within(header).getByText('Gestor')).toBeInTheDocument();
+  });
+
+  it('proyecta gestor, fuente y fecha de actualización cuando el usuario las activa', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
       {
@@ -487,6 +512,11 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
+    await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^Gestor$/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^Fuente$/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /Fecha de actualización/i }));
+
     const rows = screen.getByRole('list', { name: 'Trámites en curso' });
     expect(within(rows).getByText('Empresa Gestora SAS')).toBeInTheDocument();
     expect(within(rows).getByText('Ana Gestora')).toBeInTheDocument();
@@ -494,7 +524,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     expect(within(rows).getByText('2026/07/20')).toBeInTheDocument();
   });
 
-  it('muestra el estado de acreditación de cada parte por separado', async () => {
+  it('muestra el estado de acreditación junto al nombre de cada actor', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
       { ...item, firmaVendedorEstado: 'firmado', firmaCompradorEstado: 'rechazado' },
@@ -507,7 +537,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     expect(within(rows).getByText('Rechazado')).toBeInTheDocument();
   });
 
-  it('en matrícula inicial la columna del vendedor se presenta como no aplicable', async () => {
+  it('en matrícula inicial la firma del vendedor se presenta como no aplicable', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
       {
@@ -522,7 +552,6 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
 
     await screen.findByText('P0001');
     const rows = screen.getByRole('list', { name: 'Trámites en curso' });
-    // Sin chip de acreditación: el vendedor no existe y el comprador viene sin estado.
     expect(within(rows).queryByText('Pendiente')).toBeNull();
     expect(within(rows).getAllByTitle(/No aplica: este trámite no tiene/)).toHaveLength(2);
   });
@@ -686,6 +715,69 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
   });
 });
 
+// El trámite puede avanzar a Terminado CON salvedades (compañía que permite continuar sin SOAT
+// vigente). Enviarlo al OT en silencio en ese caso es el bug que esta suite cubre.
+describe('TramitesTable — advertencias al procesar (SOAT no vigente)', () => {
+  const procesable = () => {
+    const [item] = makeInstances(1);
+    return { ...item, id: 'proc1', referenceNumber: 'TR-PROC', placa: 'PRC001', estado: 'entregado', plateFlowStatus: 'asignado' } satisfies InstanceSummary;
+  };
+
+  it('cuando hay alerta de procesar, el menú destaca la opción Procesar', async () => {
+    mocks.listInstances.mockResolvedValue([procesable()]);
+    render(<TramitesTable />);
+
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /Acciones del trámite TR-PROC.*Pendiente por procesar/,
+      }),
+    );
+    const procesar = await screen.findByRole('menuitem', { name: 'Procesar' });
+    expect(procesar).toHaveClass('bg-amber-50');
+  });
+
+  async function procesar() {
+    mocks.listInstances.mockResolvedValue([procesable()]);
+    render(<TramitesTable />);
+    // Con la fila pendiente por procesar, ActionsMenu añade el hint al nombre accesible.
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Acciones del trámite TR-PROC/ }),
+    );
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Procesar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Marcar como Terminado' }));
+  }
+
+  it('muestra la advertencia del backend y deja el modal abierto', async () => {
+    mocks.completePlateFlow.mockResolvedValue({
+      instance: null,
+      warningCode: 'soat_no_vigente_advertencia',
+      warningMessage: 'El trámite se envió al OT SIN SOAT vigente: el RUNT no lo reporta vigente.',
+    });
+
+    await procesar();
+
+    const dialog = screen.getByRole('dialog', { name: 'Procesar trámite' });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(/SIN SOAT vigente/);
+    // La operación fue exitosa: ya no se puede reintentar, solo cerrar.
+    expect(within(dialog).queryByRole('button', { name: 'Marcar como Terminado' })).toBeNull();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Entendido' }));
+    expect(screen.queryByRole('dialog', { name: 'Procesar trámite' })).toBeNull();
+  });
+
+  it('sin advertencia cierra el modal directamente', async () => {
+    mocks.completePlateFlow.mockResolvedValue({
+      instance: null,
+      warningCode: null,
+      warningMessage: null,
+    });
+
+    await procesar();
+
+    expect(screen.queryByRole('dialog', { name: 'Procesar trámite' })).toBeNull();
+  });
+});
+
 describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
   it('selecciona varios borradores ICT y los pausa en lote', async () => {
     const [b] = makeInstances(1);
@@ -706,5 +798,123 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Pausar' }));
     expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(['m1', 'm2'], true, null, undefined);
+  });
+});
+
+describe('TramitesTable — filtros y ordenamiento server-side', () => {
+  async function abrirFiltros() {
+    await userEvent.click(screen.getByRole('button', { name: /^Filtros/i }));
+  }
+
+  it('aplica filtros de placa, actores, gestor, firmado y fechas al listado', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+    expect(mocks.listInstances).toHaveBeenCalledWith(undefined);
+
+    await abrirFiltros();
+    await userEvent.type(screen.getByLabelText('Filtrar por placa'), 'ABC123');
+    await userEvent.type(screen.getByLabelText('Filtrar por propietario o vendedor'), 'Pérez');
+    await userEvent.type(screen.getByLabelText('Filtrar por comprador'), 'García');
+    await userEvent.type(screen.getByLabelText('Filtrar por gestor'), 'Ana');
+    await userEvent.selectOptions(screen.getByLabelText('Filtrar por firma de compraventa'), 'true');
+    await userEvent.type(screen.getByLabelText('Fecha de creación desde'), '2026-01-01');
+    await userEvent.type(screen.getByLabelText('Fecha de creación hasta'), '2026-01-31');
+    await userEvent.type(screen.getByLabelText('Fecha de actualización desde'), '2026-02-01');
+    await userEvent.type(screen.getByLabelText('Fecha de actualización hasta'), '2026-02-28');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
+
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          placa: 'ABC123',
+          vendedor: 'Pérez',
+          comprador: 'García',
+          gestor: 'Ana',
+          firmado: true,
+          createdFrom: '2026-01-01',
+          createdTo: '2026-01-31',
+          updatedFrom: '2026-02-01',
+          updatedTo: '2026-02-28',
+          take: 200,
+          skip: 0,
+        }),
+      );
+    });
+  });
+
+  it('mantiene los filtros colapsados por defecto y permite limpiarlos', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    expect(screen.queryByLabelText('Filtrar por placa')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Limpiar filtros avanzados' })).toBeDisabled();
+
+    await abrirFiltros();
+    expect(screen.getByLabelText('Filtrar por placa')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Filtrar por placa'), 'XYZ');
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
+
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ placa: 'XYZ' }),
+      );
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Limpiar filtros avanzados' }));
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(undefined);
+    });
+  });
+
+  it('ordena por placa al hacer clic en la cabecera', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    await userEvent.click(screen.getByRole('button', { name: /Ordenar por Placa/i }));
+
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          sortBy: 'placa',
+          sortDir: 'asc',
+          take: 200,
+        }),
+      );
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /Ordenar por Placa \(ascendente\)/i }));
+
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          sortBy: 'placa',
+          sortDir: 'desc',
+        }),
+      );
+    });
+  });
+
+  it('ordena por comprador y fecha de creación desde cabeceras visibles', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    await userEvent.click(screen.getByRole('button', { name: /Ordenar por Comprador/i }));
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sortBy: 'comprador', sortDir: 'asc' }),
+      );
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /Ordenar por Fecha de creación/i }));
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sortBy: 'createdAt', sortDir: 'asc' }),
+      );
+    });
   });
 });

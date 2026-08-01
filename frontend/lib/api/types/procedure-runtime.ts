@@ -98,6 +98,18 @@ export interface ProcedureInstanceSummary {
   draftFinalizedAt?: string | null;
 }
 
+/**
+ * Respuesta de POST /instances/{id}/plate-flow/complete. El trámite avanzó a Terminado, pero puede
+ * hacerlo con salvedades: p. ej. la compañía permite continuar sin SOAT vigente
+ * (`warningCode = 'soat_no_vigente_advertencia'`). La UI debe mostrar `warningMessage` aunque la
+ * llamada haya sido exitosa.
+ */
+export interface CompletePlateFlowResult {
+  instance: ProcedureInstanceSummary | null;
+  warningCode: string | null;
+  warningMessage: string | null;
+}
+
 // ── Listado de instancias (Slice M6) ───────────────────────────────
 // Contrato FIJO acordado con backend:
 //   GET /api/v1/tramites/instances  (X-Tenant-Id)  -> { items: InstanceSummary[] }
@@ -194,9 +206,40 @@ export type TramiteFuente = 'dashboard' | 'integracion' | 'migrado';
  */
 export type FirmaParteEstado = 'pendiente' | 'firmado' | 'rechazado';
 
-/** Respuesta de GET /instances. */
+/**
+ * Query params de GET /api/v1/tramites/instances (filtros + orden server-side).
+ * Si no se envía ninguno, el backend responde el TOP-N legacy sin `total`.
+ */
+export interface ListInstancesParams {
+  /** SuperAdmin: acota el listado a una compañía (header X-Tenant-Id). */
+  filterTenantId?: string;
+  vin?: string;
+  placa?: string;
+  /** Subcadena sobre el nombre del propietario/vendedor. */
+  vendedor?: string;
+  comprador?: string;
+  gestor?: string;
+  /**
+   * Firma electrónica de la compraventa completa (`true`) o pendiente (`false`).
+   * No es el chip de identidad/baúl de la columna de actores.
+   */
+  firmado?: boolean;
+  /** ISO-8601 / fecha `YYYY-MM-DD` (el cliente normaliza a inicio/fin de día). */
+  createdFrom?: string;
+  createdTo?: string;
+  updatedFrom?: string;
+  updatedTo?: string;
+  /** Whitelist backend: vin | placa | comprador | gestor | createdAt | updatedAt */
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+  skip?: number;
+  take?: number;
+}
+
+/** Respuesta de GET /instances. `total` solo viene en el camino filtrado/ordenado. */
 export interface InstancesResponse {
   items: InstanceSummary[];
+  total?: number;
 }
 
 /** Organismo de tránsito habilitado para la empresa (catálogo + grant). */

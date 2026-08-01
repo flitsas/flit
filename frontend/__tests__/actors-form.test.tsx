@@ -8,7 +8,12 @@ const mocks = vi.hoisted(() => ({
   getActors: vi.fn(),
   saveActors: vi.fn(),
   runtPersonLookup: vi.fn(),
+  ruesPersonLookup: vi.fn(),
+  lookupLegalRepresentativeByNit: vi.fn(),
+  actorContactLookup: vi.fn(),
   getInstance: vi.fn(),
+  patchFieldValues: vi.fn(),
+  getBiometricState: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -16,12 +21,18 @@ vi.mock('@/lib/api/tramites-client', () => ({
     getActors: mocks.getActors,
     saveActors: mocks.saveActors,
     runtPersonLookup: mocks.runtPersonLookup,
+    ruesPersonLookup: mocks.ruesPersonLookup,
+    lookupLegalRepresentativeByNit: mocks.lookupLegalRepresentativeByNit,
+    actorContactLookup: mocks.actorContactLookup,
     getInstance: mocks.getInstance,
+    patchFieldValues: mocks.patchFieldValues,
+    getBiometricState: mocks.getBiometricState,
   },
 }));
 
 import {
   ActorsForm,
+  isIdentityConsultationReady,
   validateActors,
   type ActorsFormHandle,
 } from '@/components/operacion/ActorsForm';
@@ -29,12 +40,47 @@ import type { ProcedureActor } from '@/lib/api/types/procedure-runtime';
 
 const INSTANCE = 'inst-1';
 
+const RUNT_FOUND = {
+  found: true,
+  fullName: 'Juan Perez',
+  firstName: 'Juan',
+  lastName: 'Perez',
+  documentType: 'CC',
+  documentNumber: '12345',
+  source: 'RUNT',
+  mode: 'mock',
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getActors.mockResolvedValue([]);
   mocks.saveActors.mockResolvedValue(undefined);
   mocks.getInstance.mockResolvedValue({ fieldValues: [] });
+  mocks.lookupLegalRepresentativeByNit.mockResolvedValue(null);
+  mocks.actorContactLookup.mockResolvedValue({ found: false });
+  mocks.runtPersonLookup.mockResolvedValue(RUNT_FOUND);
+  mocks.ruesPersonLookup.mockResolvedValue({
+    found: true,
+    razonSocial: 'Empresa SAS',
+    documentNumber: '900123',
+    source: 'RUES',
+    mode: 'mock',
+  });
+  mocks.patchFieldValues.mockResolvedValue(undefined);
+  mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'mock' });
 });
+
+/** Completa consulta RUNT exitosa para el actor visible (layout split / un documento). */
+async function consultRuntOk(
+  user: ReturnType<typeof userEvent.setup>,
+  doc = '12345',
+  fullName = 'Juan Perez',
+) {
+  mocks.runtPersonLookup.mockResolvedValue({ ...RUNT_FOUND, documentNumber: doc, fullName });
+  const buttons = screen.getAllByRole('button', { name: 'Consultar RUNT' });
+  await user.click(buttons[0]);
+  await screen.findByText(/Persona encontrada en RUNT|encontrada en RUNT/i);
+}
 
 describe('ActorsForm — layout split (un comprador)', () => {
   it('matrícula inicial muestra las 2 secciones (Identificación + Datos de contacto)', async () => {
@@ -142,6 +188,17 @@ describe('ActorsForm — validación cliente', () => {
     await user.type(nombres[1], 'Beto Comprador');
     await user.type(emails[1], 'compartido@example.com');
 
+    const consultButtons = screen.getAllByRole('button', { name: 'Consultar RUNT' });
+    mocks.runtPersonLookup
+      .mockResolvedValueOnce({ ...RUNT_FOUND, documentNumber: '111', fullName: 'Ana Vendedora' })
+      .mockResolvedValueOnce({ ...RUNT_FOUND, documentNumber: '222', fullName: 'Beto Comprador' });
+    await user.click(consultButtons[0]);
+    await screen.findAllByText(/Persona encontrada en RUNT/i);
+    await user.click(consultButtons[1]);
+    await waitFor(() =>
+      expect(screen.getAllByText(/Persona encontrada en RUNT/i).length).toBeGreaterThanOrEqual(2),
+    );
+
     await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
 
     await waitFor(() => expect(mocks.saveActors).toHaveBeenCalledTimes(1));
@@ -191,7 +248,7 @@ describe('ActorsForm — submit', () => {
       await screen.findByLabelText(/Número de documento/),
       '12345',
     );
-    await user.type(screen.getByLabelText(/Nombre completo/), 'Juan Perez');
+    await consultRuntOk(user, '12345', 'Juan Perez');
     await user.type(
       screen.getByLabelText(/Correo electrónico/),
       'juan@example.com',
@@ -215,6 +272,39 @@ describe('ActorsForm — submit', () => {
     ]);
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/Actores guardados/)).toBeInTheDocument();
+  });
+
+  it('sin consulta RUNT exitosa no guarda y muestra aviso', async () => {
+    const user = userEvent.setup();
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await user.type(await screen.findByLabelText(/Número de documento/), '12345');
+    await user.type(screen.getByLabelText(/Nombre completo/), 'Juan Perez');
+    await user.type(screen.getByLabelText(/Correo electrónico/), 'juan@example.com');
+    await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
+
+    expect(mocks.saveActors).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/Consulta RUNT para traer la información/i),
+    ).toBeInTheDocument();
+  });
+
+  it('consulta fallida informa y sigue bloqueando el guardado', async () => {
+    const user = userEvent.setup();
+    mocks.runtPersonLookup.mockRejectedValue(new Error('timeout RUNT'));
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await user.type(await screen.findByLabelText(/Número de documento/), '12345');
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+    expect(await screen.findByText(/No se pudo consultar RUNT/i)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/Nombre completo/), 'Juan Perez');
+    await user.type(screen.getByLabelText(/Correo electrónico/), 'juan@example.com');
+    await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
+
+    expect(mocks.saveActors).not.toHaveBeenCalled();
+    expect(isIdentityConsultationReady('error')).toBe(false);
+    expect(isIdentityConsultationReady('found')).toBe(true);
   });
 });
 
@@ -243,10 +333,8 @@ describe('ActorsForm — tipo de persona (HU #10543)', () => {
     // El bloque de representante legal añade su propio «Número de documento»: se apunta al del actor
     // por su placeholder para que la query no sea ambigua.
     await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900123');
-    await user.type(
-      document.querySelector('#comprador-nombre') as HTMLInputElement,
-      'Empresa SAS',
-    );
+    await user.click(screen.getByRole('button', { name: 'Consultar RUES' }));
+    expect(await screen.findByText(/Empresa encontrada en RUES/i)).toBeInTheDocument();
     // Idem con el correo: el representante legal aporta otro campo con la misma etiqueta.
     await user.type(
       document.querySelector('#comprador-email') as HTMLInputElement,
@@ -321,6 +409,10 @@ describe('ActorsForm — save() vía ref (embebido en wizard)', () => {
     // Embebido → no hay botón "Guardar actores" propio.
     expect(screen.queryByRole('button', { name: /Guardar actores/ })).toBeNull();
 
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+    await screen.findByText(/Persona encontrada en RUNT/i);
+
     let ok: boolean | undefined;
     await act(async () => {
       ok = await ref.current!.save();
@@ -332,7 +424,7 @@ describe('ActorsForm — save() vía ref (embebido en wizard)', () => {
     expect(instanceId).toBe(INSTANCE);
     expect(actors[0]).toMatchObject({
       rol: 'comprador',
-      numeroDocumento: '123',
+      numeroDocumento: '12345',
       nombreCompleto: 'Juan Perez',
       email: 'juan@example.com',
     });
@@ -588,6 +680,14 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
         { fieldKey: 'owner_document_number', valueText: '1090123456' },
       ],
     });
+    mocks.runtPersonLookup.mockResolvedValue({
+      found: true,
+      fullName: 'Ana Vendedora',
+      documentType: 'CE',
+      documentNumber: '1090123456',
+      source: 'RUNT',
+      mode: 'mock',
+    });
     const ref = createRef<ActorsFormHandle>();
     render(
       <ActorsForm
@@ -605,8 +705,9 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
     await waitFor(() =>
       expect(screen.getByLabelText('Número de documento')).toHaveValue('1090123456'),
     );
+    // Auto-consulta RUNT al montar (autoConsultRunt).
+    await screen.findByText(/Persona encontrada en RUNT/i);
     // Completa los requeridos del vendedor para que el guardado sea válido.
-    await user.type(screen.getByLabelText(/Nombre completo/), 'Ana Vendedora');
     await user.type(screen.getByLabelText(/Correo electrónico/), 'ana@example.com');
 
     let ok: boolean | undefined;
@@ -627,6 +728,14 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
         { fieldKey: 'owner_document_number', valueText: '1090123456' },
       ],
     });
+    mocks.runtPersonLookup.mockResolvedValue({
+      found: true,
+      fullName: 'Ana Vendedora',
+      documentType: 'CC',
+      documentNumber: '1090123456',
+      source: 'RUNT',
+      mode: 'mock',
+    });
     const ref = createRef<ActorsFormHandle>();
     render(
       <ActorsForm
@@ -644,7 +753,7 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
     await waitFor(() =>
       expect(screen.getByLabelText('Número de documento')).toHaveValue('1090123456'),
     );
-    await user.type(screen.getByLabelText(/Nombre completo/), 'Ana Vendedora');
+    await screen.findByText(/Persona encontrada en RUNT/i);
     await user.type(screen.getByLabelText(/Correo electrónico/), 'ana@example.com');
 
     let ok: boolean | undefined;

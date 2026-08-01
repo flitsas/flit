@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Entities;
@@ -114,7 +115,8 @@ public sealed class GetWizardStateHandler(
     IConsultationRestrictionPolicy? restrictionPolicy = null,
     IDynamicProceduresPolicy? dynamicPolicy = null,
     IProcedureTypeSnapshotRepository? snapshotRepo = null,
-    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null)
+    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null,
+    IProcedureTypeRepository? typeRepo = null)
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
@@ -217,9 +219,14 @@ public sealed class GetWizardStateHandler(
         // coincidan. Solo aplica a traspaso (única modalidad con concepto de prenda/gravamen).
         var prendaDocumentoOtRequerido = await PrendaDocumentoOtBlockeaAsync(instance, ct);
 
+        // Actores a los que el tipo de trámite exige pasar por el RUNT, y los documentos que se
+        // consultaron de verdad en este trámite. Sin repositorio de tipos (tests) no hay exigencia.
+        var runtExigido = await ResolveRuntExigidoAsync(instance, tenantId, ct);
+
         var state = AnnotateInstanceFlags(
             ComputeState(
-                instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaDocumentoOtRequerido) with
+                instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaDocumentoOtRequerido,
+                runtExigido) with
             {
                 IdentityValidationEnabled = identityRequired,
                 RnmcEnabled = rnmcEnabled,
@@ -414,7 +421,8 @@ public sealed class GetWizardStateHandler(
         IReadOnlySet<string> identidadAprobadaPartes,
         bool? documentosCompletosOverride = null,
         bool comparendosBloquean = true,
-        bool prendaDocumentoOtRequerido = false)
+        bool prendaDocumentoOtRequerido = false,
+        RuntConsultaExigida? runtExigido = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
@@ -431,8 +439,8 @@ public sealed class GetWizardStateHandler(
             return BuildReadonlySnapshot(instance, modalidad);
 
         return modalidad == TramiteModalidadEntrada.Traspaso
-            ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride, comparendosBloquean, prendaDocumentoOtRequerido)
-            : BuildMatricula(instance, identidadAprobadaPartes, documentosCompletosOverride);
+            ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride, comparendosBloquean, prendaDocumentoOtRequerido, runtExigido)
+            : BuildMatricula(instance, identidadAprobadaPartes, documentosCompletosOverride, runtExigido);
     }
 
     /// <summary>
@@ -471,11 +479,11 @@ public sealed class GetWizardStateHandler(
     // ---- Matrícula inicial (5 pasos) ----------------------------------------
 
     private static WizardStateDto BuildMatricula(
-        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool? docsCompletosOverride = null)
+        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool? docsCompletosOverride = null, RuntConsultaExigida? runtExigido = null)
     {
         var fv = FieldValues(instance);
         var comprador = ParteOf(instance, "comprador");
-        var runtComprador = RuntOf(instance, "comprador");
+        var runtComprador = RuntOf(instance, "comprador", runtExigido);
         var preflight = PreflightOf(instance);
 
         var docsCompletos = docsCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
@@ -593,13 +601,13 @@ public sealed class GetWizardStateHandler(
     private static WizardStateDto BuildTraspaso(
         ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes,
         bool? docsCompletosOverride = null, bool comparendosBloquean = true,
-        bool prendaDocumentoOtRequerido = false)
+        bool prendaDocumentoOtRequerido = false, RuntConsultaExigida? runtExigido = null)
     {
         var fv = FieldValues(instance);
         var vendedor = ParteOf(instance, "vendedor");
         var comprador = ParteOf(instance, "comprador");
-        var runtVendedor = RuntOf(instance, "vendedor");
-        var runtComprador = RuntOf(instance, "comprador");
+        var runtVendedor = RuntOf(instance, "vendedor", runtExigido);
+        var runtComprador = RuntOf(instance, "comprador", runtExigido);
         var preflight = PreflightOf(instance);
         var simitComprador = SimitOf(instance, comprador, preflight);
         var docsCompletos = docsCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
@@ -844,13 +852,71 @@ public sealed class GetWizardStateHandler(
     /// se hidrata en field_values (Slice 5) sin entidad propia; el documento del snapshot coincide
     /// con el del actor por construcción (el gate normaliza y compara documentos).
     /// </summary>
-    private static RuntSnapshot? RuntOf(ProcedureInstance instance, string actorType)
+    /// <summary>
+    /// Arma la exigencia de RUNT del trámite: los actores cuyo perfil de validación tiene
+    /// <c>requiresRunt</c> y los documentos con consulta evidenciada. Devuelve
+    /// <see cref="RuntConsultaExigida.Ninguna"/> si el tipo no exige RUNT a nadie, para no pagar la
+    /// lectura de eventos cuando no aplica.
+    /// </summary>
+    private async Task<RuntConsultaExigida?> ResolveRuntExigidoAsync(
+        ProcedureInstance instance, Guid tenantId, CancellationToken ct)
+    {
+        if (typeRepo is null)
+            return null;
+
+        var tipo = await typeRepo.GetByIdWithDetailsAsync(instance.ProcedureTypeId, ct).ConfigureAwait(false);
+        if (tipo is null)
+            return null;
+
+        var actores = tipo.ConformationRules
+            .Where(r => r.IsActive && RequiereRunt(r.ValidationProfile))
+            .Select(r => RuntConsultaExigida.ActorTypeDeEntidad(r.ProcedureEntity?.Code))
+            .Where(a => a is not null)
+            .Select(a => a!)
+            .ToList();
+
+        if (actores.Count == 0)
+            return RuntConsultaExigida.Ninguna;
+
+        var consultados = await repo
+            .ListRuntConsultedDocumentKeysAsync(instance.Id, tenantId, ct)
+            .ConfigureAwait(false);
+
+        return new RuntConsultaExigida(actores, consultados);
+    }
+
+    /// <summary>¿El perfil de validación del actor marca <c>requiresRunt</c>?</summary>
+    private static bool RequiereRunt(string? validationProfile)
+    {
+        if (string.IsNullOrWhiteSpace(validationProfile))
+            return false;
+        try
+        {
+            var node = JsonNode.Parse(validationProfile);
+            return node?["requiresRunt"]?.GetValue<bool>() == true;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+        {
+            // Perfil ilegible: no se inventa una exigencia que el configurador no expresó.
+            return false;
+        }
+    }
+
+    private static RuntSnapshot? RuntOf(
+        ProcedureInstance instance, string actorType, RuntConsultaExigida? exigencia = null)
     {
         var a = instance.Actors.FirstOrDefault(x =>
             string.Equals(x.ActorType, actorType, StringComparison.OrdinalIgnoreCase));
         if (a is null || string.IsNullOrWhiteSpace(a.DocumentNumber))
             return null;
-        return new RuntSnapshot(Consultado: true, Documento: a.DocumentNumber);
+
+        // Cuando el tipo de trámite marca este actor con requiresRunt, la consulta debe estar
+        // EVIDENCIADA para el mismo documento; sin evidencia el gate del paso no pasa. Sin exigencia
+        // configurada se conserva el comportamiento anterior (documento digitado ⇒ consultado).
+        var consultado = exigencia?.Exige(actorType) != true
+            || exigencia.FueConsultado(a.DocumentType, a.DocumentNumber);
+
+        return new RuntSnapshot(Consultado: consultado, Documento: a.DocumentNumber);
     }
 
     /// <summary>

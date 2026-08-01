@@ -148,7 +148,7 @@ describe("TransitOfficesList — RF01/RF02/RF03", () => {
     renderList();
     await screen.findByText("Medellín — Secretaría de Movilidad");
     await user.click(screen.getByRole("button", { name: /Administrar Medellín/ }));
-    expect(mockPush).toHaveBeenCalledWith(`/admin/transit-offices/${OFFICE_ACTIVO}/tramites`);
+    expect(mockPush).toHaveBeenCalledWith(`/admin/transit-offices/${OFFICE_ACTIVO}/client-procedures`);
   });
 
   it("RF03 desactiva un OT activo con confirmación", async () => {

@@ -175,7 +175,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
         {
           icon: SlidersHorizontal,
           label: `Administrar ${office.name}`,
-          onClick: () => router.push(otHubModulePath(office.id, "tramites")),
+          onClick: () => router.push(otHubModulePath(office.id, "client-procedures")),
           tone: "primary",
         },
         quipuxAction,

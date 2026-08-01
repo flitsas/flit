@@ -39,6 +39,7 @@ import type {
   PrendaInput,
   InstanceSummary,
   InstancesResponse,
+  ListInstancesParams,
   TransitOfficeOption,
   TransitOfficesResponse,
   IniciarBiometriaInput,
@@ -58,6 +59,7 @@ import type {
   ProcedureInstanceDetail,
   ReconcileIdentityResult,
   ProcedureInstanceSummary,
+  CompletePlateFlowResult,
   RuntPersonLookupInput,
   RuntPersonLookupResult,
   ValidateSoatResult,
@@ -123,6 +125,7 @@ function mapPreflight(dto: PreflightSnapshotDto): PreflightSnapshot {
 import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 import { getToken } from './client';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
+import { buildListInstancesSearchParams } from '@/lib/tramites/list-instances-query';
 
 export { DEV_TENANT_ID, DEV_USER_ID };
 
@@ -290,7 +293,9 @@ export function getVehicleStateBlock(err: unknown): VehicleStateBlockInfo | null
   return { vehicleStatus, procedureType: typeof procedureType === 'string' ? procedureType : '' };
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+// Exportado para que otros clientes del mismo dominio (p. ej. lib/api/ui-preferences.ts)
+// reutilicen el mismo manejo de errores/JSON en vez de reimplementarlo.
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(apiUrl(path), {
     ...init,
@@ -346,7 +351,10 @@ function jwtTenantId(): string | undefined {
  * Para un company-user el backend igual lo sobrescribe desde el token (defensa); enviarlo solo
  * mantiene la llamada coherente. NO es el header X-Flit-SuperAdmin de parametrización.
  */
-function tenantHeader(tenantId?: string): HeadersInit {
+// Exportado por el mismo motivo que `request`: es el único lugar que resuelve Bearer +
+// X-Tenant-Id (explícito → tenant activo → JWT), y otros clientes (ui-preferences.ts) lo
+// necesitan tal cual, sin duplicar la resolución de tenant.
+export function tenantHeader(tenantId?: string): HeadersInit {
   const headers: Record<string, string> = {};
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -389,18 +397,28 @@ export const tramitesClient = {
     }),
 
   // Slice M6 — listado de instancias para la tabla "Trámites en curso".
-  // GET devuelve { items }; se desempaqueta al arreglo para el consumidor.
+  // GET devuelve { items, total? }; se desempaqueta al arreglo para el consumidor.
   // #1 — El tenant lo deriva el backend del JWT: company-user ve solo su compañía. El SuperAdmin
   // ve TODO; solo se manda X-Tenant-Id si elige una compañía (filterTenantId).
+  // Acepta string legacy (= filterTenantId) o un objeto con filtros/orden server-side.
   listInstances: async (
-    filterTenantId?: string,
+    filterTenantIdOrParams?: string | ListInstancesParams,
   ): Promise<InstanceSummary[]> => {
+    const params: ListInstancesParams =
+      typeof filterTenantIdOrParams === 'string'
+        ? { filterTenantId: filterTenantIdOrParams }
+        : (filterTenantIdOrParams ?? {});
+
     const headers: Record<string, string> = {};
-    if (filterTenantId) headers['X-Tenant-Id'] = filterTenantId;
-    const res = await request<InstancesResponse>(
-      '/api/v1/tramites/instances',
-      { headers },
-    );
+    if (params.filterTenantId) headers['X-Tenant-Id'] = params.filterTenantId;
+
+    const { filterTenantId: _tenant, ...query } = params;
+    const qs = buildListInstancesSearchParams(query).toString();
+    const path = qs
+      ? `/api/v1/tramites/instances?${qs}`
+      : '/api/v1/tramites/instances';
+
+    const res = await request<InstancesResponse>(path, { headers });
     // Normaliza los campos async de HU #10350 con defaults seguros: un backend que aún no los
     // exponga (transición) deja la tabla funcionando (chips/estado base) sin romper el render.
     return (res?.items ?? []).map((item) => ({
@@ -682,13 +700,18 @@ export const tramitesClient = {
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
 
-  /** Gestor en Asignado: checks opcionales + avanza a Terminado. */
+  /**
+   * Gestor en Asignado: checks opcionales + avanza a Terminado.
+   *
+   * El trámite puede avanzar CON salvedades (p. ej. la compañía permite continuar sin SOAT vigente):
+   * en ese caso llega `warningMessage` y la UI debe mostrarlo aunque la operación haya salido bien.
+   */
   completePlateFlow: (
     instanceId: string,
     body: { soatPagado?: boolean; impuestoDepartamentalPagado?: boolean } = {},
     tenantId?: string,
   ) =>
-    request<ProcedureInstanceSummary>(
+    request<CompletePlateFlowResult>(
       `/api/v1/tramites/instances/${instanceId}/plate-flow/complete`,
       {
         method: 'POST',

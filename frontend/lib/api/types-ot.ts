@@ -70,6 +70,11 @@ export interface OtClientProcedure {
   submittedAt?: string | null;
   /** HU #10536 — trámite marcado como prioritario: el OT lo revisa con primacía (solo indicador). */
   prioritario?: boolean;
+  /** Propietario/vendedor (null en matrícula inicial). */
+  vendedorNombre?: string | null;
+  compradorNombre?: string | null;
+  /** Gestor que radicó el trámite. */
+  gestorNombre?: string | null;
   /** Detalle (GET by id): actores del trámite. */
   actors?: OtClientProcedureActor[];
   placa?: string | null;
@@ -103,6 +108,15 @@ export interface OtClientProcedurePagedResult {
 export interface OtClientProceduresParams {
   status?: string;
   procedureTypeId?: string;
+  vin?: string;
+  placa?: string;
+  vendedor?: string;
+  comprador?: string;
+  gestor?: string;
+  /** vin | placa | vendedor | comprador | gestor | createdAt | radicado | estado */
+  sortBy?: string;
+  /** asc | desc */
+  sortDir?: "asc" | "desc";
   page?: number;
   pageSize?: number;
 }

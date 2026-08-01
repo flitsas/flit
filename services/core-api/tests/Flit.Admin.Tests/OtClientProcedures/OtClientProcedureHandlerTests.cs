@@ -66,6 +66,52 @@ public sealed class OtClientProcedureHandlerTests
     }
 
     [Fact]
+    public async Task List_ProyectaVinPlacaActoresYGestor_YFiltraPorPlaca()
+    {
+        var db = NewDbName();
+        var matchId = Guid.NewGuid();
+        var otherId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedCatalog(seed, ClientTenant, ProcedureTypeA, "Flota Andina S.A.S.", "Matrícula inicial");
+            SeedActorUser(seed, ActorUser);
+            // DisplayName del gestor = "Actor Test" (SeedActorUser).
+            SeedProcedure(seed, matchId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado,
+                reference: "REF-MATCH", plate: "ABC123");
+            SeedProcedure(seed, otherId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado,
+                reference: "REF-OTHER", plate: "XYZ999");
+
+            var match = seed.ProcedureInstances.Single(p => p.Id == matchId);
+            match.Vin = "9BWZZZ377VT004251";
+            match.CompradorNombre = "Luis Comprador";
+            match.VendedorNombre = "Ana Vendedora";
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = new ListOtClientProceduresHandler(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()));
+
+        var filtered = await handler.HandleAsync(new ListOtClientProceduresQuery
+        {
+            OtTenantId = OtTenant,
+            Placa = "ABC",
+            SortBy = "placa",
+            SortDir = "asc",
+        }, TestContext.Current.CancellationToken);
+
+        filtered.Data.Should().ContainSingle();
+        filtered.Data[0].Id.Should().Be(matchId);
+        filtered.Data[0].Placa.Should().Be("ABC123");
+        filtered.Data[0].Vin.Should().Be("9BWZZZ377VT004251");
+        filtered.Data[0].CompradorNombre.Should().Be("Luis Comprador");
+        filtered.Data[0].VendedorNombre.Should().Be("Ana Vendedora");
+        filtered.Data[0].GestorNombre.Should().Be("Actor Test");
+    }
+
+    [Fact]
     public async Task AC2_Approve_PersistsApprovedOtAndAuditTrail()
     {
         var db = NewDbName();
@@ -510,7 +556,8 @@ public sealed class OtClientProcedureHandlerTests
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
         var result = await repo.AssignPlateAsync(OtTenant, procedureId, "ABC100", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
-        result.Should().NotBeNull();
+        result.Succeeded.Should().BeTrue();
+        result.Failure.Should().Be(PlateAssignmentFailure.None);
         await using var verify = NewContext(db);
         var instance = await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken);
         instance.Status.Should().Be(TramiteEstado.Entregado);
@@ -524,7 +571,7 @@ public sealed class OtClientProcedureHandlerTests
     }
 
     [Fact] // La asignación exige el sub-estado 'preasignado'; un entregado estándar (sub-estado null) la rechaza.
-    public async Task AssignPlate_NoPreasignado_DevuelveNull()
+    public async Task AssignPlate_NoPreasignado_InformaElSubEstado()
     {
         var db = NewDbName();
         var procedureId = Guid.NewGuid();
@@ -541,7 +588,186 @@ public sealed class OtClientProcedureHandlerTests
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
         var result = await repo.AssignPlateAsync(OtTenant, procedureId, "ABC100", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
-        result.Should().BeNull();
+        result.Succeeded.Should().BeFalse();
+        result.Failure.Should().Be(PlateAssignmentFailure.NotPreassigned);
+    }
+
+    // El motivo por el que no se pudo asignar tiene que llegar nombrado hasta el endpoint: el OT
+    // reportó que el sistema no le decía que la placa ya estaba tomada, solo no lo dejaba avanzar.
+
+    [Fact]
+    public async Task AssignPlate_PlacaYaAsignadaAOtroTramite_LoDistingueDeNoDisponible()
+    {
+        var db = NewDbName();
+        var primero = Guid.NewGuid();
+        var segundo = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, primero, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Preasignado);
+            SeedProcedure(seed, segundo, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Preasignado);
+            await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
+
+        var primera = await repo.AssignPlateAsync(OtTenant, primero, "ABC100", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
+        primera.Succeeded.Should().BeTrue();
+
+        // Segundo trámite, misma placa: ya está tomada.
+        var segunda = await repo.AssignPlateAsync(OtTenant, segundo, "ABC100", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
+
+        segunda.Succeeded.Should().BeFalse();
+        segunda.Failure.Should().Be(PlateAssignmentFailure.PlateAlreadyAssigned);
+        segunda.Procedure.Should().BeNull();
+    }
+
+    // Una placa viva en otro trámite no se puede reasignar, aunque ese trámite sea de otra compañía u
+    // otro OT y aunque la placa no esté en el inventario de rangos (caso reportado en DEV con QXU030).
+    [Theory]
+    [InlineData(TramiteEstado.Borrador)]
+    [InlineData(TramiteEstado.Entregado)]
+    [InlineData(TramiteEstado.Aprobado)]
+    public async Task AssignPlate_PlacaEnTramiteVivoDeOtraCompania_LoBloquea(string estadoDelOtro)
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+        var otroTramite = Guid.NewGuid();
+        var otraCompania = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Preasignado);
+            SeedProcedure(seed, otroTramite, otraCompania, TransitOffice, ProcedureTypeA, estadoDelOtro, reference: "TRM-2026-000018", plate: "ABC100");
+            await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
+        var result = await repo.AssignPlateAsync(OtTenant, procedureId, "ABC100", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Succeeded.Should().BeFalse();
+        result.Failure.Should().Be(PlateAssignmentFailure.PlateInUseByAnotherProcedure);
+        // El operador tiene que poder ir a mirar el trámite que la retiene.
+        result.Detail.Should().Contain("TRM-2026-000018");
+
+        await using var verify = NewContext(db);
+        var instance = await verify.ProcedureInstances.SingleAsync(p => p.Id == procedureId, TestContext.Current.CancellationToken);
+        instance.PlateFlowStatus.Should().Be(PlateFlowStatus.Preasignado);
+    }
+
+    [Theory] // Rechazado y anulado liberan la placa: el vehículo puede volver a tramitarse con ella.
+    [InlineData(TramiteEstado.Rechazado)]
+    [InlineData(TramiteEstado.Anulado)]
+    public async Task AssignPlate_PlacaEnTramiteCerrado_PermiteAsignar(string estadoDelOtro)
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+        var otroTramite = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Preasignado);
+            SeedProcedure(seed, otroTramite, ClientTenant, TransitOffice, ProcedureTypeA, estadoDelOtro, reference: "TRM-2026-000019", plate: "ABC100");
+            await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
+        var result = await repo.AssignPlateAsync(OtTenant, procedureId, "ABC100", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Succeeded.Should().BeTrue();
+    }
+
+    [Fact] // La placa que ya está en el propio trámite no se bloquea a sí misma (reintento idempotente).
+    public async Task AssignPlate_PlacaDelMismoTramite_NoSeBloqueaASiMisma()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Preasignado, plate: "ABC100");
+            await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
+        var result = await repo.AssignPlateAsync(OtTenant, procedureId, "ABC100", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Succeeded.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AssignPlate_PlacaFueraDeLosRangos_InformaNoDisponible()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado, plateFlowStatus: PlateFlowStatus.Preasignado);
+            await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
+
+        // ZZZ999 no pertenece a ningún rango del OT y no se pidió fuera de rango.
+        var result = await repo.AssignPlateAsync(OtTenant, procedureId, "ZZZ999", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Succeeded.Should().BeFalse();
+        result.Failure.Should().Be(PlateAssignmentFailure.PlateNotAvailable);
+    }
+
+    [Fact]
+    public async Task AssignPlate_SinPlaca_LoInformaComoDatoFaltante()
+    {
+        var db = NewDbName();
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
+
+        var result = await repo.AssignPlateAsync(OtTenant, Guid.NewGuid(), "   ", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Failure.Should().Be(PlateAssignmentFailure.MissingPlate);
+    }
+
+    [Fact]
+    public async Task AssignPlate_TramiteSinGrantVigente_LoInformaComoNoAccesible()
+    {
+        var db = NewDbName();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            await new PlateRangeRepository(seed).CreateRangeAsync(ClientTenant, TransitOffice, "ABC", 100, 105, null, TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
+
+        // El trámite no existe para este OT.
+        var result = await repo.AssignPlateAsync(OtTenant, Guid.NewGuid(), "ABC100", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Succeeded.Should().BeFalse();
+        result.Failure.Should().Be(PlateAssignmentFailure.ProcedureNotAccessible);
     }
 
     // ---------- HU #10655: aprobar RUNT (placa utilizada) / revocar (placa revocada) ----------
@@ -911,7 +1137,8 @@ public sealed class OtClientProcedureHandlerTests
         Guid procedureTypeId,
         string status,
         string reference = "REF-001",
-        string? plateFlowStatus = null)
+        string? plateFlowStatus = null,
+        string? plate = null)
     {
         ctx.ProcedureInstances.Add(new ProcedureInstance
         {
@@ -921,6 +1148,7 @@ public sealed class OtClientProcedureHandlerTests
             ReferenceNumber = reference,
             Status = status,
             PlateFlowStatus = plateFlowStatus,
+            Plate = plate,
             TransitOfficeId = transitOfficeId,
             CreatedByUserId = ActorUser,
             CreatedAt = DateTimeOffset.UtcNow,
