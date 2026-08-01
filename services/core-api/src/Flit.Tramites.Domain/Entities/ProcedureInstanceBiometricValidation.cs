@@ -154,6 +154,22 @@ public static class BiometricProviders
 
     /// <summary>Kyverum Verify: captura remota + webhook firmado (HMAC-SHA256).</summary>
     public const string Kyverum = "kyverum";
+
+    /// <summary>
+    /// La validación NO la hizo V2: la hizo V1 y la migración la trajo como hecho consumado (biométrica
+    /// aprobada en V1 o firma física aceptada por el gestor). Aquí no hubo captura, ni proveedor externo,
+    /// ni score: es el registro de algo que ya ocurrió en el sistema anterior.
+    /// <para>
+    /// Existe como proveedor propio —y no reusando <see cref="Mock"/>— por una razón de negocio, no de
+    /// estética: una identidad migrada vale para SU trámite y para ninguno más. El reuso de identidad entre
+    /// trámites (HU #10350) busca por documento cualquier fila aprobada y vigente del tenant, así que sin
+    /// una marca que la distinga, una identidad traída de V1 quedaría apalancando trámites nuevos de V2 que
+    /// nunca validaron a nadie. Las dos consultas de reuso
+    /// (<c>FindVigenteApprovedByDocumentAsync</c> y <c>ListVigenteApprovedIdentityKeysAsync</c>) la excluyen
+    /// explícitamente.
+    /// </para>
+    /// </summary>
+    public const string MigracionV1 = "migracion_v1";
 }
 
 /// <summary>Estados de la máquina de biométrica.</summary>

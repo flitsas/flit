@@ -73,6 +73,44 @@ describe('PreflightPanel — RNMC condicionado (HU #10603)', () => {
   });
 });
 
+describe('PreflightPanel — trámite sin consultas por migración', () => {
+  it('pide la consulta de forma destacada, en vez de la nota genérica', () => {
+    render(<PreflightPanel snapshot={null} {...baseProps} esMigrado />);
+
+    expect(screen.getByText('Consulta pendiente')).toBeInTheDocument();
+    expect(screen.getByText(/estado actual del vehículo/)).toBeInTheDocument();
+    // El genérico se reemplaza, no se acompaña: dos mensajes para lo mismo confunden.
+    expect(screen.queryByText(/Ejecuta la consulta para ver el semáforo/)).not.toBeInTheDocument();
+  });
+
+  it('no le cuenta al operador que el trámite viene de una migración', () => {
+    // El aviso pide la acción, no la justifica: nombrar la migración o la caducidad de las consultas
+    // no le cambia nada a quien opera y siembra la duda de si el expediente llegó incompleto.
+    const { container } = render(<PreflightPanel snapshot={null} {...baseProps} esMigrado />);
+
+    expect(container.textContent).not.toMatch(/migra|V1|sistema anterior|caduca/i);
+  });
+
+  it('en un trámite nativo conserva la nota de siempre', () => {
+    render(<PreflightPanel snapshot={null} {...baseProps} />);
+
+    expect(screen.getByText(/Ejecuta la consulta para ver el semáforo/)).toBeInTheDocument();
+    expect(screen.queryByText('Consulta pendiente')).not.toBeInTheDocument();
+  });
+
+  it('una vez consultado, el aviso desaparece: ya hay semáforo del día', () => {
+    render(
+      <PreflightPanel
+        snapshot={snap([rnmc('rnmc_comprador_medidas_correctivas')])}
+        {...baseProps}
+        esMigrado
+      />,
+    );
+
+    expect(screen.queryByText('Consulta pendiente')).not.toBeInTheDocument();
+  });
+});
+
 // HU #10763 — advertencias y consultas omitidas visibles; el amarillo no ofrece asumir riesgo.
 describe('PreflightPanel — fuentes de los proveedores de FEATURE 05 (HU #10763)', () => {
   it('kyverum_fines se presenta como SIMIT y nunca filtra el nombre del proveedor', () => {

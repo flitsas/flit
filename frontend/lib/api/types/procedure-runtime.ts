@@ -762,6 +762,13 @@ export interface WizardState {
   subsanacionActiva?: boolean;
   /** Veces que se activó la subsanación en este expediente. */
   subsanacionCount?: number;
+  /**
+   * Migración V1→V2 — el trámite viene de V1 y no se capturó paso a paso aquí, así que llega sin las
+   * consultas de RUNT/SIMIT hechas (no se migran: caducan en minutos y no quedan atadas al trámite).
+   * El wizard lo usa para DESTACAR la petición de correrlas, sin exponer ese porqué en la UI.
+   * Ausente/false ⇒ trámite nativo de V2.
+   */
+  esMigrado?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
@@ -857,8 +864,12 @@ export type BiometricEstado =
 /** Parte a la que pertenece la validación. null = matrícula (comprador único). */
 export type BiometricParte = 'comprador' | 'vendedor';
 
-/** Proveedor de validación de identidad (espejo de BiometricProviders). */
-export type BiometricProvider = 'mock' | 'kyverum';
+/**
+ * Proveedor de validación de identidad (espejo de BiometricProviders).
+ * `migracion_v1` = identidad que ya venía validada de V1 y la migración trajo como hecho
+ * consumado; no hubo captura ni proveedor externo, y solo acredita a su propio trámite.
+ */
+export type BiometricProvider = 'mock' | 'kyverum' | 'migracion_v1';
 
 /** Estado de vigencia derivado de una identidad aprobada (espejo de BiometricVigenciaEstados). */
 export type BiometricVigenciaEstado = 'vigente' | 'por_vencer' | 'vencida';
