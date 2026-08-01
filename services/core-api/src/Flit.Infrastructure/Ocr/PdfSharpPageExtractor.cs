@@ -15,6 +15,21 @@ internal sealed class PdfSharpPageExtractor(ILogger<PdfSharpPageExtractor> logge
     private const int MaxSourcePages = 200;
     private const int MaxExtractedPages = 20;
 
+    public int? CountPages(ReadOnlyMemory<byte> pdf)
+    {
+        try
+        {
+            using var stream = new MemoryStream(pdf.ToArray(), writable: false);
+            using var doc = PdfReader.Open(stream, PdfDocumentOpenMode.InformationOnly);
+            return doc.PageCount;
+        }
+        catch (Exception ex) when (ex is PdfReaderException or InvalidOperationException or IOException or ArgumentException or NotSupportedException)
+        {
+            PdfExtractLog.ExtractFailed(logger, ex.Message);
+            return null;
+        }
+    }
+
     public byte[]? ExtractPages(ReadOnlyMemory<byte> pdf, IReadOnlyList<int> pages)
     {
         try
