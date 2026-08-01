@@ -176,35 +176,62 @@ for f in *.pdf; do
 done
 ```
 
-### Casos de aceptación
+### Resultados de la pasada real (2026-08-01, `claude-sonnet-5`)
 
-Verificados por inspección del material; el OCR debe reproducirlos.
+Los 7 expedientes, con el prompt tal como está en el código.
 
-| # | Archivo | Qué debe salir |
-|---|---|---|
-| 1 | `Fur_Matricula_QYS740` (16 págs) | `aduana` en 2–4, `factura` en 5–7, `impronta` en 14. Las demás en `noReconocidos` (mandato, solicitud, carta selfie, FUR, licencia, prenda). |
-| 2 | `Fur_Traspaso_POV336` (26 págs, **11.6 MB**) | Se procesa sin rechazarlo por tamaño — con el tope viejo de 10 MB no habría entrado. Las págs. 5–11 son escaneos sucios: deben caer en `noReconocidos`, **no** forzarse dentro de un tipo. |
-| 3 | Cualquier matrícula, `tipos=impronta,soat,rtm` | No aparece ninguna pieza de `factura` ni `aduana` aunque el documento las tenga. |
-| 4 | Certificado de consulta al RUNT (pág. 16 de POV336) | **No** debe clasificarse como `soat` ni `rtm`: es un reporte de consulta, no el certificado de la aseguradora ni del CDA. |
-| 5 | Los 7 en un `.zip` | Se expande y se procesan; el `.zip` no aparece como pieza ni como error. |
-| 6 | Sin key / Anthropic caído | Cada archivo sale en `errores` con el mensaje de carga manual. El endpoint responde **200**, no 5xx. |
-| 7 | En la UI, con una casilla ya ocupada | La pieza llega **desmarcada** con el aviso de reemplazo. Sin marcarla, el adjunto anterior no se toca. |
+| Archivo | Págs | Peso | Qué encontró | Latencia |
+|---|---|---|---|---|
+| `Matricula_QXU037` | 29 | 5.9 MB | factura 4 · impronta 5 · aduana 6 · impronta 7 | 22 s |
+| `Matricula_QXU140` | 16 | 2.6 MB | factura 4–5 · impronta 6 · aduana 7–9 · impronta 10 | 13 s |
+| `Matricula_QYS740` | 16 | 2.5 MB | aduana 2–4 · factura 5–6 · impronta 7 · impronta 14 | 10 s |
+| `Matricula_QYS756` | 17 | 2.8 MB | aduana 2–4 · factura 5–6 · impronta 7 · impronta 14 | 13 s |
+| `Traspaso_DMK181` | 18 | 4.4 MB | impronta 12 | 18 s |
+| `Traspaso_NGT915` | 18 | 6.1 MB | impronta 10–11 | 15 s |
+| `Traspaso_POV336` | 26 | 12.1 MB | impronta 20–21 | 22 s |
 
-### Qué mirar además del acierto
+**Sin falsos positivos.** Ninguna página de mandato, cédula, solicitud, FUR, licencia, prenda o paz y
+salvo se coló en un tipo. Confianzas entre 0.85 y 0.98, coherentes con el acierto.
 
-- **Confianza calibrada**: una pieza correcta con 0.4 es tan mal síntoma como una equivocada con 0.95.
-- **Falsos positivos por encima de falsos negativos**: que meta un mandato en `factura` es peor que
-  dejarlo en `noReconocidos`, porque el operador puede no revisarlo.
-- **Latencia real** del expediente de 26 páginas, para confirmar que 180 s sobran.
+Casos de aceptación cubiertos por esta pasada:
+
+- **Tamaño**: `POV336` (12.1 MB) se procesó sin problema. Con el tope anterior de 10 MB no habría entrado.
+- **Escaneos ilegibles**: las págs. 5–11 de `POV336` son escaneos sucios y quedaron en `noReconocidos`,
+  sin forzarse dentro de un tipo.
+- **Consulta RUNT ≠ certificado**: el certificado de consulta al RUNT que genera Flit (pág. 16 de
+  `POV336`) **no** se clasificó como `soat` ni `rtm` en ninguna corrida.
+- **Modalidad**: en los traspasos no apareció ninguna pieza de `factura` ni `aduana`.
+- **Estabilidad**: `QYS740` se corrió tres veces y devolvió siempre la misma agrupación de páginas.
+
+**Coste y latencia**: ~360k tokens de entrada y ~6k de salida para los 7 → **~$0.11 por expediente**
+(precio introductorio de Sonnet 5; ~$0.16 al precio estándar). La llamada más lenta fueron 22 s, muy
+por debajo del timeout de 180 s.
+
+### Dos hallazgos que conviene conocer
+
+**Cada matrícula tiene DOS improntas.** La hoja de "improntas del cliente" (foto de la placa VIN) y el
+"Certificado de Improntas" del CDA son ambos documentos de improntas legítimos. En la pantalla de
+revisión aparecerán como dos piezas compitiendo por la misma casilla: se marca la de mayor confianza y
+la otra queda desmarcada con el aviso correspondiente, que es el comportamiento diseñado. Si el negocio
+quisiera conservar las dos, haría falta una segunda casilla en el checklist.
+
+**Cuidado al construir la verdad de referencia con `pdftotext`.** Durante esta verificación se dio por
+falso positivo una impronta que era correcta: la capa de texto de esa página sólo contenía el bloque de
+firma electrónica, porque la impronta en sí es una imagen. Para juzgar una clasificación hay que
+**mirar la página renderizada** (`pdftoppm -f N -l N -r 60 -jpeg archivo.pdf salida`), no su texto.
 
 ## Pendiente / deuda conocida
 
-- **Precisión del clasificador sin medir.** El prompt se calibró leyendo el material, no ejecutándolo.
-  Es el primer ajuste probable tras la primera pasada real.
+- **`soat` y `rtm` sin verificar con material real.** Ninguno de los 7 expedientes trae la póliza SOAT
+  ni el certificado RTM originales (usan el certificado de consulta al RUNT, que correctamente se
+  descarta). Hace falta un expediente que los lleve para cerrar esos dos tipos.
 - **Un solo nivel de carpeta.** Decisión de producto; si aparece el caso de subcarpetas, es un cambio
   acotado en `soloPrimerNivel` y en la lectura del arrastre.
 - **Los `noReconocidos` no ofrecen asignación directa.** La salida hoy es cargar el archivo original en
   su casilla, donde el OCR dirigido reintenta. Asignar un rango de páginas suelto a un campo desde la
   pantalla de revisión sería el siguiente escalón.
-- **Sin tope de reintentos.** Cada reintento del operador vuelve a pagar la clasificación. No se puso
-  límite a la espera de ver el coste real.
+- **Sin tope de reintentos.** Cada reintento del operador vuelve a pagar la clasificación (~$0.11).
+  No se puso límite a la espera de ver el uso real.
+- **Falta la pasada por la UI.** Lo verificado es el clasificador contra la API. El flujo completo
+  (arrastrar → revisar → adjuntar → checklist actualizado) está cubierto por tests pero no se ha
+  ejercido a mano contra el stack levantado.

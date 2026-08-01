@@ -62,6 +62,8 @@ Cómo reconocer cada tipo:
   de nacionalizacion que expide el importador citando el numero de declaracion.
 - impronta: CERTIFICADO DE IMPRONTAS, hoja de improntas digitales, acta de improntas o fotoimpronta. Lleva
   los numeros fisicos del vehiculo (motor, chasis, VIN, serie), normalmente en recuadros o calcos.
+  Cuenta tanto el certificado de un CDA como la hoja de "improntas del cliente" que solo trae la foto
+  de la placa VIN y los numeros transcritos: ambas son el documento de improntas.
 - soat: POLIZA SOAT o certificado de SOAT de una aseguradora colombiana. Lleva numero de poliza,
   aseguradora, vigencia y datos del vehiculo.
 - rtm: CERTIFICADO DE REVISION TECNICO-MECANICA Y DE EMISIONES CONTAMINANTES expedido por un CDA. Lleva
@@ -80,7 +82,9 @@ dentro de un tipo: reportalas como no reconocidas. Ejemplos frecuentes:
 - Certificado de paz y salvo de impuestos o de tradicion
 - Certificados de consulta al RUNT generados por una plataforma (NO son el SOAT ni el RTM originales:
   son un reporte de consulta, no el certificado expedido por la aseguradora o el CDA)
-- Portadas, hojas de firmas, hashes y sellos de tiempo
+- Portadas del expediente y hojas sueltas de firmas, hashes y sellos de tiempo. OJO: muchas paginas
+  llevan al pie un bloque de "Firma digital impronta" o un hash; eso es la firma electronica de la
+  pagina y NO decide su tipo. Clasifica por el contenido principal de la pagina, no por ese bloque.
 
 REGLAS CRITICAS:
 1. Una pagina pertenece a UN solo documento. No repitas el mismo numero de pagina en dos entradas.
@@ -93,6 +97,8 @@ REGLAS CRITICAS:
 6. confianza es tu certeza real de 0.0 a 1.0. Si dudas, baja la confianza en vez de omitir el documento.
 7. total_paginas es el numero total de paginas del archivo. Para una imagen, es 1.
 8. Los numeros de pagina son base 1.
+9. No incluyas entradas con paginas vacias. Si un tipo no aparece en el archivo, simplemente no lo
+   pongas en documentos.
 
 Devuelve UNICAMENTE este JSON, sin markdown y sin texto adicional:
 {"total_paginas":0,"documentos":[{"tipo":"factura","paginas":[1,2],"confianza":0.95,"motivo":"Factura electronica de venta con CUFE y datos del vehiculo"}],"paginas_no_reconocidas":[3,4]}
