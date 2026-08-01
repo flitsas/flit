@@ -210,6 +210,73 @@ public sealed class SignatureVaultHandlerTests
 
     // ---------- Helpers ----------
 
+    // ───────── HU #11193 — capturar la firma sin salir del formulario del representante ─────────
+
+    [Fact]
+    public async Task HU11193_AC4_FirmaActivaVencida_SeRevocaYSeCreaLaNueva()
+    {
+        // El índice único parcial solo mira el estado, no la vigencia: una firma 'activa' pero vencida
+        // bloqueaba el alta y dejaba al usuario sin salida dentro del formulario del representante.
+        await using var ctx = NewContext();
+        var (create, list, _, _) = Handlers(ctx, out _);
+
+        var vencida = await create.HandleAsync(
+            NewCreate(desde: new DateOnly(2025, 1, 1), hasta: new DateOnly(2025, 12, 31)), Ct);
+        vencida.IsValid.Should().BeTrue();
+
+        // El repositorio real de InMemory no enforce el índice: se emula el conflicto con el repo
+        // que lanza el 23505 traducido, y se le da al handler el lector real para que resuelva la activa.
+        var conRevocacion = new CreateSignatureVaultHandler(
+            new FakeArtifactStorage(),
+            new ConflictOnFirstCallRepository(new SignatureVaultRepository(ctx)),
+            new DbSignatureVaultReader(ctx));
+
+        var nueva = await conRevocacion.HandleAsync(
+            NewCreate(desde: new DateOnly(2026, 1, 1), hasta: new DateOnly(2026, 12, 31)), Ct);
+
+        nueva.IsValid.Should().BeTrue("la vencida se revoca y la nueva ocupa su lugar");
+        var rows = await list.HandleAsync(new ListSignatureVaultQuery { TenantId = Tenant }, Ct);
+        rows.Single(r => r.Id == vencida.SignatureVaultId!.Value).Estado.Should().Be("revocada");
+        rows.Single(r => r.Id == nueva.SignatureVaultId!.Value).Estado.Should().Be("activa");
+    }
+
+    [Fact]
+    public async Task HU11193_AC4_FirmaActivaVIGENTE_TambienSeSustituye()
+    {
+        // D7 — la última firma capturada manda: también sustituye a una vigente. La anterior no se
+        // borra, queda 'revocada', así que lo ya firmado con ella sigue siendo trazable.
+        await using var ctx = NewContext();
+        var (create, list, _, _) = Handlers(ctx, out _);
+
+        var vigente = await create.HandleAsync(
+            NewCreate(desde: new DateOnly(2026, 1, 1), hasta: new DateOnly(2030, 12, 31)), Ct);
+        vigente.IsValid.Should().BeTrue();
+
+        var conRevocacion = new CreateSignatureVaultHandler(
+            new FakeArtifactStorage(),
+            new ConflictOnFirstCallRepository(new SignatureVaultRepository(ctx)),
+            new DbSignatureVaultReader(ctx));
+
+        var nueva = await conRevocacion.HandleAsync(NewCreate(), Ct);
+
+        nueva.IsValid.Should().BeTrue();
+        var rows = await list.HandleAsync(new ListSignatureVaultQuery { TenantId = Tenant }, Ct);
+        rows.Single(r => r.Id == vigente.SignatureVaultId!.Value).Estado.Should().Be("revocada");
+        rows.Single(r => r.Id == nueva.SignatureVaultId!.Value).Estado.Should().Be("activa");
+    }
+
+    [Fact]
+    public async Task HU11193_SinLector_ConservaElComportamientoAnterior()
+    {
+        // Sin lector inyectado no hay forma de saber si la que bloquea está vencida: 422, como antes.
+        var create = new CreateSignatureVaultHandler(new FakeArtifactStorage(), new ConflictingRepository());
+
+        var result = await create.HandleAsync(NewCreate(), Ct);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Code.Should().Be("firma_activa_existente");
+    }
+
     private static CreateSignatureVaultCommand NewCreate(
         string? artifact = PngBase64,
         DateOnly? desde = null,
@@ -275,5 +342,29 @@ public sealed class SignatureVaultHandlerTests
 
         public Task<bool> RevokeAsync(RevokeSignatureVaultData data, CancellationToken cancellationToken = default) =>
             Task.FromResult(true);
+    }
+
+    /// <summary>
+    /// HU #11193 — emula el índice único parcial que InMemory no aplica: el PRIMER intento de alta
+    /// choca (como en PostgreSQL con una firma activa presente) y el reintento posterior a la
+    /// revocación se delega al repositorio real, que es el que debe persistir la nueva firma.
+    /// </summary>
+    private sealed class ConflictOnFirstCallRepository(ISignatureVaultRepository inner) : ISignatureVaultRepository
+    {
+        private bool _yaChoco;
+
+        public Task<Guid> CreateAsync(CreateSignatureVaultData data, CancellationToken cancellationToken = default)
+        {
+            if (!_yaChoco)
+            {
+                _yaChoco = true;
+                throw new SignatureVaultActiveConflictException();
+            }
+
+            return inner.CreateAsync(data, cancellationToken);
+        }
+
+        public Task<bool> RevokeAsync(RevokeSignatureVaultData data, CancellationToken cancellationToken = default) =>
+            inner.RevokeAsync(data, cancellationToken);
     }
 }

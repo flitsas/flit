@@ -4,11 +4,15 @@
 // Los 4 estados obligatorios: sin-documento (vacío), cargando, error y lleno (lista de firmas).
 // AC3 se cubre con un estado especial "lleno pero sin firmas vigentes" dentro del estado lleno.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
+import { SignatureCapture } from "@/components/admin/companies/signature-vault/SignatureCapture";
 import type { SignatureVaultItem } from "@/lib/api/admin-signature-vault";
-import { fetchSignatureVaultByDocument } from "@/lib/api/admin-signature-vault";
+import {
+  createSignatureVaultEntry,
+  fetchSignatureVaultByDocument,
+} from "@/lib/api/admin-signature-vault";
 import { formatFecha } from "@/lib/format/date";
 
 export interface SignatureVaultSelectorProps {
@@ -20,6 +24,12 @@ export interface SignatureVaultSelectorProps {
   onChange: (id: string | null) => void;
   /** Solo lectura (modo view): muestra la firma seleccionada como texto plano. */
   readOnly?: boolean;
+  /**
+   * HU #11193 (AC2) — datos de la PERSONA que se toman del representante para dar de alta la firma
+   * sin volver a pedirlos. Sin nombre completo no se ofrece la captura: es obligatorio en el baúl.
+   */
+  fullName?: string;
+  nitEmpresa?: string | null;
 }
 
 /**
@@ -35,13 +45,45 @@ export function SignatureVaultSelector({
   value,
   onChange,
   readOnly,
+  fullName,
+  nitEmpresa,
 }: SignatureVaultSelectorProps) {
   const [items, setItems] = useState<SignatureVaultItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [fetched, setFetched] = useState(false);
 
+  // HU #11193 — captura de firma dentro del mismo formulario.
+  const [capturing, setCapturing] = useState(false);
+  const [artefacto, setArtefacto] = useState<string | null>(null);
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const hasDoc = documentType.trim() !== "" && documentNumber.trim().length >= 3;
+
+  const load = useCallback(
+    (signal?: AbortSignal) => {
+      setLoading(true);
+      setError(false);
+      setFetched(false);
+      return fetchSignatureVaultByDocument(tenantId, documentType, documentNumber, true, signal)
+        .then((list) => {
+          if (signal?.aborted) return;
+          setItems(list);
+          setFetched(true);
+          setLoading(false);
+        })
+        .catch(() => {
+          if (!signal?.aborted) {
+            setError(true);
+            setLoading(false);
+          }
+        });
+    },
+    [tenantId, documentType, documentNumber],
+  );
 
   useEffect(() => {
     if (!hasDoc) {
@@ -51,27 +93,106 @@ export function SignatureVaultSelector({
       return;
     }
 
-    setLoading(true);
-    setError(false);
-    setFetched(false);
     const controller = new AbortController();
-
-    fetchSignatureVaultByDocument(tenantId, documentType, documentNumber, true, controller.signal)
-      .then((list) => {
-        if (controller.signal.aborted) return;
-        setItems(list);
-        setFetched(true);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setError(true);
-          setLoading(false);
-        }
-      });
-
+    void load(controller.signal);
     return () => controller.abort();
-  }, [tenantId, documentType, documentNumber, hasDoc]);
+  }, [hasDoc, load]);
+
+  const cerrarCaptura = () => {
+    setCapturing(false);
+    setArtefacto(null);
+    setDesde("");
+    setHasta("");
+    setSaveError(null);
+  };
+
+  const guardarFirma = async () => {
+    if (!artefacto || desde === "" || hasta === "" || !fullName) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const creada = await createSignatureVaultEntry(tenantId, {
+        documentType,
+        documentNumber,
+        nitEmpresa: nitEmpresa ?? null,
+        fullName,
+        vigenciaDesde: desde,
+        vigenciaHasta: hasta,
+        artefactoFirmaBase64: artefacto,
+      });
+      await load();
+      // AC3 — la firma recién capturada queda elegida; el guardado del representante la persiste.
+      onChange(creada.id);
+      cerrarCaptura();
+    } catch {
+      setSaveError("No se pudo registrar la firma. Revisa la vigencia y vuelve a intentarlo.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** AC1 y AC2 — captura inline con el resto de datos tomados del representante. */
+  const bloqueCaptura = (
+    <div
+      className="mt-2 space-y-2 rounded-xl border px-3 py-3"
+      style={{ borderColor: "var(--flit-border, #DFE5ED)" }}
+      data-testid="sig-capture-block"
+    >
+      <p className="text-[11px] opacity-70">
+        La firma se registra a nombre de <b>{fullName}</b> con el documento {documentType}{" "}
+        {documentNumber} del representante.
+      </p>
+      <SignatureCapture value={artefacto} onChange={setArtefacto} disabled={saving} />
+      <div className="flex gap-2">
+        <label className="flex-1 text-[11px] font-semibold">
+          Vigencia desde
+          <input
+            type="date"
+            className={`mt-1 ${OT_INPUT_CLS}`}
+            value={desde}
+            onChange={(e) => setDesde(e.target.value)}
+            disabled={saving}
+            aria-label="Vigencia desde"
+          />
+        </label>
+        <label className="flex-1 text-[11px] font-semibold">
+          Vigencia hasta
+          <input
+            type="date"
+            className={`mt-1 ${OT_INPUT_CLS}`}
+            value={hasta}
+            onChange={(e) => setHasta(e.target.value)}
+            disabled={saving}
+            aria-label="Vigencia hasta"
+          />
+        </label>
+      </div>
+      {saveError && (
+        <p role="alert" className="text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+          {saveError}
+        </p>
+      )}
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold"
+          onClick={cerrarCaptura}
+          disabled={saving}
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          className="rounded-xl px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60"
+          style={{ background: "#557EFF" }}
+          onClick={() => void guardarFirma()}
+          disabled={saving || !artefacto || desde === "" || hasta === ""}
+        >
+          {saving ? "Guardando…" : "Guardar firma"}
+        </button>
+      </div>
+    </div>
+  );
 
   // Estado vacío — sin documento diligenciado
   if (!hasDoc) {
@@ -114,19 +235,27 @@ export function SignatureVaultSelector({
     );
   }
 
-  // AC3 — sin firmas vigentes
+  // Sin firmas vigentes (AC3 de la HU #11180). Desde la HU #11193 la salida ya no es «ve al baúl»:
+  // se captura aquí mismo, con los datos de la persona que ya están en el formulario.
   if (fetched && items.length === 0) {
     return (
-      <p
-        className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-[11px] opacity-80"
-        data-testid="sig-selector-empty"
-        aria-live="polite"
-      >
-        Esta persona no tiene firmas vigentes en el baúl.{" "}
-        <span className="font-semibold">
-          Ve al Baúl de firmas para registrar una.
-        </span>
-      </p>
+      <div data-testid="sig-selector-empty" aria-live="polite">
+        <p className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-[11px] opacity-80">
+          Esta persona no tiene firmas vigentes en el baúl.
+        </p>
+        {!readOnly && fullName && !capturing && (
+          <button
+            type="button"
+            className="mt-2 rounded-xl px-3 py-1.5 text-[11px] font-semibold text-white"
+            style={{ background: "#557EFF" }}
+            onClick={() => setCapturing(true)}
+            data-testid="sig-capture-open"
+          >
+            Capturar firma
+          </button>
+        )}
+        {capturing && bloqueCaptura}
+      </div>
     );
   }
 

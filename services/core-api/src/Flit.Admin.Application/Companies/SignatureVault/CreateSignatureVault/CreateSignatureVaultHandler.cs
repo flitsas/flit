@@ -7,20 +7,34 @@ namespace Flit.Admin.Application.Companies.SignatureVault.CreateSignatureVault;
 /// vía <see cref="ISignatureVaultArtifactStorage"/> y persiste la fila (solo path + hash, nunca el
 /// material — ADR-0025 §3). La exclusividad "una 'activa' por (tenant, NIT, documento)" la garantiza
 /// el índice único parcial de BD; el <c>23505</c> se traduce a
-/// <see cref="SignatureVaultActiveConflictException"/> en el repositorio y aquí a un 422 legible
-/// (<c>firma_activa_existente</c>). <c>DocumentNumber</c> es PII (Ley 1581): no se loguea.
+/// <see cref="SignatureVaultActiveConflictException"/> en el repositorio.
+/// <para>
+/// HU #11193 (D7) — ese conflicto ya no es un 422: <b>la última firma capturada sustituye a la
+/// anterior</b>, esté vencida o vigente. Se revoca la activa y se reintenta el alta una sola vez. La
+/// sustituida queda <c>revocada</c> (no se borra), así que el historial y la trazabilidad de lo ya
+/// firmado con ella se conservan. Solo se responde <c>firma_activa_existente</c> si no hay lector
+/// para resolverla o si la revocación falla.
+/// </para>
+/// <c>DocumentNumber</c> es PII (Ley 1581): no se loguea.
 /// </summary>
 public sealed class CreateSignatureVaultHandler
 {
     private readonly ISignatureVaultArtifactStorage _artifactStorage;
     private readonly ISignatureVaultRepository _repository;
+    private readonly ISignatureVaultReader? _reader;
 
+    /// <param name="reader">
+    /// HU #11193 — necesario para resolver cuál es la firma activa que provoca el conflicto y poder
+    /// revocarla. Sin él, el comportamiento es el anterior: cualquier conflicto se responde 422.
+    /// </param>
     public CreateSignatureVaultHandler(
         ISignatureVaultArtifactStorage artifactStorage,
-        ISignatureVaultRepository repository)
+        ISignatureVaultRepository repository,
+        ISignatureVaultReader? reader = null)
     {
         _artifactStorage = artifactStorage ?? throw new ArgumentNullException(nameof(artifactStorage));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _reader = reader;
     }
 
     public async Task<CreateSignatureVaultResult> HandleAsync(
@@ -41,40 +55,92 @@ public sealed class CreateSignatureVaultHandler
             .SaveAsync(command.TenantId, artifact!, cancellationToken)
             .ConfigureAwait(false);
 
+        var data = new CreateSignatureVaultData(
+            command.TenantId,
+            command.DocumentType!.Trim(),
+            command.DocumentNumber!.Trim(),
+            command.NitEmpresa?.Trim(),
+            command.FullName!.Trim(),
+            SignatureHash: stored.Sha256,
+            StoragePath: stored.StoragePath,
+            StorageSha256: stored.Sha256,
+            command.VigenciaDesde,
+            command.VigenciaHasta,
+            command.MandateSignerId,
+            command.CreatedBy,
+            command.CorrelationId,
+            CodigoHash: command.CodigoHash);
+
         try
         {
-            var id = await _repository.CreateAsync(
-                new CreateSignatureVaultData(
-                    command.TenantId,
-                    command.DocumentType!.Trim(),
-                    command.DocumentNumber!.Trim(),
-                    command.NitEmpresa?.Trim(),
-                    command.FullName!.Trim(),
-                    SignatureHash: stored.Sha256,
-                    StoragePath: stored.StoragePath,
-                    StorageSha256: stored.Sha256,
-                    command.VigenciaDesde,
-                    command.VigenciaHasta,
-                    command.MandateSignerId,
-                    command.CreatedBy,
-                    command.CorrelationId,
-                    CodigoHash: command.CodigoHash),
-                cancellationToken).ConfigureAwait(false);
-
-            return CreateSignatureVaultResult.Success(id);
+            return CreateSignatureVaultResult.Success(
+                await _repository.CreateAsync(data, cancellationToken).ConfigureAwait(false));
         }
         catch (SignatureVaultActiveConflictException)
         {
-            // El artefacto ya subido queda huérfano en S3 (lo recupera el job de limpieza del
-            // file-manager, igual que otros adjuntos): no se persiste ninguna referencia en BD.
-            return CreateSignatureVaultResult.Invalid(
-            [
-                new SignatureVaultValidationError(
-                    "documentNumber",
-                    "firma_activa_existente",
-                    "Ya existe una firma activa para esta compañía y documento."),
-            ]);
+            // HU #11193 (D7) — la firma activa que ocupa el sitio se revoca y se reintenta una vez,
+            // esté vencida o vigente: la última firma capturada de una persona es la que manda. El
+            // índice único parcial solo admite una 'activa' por persona, así que sin revocar la
+            // anterior no hay forma de registrar la nueva.
+            // La revocación NO borra: la firma anterior queda en el baúl como 'revocada', así que el
+            // historial y la trazabilidad de lo ya firmado con ella se conservan.
+            var anterior = await ResolverActivaAsync(command, cancellationToken).ConfigureAwait(false);
+            if (anterior is null)
+            {
+                // El artefacto ya subido queda huérfano en S3 (lo recupera el job de limpieza del
+                // file-manager, igual que otros adjuntos): no se persiste ninguna referencia en BD.
+                return CreateSignatureVaultResult.Invalid(
+                [
+                    new SignatureVaultValidationError(
+                        "documentNumber",
+                        "firma_activa_existente",
+                        "Ya existe una firma activa para esta persona."),
+                ]);
+            }
+
+            var revocada = await _repository.RevokeAsync(
+                new RevokeSignatureVaultData(anterior.Value, command.TenantId, command.CreatedBy, command.CorrelationId),
+                cancellationToken).ConfigureAwait(false);
+
+            if (!revocada)
+            {
+                return CreateSignatureVaultResult.Invalid(
+                [
+                    new SignatureVaultValidationError(
+                        "documentNumber",
+                        "firma_activa_existente",
+                        "Ya existe una firma activa para esta persona y no se pudo revocar la anterior."),
+                ]);
+            }
+
+            return CreateSignatureVaultResult.Success(
+                await _repository.CreateAsync(data, cancellationToken).ConfigureAwait(false));
         }
+    }
+
+    /// <summary>
+    /// Id de la firma activa de la persona que bloquea el alta (HU #11193, D7); <c>null</c> si no se
+    /// puede resolver o si no hay lector inyectado, en cuyo caso se conserva el 422 de siempre.
+    /// <para>
+    /// No distingue vencida de vigente a propósito: la decisión de negocio es que la última firma
+    /// capturada sustituye a la anterior. La sustituida queda <c>revocada</c>, no borrada.
+    /// </para>
+    /// </summary>
+    private async Task<Guid?> ResolverActivaAsync(
+        CreateSignatureVaultCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (_reader is null)
+        {
+            return null;
+        }
+
+        var activa = await _reader
+            .FindActiveByDocumentAsync(
+                command.TenantId, command.DocumentType!.Trim(), command.DocumentNumber!.Trim(), cancellationToken)
+            .ConfigureAwait(false);
+
+        return activa?.Id;
     }
 
     private static (List<SignatureVaultValidationError> Errors, byte[]? Artifact) Validate(

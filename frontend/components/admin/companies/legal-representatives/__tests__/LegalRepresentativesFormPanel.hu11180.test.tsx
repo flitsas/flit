@@ -300,12 +300,16 @@ describe("HU #11180 — AC3: sin firmas vigentes se muestra aviso que remite al 
     ).toBeInTheDocument();
   });
 
-  it("AC3 — contrato: el aviso remite al baúl de firmas", async () => {
+  // HU #11193 — el aviso YA NO remite al baúl: la salida pasó a ser capturar la firma aquí mismo.
+  // El AC3 de esta HU (avisar cuando no hay firmas vigentes) sigue cubierto por el test anterior;
+  // lo que cambia es qué se le ofrece al usuario a continuación.
+  it("AC3 — contrato: el aviso ofrece capturar la firma sin salir del formulario", async () => {
     renderPanel("edit");
     await waitFor(() => expect(fetchSignatureVaultByDocument).toHaveBeenCalled());
 
     const aviso = await screen.findByTestId("sig-selector-empty");
-    expect(aviso).toHaveTextContent(/Ve al Baúl de firmas/i);
+    expect(aviso).toHaveTextContent(/no tiene firmas vigentes/i);
+    expect(await screen.findByTestId("sig-capture-open")).toBeInTheDocument();
   });
 
   it("AC3 — edge case: cuando el fetch falla se muestra error (no el aviso de AC3)", async () => {

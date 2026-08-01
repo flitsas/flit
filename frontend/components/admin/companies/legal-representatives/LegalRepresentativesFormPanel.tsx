@@ -685,6 +685,13 @@ export function LegalRepresentativesFormPanel({
             documentNumber={form.documentNumber}
             value={form.signatureVaultId}
             onChange={(id) => patch({ signatureVaultId: id })}
+            // HU #11193 (AC2) — el alta de la firma reutiliza los datos ya diligenciados de la
+            // persona: nombre completo del representante y NIT de su compañía principal.
+            fullName={[form.name, form.firstLastName, form.secondLastName]
+              .map((p) => p?.trim() ?? "")
+              .filter((p) => p !== "")
+              .join(" ")}
+            nitEmpresa={form.companies[0]?.nit ?? null}
           />
         </section>
 
