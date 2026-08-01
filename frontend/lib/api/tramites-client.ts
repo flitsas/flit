@@ -19,6 +19,7 @@ import type {
   CreateFromConsultaResult,
   CreateInstanceRequest,
   PreflightPreviewResult,
+  BatchOcrResult,
   DocumentOcrResult,
   PersistOcrFieldsResult,
   EditarPrevalidacionRequest,
@@ -739,6 +740,31 @@ export const tramitesClient = {
       throw new Error(problemMessage(res, body));
     }
     return JSON.parse(await res.text()) as DocumentOcrResult;
+  },
+
+  // Cargue masivo: manda uno o varios archivos (o un .zip, que expande el backend) y devuelve las tres
+  // listas de la pantalla de revisión. No sube nada: las piezas confirmadas las sube después el hook
+  // por el flujo presign→S3→register de siempre. Lanza sólo si falla el lote entero (sin tipos, sin
+  // archivos, topes excedidos); los fallos de un archivo suelto vienen dentro, en `errores`.
+  analyzeBatch: async (
+    tipos: readonly string[],
+    files: readonly File[],
+    tenantId?: string,
+  ): Promise<BatchOcrResult> => {
+    const form = new FormData();
+    form.append('tipos', tipos.join(','));
+    for (const file of files) form.append('files', file, file.name);
+
+    const res = await fetch(apiUrl('/api/v1/tramites/ocr/lote'), {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(problemMessage(res, body));
+    }
+    return JSON.parse(await res.text()) as BatchOcrResult;
   },
 
   /**
