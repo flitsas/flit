@@ -42,10 +42,14 @@ export function DocumentPrecedenceList({
     setOrder(items);
   }, [items]);
 
-  const commitOrder = async (next: OtDocumentPrecedenceItem[]) => {
+  const commitOrder = async (next: OtDocumentPrecedenceItem[], previous: OtDocumentPrecedenceItem[]) => {
     setSaving(true);
     try {
       await onReorder(next);
+    } catch {
+      // HU #11185 AC5 — si el guardado falla, la lista no puede quedarse mostrando un orden que
+      // el organismo cree guardado: vuelve al anterior. El aviso lo da la sección (toast).
+      setOrder(previous);
     } finally {
       setSaving(false);
       setPendingKeyboard(false);
@@ -54,10 +58,11 @@ export function DocumentPrecedenceList({
 
   const onDrop = (targetIndex: number) => {
     if (dragIndex === null || disabled || saving) return;
+    const previous = order;
     const next = reorderList(order, dragIndex, targetIndex);
     setOrder(next);
     setDragIndex(null);
-    void commitOrder(next);
+    void commitOrder(next, previous);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -86,7 +91,7 @@ export function DocumentPrecedenceList({
     }
     if ((event.key === "Enter" || event.key === " ") && pendingKeyboard) {
       event.preventDefault();
-      void commitOrder(order);
+      void commitOrder(order, items);
       setKeyboardIndex(null);
     }
     if (event.key === "Escape") {
@@ -129,6 +134,13 @@ export function DocumentPrecedenceList({
           <span className="flex-1 text-xs font-semibold text-foreground">
             {item.document_name}
           </span>
+          {/* HU #11181 — el organismo necesita distinguir lo que adjunta el gestor de lo que
+              produce FLIT: ambos se reordenan, pero solo los primeros se piden en el checklist. */}
+          {item.is_system_generated && (
+            <span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold opacity-70">
+              Generado
+            </span>
+          )}
           <span className="text-[10px] opacity-60">#{item.sort_order}</span>
         </li>
       ))}

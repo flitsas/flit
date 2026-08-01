@@ -212,8 +212,14 @@ export interface OtRulesListResult {
 
 export interface OtDocumentPrecedenceItem {
   document_type_id: string;
+  /** Código del catálogo (HU #11182); empareja con el tipo del adjunto del trámite. */
+  document_code?: string;
   document_name: string;
   sort_order: number;
+  /** HU #11181 — lo produce FLIT (FUR, certificados, mandato); el gestor no lo adjunta. */
+  is_system_generated?: boolean;
+  /** HU #11182 — el OT ya guardó una posición para este documento. */
+  is_configured?: boolean;
 }
 
 export interface OtDocumentPrecedenceListResult {
