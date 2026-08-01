@@ -115,14 +115,15 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     expect(await screen.findByText("Ana Gómez Ruiz")).toBeInTheDocument();
   });
 
-  it("lista enmascarando el documento y marca el estado sin firma ni identidad", async () => {
+  it("lista el documento completo y marca el estado sin firma ni identidad", async () => {
     vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([ITEM]));
     renderTab();
     expect(await screen.findByText("Ana Gómez Ruiz")).toBeInTheDocument();
-    expect(screen.getByText(/••••5432/)).toBeInTheDocument();
+    // El listado muestra el documento completo: los últimos cuatro dígitos no bastan para
+    // identificar a la persona durante la operación.
+    expect(screen.getByText(/1098765432/)).toBeInTheDocument();
+    expect(screen.queryByText(/••••/)).not.toBeInTheDocument();
     expect(screen.getByText(/Sin firma ni identidad/i)).toBeInTheDocument();
-    // El número completo del documento no debe renderizarse.
-    expect(screen.queryByText(/1098765432/)).not.toBeInTheDocument();
   });
 
   it("no muestra la columna Compañía en la tabla (razón social / NIT ocultos)", async () => {

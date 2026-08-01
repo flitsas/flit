@@ -54,6 +54,10 @@ const mocks = vi.hoisted(() => ({
   iniciarBiometric: vi.fn(),
   simulateBiometric: vi.fn(),
   ensureIdentity: vi.fn(),
+  runtPersonLookup: vi.fn(),
+  ruesPersonLookup: vi.fn(),
+  lookupLegalRepresentativeByNit: vi.fn(),
+  actorContactLookup: vi.fn(),
   // HU #10875 — panel consolidado de identidad (IdentityStatusPanel), montado por el wizard siempre
   // que hay instanceId.
   getInstanceIdentityValidationAlerts: vi.fn(),
@@ -221,6 +225,25 @@ beforeEach(() => {
   mocks.finalizeDraft.mockResolvedValue({ id: 'inst-1', status: 'borrador', draftFinalizedAt: '2026-06-24T12:00:00Z' });
   mocks.getActors.mockResolvedValue([]);
   mocks.saveActors.mockResolvedValue(undefined);
+  mocks.lookupLegalRepresentativeByNit.mockResolvedValue(null);
+  mocks.actorContactLookup.mockResolvedValue({ found: false });
+  mocks.runtPersonLookup.mockResolvedValue({
+    found: true,
+    fullName: 'Pedro Vendedor',
+    firstName: 'Pedro',
+    lastName: 'Vendedor',
+    documentType: 'CC',
+    documentNumber: '999',
+    source: 'RUNT',
+    mode: 'mock',
+  });
+  mocks.ruesPersonLookup.mockResolvedValue({
+    found: true,
+    razonSocial: 'Empresa SAS',
+    documentNumber: '900',
+    source: 'RUES',
+    mode: 'mock',
+  });
   mocks.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true });
   mocks.getAttachments.mockResolvedValue([]);
   mocks.listTransitOffices.mockResolvedValue([]);
@@ -1210,8 +1233,9 @@ describe('TramiteWizard — Guardar y continuar (pasos de actores)', () => {
 
     // Navega al paso Vendedor (frontera).
     await user.click(screen.getByRole('button', { name: /^Paso 3: Vendedor/ }));
-    // El form hidrata al vendedor cargado.
+    // El form hidrata al vendedor cargado y auto-consulta RUNT.
     await screen.findByDisplayValue('Pedro Vendedor');
+    await screen.findByText(/Persona encontrada en RUNT/i);
 
     // Footer del wizard: "Guardar y continuar" (no el botón propio del form).
     await user.click(screen.getByRole('button', { name: /Guardar y continuar/ }));
@@ -1240,6 +1264,7 @@ describe('TramiteWizard — Guardar y continuar (pasos de actores)', () => {
     await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
     await user.click(screen.getByRole('button', { name: /^Paso 3: Vendedor/ }));
     await screen.findByDisplayValue('Pedro Vendedor');
+    await screen.findByText(/Persona encontrada en RUNT/i);
     await user.click(screen.getByRole('button', { name: /Guardar y continuar/ }));
   }
 

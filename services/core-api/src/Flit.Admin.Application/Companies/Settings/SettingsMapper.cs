@@ -19,6 +19,7 @@ internal static class SettingsMapper
         ToChoices(settings.ConsultationProviderConfig),
         settings.PlatePreassignEnabled,
         settings.PlateFlowSkipToTerminado,
+        settings.ValidateSoatWithRunt,
         new AvaluoProviderConfigDto(
             settings.AvaluoProviderConfig.Primary,
             settings.AvaluoProviderConfig.Enabled),

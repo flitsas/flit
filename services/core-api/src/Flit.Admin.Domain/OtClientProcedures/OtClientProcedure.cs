@@ -58,11 +58,20 @@ public sealed class OtClientProcedure
     /// <summary>Detalle (GET by id): actores del trámite. Vacío en listados.</summary>
     public IReadOnlyList<OtClientProcedureActor> Actors { get; init; } = [];
 
-    /// <summary>Detalle (GET by id): placa del vehículo.</summary>
+    /// <summary>Placa denormalizada (también en listado de bandeja).</summary>
     public string? Placa { get; init; }
 
-    /// <summary>Detalle (GET by id): VIN.</summary>
+    /// <summary>VIN denormalizado (también en listado de bandeja).</summary>
     public string? Vin { get; init; }
+
+    /// <summary>Nombre del propietario/vendedor (actor vendedor); null en matrícula inicial.</summary>
+    public string? VendedorNombre { get; init; }
+
+    /// <summary>Nombre del comprador.</summary>
+    public string? CompradorNombre { get; init; }
+
+    /// <summary>Nombre visible del gestor que radicó (created_by_user → DisplayName).</summary>
+    public string? GestorNombre { get; init; }
 
     /// <summary>Detalle (GET by id): marca.</summary>
     public string? Marca { get; init; }

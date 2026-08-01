@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, FolderOpen, Star, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, FolderOpen, Star, X } from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { OtTablePagination } from "./OtTablePagination";
 import { RowActions } from "@/components/atom/RowActions";
@@ -12,6 +12,10 @@ import {
   plateFlowLabel,
   puedeDecidirOt,
 } from "@/lib/tramites/estados";
+import {
+  OT_PROCEDURES_COLUMNS,
+  otColumnToSortBy,
+} from "@/lib/admin/ot-procedures-columns";
 
 export interface ClientProceduresTableProps {
   rows: OtClientProcedure[];
@@ -40,9 +44,52 @@ export interface ClientProceduresTableProps {
   onVerDocumentos?: (row: OtClientProcedure) => void;
   /** Abre el panel lateral con el detalle del trámite. */
   onVerDetalle?: (row: OtClientProcedure) => void;
+  /** sortBy actual del API (vin, placa, vendedor, …). */
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
+  onSortChange?: (sortBy: string, sortDir: "asc" | "desc") => void;
 }
 
-/** Tabla paginada tramites clientes OT ? patron CompanyListTable (HU #10220). */
+function SortableTh({
+  label,
+  columnKey,
+  sortBy,
+  sortDir,
+  onSortChange,
+  className = "",
+}: {
+  label: string;
+  columnKey: string;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
+  onSortChange?: (sortBy: string, sortDir: "asc" | "desc") => void;
+  className?: string;
+}) {
+  const apiKey = otColumnToSortBy(columnKey);
+  const active = sortBy === apiKey || (columnKey === "fechaRadicacion" && sortBy === "createdAt");
+  const nextDir: "asc" | "desc" = active && sortDir === "asc" ? "desc" : "asc";
+  const Icon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+
+  if (!onSortChange) {
+    return <th className={`px-4 py-2.5 bg-muted ${className}`.trim()}>{label}</th>;
+  }
+
+  return (
+    <th className={`px-4 py-2.5 bg-muted ${className}`.trim()}>
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 uppercase hover:opacity-80"
+        aria-label={`Ordenar por ${label}${active ? ` (${sortDir === "asc" ? "ascendente" : "descendente"})` : ""}`}
+        onClick={() => onSortChange(apiKey, nextDir)}
+      >
+        {label}
+        <Icon className="h-3 w-3 opacity-60" aria-hidden="true" />
+      </button>
+    </th>
+  );
+}
+
+/** Tabla paginada tramites clientes OT — patron CompanyListTable (HU #10220). */
 export function ClientProceduresTable({
   rows,
   totalCount,
@@ -59,28 +106,77 @@ export function ClientProceduresTable({
   consolidadoActingId = null,
   onVerDocumentos,
   onVerDetalle,
+  sortBy,
+  sortDir,
+  onSortChange,
 }: ClientProceduresTableProps) {
+  const col = (key: string) => OT_PROCEDURES_COLUMNS.find((c) => c.key === key)!;
+
   return (
     <div className="flex flex-1 flex-col">
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] border-separate border-spacing-y-2 text-xs">
+      <table className="w-full min-w-[1100px] border-separate border-spacing-y-2 text-xs">
         <thead>
           <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
-            <th className="rounded-l-xl px-4 py-2.5 bg-muted">
-              Radicado
-            </th>
-            <th className="px-4 py-2.5 bg-muted">
-              Tipo tramite
-            </th>
-            <th className="px-4 py-2.5 bg-muted">
-              Empresa cliente
-            </th>
-            <th className="px-4 py-2.5 bg-muted">
-              Estado
-            </th>
-            <th className="px-4 py-2.5 bg-muted">
-              Fecha radicacion
-            </th>
+            <SortableTh
+              label={col("radicado").label}
+              columnKey="radicado"
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSortChange={col("radicado").sortable ? onSortChange : undefined}
+              className="rounded-l-xl"
+            />
+            <SortableTh
+              label={col("vin").label}
+              columnKey="vin"
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSortChange={onSortChange}
+            />
+            <SortableTh
+              label={col("placa").label}
+              columnKey="placa"
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSortChange={onSortChange}
+            />
+            <SortableTh
+              label={col("vendedor").label}
+              columnKey="vendedor"
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSortChange={onSortChange}
+            />
+            <SortableTh
+              label={col("comprador").label}
+              columnKey="comprador"
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSortChange={onSortChange}
+            />
+            <SortableTh
+              label={col("gestor").label}
+              columnKey="gestor"
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSortChange={onSortChange}
+            />
+            <th className="px-4 py-2.5 bg-muted">{col("tipoTramite").label}</th>
+            <th className="px-4 py-2.5 bg-muted">{col("empresaCliente").label}</th>
+            <SortableTh
+              label={col("estado").label}
+              columnKey="estado"
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSortChange={onSortChange}
+            />
+            <SortableTh
+              label={col("fechaRadicacion").label}
+              columnKey="fechaRadicacion"
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSortChange={onSortChange}
+            />
             <th className="rounded-r-xl px-4 py-2.5 text-right bg-muted">
               Acciones
             </th>
@@ -91,7 +187,6 @@ export function ClientProceduresTable({
             <tr key={row.id} className="bg-card">
               <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">
                 <span className="flex items-center gap-1.5">
-                  {/* HU #10536 — distintivo de prioridad (solo lectura para el OT). */}
                   {row.prioritario && (
                     <Star
                       className="h-3.5 w-3.5 shrink-0"
@@ -101,6 +196,21 @@ export function ClientProceduresTable({
                   )}
                   {row.referenceNumber}
                 </span>
+              </td>
+              <td className="border-y px-4 py-3 font-mono text-[11px]">
+                {row.vin?.trim() || "—"}
+              </td>
+              <td className="border-y px-4 py-3 font-semibold">
+                {row.placa?.trim() || "—"}
+              </td>
+              <td className="border-y px-4 py-3">
+                {row.vendedorNombre?.trim() || "—"}
+              </td>
+              <td className="border-y px-4 py-3">
+                {row.compradorNombre?.trim() || "—"}
+              </td>
+              <td className="border-y px-4 py-3">
+                {row.gestorNombre?.trim() || "—"}
               </td>
               <td className="border-y px-4 py-3">
                 {row.procedureTypeName ?? row.procedureTypeId}
@@ -146,7 +256,6 @@ export function ClientProceduresTable({
                       <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   )}
-                  {/* Aprobar/Rechazar solo en ruta estándar o Terminado. */}
                   {row.status === "entregado" &&
                     puedeDecidirOt(row.plateFlowStatus, row.soatEstado) &&
                     showApprovalActions && (
@@ -178,7 +287,6 @@ export function ClientProceduresTable({
                       Esperando proceso del gestor
                     </span>
                   )}
-                  {/* Badges SOAT/impuesto solo visibles en Terminado. */}
                   {row.plateFlowStatus === "terminado" && (
                     <span className="flex flex-wrap justify-end gap-1">
                       {row.soatPagado && (
@@ -193,7 +301,6 @@ export function ClientProceduresTable({
                       )}
                     </span>
                   )}
-                  {/* Feature #10587 — asignar (preasignado/sin asignar) y revocar. */}
                   {row.plateFlowStatus === "preasignado" && showApprovalActions && onAssignPlate && (
                     <button
                       type="button"

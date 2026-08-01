@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
+import { Pagination } from "@/components/atom/Pagination";
 import { useToast } from "@/components/admin/Toast";
 import { OTConfigTable, type OtOperationalInfo } from "@/components/admin/companies/OTConfigTable";
 import { OTConfigModal } from "@/components/admin/companies/OTConfigModal";
@@ -34,6 +35,9 @@ import type {
 // las dos secciones (bloqueos + restricciones de consulta). Carga todo lo que antes
 // cargaban los 3 paneles (catálogo, grants, estado operativo, políticas de bloqueo y
 // restricciones de consulta) para poder abrir el modal sin una petición adicional por fila.
+/** Filas por página del listado de OT. */
+const OT_PAGE_SIZE = 10;
+
 export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -43,6 +47,7 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
   const [policies, setPolicies] = useState<OtBlockingPolicy[]>([]);
   const [restrictions, setRestrictions] = useState<OtConsultationRestriction[]>([]);
   const [configOffice, setConfigOffice] = useState<TransitOffice | null>(null);
+  const [page, setPage] = useState(1);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -100,6 +105,33 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
     );
   };
 
+  /**
+   * Solo los OT dados de alta y activos. El catálogo trae también los que nunca se dieron de alta y
+   * los desactivados, que no se pueden habilitar y solo alargaban la lista.
+   *
+   * <p>Un OT ya habilitado para la compañía se sigue mostrando aunque haya dejado de estar activo:
+   * si se ocultara, su grant quedaría vigente sin forma de revocarlo desde la consola.</p>
+   */
+  const visibleOffices = useMemo(
+    () =>
+      offices.filter((office) => {
+        if (grantedIds.includes(office.id)) return true;
+        const op = operationalById[office.id];
+        return Boolean(op?.hasTenant && op.estadoActivo);
+      }),
+    [offices, grantedIds, operationalById],
+  );
+
+  // La página se acota al render en vez de corregirse con setState: si al revocar un grant la lista
+  // se encoge, un índice guardado dejaría la tabla en blanco en una página que ya no existe.
+  const lastPage = Math.max(1, Math.ceil(visibleOffices.length / OT_PAGE_SIZE));
+  const safePage = Math.min(page, lastPage);
+
+  const pageOffices = useMemo(
+    () => visibleOffices.slice((safePage - 1) * OT_PAGE_SIZE, safePage * OT_PAGE_SIZE),
+    [visibleOffices, safePage],
+  );
+
   const handleToggleBlocking = async (
     transitOfficeId: string,
     criterion: BlockingCriterion,
@@ -128,19 +160,25 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
   return (
     <>
       <UiStateBoundary
-        status={status}
+        status={status === "ready" && visibleOffices.length === 0 ? "empty" : status}
         onRetry={() => void load()}
-        emptyMessage="No hay organismos de tránsito en el catálogo."
+        emptyMessage="No hay organismos de tránsito activos."
         errorMessage="No se pudieron cargar los organismos de tránsito."
         skeletonRows={4}
       >
         <OTConfigTable
-          offices={offices}
+          offices={pageOffices}
           grantedIds={grantedIds}
           operationalById={operationalById}
           onToggleGrant={handleToggleGrant}
           onOpenConfig={(office) => setConfigOffice(office)}
           onError={(message) => show(message, "error")}
+        />
+        <Pagination
+          page={safePage}
+          pageSize={OT_PAGE_SIZE}
+          totalCount={visibleOffices.length}
+          onPageChange={setPage}
         />
       </UiStateBoundary>
 

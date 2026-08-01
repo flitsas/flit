@@ -15,6 +15,7 @@ import {
 import { SignatureVaultFormPanel } from "./SignatureVaultFormPanel";
 import { SignatureVaultDetailModal } from "./SignatureVaultDetailModal";
 import { ESTADO_BADGE, ESTADO_LABELS, formatDate } from "./signatureVaultDisplay";
+import { formatDocumentNumber } from "@/lib/display/document-number";
 
 /**
  * Pestaña "Baúl de Firmas" (HU #10644): registra, lista, consulta y anula firmas de
@@ -147,7 +148,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                     </td>
                     <td className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""}`}>
                       <span className="font-mono">
-                        {item.documentType} {maskDocument(item.documentNumber)}
+                        {item.documentType} {formatDocumentNumber(item.documentNumber)}
                       </span>
                     </td>
                     <td className={`border-y px-4 py-3 font-mono ${revoked ? "opacity-60" : ""}`}>
@@ -252,8 +253,3 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
   );
 }
 
-/** Enmascara el número de documento (PII, Ley 1581): solo los últimos 4 dígitos. */
-function maskDocument(documentNumber: string): string {
-  if (documentNumber.length <= 4) return "••••";
-  return `••••${documentNumber.slice(-4)}`;
-}

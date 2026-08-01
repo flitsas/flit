@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, Clock, Copy, ExternalLink, ListTree, Lock, Pencil, Plus, RotateCcw, ScanFace, Send, ShieldAlert } from 'lucide-react';
+import { AlertCircle, Clock, Copy, ExternalLink, ListTree, Lock, Pencil, RotateCcw, ScanFace, Send, ShieldAlert } from 'lucide-react';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ModuleTitle } from './ModuleTitle';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
@@ -330,7 +330,6 @@ export function PrevalidacionesModule() {
             style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
             aria-label="Crear nueva prevalidación de identidad"
           >
-            <Plus className="h-4 w-4" aria-hidden="true" />
             Nueva prevalidación
           </button>
         }
@@ -422,7 +421,6 @@ export function PrevalidacionesModule() {
                   className="mt-4 flex items-center gap-2 mx-auto rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
                   style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
                 >
-                  <Plus className="h-4 w-4" aria-hidden="true" />
                   Nueva prevalidación
                 </button>
               </>
@@ -654,7 +652,8 @@ function PrevalidacionRow({
     actionItems.push({
       key: 'nueva',
       label: 'Nueva prevalidación',
-      icon: Plus,
+      // Los items del menú sí llevan icono, pero uno semántico (identidad) y no el "+" genérico.
+      icon: ScanFace,
       onSelect: () => onNewFor(r),
     });
   } else if (!isTramite && !isApproved) {

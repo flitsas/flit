@@ -98,11 +98,67 @@ internal static class ProcedureInstanceEndpoints
         group.MapGet("/instances", async (
             HttpContext http,
             ListProcedureInstancesHandler handler,
+            ListProcedureInstancesFilteredHandler filteredHandler,
+            [FromQuery] string? vin,
+            [FromQuery] string? placa,
+            [FromQuery] string? vendedor,
+            [FromQuery] string? comprador,
+            [FromQuery] string? gestor,
+            [FromQuery] bool? firmado,
+            [FromQuery] DateTimeOffset? createdFrom,
+            [FromQuery] DateTimeOffset? createdTo,
+            [FromQuery] DateTimeOffset? updatedFrom,
+            [FromQuery] DateTimeOffset? updatedTo,
+            [FromQuery] string? sortBy,
+            [FromQuery] string? sortDir,
+            [FromQuery] int? skip,
+            [FromQuery] int? take,
             CancellationToken ct) =>
         {
             var (tenantId, _) = ResolveTenantContext(http);
-            var items = await handler.HandleAsync(tenantId, ct);
-            return Results.Ok(new { items });
+
+            // Filtrado/ordenamiento server-side (WHERE/ORDER BY en SQL): solo se activa el camino nuevo
+            // cuando el caller pide EXPLÍCITAMENTE algún filtro, orden o paginación. Sin ningún parámetro
+            // el comportamiento histórico (TOP-N más reciente, sin filtros) queda intacto — no rompe
+            // consumidores existentes que llaman este mismo endpoint sin query string.
+            var pideFiltradoOrdenado =
+                !string.IsNullOrWhiteSpace(vin) || !string.IsNullOrWhiteSpace(placa)
+                || !string.IsNullOrWhiteSpace(vendedor) || !string.IsNullOrWhiteSpace(comprador)
+                || !string.IsNullOrWhiteSpace(gestor) || firmado is not null
+                || createdFrom is not null || createdTo is not null
+                || updatedFrom is not null || updatedTo is not null
+                || !string.IsNullOrWhiteSpace(sortBy) || !string.IsNullOrWhiteSpace(sortDir)
+                || skip is not null || take is not null;
+
+            if (!pideFiltradoOrdenado)
+            {
+                var items = await handler.HandleAsync(tenantId, ct);
+                return Results.Ok(new { items });
+            }
+
+            var request = new ProcedureInstanceListRequest
+            {
+                TenantId = tenantId,
+                Skip = skip ?? 0,
+                Take = take ?? ListProcedureInstancesHandler.MaxItems,
+                Vin = vin,
+                Placa = placa,
+                Vendedor = vendedor,
+                Comprador = comprador,
+                Gestor = gestor,
+                Firmado = firmado,
+                CreatedFrom = createdFrom,
+                CreatedTo = createdTo,
+                UpdatedFrom = updatedFrom,
+                UpdatedTo = updatedTo,
+                SortBy = sortBy,
+                // Default DESC (igual que el orden histórico); "asc" (case-insensitive) es el único
+                // valor que invierte a ascendente — cualquier otro texto se trata como "no asc" (DESC).
+                SortDescending = !string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase),
+            };
+
+            var (filteredItems, total) = await filteredHandler.HandleAsync(request, ct);
+            return Results.Ok(new { items = filteredItems, total });
         }).WithName("ListProcedureInstances");
 
         // GET /api/v1/tramites/transit-offices — Organismos de tránsito HABILITADOS para la
@@ -410,7 +466,7 @@ internal static class ProcedureInstanceEndpoints
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.HandleAsync(
+            var (result, error, warning) = await handler.HandleAsync(
                 id, tenantId.Value, ResolveUserId(http.User), body ?? new CompletePlateFlowRequest(), ct);
             return error switch
             {
@@ -421,10 +477,21 @@ internal static class ProcedureInstanceEndpoints
                 "plate_flow_not_asignado" => Results.Problem(
                     statusCode: 409, title: "plate_flow_not_asignado",
                     detail: "Solo se puede procesar cuando el sub-estado de placa es asignado."),
+                CompletePlateFlowHandler.SoatNoVigente => Results.Problem(
+                    statusCode: 409, title: CompletePlateFlowHandler.SoatNoVigente,
+                    detail: "El RUNT no reporta un SOAT vigente para el vehículo. La compañía tiene "
+                        + "desactivada la opción de continuar sin SOAT vigente: registra un SOAT vigente y vuelve a intentarlo."),
                 TramiteEstadoErrores.ConflictoConcurrencia => Results.Problem(
                     statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia,
                     detail: "El trámite cambió mientras se procesaba. Recarga e inténtalo de nuevo."),
-                _ => Results.Ok(result)
+                // 200 con advertencia: el trámite avanzó, pero el gestor tiene que saber con qué salvedad.
+                _ => Results.Ok(new CompletePlateFlowResponse(
+                    result,
+                    warning,
+                    warning == CompletePlateFlowHandler.SoatNoVigenteAdvertencia
+                        ? "El trámite se envió al OT SIN SOAT vigente: el RUNT no lo reporta vigente. "
+                            + "La compañía permite continuar, pero el OT puede rechazarlo por este motivo."
+                        : null))
             };
         }).WithName("CompletePlateFlow");
 
@@ -783,6 +850,16 @@ internal sealed record PauseProcedureInstancesBulkRequest(
 
 /// <summary>Body de PATCH /instances/{id}/current-step (HU #10879). Step = Key del paso del wizard.</summary>
 internal sealed record SetCurrentStepRequest(string? Step);
+
+/// <summary>
+/// Respuesta de POST /instances/{id}/plate-flow/complete. El trámite avanzó (<c>Instance</c>), pero
+/// puede traer una salvedad que el gestor debe ver: <c>WarningCode</c> para lógica y
+/// <c>WarningMessage</c> ya redactado para la UI. Ambos van en null cuando no hay nada que advertir.
+/// </summary>
+internal sealed record CompletePlateFlowResponse(
+    ProcedureInstanceSummary? Instance,
+    string? WarningCode,
+    string? WarningMessage);
 
 /// <summary>
 /// Body de POST /preflight-preview (CF-02). <c>TenantId</c> solo lo usa el SuperAdmin sin

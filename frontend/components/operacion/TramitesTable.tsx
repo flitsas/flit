@@ -1,13 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatFecha } from '@/lib/format/date';
 import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
+  ArrowDown,
   ArrowLeftRight,
+  ArrowUp,
+  ArrowUpDown,
   Car,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Eye,
   FileCheck,
   FileStack,
@@ -23,9 +28,20 @@ import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
 import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
+import {
+  TRAMITES_COLUMNS,
+  DEFAULT_TRAMITES_VISIBLE_COLUMNS,
+  buildTramitesGridLayout,
+  tramitesColumnToSortBy,
+  type TramitesColumnDef,
+  type TramitesGridLayout,
+} from '@/lib/tramites/tramites-table-columns';
+import { useUiPreferences } from '@/hooks/useUiPreferences';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { Modal } from '@/components/atom/Modal';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
+import { ColumnSelector } from '@/components/atom/ColumnSelector';
+import { InlineAlert } from '@/components/atom/InlineAlert';
 import { EstadoFunnel } from './EstadoFunnel';
 import {
   AttachmentPreview,
@@ -36,9 +52,17 @@ import type {
   FirmaParteEstado,
   InstanceStatus,
   InstanceSummary,
+  ListInstancesParams,
   TramiteFuente,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+
+const FILTER_INPUT_CLS =
+  'mt-1 w-full rounded-xl border border-[#DFE5ED] bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF] dark:border-white/15';
+const FILTER_FORM_CLS =
+  'grid grid-cols-1 gap-3 rounded-2xl border bg-white p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 dark:bg-[#0B0F14]';
+/** Tope del camino filtrado del backend (mismo MaxItems del API). */
+const SERVER_LIST_TAKE = 200;
 
 /** Texto corto y discreto del sub-estado de placa (debajo del chip de estado). */
 function plateFlowHint(status: string | null | undefined): string | null {
@@ -156,10 +180,8 @@ function stepLabel(item: InstanceSummary): string {
 }
 
 /**
- * HU #11057 — chip de "Firmado" POR PARTE (vendedor y comprador tienen columna propia).
- *
- * Ajuste del PO: la columna acredita a la parte por VALIDACIÓN DE IDENTIDAD o FIRMA DEL BAÚL, no por
- * la firma electrónica de la compraventa. Solo hay tres estados válidos y son excluyentes.
+ * HU #11057 — chip de acreditación de una parte (identidad o firma del baúl).
+ * Va dentro de la misma celda del actor (propietario/vendedor o comprador).
  */
 const FIRMA_CHIP: Record<FirmaParteEstado, Chip> = {
   firmado: { label: 'Firmado', bg: 'rgba(140,198,63,0.15)', color: '#5B8A1F', border: 'rgba(140,198,63,0.4)' },
@@ -174,44 +196,11 @@ const FUENTE_LABEL: Record<TramiteFuente, string> = {
   migrado: 'Migrado',
 };
 
-// HU #11020 — se añade la columna Vendedor antes de Comprador (saliente → entrante), coherente con
-// el expediente y el resumen del último paso.
-// ICT (PR #204) — ancho de la columna de selección (checkbox), PRIMERA columna de la tabla.
-const SELECT_COL = '2.25rem';
-
-// HU #11057 — columnas acordadas con el negocio: radicado · VIN · placa · trámite/modalidad ·
-// propietario/vendedor + su firma · comprador + su firma · fecha de creación · fecha de actualización ·
-// secretaría · gestor · fuente · acciones. El negocio pidió "visualizar MÍNIMO" esa información, así
-// que se conservan además Vehículo, Paso y Estado (Estado y Paso son los chips que orientan la acción
-// de la fila; quitarlos sería una regresión funcional). Con 17 columnas la tabla se navega con
-// desplazamiento horizontal: el ancho mínimo crece en consecuencia y la cabecera comparte el mismo
-// `gridTemplateColumns` que las filas para no desalinearse (ver docs/reporte-desalineamiento-tablas.md).
-const GRID_COLS = [
-  SELECT_COL, // Selección (checkbox ICT); cabecera vacía
-  '1.2fr', // Radicado (+ estrella de prioridad)
-  '1.1fr', // VIN
-  '0.9fr', // Placa
-  '0.9fr', // Trámite / Modalidad
-  '1.1fr', // Vehículo
-  '1.2fr', // Propietario / vendedor
-  '0.9fr', // Firmado (vendedor)
-  '1.2fr', // Comprador
-  '0.9fr', // Firmado (comprador)
-  '1fr',   // Paso
-  '1.2fr', // Estado
-  '0.9fr', // Fecha de creación
-  '0.9fr', // Fecha de actualización
-  '1.1fr', // Secretaría
-  '1.3fr', // Gestor
-  '0.9fr', // Fuente
-  '1.2fr', // Acciones
-].join(' ');
-
-/**
- * Ancho mínimo del grid con las 17 columnas: por debajo de esto la tabla se desplaza en horizontal
- * dentro de su contenedor (`overflow-x-auto`) en vez de comprimir las celdas.
- */
-const MIN_WIDTH = 'min-w-[1940px]';
+// Selector de columnas — el ancho/orden de cada columna vive en TRAMITES_COLUMNS
+// (lib/tramites/tramites-table-columns.ts); `buildTramitesGridLayout` calcula el
+// `gridTemplateColumns` (Selección + visibles + Acciones) UNA sola vez a partir de las columnas
+// visibles, y tanto la cabecera como cada fila lo reciben ya calculado: quedan alineadas por
+// construcción sin importar cuántas columnas se oculten.
 
 /** Filas por página en el listado (paginación client-side sobre `filtered`). */
 const PAGE_SIZE = 10;
@@ -246,6 +235,50 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
   // HU #10536 — filtro "solo prioritarios".
   const [soloPrioritarios, setSoloPrioritarios] = useState(false);
 
+  // Filtros server-side (mismo contrato que GET /instances). Borrador del form → se aplican
+  // solo con "Aplicar filtros"; el sort sí recarga de inmediato al clic en cabecera.
+  const [placaFilter, setPlacaFilter] = useState('');
+  const [vendedorFilter, setVendedorFilter] = useState('');
+  const [compradorFilter, setCompradorFilter] = useState('');
+  const [gestorFilter, setGestorFilter] = useState('');
+  const [firmadoFilter, setFirmadoFilter] = useState<'' | 'true' | 'false'>('');
+  const [createdFromFilter, setCreatedFromFilter] = useState('');
+  const [createdToFilter, setCreatedToFilter] = useState('');
+  const [updatedFromFilter, setUpdatedFromFilter] = useState('');
+  const [updatedToFilter, setUpdatedToFilter] = useState('');
+  const [appliedPlaca, setAppliedPlaca] = useState('');
+  const [appliedVendedor, setAppliedVendedor] = useState('');
+  const [appliedComprador, setAppliedComprador] = useState('');
+  const [appliedGestor, setAppliedGestor] = useState('');
+  const [appliedFirmado, setAppliedFirmado] = useState<'' | 'true' | 'false'>('');
+  const [appliedCreatedFrom, setAppliedCreatedFrom] = useState('');
+  const [appliedCreatedTo, setAppliedCreatedTo] = useState('');
+  const [appliedUpdatedFrom, setAppliedUpdatedFrom] = useState('');
+  const [appliedUpdatedTo, setAppliedUpdatedTo] = useState('');
+  const [sortBy, setSortBy] = useState('');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  /** Panel de filtros avanzados colapsado por defecto para no saturar la pantalla. */
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Selector de columnas: persiste qué columnas ve el usuario (scope "tramites.columns"). Degrada
+  // con elegancia — si la preferencia no carga o falla al guardar, la tabla sigue con el default
+  // compacto (el hook nunca deja la tabla en blanco ni bloquea su render).
+  const {
+    visible: visibleColumns,
+    saving: savingColumns,
+    setVisible: setVisibleColumns,
+  } = useUiPreferences('tramites.columns', DEFAULT_TRAMITES_VISIBLE_COLUMNS);
+  // Solo reservar la pista del checkbox cuando haya borradores ICT seleccionables; si no, ese
+  // hueco vacío se veía como “espacio muerto” al inicio de Radicado.
+  const includeSelectColumn = useMemo(
+    () => items.some((it) => it.origin === 'ict' && it.estado === 'borrador'),
+    [items],
+  );
+  const gridLayout = useMemo(
+    () => buildTramitesGridLayout(visibleColumns, { includeSelectColumn }),
+    [visibleColumns, includeSelectColumn],
+  );
+
   // #1 — ¿el caller es SuperAdmin? Determina la columna/filtro Compañía y si al abrir un trámite
   // se pasa el tenant de la fila (?t=) para poder verlo aunque sea de otra empresa. Se resuelve del
   // JWT en cliente tras montar (getToken lee la cookie), por eso vive en estado, no en el render SSR.
@@ -274,20 +307,27 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
   const [impuestoPagado, setImpuestoPagado] = useState(false);
   const [processActing, setProcessActing] = useState(false);
   const [processError, setProcessError] = useState<string | null>(null);
+  /**
+   * Salvedad con la que el trámite avanzó (p. ej. sin SOAT vigente). No es un error: el modal se
+   * queda abierto mostrándola para que el gestor sepa en qué condiciones lo envió al OT.
+   */
+  const [processWarning, setProcessWarning] = useState<string | null>(null);
 
   const openProcesar = (item: InstanceSummary) => {
     setProcessTarget(item);
     setSoatPagado(false);
     setImpuestoPagado(false);
     setProcessError(null);
+    setProcessWarning(null);
   };
 
   const confirmProcesar = async () => {
     if (!processTarget) return;
     setProcessActing(true);
     setProcessError(null);
+    setProcessWarning(null);
     try {
-      await tramitesClient.completePlateFlow(
+      const res = await tramitesClient.completePlateFlow(
         processTarget.id,
         { soatPagado, impuestoDepartamentalPagado: impuestoPagado },
         isAdmin ? processTarget.tenantId : undefined,
@@ -297,7 +337,11 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           it.id === processTarget.id ? { ...it, plateFlowStatus: 'terminado' } : it,
         ),
       );
-      setProcessTarget(null);
+      if (res?.warningMessage) {
+        setProcessWarning(res.warningMessage);
+      } else {
+        setProcessTarget(null);
+      }
     } catch (err) {
       setProcessError(err instanceof Error ? err.message : 'No se pudo marcar como Terminado.');
     } finally {
@@ -309,14 +353,48 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
     setLoading(true);
     setError(null);
     try {
-      const data = await tramitesClient.listInstances();
+      const query: ListInstancesParams = {};
+      if (appliedPlaca.trim()) query.placa = appliedPlaca.trim();
+      if (appliedVendedor.trim()) query.vendedor = appliedVendedor.trim();
+      if (appliedComprador.trim()) query.comprador = appliedComprador.trim();
+      if (appliedGestor.trim()) query.gestor = appliedGestor.trim();
+      if (appliedFirmado === 'true') query.firmado = true;
+      if (appliedFirmado === 'false') query.firmado = false;
+      if (appliedCreatedFrom.trim()) query.createdFrom = appliedCreatedFrom.trim();
+      if (appliedCreatedTo.trim()) query.createdTo = appliedCreatedTo.trim();
+      if (appliedUpdatedFrom.trim()) query.updatedFrom = appliedUpdatedFrom.trim();
+      if (appliedUpdatedTo.trim()) query.updatedTo = appliedUpdatedTo.trim();
+      if (sortBy) {
+        query.sortBy = sortBy;
+        query.sortDir = sortDir;
+      }
+      // Cualquier filtro/orden activa el camino server-side: pedir el tope del API.
+      if (Object.keys(query).length > 0) {
+        query.take = SERVER_LIST_TAKE;
+        query.skip = 0;
+      }
+      const data = await tramitesClient.listInstances(
+        Object.keys(query).length > 0 ? query : undefined,
+      );
       setItems(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [
+    appliedPlaca,
+    appliedVendedor,
+    appliedComprador,
+    appliedGestor,
+    appliedFirmado,
+    appliedCreatedFrom,
+    appliedCreatedTo,
+    appliedUpdatedFrom,
+    appliedUpdatedTo,
+    sortBy,
+    sortDir,
+  ]);
 
   useEffect(() => {
     // Carga/refresca al montar y al cambiar refreshKey: los setState de `load`
@@ -526,12 +604,44 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
     [selectedIds, items, isAdmin, load],
   );
 
+  const hasServerFilters =
+    appliedPlaca.trim() !== '' ||
+    appliedVendedor.trim() !== '' ||
+    appliedComprador.trim() !== '' ||
+    appliedGestor.trim() !== '' ||
+    appliedFirmado !== '' ||
+    appliedCreatedFrom.trim() !== '' ||
+    appliedCreatedTo.trim() !== '' ||
+    appliedUpdatedFrom.trim() !== '' ||
+    appliedUpdatedTo.trim() !== '';
+
   const hasActiveFilters =
     search.trim() !== '' ||
     modalidad !== '' ||
     estado !== '' ||
     compania !== '' ||
-    soloPrioritarios;
+    soloPrioritarios ||
+    hasServerFilters ||
+    sortBy !== '';
+
+  const applyServerFilters = () => {
+    setAppliedPlaca(placaFilter);
+    setAppliedVendedor(vendedorFilter);
+    setAppliedComprador(compradorFilter);
+    setAppliedGestor(gestorFilter);
+    setAppliedFirmado(firmadoFilter);
+    setAppliedCreatedFrom(createdFromFilter);
+    setAppliedCreatedTo(createdToFilter);
+    setAppliedUpdatedFrom(updatedFromFilter);
+    setAppliedUpdatedTo(updatedToFilter);
+    setPage(1);
+  };
+
+  const handleSortChange = (nextSortBy: string, nextSortDir: 'asc' | 'desc') => {
+    setSortBy(nextSortBy);
+    setSortDir(nextSortDir);
+    setPage(1);
+  };
 
   const clearFilters = () => {
     setSearch('');
@@ -539,6 +649,26 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
     setEstado('');
     setCompania('');
     setSoloPrioritarios(false);
+    setPlacaFilter('');
+    setVendedorFilter('');
+    setCompradorFilter('');
+    setGestorFilter('');
+    setFirmadoFilter('');
+    setCreatedFromFilter('');
+    setCreatedToFilter('');
+    setUpdatedFromFilter('');
+    setUpdatedToFilter('');
+    setAppliedPlaca('');
+    setAppliedVendedor('');
+    setAppliedComprador('');
+    setAppliedGestor('');
+    setAppliedFirmado('');
+    setAppliedCreatedFrom('');
+    setAppliedCreatedTo('');
+    setAppliedUpdatedFrom('');
+    setAppliedUpdatedTo('');
+    setSortBy('');
+    setSortDir('desc');
     setPage(1);
   };
 
@@ -661,6 +791,168 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           </div>
         )}
 
+        {/* Filtros server-side colapsables: placa, actores, gestor, firmado, rangos de fecha. */}
+        <div className="rounded-2xl border bg-white dark:bg-[#0B0F14]">
+          <div className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((o) => !o)}
+              aria-expanded={filtersOpen}
+              aria-controls="tramites-filtros-panel"
+              className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-[#162744] transition hover:bg-[#557EFF]/10 dark:text-white"
+            >
+              {filtersOpen ? (
+                <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              Filtros
+              {hasServerFilters ? (
+                <span className="ml-0.5 rounded-full bg-[#557EFF]/15 px-1.5 py-0.5 text-[10px] font-bold text-[#557EFF]">
+                  activos
+                </span>
+              ) : null}
+            </button>
+            <button
+              type="button"
+              onClick={clearFilters}
+              disabled={!hasActiveFilters}
+              className="rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ borderColor: '#557EFF', color: '#557EFF' }}
+              aria-label="Limpiar filtros avanzados"
+            >
+              Limpiar filtros
+            </button>
+            <ColumnSelector
+              columns={TRAMITES_COLUMNS}
+              visible={visibleColumns}
+              onChange={setVisibleColumns}
+              label="Columnas"
+              disabled={savingColumns}
+              className="ml-auto"
+            />
+          </div>
+          {filtersOpen ? (
+            <form
+              id="tramites-filtros-panel"
+              className={`${FILTER_FORM_CLS} border-0 border-t rounded-none rounded-b-2xl`}
+              aria-label="Filtros de trámites"
+              onSubmit={(e) => {
+                e.preventDefault();
+                applyServerFilters();
+              }}
+            >
+          <label className="text-xs font-semibold text-[#162744] dark:text-white">
+            Placa
+            <input
+              type="search"
+              aria-label="Filtrar por placa"
+              className={FILTER_INPUT_CLS}
+              value={placaFilter}
+              onChange={(e) => setPlacaFilter(e.target.value)}
+              placeholder="ABC123"
+            />
+          </label>
+          <label className="text-xs font-semibold text-[#162744] dark:text-white">
+            Propietario / vendedor
+            <input
+              type="search"
+              aria-label="Filtrar por propietario o vendedor"
+              className={FILTER_INPUT_CLS}
+              value={vendedorFilter}
+              onChange={(e) => setVendedorFilter(e.target.value)}
+              placeholder="Nombre"
+            />
+          </label>
+          <label className="text-xs font-semibold text-[#162744] dark:text-white">
+            Comprador
+            <input
+              type="search"
+              aria-label="Filtrar por comprador"
+              className={FILTER_INPUT_CLS}
+              value={compradorFilter}
+              onChange={(e) => setCompradorFilter(e.target.value)}
+              placeholder="Nombre"
+            />
+          </label>
+          <label className="text-xs font-semibold text-[#162744] dark:text-white">
+            Gestor
+            <input
+              type="search"
+              aria-label="Filtrar por gestor"
+              className={FILTER_INPUT_CLS}
+              value={gestorFilter}
+              onChange={(e) => setGestorFilter(e.target.value)}
+              placeholder="Nombre"
+            />
+          </label>
+          <label className="text-xs font-semibold text-[#162744] dark:text-white">
+            Firmado
+            <select
+              aria-label="Filtrar por firma de compraventa"
+              className={FILTER_INPUT_CLS}
+              value={firmadoFilter}
+              onChange={(e) => setFirmadoFilter(e.target.value as '' | 'true' | 'false')}
+              title="Firma electrónica de la compraventa (completa o pendiente)"
+            >
+              <option value="">Todos</option>
+              <option value="true">Firmado</option>
+              <option value="false">Pendiente</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-[#162744] dark:text-white">
+            Creación desde
+            <input
+              type="date"
+              aria-label="Fecha de creación desde"
+              className={FILTER_INPUT_CLS}
+              value={createdFromFilter}
+              onChange={(e) => setCreatedFromFilter(e.target.value)}
+            />
+          </label>
+          <label className="text-xs font-semibold text-[#162744] dark:text-white">
+            Creación hasta
+            <input
+              type="date"
+              aria-label="Fecha de creación hasta"
+              className={FILTER_INPUT_CLS}
+              value={createdToFilter}
+              onChange={(e) => setCreatedToFilter(e.target.value)}
+            />
+          </label>
+          <label className="text-xs font-semibold text-[#162744] dark:text-white">
+            Actualización desde
+            <input
+              type="date"
+              aria-label="Fecha de actualización desde"
+              className={FILTER_INPUT_CLS}
+              value={updatedFromFilter}
+              onChange={(e) => setUpdatedFromFilter(e.target.value)}
+            />
+          </label>
+          <label className="text-xs font-semibold text-[#162744] dark:text-white">
+            Actualización hasta
+            <input
+              type="date"
+              aria-label="Fecha de actualización hasta"
+              className={FILTER_INPUT_CLS}
+              value={updatedToFilter}
+              onChange={(e) => setUpdatedToFilter(e.target.value)}
+            />
+          </label>
+          <div className="flex items-end gap-2 sm:col-span-2 md:col-span-3 lg:col-span-4">
+            <button
+              type="submit"
+              className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
+              style={{ background: '#557EFF' }}
+            >
+              Aplicar filtros
+            </button>
+          </div>
+            </form>
+          ) : null}
+        </div>
+
         {/* ICT (paridad v1 pause-unpause-massive) — barra de acción cuando hay trámites ICT seleccionados. */}
         {selectedIds.size > 0 ? (
           <div
@@ -701,10 +993,15 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
           items={items}
           filtered={filtered}
           paginated={paginated}
+          visibleColumns={visibleColumns}
+          gridLayout={gridLayout}
           page={safePage}
           totalPages={totalPages}
           onPageChange={setPage}
           hasActiveFilters={hasActiveFilters}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          onSortChange={handleSortChange}
           openPopoverId={openPopoverId}
           onTogglePopover={(id) => setOpenPopoverId((prev) => (prev === id ? null : id))}
           onClosePopover={() => setOpenPopoverId(null)}
@@ -777,7 +1074,7 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
                   className="h-4 w-4 accent-[#557EFF]"
                   checked={soatPagado}
                   onChange={(e) => setSoatPagado(e.target.checked)}
-                  disabled={processActing}
+                  disabled={processActing || !!processWarning}
                 />
                 SOAT pagado
               </label>
@@ -787,39 +1084,91 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
                   className="h-4 w-4 accent-[#557EFF]"
                   checked={impuestoPagado}
                   onChange={(e) => setImpuestoPagado(e.target.checked)}
-                  disabled={processActing}
+                  disabled={processActing || !!processWarning}
                 />
                 Impuesto departamental pagado
               </label>
             </div>
             {processError ? (
-              <p role="alert" className="mt-3 text-xs text-orange-700">
+              <InlineAlert tone="warning" title="No se pudo procesar el trámite" className="mt-4">
                 {processError}
-              </p>
+              </InlineAlert>
+            ) : null}
+            {processWarning ? (
+              <InlineAlert tone="warning" title="Trámite enviado al OT con advertencia" className="mt-4">
+                {processWarning}
+              </InlineAlert>
             ) : null}
             <div className="mt-5 flex gap-3">
-              <button
-                type="button"
-                className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
-                onClick={() => setProcessTarget(null)}
-                disabled={processActing}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: '#557EFF' }}
-                disabled={processActing}
-                onClick={() => void confirmProcesar()}
-              >
-                {processActing ? 'Procesando…' : 'Marcar como Terminado'}
-              </button>
+              {processWarning ? (
+                <button
+                  type="button"
+                  className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white"
+                  style={{ background: '#557EFF' }}
+                  onClick={() => setProcessTarget(null)}
+                >
+                  Entendido
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+                    onClick={() => setProcessTarget(null)}
+                    disabled={processActing}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                    style={{ background: '#557EFF' }}
+                    disabled={processActing}
+                    onClick={() => void confirmProcesar()}
+                  >
+                    {processActing ? 'Procesando…' : 'Marcar como Terminado'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
     </section>
+  );
+}
+
+/** Cabecera ordenable (grid CSS) — mismo patrón que OT ClientProceduresTable. */
+function SortableHeaderCell({
+  column,
+  sortBy,
+  sortDir,
+  onSortChange,
+}: {
+  column: TramitesColumnDef;
+  sortBy: string;
+  sortDir: 'asc' | 'desc';
+  onSortChange: (sortBy: string, sortDir: 'asc' | 'desc') => void;
+}) {
+  if (!column.sortable) {
+    return <div>{column.label}</div>;
+  }
+  const apiKey = tramitesColumnToSortBy(column.key);
+  const active = sortBy === apiKey;
+  const nextDir: 'asc' | 'desc' = active && sortDir === 'asc' ? 'desc' : 'asc';
+  const Icon = !active ? ArrowUpDown : sortDir === 'asc' ? ArrowUp : ArrowDown;
+  return (
+    <div>
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 uppercase hover:opacity-80"
+        aria-label={`Ordenar por ${column.label}${active ? ` (${sortDir === 'asc' ? 'ascendente' : 'descendente'})` : ''}`}
+        onClick={() => onSortChange(apiKey, nextDir)}
+      >
+        {column.label}
+        <Icon className="h-3 w-3 opacity-60" aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
@@ -830,10 +1179,15 @@ function TableBody({
   items,
   filtered,
   paginated,
+  visibleColumns,
+  gridLayout,
   page,
   totalPages,
   onPageChange,
   hasActiveFilters,
+  sortBy,
+  sortDir,
+  onSortChange,
   openPopoverId,
   onTogglePopover,
   onClosePopover,
@@ -853,10 +1207,18 @@ function TableBody({
   items: InstanceSummary[];
   filtered: InstanceSummary[];
   paginated: InstanceSummary[];
+  /** Selector de columnas: claves visibles, en el mismo orden que TRAMITES_COLUMNS. */
+  visibleColumns: readonly string[];
+  /** `gridTemplateColumns` + ancho mínimo, calculados UNA vez a partir de `visibleColumns` — la
+   *  cabecera y cada fila lo reciben ya resuelto, así quedan alineados por construcción. */
+  gridLayout: TramitesGridLayout;
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
   hasActiveFilters: boolean;
+  sortBy: string;
+  sortDir: 'asc' | 'desc';
+  onSortChange: (sortBy: string, sortDir: 'asc' | 'desc') => void;
   openPopoverId: string | null;
   onTogglePopover: (id: string) => void;
   onClosePopover: () => void;
@@ -944,43 +1306,37 @@ function TableBody({
     );
   }
 
-    return (
+  // Columnas visibles, RE-ORDENADAS al orden canónico de TRAMITES_COLUMNS (nunca al orden en que
+  // llegó `visibleColumns`, que podría venir desordenado de una preferencia guardada). Header y
+  // filas reciben esta MISMA lista `visibleKeysOrdered`, calculada una sola vez aquí: es lo que
+  // garantiza la alineación por construcción, sin importar cuántas columnas se oculten.
+  const visibleDefs = TRAMITES_COLUMNS.filter((c) => visibleColumns.includes(c.key));
+  const visibleKeysOrdered = visibleDefs.map((c) => c.key);
+
+  return (
     <div className="overflow-x-auto">
-      <div className={MIN_WIDTH}>
+      <div style={{ minWidth: `${gridLayout.minWidthPx}px` }}>
         {/* Header */}
         <div
           className="grid items-center text-[11px] uppercase tracking-wider font-semibold rounded-xl px-4 py-3"
           style={{
             background: '#dfe5ed',
             color: '#162744',
-            gridTemplateColumns: GRID_COLS,
+            gridTemplateColumns: gridLayout.gridTemplateColumns,
           }}
           role="row"
         >
-          {/* Columna de selección (checkbox por fila); cabecera vacía. */}
-          <div aria-hidden="true" />
-          <div>Radicado</div>
-          <div>VIN</div>
-          <div>Placa</div>
-          <div>Trámite / Modalidad</div>
-          <div>Vehículo</div>
-          <div>Propietario / vendedor</div>
-          {/* Dos columnas "Firmado": el negocio las rotula igual, así que el sufijo va oculto
-              visualmente para que cada cabecera tenga un nombre accesible propio. */}
-          <div>
-            Firmado<span className="sr-only"> (vendedor)</span>
-          </div>
-          <div>Comprador</div>
-          <div>
-            Firmado<span className="sr-only"> (comprador)</span>
-          </div>
-          <div>Paso</div>
-          <div>Estado</div>
-          <div>Fecha de creación</div>
-          <div>Fecha de actualización</div>
-          <div>Secretaría</div>
-          <div>Gestor</div>
-          <div>Fuente</div>
+          {/* Columna de selección solo cuando hay borradores ICT (si no, hueco vacío al inicio). */}
+          {gridLayout.includeSelectColumn ? <div aria-hidden="true" /> : null}
+          {visibleDefs.map((col) => (
+            <SortableHeaderCell
+              key={col.key}
+              column={col}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSortChange={onSortChange}
+            />
+          ))}
           <div className="text-right">Acciones</div>
         </div>
 
@@ -990,6 +1346,9 @@ function TableBody({
             <TramiteRow
               key={item.id}
               item={item}
+              visibleColumns={visibleKeysOrdered}
+              gridTemplateColumns={gridLayout.gridTemplateColumns}
+              includeSelectColumn={gridLayout.includeSelectColumn}
               popoverOpen={openPopoverId === item.id}
               onTogglePopover={onTogglePopover}
               onClosePopover={onClosePopover}
@@ -1077,30 +1436,42 @@ function Pagination({
 }
 
 /**
- * HU #11057 — celda de "Firmado" de una parte. `null` = NO APLICA (el vendedor no existe en matrícula
- * inicial): se muestra un guion, no un chip, para no dar una falsa alarma.
+ * HU #11057 — celda de actor + acreditación (identidad o firma del baúl) en la misma columna.
+ * `estado` null = NO APLICA (p. ej. vendedor en matrícula inicial): guion, no chip, para no dar
+ * una falsa alarma.
  */
-function FirmaCell({
+function ActorConFirmaCell({
+  nombre,
   estado,
   parte,
 }: {
+  nombre: string | null | undefined;
   estado?: FirmaParteEstado | null;
   parte: 'vendedor' | 'comprador';
 }) {
-  if (!estado) {
-    return (
-      <span
-        className="block text-xs text-[#162744]/40 dark:text-white/30"
-        title={`No aplica: este trámite no tiene ${parte}`}
-      >
-        —
-      </span>
-    );
-  }
-  const chip = FIRMA_CHIP[estado];
   return (
-    <span className="block">
-      <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+    <span className="flex min-w-0 flex-col items-start gap-1">
+      <span
+        className="block w-full truncate text-[#162744] dark:text-white/90"
+        title={nombre?.trim() || undefined}
+      >
+        {nombre?.trim() || '—'}
+      </span>
+      {estado ? (
+        <StatusBadge
+          label={FIRMA_CHIP[estado].label}
+          bg={FIRMA_CHIP[estado].bg}
+          color={FIRMA_CHIP[estado].color}
+          border={FIRMA_CHIP[estado].border}
+        />
+      ) : (
+        <span
+          className="block text-[10px] text-[#162744]/40 dark:text-white/30"
+          title={`No aplica: este trámite no tiene ${parte}`}
+        >
+          —
+        </span>
+      )}
     </span>
   );
 }
@@ -1108,6 +1479,9 @@ function FirmaCell({
 /** Fila de trámite: clickable (abre el wizard) + acciones explícitas (documentos, consolidado, Continuar/Ver). */
 function TramiteRow({
   item,
+  visibleColumns,
+  gridTemplateColumns,
+  includeSelectColumn,
   popoverOpen,
   onTogglePopover,
   onClosePopover,
@@ -1121,6 +1495,12 @@ function TramiteRow({
   onVerConsolidado,
 }: {
   item: InstanceSummary;
+  /** Claves visibles (selector de columnas) — misma lista/orden que usa la cabecera. */
+  visibleColumns: readonly string[];
+  /** `gridTemplateColumns` ya resuelto por TableBody a partir de `visibleColumns`. */
+  gridTemplateColumns: string;
+  /** Debe coincidir con `gridLayout.includeSelectColumn` (pista del checkbox ICT). */
+  includeSelectColumn: boolean;
   popoverOpen: boolean;
   onTogglePopover: (id: string) => void;
   onClosePopover: () => void;
@@ -1174,6 +1554,7 @@ function TramiteRow({
             key: 'procesar',
             label: 'Procesar',
             icon: CheckCircle2,
+            attention: true,
             onSelect: () => onProcesar(item),
           },
         ]
@@ -1235,6 +1616,249 @@ function TramiteRow({
     };
   }, [popoverOpen, onClosePopover]);
 
+  // Contenido de cada columna de DATOS (todo menos Selección/Acciones, que son estructurales),
+  // indexado por la misma clave que usa el selector de columnas. Se define aparte del JSX para
+  // poder renderizar SOLO las visibles, en el orden canónico de TRAMITES_COLUMNS, con un único
+  // `.map` — así la fila queda alineada con la cabecera por construcción (ambas parten de
+  // `gridTemplateColumns` calculado por TableBody a partir del mismo `visibleColumns`).
+  const cellsByKey: Record<string, React.ReactNode> = {
+    radicado: (
+      <span className="flex min-w-0 items-center gap-2">
+        {/* HU #10536 — estrella de prioridad: toggle in-line (no navega la fila). */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePriority(item.id, !item.prioritario, item.tenantId);
+          }}
+          aria-pressed={item.prioritario}
+          aria-label={
+            item.prioritario
+              ? `Quitar prioridad al trámite ${item.referenceNumber}`
+              : `Marcar como prioritario el trámite ${item.referenceNumber}`
+          }
+          title={item.prioritario ? 'Prioritario — clic para quitar' : 'Marcar como prioritario'}
+          className="shrink-0 rounded-md p-0.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+        >
+          <Star
+            className="h-4 w-4"
+            style={
+              item.prioritario
+                ? { color: '#F59E0B', fill: '#F59E0B' }
+                : { color: '#162744', opacity: 0.3 }
+            }
+            aria-hidden="true"
+          />
+        </button>
+        <span className="min-w-0 truncate block font-mono font-semibold text-[#162744] dark:text-white">
+          {item.referenceNumber}
+        </span>
+      </span>
+    ),
+    vin: (
+      <span className="block truncate font-mono text-xs text-[#162744]/80 dark:text-white/70">
+        {item.vin ?? '—'}
+      </span>
+    ),
+    placa: (
+      <span className="block truncate font-mono font-semibold text-[#162744] dark:text-white">
+        {item.placa ?? '—'}
+      </span>
+    ),
+    tramite: (
+      <span className="block">
+        <span
+          className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
+          style={{
+            background: 'rgba(85,126,255,0.08)',
+            color: '#557eff',
+            borderColor: 'rgba(85,126,255,0.25)',
+          }}
+        >
+          {MODALIDAD_SHORT[item.modalidad]}
+        </span>
+      </span>
+    ),
+    vehiculo: (
+      <span className="block truncate text-[#162744]/90 dark:text-white/80" title={vehiculo(item)}>
+        {vehiculo(item)}
+      </span>
+    ),
+    propietario: (
+      <ActorConFirmaCell
+        nombre={item.vendedorNombre}
+        estado={item.firmaVendedorEstado}
+        parte="vendedor"
+      />
+    ),
+    comprador: (
+      <ActorConFirmaCell
+        nombre={item.compradorNombre}
+        estado={item.firmaCompradorEstado}
+        parte="comprador"
+      />
+    ),
+    paso: (
+      <span className="block min-w-0">
+        <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+          {item.pasoActual}/{item.totalPasos}
+        </span>
+        <span className="block truncate text-[10px] text-[#162744]/60 dark:text-white/50">
+          {stepLabel(item)}
+        </span>
+      </span>
+    ),
+    estado: (
+      <span className="relative flex min-w-0 flex-col items-start gap-1">
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+          {showRejectPopover ? (
+          <div ref={popoverRef} className="relative shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePopover(item.id);
+              }}
+              aria-expanded={popoverOpen}
+              aria-haspopup="dialog"
+              aria-label={`Ver detalle de rechazo / subsanación de ${item.referenceNumber}`}
+              title="Ver motivo del OT y subsanación"
+              className="rounded-md p-0.5 transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00]"
+            >
+              <AlertCircle
+                className="h-3.5 w-3.5"
+                style={{ color: iconColor }}
+                aria-hidden="true"
+              />
+            </button>
+            {popoverOpen ? (
+              <div
+                role="dialog"
+                aria-label={`Detalle de rechazo de ${item.referenceNumber}`}
+                className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-white p-3 shadow-lg dark:bg-[#162744]"
+                style={{ borderColor: 'rgba(255,78,0,0.28)' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {motivoRechazo ? (
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#c2410c]">
+                      Motivo del OT
+                    </p>
+                    <p className="mt-1 text-sm text-[#162744] dark:text-white/90 whitespace-pre-wrap">
+                      {motivoRechazo}
+                    </p>
+                  </div>
+                ) : null}
+                {enSubsanacion || subsanacionCount > 0 ? (
+                  <div
+                    className={`flex flex-wrap gap-1.5 ${motivoRechazo ? 'mt-2.5 border-t pt-2.5' : ''}`}
+                    style={
+                      motivoRechazo
+                        ? { borderColor: 'rgba(223,229,237,0.8)' }
+                        : undefined
+                    }
+                  >
+                    {enSubsanacion ? (
+                      <span
+                        className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
+                        style={{
+                          background: 'rgba(245,158,11,0.12)',
+                          color: '#b45309',
+                          borderColor: 'rgba(245,158,11,0.3)',
+                        }}
+                      >
+                        En subsanación
+                      </span>
+                    ) : null}
+                    {subsanacionCount > 0 ? (
+                      <span
+                        className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
+                        style={{
+                          background: 'rgba(99,102,241,0.10)',
+                          color: '#4f46e5',
+                          borderColor: 'rgba(99,102,241,0.28)',
+                        }}
+                      >
+                        Subsanado ×{subsanacionCount}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        </span>
+        {/* ICT — "Pausado" (solo texto, sin ícono): apilado bajo el estado; no invade Organismo. */}
+        {item.isPaused ? (
+          <span
+            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#162744]/20 bg-[#162744]/[0.06] px-2 py-0.5 text-[10px] font-semibold text-[#162744]/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
+            title={item.pausedObservation ?? 'Trámite pausado'}
+            aria-label={
+              item.pausedObservation
+                ? `Trámite pausado: ${item.pausedObservation}`
+                : 'Trámite pausado'
+            }
+          >
+            Pausado
+          </span>
+        ) : null}
+        {plateHint ? (
+          <span
+            className="text-[10px] leading-tight text-[#162744]/45 dark:text-white/40 truncate"
+            title={plateHint}
+          >
+            {plateHint}
+          </span>
+        ) : null}
+      </span>
+    ),
+    fechaCreacion: (
+      <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+        {shortDate(item.createdAt)}
+      </span>
+    ),
+    // Sin modificaciones desde que se creó ⇒ no hay fecha de actualización que mostrar.
+    fechaActualizacion: (
+      <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
+        {item.updatedAt ? shortDate(item.updatedAt) : '—'}
+      </span>
+    ),
+    secretaria: (
+      <span
+        className="block truncate text-xs text-[#162744]/90 dark:text-white/80"
+        title={item.organismoTransito ?? undefined}
+      >
+        {item.organismoTransito ?? '—'}
+      </span>
+    ),
+    // Gestor = empresa que radica + persona que la operó. Sustituye a la antigua columna
+    // "Compañía" del SuperAdmin: era exactamente la misma razón social, sin la persona. El
+    // filtro por compañía sigue existiendo (arriba), y ahora todos los perfiles ven el dato.
+    gestor: (
+      <span className="block min-w-0">
+        <span
+          className="block truncate text-xs font-semibold text-[#162744] dark:text-white"
+          title={item.companiaNombre ?? undefined}
+        >
+          {item.companiaNombre ?? '—'}
+        </span>
+        <span
+          className="block truncate text-[10px] text-[#162744]/60 dark:text-white/50"
+          title={item.gestorNombre ?? undefined}
+        >
+          {item.gestorNombre ?? '—'}
+        </span>
+      </span>
+    ),
+    fuente: (
+      <span className="block truncate text-xs text-[#162744]/90 dark:text-white/80">
+        {FUENTE_LABEL[item.fuente ?? 'dashboard']}
+      </span>
+    ),
+  };
+
   return (
     <li>
       <div
@@ -1247,220 +1871,30 @@ function TramiteRow({
             handleOpen();
           }
         }}
-        className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl border px-4 py-3 text-sm transition hover:border-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-        style={{ gridTemplateColumns: GRID_COLS }}
+        className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl border px-4 py-3 text-xs transition hover:border-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+        style={{ gridTemplateColumns }}
         aria-label={`Abrir trámite ${item.referenceNumber}`}
       >
-        {/* ICT (paridad v1 pause-unpause-massive) — checkbox de selección: PRIMERA columna. Solo
-            borradores ICT; en el resto la celda va vacía para mantener la grilla alineada. */}
-        <span className="flex items-center justify-start" onClick={(e) => e.stopPropagation()}>
-          {isIctDraft ? (
-            <input
-              type="checkbox"
-              checked={selected}
-              onChange={() => onToggleSelect(item.id)}
-              aria-label={`Seleccionar el trámite ${item.referenceNumber} para pausar/reanudar en lote`}
-              title="Seleccionar para pausar/reanudar en lote"
-              className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#557EFF]"
-            />
-          ) : null}
-        </span>
-        <span className="flex min-w-0 items-center gap-2">
-          {/* HU #10536 — estrella de prioridad: toggle in-line (no navega la fila). */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onTogglePriority(item.id, !item.prioritario, item.tenantId);
-            }}
-            aria-pressed={item.prioritario}
-            aria-label={
-              item.prioritario
-                ? `Quitar prioridad al trámite ${item.referenceNumber}`
-                : `Marcar como prioritario el trámite ${item.referenceNumber}`
-            }
-            title={item.prioritario ? 'Prioritario — clic para quitar' : 'Marcar como prioritario'}
-            className="shrink-0 rounded-md p-0.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-          >
-            <Star
-              className="h-4 w-4"
-              style={
-                item.prioritario
-                  ? { color: '#F59E0B', fill: '#F59E0B' }
-                  : { color: '#162744', opacity: 0.3 }
-              }
-              aria-hidden="true"
-            />
-          </button>
-          <span className="min-w-0 font-mono font-semibold text-[#162744] dark:text-white truncate block">
-            {item.referenceNumber}
+        {/* ICT — checkbox de selección solo si la grilla reservó la pista (hay borradores ICT). */}
+        {includeSelectColumn ? (
+          <span className="flex items-center justify-start" onClick={(e) => e.stopPropagation()}>
+            {isIctDraft ? (
+              <input
+                type="checkbox"
+                checked={selected}
+                onChange={() => onToggleSelect(item.id)}
+                aria-label={`Seleccionar el trámite ${item.referenceNumber} para pausar/reanudar en lote`}
+                title="Seleccionar para pausar/reanudar en lote"
+                className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#557EFF]"
+              />
+            ) : null}
           </span>
-        </span>
-        <span className="block font-mono text-xs text-[#162744]/80 dark:text-white/70 truncate">
-          {item.vin ?? '—'}
-        </span>
-        <span className="block font-mono font-semibold text-[#162744] dark:text-white truncate">
-          {item.placa ?? '—'}
-        </span>
-        <span className="block">
-          <span
-            className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
-            style={{
-              background: 'rgba(85,126,255,0.08)',
-              color: '#557eff',
-              borderColor: 'rgba(85,126,255,0.25)',
-            }}
-          >
-            {MODALIDAD_SHORT[item.modalidad]}
-          </span>
-        </span>
-        <span className="block text-[#162744]/90 dark:text-white/80 truncate">
-          {vehiculo(item)}
-        </span>
-        <span className="block text-[#162744] dark:text-white/90 truncate">
-          {item.vendedorNombre ?? '—'}
-        </span>
-        <FirmaCell estado={item.firmaVendedorEstado} parte="vendedor" />
-        <span className="block text-[#162744] dark:text-white/90 truncate">
-          {item.compradorNombre ?? '—'}
-        </span>
-        <FirmaCell estado={item.firmaCompradorEstado} parte="comprador" />
-        <span className="block min-w-0">
-          <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
-            {item.pasoActual}/{item.totalPasos}
-          </span>
-          <span className="block text-[10px] text-[#162744]/60 dark:text-white/50 truncate">
-            {stepLabel(item)}
-          </span>
-        </span>
-        <span className="relative flex min-w-0 flex-col items-start gap-1">
-          <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
-            {showRejectPopover ? (
-            <div ref={popoverRef} className="relative shrink-0">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTogglePopover(item.id);
-                }}
-                aria-expanded={popoverOpen}
-                aria-haspopup="dialog"
-                aria-label={`Ver detalle de rechazo / subsanación de ${item.referenceNumber}`}
-                title="Ver motivo del OT y subsanación"
-                className="rounded-md p-0.5 transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00]"
-              >
-                <AlertCircle
-                  className="h-3.5 w-3.5"
-                  style={{ color: iconColor }}
-                  aria-hidden="true"
-                />
-              </button>
-              {popoverOpen ? (
-                <div
-                  role="dialog"
-                  aria-label={`Detalle de rechazo de ${item.referenceNumber}`}
-                  className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-white p-3 shadow-lg dark:bg-[#162744]"
-                  style={{ borderColor: 'rgba(255,78,0,0.28)' }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {motivoRechazo ? (
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[#c2410c]">
-                        Motivo del OT
-                      </p>
-                      <p className="mt-1 text-sm text-[#162744] dark:text-white/90 whitespace-pre-wrap">
-                        {motivoRechazo}
-                      </p>
-                    </div>
-                  ) : null}
-                  {enSubsanacion || subsanacionCount > 0 ? (
-                    <div
-                      className={`flex flex-wrap gap-1.5 ${motivoRechazo ? 'mt-2.5 border-t pt-2.5' : ''}`}
-                      style={
-                        motivoRechazo
-                          ? { borderColor: 'rgba(223,229,237,0.8)' }
-                          : undefined
-                      }
-                    >
-                      {enSubsanacion ? (
-                        <span
-                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
-                          style={{
-                            background: 'rgba(245,158,11,0.12)',
-                            color: '#b45309',
-                            borderColor: 'rgba(245,158,11,0.3)',
-                          }}
-                        >
-                          En subsanación
-                        </span>
-                      ) : null}
-                      {subsanacionCount > 0 ? (
-                        <span
-                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap"
-                          style={{
-                            background: 'rgba(99,102,241,0.10)',
-                            color: '#4f46e5',
-                            borderColor: 'rgba(99,102,241,0.28)',
-                          }}
-                        >
-                          Subsanado ×{subsanacionCount}
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          </span>
-          {/* ICT — "Pausado" (solo texto, sin ícono): apilado bajo el estado; no invade Organismo. */}
-          {item.isPaused ? (
-            <span
-              className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[#162744]/20 bg-[#162744]/[0.06] px-2 py-0.5 text-[10px] font-semibold text-[#162744]/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
-              title={item.pausedObservation ?? 'Trámite pausado'}
-              aria-label={
-                item.pausedObservation
-                  ? `Trámite pausado: ${item.pausedObservation}`
-                  : 'Trámite pausado'
-              }
-            >
-              Pausado
-            </span>
-          ) : null}
-          {plateHint ? (
-            <span
-              className="text-[10px] leading-tight text-[#162744]/45 dark:text-white/40 truncate"
-              title={plateHint}
-            >
-              {plateHint}
-            </span>
-          ) : null}
-        </span>
-        <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
-          {shortDate(item.createdAt)}
-        </span>
-        {/* Sin modificaciones desde que se creó ⇒ no hay fecha de actualización que mostrar. */}
-        <span className="block font-mono text-xs text-[#162744]/70 dark:text-white/60">
-          {item.updatedAt ? shortDate(item.updatedAt) : '—'}
-        </span>
-        <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
-          {item.organismoTransito ?? '—'}
-        </span>
-        {/* Gestor = empresa que radica + persona que la operó. Sustituye a la antigua columna
-            "Compañía" del SuperAdmin: era exactamente la misma razón social, sin la persona. El
-            filtro por compañía sigue existiendo (arriba), y ahora todos los perfiles ven el dato. */}
-        <span className="block min-w-0">
-          <span className="block truncate text-xs font-semibold text-[#162744] dark:text-white">
-            {item.companiaNombre ?? '—'}
-          </span>
-          <span className="block truncate text-[10px] text-[#162744]/60 dark:text-white/50">
-            {item.gestorNombre ?? '—'}
-          </span>
-        </span>
-        <span className="block text-xs text-[#162744]/90 dark:text-white/80 truncate">
-          {FUENTE_LABEL[item.fuente ?? 'dashboard']}
-        </span>
+        ) : null}
+        {/* Selector de columnas: solo se renderizan las visibles, en el orden canónico de
+            TRAMITES_COLUMNS — la misma lista/orden que usa la cabecera (TableBody). */}
+        {visibleColumns.map((key) => (
+          <Fragment key={key}>{cellsByKey[key]}</Fragment>
+        ))}
         {/* La fila entera navega al wizard, así que las acciones detienen la propagación en un
             envoltorio: el menú no recibe el evento y no hay que filtrarlo acción por acción.
             Se conserva el `ActionsMenu` que introdujo el subflujo de placa (HU #11037): las acciones

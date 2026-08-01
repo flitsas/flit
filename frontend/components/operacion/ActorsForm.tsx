@@ -85,6 +85,18 @@ interface Props {
    * (necesaria para consultar el RNMC y generar el certificado). Ausente/false ⇒ el campo se oculta.
    */
   rnmcEnabled?: boolean;
+  /**
+   * Gate de avance del wizard: `true` cuando TODOS los actores del formulario tienen consulta de
+   * identidad exitosa (RUNT / RUES / directorio). Sin consulta OK, Continuar permanece deshabilitado.
+   */
+  onConsultationGateChange?: (ready: boolean) => void;
+}
+
+/** ¿La consulta de identidad resolvió datos? Gate duro de avance/guardado. */
+export function isIdentityConsultationReady(
+  status: 'idle' | 'loading' | 'found' | 'not_found' | 'error' | undefined,
+): boolean {
+  return status === 'found';
 }
 
 const DOC_OPTIONS: { value: ActorDocumentType; label: string }[] = [
@@ -384,6 +396,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     seedDocumentoFromOwner = false,
     autoConsultRunt = false,
     rnmcEnabled = false,
+    onConsultationGateChange,
   },
   ref,
 ) {
@@ -603,7 +616,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
   const validation = validateActors(actors, modalidad);
 
-  const updateActor = (index: number, patch: Partial<ProcedureActor>) => {
+  const setRuntFor = (index: number, value: LookupState) =>
+    setRunt((prev) => ({ ...prev, [index]: value }));
+
+  const updateActor = (
+    index: number,
+    patch: Partial<ProcedureActor>,
+    opts?: { preserveConsultation?: boolean },
+  ) => {
+    const identityChanged =
+      patch.numeroDocumento !== undefined ||
+      patch.tipoDocumento !== undefined ||
+      patch.personType !== undefined;
     setActors((prev) =>
       prev.map((a, i) => {
         if (i !== index) return a;
@@ -620,10 +644,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         return next;
       }),
     );
+    // Cambio MANUAL de identidad invalida la consulta. El autopoblado post-RUNT/RUES
+    // usa preserveConsultation para no disparar un segundo lookup ni perder el `found`.
+    if (identityChanged && !opts?.preserveConsultation) {
+      setRuntFor(index, { status: 'idle' });
+      autoLookupTriggeredRef.current = null;
+    }
   };
-
-  const setRuntFor = (index: number, value: LookupState) =>
-    setRunt((prev) => ({ ...prev, [index]: value }));
 
   const setRlRuntFor = (index: number, value: LookupState) =>
     setRlRunt((prev) => ({ ...prev, [index]: value }));
@@ -668,8 +695,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   };
 
   // Consulta de identidad por documento. Bifurca por tipo de persona: jurídica → RUES (por NIT),
-  // natural → RUNT (conductor). Si encuentra, autopopula el actor. Nunca bloquea la captura
-  // manual: not_found/error dejan los campos editables (registro sin resultado de consulta).
+  // natural → RUNT (conductor). Si encuentra, autopopula el actor. Sin resultado exitoso no se
+  // permite guardar ni avanzar (gate de Continuar en el wizard).
   const handleIdentityLookup = async (index: number) => {
     const actor = actors[index];
     const documentNumber = actor.numeroDocumento.trim();
@@ -686,11 +713,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         const preload = await tramitesClient.lookupLegalRepresentativeByNit(documentNumber);
         if (preload) {
           const nit = preload.company.nit || documentNumber;
-          updateActor(index, {
-            nombreCompleto: preload.company.razonSocial,
-            tipoDocumento: 'NIT',
-            numeroDocumento: nit,
-          });
+          updateActor(
+            index,
+            {
+              nombreCompleto: preload.company.razonSocial,
+              tipoDocumento: 'NIT',
+              numeroDocumento: nit,
+            },
+            { preserveConsultation: true },
+          );
           // HU #10937 — si la compañía tiene varios representantes, se precarga el primero por defecto
           // y el gestor puede cambiarlo con el selector (handleSelectRep). Con uno solo, comportamiento
           // previo (auto-seleccionado). El representante elegido queda embebido en el actor.
@@ -708,11 +739,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         });
         if (result.found) {
           const nit = result.documentNumber || actor.numeroDocumento;
-          updateActor(index, {
-            nombreCompleto: result.razonSocial ?? actor.nombreCompleto,
-            tipoDocumento: 'NIT',
-            numeroDocumento: nit,
-          });
+          updateActor(
+            index,
+            {
+              nombreCompleto: result.razonSocial ?? actor.nombreCompleto,
+              tipoDocumento: 'NIT',
+              numeroDocumento: nit,
+            },
+            { preserveConsultation: true },
+          );
           setRuntFor(index, { status: 'found', kind: 'rues', result });
           // HU #10956 (AC2) — identidad resuelta en RUES: precarga el contacto conocido.
           void runContactLookup(index, 'NIT', nit);
@@ -729,11 +764,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       if (result.found) {
         const resolvedTipo = (result.documentType as ActorDocumentType) || actor.tipoDocumento;
         const resolvedNumero = result.documentNumber || actor.numeroDocumento;
-        updateActor(index, {
-          nombreCompleto: result.fullName ?? actor.nombreCompleto,
-          tipoDocumento: resolvedTipo,
-          numeroDocumento: resolvedNumero,
-        });
+        updateActor(
+          index,
+          {
+            nombreCompleto: result.fullName ?? actor.nombreCompleto,
+            tipoDocumento: resolvedTipo,
+            numeroDocumento: resolvedNumero,
+          },
+          { preserveConsultation: true },
+        );
         setRuntFor(index, { status: 'found', kind: 'runt', result });
         // HU #10956 (AC2) — identidad resuelta en RUNT: precarga el contacto conocido.
         void runContactLookup(index, resolvedTipo, resolvedNumero);
@@ -881,6 +920,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const submitActors = async (): Promise<boolean> => {
     setShowErrors(true);
     if (!validateActors(actors, modalidad).valid) return false;
+
+    // Gate duro: cada actor debe tener consulta RUNT/RUES/directorio exitosa antes de persistir.
+    if (actors.some((_, i) => !isIdentityConsultationReady(runt[i]?.status))) {
+      return false;
+    }
+
     const normalized = normalizeActors(actors);
 
     // AC1 — correo cambiado con validación en curso: pide confirmación antes de persistir. Sin
@@ -901,6 +946,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   };
 
   useImperativeHandle(ref, () => ({ save: submitActors }));
+
+  // Notifica al wizard si Continuar puede habilitarse (consulta exitosa en todos los actores).
+  const consultationReady = actors.every((_, i) =>
+    isIdentityConsultationReady(runt[i]?.status),
+  );
+  useEffect(() => {
+    onConsultationGateChange?.(consultationReady);
+  }, [consultationReady, onConsultationGateChange]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1268,11 +1321,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     if (runtState.status === 'not_found') {
       return (
         <div
-          className="rounded-xl p-3 text-[11px] border opacity-80"
-          role="status"
+          className="rounded-xl p-3 text-[11px] border"
+          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          role="alert"
           aria-live="polite"
         >
-          No se encontró en {channel} — completa los datos manualmente.
+          No se encontró en {channel}. Corrige el documento e intenta de nuevo; sin datos de{' '}
+          {channel} no puedes continuar.
         </div>
       );
     }
@@ -1284,7 +1339,25 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           role="alert"
           aria-live="polite"
         >
-          No se pudo consultar {channel} ({runtState.message}). Puedes completar los datos manualmente.
+          No se pudo consultar {channel} ({runtState.message}). Reintenta la consulta; sin datos de{' '}
+          {channel} no puedes continuar.
+        </div>
+      );
+    }
+    // Documento capturado pero aún sin consulta exitosa: aviso para habilitar Continuar.
+    if (
+      actor.numeroDocumento.trim() &&
+      (runtState.status === 'idle' || showErrors)
+    ) {
+      return (
+        <div
+          className="rounded-xl p-3 text-[11px] border opacity-90"
+          style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)', color: '#162744' }}
+          role="status"
+          aria-live="polite"
+        >
+          Consulta {channel} para traer la información. Hasta que la consulta sea exitosa no se
+          habilita Continuar.
         </div>
       );
     }

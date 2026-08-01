@@ -71,6 +71,14 @@ export function ConfiguracionEmpresaTab({
       />
 
       <ToggleSwitch
+        id="validarSoatConRunt"
+        label="Validar SOAT ante el RUNT al procesar"
+        description="Al procesar un trámite en sub-estado Asignado se consulta el SOAT en el RUNT. Con la opción activa, si el RUNT no reporta un SOAT vigente el hallazgo solo se informa y el trámite continúa. Desactivada, el trámite no avanza y se muestra el error."
+        checked={form.validarSoatConRunt}
+        onChange={(v) => onChange({ validarSoatConRunt: v })}
+      />
+
+      <ToggleSwitch
         id="plateFlowSkipToTerminado"
         label="Omitir proceso del gestor (placa → Terminado)"
         description="Si al radicar ya hay placa completa o del rango, el trámite pasa directo a Terminado (sin paso Asignado ni checks del gestor). Si está desactivado, el gestor debe procesar Asignado → Terminado antes de que el OT apruebe."

@@ -135,6 +135,8 @@ export interface TenantSettings {
    * Default false.
    */
   plateFlowSkipToTerminado?: boolean;
+  /** Opción activa: permite continuar aunque el RUNT no reporte SOAT vigente. Apagada: bloquea. */
+  validarSoatConRunt?: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
   notificationTarget: NotificationTarget;
   metodosRecaudo: string[];
@@ -158,6 +160,8 @@ export interface TenantSettingsUpdate {
    * Default false.
    */
   plateFlowSkipToTerminado?: boolean;
+  /** Opción activa: permite continuar aunque el RUNT no reporte SOAT vigente. Apagada: bloquea. */
+  validarSoatConRunt?: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
   notificationTarget: NotificationTarget;
   metodosRecaudo: string[];

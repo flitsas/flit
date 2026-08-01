@@ -67,6 +67,17 @@ public sealed class ProcedureInstance
     public int SubsanacionCount { get; set; }
 
     /// <summary>
+    /// Snapshot de <c>field_values</c> capturado al activar la subsanación: el baseline contra el que
+    /// se compara al re-radicar para decidir qué gates se re-evalúan.
+    ///
+    /// <para>Vive aquí y no en el historial de estados a propósito. Antes se guardaba en el
+    /// <c>metadata</c> de una fila <c>rechazado → rechazado</c>, que no era una transición real y el
+    /// timeline mostraba como un segundo rechazo. Columna por migración SQL cruda (tabla
+    /// ExcludeFromMigrations).</para>
+    /// </summary>
+    public string? SubsanacionBaseline { get; set; }
+
+    /// <summary>
     /// Feature #10701 / HU #10706 — marca de vigencia del expediente consolidado maestro. En
     /// <c>true</c> el <c>consolidado_maestro</c> persistido refleja el estado actual del expediente:
     /// el botón único "Ver consolidado" lo muestra tal cual (sin regenerar). Cualquier cambio
@@ -148,6 +159,30 @@ public sealed class ProcedureInstance
     /// se mapea al modelo EF.
     /// </summary>
     public Guid? MandateSignerId { get; set; }
+
+    /// <summary>
+    /// VIN denormalizado desde <c>procedure_instance_field_values</c> (field_key <c>vin</c>), mantenido
+    /// por trigger de BD (migración TramitesCamposBusqueda). Habilita filtrar/ordenar el listado en SQL
+    /// sin cargar el grafo completo. SOLO LECTURA para el aplicativo: la fuente de verdad sigue siendo
+    /// <see cref="FieldValues"/>; escribir aquí directamente no se propaga a field_values. Columna
+    /// agregada por migración SQL cruda (la tabla está ExcludeFromMigrations); aquí solo se mapea.
+    /// </summary>
+    public string? Vin { get; set; }
+
+    /// <summary>Placa denormalizada (field_key <c>plate</c>). Mismo propósito y misma advertencia de
+    /// solo-lectura que <see cref="Vin"/>.</summary>
+    public string? Plate { get; set; }
+
+    /// <summary>
+    /// Nombre del vendedor (actor_type <c>vendedor</c>) denormalizado desde
+    /// <see cref="Actors"/> por trigger. Null en matrícula inicial (no hay vendedor) o si el actor aún
+    /// no se ha registrado. SOLO LECTURA para el aplicativo.
+    /// </summary>
+    public string? VendedorNombre { get; set; }
+
+    /// <summary>Nombre del comprador (actor_type <c>comprador</c>) denormalizado desde
+    /// <see cref="Actors"/> por el mismo trigger que <see cref="VendedorNombre"/>. SOLO LECTURA.</summary>
+    public string? CompradorNombre { get; set; }
 
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }

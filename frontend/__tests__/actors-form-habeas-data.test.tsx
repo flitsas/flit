@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   runtPersonLookup: vi.fn(),
   ruesPersonLookup: vi.fn(),
   actorContactLookup: vi.fn(),
+  lookupLegalRepresentativeByNit: vi.fn(),
   getInstance: vi.fn(),
 }));
 
@@ -25,6 +26,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     runtPersonLookup: mocks.runtPersonLookup,
     ruesPersonLookup: mocks.ruesPersonLookup,
     actorContactLookup: mocks.actorContactLookup,
+    lookupLegalRepresentativeByNit: mocks.lookupLegalRepresentativeByNit,
     getInstance: mocks.getInstance,
   },
 }));
@@ -50,6 +52,7 @@ beforeEach(() => {
   mocks.saveActors.mockResolvedValue(undefined);
   mocks.getInstance.mockResolvedValue({ fieldValues: [] });
   mocks.actorContactLookup.mockResolvedValue(EMPTY_CONTACT);
+  mocks.lookupLegalRepresentativeByNit.mockResolvedValue(null);
 });
 
 async function fillRequiredComprador(user: ReturnType<typeof userEvent.setup>) {
@@ -101,6 +104,17 @@ describe('ActorsForm — AC1 (HU #10956) el check de Habeas Data ya no se ofrece
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
     await screen.findByDisplayValue('Juan Perez');
+
+    mocks.runtPersonLookup.mockResolvedValue({
+      found: true,
+      fullName: 'Juan Perez',
+      documentType: 'CC',
+      documentNumber: '12345',
+      source: 'RUNT',
+      mode: 'mock',
+    });
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+    await screen.findByText(/Persona encontrada en RUNT/i);
 
     await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
 

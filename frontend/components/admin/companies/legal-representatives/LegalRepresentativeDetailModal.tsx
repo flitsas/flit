@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Building2, FileText, Loader2, Plus, UserSquare } from "lucide-react";
+import { Building2, FileText, Loader2, UserSquare } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { useToast } from "@/components/admin/Toast";
@@ -332,7 +332,7 @@ export function LegalRepresentativeDetailModal({
                     className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold"
                     style={{ color: "#557EFF", borderColor: "#557EFF" }}
                   >
-                    <Plus className="h-3.5 w-3.5" /> Asociar escritura
+                    Asociar escritura
                   </button>
                 </div>
 
