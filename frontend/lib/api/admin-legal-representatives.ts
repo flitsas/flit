@@ -144,6 +144,12 @@ export interface LegalRepresentativeInput {
   city?: string | null;
   phone?: string | null;
   procedureTypeIds: string[];
+  /**
+   * HU #11180 — firma del baúl seleccionada explícitamente por el administrador. Si viene,
+   * el backend valida y persiste saltándose el resolver automático; si no viene, el resolver
+   * sigue funcionando como antes (compatibilidad con el wizard).
+   */
+  signatureVaultId?: string | null;
 }
 
 /**
@@ -264,4 +270,16 @@ export function resendLegalRepresentativeIdentity(
   return apiFetch<IdentityValidationSent>(`${base(tenantId)}/${id}/identity/resend`, {
     method: "POST",
   });
+}
+
+/**
+ * POST "/{id}/identity/link" — vincula una validación de identidad ya aprobada al representante
+ * (HU #11180 AC6). Idempotente: si ya está vinculada devuelve la misma respuesta. Devuelve 409 con
+ * código `sin_identidad_vigente` cuando no hay una validación aprobada y vigente que vincular.
+ */
+export function linkLegalRepresentativeIdentity(
+  tenantId: string,
+  id: string,
+): Promise<void> {
+  return apiFetch<void>(`${base(tenantId)}/${id}/identity/link`, { method: "POST" });
 }

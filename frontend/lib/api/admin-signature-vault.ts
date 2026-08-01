@@ -73,6 +73,25 @@ export async function fetchSignatureVault(
   return unwrapList(result);
 }
 
+/**
+ * GET "" con filtros de documento — firmas vigentes de UNA persona (HU #11180 AC1).
+ * El backend acepta `documentType`, `documentNumber` y `soloVigentes` como query params.
+ * Solo devuelve las firmas de la persona indicada, filtradas por vigencia si `soloVigentes=true`.
+ */
+export async function fetchSignatureVaultByDocument(
+  tenantId: string,
+  documentType: string,
+  documentNumber: string,
+  soloVigentes = true,
+  signal?: AbortSignal,
+): Promise<SignatureVaultItem[]> {
+  const result = await apiFetch<unknown>(base(tenantId), {
+    query: { documentType, documentNumber, soloVigentes },
+    signal,
+  });
+  return unwrapList(result);
+}
+
 /** GET "/{id}" — detalle de una firma (solo metadatos). */
 export function fetchSignatureVaultItem(
   tenantId: string,

@@ -16,10 +16,11 @@ import type {
 import { fetchLegalRepresentative } from "@/lib/api/admin-legal-representatives";
 import { digitsOnly } from "@/lib/format/currency";
 import { sanitizeDocNumber } from "@/lib/validation/fieldRules";
-import { identityUi, vigenciaLabel } from "@/lib/admin/identity-vigencia";
 import { formatFecha } from "@/lib/format/date";
 import { procedureTypeLabels } from "./legalRepresentativesDisplay";
 import { RepresentativeCompaniesAccordion } from "./RepresentativeCompaniesAccordion";
+import { SignatureVaultSelector } from "./SignatureVaultSelector";
+import { IdentityActionsBlock } from "./IdentityActionsBlock";
 
 /** Modo del panel: consulta (solo lectura), alta (formulario en blanco) o edición (formulario precargado). */
 export type PanelMode = "view" | "create" | "edit";
@@ -72,6 +73,8 @@ interface FormState {
   city: string;
   phone: string;
   procedureTypeIds: string[];
+  /** HU #11180 — firma del baúl elegida explícitamente por el administrador. */
+  signatureVaultId: string | null;
 }
 
 const EMPTY_COMPANY: CompanyRow = { nit: "", name: "", email: "", address: "", city: "", phone: "" };
@@ -88,6 +91,7 @@ const EMPTY: FormState = {
   city: "",
   phone: "",
   procedureTypeIds: [],
+  signatureVaultId: null,
 };
 
 // HU #11058 — la precarga tiene que traer TODAS las compañías del representante y el contacto COMPLETO
@@ -117,6 +121,8 @@ function fromItem(item: LegalRepresentativeItem): FormState {
     city: item.city ?? "",
     phone: item.phone ?? "",
     procedureTypeIds: [...item.procedureTypeIds],
+    // HU #11180 — precargar la firma seleccionada previamente (AC2).
+    signatureVaultId: item.signatureVaultId ?? null,
   };
 }
 
@@ -276,6 +282,8 @@ export function LegalRepresentativesFormPanel({
         city: trimmed(form.city),
         phone: trimmed(form.phone),
         procedureTypeIds: form.procedureTypeIds,
+        // HU #11180 — firma del baúl elegida (null = usar el resolver automático del backend).
+        signatureVaultId: form.signatureVaultId ?? null,
       });
       onSaved(saved);
     } catch (err) {
@@ -385,64 +393,52 @@ export function LegalRepresentativesFormPanel({
     }
     if (!detail) return <PanelSkeleton />;
 
-    const idUi = identityUi(detail.identityStatus);
-    const vigLabel = vigenciaLabel(detail.identityStatus, detail.identityValidUntil);
     const tramites = procedureTypeLabels(detail.procedureTypeIds, procedureTypes);
 
     return (
       <div className="space-y-5">
-        {/* Bloques de identidad y firma del baúl */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div
-            className="rounded-xl border border-[#DFE5ED] p-3"
-            data-testid="rl-identidad"
-          >
-            <p className="text-[11px] font-bold uppercase tracking-wide opacity-60">
-              Validación de identidad
-            </p>
-            <div className="mt-1.5 space-y-1.5">
-              <span
-                className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold"
-                style={idUi.style}
-              >
-                {idUi.label}
-              </span>
-              {vigLabel && (
-                <p className="text-[10px] opacity-60" data-testid="rl-identidad-vigencia">
-                  {vigLabel}
-                </p>
-              )}
-            </div>
-          </div>
+        {/* HU #11180 — Bloque de identidad con acciones (AC5, AC6) */}
+        <div data-testid="rl-identidad">
+          <IdentityActionsBlock
+            tenantId={tenantId}
+            representativeId={representativeId}
+            identityStatus={detail.identityStatus}
+            identityValidUntil={detail.identityValidUntil}
+            firmaBaulVigente={detail.firmaBaulVigente}
+            firmaBaulVigenteHasta={detail.firmaBaulVigenteHasta}
+            email={detail.email}
+            onRefresh={refreshDetail}
+          />
+        </div>
 
-          <div
-            className="rounded-xl border border-[#DFE5ED] p-3"
-            data-testid="rl-firma-baul"
-          >
-            <p className="text-[11px] font-bold uppercase tracking-wide opacity-60">
-              Firma del baúl
-            </p>
-            <div className="mt-1.5">
-              <span
-                className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold"
-                style={
-                  detail.firmaBaulVigente
-                    ? { background: "rgba(112,207,58,0.14)", color: "#3f7a15" }
-                    : { background: "rgba(245,158,11,0.16)", color: "#b45309" }
-                }
-              >
-                {detail.firmaBaulVigente
-                  ? "Firma vigente"
-                  : detail.signatureVaultId
-                    ? "Firma vencida"
-                    : "Sin firma registrada"}
-              </span>
-              {detail.firmaBaulVigente && detail.firmaBaulVigenteHasta && (
-                <p className="mt-1 text-[10px] opacity-60">
-                  Válida hasta {formatFecha(detail.firmaBaulVigenteHasta)}
-                </p>
-              )}
-            </div>
+        {/* Firma del baúl — solo lectura en modo view */}
+        <div
+          className="rounded-xl border border-[#DFE5ED] p-3"
+          data-testid="rl-firma-baul"
+        >
+          <p className="text-[11px] font-bold uppercase tracking-wide opacity-60">
+            Firma del baúl
+          </p>
+          <div className="mt-1.5">
+            <span
+              className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold"
+              style={
+                detail.firmaBaulVigente
+                  ? { background: "rgba(112,207,58,0.14)", color: "#3f7a15" }
+                  : { background: "rgba(245,158,11,0.16)", color: "#b45309" }
+              }
+            >
+              {detail.firmaBaulVigente
+                ? "Firma vigente"
+                : detail.signatureVaultId
+                  ? "Firma vencida"
+                  : "Sin firma registrada"}
+            </span>
+            {detail.firmaBaulVigente && detail.firmaBaulVigenteHasta && (
+              <p className="mt-1 text-[10px] opacity-60">
+                Válida hasta {formatFecha(detail.firmaBaulVigenteHasta)}
+              </p>
+            )}
           </div>
         </div>
 
@@ -677,6 +673,44 @@ export function LegalRepresentativesFormPanel({
             </Field>
           </div>
         </section>
+
+        {/* HU #11180 — Firma del baúl (AC1, AC2, AC3) */}
+        <section className="space-y-2">
+          <h3 className="text-[11px] font-bold uppercase tracking-wide opacity-60">
+            Firma del baúl
+          </h3>
+          <SignatureVaultSelector
+            tenantId={tenantId}
+            documentType={form.documentType}
+            documentNumber={form.documentNumber}
+            value={form.signatureVaultId}
+            onChange={(id) => patch({ signatureVaultId: id })}
+          />
+        </section>
+
+        {/* HU #11180 — Identidad (AC4, AC5, AC6) — disponible solo en modo edit */}
+        {mode === "edit" && (
+          <IdentityActionsBlock
+            tenantId={tenantId}
+            representativeId={representativeId}
+            identityStatus={detail?.identityStatus}
+            identityValidUntil={detail?.identityValidUntil}
+            firmaBaulVigente={detail?.firmaBaulVigente}
+            firmaBaulVigenteHasta={detail?.firmaBaulVigenteHasta}
+            email={form.email}
+            onRefresh={refreshDetail}
+          />
+        )}
+
+        {/* AC4: en modo create, aviso de identidad automática */}
+        {mode === "create" && (
+          <IdentityActionsBlock
+            tenantId={tenantId}
+            representativeId={null}
+            email={form.email}
+            onRefresh={() => undefined}
+          />
+        )}
 
         {/* Tipos de trámite */}
         <fieldset className="space-y-2">
