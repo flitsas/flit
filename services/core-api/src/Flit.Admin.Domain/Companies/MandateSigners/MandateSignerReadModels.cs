@@ -50,6 +50,12 @@ public sealed class MandateSignerItem
 
     /// <summary>Compañías (tenants gestores) actualmente asignadas al mandatario.</summary>
     public IReadOnlyList<Guid> CompanyTenantIds { get; init; } = [];
+
+    /// <summary>
+    /// HU #11201 — organismos donde aplica el mandatario. <see cref="TransitOfficeId"/> es solo el
+    /// primario (deprecado): esta lista es la que dice dónde puede firmar.
+    /// </summary>
+    public IReadOnlyList<Guid> TransitOfficeIds { get; init; } = [];
 }
 
 /// <summary>

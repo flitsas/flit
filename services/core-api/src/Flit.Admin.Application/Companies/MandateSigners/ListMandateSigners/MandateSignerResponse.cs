@@ -19,4 +19,9 @@ public sealed record MandateSignerResponse(
     string IdentityStatus,
     DateTimeOffset RegisteredAt,
     bool IsActive,
-    IReadOnlyList<Guid> CompanyTenantIds);
+    IReadOnlyList<Guid> CompanyTenantIds,
+    /// <summary>
+    /// HU #11201 — organismos donde aplica el mandatario. <c>TransitOfficeId</c> es solo el primario
+    /// (deprecado): esta lista es la que dice dónde puede firmar.
+    /// </summary>
+    IReadOnlyList<Guid> TransitOfficeIds);

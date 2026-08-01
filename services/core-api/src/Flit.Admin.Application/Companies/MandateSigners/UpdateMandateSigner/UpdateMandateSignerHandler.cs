@@ -90,7 +90,8 @@ public sealed class UpdateMandateSignerHandler
                 command.CorrelationId,
                 documentType,
                 email,
-                command.UserId),
+                command.UserId,
+                command.TransitOfficeIds),
             cancellationToken).ConfigureAwait(false);
 
         // HU #10993 — apalancar la validación de identidad también al EDITAR: si el correo se acaba de

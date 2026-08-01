@@ -56,7 +56,14 @@ public sealed record CreateMandateSignerData(
     Guid? CorrelationId,
     string DocumentType = "CC",
     string? Email = null,
-    Guid? UserId = null);
+    Guid? UserId = null,
+    /// <summary>
+    /// HU #11201 — organismos donde aplica el mandatario. Vacío ⇒ solo
+    /// <see cref="TransitOfficeId"/>, que es lo que hace el alta desde el perfil del organismo.
+    /// <see cref="TransitOfficeId"/> queda como organismo PRIMARIO (deprecado, se conserva por
+    /// compatibilidad); la lista es la que decide dónde puede firmar.
+    /// </summary>
+    IReadOnlyList<Guid>? TransitOfficeIds = null);
 
 /// <summary>Datos de edición. La huella ya viene recalculada con la fecha de registro original.</summary>
 public sealed record UpdateMandateSignerData(
@@ -70,7 +77,13 @@ public sealed record UpdateMandateSignerData(
     Guid? CorrelationId,
     string DocumentType = "CC",
     string? Email = null,
-    Guid? UserId = null);
+    Guid? UserId = null,
+    /// <summary>
+    /// HU #11201 — conjunto deseado de organismos. <c>null</c> ⇒ no se tocan (la edición desde el
+    /// perfil del organismo solo cambia datos personales y compañías, AC2). Una lista, aunque esté
+    /// vacía, REEMPLAZA el conjunto: los organismos que no vengan se retiran (AC3).
+    /// </summary>
+    IReadOnlyList<Guid>? TransitOfficeIds = null);
 
 /// <summary>Datos de inactivación.</summary>
 public sealed record InactivateMandateSignerData(

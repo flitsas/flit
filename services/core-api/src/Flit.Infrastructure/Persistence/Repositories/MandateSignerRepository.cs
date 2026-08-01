@@ -94,9 +94,23 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             CreatedBy = data.CreatedBy,
         });
 
-        foreach (var companyId in Distinct(data.CompanyTenantIds))
+        // HU #11201 — los organismos van al puente. Sin lista, el único organismo es el primario, que
+        // es exactamente lo que manda el alta desde el perfil del organismo.
+        var offices = OrganismosDe(data.TransitOfficeIds, data.TransitOfficeId);
+        foreach (var officeId in offices)
         {
-            _context.MandateSignerCompanies.Add(NewAssignment(signerId, data.TransitOfficeId, companyId, now));
+            _context.MandateSignerTransitOffices.Add(NewOffice(signerId, officeId, now));
+        }
+
+        // La asignación a compañías se escribe por CADA organismo: es la que consulta el trámite para
+        // saber quién firma (mandate_signer_companies lleva el organismo en su llave). Escribirla solo
+        // para el primario dejaría al mandatario invisible en los demás organismos.
+        foreach (var officeId in offices)
+        {
+            foreach (var companyId in Distinct(data.CompanyTenantIds))
+            {
+                _context.MandateSignerCompanies.Add(NewAssignment(signerId, officeId, companyId, now));
+            }
         }
 
         AddAudit(
@@ -127,13 +141,19 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
 
         var now = DateTimeOffset.UtcNow;
 
+        // Se cargan también las inactivas: si una pareja (organismo, compañía) vuelve, se REACTIVA su
+        // fila en vez de insertar otra, y así el histórico no se llena de duplicados.
         var currentAssignments = await _context.MandateSignerCompanies
-            .Where(c => c.MandateSignerId == signer.Id && c.IsActive)
+            .Where(c => c.MandateSignerId == signer.Id)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
         var oldHash = signer.IntegrityHash;
-        var oldCompanyIds = currentAssignments.Select(c => c.CompanyTenantId).ToList();
+        var oldCompanyIds = currentAssignments
+            .Where(c => c.IsActive)
+            .Select(c => c.CompanyTenantId)
+            .Distinct()
+            .ToList();
 
         signer.FullName = data.FullName;
         signer.DocumentType = data.DocumentType;
@@ -144,23 +164,35 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
         signer.UpdatedAt = now;
         signer.UpdatedBy = data.UpdatedBy;
 
-        var desired = Distinct(data.CompanyTenantIds).ToHashSet();
+        // HU #11201 (AC2/AC3) — los datos personales se editan una sola vez y aplican a TODOS los
+        // organismos, porque la persona es una sola fila. La lista de organismos, si viene, reemplaza
+        // al conjunto: los que no vengan se retiran con baja lógica y dejan de estar disponibles ahí.
+        var organismos = data.TransitOfficeIds is not null
+            ? await ReemplazarOrganismosAsync(signer.Id, data.TransitOfficeIds, now, cancellationToken)
+                .ConfigureAwait(false)
+            : await OrganismosActivosAsync(signer.Id, signer.TransitOfficeId, cancellationToken)
+                .ConfigureAwait(false);
 
-        // Baja lógica de las compañías retiradas del conjunto (liberan la exclusividad).
-        foreach (var assignment in currentAssignments.Where(c => !desired.Contains(c.CompanyTenantId)))
-        {
-            assignment.IsActive = false;
-        }
-
-        // Alta de las compañías nuevas.
-        var currentActive = currentAssignments
-            .Where(c => c.IsActive)
-            .Select(c => c.CompanyTenantId)
+        // La asignación a compañías vive por (organismo, compañía): el conjunto deseado es el producto
+        // de los organismos vigentes por las compañías pedidas. Retirar un organismo (AC3) arrastra sus
+        // asignaciones, que es lo que hace que el mandatario deje de estar disponible allí.
+        var companiasDeseadas = Distinct(data.CompanyTenantIds).ToHashSet();
+        var deseadas = organismos
+            .SelectMany(officeId => companiasDeseadas.Select(companyId => (officeId, companyId)))
             .ToHashSet();
 
-        foreach (var companyId in desired.Where(id => !currentActive.Contains(id)))
+        foreach (var assignment in currentAssignments)
         {
-            _context.MandateSignerCompanies.Add(NewAssignment(signer.Id, signer.TransitOfficeId, companyId, now));
+            assignment.IsActive = deseadas.Contains((assignment.TransitOfficeId, assignment.CompanyTenantId));
+        }
+
+        var yaExistentes = currentAssignments
+            .Select(c => (c.TransitOfficeId, c.CompanyTenantId))
+            .ToHashSet();
+
+        foreach (var (officeId, companyId) in deseadas.Where(p => !yaExistentes.Contains(p)))
+        {
+            _context.MandateSignerCompanies.Add(NewAssignment(signer.Id, officeId, companyId, now));
         }
 
         AddAudit(
@@ -207,6 +239,18 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             assignment.IsActive = false;
         }
 
+        // HU #11201 — los organismos siguen la suerte del mandatario: uno inactivo no puede seguir
+        // apareciendo como disponible en ninguno de ellos.
+        var offices = await _context.MandateSignerTransitOffices
+            .Where(o => o.MandateSignerId == signer.Id && o.IsActive)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var office in offices)
+        {
+            office.IsActive = false;
+        }
+
         AddAudit(
             data.OtTenantId,
             fieldName: "is_active",
@@ -240,6 +284,12 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
         signer.IsActive = true;
         signer.UpdatedAt = now;
         signer.UpdatedBy = data.ChangedBy;
+
+        // HU #11201 — los organismos SÍ se recuperan, pero solo el primario. Dejarlo sin ninguno lo
+        // volvería invisible en todas las consolas (que listan por organismo) y no habría forma de
+        // editarlo para devolvérselos: quedaría activo e inalcanzable. Con el primario reaparece donde
+        // se dio de alta y desde ahí se le vuelven a asignar los demás.
+        await RestaurarOrganismoPrimarioAsync(signer, now, cancellationToken).ConfigureAwait(false);
 
         AddAudit(
             data.OtTenantId,
@@ -276,6 +326,97 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             CorrelationId = correlationId,
         });
     }
+
+    /// <summary>
+    /// HU #11201 (AC3) — deja el puente con exactamente los organismos pedidos: baja lógica de los que
+    /// salen, reactivación de los que vuelven (evita chocar con el histórico) y alta de los nuevos.
+    /// </summary>
+    private async Task<IReadOnlyList<Guid>> ReemplazarOrganismosAsync(
+        Guid signerId,
+        IReadOnlyList<Guid> deseados,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var objetivo = Distinct(deseados).ToHashSet();
+
+        var existentes = await _context.MandateSignerTransitOffices
+            .Where(o => o.MandateSignerId == signerId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var fila in existentes)
+        {
+            fila.IsActive = objetivo.Contains(fila.TransitOfficeId);
+        }
+
+        var yaRepresentados = existentes.Select(o => o.TransitOfficeId).ToHashSet();
+        foreach (var officeId in objetivo.Where(id => !yaRepresentados.Contains(id)))
+        {
+            _context.MandateSignerTransitOffices.Add(NewOffice(signerId, officeId, now));
+        }
+
+        return [.. objetivo];
+    }
+
+    /// <summary>
+    /// Organismos vigentes del mandatario cuando la edición no los toca. Si el puente aún no tiene
+    /// filas (dato anterior al backfill), cae al organismo primario para no dejarlo sin ninguno.
+    /// </summary>
+    private async Task<IReadOnlyList<Guid>> OrganismosActivosAsync(
+        Guid signerId,
+        Guid primario,
+        CancellationToken cancellationToken)
+    {
+        var activos = await _context.MandateSignerTransitOffices
+            .Where(o => o.MandateSignerId == signerId && o.IsActive)
+            .Select(o => o.TransitOfficeId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return activos.Count == 0 ? [primario] : activos;
+    }
+
+    /// <summary>Deja activo el vínculo con el organismo primario, creándolo si no existía.</summary>
+    private async Task RestaurarOrganismoPrimarioAsync(
+        MandateSigner signer,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var primario = await _context.MandateSignerTransitOffices
+            .FirstOrDefaultAsync(
+                o => o.MandateSignerId == signer.Id && o.TransitOfficeId == signer.TransitOfficeId,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (primario is null)
+        {
+            _context.MandateSignerTransitOffices.Add(NewOffice(signer.Id, signer.TransitOfficeId, now));
+            return;
+        }
+
+        primario.IsActive = true;
+    }
+
+    /// <summary>
+    /// Organismos efectivos de un alta: la lista si vino, y si no el primario. Nunca vacío, para que un
+    /// mandatario recién creado no nazca sin ningún organismo donde firmar.
+    /// </summary>
+    private static IReadOnlyList<Guid> OrganismosDe(IReadOnlyList<Guid>? ids, Guid primario)
+    {
+        var lista = Distinct(ids ?? []);
+        return lista.Count == 0 ? [primario] : lista;
+    }
+
+    private static MandateSignerTransitOffice NewOffice(
+        Guid signerId, Guid transitOfficeId, DateTimeOffset now) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            MandateSignerId = signerId,
+            TransitOfficeId = transitOfficeId,
+            IsActive = true,
+            CreatedAt = now,
+        };
 
     private static MandateSignerCompany NewAssignment(
         Guid signerId, Guid transitOfficeId, Guid companyTenantId, DateTimeOffset now) =>

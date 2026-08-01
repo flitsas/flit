@@ -66,6 +66,13 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<MandateSignerCompany> MandateSignerCompanies => Set<MandateSignerCompany>();
 
+    /// <summary>
+    /// HU #11201 — organismos donde aplica cada mandatario. Fuente de verdad desde este cambio;
+    /// <c>MandateSigner.TransitOfficeId</c> queda como organismo primario para compatibilidad.
+    /// </summary>
+    public DbSet<MandateSignerTransitOffice> MandateSignerTransitOffices =>
+        Set<MandateSignerTransitOffice>();
+
     // ── Admin OT — configuración de mandato por OT (ADR-0036, HU #10912) ───────────
     public DbSet<TransitOfficeMandateConfigEntity> TransitOfficeMandateConfigs =>
         Set<TransitOfficeMandateConfigEntity>();

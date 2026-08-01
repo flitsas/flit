@@ -21,6 +21,11 @@ public sealed class UpdateMandateSignerCommand
     /// <summary>Cuenta de usuario de OT del mandatario (ADR-0036 §D9).</summary>
     public Guid? UserId { get; init; }
 
+    /// <summary>
+    /// HU #11201 — conjunto deseado de organismos. <c>null</c> ⇒ no se tocan; una lista los reemplaza.
+    /// </summary>
+    public IReadOnlyList<Guid>? TransitOfficeIds { get; init; }
+
     public Guid? UpdatedBy { get; init; }
     public Guid? CorrelationId { get; init; }
 }

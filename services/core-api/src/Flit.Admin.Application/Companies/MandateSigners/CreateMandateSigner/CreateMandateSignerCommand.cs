@@ -17,6 +17,11 @@ public sealed class CreateMandateSignerCommand
     /// <summary>Cuenta de usuario de OT del mandatario (ADR-0036 §D9).</summary>
     public Guid? UserId { get; init; }
 
+    /// <summary>
+    /// HU #11201 — organismos donde aplica. Vacío o nulo ⇒ solo <see cref="TransitOfficeId"/>.
+    /// </summary>
+    public IReadOnlyList<Guid>? TransitOfficeIds { get; init; }
+
     public Guid? CreatedBy { get; init; }
     public Guid? CorrelationId { get; init; }
 }
