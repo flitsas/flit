@@ -201,21 +201,24 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     await userEvent.type(screen.getByLabelText(/número de documento/i), "1098765432");
     await userEvent.type(screen.getByLabelText(/primer apellido/i), "Gómez");
 
-    const nits = screen.getAllByLabelText(/nit de la compañía/i);
-    const names = screen.getAllByLabelText(/razón social/i);
+    // En modo create el primer acordeón empieza abierto; los inputs están en el DOM.
+    const nits = await screen.findAllByLabelText(/nit de la compañía/i);
+    const names = await screen.findAllByLabelText(/razón social/i);
     await userEvent.type(nits[0], "900111111-1");
     await userEvent.type(names[0], "Empresa Uno");
 
+    // Al agregar empresa, el nuevo acordeón se abre automáticamente vía useEffect.
     await userEvent.click(screen.getByRole("button", { name: /agregar empresa/i }));
     await userEvent.click(screen.getByRole("button", { name: /agregar empresa/i }));
-    let nitInputs = screen.getAllByLabelText(/nit de la compañía/i);
-    const nameInputs = screen.getAllByLabelText(/razón social/i);
+    // Usar findAllByLabelText para esperar a que los nuevos acordeones estén visibles.
+    let nitInputs = await screen.findAllByLabelText(/nit de la compañía/i);
+    const nameInputs = await screen.findAllByLabelText(/razón social/i);
     expect(nitInputs).toHaveLength(3);
     await userEvent.type(nitInputs[1], "900222222-2");
     await userEvent.type(nameInputs[1], "Empresa Dos");
 
     await userEvent.click(screen.getByRole("button", { name: /quitar empresa 3/i }));
-    nitInputs = screen.getAllByLabelText(/nit de la compañía/i);
+    nitInputs = await screen.findAllByLabelText(/nit de la compañía/i);
     expect(nitInputs).toHaveLength(2);
 
     await userEvent.click(screen.getByRole("button", { name: /registrar representante/i }));
@@ -227,7 +230,7 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     expect(payload.companies[0]).toMatchObject({ nit: "9001111111", name: "Empresa Uno" });
     expect(payload.companies[1]).toMatchObject({ nit: "9002222222", name: "Empresa Dos" });
     expect(payload.companyNit).toBe("9001111111");
-  });
+  }, 15000); // Plazo extendido: el test tipea 65+ caracteres en acordeones auto-expandibles.
 
   // ── HU #11178: panel unificado ───────────────────────────────────────────────
 
@@ -296,13 +299,13 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /^nuevo representante$/i }));
 
-    // Rellena el mínimo requerido.
+    // Rellena el mínimo requerido (acordeón[0] abierto automáticamente en modo create).
     await userEvent.type(screen.getByLabelText(/^nombres$/i), "Pedro");
     await userEvent.type(screen.getByLabelText(/primer apellido/i), "López");
     await userEvent.type(screen.getByLabelText(/número de documento/i), "9876543");
-    const nits = screen.getAllByLabelText(/nit de la compañía/i);
+    const nits = await screen.findAllByLabelText(/nit de la compañía/i);
     await userEvent.type(nits[0], "900000001");
-    const names = screen.getAllByLabelText(/razón social/i);
+    const names = await screen.findAllByLabelText(/razón social/i);
     await userEvent.type(names[0], "Empresa Alta");
 
     await userEvent.click(screen.getByRole("button", { name: /registrar representante/i }));

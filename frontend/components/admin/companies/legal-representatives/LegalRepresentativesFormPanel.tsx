@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Loader2, Pencil } from "lucide-react";
 import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
 import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -19,6 +19,7 @@ import { sanitizeDocNumber } from "@/lib/validation/fieldRules";
 import { identityUi, vigenciaLabel } from "@/lib/admin/identity-vigencia";
 import { formatFecha } from "@/lib/format/date";
 import { procedureTypeLabels } from "./legalRepresentativesDisplay";
+import { RepresentativeCompaniesAccordion } from "./RepresentativeCompaniesAccordion";
 
 /** Modo del panel: consulta (solo lectura), alta (formulario en blanco) o edición (formulario precargado). */
 export type PanelMode = "view" | "create" | "edit";
@@ -49,8 +50,8 @@ export interface LegalRepresentativesFormPanelProps {
   onSwitchToEdit: () => void;
 }
 
-// Una fila de empresa dentro del formulario (HU #10934).
-interface CompanyRow {
+// Una fila de empresa dentro del formulario (HU #10934). Exportada para RepresentativeCompaniesAccordion.
+export interface CompanyRow {
   nit: string;
   name: string;
   email: string;
@@ -300,6 +301,17 @@ export function LegalRepresentativesFormPanel({
   const errStyle = (field: string) =>
     fieldErrors[field] ? { borderColor: "#FF4E00" } : undefined;
 
+  // HU #11179 — AC4: tras guardar una escritura, re-carga el detalle completo para refrescar la
+  // lista de escrituras en el acordeón. Sin recarga de página: solo actualiza el estado local.
+  const refreshDetail = () => {
+    if (!representativeId) return;
+    fetchLegalRepresentative(tenantId, representativeId)
+      .then((full) => setDetail(full))
+      .catch(() => {
+        // Fallo silencioso: la escritura ya se guardó; el gestor puede reabrir el panel.
+      });
+  };
+
   // ── Metadatos del panel ──────────────────────────────────────────────────────
 
   const title =
@@ -453,43 +465,22 @@ export function LegalRepresentativesFormPanel({
           </dl>
         </section>
 
-        {/* Empresas representadas (sin acordeón de escrituras — HU #11179) */}
+        {/* Empresas representadas — acordeón HU #11179 (AC1–AC3) */}
         {detail.companies.length > 0 && (
           <section aria-label="Empresas representadas">
-            <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wide opacity-60">
-              Empresas representadas
-            </h3>
-            <div className="space-y-2">
-              {detail.companies.map((company) => (
-                <div
-                  key={company.id}
-                  className="space-y-1 rounded-xl border px-3 py-3"
-                  style={{ borderColor: "#DFE5ED" }}
-                >
-                  <div className="flex items-center gap-2">
-                    <Building2
-                      className="h-4 w-4 shrink-0"
-                      style={{ color: "#557EFF" }}
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-semibold">
-                        {company.name}
-                        {company.isPrimary && (
-                          <span
-                            className="ml-1.5 text-[10px] font-normal opacity-70"
-                            aria-label="Compañía principal"
-                          >
-                            (principal)
-                          </span>
-                        )}
-                      </p>
-                      <p className="font-mono text-[11px] opacity-60">{company.nit}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <RepresentativeCompaniesAccordion
+              mode="view"
+              companies={detail.companies}
+              formCompanies={[]}
+              onContactChange={() => undefined}
+              onAddCompany={() => undefined}
+              onRemoveCompany={() => undefined}
+              fieldErrors={{}}
+              tenantId={tenantId}
+              representativeId={representativeId}
+              onDeedSaved={refreshDetail}
+              onError={onError}
+            />
           </section>
         )}
 
@@ -541,136 +532,21 @@ export function LegalRepresentativesFormPanel({
           </p>
         )}
 
-        {/* Empresas representadas */}
+        {/* Empresas representadas — acordeón HU #11179 (AC1–AC5) */}
         <section className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-[11px] font-bold uppercase tracking-wide opacity-60">
-              Empresas representadas
-            </h3>
-            <button
-              type="button"
-              onClick={addCompany}
-              className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold"
-              style={{ color: "#557EFF", borderColor: "#557EFF" }}
-            >
-              <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Agregar empresa
-            </button>
-          </div>
-          <p className="text-[11px] opacity-60">
-            El representante se registra una sola vez; agrégale todas las empresas que representa. La
-            primera es la compañía primaria.
-          </p>
-
-          {form.companies.map((company, index) => {
-            const err = (suffix: string) =>
-              fieldErrors[`companies[${index}].${suffix}`] ??
-              (index === 0
-                ? fieldErrors[`company${suffix.charAt(0).toUpperCase()}${suffix.slice(1)}`]
-                : undefined);
-            return (
-              <div
-                key={index}
-                className="space-y-3 rounded-xl border px-3 py-3"
-                style={{ borderColor: "#DFE5ED" }}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold" style={{ color: "#162744" }}>
-                    {index === 0 ? "Empresa primaria" : `Empresa ${index + 1}`}
-                  </span>
-                  {form.companies.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeCompany(index)}
-                      aria-label={`Quitar empresa ${index + 1}`}
-                      className="flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold"
-                      style={{ color: "#FF4E00", borderColor: "#f0c38e" }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Quitar
-                    </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field id={`lr-companyNit-${index}`} label="NIT de la compañía" error={err("nit")}>
-                    <input
-                      id={`lr-companyNit-${index}`}
-                      value={company.nit}
-                      onChange={(e) => patchCompany(index, { nit: digitsOnly(e.target.value) })}
-                      className={OT_INPUT_CLS}
-                      style={err("nit") ? { borderColor: "#FF4E00" } : undefined}
-                      placeholder="NIT"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      autoComplete="off"
-                    />
-                  </Field>
-                  <Field id={`lr-companyName-${index}`} label="Razón social" error={err("name")}>
-                    <input
-                      id={`lr-companyName-${index}`}
-                      value={company.name}
-                      onChange={(e) => patchCompany(index, { name: e.target.value })}
-                      className={OT_INPUT_CLS}
-                      style={err("name") ? { borderColor: "#FF4E00" } : undefined}
-                      placeholder="Razón social"
-                    />
-                  </Field>
-                  <Field
-                    id={`lr-companyEmail-${index}`}
-                    label="Correo (opcional)"
-                    error={err("email")}
-                  >
-                    <input
-                      id={`lr-companyEmail-${index}`}
-                      type="email"
-                      value={company.email}
-                      onChange={(e) => patchCompany(index, { email: e.target.value })}
-                      className={OT_INPUT_CLS}
-                    />
-                  </Field>
-                  <Field
-                    id={`lr-companyPhone-${index}`}
-                    label="Teléfono (opcional)"
-                    error={err("phone")}
-                  >
-                    <input
-                      id={`lr-companyPhone-${index}`}
-                      type="tel"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      autoComplete="tel"
-                      value={company.phone}
-                      onChange={(e) => patchCompany(index, { phone: digitsOnly(e.target.value) })}
-                      className={OT_INPUT_CLS}
-                    />
-                  </Field>
-                  <Field
-                    id={`lr-companyAddress-${index}`}
-                    label="Dirección (opcional)"
-                    error={err("address")}
-                  >
-                    <input
-                      id={`lr-companyAddress-${index}`}
-                      value={company.address}
-                      onChange={(e) => patchCompany(index, { address: e.target.value })}
-                      className={OT_INPUT_CLS}
-                    />
-                  </Field>
-                  <Field
-                    id={`lr-companyCity-${index}`}
-                    label="Ciudad (opcional)"
-                    error={err("city")}
-                  >
-                    <input
-                      id={`lr-companyCity-${index}`}
-                      value={company.city}
-                      onChange={(e) => patchCompany(index, { city: e.target.value })}
-                      className={OT_INPUT_CLS}
-                    />
-                  </Field>
-                </div>
-              </div>
-            );
-          })}
+          <RepresentativeCompaniesAccordion
+            mode={mode}
+            companies={detail?.companies ?? []}
+            formCompanies={form.companies}
+            onContactChange={patchCompany}
+            onAddCompany={addCompany}
+            onRemoveCompany={removeCompany}
+            fieldErrors={fieldErrors}
+            tenantId={tenantId}
+            representativeId={representativeId}
+            onDeedSaved={refreshDetail}
+            onError={onError}
+          />
         </section>
 
         {/* Datos del representante-persona */}
