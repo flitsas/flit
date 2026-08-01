@@ -119,6 +119,30 @@ public sealed class FurOverlayDocumentGeneratorTests
     }
 
     [Fact]
+    public void GenerateCompraventa_ConFirmaDelBaul_ProducePdfConSuTrazabilidad()
+    {
+        // HU #11170 — la compraventa estampaba la imagen del baúl y nada más: al hacerse exclusivas la
+        // imagen y el sello de identidad (Bug #11146), esa firma se quedó sin vigencia ni hash. El texto
+        // impreso se verifica con render; aquí, que el bloque acepte los metadatos sin romperse.
+        var png = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+        var data = TraspasoData() with
+        {
+            IdentidadValidada = true,
+            FirmaImagenes = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase) { ["vendedor"] = png },
+            FirmaBaulMetadatos = new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["vendedor"] = new FirmaBaulMetadata(
+                    "52123456", "Ana Gómez", new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), Guid.NewGuid(), "ABC-123"),
+            },
+        };
+
+        var pdf = Flit.Infrastructure.Documents.Fur.FurCompraventaDocumentGenerator.Generate(data);
+
+        Encoding.ASCII.GetString(pdf, 0, 4).Should().Be("%PDF");
+    }
+
+    [Fact]
     public void GenerateCompraventa_IdentidadPendiente_ProducePdfSinFirmas_SinLanzar()
     {
         // HU #10859: sin validación de identidad, la compraventa se emite igual (sin firmas), no bloquea.

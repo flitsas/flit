@@ -17,6 +17,10 @@ public sealed class MandatoPdfGeneratorTests
 {
     private static readonly MandatoPdfGenerator Generator = new();
 
+    /// <summary>PNG 1×1 válido: QuestPDF decodifica la imagen de verdad, no basta con bytes sueltos.</summary>
+    private static readonly byte[] FirmaPng = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+
     private static FurDocumentData DataWith(
         DocumentParte? parte, bool firmasVisibles = true, string codigo = "MATRICULA_NUEVA") =>
         new(
@@ -76,6 +80,33 @@ public sealed class MandatoPdfGeneratorTests
             Juridica(), "generico", mandatario: new MandatarioFirmante("Carlos Ruiz", "70111222"),
             codigo: TramiteTipologiaCatalog.CodigoTraspasoStandard));
         doc.Content.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void ConFirmaDelBaul_EnMandanteYMandatario_GeneraElPdfConSuTrazabilidad()
+    {
+        // HU #11170 — el mandato pintaba la imagen del baúl y nada más. Aquí se comprueba que el bloque
+        // acepta los metadatos de AMBOS firmantes sin romper el layout; que el texto salga impreso se
+        // verifica con render (el proyecto de pruebas no lee PDFs).
+        var meta = new FirmaBaulMetadata(
+            "52123456", "Ana Gómez", new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31), Guid.NewGuid(), "ABC-123");
+        var parte = Juridica();
+        var tramite = DataWith(parte) with
+        {
+            FirmaImagenes = new Dictionary<string, byte[]> { [parte.Rol] = FirmaPng },
+            FirmaBaulMetadatos = new Dictionary<string, FirmaBaulMetadata>(StringComparer.OrdinalIgnoreCase)
+            {
+                [parte.Rol] = meta,
+            },
+        };
+        var mandatario = new MandatarioFirmante("Carlos Ruiz", "70111222", FirmaPng, null, meta);
+
+        foreach (var template in new[] { "generico", "sabaneta", "bello" })
+        {
+            var doc = Generator.GenerateMandato(
+                new MandatoData(tramite, template, "UT-SETSA", "900111222", mandatario));
+            doc.Content.Should().NotBeEmpty();
+        }
     }
 
     [Fact]

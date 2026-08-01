@@ -184,7 +184,11 @@ public sealed record MandatarioFirmante(
     // baúl si la tiene, y si no el sello de su validación de identidad. Sin ninguna, el PDF deja la
     // línea en blanco (comportamiento previo).
     byte[]? FirmaImagen = null,
-    string? SelloIdentidad = null);
+    string? SelloIdentidad = null,
+    // HU #11170 — trazabilidad de la firma del baúl del mandatario (vigencia y hash), que se estampa
+    // bajo la imagen. No se resuelve por rol del trámite como la de las partes: el mandatario no es
+    // parte, así que sus metadatos viajan aquí.
+    FirmaBaulMetadata? FirmaBaulMetadatos = null);
 
 /// <summary>
 /// Datos para el <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). El MANDANTE es la parte que

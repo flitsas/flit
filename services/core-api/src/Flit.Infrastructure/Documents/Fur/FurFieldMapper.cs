@@ -154,39 +154,17 @@ public static class FurFieldMapper
         dict[fieldId] = new FurFieldValue(Val(fallbackText), FontSizeDelta: esSelloIdentidad ? selloFontSizeDelta : 0);
     }
 
+    /// <summary>
+    /// Sello de trazabilidad junto a la imagen de la firma del baúl. El texto lo arma
+    /// <see cref="FlitFirmaBaulSello"/>, compartido con la compraventa, el mandato y la solicitud de
+    /// trámite virtual (HU #11170): antes vivía aquí y por eso era el único documento que lo llevaba.
+    /// El FUR es el que SÍ incluye la identificación del firmante, porque su espacio de firma no la
+    /// imprime en ninguna otra parte.
+    /// </summary>
     private static string? TryBuildFirmaBaulSidecar(
         IReadOnlyDictionary<string, FirmaBaulMetadata>? metadata,
-        string rol)
-    {
-        if (metadata is null)
-            return null;
-
-        foreach (var key in FirmaRolKeys(rol))
-        {
-            if (!metadata.TryGetValue(key, out var meta))
-                continue;
-
-            var lines = new List<string>
-            {
-                $"Doc. {meta.DocumentNumber}",
-                meta.FullName,
-                // HU #11018 — formato de negocio unico en documentos: AÑO/MES/DIA.
-                $"Vig. {meta.VigenciaDesde:yyyy/MM/dd} — {meta.VigenciaHasta:yyyy/MM/dd}",
-            };
-
-            // HU #10930 (Feature #10929): se estampa el codigo_hash digitado en el baúl (meta.Hash), NO el
-            // UUID de la fila. Si el baúl no trae código (firmas previas / null), se OMITE la línea "Hash"
-            // en vez de imprimir el GUID (que confundía al operador).
-            if (!string.IsNullOrWhiteSpace(meta.Hash))
-            {
-                lines.Add($"Hash: {meta.Hash}");
-            }
-
-            return string.Join('\n', lines);
-        }
-
-        return null;
-    }
+        string rol) =>
+        FlitFirmaBaulSello.Resolve(metadata, rol, incluirIdentificacion: true);
 
     private static bool TryGetFirmaImagen(IReadOnlyDictionary<string, byte[]> images, string rol, out byte[] bytes)
     {
@@ -203,14 +181,12 @@ public static class FurFieldMapper
         return false;
     }
 
-    private static IEnumerable<string> FirmaRolKeys(string rol)
-    {
-        var n = Norm(rol);
-        yield return rol;
-        if (n.Contains("COMPRADOR")) yield return "comprador";
-        if (n.Contains("VENDEDOR")) yield return "vendedor";
-        if (n.Contains("PROPIETARIO")) yield return "propietario";
-    }
+    /// <summary>
+    /// Alias de rol para resolver la firma. Delega en <see cref="FlitFirmaBaulSello.RolKeys"/> para que
+    /// la imagen y su sello de trazabilidad se busquen SIEMPRE con las mismas llaves y en el mismo
+    /// orden: si divergieran, una parte podría quedar con firma estampada y sin vigencia ni hash.
+    /// </summary>
+    private static IEnumerable<string> FirmaRolKeys(string rol) => FlitFirmaBaulSello.RolKeys(rol);
 
     private static void MarkTramite(Dictionary<string, FurFieldValue> dict, bool esTraspaso, FurDocumentData data)
     {
