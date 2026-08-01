@@ -23,6 +23,7 @@ import ExpedienteTimeline from './ExpedienteTimeline';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { MandatarioSection } from './MandatarioSection';
+import { FirmaPosteriorSection } from './FirmaPosteriorSection';
 import { documentLabel } from '@/lib/tramites/document-labels';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import type {
@@ -486,6 +487,20 @@ export function FirmaFurStep({
       {instanceId && organismoSelected && (
         <MandatarioSection
           instanceId={instanceId}
+          onChanged={() => {
+            void loadDetail();
+            onRefresh?.();
+          }}
+        />
+      )}
+
+      {/* HU #11197 — si el representante legal no tiene firma ni identidad vigentes, el trámite puede
+          dejarse marcado para firmarse cuando él valide, en vez de dejar al gestor sin salida. La
+          sección se pinta sola: no existe si no aplica a ninguna parte. */}
+      {instanceId && (
+        <FirmaPosteriorSection
+          instanceId={instanceId}
+          readOnly={readOnly}
           onChanged={() => {
             void loadDetail();
             onRefresh?.();

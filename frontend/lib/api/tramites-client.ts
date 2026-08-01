@@ -40,6 +40,7 @@ import type {
   InstanceSummary,
   InstancesResponse,
   ListInstancesParams,
+  FirmaPosteriorEstado,
   MandateSignerSelection,
   TransitOfficeOption,
   TransitOfficesResponse,
@@ -529,6 +530,22 @@ export const tramitesClient = {
       method: 'PUT',
       headers: tenantHeader(tenantId),
       body: JSON.stringify({ mandateSignerId }),
+    }),
+
+  // HU #11197 — ¿se ofrece la firma a posteriori para esta parte y ya está marcada? En persona natural
+  // responde `aplica:false` en vez de un error: para el gestor la opción sencillamente no existe.
+  getFirmaPosterior: (id: string, parte: string, tenantId?: string) =>
+    request<FirmaPosteriorEstado>(
+      `/api/v1/tramites/instances/${id}/deferred-signature?parte=${encodeURIComponent(parte)}`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
+  // HU #11196 — marca el trámite para firmarse cuando el representante valide su identidad. Idempotente.
+  marcarFirmaPosterior: (id: string, parte: string, tenantId?: string) =>
+    request<FirmaPosteriorEstado>(`/api/v1/tramites/instances/${id}/deferred-signature`, {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: JSON.stringify({ parte }),
     }),
 
   getInstance: (id: string, tenantId?: string) =>

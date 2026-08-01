@@ -1625,3 +1625,15 @@ export interface MandateSignerSelection {
   elegidoId: string | null;
   editable: boolean;
 }
+
+/**
+ * HU #11197 - estado de la firma a posteriori de una parte. `aplica` es true solo cuando el
+ * representante legal tiene la identidad Y la firma del baul vencidas: con cualquiera de las dos
+ * vigente el tramite puede firmarse ya y la opcion no se ofrece.
+ */
+export interface FirmaPosteriorEstado {
+  aplica: boolean;
+  marcado: boolean;
+  representanteNombre?: string | null;
+  marcadoAt?: string | null;
+}
