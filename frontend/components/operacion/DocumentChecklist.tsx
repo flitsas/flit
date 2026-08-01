@@ -159,6 +159,17 @@ const OCR_RESUMEN_FIELDS: Record<string, ReadonlyArray<OcrField>> = {
     { label: 'Estado', value: (d) => pickStr(d, 'estado_poliza') },
     { label: 'VIN', value: (d) => pickStr(d, 'vehiculo_vin'), vin: true },
   ],
+  // El prompt de `rtm` llegó en HU #10977 pero su resumen nunca se añadió aquí, así que el panel salía
+  // con el encabezado y la grilla vacía. Los campos son los que pide el certificado de vigencia.
+  rtm: [
+    { label: 'N.º certificado', value: (d) => pickStr(d, 'numero_certificado') },
+    { label: 'CDA', value: (d) => pickStr(d, 'cda_expide') },
+    { label: 'Expedición', value: (d) => pickStr(d, 'fecha_expedicion') },
+    { label: 'Vencimiento', value: (d) => pickStr(d, 'fecha_vencimiento') },
+    { label: 'Estado', value: (d) => pickStr(d, 'estado') },
+    { label: 'Resultado', value: (d) => pickStr(d, 'resultado') },
+    { label: 'VIN', value: (d) => pickStr(d, 'vehiculo_vin'), vin: true },
+  ],
 };
 
 /** Nombre corto del tipo para el encabezado de la tarjeta. */
@@ -167,7 +178,13 @@ const TIPO_LABEL: Record<string, string> = {
   aduana: 'Aduana',
   impronta: 'Impronta',
   soat: 'SOAT',
+  rtm: 'RTM',
 };
+
+/** Nombre legible de un tipo de documento OCR; el propio código si no está en el mapa. */
+export function tipoLabel(tipo: string): string {
+  return TIPO_LABEL[tipo] ?? tipo;
+}
 
 /** Colores del chip de estado (coincide / no_coincide / no_aplica / no_verificado). */
 function stateChipStyle(value: string): { color: string; background: string } {
@@ -189,8 +206,10 @@ function recorteLabel(data: Record<string, unknown> | null): string | null {
 /**
  * Tarjeta de estado OCR de un documento: encabezado (verificado/rechazado/no analizado) + chip del
  * tipo, motivo cuando aplica, y una grilla legible de pares etiqueta/valor (set ampliado por tipo).
+ * Exportada para que la revisión del cargue masivo muestre exactamente el mismo resumen que el cargue
+ * campo a campo — si divergieran, el operador tendría que aprender a leer dos tarjetas distintas.
  */
-function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }) {
+export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }) {
   const palette =
     ocr.status === 'verified'
       ? { color: '#3B8A00', border: '#8CC63F', bg: 'rgba(140,198,63,0.08)', icon: '✓', label: 'Verificado' }
