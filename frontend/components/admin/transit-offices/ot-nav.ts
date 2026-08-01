@@ -7,8 +7,7 @@ export type OtHubTabId =
   | "documents"
   | "requirements"
   | "plate-ranges"
-  | "usuarios"
-  | "mandatarios";
+  | "usuarios";
 
 export interface OtHubTab {
   id: OtHubTabId;
@@ -25,7 +24,8 @@ export const OT_HUB_TABS: OtHubTab[] = [
   { id: "requirements", label: "Requisitos", segment: "requirements" },
   { id: "plate-ranges", label: "Preasignación de placa", segment: "plate-ranges" },
   { id: "usuarios", label: "Usuarios", segment: "usuarios" },
-  { id: "mandatarios", label: "Mandatario", segment: "mandatarios" },
+  // HU #11202 (AC4) — la gestión de mandatarios salió del perfil del organismo: ahora la hace la
+  // COMPAÑÍA desde su configurador, eligiendo en cuáles de sus organismos aplica cada mandatario.
 ];
 
 export function otHubModulePath(transitOfficeId: string, tab: OtHubTabId): string {

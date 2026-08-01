@@ -6,8 +6,10 @@ using Flit.Admin.Application.Companies.UpdateCompany;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices;
+using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ListOtCompanies;
 using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
@@ -159,6 +161,13 @@ public static class DependencyInjection
         services.AddScoped<ReactivateMandateSignerHandler>();
         services.AddScoped<ListMandateSignersHandler>();
         services.AddScoped<ListOtCompaniesHandler>();
+
+        // HU #11202 — vista inversa: la COMPAÑÍA registra sus mandatarios y elige en qué organismos
+        // aplican. Reusa los handlers de arriba para no duplicar operabilidad, huella ni identidad.
+        services.AddScoped<ListCompanyMandateSignersHandler>();
+        services.AddScoped<ListCompanyTransitOfficesHandler>();
+        services.AddScoped<CreateCompanyMandateSignerHandler>();
+        services.AddScoped<UpdateCompanyMandateSignerHandler>();
 
         // HU #10643 (ADR-0025) — baúl de firmas: CRUD SuperAdmin. ISignatureVaultReader/Repository
         // e ISignatureVaultArtifactStorage se registran en AddAdminInfrastructure.

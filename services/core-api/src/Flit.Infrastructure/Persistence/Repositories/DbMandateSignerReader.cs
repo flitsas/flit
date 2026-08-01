@@ -121,6 +121,90 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             },
             cancellationToken);
 
+    public Task<IReadOnlyList<MandateSignerItem>> ListByCompanyAsync(
+        Guid companyTenantId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCrossTenantReadAsync(
+            async () =>
+            {
+                // HU #11202 — la vista inversa: los mandatarios que esta compañía registró, en todos
+                // sus organismos. Se toman los ids de las asignaciones activas; el estado de la persona
+                // se decide con su propia bandera (los inactivos siguen a la vista para reactivarlos).
+                var signerIds = await _context.MandateSignerCompanies
+                    .AsNoTracking()
+                    .Where(c => c.CompanyTenantId == companyTenantId)
+                    .Select(c => c.MandateSignerId)
+                    .Distinct()
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (signerIds.Count == 0)
+                {
+                    return [];
+                }
+
+                var signers = await _context.MandateSigners
+                    .AsNoTracking()
+                    .Where(s => signerIds.Contains(s.Id))
+                    .OrderByDescending(s => s.IsActive)
+                    .ThenBy(s => s.FullName)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var companiesBySigner = await LoadCompanyIdsBySignerAsync(signerIds, cancellationToken)
+                    .ConfigureAwait(false);
+                var officesBySigner = await LoadOfficeIdsBySignerAsync(signerIds, cancellationToken)
+                    .ConfigureAwait(false);
+                var vigenciaBySigner = await LoadIdentityVigenciaAsync(signerIds, cancellationToken)
+                    .ConfigureAwait(false);
+
+                IReadOnlyList<MandateSignerItem> items =
+                [
+                    .. signers.Select(s => Project(s, companiesBySigner, officesBySigner, vigenciaBySigner)),
+                ];
+                return items;
+            },
+            cancellationToken);
+
+    public Task<IReadOnlyList<CompanyTransitOfficeOption>> ListCompanyTransitOfficesAsync(
+        Guid companyTenantId,
+        CancellationToken cancellationToken = default) =>
+        ExecuteCrossTenantReadAsync(
+            async () =>
+            {
+                var officeIds = await _context.TenantTransitOfficeGrants
+                    .AsNoTracking()
+                    .Where(g => g.TenantId == companyTenantId && g.IsEnabled)
+                    .Select(g => g.TransitOfficeId)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (officeIds.Count == 0)
+                {
+                    return [];
+                }
+
+                // Solo organismos ACTIVOS del catálogo: uno desactivado no sirve para radicar, así que
+                // ofrecerlo como destino de un mandatario sería ofrecer algo inservible.
+                IReadOnlyList<CompanyTransitOfficeOption> options =
+                [
+                    .. await _context.TransitOffices
+                        .AsNoTracking()
+                        .Where(o => officeIds.Contains(o.Id) && o.IsActive)
+                        .OrderBy(o => o.Name)
+                        .Select(o => new CompanyTransitOfficeOption
+                        {
+                            TransitOfficeId = o.Id,
+                            Code = o.Code,
+                            Name = o.Name,
+                        })
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false),
+                ];
+                return options;
+            },
+            cancellationToken);
+
     public Task<IReadOnlyList<OtCompanyOption>> ListOtCompaniesAsync(
         Guid transitOfficeId,
         CancellationToken cancellationToken = default) =>
@@ -253,9 +337,26 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             .ToDictionary(g => g.Key, g => g.Any(r => r.IsActive));
     }
 
+    /// <summary>Compañías activas de cada mandatario, sin acotar por organismo (vista de la empresa).</summary>
+    private async Task<Dictionary<Guid, List<Guid>>> LoadCompanyIdsBySignerAsync(
+        List<Guid> signerIds,
+        CancellationToken cancellationToken)
+    {
+        var rows = await _context.MandateSignerCompanies
+            .AsNoTracking()
+            .Where(c => signerIds.Contains(c.MandateSignerId) && c.IsActive)
+            .Select(c => new { c.MandateSignerId, c.CompanyTenantId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.MandateSignerId)
+            .ToDictionary(g => g.Key, g => g.Select(r => r.CompanyTenantId).Distinct().ToList());
+    }
+
     /// <summary>Organismos ACTIVOS de cada mandatario, para pintarlos en la consola de gestión.</summary>
     private async Task<Dictionary<Guid, List<Guid>>> LoadOfficeIdsBySignerAsync(
-        IReadOnlyList<Guid> signerIds,
+        List<Guid> signerIds,
         CancellationToken cancellationToken)
     {
         if (signerIds.Count == 0)
@@ -313,7 +414,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
     /// Se lee dentro del scope cross-tenant (row_security off) que abre <c>ExecuteCrossTenantReadAsync</c>.
     /// </summary>
     private async Task<Dictionary<Guid, AdminIdentityVigencia.Resultado>> LoadIdentityVigenciaAsync(
-        IReadOnlyList<Guid> signerIds,
+        List<Guid> signerIds,
         CancellationToken cancellationToken)
     {
         if (signerIds.Count == 0)

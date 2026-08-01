@@ -42,4 +42,21 @@ public interface IMandateSignerReader
     Task<IReadOnlyList<MandateSignerCompanyResolution>> ListActiveCompanyResolutionsAsync(
         Guid transitOfficeId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #11202 — mandatarios de una COMPAÑÍA gestora, con los organismos donde aplican. Es la vista
+    /// inversa de <see cref="ListByOtAsync"/>: desde este cambio el alta la hace la empresa y elige sus
+    /// organismos, no al revés. Incluye los inactivos, para poder reactivarlos.
+    /// </summary>
+    Task<IReadOnlyList<MandateSignerItem>> ListByCompanyAsync(
+        Guid companyTenantId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #11202 — organismos de tránsito asignados a la compañía (grant habilitado y organismo activo
+    /// en el catálogo). Es la lista que se ofrece al elegir dónde aplica un mandatario.
+    /// </summary>
+    Task<IReadOnlyList<CompanyTransitOfficeOption>> ListCompanyTransitOfficesAsync(
+        Guid companyTenantId,
+        CancellationToken cancellationToken = default);
 }

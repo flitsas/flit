@@ -75,6 +75,18 @@ public sealed class OtCompanyOption
 }
 
 /// <summary>
+/// HU #11202 — organismo de tránsito asignado a una compañía gestora, para elegir dónde aplica un
+/// mandatario. Solo se ofrecen los que la compañía tiene habilitados: registrar un mandatario en un
+/// organismo donde no puede radicar no serviría de nada.
+/// </summary>
+public sealed class CompanyTransitOfficeOption
+{
+    public Guid TransitOfficeId { get; init; }
+    public string Code { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+}
+
+/// <summary>
 /// Resolución del mandatario activo configurado para una compañía dentro del OT (RF34). Se
 /// consume en la vista consolidada de compañías por OT.
 /// </summary>

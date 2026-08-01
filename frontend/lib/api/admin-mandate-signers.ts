@@ -40,6 +40,11 @@ export interface MandateSigner {
   registeredAt: string;
   isActive: boolean;
   companyTenantIds: string[];
+  /**
+   * HU #11201 — organismos donde aplica el mandatario. `transitOfficeId` es solo el primario
+   * (deprecado): esta lista es la que dice dónde puede firmar.
+   */
+  transitOfficeIds?: string[];
 }
 
 /**
@@ -219,4 +224,89 @@ export function resendMandateSignerIdentity(
     `${base(transitOfficeId)}/${mandateSignerId}/identity/resend`,
     { method: "POST" },
   );
+}
+
+// ── HU #11202 — mandatarios desde el configurador de la COMPAÑÍA ──────────────
+// Vista inversa: la empresa registra a la persona y marca en cuáles de SUS organismos aplica, en vez
+// de que cada organismo elija compañías. Mismos objetos de dominio; cambia la ruta y quién manda.
+
+/** Organismo de tránsito habilitado para la compañía (opción del multiselect). */
+export interface CompanyTransitOfficeOption {
+  transitOfficeId: string;
+  code: string;
+  name: string;
+}
+
+/** Datos que la compañía captura de un mandatario. */
+export interface CompanyMandateSignerInput {
+  fullName: string;
+  documentType: string;
+  documentNumber: string;
+  email: string | null;
+  /** Organismos donde aplica. Al editar, REEMPLAZA a los anteriores: quitar uno lo retira. */
+  transitOfficeIds: string[];
+}
+
+function companyBase(tenantId: string): string {
+  return `/api/v1/admin/companies/${tenantId}/mandate-signers`;
+}
+
+/** GET — mandatarios de la compañía, con sus organismos. */
+export async function fetchCompanyMandateSigners(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<{ signers: MandateSigner[]; mockIdentityEnabled: boolean }> {
+  const result = await apiFetch<{ data: MandateSigner[]; mockIdentityEnabled?: boolean }>(
+    companyBase(tenantId),
+    { signal },
+  );
+  return { signers: result.data, mockIdentityEnabled: result.mockIdentityEnabled === true };
+}
+
+/** GET /transit-offices — organismos que la compañía puede elegir (AC2). */
+export async function fetchCompanyTransitOffices(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<CompanyTransitOfficeOption[]> {
+  const result = await apiFetch<{ data: CompanyTransitOfficeOption[] }>(
+    `${companyBase(tenantId)}/transit-offices`,
+    { signal },
+  );
+  return result.data;
+}
+
+/** POST — alta del mandatario en los organismos elegidos. 422 si alguno no está habilitado. */
+export function createCompanyMandateSigner(
+  tenantId: string,
+  body: CompanyMandateSignerInput,
+): Promise<MandateSignerSaved> {
+  return apiFetch<MandateSignerSaved>(companyBase(tenantId), { method: "POST", body });
+}
+
+/** PUT /{signerId} — edición de datos y organismos. */
+export function updateCompanyMandateSigner(
+  tenantId: string,
+  mandateSignerId: string,
+  body: CompanyMandateSignerInput,
+): Promise<MandateSignerSaved> {
+  return apiFetch<MandateSignerSaved>(`${companyBase(tenantId)}/${mandateSignerId}`, {
+    method: "PUT",
+    body,
+  });
+}
+
+/** POST /{signerId}/inactivate — baja lógica del mandatario. */
+export function inactivateCompanyMandateSigner(
+  tenantId: string,
+  mandateSignerId: string,
+): Promise<void> {
+  return apiFetch<void>(`${companyBase(tenantId)}/${mandateSignerId}/inactivate`, { method: "POST" });
+}
+
+/** POST /{signerId}/reactivate — reactiva un mandatario inactivado. */
+export function reactivateCompanyMandateSigner(
+  tenantId: string,
+  mandateSignerId: string,
+): Promise<void> {
+  return apiFetch<void>(`${companyBase(tenantId)}/${mandateSignerId}/reactivate`, { method: "POST" });
 }
