@@ -18,6 +18,9 @@ namespace Flit.Infrastructure.OtRules;
 /// </summary>
 internal sealed class MandateSignerDirectory : IMandateSignerDirectory
 {
+    /// <summary>Identidad aprobada y vigente de un mandatario: su certificado y hasta cuándo vale.</summary>
+    private sealed record IdentidadVigente(string? Certificado, DateTimeOffset? ValidUntil);
+
     /// <summary>Estado "aprobado" del CHECK de <c>admin_identity_validations</c> (HU #10907).</summary>
     private const string AprobadoStatus = "aprobado";
 
@@ -59,7 +62,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
         [
             .. signers.Select(s => new MandateSignerCandidate(
                 s.Id, s.FullName, s.DocumentNumber, s.UserId, vigentes.ContainsKey(s.Id),
-                s.SignatureVaultId, s.DocumentType, vigentes.GetValueOrDefault(s.Id))),
+                s.SignatureVaultId, s.DocumentType, vigentes.GetValueOrDefault(s.Id)?.Certificado,
+                vigentes.GetValueOrDefault(s.Id)?.ValidUntil)),
         ];
     }
 
@@ -85,7 +89,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
         var vigentes = await LoadVigentIdentitiesAsync([signer.Id], cancellationToken).ConfigureAwait(false);
         return new MandateSignerCandidate(
             signer.Id, signer.FullName, signer.DocumentNumber, signer.UserId, vigentes.ContainsKey(signer.Id),
-            signer.SignatureVaultId, signer.DocumentType, vigentes.GetValueOrDefault(signer.Id));
+            signer.SignatureVaultId, signer.DocumentType, vigentes.GetValueOrDefault(signer.Id)?.Certificado,
+            vigentes.GetValueOrDefault(signer.Id)?.ValidUntil);
     }
 
     /// <summary>
@@ -93,14 +98,14 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
     /// el futuro). La tabla tiene RLS por tenant (anclada al OT) y el directorio corre en el tenant
     /// gestora ⇒ lectura con <c>row_security = off</c>. En proveedor no relacional (tests) corre directo.
     /// </summary>
-    private async Task<Dictionary<Guid, string?>> LoadVigentIdentitiesAsync(
+    private async Task<Dictionary<Guid, IdentidadVigente>> LoadVigentIdentitiesAsync(
         IReadOnlyList<Guid> signerIds, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
 
         // HU #11030 — además de la vigencia se trae el certificado, que alimenta el sello de firma del
         // mandato cuando el mandatario no tiene firma en el baúl.
-        async Task<List<(Guid SubjectRef, string? Certificado)>> QueryAsync() =>
+        async Task<List<(Guid SubjectRef, string? Certificado, DateTimeOffset? ValidUntil)>> QueryAsync() =>
             [.. (await _context.AdminIdentityValidations
                 .AsNoTracking()
                 .Where(v => v.SubjectType == AdminIdentitySubjectTypes.MandateSigner
@@ -108,14 +113,20 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
                     && v.Status == AprobadoStatus
                     && (v.ValidUntil == null || v.ValidUntil > now))
                 .OrderByDescending(v => v.ValidatedAt)
-                .Select(v => new { v.SubjectRef, v.CertificateHash })
+                .Select(v => new { v.SubjectRef, v.CertificateHash, v.ValidUntil })
                 .ToListAsync(cancellationToken)
                 .ConfigureAwait(false))
-                .Select(x => (x.SubjectRef, x.CertificateHash))];
+                .Select(x => (x.SubjectRef, x.CertificateHash, x.ValidUntil))];
 
-        static Dictionary<Guid, string?> ToMap(List<(Guid SubjectRef, string? Certificado)> rows) =>
+        static Dictionary<Guid, IdentidadVigente> ToMap(
+            List<(Guid SubjectRef, string? Certificado, DateTimeOffset? ValidUntil)> rows) =>
             rows.GroupBy(r => r.SubjectRef)
-                .ToDictionary(g => g.Key, g => g.Select(r => r.Certificado).FirstOrDefault(c => c is not null));
+                .ToDictionary(
+                    g => g.Key,
+                    g => new IdentidadVigente(
+                        g.Select(r => r.Certificado).FirstOrDefault(c => c is not null),
+                        // La más reciente manda: es la que sigue en pie.
+                        g.Select(r => r.ValidUntil).FirstOrDefault()));
 
         if (!_context.Database.IsRelational())
         {

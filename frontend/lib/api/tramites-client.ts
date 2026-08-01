@@ -39,6 +39,7 @@ import type {
   PrendaInput,
   InstanceSummary,
   InstancesResponse,
+  MandateSignerSelection,
   TransitOfficeOption,
   TransitOfficesResponse,
   IniciarBiometriaInput,
@@ -496,6 +497,21 @@ export const tramitesClient = {
     );
     return res?.items ?? [];
   },
+
+  // HU #11203 — mandatarios que pueden firmar el mandato de este trámite (los habilitados para su
+  // organismo en la compañía), con la vigencia de su identidad y cuál está elegido.
+  listMandateSigners: (id: string, tenantId?: string) =>
+    request<MandateSignerSelection>(`/api/v1/tramites/instances/${id}/mandate-signers`, {
+      headers: tenantHeader(tenantId),
+    }),
+
+  // HU #11203 — fija quién firma. 409 fuera de borrador; 422 si no está habilitado para el organismo.
+  setMandateSigner: (id: string, mandateSignerId: string, tenantId?: string) =>
+    request<void>(`/api/v1/tramites/instances/${id}/mandate-signer`, {
+      method: 'PUT',
+      headers: tenantHeader(tenantId),
+      body: JSON.stringify({ mandateSignerId }),
+    }),
 
   getInstance: (id: string, tenantId?: string) =>
     request<ProcedureInstanceDetail>(`/api/v1/tramites/instances/${id}`, {

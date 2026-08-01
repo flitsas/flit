@@ -1550,3 +1550,24 @@ export interface StatusHistoryPage {
   page: number;
   pageSize: number;
 }
+
+/**
+ * HU #11203 — un mandatario que puede firmar el mandato del trámite. `identidadHasta` es hasta cuándo
+ * vale su validación de identidad: sin una vigente el mandato no se puede aprobar, así que se informa
+ * al elegir y no en el último paso.
+ */
+export interface MandateSignerOption {
+  id: string;
+  nombre: string;
+  tipoDocumento: string;
+  documento: string;
+  identidadVigente: boolean;
+  identidadHasta: string | null;
+}
+
+/** Mandatarios disponibles y cuál está elegido. `editable` es falso fuera de borrador. */
+export interface MandateSignerSelection {
+  opciones: MandateSignerOption[];
+  elegidoId: string | null;
+  editable: boolean;
+}

@@ -15,7 +15,11 @@ public sealed record MandateSignerCandidate(
     // validación de identidad vigente. Sin ninguno, el PDF deja la línea en blanco.
     Guid? SignatureVaultId = null,
     string? TipoDocumento = null,
-    string? CertificadoIdentidad = null);
+    string? CertificadoIdentidad = null,
+    // HU #11203 — hasta cuándo vale su identidad. El gestor elige quién firma al registrar el trámite y
+    // necesita ver la vigencia ahí mismo: un mandatario cuya validación caduca antes de la aprobación
+    // bloquearía el trámite justo al final.
+    DateTimeOffset? IdentityValidUntil = null);
 
 /// <summary>
 /// Puerto para consultar los mandatarios registrados por el OT para una compañía gestora (ADR-0036,

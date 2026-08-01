@@ -22,6 +22,7 @@ import ExpedienteVisor from './ExpedienteVisor';
 import ExpedienteTimeline from './ExpedienteTimeline';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { MandatarioSection } from './MandatarioSection';
 import { documentLabel } from '@/lib/tramites/document-labels';
 import type {
   Actor,
@@ -478,6 +479,18 @@ export function FirmaFurStep({
         elegidoEnPasoUno={organismoElegidoEnPasoUno}
         onOpenModal={() => setOrganismoModalOpen(true)}
       />
+
+      {/* HU #11203 — quién firma el mandato se elige aquí, con el organismo ya resuelto, en vez de
+          dejarlo para la aprobación del organismo. Solo aparece si hay mandatarios que ofrecer. */}
+      {instanceId && organismoSelected && (
+        <MandatarioSection
+          instanceId={instanceId}
+          onChanged={() => {
+            void loadDetail();
+            onRefresh?.();
+          }}
+        />
+      )}
 
       {/* HU #10799 — selección de placa preasignada como SECCIÓN explícita (Flujo A), solo en matrícula
           inicial y una vez elegido el OT. No aplica si el VIN ya tiene placa del RUNT (AC2). */}

@@ -61,7 +61,13 @@ public sealed class MandatoApprovalHandler(
             .GetCandidatesAsync(transitOfficeId, instance.TenantId, ct)
             .ConfigureAwait(false);
 
-        var resolution = MandateSignerSelector.Resolve(candidates, approvingUserId, explicitSignerId);
+        // HU #11203 — la elección hecha al REGISTRAR el trámite manda sobre la resolución automática:
+        // el gestor ya dijo quién firma y el aprobador no tiene por qué volver a decidirlo. La elección
+        // explícita del aprobador sigue teniendo la última palabra (es quien está aprobando), y la
+        // resolución automática queda como respaldo para los trámites que no traen ninguna.
+        var elegido = explicitSignerId ?? instance.MandateSignerId;
+
+        var resolution = MandateSignerSelector.Resolve(candidates, approvingUserId, elegido);
 
         return resolution.Status switch
         {

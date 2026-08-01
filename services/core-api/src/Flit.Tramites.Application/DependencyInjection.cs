@@ -104,6 +104,10 @@ public static class DependencyInjection
         services.AddScoped<RunPreflightPreviewHandler>();
         services.AddScoped<CreateProcedureInstanceFromConsultaHandler>();
 
+        // HU #11203 — elección del mandatario que firma, adelantada al registro del trámite.
+        services.AddScoped<ListMandateSignerOptionsHandler>();
+        services.AddScoped<SetMandateSignerHandler>();
+
         // FEATURE 05 — consulta RNMC desacoplada del pre-vuelo (corre en el paso final, por actor).
         services.AddScoped<RunRnmcConsultHandler>();
         services.AddScoped<GetRnmcHandler>();
