@@ -99,6 +99,12 @@ public static class AdminInfrastructureExtensions
             Flit.Infrastructure.Storage.SignatureVaultArtifactStorage>();
         services.AddScoped<ISignatureVaultPolicy, SignatureVaultPolicy>();
 
+        // HU #11195 — el directorio de representantes visto desde trámites: dice si el NIT de una parte
+        // tiene un representante utilizable (escritura vigente + firma o identidad vigente). Sin él, la
+        // ruta de registro no sabe cuándo el gestor se está quedando sin salida.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IRepresentanteLegalDirectory,
+            RepresentanteLegalDirectory>();
+
         // HU #10912 (ADR-0036) — configuración de mandato por OT (plantilla + exige-PN + mandatario
         // institucional), leída por código de OT para el flujo de trámite.
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandateRequirementPolicy,
