@@ -30,6 +30,12 @@ public sealed class CreateMandateSignerCommand
     /// </summary>
     public IReadOnlyList<Guid>? PhysicalSignatureOfficeIds { get; init; }
 
+    /// <summary>
+    /// Firma del baúl elegida para el mandatario. <c>null</c> ⇒ el trámite la resuelve por documento,
+    /// que es el comportamiento previo.
+    /// </summary>
+    public Guid? SignatureVaultId { get; init; }
+
     public Guid? CreatedBy { get; init; }
     public Guid? CorrelationId { get; init; }
 }

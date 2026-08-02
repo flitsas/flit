@@ -198,6 +198,7 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
 
       {formOpen && (
         <CompanyMandatarioForm
+          tenantId={tenantId}
           offices={offices}
           editing={editing}
           onCancel={() => {

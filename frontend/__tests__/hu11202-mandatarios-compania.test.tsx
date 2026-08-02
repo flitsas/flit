@@ -23,6 +23,14 @@ vi.mock("@/components/admin/Toast", () => ({
   useToast: () => ({ show: vi.fn() }),
 }));
 
+// El formulario monta el selector de firma del baúl (mismo componente que el representante legal).
+// Sin este doble, el selector no puede consultar y pinta su propia alerta, que compite con la del
+// formulario al buscar por role="alert".
+vi.mock("@/lib/api/admin-signature-vault", () => ({
+  fetchSignatureVaultByDocument: vi.fn().mockResolvedValue([]),
+  createSignatureVaultEntry: vi.fn(),
+}));
+
 import { CompanyMandatariosPanel } from "@/components/admin/companies/mandate-signers/CompanyMandatariosPanel";
 import { OT_HUB_TABS } from "@/components/admin/transit-offices/ot-nav";
 

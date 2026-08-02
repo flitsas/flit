@@ -88,6 +88,7 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             IntegrityHash = data.IntegrityHash,
             Email = data.Email,
             UserId = data.UserId,
+            SignatureVaultId = data.SignatureVaultId,
             RegisteredAt = data.RegisteredAt,
             IsActive = true,
             CreatedAt = now,
@@ -175,6 +176,14 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
         signer.IntegrityHash = data.IntegrityHash;
         signer.Email = data.Email;
         signer.UserId = data.UserId;
+        // La columna existía desde la HU #10910 pero NADIE la escribía: el trámite resolvía la firma
+        // por documento y esta referencia quedaba siempre nula. Solo se toca si el llamante la
+        // gestiona: escribirla siempre haría que un guardado desde el perfil del organismo —que no
+        // maneja este campo— borrara la firma que la compañía acababa de elegir.
+        if (data.ActualizaFirma)
+        {
+            signer.SignatureVaultId = data.SignatureVaultId;
+        }
         signer.UpdatedAt = now;
         signer.UpdatedBy = data.UpdatedBy;
 

@@ -1,6 +1,7 @@
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Admin.Domain.Companies.MandateSigners;
+using Flit.Admin.Domain.Companies.SignatureVault;
 
 namespace Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 
@@ -17,7 +18,12 @@ public sealed record CompanyMandateSignerRequest(
     /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
     /// electrónicamente ante otro.
     /// </summary>
-    IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null);
+    IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null,
+    /// <summary>
+    /// Firma del baúl elegida para el mandatario. <c>null</c> ⇒ el trámite la resuelve por documento,
+    /// que es el comportamiento previo.
+    /// </summary>
+    Guid? SignatureVaultId = null);
 
 /// <summary>
 /// HU #11202 — alta de un mandatario desde el configurador de la COMPAÑÍA. La empresa captura los datos
@@ -36,11 +42,16 @@ public sealed class CreateCompanyMandateSignerHandler
 {
     private readonly IMandateSignerReader _reader;
     private readonly CreateMandateSignerHandler _inner;
+    private readonly ISignatureVaultReader? _vaultReader;
 
-    public CreateCompanyMandateSignerHandler(IMandateSignerReader reader, CreateMandateSignerHandler inner)
+    public CreateCompanyMandateSignerHandler(
+        IMandateSignerReader reader,
+        CreateMandateSignerHandler inner,
+        ISignatureVaultReader? vaultReader = null)
     {
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        _vaultReader = vaultReader;
     }
 
     public async Task<CreateMandateSignerResult> HandleAsync(
@@ -58,6 +69,13 @@ public sealed class CreateCompanyMandateSignerHandler
             return CreateMandateSignerResult.Invalid([error]);
         }
 
+        var firmaError = await ValidarFirmaAsync(
+            _vaultReader, companyTenantId, request, cancellationToken).ConfigureAwait(false);
+        if (firmaError is not null)
+        {
+            return CreateMandateSignerResult.Invalid([firmaError]);
+        }
+
         return await _inner.HandleAsync(
             new CreateMandateSignerCommand
             {
@@ -69,9 +87,57 @@ public sealed class CreateCompanyMandateSignerHandler
                 Email = request.Email,
                 TransitOfficeIds = offices,
                 PhysicalSignatureOfficeIds = request.PhysicalSignatureOfficeIds,
+                SignatureVaultId = request.SignatureVaultId,
                 CreatedBy = createdBy,
             },
             cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Valida la firma del baúl elegida para el mandatario, con el mismo criterio que el representante
+    /// legal (<c>LegalRepresentativeWriter</c>): que exista en el baúl de esta compañía, que sea de ESA
+    /// persona y que esté activa y vigente hoy.
+    ///
+    /// <para>Sin lector inyectado no se valida — el comportamiento previo, en el que la firma ni
+    /// siquiera se podía elegir. La vigencia se evalúa en día calendario de Colombia (UTC-5, sin horario
+    /// de verano), igual que el resto del baúl.</para>
+    /// </summary>
+    internal static async Task<MandateSignerValidationError?> ValidarFirmaAsync(
+        ISignatureVaultReader? vaultReader,
+        Guid companyTenantId,
+        CompanyMandateSignerRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (vaultReader is null || request.SignatureVaultId is not { } firmaId || firmaId == Guid.Empty)
+        {
+            return null;
+        }
+
+        var firma = await vaultReader
+            .GetByIdAsync(companyTenantId, firmaId, cancellationToken).ConfigureAwait(false);
+
+        if (firma is null)
+        {
+            return new MandateSignerValidationError(
+                "signatureVaultId", "La firma indicada no existe en el baul de esta compania.", null);
+        }
+
+        var documento = request.DocumentNumber?.Trim() ?? string.Empty;
+        var tipo = string.IsNullOrWhiteSpace(request.DocumentType) ? "CC" : request.DocumentType.Trim();
+        if (!string.Equals(firma.DocumentType, tipo, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(firma.DocumentNumber, documento, StringComparison.Ordinal))
+        {
+            return new MandateSignerValidationError(
+                "signatureVaultId", "La firma indicada no pertenece al mandatario.", null);
+        }
+
+        var hoy = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).Date);
+        return firma.Estado != SignatureVaultEstado.Activa
+            || hoy < firma.VigenciaDesde
+            || hoy > firma.VigenciaHasta
+            ? new MandateSignerValidationError(
+                "signatureVaultId", "La firma indicada no esta activa o su vigencia ha expirado.", null)
+            : null;
     }
 
     /// <summary>
@@ -116,11 +182,16 @@ public sealed class UpdateCompanyMandateSignerHandler
 {
     private readonly IMandateSignerReader _reader;
     private readonly UpdateMandateSignerHandler _inner;
+    private readonly ISignatureVaultReader? _vaultReader;
 
-    public UpdateCompanyMandateSignerHandler(IMandateSignerReader reader, UpdateMandateSignerHandler inner)
+    public UpdateCompanyMandateSignerHandler(
+        IMandateSignerReader reader,
+        UpdateMandateSignerHandler inner,
+        ISignatureVaultReader? vaultReader = null)
     {
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        _vaultReader = vaultReader;
     }
 
     public async Task<UpdateMandateSignerResult> HandleAsync(
@@ -153,6 +224,13 @@ public sealed class UpdateCompanyMandateSignerHandler
         // suyo mientras siga en la lista; solo si el gestor lo retira pasa a serlo el primero de los que
         // quedan. Tomar siempre `offices[0]` —el primero que mandó el formulario— era el origen del 404:
         // en cuanto no coincidía con el primario guardado, la búsqueda no encontraba al mandatario.
+        var firmaError = await CreateCompanyMandateSignerHandler.ValidarFirmaAsync(
+            _vaultReader, companyTenantId, request, cancellationToken).ConfigureAwait(false);
+        if (firmaError is not null)
+        {
+            return UpdateMandateSignerResult.Invalid([firmaError]);
+        }
+
         var primarioActual = signer.TransitOfficeId;
         var organismoDeEdicion = offices.Contains(primarioActual) ? primarioActual : offices[0];
 
@@ -169,6 +247,9 @@ public sealed class UpdateCompanyMandateSignerHandler
                 Email = request.Email,
                 TransitOfficeIds = offices,
                 PhysicalSignatureOfficeIds = request.PhysicalSignatureOfficeIds,
+                SignatureVaultId = request.SignatureVaultId,
+                // El configurador de la compañía SÍ gestiona la firma: su null significa "quítala".
+                ActualizaFirma = true,
                 UpdatedBy = updatedBy,
             },
             cancellationToken).ConfigureAwait(false);

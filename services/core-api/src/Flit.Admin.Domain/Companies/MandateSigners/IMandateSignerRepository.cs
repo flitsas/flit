@@ -70,7 +70,12 @@ public sealed record CreateMandateSignerData(
     /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
     /// electrónicamente ante otro.
     /// </summary>
-    IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null);
+    IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null,
+    /// <summary>
+    /// Firma del baúl elegida para el mandatario. <c>null</c> ⇒ el trámite la resuelve por documento,
+    /// que es el comportamiento previo.
+    /// </summary>
+    Guid? SignatureVaultId = null);
 
 /// <summary>Datos de edición. La huella ya viene recalculada con la fecha de registro original.</summary>
 public sealed record UpdateMandateSignerData(
@@ -98,6 +103,20 @@ public sealed record UpdateMandateSignerData(
     /// electrónicamente ante otro.
     /// </summary>
     IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null,
+    /// <summary>
+    /// Firma del baúl elegida para el mandatario. <c>null</c> ⇒ el trámite la resuelve por documento,
+    /// que es el comportamiento previo.
+    /// </summary>
+    Guid? SignatureVaultId = null,
+    /// <summary>
+    /// El llamante gestiona la firma del baúl y <see cref="SignatureVaultId"/> es su valor deseado
+    /// (incluido <c>null</c>, que la desvincula). En <c>false</c> la firma NO se toca.
+    ///
+    /// <para>Hace falta porque <c>Guid?</c> no distingue "no la gestiono" de "quítala": la edición desde
+    /// el perfil del organismo no maneja este campo, y sin esta señal cada guardado suyo borraría la
+    /// firma que la compañía acababa de elegir.</para>
+    /// </summary>
+    bool ActualizaFirma = false,
     /// <summary>
     /// Organismo que pasa a ser el PRIMARIO (<c>mandate_signers.transit_office_id</c>). Solo hace falta
     /// cuando la edición retira de la lista al primario actual: sin repuntarlo, la fila quedaría

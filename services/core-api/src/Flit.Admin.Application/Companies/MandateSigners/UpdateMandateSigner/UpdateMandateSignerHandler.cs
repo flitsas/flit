@@ -97,6 +97,8 @@ public sealed class UpdateMandateSignerHandler
                 command.UserId,
                 command.TransitOfficeIds,
                 command.PhysicalSignatureOfficeIds,
+                command.SignatureVaultId,
+                command.ActualizaFirma,
                 // Tras la edición, el organismo bajo el que se editó es el primario. Solo cambia algo
                 // cuando la lista retira al primario anterior; en la edición desde el perfil del
                 // organismo ambos coinciden y esto es un no-op.

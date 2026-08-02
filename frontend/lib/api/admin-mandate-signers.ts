@@ -252,6 +252,11 @@ export interface CompanyMandateSignerInput {
    * datos debajo y no estampa firma del baúl ni sello de identidad.
    */
   physicalSignatureOfficeIds?: string[];
+  /**
+   * Firma del baúl elegida para el mandatario. `null` ⇒ el trámite la resuelve por documento, que es
+   * el comportamiento previo.
+   */
+  signatureVaultId?: string | null;
 }
 
 function companyBase(tenantId: string): string {

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { ApiValidationError } from "@/lib/api/types";
+import { SignatureVaultSelector } from "@/components/admin/companies/legal-representatives/SignatureVaultSelector";
 import type {
   CompanyMandateSignerInput,
   CompanyTransitOfficeOption,
@@ -18,11 +19,13 @@ const DOC_TYPES = ["CC", "CE", "PAS", "NIT"];
  * un destino donde no puede radicar.
  */
 export function CompanyMandatarioForm({
+  tenantId,
   offices,
   editing,
   onCancel,
   onSubmit,
 }: {
+  tenantId: string;
   offices: CompanyTransitOfficeOption[];
   editing: MandateSigner | null;
   onCancel: () => void;
@@ -36,6 +39,11 @@ export function CompanyMandatarioForm({
   // Organismos donde esta persona firma A MANO. Va por organismo y no por persona porque la misma
   // puede firmar a mano ante uno y electrónicamente ante otro.
   const [fisicos, setFisicos] = useState<string[]>(editing?.physicalSignatureOfficeIds ?? []);
+  // Firma del baúl del mandatario. La columna existía desde la HU #10910 pero nunca se poblaba: el
+  // trámite la resolvía por documento y esta referencia quedaba siempre nula.
+  const [signatureVaultId, setSignatureVaultId] = useState<string | null>(
+    editing?.signatureVaultId ?? null,
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,6 +83,7 @@ export function CompanyMandatarioForm({
         email: email.trim() === "" ? null : email.trim(),
         transitOfficeIds: selected,
         physicalSignatureOfficeIds: fisicos,
+        signatureVaultId,
       });
     } catch (err) {
       setError(
@@ -167,6 +176,26 @@ export function CompanyMandatarioForm({
             <p className="mt-1 text-[11px] leading-tight opacity-70">
               Con correo se le envía la validación de identidad al registrarlo. Si la persona ya tiene
               una vigente, se reutiliza y no se le vuelve a escribir.
+            </p>
+          </div>
+
+          {/* Igual que en el panel del representante legal, pero sin escrituras: el mandatario no las
+              necesita. Sirve para elegir su firma o capturarla ahí mismo si aún no tiene. */}
+          <div>
+            <label htmlFor="lr-sig-vault" className="mb-1.5 block text-xs font-semibold">
+              Firma del baúl <span className="font-normal opacity-60">(opcional)</span>
+            </label>
+            <SignatureVaultSelector
+              tenantId={tenantId}
+              documentType={documentType}
+              documentNumber={documentNumber}
+              value={signatureVaultId}
+              onChange={setSignatureVaultId}
+              fullName={fullName.trim() === "" ? undefined : fullName.trim()}
+            />
+            <p className="mt-1 text-[11px] leading-tight opacity-70">
+              Con firma del baúl vigente, el mandato la estampa. Sin ella se usa el sello de su
+              validación de identidad, y sin ninguna de las dos queda la línea para firmar a mano.
             </p>
           </div>
 

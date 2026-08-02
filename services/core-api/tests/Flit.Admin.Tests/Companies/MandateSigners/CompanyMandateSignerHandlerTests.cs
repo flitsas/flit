@@ -102,12 +102,39 @@ public sealed class CompanyMandateSignerHandlerTests
     }
 
     private static (CreateCompanyMandateSignerHandler Create, ListCompanyMandateSignersHandler List)
-        Handlers(FlitDbContext ctx)
+        Handlers(FlitDbContext ctx, Guid? conFirma = null)
     {
         var reader = new DbMandateSignerReader(ctx);
         var repo = new MandateSignerRepository(ctx);
         var inner = new CreateMandateSignerHandler(OtOperable(), reader, repo);
-        return (new CreateCompanyMandateSignerHandler(reader, inner), new ListCompanyMandateSignersHandler(reader));
+        var vault = conFirma is null ? null : new DbSignatureVaultReader(ctx);
+        return (
+            new CreateCompanyMandateSignerHandler(reader, inner, vault),
+            new ListCompanyMandateSignersHandler(reader));
+    }
+
+    /// <summary>Firma activa y vigente en el baúl de la compañía, a nombre del documento indicado.</summary>
+    private static async Task<Guid> SeedFirmaAsync(FlitDbContext ctx, string documento, CancellationToken ct)
+    {
+        var id = Guid.NewGuid();
+        var hoy = DateOnly.FromDateTime(DateTimeOffset.UtcNow.AddHours(-5).Date);
+        ctx.SignatureVault.Add(new SignatureVaultEntity
+        {
+            Id = id,
+            TenantId = Compania,
+            DocumentType = "CC",
+            DocumentNumber = documento,
+            FullName = "Ana Restrepo",
+            SignatureHash = "sha",
+            StoragePath = "vault/f.png",
+            StorageSha256 = "sha",
+            Estado = "activa",
+            VigenciaDesde = hoy.AddDays(-1),
+            VigenciaHasta = hoy.AddYears(1),
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await ctx.SaveChangesAsync(ct);
+        return id;
     }
 
     private static UpdateCompanyMandateSignerHandler Editor(FlitDbContext ctx)
@@ -233,6 +260,90 @@ public sealed class CompanyMandateSignerHandlerTests
         // Comparten organismo, pero cada compañía solo ve a los suyos.
         var otraCompania = Guid.NewGuid();
         (await list.HandleAsync(otraCompania, ct)).Should().BeEmpty();
+    }
+
+    // ── Firma del baúl del mandatario ─────────────────────────────────────────
+
+    [Fact]
+    public async Task LaFirmaDelBaulElegida_SePersisteEnElMandatario()
+    {
+        // La columna existía desde la HU #10910 pero NADIE la escribía: el trámite resolvía la firma por
+        // documento y esta referencia quedaba siempre nula.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var firmaId = await SeedFirmaAsync(ctx, "1020304050", ct);
+        var (create, list) = Handlers(ctx, firmaId);
+
+        var result = await create.HandleAsync(
+            Compania, Alta(OtMedellin) with { SignatureVaultId = firmaId }, null, ct);
+
+        result.IsValid.Should().BeTrue();
+        ctx.ChangeTracker.Clear();
+        var id = (await list.HandleAsync(Compania, ct)).Single().Id;
+        (await ctx.MandateSigners.FirstAsync(m => m.Id == id, ct))
+            .SignatureVaultId.Should().Be(firmaId);
+    }
+
+    [Fact]
+    public async Task UnaFirmaDeOtraPersona_SeRechaza()
+    {
+        // Mismo criterio que el representante legal: la firma tiene que ser de ESA persona. Sin la
+        // comprobación, el mandato estamparía la firma de alguien distinto de quien lo suscribe.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var firmaAjena = await SeedFirmaAsync(ctx, "99999999", ct);
+        var (create, _) = Handlers(ctx, firmaAjena);
+
+        var result = await create.HandleAsync(
+            Compania, Alta(OtMedellin) with { SignatureVaultId = firmaAjena }, null, ct);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Field == "signatureVaultId");
+    }
+
+    [Fact]
+    public async Task UnaFirmaInexistente_SeRechaza()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, _) = Handlers(ctx, Guid.NewGuid());
+
+        var result = await create.HandleAsync(
+            Compania, Alta(OtMedellin) with { SignatureVaultId = Guid.NewGuid() }, null, ct);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Field == "signatureVaultId");
+    }
+
+    [Fact]
+    public async Task EditarDesdeElOrganismo_NoBorraLaFirmaQueEligioLaCompania()
+    {
+        // Invariante de no-regresión: `Guid?` no distingue "no gestiono la firma" de "quítala", así que
+        // sin una señal explícita cada guardado desde el perfil del organismo —que no maneja este
+        // campo— borraría la firma que la compañía acababa de elegir. Es la misma clase de fallo que
+        // hizo que editar un representante legal vaciara el contacto de sus compañías.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var firmaId = await SeedFirmaAsync(ctx, "1020304050", ct);
+        var (create, list) = Handlers(ctx, firmaId);
+        await create.HandleAsync(Compania, Alta(OtMedellin) with { SignatureVaultId = firmaId }, null, ct);
+        var id = await IdDelUnicoAsync(list, ct);
+
+        // Edición que NO gestiona la firma (ActualizaFirma queda en false por defecto).
+        await new MandateSignerRepository(ctx).UpdateAsync(
+            new UpdateMandateSignerData(
+                id, OtTenantMedellin, "Ana Restrepo", "1020304050", new string('a', 64),
+                [Compania], null, null, "CC", "ana@x.com", null,
+                TransitOfficeIds: [OtMedellin]),
+            ct);
+
+        ctx.ChangeTracker.Clear();
+        (await ctx.MandateSigners.FirstAsync(m => m.Id == id, ct))
+            .SignatureVaultId.Should().Be(firmaId);
     }
 
     // ── Edición (hallado en validación manual: la edición respondía 404) ──────
