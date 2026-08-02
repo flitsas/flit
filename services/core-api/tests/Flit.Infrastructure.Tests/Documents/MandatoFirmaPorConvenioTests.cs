@@ -10,8 +10,9 @@ namespace Flit.Infrastructure.Tests.Documents;
 /// <summary>
 /// Cómo aparece el MANDATARIO en el recuadro de firmas del contrato de mandato.
 ///
-/// <para>Tres modos y una precedencia deliberada: el <b>convenio</b> comercial entre la compañía y el
-/// organismo quita el bloque; el mandatario que es el propio organismo, o el marcado como firmante
+/// <para>Tres modos y una precedencia deliberada: <b>Sabaneta</b> nunca lleva bloque —su mandatario es
+/// la propia unión temporal, no una persona—; el <b>convenio</b> comercial entre la compañía y el
+/// organismo también lo quita; el mandatario que es el propio organismo, o el marcado como firmante
 /// físico, conserva el bloque con la línea; el resto estampa.</para>
 ///
 /// <para>Se afirma sobre la decisión de política y no sobre los bytes del PDF: un test que solo
@@ -41,17 +42,41 @@ public sealed class MandatoFirmaPorConvenioTests
             .Should().Be(MandatarioFirmaModo.SinBloque);
     }
 
-    [Fact]
-    public void C_ElMandatarioQueEsElPropioOrganismo_FirmaAMano_AunqueNoHayaConvenio()
+    [Theory]
+    [InlineData(MandatarioFirmaModo.Estampada)]
+    [InlineData(MandatarioFirmaModo.Manual)]
+    [InlineData(MandatarioFirmaModo.SinBloque)]
+    public void C_Sabaneta_NuncaLlevaBloqueDeMandatario_ConOSinConvenio(MandatarioFirmaModo resuelto)
     {
-        // Sabaneta y Bello (familia organismo_transito): firma la empresa, y lo hace a mano sobre la
+        // Su mandatario es la propia unión temporal: el contrato la nombra a ella, no a una persona, así
+        // que no hay a quién dejarle espacio de firma. Es incondicional — ni el convenio ni la marca de
+        // firma física la mueven.
+        Resolver(Mandato(resuelto, MandatoFamilia.OrganismoTransito, MandatoTemplateResolver.Sabaneta))
+            .Should().Be(MandatarioFirmaModo.SinBloque);
+    }
+
+    [Fact]
+    public void Bello_SiConservaElBloque_ConSuLineaParaFirmarAMano()
+    {
+        // Bello es de la misma familia que Sabaneta pero su plantilla nombra al REPRESENTANTE LEGAL de
+        // la unión temporal: hay una persona que puede firmar, así que pierde la estampa pero no el
+        // bloque. Agruparlo con Sabaneta le quitaría el espacio de firma a alguien que sí firma.
+        Resolver(Mandato(
+                MandatarioFirmaModo.Estampada, MandatoFamilia.OrganismoTransito, MandatoTemplateResolver.Bello))
+            .Should().Be(MandatarioFirmaModo.Manual);
+    }
+
+    [Fact]
+    public void UnOtInstitucionalSinPlantillaPropia_FirmaAMano_AunqueNoHayaConvenio()
+    {
+        // Familia organismo_transito con plantilla genérica: firma la empresa, y lo hace a mano sobre la
         // línea. No depende del convenio: es la naturaleza del mandatario.
         Resolver(Mandato(MandatarioFirmaModo.Estampada, MandatoFamilia.OrganismoTransito))
             .Should().Be(MandatarioFirmaModo.Manual);
     }
 
     [Fact]
-    public void ElConvenioGanaSobreLaFamilia_NiSiquieraSabanetaLlevaBloque()
+    public void ElConvenioGanaSobreLaFamilia_UnOtInstitucionalConConvenioTampocoLlevaBloque()
     {
         // Con convenio no hay a quién dejarle espacio de firma, sea quien sea el mandatario. Si la
         // familia ganara, un OT institucional con convenio seguiría pintando su recuadro vacío.
@@ -96,10 +121,12 @@ public sealed class MandatoFirmaPorConvenioTests
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static MandatoData Mandato(
-        MandatarioFirmaModo modo, MandatoFamilia familia = MandatoFamilia.Individuo) =>
+        MandatarioFirmaModo modo,
+        MandatoFamilia familia = MandatoFamilia.Individuo,
+        string plantilla = MandatoTemplateResolver.Generico) =>
         new(
             Tramite(),
-            MandatoTemplateResolver.Generico,
+            plantilla,
             familia == MandatoFamilia.OrganismoTransito ? "UNION TEMPORAL SETSA" : null,
             familia == MandatoFamilia.OrganismoTransito ? "900273813-7" : null,
             new MandatarioFirmante("Carlos Ruiz", "70111222", null, null, null),

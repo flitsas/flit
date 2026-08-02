@@ -303,22 +303,29 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     /// <summary>
     /// Cómo aparece el MANDATARIO en el recuadro de firmas. Orden deliberado:
     /// <list type="number">
+    ///   <item><b>Sabaneta: sin bloque SIEMPRE</b>, con o sin convenio. Su mandatario es la propia unión
+    ///   temporal —el contrato la nombra a ella, no a una persona—, así que no hay nadie a quien dejarle
+    ///   un espacio de firma. Es la única variante con esta regla incondicional.</item>
     ///   <item><b>Sin bloque</b> si el modo ya viene resuelto así desde la aplicación (convenio
     ///   comercial compañía↔organismo).</item>
     ///   <item><b>Manual</b> si el mandatario es el propio organismo (familia <c>organismo_transito</c>,
-    ///   HU #11205): ahí firma la empresa a mano sobre la línea.</item>
+    ///   HU #11205): ahí firma la empresa a mano sobre la línea. Es el caso de <b>Bello</b>, cuya
+    ///   plantilla sí nombra al representante legal de la unión temporal: hay una persona que puede
+    ///   firmar, y por eso conserva la línea en vez de perder el bloque.</item>
     ///   <item>Lo que diga el modo resuelto fuera — <b>manual</b> también cuando el mandatario está
     ///   marcado como firmante físico en ese organismo.</item>
     /// </list>
-    /// La familia se comprueba aquí y no fuera porque es un dato del propio documento (la plantilla del
-    /// OT), no del convenio ni del mandatario.
+    /// La variante y la familia se comprueban aquí y no fuera porque son datos del propio documento (la
+    /// plantilla del OT), no del convenio ni del mandatario.
     /// </summary>
     private static MandatarioFirmaModo ModoFirmaMandatario(MandatoData data) =>
-        data.ModoFirmaMandatario == MandatarioFirmaModo.SinBloque
+        MandatoTemplateResolver.Resolve(data.TemplateCode) == MandatoVariante.Sabaneta
             ? MandatarioFirmaModo.SinBloque
-            : MandatarioEsEmpresa(data)
-                ? MandatarioFirmaModo.Manual
-                : data.ModoFirmaMandatario;
+            : data.ModoFirmaMandatario == MandatarioFirmaModo.SinBloque
+                ? MandatarioFirmaModo.SinBloque
+                : MandatarioEsEmpresa(data)
+                    ? MandatarioFirmaModo.Manual
+                    : data.ModoFirmaMandatario;
 
     /// <summary>
     /// HU #11205 (D4) — ¿el mandatario del OT es una empresa relacionada? La señal explícita es la
