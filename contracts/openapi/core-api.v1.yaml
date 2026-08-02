@@ -6076,7 +6076,90 @@ paths:
         "422":
           description: >
             no_aplica (la parte no es persona jurídica), sin_representante (el representante declarado no
-            tiene documento con el que validar) o firma_disponible (ya puede firmarse ahora).
+            tiene documento con el que validar), sin_mandatario (el trámite no tiene mandatario elegido
+            con documento registrado) o firma_disponible (ya puede firmarse ahora).
+
+  /api/v1/tramites/instances/{id}/mandate-signers:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: "#/components/parameters/TenantIdHeader"
+    get:
+      operationId: listProcedureInstanceMandateSigners
+      tags: ["Trámites · Traspaso"]
+      security:
+        - bearerAuth: []
+      summary: "Mandatarios que pueden firmar el mandato de este trámite"
+      description: >
+        HU #11203. Adelanta al REGISTRO lo que antes se resolvía al aprobar: el gestor ve desde el
+        principio quién va a firmar el contrato de mandato, en vez de descubrirlo al final o tener que
+        decidirlo el organismo.
+
+
+        Los candidatos son los mandatarios activos de la compañía gestora habilitados para el organismo
+        del trámite. El organismo se resuelve de `field_values.transit_office_id` durante el asistente
+        —la columna solo se fija al radicar—, así que **sin organismo elegido todavía la lista viene
+        vacía**, no es un error.
+
+
+        Cada opción dice con QUÉ puede firmar esa persona: `firmaBaulVigente` o `identidadVigente`. Son
+        vías ALTERNATIVAS, no requisitos acumulativos — con cualquiera de las dos el mandato puede
+        firmarse. Sin ninguna, el trámite puede marcarse para firma a posteriori
+        (`POST /instances/{id}/deferred-signature` con `parte: mandatario`).
+      responses:
+        "200":
+          description: "Mandatarios disponibles y cuál está elegido."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MandateSignerSelectionResponse"
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "404": { description: "Trámite no encontrado." }
+
+  /api/v1/tramites/instances/{id}/mandate-signer:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: "#/components/parameters/TenantIdHeader"
+    put:
+      operationId: setProcedureInstanceMandateSigner
+      tags: ["Trámites · Traspaso"]
+      security:
+        - bearerAuth: []
+      summary: "Fija qué mandatario firma el mandato del trámite"
+      description: >
+        HU #11203 (AC4/AC5). Solo en borrador o con subsanación activa: una vez el trámite salió de
+        ahí, cambiar quién firma alteraría un documento ya generado y radicado.
+
+
+        El elegido debe estar entre los habilitados para el organismo del trámite y esa compañía.
+        Aceptar cualquier id dejaría el trámite apuntando a un mandatario que no puede firmarlo, y eso
+        solo se descubriría al aprobar.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mandateSignerId: { type: string, format: uuid }
+              required: [mandateSignerId]
+      responses:
+        "204": { description: "Mandatario fijado." }
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "404": { description: "Trámite no encontrado." }
+        "409":
+          description: >
+            not_draft (el trámite ya salió de borrador) o sin_organismo (todavía no tiene organismo de
+            tránsito, así que no hay candidatos contra los que validar).
+        "422":
+          description: "mandatario_no_habilitado — no está habilitado para el organismo del trámite."
 
   /api/v1/me/ui-preferences/{scope}:
     parameters:
@@ -6182,6 +6265,51 @@ components:
           type: string
           format: date-time
           nullable: true
+    MandateSignerOption:
+      type: object
+      description: >
+        Un mandatario elegible para firmar el mandato. `firmaBaulVigente` e `identidadVigente` son las
+        dos vías ALTERNATIVAS de firmar: basta cualquiera de las dos.
+      required: [id, nombre, tipoDocumento, documento, identidadVigente]
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        tipoDocumento: { type: string, example: CC }
+        documento: { type: string }
+        identidadVigente:
+          type: boolean
+          description: "Tiene una validación de identidad admin aprobada y vigente."
+        identidadHasta:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Hasta cuándo vale su validación de identidad; null si no tiene o no vence."
+        firmaBaulVigente:
+          type: boolean
+          description: >
+            Tiene una firma del baúl activa y vigente. Se resuelve por su DOCUMENTO y contra el tenant
+            de la compañía gestora, igual que hace el generador del mandato:
+            `mandate_signers.signature_vault_id` no se escribe, así que esa referencia no sirve para
+            saberlo.
+    MandateSignerSelectionResponse:
+      type: object
+      required: [opciones, elegidoId, editable]
+      properties:
+        opciones:
+          type: array
+          items:
+            $ref: "#/components/schemas/MandateSignerOption"
+          description: "Vacío si el trámite todavía no tiene organismo, o si no hay mandatarios."
+        elegidoId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            El elegido explícitamente; si no hay ninguno y solo existe un candidato, ese candidato (no
+            hay nada que decidir).
+        editable:
+          type: boolean
+          description: "Falso fuera de borrador/subsanación: el mandatario se muestra pero no se cambia."
     # ── Preferencias de UI ─────────────────────────────────────────────────────
     UserUiPreferenceResponse:
       type: object
