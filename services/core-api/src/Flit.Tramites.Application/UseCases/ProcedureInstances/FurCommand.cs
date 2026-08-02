@@ -235,7 +235,8 @@ public sealed class GenerarFurHandler(
         // natural solo si el OT lo exige). El firmante (mandatario) aún NO se resuelve en preparado: se
         // regenera al aprobar con el firmante elegido/filtrado (HU #10916). Generar-o-limpiar: si el
         // trámite dejó de exigir mandato en una regeneración, se retira el adjunto 'mandato' previo.
-        var mandato = await TryGenerateMandatoAsync(data, Get(fv, "transit_office_code"), instance.MandateSignerId, ct);
+        var mandato = await TryGenerateMandatoAsync(
+            data, Get(fv, "transit_office_code"), instance.MandateSignerId, TransformacionesActivas(fv), ct);
         if (mandato is not null)
         {
             generated.Add(mandato);
@@ -795,8 +796,29 @@ public sealed class GenerarFurHandler(
     /// <c>null</c> (el caller retira el mandato previo). El firmante (mandatario) va <c>null</c>: en
     /// preparado aún no está elegido/filtrado (HU #10916 lo resuelve al aprobar y regenera).
     /// </summary>
+    /// <summary>
+    /// HU #11206 — transformaciones declaradas en el trámite (<c>field_values</c> con valor <c>true</c>).
+    /// Se leen aquí y no en el generador para que el documento no dependa del formato de almacenamiento.
+    /// </summary>
+    private static IReadOnlyList<string> TransformacionesActivas(Dictionary<string, string?> fv)
+    {
+        string[] claves =
+        [
+            MandatoObjetoComposer.CambioColor,
+            MandatoObjetoComposer.CambioCarroceria,
+            MandatoObjetoComposer.CambioCombustible,
+        ];
+
+        return [.. claves.Where(clave =>
+            string.Equals(Get(fv, clave)?.Trim(), "true", StringComparison.OrdinalIgnoreCase))];
+    }
+
     private async Task<GeneratedDocument?> TryGenerateMandatoAsync(
-        FurDocumentData data, string? transitOfficeCode, Guid? mandateSignerId, CancellationToken ct)
+        FurDocumentData data,
+        string? transitOfficeCode,
+        Guid? mandateSignerId,
+        IReadOnlyList<string> transformaciones,
+        CancellationToken ct)
     {
         if (_mandatoGenerator is null || string.IsNullOrWhiteSpace(transitOfficeCode))
             return null;
@@ -835,7 +857,9 @@ public sealed class GenerarFurHandler(
             // aplica los mismos valores de siempre, así que un OT sin fila sale como hasta ahora (AC5).
             MandatoFamiliaCodes.Resolve(config?.MandataryFamily),
             config?.ChamberCity,
-            config?.MandatarySigla);
+            config?.MandatarySigla,
+            // HU #11206 — las transformaciones entran DENTRO del objeto del contrato, sin cláusula nueva.
+            transformaciones);
 
         return _mandatoGenerator.GenerateMandato(mandatoData);
     }

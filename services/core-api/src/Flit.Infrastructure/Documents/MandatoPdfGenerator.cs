@@ -64,7 +64,12 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
 
         var esTraspaso = string.Equals(
             tramite.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
-        var nombreTramite = esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL";
+        // HU #11206 — el objeto del contrato incluye las transformaciones del trámite. Se compone aquí,
+        // una sola vez, para que todas las familias de plantilla lo redacten idéntico (AC4). Sin
+        // transformaciones queda exactamente el texto de siempre (AC3).
+        var nombreTramite = MandatoObjetoComposer.Componer(
+            esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL",
+            data.Transformaciones);
 
         var placa = Val(tramite.Placa, "___");
         var ot = Val(tramite.Organismo.Nombre, "___");

@@ -214,7 +214,10 @@ public sealed record MandatoData(
     // tener textos legales distintos (Bello y Sabaneta lo son).
     MandatoFamilia Familia = MandatoFamilia.Individuo,
     string? ChamberCity = null,
-    string? MandatarySigla = null);
+    string? MandatarySigla = null,
+    // HU #11206 — transformaciones declaradas en el trámite (claves de field_values). Se componen DENTRO
+    // del objeto del contrato, sin cláusula nueva: ninguna plantilla del PO las menciona.
+    IReadOnlyList<string>? Transformaciones = null);
 
 /// <summary>
 /// Contrato del generador del <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). Solo aplica
