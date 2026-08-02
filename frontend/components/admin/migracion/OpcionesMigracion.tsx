@@ -17,13 +17,21 @@ export function OpcionesMigracion({
   dryRun,
   onDryRun,
   deshabilitado = false,
+  disposicion = "columna",
 }: {
   instancias: Instancia[];
   onInstancias: (valor: Instancia[]) => void;
   dryRun: boolean;
   onDryRun: (valor: boolean) => void;
   deshabilitado?: boolean;
+  /**
+   * `columna` para el panel estrecho de «Un trámite»; `fila` para la barra a todo el ancho del
+   * cargue masivo, donde apilarlo dejaba una columna altísima al lado de una tarjeta corta y el
+   * hueco resultante se leía como si la página estuviera rota.
+   */
+  disposicion?: "columna" | "fila";
 }) {
+  const enFila = disposicion === "fila";
   const alternar = (instancia: Instancia) => {
     onInstancias(
       instancias.includes(instancia)
@@ -36,7 +44,13 @@ export function OpcionesMigracion({
   const todas = instancias.length === 0 || instancias.length === INSTANCIAS.length;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div
+      className={
+        enFila
+          ? "grid grid-cols-1 gap-x-8 gap-y-4 lg:grid-cols-[minmax(0,1fr)_auto]"
+          : "flex flex-col gap-4"
+      }
+    >
       <fieldset className="flex flex-col gap-3" disabled={deshabilitado}>
         <div>
           <legend className="text-xs font-semibold uppercase tracking-wide opacity-60">
@@ -49,7 +63,7 @@ export function OpcionesMigracion({
           </p>
         </div>
 
-        <div className="flex flex-col gap-2">
+        <div className={enFila ? "grid gap-2 sm:grid-cols-3" : "flex flex-col gap-2"}>
           {INSTANCIAS.map((instancia) => (
             <label
               key={instancia}
@@ -72,7 +86,12 @@ export function OpcionesMigracion({
         </div>
       </fieldset>
 
-      <ModoEjecucion dryRun={dryRun} onDryRun={onDryRun} deshabilitado={deshabilitado} />
+      <ModoEjecucion
+        dryRun={dryRun}
+        onDryRun={onDryRun}
+        deshabilitado={deshabilitado}
+        anchoFijo={enFila}
+      />
     </div>
   );
 }
@@ -89,13 +108,20 @@ function ModoEjecucion({
   dryRun,
   onDryRun,
   deshabilitado,
+  anchoFijo,
 }: {
   dryRun: boolean;
   onDryRun: (valor: boolean) => void;
   deshabilitado: boolean;
+  anchoFijo: boolean;
 }) {
   return (
-    <fieldset className="flex flex-col gap-2" disabled={deshabilitado}>
+    <fieldset
+      // En la barra ancha no debe estirarse a media pantalla: son dos botones, y a 700 px de ancho
+      // parecen dos paneles. Con ancho fijo quedan del tamaño de lo que dicen.
+      className={`flex flex-col gap-2 ${anchoFijo ? "lg:w-[19rem]" : ""}`}
+      disabled={deshabilitado}
+    >
       <legend className="text-xs font-semibold uppercase tracking-wide opacity-60">
         Modo de ejecución
       </legend>

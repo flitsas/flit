@@ -318,22 +318,15 @@ export function CargueMasivo() {
       {lote && (
         <>
           {/*
-            `items-start`: sin él las dos tarjetas se estiran a la altura de la más alta, y como la
-            de opciones mide el doble, la del lote quedaba con 300 px de vacío bajo el botón.
+            Una sola barra a todo el ancho, no dos columnas.
+            Partirlo en «opciones | lote» dejaba una columna de opciones muy alta junto a una
+            tarjeta de tres líneas, y el vacío de 350 px que quedaba a su derecha se leía como si
+            la página se hubiera roto al cargar. Además invertía la importancia: las opciones se
+            tocan una vez, y lo que se mira todo el rato es el archivo y el botón.
           */}
-          <section className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
-            <div className="rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10">
-              <OpcionesMigracion
-                instancias={instancias}
-                onInstancias={setInstancias}
-                dryRun={dryRun}
-                onDryRun={setDryRun}
-                deshabilitado={corriendo}
-              />
-            </div>
-
-            <div className="flex flex-col gap-3 rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10">
-              <div>
+          <section className="flex flex-col gap-4 rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10">
+            <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+              <div className="min-w-0">
                 <p className="text-sm font-semibold">{lote.archivo}</p>
                 {/*
                   Se cuenta lo que se va a CORRER, no lo que está marcado. Antes decía «4
@@ -346,21 +339,21 @@ export function CargueMasivo() {
                     {pendientes.length} por {dryRun ? "simular" : "migrar"}
                   </strong>
                 </p>
+
+                {reconciliado === true && (
+                  <p className="mt-1 text-xs opacity-70">
+                    Contrastado con el servidor: lo que aparece como migrado, lo está.
+                  </p>
+                )}
+                {reconciliado === false && (
+                  <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                    No se pudo contrastar con el servidor. Lo que ves es el avance guardado en este
+                    navegador y puede estar desactualizado.
+                  </p>
+                )}
               </div>
 
-              {reconciliado === true && (
-                <p className="text-xs opacity-70">
-                  Contrastado con el servidor: lo que aparece como migrado, lo está.
-                </p>
-              )}
-              {reconciliado === false && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  No se pudo contrastar con el servidor. Lo que ves es el avance guardado en este
-                  navegador y puede estar desactualizado.
-                </p>
-              )}
-
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={migrarSeleccionadas}
@@ -411,13 +404,24 @@ export function CargueMasivo() {
                   </button>
                 )}
               </div>
+            </div>
 
-              {corriendo && (
-                <p className="text-xs opacity-70">
-                  Van de a uno: el migrador solo admite dos a la vez. Si cierras la pestaña, lo
-                  que ya se migró queda migrado y el progreso se recupera al volver.
-                </p>
-              )}
+            {corriendo && (
+              <p className="text-xs opacity-70">
+                Van de a uno: el migrador solo admite dos a la vez. Si cierras la pestaña, lo que
+                ya se migró queda migrado y el progreso se recupera al volver.
+              </p>
+            )}
+
+            <div className="border-t border-[#DFE5ED] pt-4 dark:border-white/10">
+              <OpcionesMigracion
+                instancias={instancias}
+                onInstancias={setInstancias}
+                dryRun={dryRun}
+                onDryRun={setDryRun}
+                deshabilitado={corriendo}
+                disposicion="fila"
+              />
             </div>
           </section>
 
