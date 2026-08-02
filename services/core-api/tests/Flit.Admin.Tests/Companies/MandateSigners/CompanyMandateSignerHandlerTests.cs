@@ -1,6 +1,7 @@
 using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
+using Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.Persistence;
@@ -108,6 +109,19 @@ public sealed class CompanyMandateSignerHandlerTests
         var inner = new CreateMandateSignerHandler(OtOperable(), reader, repo);
         return (new CreateCompanyMandateSignerHandler(reader, inner), new ListCompanyMandateSignersHandler(reader));
     }
+
+    private static UpdateCompanyMandateSignerHandler Editor(FlitDbContext ctx)
+    {
+        var reader = new DbMandateSignerReader(ctx);
+        var repo = new MandateSignerRepository(ctx);
+        return new UpdateCompanyMandateSignerHandler(
+            reader, new UpdateMandateSignerHandler(OtOperable(), reader, repo));
+    }
+
+    /// <summary>Id del único mandatario de la compañía, ya guardado.</summary>
+    private static async Task<Guid> IdDelUnicoAsync(
+        ListCompanyMandateSignersHandler list, CancellationToken ct) =>
+        (await list.HandleAsync(Compania, ct)).Single().Id;
 
     private static CompanyMandateSignerRequest Alta(params Guid[] organismos) =>
         new("Ana Restrepo", "1020304050", organismos, "CC", null);
@@ -219,5 +233,99 @@ public sealed class CompanyMandateSignerHandlerTests
         // Comparten organismo, pero cada compañía solo ve a los suyos.
         var otraCompania = Guid.NewGuid();
         (await list.HandleAsync(otraCompania, ct)).Should().BeEmpty();
+    }
+
+    // ── Edición (hallado en validación manual: la edición respondía 404) ──────
+
+    [Fact]
+    public async Task Editar_AgregandoUnOrganismo_NoResponde404_AunqueElPrimeroDeLaListaNoSeaElPrimario()
+    {
+        // El caso reportado. Al editar, el formulario manda la lista COMPLETA de organismos; el primero
+        // de esa lista no tiene por qué ser el primario guardado. Usarlo como identidad hacía que el
+        // mandatario "no existiera" justo al añadirle un organismo.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, list) = Handlers(ctx);
+        await create.HandleAsync(Compania, Alta(OtMedellin), null, ct);
+        var id = await IdDelUnicoAsync(list, ct);
+
+        // Envigado primero: distinto del primario (Medellín), que es como lo manda el multiselect.
+        var result = await Editor(ctx).HandleAsync(
+            Compania, id, new CompanyMandateSignerRequest(
+                "Ana Restrepo", "1020304050", [OtEnvigado, OtMedellin], "CC", "ana@x.com"),
+            null, ct);
+
+        result.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
+        var actualizado = (await list.HandleAsync(Compania, ct)).Single();
+        actualizado.TransitOfficeIds.Should().BeEquivalentTo([OtMedellin, OtEnvigado]);
+        actualizado.Email.Should().Be("ana@x.com");
+    }
+
+    [Fact]
+    public async Task Editar_ConservaElPrimarioMientrasSigaEnLaLista()
+    {
+        // Reordenar el multiselect no debe mover el organismo primario: es el que la reactivación
+        // restaura, así que moverlo por accidente cambia a dónde vuelve el mandatario.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, list) = Handlers(ctx);
+        await create.HandleAsync(Compania, Alta(OtMedellin, OtEnvigado), null, ct);
+        var id = await IdDelUnicoAsync(list, ct);
+
+        await Editor(ctx).HandleAsync(
+            Compania, id, new CompanyMandateSignerRequest(
+                "Ana Restrepo", "1020304050", [OtEnvigado, OtMedellin], "CC", null),
+            null, ct);
+
+        ctx.ChangeTracker.Clear();
+        var fila = await ctx.MandateSigners.FirstAsync(m => m.Id == id, ct);
+        fila.TransitOfficeId.Should().Be(OtMedellin);
+    }
+
+    [Fact]
+    public async Task Editar_RetirandoElPrimario_LoRepuntaAUnoQueSiQueda()
+    {
+        // Sin repuntarlo, la fila quedaría apuntando a un organismo donde el mandatario ya no aplica, y
+        // la reactivación —que restaura el primario— lo resucitaría.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, list) = Handlers(ctx);
+        await create.HandleAsync(Compania, Alta(OtMedellin, OtEnvigado), null, ct);
+        var id = await IdDelUnicoAsync(list, ct);
+
+        var result = await Editor(ctx).HandleAsync(
+            Compania, id, new CompanyMandateSignerRequest(
+                "Ana Restrepo", "1020304050", [OtEnvigado], "CC", null),
+            null, ct);
+
+        result.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
+        ctx.ChangeTracker.Clear();
+        var fila = await ctx.MandateSigners.FirstAsync(m => m.Id == id, ct);
+        fila.TransitOfficeId.Should().Be(OtEnvigado);
+        (await list.HandleAsync(Compania, ct)).Single()
+            .TransitOfficeIds.Should().BeEquivalentTo([OtEnvigado]);
+    }
+
+    [Fact]
+    public async Task Editar_ElMandatarioDeOtraCompania_Responde404()
+    {
+        // El ámbito de la ruta es la compañía. Antes bastaba acertar el id y compartir organismo con su
+        // dueño para poder editar el mandatario de otra empresa.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, list) = Handlers(ctx);
+        await create.HandleAsync(Compania, Alta(OtMedellin), null, ct);
+        var id = await IdDelUnicoAsync(list, ct);
+
+        var result = await Editor(ctx).HandleAsync(
+            Guid.NewGuid(), id, new CompanyMandateSignerRequest(
+                "Ana Restrepo", "1020304050", [OtMedellin], "CC", null),
+            null, ct);
+
+        result.Outcome.Should().Be(UpdateMandateSignerOutcome.NotFound);
     }
 }

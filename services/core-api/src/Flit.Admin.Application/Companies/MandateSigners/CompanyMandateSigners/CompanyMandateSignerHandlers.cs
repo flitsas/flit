@@ -124,6 +124,16 @@ public sealed class UpdateCompanyMandateSignerHandler
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        // El ámbito de esta ruta es la COMPAÑÍA, así que el mandatario se busca entre los suyos. Antes
+        // no se comprobaba: bastaba con acertar el id y compartir organismo con su dueño para poder
+        // editar el mandatario de otra empresa.
+        var propios = await _reader.ListByCompanyAsync(companyTenantId, cancellationToken).ConfigureAwait(false);
+        var signer = propios.FirstOrDefault(s => s.Id == mandateSignerId);
+        if (signer is null)
+        {
+            return UpdateMandateSignerResult.NotFound();
+        }
+
         var (offices, error) = await CreateCompanyMandateSignerHandler.ResolverOrganismosAsync(
             _reader, companyTenantId, request.TransitOfficeIds, cancellationToken).ConfigureAwait(false);
         if (error is not null)
@@ -131,10 +141,18 @@ public sealed class UpdateCompanyMandateSignerHandler
             return UpdateMandateSignerResult.Invalid([error]);
         }
 
+        // El organismo bajo el que se edita es el primario que el mandatario conservará. Se mantiene el
+        // suyo mientras siga en la lista; solo si el gestor lo retira pasa a serlo el primero de los que
+        // quedan. Tomar siempre `offices[0]` —el primero que mandó el formulario— era el origen del 404:
+        // en cuanto no coincidía con el primario guardado, la búsqueda no encontraba al mandatario.
+        var primarioActual = signer.TransitOfficeId;
+        var organismoDeEdicion = offices.Contains(primarioActual) ? primarioActual : offices[0];
+
         return await _inner.HandleAsync(
             new UpdateMandateSignerCommand
             {
-                TransitOfficeId = offices[0],
+                TransitOfficeId = organismoDeEdicion,
+                OrganismoPrimarioActual = primarioActual,
                 MandateSignerId = mandateSignerId,
                 FullName = request.FullName ?? string.Empty,
                 DocumentNumber = request.DocumentNumber ?? string.Empty,

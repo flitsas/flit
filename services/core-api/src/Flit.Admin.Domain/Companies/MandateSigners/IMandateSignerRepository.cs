@@ -83,7 +83,14 @@ public sealed record UpdateMandateSignerData(
     /// perfil del organismo solo cambia datos personales y compañías, AC2). Una lista, aunque esté
     /// vacía, REEMPLAZA el conjunto: los organismos que no vengan se retiran (AC3).
     /// </summary>
-    IReadOnlyList<Guid>? TransitOfficeIds = null);
+    IReadOnlyList<Guid>? TransitOfficeIds = null,
+    /// <summary>
+    /// Organismo que pasa a ser el PRIMARIO (<c>mandate_signers.transit_office_id</c>). Solo hace falta
+    /// cuando la edición retira de la lista al primario actual: sin repuntarlo, la fila quedaría
+    /// apuntando a un organismo donde el mandatario ya no aplica, y la reactivación —que restaura el
+    /// primario— lo resucitaría. <c>null</c> ⇒ se conserva el que ya tiene.
+    /// </summary>
+    Guid? NuevoOrganismoPrimario = null);
 
 /// <summary>Datos de inactivación.</summary>
 public sealed record InactivateMandateSignerData(

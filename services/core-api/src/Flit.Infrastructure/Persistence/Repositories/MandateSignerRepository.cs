@@ -155,6 +155,18 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             .Distinct()
             .ToList();
 
+        // El primario solo se mueve si el nuevo está entre los organismos que quedan. Repuntarlo a uno
+        // que la edición acaba de retirar dejaría la fila apuntando fuera de su propia lista, y la
+        // reactivación —que restaura el primario— resucitaría un organismo que el gestor quitó.
+        if (data.NuevoOrganismoPrimario is { } nuevoPrimario
+            && nuevoPrimario != Guid.Empty
+            && nuevoPrimario != signer.TransitOfficeId
+            && data.TransitOfficeIds is not null
+            && data.TransitOfficeIds.Contains(nuevoPrimario))
+        {
+            signer.TransitOfficeId = nuevoPrimario;
+        }
+
         signer.FullName = data.FullName;
         signer.DocumentType = data.DocumentType;
         signer.DocumentNumber = data.DocumentNumber;
