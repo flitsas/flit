@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { Eye } from 'lucide-react';
 import {
+  resumirVins,
   useProcedureDocuments,
   type OcrUiResult,
 } from '@/hooks/useProcedureDocuments';
@@ -226,9 +227,14 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
   const recorte = recorteLabel(data);
   const rechazoPorVin = ocr.status === 'rejected' && !!ocr.motivo && /VIN/i.test(ocr.motivo);
 
+  // Los campos VIN se resumen: una declaración de importación ampara el lote entero del contenedor y
+  // llega con decenas de VIN, que sin recortar ocupan media pantalla.
   const fields = data
     ? (OCR_RESUMEN_FIELDS[tipo] ?? [])
-        .map((field) => ({ field, value: field.value(data) }))
+        .map((field) => {
+          const value = field.value(data);
+          return { field, value: field.vin ? resumirVins(value) : value };
+        })
         .filter((x) => x.value !== '')
     : [];
 

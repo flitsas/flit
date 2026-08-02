@@ -61,6 +61,46 @@ export function normalizeVin(value: string | null | undefined): string {
 }
 
 /**
+ * Un documento puede amparar VARIOS vehículos: una declaración de importación cubre el lote entero
+ * que entró en el contenedor, y el OCR devuelve los VIN separados por comas en un solo campo. Por eso
+ * el cruce es por pertenencia y no por igualdad — comparar la cadena completa rechazaría una
+ * declaración legítima sólo por traer a los otros 49 vehículos del lote.
+ *
+ * No se parte por espacios a propósito: `normalizeVin` ya los ignora dentro de un VIN ("VIN 123").
+ */
+const SEPARADOR_VINS = /[,;/\n]+/;
+
+export function vinsDelDocumento(value: string): string[] {
+  return value
+    .split(SEPARADOR_VINS)
+    .map((v) => normalizeVin(v))
+    .filter(Boolean);
+}
+
+/** Cuántos VIN se muestran antes de resumir el resto. Un lote de 50 hace ilegible el mensaje. */
+const MAX_VINS_VISIBLES = 2;
+
+/** Deja el listado de VIN en algo legible: los primeros y un contador del resto. */
+export function resumirVins(value: string): string {
+  const vins = value.split(SEPARADOR_VINS).map((v) => v.trim()).filter(Boolean);
+  if (vins.length <= MAX_VINS_VISIBLES) return value;
+  const resto = vins.length - MAX_VINS_VISIBLES;
+  return `${vins.slice(0, MAX_VINS_VISIBLES).join(', ')} y ${resto} más`;
+}
+
+/** Motivo del rechazo por tipo, usando lo que el propio OCR haya explicado. */
+function motivoDeTipo(data: Record<string, unknown>): string {
+  const base = 'El documento no pasó la validación de tipo';
+  const nota = pickString(data.observaciones).trim();
+  if (nota) return `${base}: ${nota.length > 200 ? `${nota.slice(0, 200)}…` : nota}`;
+  const identificado = pickString(data.tipo_documento).trim();
+  if (identificado && identificado !== 'otro') {
+    return `${base}: el análisis lo identificó como «${identificado.replace(/_/g, ' ')}».`;
+  }
+  return `${base}: no se reconoció como el documento esperado.`;
+}
+
+/**
  * Aplica las validaciones del frontend sobre el JSON del OCR: validez de tipo
  * (`es_factura_valida` para factura, `es_valido` para el resto) y cruce del VIN del documento
  * (`vehiculo_vin` o `vehiculo_chasis`) con el VIN del trámite. Devuelve si el documento queda rechazado.
@@ -74,15 +114,15 @@ export function evaluateOcr(
   }
   const validez = data.es_factura_valida ?? data.es_valido;
   if (validez === false) {
-    return { rechazado: true, motivo: 'El documento no pasó la validación de tipo.' };
+    return { rechazado: true, motivo: motivoDeTipo(data) };
   }
   const docVin = pickString(data.vehiculo_vin) || pickString(data.vehiculo_chasis);
   const tramite = normalizeVin(instanceVin);
-  const documento = normalizeVin(docVin);
-  if (tramite && documento && tramite !== documento) {
+  const documento = vinsDelDocumento(docVin);
+  if (tramite && documento.length > 0 && !documento.includes(tramite)) {
     return {
       rechazado: true,
-      motivo: `El VIN del documento (${docVin}) no coincide con el del trámite.`,
+      motivo: `El VIN del documento (${resumirVins(docVin)}) no coincide con el del trámite.`,
     };
   }
   return { rechazado: false };
