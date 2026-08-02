@@ -14,9 +14,15 @@ namespace Flit.Infrastructure.Documents;
 /// <c>mandated/*.hbs</c> de FLIT 1.0 a QuestPDF (tipo <c>mandato</c>), fusionable al Expediente
 /// Consolidado (mismo patrón que <see cref="SolicitudVirtualPdfGenerator"/>). La variante la decide
 /// <see cref="MandatoTemplateResolver"/> por el <c>template_code</c> del OT: <b>genérica</b> (mandatario
-/// persona, ambos firman), <b>Sabaneta</b> (mandatario institucional UT-SETSA, solo firma el mandante) y
+/// persona, ambos firman electrónicamente), <b>Sabaneta</b> (mandatario institucional UT-SETSA) y
 /// <b>Bello</b> (mandatario persona, representante legal de la UT-MAB). Dentro de cada variante, el texto
 /// del MANDANTE cambia según sea persona natural (a nombre propio) o jurídica (su representante legal).
+/// <para><b>HU #11205 — quién firma electrónicamente.</b> Cuando el OT tiene una EMPRESA RELACIONADA como
+/// mandatario (familia <c>organismo_transito</c>), su firma es MANUAL: no se plasma su validación de
+/// identidad, solo queda la línea sobre la razón social y el NIT. Aplica a Sabaneta <b>y a Bello</b>: los
+/// <c>.md</c> de ambos traen un bloque de firma electrónica del mandatario, pero se consideran
+/// desactualizados en ese punto (D4) y se usan como fuente del texto legal, no de la política de firma.
+/// El MANDANTE sigue firmando con su validación de identidad en todos los casos.</para>
 /// <para><b>Texto legal transcrito literal</b> de las plantillas legacy y marcado para revisión del PO
 /// (ADR-0036 §10.2): esta implementación NO reinterpreta las cláusulas.</para>
 /// Las firmas solo se pintan en estado distinto de borrador (<see cref="FurDocumentData.FirmasVisibles"/>).
@@ -249,18 +255,13 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     {
         var tramite = data.Tramite;
 
-        // Sabaneta: mandatario institucional ⇒ solo firma el MANDANTE (+ bloque de identificación).
-        if (variante == MandatoVariante.Sabaneta)
-        {
-            col.Item().PaddingTop(16).Column(sig =>
-            {
-                sig.Item().Text(t => t.Span("MANDANTE").Bold());
-                RenderMandanteFirma(sig, tramite, parte, esJuridica);
-            });
-            return;
-        }
+        // HU #11205 — con EMPRESA RELACIONADA como mandatario, la firma del mandatario es MANUAL: no se
+        // plasma su validación de identidad (AC1), pero SÍ queda la línea sobre su identificación para
+        // que pueda firmarla a mano (AC2). Antes, Sabaneta no pintaba bloque de mandatario en absoluto
+        // —no había dónde firmar— y Bello le estampaba la firma electrónica. El MANDANTE no cambia en
+        // ningún caso (AC4).
+        var mandatarioEsEmpresa = MandatarioEsEmpresa(data);
 
-        // Genérica / Bello: firman MANDANTE y MANDATARIO.
         // HU #11034 — separación reducida para que las firmas quepan en la misma hoja que el cuerpo.
         col.Item().PaddingTop(16).Row(row =>
         {
@@ -278,14 +279,27 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                 // HU #11170 — la firma del baúl del mandatario también lleva su vigencia y su hash.
                 FlitFirmaBlock.Render(
                     sig,
-                    data.Mandatario?.FirmaImagen,
-                    data.Mandatario?.SelloIdentidad,
-                    MandatarioIdentificacion(data.Mandatario),
+                    mandatarioEsEmpresa ? null : data.Mandatario?.FirmaImagen,
+                    mandatarioEsEmpresa ? null : data.Mandatario?.SelloIdentidad,
+                    MandatarioIdentificacion(data.Mandatario, data),
                     FlitFirmaLinea.Underscores,
-                    selloBaul: SelloBaulDe(data.Mandatario));
+                    selloBaul: mandatarioEsEmpresa ? null : SelloBaulDe(data.Mandatario));
             });
         });
     }
+
+    /// <summary>
+    /// HU #11205 (D4) — ¿el mandatario del OT es una empresa relacionada? La señal explícita es la
+    /// familia (HU #11204); el nombre institucional se conserva como señal heredada para los OT que
+    /// todavía no tengan familia configurada.
+    ///
+    /// <para>Manda la REGLA, no las plantillas: los <c>.md</c> de Bello y Sabaneta incluyen un bloque de
+    /// firma electrónica para el mandatario, pero se consideran desactualizados en ese punto y se usan
+    /// como fuente del texto legal, no de la política de firma.</para>
+    /// </summary>
+    private static bool MandatarioEsEmpresa(MandatoData data) =>
+        data.Familia == MandatoFamilia.OrganismoTransito
+        || !string.IsNullOrWhiteSpace(data.InstitutionalMandataryName);
 
     /// <summary>
     /// Bloque de firma del MANDANTE (HU #11046): estampa (baúl o sello de identidad) sobre la línea y,
@@ -439,8 +453,20 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     /// <para>El contacto del mandatario NO se imprime: <c>MandatarioFirmante</c> no lo transporta, y el
     /// dato de contacto que el organismo necesita es el del mandante (quien otorga el poder).</para>
     /// </summary>
-    internal static IEnumerable<string> MandatarioIdentificacion(MandatarioFirmante? mandatario)
+    internal static IEnumerable<string> MandatarioIdentificacion(
+        MandatarioFirmante? mandatario, MandatoData? data = null)
     {
+        // HU #11205 (AC2) — con empresa relacionada, quien firma a mano es la empresa: bajo la línea va
+        // su razón social y su NIT. Poner ahí la cédula de la persona firmante haría que el documento
+        // dijera que firmó alguien distinto de quien lo hace.
+        if (data is not null && MandatarioEsEmpresa(data)
+            && !string.IsNullOrWhiteSpace(data.InstitutionalMandataryName))
+        {
+            yield return $"RAZÓN SOCIAL: {data.InstitutionalMandataryName.Trim()}";
+            yield return $"NIT: {Val(data.InstitutionalMandataryNit, "___")}";
+            yield break;
+        }
+
         var (nombre, documento) = MandatarioTexto(mandatario);
         yield return $"NOMBRE: {nombre}";
         yield return $"CÉDULA DE CIUDADANÍA: {documento}";
