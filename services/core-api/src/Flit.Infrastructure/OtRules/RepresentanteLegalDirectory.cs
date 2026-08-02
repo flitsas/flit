@@ -135,6 +135,65 @@ internal sealed class RepresentanteLegalDirectory : IRepresentanteLegalDirectory
         return false;
     }
 
+    public async Task<string?> BuscarNombreRepresentanteAsync(
+        Guid tenantId,
+        string nitCompania,
+        string? documentType,
+        string? documentNumber,
+        CancellationToken cancellationToken = default)
+    {
+        if (tenantId == Guid.Empty || string.IsNullOrWhiteSpace(nitCompania))
+        {
+            return null;
+        }
+
+        var nit = nitCompania.Trim();
+        var documento = string.IsNullOrWhiteSpace(documentNumber) ? null : documentNumber.Trim();
+        var tipo = string.IsNullOrWhiteSpace(documentType) ? null : documentType.Trim();
+
+        var candidatos = await TenantRlsScope.ExecuteAsync(
+            _context,
+            tenantId,
+            () => (
+                    from vinculo in _context.LegalRepresentativeCompanies.AsNoTracking()
+                    join compania in _context.RepresentedCompanies.AsNoTracking()
+                        on vinculo.RepresentedCompanyId equals compania.Id
+                    join representante in _context.CompanyLegalRepresentatives.AsNoTracking()
+                        on vinculo.RepresentativeId equals representante.Id
+                    where vinculo.TenantId == tenantId
+                        && compania.TenantId == tenantId
+                        && compania.DocumentNumber == nit
+                        && representante.IsActive
+                        && (documento == null
+                            || (representante.DocumentNumber == documento
+                                && (tipo == null || representante.DocumentType == tipo)))
+                    select new Nombre(
+                        representante.Id, representante.Name, representante.FirstLastName, representante.SecondLastName))
+                .Distinct()
+                .Take(2)
+                .ToListAsync(cancellationToken),
+            cancellationToken)
+            .ConfigureAwait(false);
+
+        // Con el documento del trámite se busca a ESA persona; sin él, solo se responde si la compañía
+        // tiene exactamente un representante. Elegir entre varios imprimiría el nombre de alguien que no
+        // es en un documento legal, que es peor que dejar el hueco.
+        if (candidatos.Count != 1)
+        {
+            return null;
+        }
+
+        var elegido = candidatos[0];
+        var partes = new[] { elegido.Name, elegido.FirstLastName, elegido.SecondLastName }
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p!.Trim());
+        var completo = string.Join(' ', partes);
+        return string.IsNullOrWhiteSpace(completo) ? null : completo;
+    }
+
     /// <summary>Representante de la compañía con escritura vigente: solo su documento, que es la llave de la firma y de la identidad.</summary>
     private sealed record Acreditado(string DocumentType, string DocumentNumber);
+
+    /// <summary>Nombre del representante troceado como lo guarda el directorio.</summary>
+    private sealed record Nombre(Guid Id, string Name, string FirstLastName, string? SecondLastName);
 }

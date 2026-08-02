@@ -54,9 +54,16 @@ public sealed class GenerarFurHandler(
     GetSuggestedCommercialValueHandler? avaluoHandler = null,
     IFurTemplateResolver? templateResolver = null,
     IProcedureDeedResolver? deedResolver = null,
-    IRuesActorDataResolver? ruesResolver = null)
+    IRuesActorDataResolver? ruesResolver = null,
+    IRepresentanteLegalDirectory? representanteDirectory = null)
     : IExpedienteHotDocumentsRegenerator
 {
+    // HU #11198 (AC3) — respaldo del directorio para el nombre del representante cuando el trámite no lo
+    // trajo. Default inerte (nunca responde) en los tests que no lo ejercitan: sin él, el hueco queda
+    // como estaba, que es el comportamiento previo.
+    private readonly IRepresentanteLegalDirectory _representanteDirectory =
+        representanteDirectory ?? NullRepresentanteLegalDirectory.Instance;
+
     // HU #10990 (Feature #10972) — resuelve el RUES por NIT cuando field_values no lo tiene para ese
     // actor. Default seguro (NUNCA resuelve) en tests que no lo ejercitan: sin él, el certificado se
     // emite solo si el wizard dejó las rues_* del actor, que es el comportamiento previo.
@@ -201,7 +208,12 @@ public sealed class GenerarFurHandler(
             ? await _templateResolver.ResolveAsync(Get(fv, "vehicle_class"), ct)
             : FurTemplateFormat.Automotor;
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, acreedorPrendaDocumento, firmaImagenes, firmaBaulMetadatos, templateFormat);
+        // HU #11198 (AC3) — el nombre del representante lo manda el trámite; solo si no lo trajo se pide
+        // al directorio de la compañía. Se resuelve ANTES de ensamblar para que AssembleData siga siendo
+        // una función pura y síncrona.
+        var nombresRlDirectorio = await ResolverNombresDelDirectorioAsync(instance, esTraspaso, ct);
+
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, acreedorPrendaDocumento, firmaImagenes, firmaBaulMetadatos, templateFormat, nombresRlDirectorio);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -491,12 +503,13 @@ public sealed class GenerarFurHandler(
         bool tienePrenda, string? acreedorPrenda, string? acreedorPrendaDocumento,
         IReadOnlyDictionary<string, byte[]>? firmaImagenes,
         IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos,
-        FurTemplateFormat templateFormat)
+        FurTemplateFormat templateFormat,
+        IReadOnlyDictionary<string, string>? nombresRlDirectorio = null)
     {
         var partes = new List<DocumentParte>(2);
-        AddParte(partes, instance, "comprador");
+        AddParte(partes, instance, "comprador", nombresRlDirectorio);
         if (esTraspaso)
-            AddParte(partes, instance, "vendedor");
+            AddParte(partes, instance, "vendedor", nombresRlDirectorio);
 
         var sellos = instance.Signatures
             .Where(s => s.Estado == SignatureEstados.Firmada)
@@ -1145,7 +1158,51 @@ public sealed class GenerarFurHandler(
         }
     }
 
-    private static void AddParte(List<DocumentParte> partes, ProcedureInstance instance, string rol)
+    /// <summary>
+    /// HU #11198 (AC3) — nombres de respaldo del directorio, por rol, SOLO para las partes jurídicas cuyo
+    /// trámite no registró el nombre del representante. Si el trámite lo trae, no se consulta nada: el
+    /// dato del trámite es el que manda (AC1/AC2) y una consulta de más solo abriría la puerta a que el
+    /// directorio termine ganando por accidente.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, string>?> ResolverNombresDelDirectorioAsync(
+        ProcedureInstance instance, bool esTraspaso, CancellationToken ct)
+    {
+        var roles = esTraspaso ? new[] { "comprador", "vendedor" } : ["comprador"];
+        Dictionary<string, string>? nombres = null;
+
+        foreach (var rol in roles)
+        {
+            var actor = instance.Actors.FirstOrDefault(a =>
+                string.Equals(a.ActorType, rol, StringComparison.OrdinalIgnoreCase));
+            if (actor is null)
+                continue;
+
+            var esJuridica = ActorPersonTypes.IsJuridical(actor.PersonType)
+                || string.Equals(actor.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase);
+            if (!esJuridica)
+                continue;
+
+            var (_, _, rl) = ParseActorMetadata(actor.Metadata);
+            if (!string.IsNullOrWhiteSpace(rl?.NombreCompleto))
+                continue; // El trámite lo trae: no hay nada que respaldar.
+
+            var nombre = await _representanteDirectory.BuscarNombreRepresentanteAsync(
+                instance.TenantId, actor.DocumentNumber, rl?.TipoDocumento, rl?.NumeroDocumento, ct);
+            if (string.IsNullOrWhiteSpace(nombre))
+                continue;
+
+            nombres ??= [];
+            nombres[rol] = nombre;
+        }
+
+        return nombres;
+    }
+
+    private static void AddParte(
+        List<DocumentParte> partes,
+        ProcedureInstance instance,
+        string rol,
+        IReadOnlyDictionary<string, string>? nombresRlDirectorio = null)
     {
         var a = instance.Actors.FirstOrDefault(x =>
             string.Equals(x.ActorType, rol, StringComparison.OrdinalIgnoreCase));
@@ -1164,7 +1221,13 @@ public sealed class GenerarFurHandler(
             ciudad,
             esJuridica,
             // ADR-0036 (HU #10914/#10915) — representante legal del mandante (solo persona jurídica).
-            RepresentanteLegalNombre: Trim(rl?.NombreCompleto),
+            // HU #11198 — el nombre lo manda SIEMPRE el trámite; el directorio es solo respaldo para
+            // cuando el trámite no lo trajo (AC3). Este es el punto ÚNICO donde se arma la parte, así que
+            // el mandato, la compraventa, la solicitud y el FUR quedan consistentes por construcción (AC4).
+            RepresentanteLegalNombre: Trim(rl?.NombreCompleto)
+                ?? (nombresRlDirectorio is not null && nombresRlDirectorio.TryGetValue(rol, out var respaldo)
+                    ? Trim(respaldo)
+                    : null),
             RepresentanteLegalTipoDoc: Trim(rl?.TipoDocumento),
             RepresentanteLegalDocumento: Trim(rl?.NumeroDocumento)));
     }

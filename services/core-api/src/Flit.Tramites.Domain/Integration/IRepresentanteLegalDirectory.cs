@@ -25,6 +25,19 @@ public interface IRepresentanteLegalDirectory
         string nitCompania,
         DateOnly hoy,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #11198 (AC3) — nombre completo del representante ACTIVO de la compañía, como RESPALDO para los
+    /// documentos cuando el trámite no lo trajo. Si <paramref name="documentNumber"/> viene, se busca a
+    /// esa persona; si no viene y la compañía tiene <b>más de un</b> representante, devuelve <c>null</c>:
+    /// adivinar imprimiría el nombre de otra persona en un documento legal.
+    /// </summary>
+    Task<string?> BuscarNombreRepresentanteAsync(
+        Guid tenantId,
+        string nitCompania,
+        string? documentType,
+        string? documentNumber,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -44,4 +57,12 @@ public sealed class NullRepresentanteLegalDirectory : IRepresentanteLegalDirecto
         DateOnly hoy,
         CancellationToken cancellationToken = default) =>
         Task.FromResult(true);
+
+    public Task<string?> BuscarNombreRepresentanteAsync(
+        Guid tenantId,
+        string nitCompania,
+        string? documentType,
+        string? documentNumber,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<string?>(null);
 }
