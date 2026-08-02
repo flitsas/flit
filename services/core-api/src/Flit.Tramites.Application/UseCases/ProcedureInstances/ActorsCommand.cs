@@ -110,13 +110,19 @@ public sealed class PutActorsHandler(
     BiometricsProviderOptions providerOptions,
     IniciarKyverumVerifyHandler kyverumHandler,
     IPersonDataConsentRepository consentRepo,
-    IRepresentanteLegalDirectory? representanteDirectory = null)
+    IRepresentanteLegalDirectory? representanteDirectory = null,
+    ISignatureVaultPolicy? vaultPolicy = null)
 {
     // HU #11195 — directorio de representantes de Admin. Default inerte (responde SIEMPRE "sí tiene
     // representante utilizable") para que los tests que no ejercitan la compuerta conserven el
     // comportamiento previo: el default seguro es no enviar de más.
     private readonly IRepresentanteLegalDirectory _representanteDirectory =
         representanteDirectory ?? NullRepresentanteLegalDirectory.Instance;
+
+    // Baúl de firmas: hace falta para no pedirle una validación de identidad a quien ya tiene con qué
+    // firmar. Default inerte (nunca resuelve firma) ⇒ los tests que no lo inyectan conservan su
+    // comportamiento.
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
 
     // Colombia no tiene horario de verano: UTC-5 fijo (coherente con BiometricRules / el baúl).
     private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
@@ -349,6 +355,10 @@ public sealed class PutActorsHandler(
                 || string.IsNullOrWhiteSpace(subject.Email))
                 continue; // RL sin documento o sin correo: no hay a quién enviarle la validación.
 
+            // El sujeto de ESTE trámite ya puede firmar: no hay nada que validar.
+            if (await LaFirmaDelBaulYaCubreAsync(tenantId, actor, subject, ct))
+                continue;
+
             var utilizable = await _representanteDirectory
                 .TieneRepresentanteUtilizableAsync(tenantId, actor.DocumentNumber, hoy, ct);
             if (utilizable)
@@ -452,6 +462,12 @@ public sealed class PutActorsHandler(
             if (prevEmail is null || newEmail is null || prevEmail == newEmail)
                 continue; // AC2: sin cambio real de correo -> no-op.
 
+            // Con la firma del baúl cubriendo a la parte, corregir el correo no debe convocar una
+            // validación de identidad: se firma con el baúl. La previa en curso se deja como está —
+            // expirarla aquí sería decidir por el gestor sobre una validación que él inició.
+            if (await LaFirmaDelBaulYaCubreAsync(tenantId, newActor, newSubject, ct))
+                continue;
+
             var parte = RolToCode(rol);
 
             // Solo hay algo que reenviar si la parte tenía una validación EN CURSO para el documento del
@@ -482,6 +498,36 @@ public sealed class PutActorsHandler(
                 newSubject.Email ?? string.Empty);
             await kyverumHandler.HandleAsync(instance.Id, tenantId, resendInput, ct);
         }
+    }
+
+    /// <summary>
+    /// ¿La firma del baúl ya cubre a esta parte, de modo que pedirle una validación de identidad sería
+    /// pedirle algo que no necesita?
+    ///
+    /// <para><b>Por qué hace falta.</b> El Bug #11141 fijó que el mecanismo de firma elegido por el
+    /// gestor es la única fuente de verdad, y lo aplicó a la vista y al documento. Las rutas que
+    /// disparan el correo de validación se quedaron sin enterarse: con «Firma del baúl» seleccionada y
+    /// firma vigente, al representante le seguía llegando un correo para validar identidad que nadie
+    /// iba a usar. Peor aún, el correo se disparaba también cuando el representante SÍ tenía firma
+    /// vigente pero su compañía no tenía escritura vigente, porque la compuerta de la HU #11195
+    /// pregunta por la COMPAÑÍA y no por la persona que va a firmar este trámite.</para>
+    ///
+    /// <para>Se comprueban las dos cosas: que la firma del baúl proceda para esta parte
+    /// (<see cref="FirmaBaulCobertura.Aplica"/>, que es el predicado único del Bug #11141 e incluye el
+    /// mecanismo elegido) y que exista de verdad. Sin firma real no basta con haberla elegido: ahí la
+    /// validación de identidad sigue siendo la única salida.</para>
+    /// </summary>
+    private async Task<bool> LaFirmaDelBaulYaCubreAsync(
+        Guid tenantId, ProcedureInstanceActor actor, IdentitySubject subject, CancellationToken ct)
+    {
+        if (!FirmaBaulCobertura.Aplica(actor)
+            || string.IsNullOrWhiteSpace(subject.TipoDocumento)
+            || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
+            return false;
+
+        return await _vaultPolicy
+            .ResolveAsync(tenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), ct)
+            .ConfigureAwait(false) is not null;
     }
 
     /// <summary>Correo normalizado para comparar (trim + minúsculas); null si viene vacío.</summary>

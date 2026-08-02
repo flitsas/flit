@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -433,6 +434,48 @@ public sealed class EnsureIdentityHandlerTests
         };
 
     /// <summary>Matrícula cuyo comprador es una persona JURÍDICA (NIT) — el único caso que consume el baúl.</summary>
+    [Fact]
+    public async Task Handle_EligioSelloDeIdentidad_NoConsumeElBaul_YLanzaLaBiometrica()
+    {
+        // Bug espejo del #11141 (hallado en validación manual). Esta ruta tenía una TERCERA copia de la
+        // regla "¿aplica el baúl?" que solo miraba si el actor era jurídico, sin consultar el mecanismo
+        // elegido. Con «Sello de validación de identidad» seleccionado y firma del baúl vigente
+        // respondía firma_baul, así que la biométrica que el gestor acababa de pedir no se lanzaba nunca
+        // y la firma acababa saliendo en blanco.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConCompradorNit();
+        instance.Actors.First().Metadata = MetadataConMecanismo("identidad");
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+        _repo.FindVigenteApprovedByDocumentAsync(
+                TenantId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), ct)
+            .Returns((ProcedureInstanceBiometricValidation?)null);
+        var vault = new FakeVaultPolicy(Match());
+        var sut = new EnsureIdentityHandler(_repo, vault);
+
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().Be(EnsureIdentityOutcomes.RequiereValidacion);
+        // Ni siquiera se pregunta por la firma: el mecanismo elegido ya decide que no se va a consumir.
+        vault.Calls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_EligioElBaulExplicitamente_ConservaLaCoberturaPorBaul()
+    {
+        // La otra mitad de la misma regla: elegir el baúl teniéndolo vigente sigue cubriendo la identidad.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = MatriculaConCompradorNit();
+        instance.Actors.First().Metadata = MetadataConMecanismo("baul");
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, TenantId, ct).Returns(instance);
+        var sut = new EnsureIdentityHandler(_repo, new FakeVaultPolicy(Match()));
+
+        var (result, error) = await sut.HandleAsync(instance.Id, TenantId, "comprador", ct);
+
+        error.Should().BeNull();
+        result!.Outcome.Should().Be(EnsureIdentityOutcomes.FirmaBaul);
+    }
+
     private static ProcedureInstance MatriculaConCompradorNit()
     {
         var instance = MatriculaConComprador();
@@ -451,6 +494,23 @@ public sealed class EnsureIdentityHandlerTests
         v.DocumentNumber = Nit;
         return v;
     }
+
+    /// <summary>
+    /// Metadata del actor con el mecanismo de firma elegido por el gestor (HU #11061). Va en el mismo
+    /// jsonb que el representante legal, que es de donde lo lee <c>FirmaBaulCobertura</c>.
+    /// </summary>
+    private static string MetadataConMecanismo(string mecanismo) =>
+        JsonSerializer.Serialize(new
+        {
+            representanteLegal = new
+            {
+                tipoDocumento = "CC",
+                numeroDocumento = "1090123456",
+                nombreCompleto = "Ana Representante",
+                email = "rep@empresa.com",
+                mecanismoFirma = mecanismo,
+            },
+        });
 
     private static SignatureVaultMatch Match() => new(
         Guid.NewGuid(), "Renting SAS", "sig-hash", "vault/firma.png", "art-sha",

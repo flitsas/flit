@@ -5,6 +5,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using FluentAssertions;
 using NSubstitute;
@@ -27,6 +28,7 @@ public sealed class ValidacionIdentidadNitSinRepresentanteTests
     private readonly IKyverumVerifyClient _kyverumClient = Substitute.For<IKyverumVerifyClient>();
     private readonly IPersonDataConsentRepository _consentRepo = Substitute.For<IPersonDataConsentRepository>();
     private readonly IRepresentanteLegalDirectory _directorio = Substitute.For<IRepresentanteLegalDirectory>();
+    private readonly ISignatureVaultPolicy _baul = Substitute.For<ISignatureVaultPolicy>();
     private readonly PutActorsHandler _put;
 
     private static readonly Guid BuyerEntityId = Guid.NewGuid();
@@ -42,7 +44,7 @@ public sealed class ValidacionIdentidadNitSinRepresentanteTests
             Substitute.For<IIdentityValidationAuditLog>());
 
         _put = new PutActorsHandler(
-            _repo, _catalogRepo, _providerOptions, kyverumHandler, _consentRepo, _directorio);
+            _repo, _catalogRepo, _providerOptions, kyverumHandler, _consentRepo, _directorio, _baul);
 
         _catalogRepo.GetProcedureEntityByCodeAsync("BUYER", Arg.Any<CancellationToken>())
             .Returns(new ProcedureEntity { Id = BuyerEntityId, Code = "BUYER", Name = "Comprador" });
@@ -202,6 +204,78 @@ public sealed class ValidacionIdentidadNitSinRepresentanteTests
             Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
     }
 
+
+    // ── El correo no debe salir cuando la persona ya puede firmar (hallado en validación manual) ──
+
+    [Fact]
+    public async Task ConFirmaDelBaulVigente_NoSeEnviaAunqueLaCompaniaNoAporteRepresentante()
+    {
+        // El caso reportado: el representante del trámite tiene su firma del baúl vigente, pero la
+        // compuerta preguntaba por la COMPAÑÍA —que exige escritura vigente— y al responder "no" mandaba
+        // un correo de validación a alguien que ya tenía con qué firmar.
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenant, instance) = NuevoTramite();
+        SinRepresentanteUtilizable();
+        ConFirmaDelBaul();
+
+        var (_, error) = await _put.HandleAsync(
+            id, tenant, new PutActorsRequest([CompradorJuridico(mecanismo: MecanismoFirma.Baul)]), ct);
+
+        error.Should().BeNull();
+        await _kyverumClient.DidNotReceive().StartVerificationAsync(
+            Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+        instance.BiometricValidations.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SinEleccionExplicita_LaFirmaDelBaulVigenteTambienEvitaElCorreo()
+    {
+        // Sin elección manda la precedencia del baúl (HU #11031), así que la firma se plasmará desde el
+        // baúl igual: pedir identidad seguiría siendo pedir algo que nadie va a usar.
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenant, _) = NuevoTramite();
+        SinRepresentanteUtilizable();
+        ConFirmaDelBaul();
+
+        await _put.HandleAsync(id, tenant, new PutActorsRequest([CompradorJuridico()]), ct);
+
+        await _kyverumClient.DidNotReceive().StartVerificationAsync(
+            Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EligiendoIdentidad_SeEnviaAunqueTengaFirmaDelBaulVigente()
+    {
+        // Simétrico y deliberado: si el gestor eligió el sello de identidad, la firma del baúl no se va a
+        // consumir, así que la validación SÍ hace falta. Es lo que separa "tiene firma" de "va a usarla".
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenant, _) = NuevoTramite();
+        SinRepresentanteUtilizable();
+        ConFirmaDelBaul();
+
+        await _put.HandleAsync(
+            id, tenant, new PutActorsRequest([CompradorJuridico(mecanismo: MecanismoFirma.Identidad)]), ct);
+
+        await _kyverumClient.Received(1).StartVerificationAsync(
+            Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EligiendoElBaulSinFirmaVigente_SeEnviaIgual()
+    {
+        // Haber elegido el baúl no basta: sin firma real que plasmar, la validación de identidad es la
+        // única salida. Lo contrario dejaría el trámite sin ninguna forma de firmarse.
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenant, _) = NuevoTramite();
+        SinRepresentanteUtilizable();
+
+        await _put.HandleAsync(
+            id, tenant, new PutActorsRequest([CompradorJuridico(mecanismo: MecanismoFirma.Baul)]), ct);
+
+        await _kyverumClient.Received(1).StartVerificationAsync(
+            Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private (Guid Id, Guid Tenant, ProcedureInstance Instance) NuevoTramite()
@@ -227,12 +301,20 @@ public sealed class ValidacionIdentidadNitSinRepresentanteTests
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(false);
 
+    /// <summary>El representante del trámite tiene firma del baúl activa y vigente.</summary>
+    private void ConFirmaDelBaul() =>
+        _baul.ResolveAsync(Arg.Any<Guid>(), "CC", "1090123456", Arg.Any<CancellationToken>())
+            .Returns(new SignatureVaultMatch(
+                Guid.NewGuid(), "Ana Representante", "sha", "path", "sha",
+                new DateOnly(2026, 1, 1), new DateOnly(2027, 1, 1), "1090123456"));
+
     private void ConRepresentanteUtilizable() =>
         _directorio.TieneRepresentanteUtilizableAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
-    private static ActorInput CompradorJuridico(ActorRepresentanteLegal? rl = null) =>
+    private static ActorInput CompradorJuridico(
+        ActorRepresentanteLegal? rl = null, string? mecanismo = null) =>
         new(
             "comprador",
             "NIT",
@@ -242,7 +324,7 @@ public sealed class ValidacionIdentidadNitSinRepresentanteTests
             null,
             PersonType: "juridical",
             RepresentanteLegal: rl ?? new ActorRepresentanteLegal(
-                "CC", "1090123456", "Ana Representante", "rep@empresa.com", null));
+                "CC", "1090123456", "Ana Representante", "rep@empresa.com", null, mecanismo));
 
     private static ActorInput CompradorNatural() =>
         new("comprador", "CC", "123456", "Juan Comprador", "juan@x.com", null, PersonType: "natural");
