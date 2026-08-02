@@ -96,7 +96,19 @@ export function TablaLote({
                   <td className="p-3">{ETIQUETA_TRAMITE[fila.tramite]}</td>
                   <td className="p-3 font-medium tabular-nums">{fila.v1Id}</td>
                   <td className="p-3">
-                    <Estado estado={fila.estado} />
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <Estado estado={fila.estado} />
+                      {/*
+                        El motivo va AQUÍ y no dentro del reporte. Un id que no existe en V1
+                        devuelve 200 con la instancia en cuarentena, así que la fila decía «Falló»
+                        y nada más: para leer «No existe en la copia de V1» había que desplegar el
+                        reporte y bajar hasta la instancia. Con tres fallos en una ola de veinte,
+                        eso son tres despliegues para enterarse de algo que cabe en una línea.
+                      */}
+                      {motivoDelFallo(fila) && (
+                        <span className="text-xs opacity-70">{motivoDelFallo(fila)}</span>
+                      )}
+                    </div>
                   </td>
                   <td className="p-3">
                     <div className="flex flex-wrap items-center gap-2">
@@ -128,11 +140,6 @@ export function TablaLote({
                         </button>
                       )}
 
-                      {fila.error && (
-                        <span className="text-xs text-red-500" title={fila.error}>
-                          {fila.error}
-                        </span>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -151,6 +158,20 @@ export function TablaLote({
       </table>
     </div>
   );
+}
+
+/**
+ * Por qué falló una fila, en una línea.
+ *
+ * Dos orígenes distintos que para quien mira son lo mismo: `error` es lo que reventó del lado del
+ * navegador (la petición no llegó, o el host devolvió un ProblemDetails), y `motivo` es lo que el
+ * motor dice de la instancia que se quedó en cuarentena, que llega en un 200 perfectamente normal.
+ */
+function motivoDelFallo(fila: FilaLote): string | null {
+  if (fila.error) {
+    return fila.error;
+  }
+  return fila.respuesta?.instancias.find((i) => i.conProblemas)?.motivo ?? null;
 }
 
 const TONO: Record<EstadoFila, string> = {

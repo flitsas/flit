@@ -242,6 +242,7 @@ export function CargueMasivo() {
   // Ni una fila por hacer. Se mira sobre TODAS las filas y no sobre las seleccionadas: con
   // `pendientes` bastaría con desmarcarlas para que la pantalla dijera que terminó.
   const loteTerminado = lote !== null && lote.filas.length > 0 && lote.filas.every(estaTerminada);
+  const fallidas = lote?.filas.filter((f) => f.estado === "fallido").length ?? 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -358,6 +359,20 @@ export function CargueMasivo() {
                   es suponer que hay que descartar primero, que es el camino largo y hace pensar
                   que se pierde algo. Cargar el archivo nuevo basta.
                 */}
+                {/*
+                  El mismo problema que el lote terminado, pero al revés: la ola acabó con fallos y
+                  la pantalla no dice qué se espera de quien mira. Las que fallaron siguen marcadas
+                  —no son «terminadas»— así que el botón ya ofrece justo esas; lo que faltaba era
+                  decirlo, y decir que reintentar no duplica nada.
+                */}
+                {fallidas > 0 && !corriendo && (
+                  <p className="mt-1 text-xs opacity-70">
+                    {fallidas === 1 ? "1 trámite falló" : `${fallidas} trámites fallaron`} y{" "}
+                    {fallidas === 1 ? "sigue marcado" : "siguen marcados"} para reintentar: el motivo
+                    está al lado de cada uno. Reintentar es seguro — lo que ya migró no se duplica.
+                  </p>
+                )}
+
                 {loteTerminado && !corriendo && (
                   <p className="mt-1 text-xs opacity-70">
                     Lote terminado. Para empezar otro,{" "}

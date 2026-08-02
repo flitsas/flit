@@ -123,6 +123,41 @@ describe("CargueMasivo", () => {
     expect(await screen.findAllByText("Migrado")).toHaveLength(2);
   });
 
+  /**
+   * Un id que no existe en V1 NO revienta la petición: el host responde 200 con la instancia en
+   * cuarentena. Sin esto, la fila decía «Falló» a secas y el motivo solo se leía desplegando el
+   * reporte y bajando hasta la instancia — tres despliegues para tres fallos en una ola de veinte.
+   */
+  it("la fila que falla dice por qué, sin desplegar el reporte", async () => {
+    const usuario = userEvent.setup();
+    migrarTramite.mockImplementation(async (p: { v1Id: number }) => {
+      const base = respuestaOk(p.v1Id);
+      return {
+        ...base,
+        conProblemas: true,
+        instancias: [
+          {
+            instancia: "datos",
+            estado: "Quarantined",
+            v2Id: null,
+            motivo: "No existe en la copia de V1.",
+            conProblemas: true,
+            conteos: {},
+            avisos: [],
+          },
+        ],
+      };
+    });
+
+    render(<CargueMasivo />);
+    await cargarCsv(usuario, "tipo,id\ntraspaso,999999999");
+    await usuario.click(await screen.findByRole("button", { name: /Simular 1 trámite/i }));
+
+    expect(await screen.findByText("No existe en la copia de V1.")).toBeInTheDocument();
+    expect(screen.getByText(/1 trámite falló/i)).toBeInTheDocument();
+    expect(screen.getByText(/Reintentar es seguro/i)).toBeInTheDocument();
+  });
+
   /** Que el tercero falle no es motivo para no intentar los demás. */
   it("un fallo no detiene la cola", async () => {
     const usuario = userEvent.setup();
