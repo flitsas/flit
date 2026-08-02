@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Play, RotateCcw, Square } from "lucide-react";
+import { Loader2, Play, Square } from "lucide-react";
 import { descargarPlantilla, leerArchivo, type FilaInvalida } from "@/lib/migracion/archivo";
 import { consultarEstado, migrarTramite } from "@/lib/migracion/client";
 import {
@@ -427,9 +427,8 @@ export function CargueMasivo() {
                         ),
                       );
                     }}
-                    className="flex items-center gap-1.5 rounded-lg border border-[#DFE5ED] px-3 py-2 text-xs font-semibold dark:border-white/10"
+                    className="rounded-lg border border-[#DFE5ED] px-3 py-2 text-xs font-semibold dark:border-white/10"
                   >
-                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
                     Seleccionar solo los que fallaron
                   </button>
                 )}
