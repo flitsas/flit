@@ -56,6 +56,7 @@ export function SignatureVaultSelector({
   // HU #11193 — captura de firma dentro del mismo formulario.
   const [capturing, setCapturing] = useState(false);
   const [artefacto, setArtefacto] = useState<string | null>(null);
+  const [codigoHash, setCodigoHash] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [saving, setSaving] = useState(false);
@@ -104,6 +105,7 @@ export function SignatureVaultSelector({
   const cerrarCaptura = () => {
     setCapturing(false);
     setArtefacto(null);
+    setCodigoHash("");
     setDesde("");
     setHasta("");
     setSaveError(null);
@@ -114,11 +116,16 @@ export function SignatureVaultSelector({
     setSaving(true);
     setSaveError(null);
     try {
+      // El código hash es el que se estampa como "Hash:" en el sello de la firma del baúl de TODOS
+      // los documentos (FlitFirmaBaulSello). Sin él la línea se omite, así que una firma capturada
+      // desde aquí salía sin trazabilidad verificable mientras la del baúl sí la llevaba.
+      const codigo = codigoHash.trim();
       const creada = await createSignatureVaultEntry(tenantId, {
         documentType,
         documentNumber,
         nitEmpresa: nitEmpresa ?? null,
         fullName,
+        codigoHash: codigo === "" ? undefined : codigo,
         vigenciaDesde: desde,
         vigenciaHasta: hasta,
         artefactoFirmaBase64: artefacto,
@@ -146,6 +153,17 @@ export function SignatureVaultSelector({
         {documentNumber} del representante.
       </p>
       <SignatureCapture value={artefacto} onChange={setArtefacto} disabled={saving} />
+      <label className="block text-[11px] font-semibold">
+        Código hash <span className="font-normal opacity-60">(opcional)</span>
+        <input
+          className={`mt-1 ${OT_INPUT_CLS}`}
+          value={codigoHash}
+          onChange={(e) => setCodigoHash(e.target.value)}
+          disabled={saving}
+          placeholder="Código alfanumérico"
+          aria-label="Código hash"
+        />
+      </label>
       <div className="flex gap-2">
         <label className="flex-1 text-[11px] font-semibold">
           Vigencia desde

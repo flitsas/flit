@@ -73,6 +73,7 @@ describe("SignatureVaultSelector — HU #11193 (captura desde el formulario)", (
 
     await user.click(await screen.findByTestId("sig-capture-open"));
     await user.click(screen.getByRole("button", { name: /Dibujar firma/i }));
+    await user.type(screen.getByLabelText("Código hash"), "A1B2C3D4");
     await user.type(screen.getByLabelText("Vigencia desde"), "2026-08-01");
     await user.type(screen.getByLabelText("Vigencia hasta"), "2027-08-01");
     await user.click(screen.getByRole("button", { name: /Guardar firma/i }));
@@ -83,12 +84,35 @@ describe("SignatureVaultSelector — HU #11193 (captura desde el formulario)", (
         documentNumber: "1038409485",
         nitEmpresa: "900123456",
         fullName: "Juan Felipe Montoya",
+        codigoHash: "A1B2C3D4",
         vigenciaDesde: "2026-08-01",
         vigenciaHasta: "2027-08-01",
         artefactoFirmaBase64: "data:image/png;base64,QUJD",
       }),
     );
     expect(onChange).toHaveBeenCalledWith("firma-nueva");
+  });
+
+  // El código hash es lo que se estampa como "Hash:" en el sello de la firma del baúl de todos los
+  // documentos. Sin este campo, una firma capturada desde el formulario del representante salía sin
+  // hash mientras la capturada desde el baúl sí lo llevaba.
+  it("el código hash digitado viaja al baúl y sin digitarlo no se manda cadena vacía", async () => {
+    vi.mocked(fetchSignatureVaultByDocument).mockResolvedValue([]);
+    vi.mocked(createSignatureVaultEntry).mockResolvedValue({ id: "firma-nueva" });
+    const user = userEvent.setup();
+    render(<SignatureVaultSelector {...PROPS} onChange={vi.fn()} />);
+
+    await user.click(await screen.findByTestId("sig-capture-open"));
+    await user.click(screen.getByRole("button", { name: /Dibujar firma/i }));
+    await user.type(screen.getByLabelText("Vigencia desde"), "2026-08-01");
+    await user.type(screen.getByLabelText("Vigencia hasta"), "2027-08-01");
+    await user.click(screen.getByRole("button", { name: /Guardar firma/i }));
+
+    // `undefined`, no "": una cadena vacía persistiría un hash en blanco que el sello trataría como
+    // presente y ensuciaría el documento con una línea "Hash:" sin valor.
+    await waitFor(() =>
+      expect(vi.mocked(createSignatureVaultEntry).mock.calls[0][1].codigoHash).toBeUndefined(),
+    );
   });
 
   it("AC3 si el registro falla se informa y el bloque sigue abierto", async () => {
