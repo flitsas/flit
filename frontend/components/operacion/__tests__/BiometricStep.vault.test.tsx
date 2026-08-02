@@ -6,13 +6,16 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import { BiometricStep } from '../BiometricStep';
 import { WizardReadOnlyProvider } from '../WizardReadOnlyContext';
 
-// El estado biométrico no expone cobertura por baúl: devuelve vacío (el backend no crea validación
-// para firma_baul). La señal de cobertura llega por la prop `vaultCoveredPartes`.
+// El estado biométrico expone la cobertura por baúl en `firmaBaulPartes` (HU #11014). Por defecto se
+// devuelve vacío para ejercitar la señal optimista de la prop `vaultCoveredPartes`; los casos
+// server-driven lo sobrescriben.
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
-    getBiometricState: vi.fn().mockResolvedValue({ validations: [], provider: 'mock' }),
+    getBiometricState: vi.fn(),
   },
 }));
+
+import { tramitesClient } from '@/lib/api/tramites-client';
 
 vi.mock('@/lib/api/client', () => ({ getToken: () => null }));
 vi.mock('@/lib/auth/jwt', () => ({
@@ -33,7 +36,13 @@ function renderStep(vaultCoveredPartes: Array<'comprador' | 'vendedor'>) {
 }
 
 describe('BiometricStep — cobertura por baúl (HU #10646)', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(tramitesClient.getBiometricState).mockResolvedValue({
+      validations: [],
+      provider: 'mock',
+    });
+  });
 
   it('presenta la parte NIT como "Firma electrónica (baúl)" sin botones de biométrica', async () => {
     renderStep(['comprador']);
@@ -61,5 +70,31 @@ describe('BiometricStep — cobertura por baúl (HU #10646)', () => {
     renderStep([]);
     await screen.findByRole('group', { name: /Biométrica Comprador/i });
     expect(screen.queryByText('Firma electrónica (baúl)')).not.toBeInTheDocument();
+  });
+
+  // Al reabrir el trámite desde el listado no hubo `ensureIdentity`, así que la prop llega vacía: si
+  // el paso no leyera `firmaBaulPartes` del backend, la parte se rotularía como «Identidad
+  // verificada» pese a haber firmado desde el baúl.
+  it('al reabrir el trámite la cobertura se toma del backend, sin la señal del registro', async () => {
+    vi.mocked(tramitesClient.getBiometricState).mockResolvedValue({
+      validations: [
+        {
+          id: 'val-1',
+          partyRole: 'comprador',
+          status: 'aprobado',
+          score: 98,
+          name: 'Comercializadora del Valle SAS',
+        },
+      ],
+      provider: 'mock',
+      firmaBaulPartes: ['comprador'],
+    } as never);
+
+    renderStep([]);
+
+    const compradorCard = await screen.findByRole('group', { name: /Biométrica Comprador/i });
+    expect(within(compradorCard).getByText('Firma electrónica (baúl)')).toBeInTheDocument();
+    // La validación referenciada existe, pero no es lo que se plasma: no debe rotularse como verificada.
+    expect(within(compradorCard).queryByText(/Identidad verificada/i)).not.toBeInTheDocument();
   });
 });

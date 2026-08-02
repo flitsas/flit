@@ -35,11 +35,15 @@ interface Props {
    */
   hideIntro?: boolean;
   /**
-   * HU #10646 — partes (NIT/jurídicas) cuya identidad quedó cubierta por la firma electrónica del baúl.
-   * El backend deja el paso completo server-side y no crea validación biométrica (ni expone un flag por
-   * parte en el estado biométrico), así que la señal llega del outcome `firma_baul` de ensureIdentity que
-   * captura el wizard. Para estas partes se muestra el estado "cubierto por el baúl" y se omite la
-   * biométrica manual.
+   * HU #10646 — partes (NIT/jurídicas) cuya identidad quedó cubierta por la firma electrónica del baúl,
+   * capturadas del outcome `firma_baul` de ensureIdentity durante el registro.
+   *
+   * <p>Refuerzo optimista, NO la fuente de verdad. Lo era hasta que se descubrió que, al reabrir el
+   * trámite desde el listado, este estado en memoria llega vacío y la parte se rotulaba como «Identidad
+   * verificada» aunque hubiera firmado por el baúl. La fuente es `firmaBaulPartes` del propio estado
+   * biométrico, que desde la HU #11014 lo expone por parte y desde el Bug #11141 respeta además el
+   * mecanismo elegido por el gestor. Se unen porque durante el registro la respuesta del servidor puede
+   * ir un paso por detrás del outcome que el wizard acaba de recibir.</p>
    */
   vaultCoveredPartes?: BiometricParte[];
 }
@@ -112,6 +116,9 @@ export function BiometricStep({
 
   const [validations, setValidations] = useState<BiometricValidation[] | null>(null);
   const [provider, setProvider] = useState<string>('mock');
+  // Partes cubiertas por el baúl según el BACKEND. Se consulta en vez de depender solo de la prop
+  // porque esta última solo existe durante el registro; al reabrir el trámite llegaba vacía.
+  const [firmaBaulServidor, setFirmaBaulServidor] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -121,6 +128,7 @@ export function BiometricStep({
       const state = await tramitesClient.getBiometricState(instanceId);
       setValidations(state.validations);
       setProvider(state.provider);
+      setFirmaBaulServidor(state.firmaBaulPartes ?? []);
       setError(() => null);
       return state;
     } catch (err) {
@@ -229,7 +237,9 @@ export function BiometricStep({
                 // cronológico), no solo la vigente: la tarjeta de acción sigue mostrando solo esta
                 // última, pero el historial completo queda visible debajo.
                 historial={matches}
-                vaultCovered={vaultCoveredPartes.includes(parte)}
+                vaultCovered={
+                  firmaBaulServidor.includes(parte) || vaultCoveredPartes.includes(parte)
+                }
                 onChanged={() => void handleRefresh()}
               />
             );

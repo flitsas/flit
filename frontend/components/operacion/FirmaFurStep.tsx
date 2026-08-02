@@ -553,6 +553,7 @@ export function FirmaFurStep({
         }
         archivosCount={attachments.length}
         identidadAprobada={identidadAprobada}
+        firmaBaulPartes={firmaBaulPartes}
         orgTransito={{ nombre: organismo.name, ciudad: organismo.city }}
         soat={{ estado: fv('soat_estado'), vencimiento: fv('soat_vencimiento') }}
       />
