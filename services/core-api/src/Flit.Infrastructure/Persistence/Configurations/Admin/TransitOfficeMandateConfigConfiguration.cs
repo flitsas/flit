@@ -30,6 +30,10 @@ internal sealed class TransitOfficeMandateConfigConfiguration : IEntityTypeConfi
         builder.Property(x => x.RequiresForNaturalPerson).IsRequired();
         builder.Property(x => x.InstitutionalMandataryName).HasMaxLength(200);
         builder.Property(x => x.InstitutionalMandataryNit).HasMaxLength(20);
+        // HU #11204 — familia del mandatario + datos propios del OT (antes incrustados en el generador).
+        builder.Property(x => x.MandataryFamily).HasMaxLength(30).IsRequired().HasDefaultValue("individuo");
+        builder.Property(x => x.ChamberCity).HasMaxLength(120);
+        builder.Property(x => x.MandatarySigla).HasMaxLength(60);
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
 

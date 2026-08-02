@@ -1,3 +1,5 @@
+using Flit.Tramites.Domain.Documents;
+
 namespace Flit.Tramites.Application.Documents;
 
 /// <summary>Datos de una parte para el documento (FUR / compraventa).</summary>
@@ -205,7 +207,14 @@ public sealed record MandatoData(
     string TemplateCode,
     string? InstitutionalMandataryName,
     string? InstitutionalMandataryNit,
-    MandatarioFirmante? Mandatario);
+    MandatarioFirmante? Mandatario,
+    // HU #11204 — familia del mandatario y datos propios del OT que antes estaban incrustados en el
+    // generador. La familia dice QUIÉN firma como mandatario (una persona o el propio organismo); la
+    // redacción la sigue eligiendo <see cref="TemplateCode"/>, porque dos OT de la misma familia pueden
+    // tener textos legales distintos (Bello y Sabaneta lo son).
+    MandatoFamilia Familia = MandatoFamilia.Individuo,
+    string? ChamberCity = null,
+    string? MandatarySigla = null);
 
 /// <summary>
 /// Contrato del generador del <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). Solo aplica

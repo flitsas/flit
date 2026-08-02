@@ -830,7 +830,12 @@ public sealed class GenerarFurHandler(
             config?.TemplateCode ?? MandatoTemplateResolver.Generico,
             config?.InstitutionalMandataryName,
             config?.InstitutionalMandataryNit,
-            mandatario);
+            mandatario,
+            // HU #11204 — familia del mandatario y datos propios del OT. Sin configuración el generador
+            // aplica los mismos valores de siempre, así que un OT sin fila sale como hasta ahora (AC5).
+            MandatoFamiliaCodes.Resolve(config?.MandataryFamily),
+            config?.ChamberCity,
+            config?.MandatarySigla);
 
         return _mandatoGenerator.GenerateMandato(mandatoData);
     }

@@ -29,6 +29,18 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     private const string MabNombre = "UNION TEMPORAL MOVILIDAD AVANZADA DE BELLO MAB";
     private const string MabNit = "901783814-6";
 
+    // HU #11204 — datos del OT que hasta ahora estaban incrustados en el texto. Ahora vienen de la
+    // configuración del organismo; estas constantes quedan como fallback literal, de modo que un OT sin
+    // configurarlos emite exactamente el mismo contrato que antes (AC5).
+    private const string CamaraPorDefecto = "Medellín";
+    private const string SetsaSigla = "UT-SETSA";
+
+    /// <summary>Ciudad de la Cámara de Comercio que acredita al MANDANTE (config del OT, HU #11204).</summary>
+    private static string Camara(MandatoData data) => Val(data.ChamberCity, CamaraPorDefecto);
+
+    /// <summary>Sigla de la unión temporal para la cláusula de obligaciones (config del OT, HU #11204).</summary>
+    private static string Sigla(MandatoData data, string fallback) => Val(data.MandatarySigla, fallback);
+
     static MandatoPdfGenerator()
     {
         Settings.License = LicenseType.Community;
@@ -109,7 +121,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             ? $"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} No. {RlDoc(parte)}, " +
               $"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, según lo acredita la " +
               "escritura pública y/o el certificado de existencia y representación expedido por la Cámara de " +
-              "Comercio de Medellín y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
+              $"Comercio de {Camara(data)} y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
               $"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, " +
               "quien para los efectos del presente contrato se denominará EL MANDATARIO, hemos acordado suscribir " +
               ResolucionesCc()
@@ -143,7 +155,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             ? $"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} número No {RlDoc(parte)}, " +
               $"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, según lo acredita la " +
               "escritura pública y/o el certificado de existencia y representación expedido por la Cámara de " +
-              "Comercio de Medellín y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
+              $"Comercio de {Camara(data)} y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
               $"Y de {inst}, con NIT N° {nit}, quien para efectos del presente contrato se denominará EL MANDATARIO, " +
               "hemos acordado suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace " +
               $"cargo de la gestión de realizar el trámite de {nombreTramite} del vehículo de placas: {placa}, " +
@@ -161,7 +173,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             "OBLIGACIONES DEL MANDANTE: EL MANDANTE declara que la información contenida en los documentos que se " +
             "anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante las " +
             "autoridades competentes de cualquier irregularidad que los mismos puedan contener; al igual dejando " +
-            "indemne a la UT-SETSA de cualquier responsabilidad en los que se ve comprometido la confidencialidad y " +
+            $"indemne a la {Sigla(data, SetsaSigla)} de cualquier responsabilidad en los que se ve comprometido la confidencialidad y " +
             "divulgación de la información legalmente protegida mediante los parámetros y disposiciones de la ley " +
             "1581 del 2012 y demás normas que se dicten en la materia.",
             CierreFirma(fecha, ciudad),
@@ -180,7 +192,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             ? $"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} número No {RlDoc(parte)}, " +
               $"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, según lo acredita la " +
               "escritura pública y/o el Certificado de Existencia y Representación expedido por la Cámara de " +
-              "Comercio de Medellín y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
+              $"Comercio de {Camara(data)} y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
               $"Y de la otra parte, {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, " +
               $"Representante Legal de {inst}, con NIT No. {nit}, quien para efectos del presente contrato se " +
               "denominará EL MANDATARIO, hemos acordado suscribir el siguiente contrato de mandato mediante el cual " +
