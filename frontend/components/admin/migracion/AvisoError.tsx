@@ -11,9 +11,26 @@ import { ErrorMigracion } from "@/lib/migracion/client";
  * un 409 se leen igual de mal —«algo falló»— pero se resuelven distinto, y quien opera no debería
  * tener que saberse los códigos HTTP para averiguarlo.
  */
+/**
+ * Estados del ambiente en los que la pantalla dice el HECHO y nada más.
+ *
+ * Los tres se arreglan igual —tocando el despliegue— y ninguno se arregla desde aquí. El detalle
+ * que traen es diagnóstico: nombres de variables, el contenedor a recrear, el error de red crudo.
+ * Quien lo ve en pantalla no puede hacer nada con eso, y quien sí puede no lo necesita ahí: lo
+ * tiene en el `ProblemDetails` de la respuesta, que sigue llegando entero y se lee en las
+ * herramientas del navegador o en los logs.
+ */
+const SOLO_TITULAR = new Set([
+  "migracion.apagado",
+  "migracion.sin_llave",
+  "migracion.llave_invalida",
+  "migracion.host_inalcanzable",
+]);
+
 export function AvisoError({ error }: { error: Error }) {
   const codigo = error instanceof ErrorMigracion ? error.titulo : "";
-  const detalle = error.message;
+  const escueto = SOLO_TITULAR.has(codigo);
+  const detalle = escueto ? "" : error.message;
 
   return (
     <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/5 p-3 text-sm">
@@ -56,11 +73,6 @@ function sugerencia(codigo: string): string | null {
       return "Espera a que termine y vuelve a intentarlo. Reintentar no duplica nada.";
     case "migracion.ocupado":
       return "Solo se admiten dos migraciones a la vez. Reintenta en un momento.";
-    case "migracion.llave_invalida":
-    case "migracion.sin_llave":
-      return "Es configuración del ambiente: la llave del frontend y la del migrador no coinciden. Avisa a quien administra el despliegue.";
-    case "migracion.host_inalcanzable":
-      return "Puede que el migrador esté apagado aquí. Se enciende por ambiente mientras dura una ola.";
     case "migracion.sesion_expirada":
       return "Vuelve a entrar y repite la operación.";
     default:

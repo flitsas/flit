@@ -123,9 +123,12 @@ export async function llamarMigracion(
    * Se comprueba que el cuerpo esté vacío para no pisar un 404 que sí venga explicado.
    */
   if (response.status === 404 && !texto) {
-    // Sin detalle a propósito: el hecho basta. Cómo se enciende —qué variable, qué contenedor— es
-    // información del despliegue y no tiene por qué estar en una pantalla.
-    return problema(404, "migracion.apagado", "");
+    return problema(
+      404,
+      "migracion.apagado",
+      "El host respondió 404 sin cuerpo: las rutas de migración no están registradas " +
+        "(MigracionApi:Enabled).",
+    );
   }
 
   if (!texto) {
