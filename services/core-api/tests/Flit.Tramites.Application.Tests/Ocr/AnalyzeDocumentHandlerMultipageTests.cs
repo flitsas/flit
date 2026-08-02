@@ -130,5 +130,8 @@ public sealed class AnalyzeDocumentHandlerMultipageTests
             ReceivedPages = pages;
             return Result;
         }
+
+        // El cargue campo a campo no cuenta páginas: el total lo reporta el propio análisis.
+        public int? CountPages(ReadOnlyMemory<byte> pdf) => null;
     }
 }

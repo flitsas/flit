@@ -42,8 +42,21 @@ internal sealed class AnthropicMessagesClient(
     /// no-200, error del proveedor o respuesta inválida devuelve <c>Ok=false</c> con status 503 y un
     /// mensaje de carga manual (degradación graceful).
     /// </summary>
+    /// <param name="model">Modelo a usar; null → el de <see cref="AnthropicOptions.Model"/> (analizador por tipo).</param>
+    /// <param name="maxTokens">Tope de salida; null → el de <see cref="AnthropicOptions.MaxTokens"/>.</param>
+    /// <param name="timeoutSeconds">
+    /// Deadline de esta llamada; null → <see cref="AnthropicOptions.TimeoutSeconds"/>. El
+    /// <c>HttpClient.Timeout</c> se registra con el mayor de los dos deadlines configurados, así que
+    /// el corto se impone aquí con un CTS enlazado y sigue tratándose como timeout reintentable.
+    /// </param>
     public async Task<AnthropicVisionResult> SendVisionAsync(
-        string base64, string mediaType, string prompt, CancellationToken ct)
+        string base64,
+        string mediaType,
+        string prompt,
+        CancellationToken ct,
+        string? model = null,
+        int? maxTokens = null,
+        int? timeoutSeconds = null)
     {
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
@@ -53,8 +66,8 @@ internal sealed class AnthropicMessagesClient(
 
         var blockType = mediaType == "application/pdf" ? "document" : "image";
         var payload = new AnthropicMessagesRequest(
-            Model: _options.Model,
-            MaxTokens: _options.MaxTokens,
+            Model: model ?? _options.Model,
+            MaxTokens: maxTokens ?? _options.MaxTokens,
             Messages:
             [
                 new AnthropicMessage("user",
@@ -64,11 +77,16 @@ internal sealed class AnthropicMessagesClient(
                 ]),
             ]);
 
+        var deadline = TimeSpan.FromSeconds(timeoutSeconds ?? _options.TimeoutSeconds);
+
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
             var isLastAttempt = attempt == MaxAttempts;
             try
             {
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(deadline);
+
                 using var message = new HttpRequestMessage(HttpMethod.Post, "/v1/messages")
                 {
                     Content = JsonContent.Create(payload, options: JsonOptions),
@@ -76,7 +94,7 @@ internal sealed class AnthropicMessagesClient(
                 message.Headers.TryAddWithoutValidation("x-api-key", _options.ApiKey);
                 message.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
 
-                using var response = await http.SendAsync(message, ct);
+                using var response = await http.SendAsync(message, timeoutCts.Token);
 
                 // Una respuesta HTTP completa (aun no-200) NO se reintenta: es un fallo del proveedor,
                 // no de transporte. Se degrada a 503 con mensaje de carga manual.
@@ -86,7 +104,7 @@ internal sealed class AnthropicMessagesClient(
                     return new AnthropicVisionResult(false, null, 503, MsgManual);
                 }
 
-                var body = await response.Content.ReadFromJsonAsync<AnthropicMessagesResponse>(JsonOptions, ct);
+                var body = await response.Content.ReadFromJsonAsync<AnthropicMessagesResponse>(JsonOptions, timeoutCts.Token);
                 if (body?.Error is not null)
                 {
                     AnthropicLog.ProviderError(logger, body.Error.Type ?? "unknown");

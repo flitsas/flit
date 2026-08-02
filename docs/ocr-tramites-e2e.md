@@ -75,3 +75,9 @@ Respuesta OK: `{ "ok": true, "tipo": "factura", "data": { "es_factura_valida": t
 
 Los tipos por modalidad: matrícula → `factura`, `aduana`, `impronta`, `soat`; traspaso → `impronta`, `soat`.
 Archivos entre 10 y 20 MB se suben **sin** OCR (se marcan "no analizado" en la UI).
+
+## Cargue masivo
+
+El cargue campo a campo descrito arriba no cambia. El camino adicional que reparte un expediente
+completo (o una carpeta, o un `.zip`) entre las casillas del checklist es `POST /ocr/lote`, y tiene su
+propia guía: [ocr-lote-cargue-masivo.md](./ocr-lote-cargue-masivo.md).

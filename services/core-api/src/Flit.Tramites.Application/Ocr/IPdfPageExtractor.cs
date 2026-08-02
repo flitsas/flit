@@ -13,4 +13,10 @@ public interface IPdfPageExtractor
     /// o null si no se puede extraer (PDF ilegible, excede el límite de páginas, o ninguna página válida).
     /// </summary>
     byte[]? ExtractPages(ReadOnlyMemory<byte> pdf, IReadOnlyList<int> pages);
+
+    /// <summary>
+    /// Número de páginas del PDF, o null si no se puede leer. El cargue masivo lo usa para rechazar
+    /// archivos demasiado largos ANTES de gastar una llamada al clasificador.
+    /// </summary>
+    int? CountPages(ReadOnlyMemory<byte> pdf);
 }

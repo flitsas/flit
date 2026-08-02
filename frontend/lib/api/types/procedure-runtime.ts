@@ -703,6 +703,67 @@ export interface DocumentOcrResult {
 }
 
 /**
+ * Una pieza propuesta por el cargue masivo: un documento que el clasificador reconoció dentro de un
+ * archivo, ya recortado y verificado con el prompt de su tipo. NO está subida — vive en la pantalla de
+ * revisión hasta que el operador la confirma.
+ */
+export interface BatchOcrPiece {
+  /** Tipo de documento al que se propone asignarla. */
+  tipo: string;
+  /** Archivo del lote del que salió, para que el operador se ubique. */
+  sourceFilename: string;
+  /** Nombre propuesto del adjunto (`soat_expediente.pdf` cuando hubo recorte). */
+  filename: string;
+  mimetype: string;
+  sizeBytes: number;
+  /** Páginas del archivo original que ocupa, base 1. */
+  paginas: number[];
+  /** Páginas del archivo original, para el chip «recorte 3/16 págs». */
+  totalPaginasOrigen: number;
+  /** Certeza del clasificador, 0.0–1.0. */
+  confianza: number;
+  /** Por qué el clasificador la reconoció así. */
+  motivo?: string | null;
+  /**
+   * JSON del prompt por tipo — el MISMO que devuelve el cargue campo a campo, así que se evalúa con
+   * `evaluateOcr` y se pinta con `OcrStatusPanel` sin duplicar reglas. null si el análisis falló.
+   */
+  data: Record<string, unknown> | null;
+  /** Por qué no hay `data`; null si el análisis fue bien. */
+  analisisError?: string | null;
+  /** Bytes de la pieza recortada, listos para subir al confirmar. */
+  contentBase64: string;
+}
+
+/**
+ * Páginas que el clasificador no supo ubicar en ningún tipo. Sin binario a propósito: el cliente
+ * todavía tiene el archivo original, y la salida que se le ofrece al operador es cargarlo a mano en un
+ * campo (donde el OCR dirigido reintenta la extracción) o descartarlo.
+ */
+export interface BatchOcrUnrecognized {
+  sourceFilename: string;
+  paginas: number[];
+  totalPaginas: number;
+}
+
+/** Archivo del lote que no se pudo procesar, con el motivo en lenguaje del operador. */
+export interface BatchOcrFileError {
+  filename: string;
+  motivo: string;
+}
+
+/**
+ * Respuesta de POST /tramites/ocr/lote. Las tres listas son la pantalla de revisión: lo que se propone
+ * subir, lo que sobró, y lo que ni siquiera se pudo abrir. Un lote donde todo falla sigue siendo un 200
+ * con `piezas` vacío — el error por archivo es información para el operador, no un fallo de la petición.
+ */
+export interface BatchOcrResult {
+  piezas: BatchOcrPiece[];
+  noReconocidos: BatchOcrUnrecognized[];
+  errores: BatchOcrFileError[];
+}
+
+/**
  * HU #10975 (Feature #10972) — resultado de persistir en `field_values` lo que extrajo el OCR.
  * Las dos listas de omitidos son deliberadas: sin ellas, "el certificado sigue saliendo vacío"
  * no se puede depurar desde fuera del backend.
