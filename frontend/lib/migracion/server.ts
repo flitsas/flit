@@ -123,11 +123,9 @@ export async function llamarMigracion(
    * Se comprueba que el cuerpo esté vacío para no pisar un 404 que sí venga explicado.
    */
   if (response.status === 404 && !texto) {
-    return problema(
-      404,
-      "migracion.apagado",
-      "El host de migración está encendido pero con las rutas desactivadas: respondió 404 sin más.",
-    );
+    // Sin detalle a propósito: el hecho basta. Cómo se enciende —qué variable, qué contenedor— es
+    // información del despliegue y no tiene por qué estar en una pantalla.
+    return problema(404, "migracion.apagado", "");
   }
 
   if (!texto) {

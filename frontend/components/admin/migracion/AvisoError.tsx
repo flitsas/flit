@@ -20,7 +20,8 @@ export function AvisoError({ error }: { error: Error }) {
       <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" aria-hidden="true" />
       <div className="min-w-0">
         <p className="font-semibold text-red-600 dark:text-red-400">{titulo(codigo)}</p>
-        <p className="mt-0.5 opacity-90">{detalle}</p>
+        {/* Sin detalle no se pinta el hueco: hay errores en los que el titular ya lo dice todo. */}
+        {detalle && <p className="mt-0.5 opacity-90">{detalle}</p>}
         {sugerencia(codigo) && <p className="mt-1.5 text-xs opacity-70">{sugerencia(codigo)}</p>}
       </div>
     </div>
@@ -60,8 +61,6 @@ function sugerencia(codigo: string): string | null {
       return "Es configuración del ambiente: la llave del frontend y la del migrador no coinciden. Avisa a quien administra el despliegue.";
     case "migracion.host_inalcanzable":
       return "Puede que el migrador esté apagado aquí. Se enciende por ambiente mientras dura una ola.";
-    case "migracion.apagado":
-      return "Se enciende poniendo FLITMIG_MIGRACION_API_ENABLED=true en el .env del ambiente y recreando el contenedor migracion-api; no hace falta desplegar. Avisa a quien administra el despliegue.";
     case "migracion.sesion_expirada":
       return "Vuelve a entrar y repite la operación.";
     default:
