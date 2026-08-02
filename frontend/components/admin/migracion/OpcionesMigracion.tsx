@@ -51,17 +51,17 @@ export function OpcionesMigracion({
           : "flex flex-col gap-4"
       }
     >
-      <fieldset className="flex flex-col gap-3" disabled={deshabilitado}>
-        <div>
-          <legend className="text-xs font-semibold uppercase tracking-wide opacity-60">
-            Qué migrar
-          </legend>
-          <p className="mt-0.5 text-xs opacity-70">
-            {todas
-              ? "Se correrán las tres instancias, en su orden obligatorio."
-              : "Solo las marcadas. Recuerda que los adjuntos y los documentos necesitan que los datos ya existan."}
-          </p>
-        </div>
+      {/*
+        Los dos bloques van con la MISMA estructura —leyenda, tarjetas, explicación— y por eso la
+        explicación va debajo y no encima. Cuando «Qué migrar» la llevaba arriba y el modo la
+        llevaba abajo, uno empujaba sus tarjetas un renglón y el otro no: puestos lado a lado en la
+        barra ancha, las dos filas de tarjetas quedaban desalineadas sin motivo visible. Así se
+        alinean solas, y además ninguna explicación puede descuadrar nada al ocupar dos líneas.
+      */}
+      <fieldset className="flex flex-col gap-2" disabled={deshabilitado}>
+        <legend className="text-xs font-semibold uppercase tracking-wide opacity-60">
+          Qué migrar
+        </legend>
 
         <div className={enFila ? "grid gap-2 sm:grid-cols-3" : "flex flex-col gap-2"}>
           {INSTANCIAS.map((instancia) => (
@@ -84,6 +84,12 @@ export function OpcionesMigracion({
             </label>
           ))}
         </div>
+
+        <p className="text-xs opacity-70">
+          {todas
+            ? "Se correrán las tres instancias, en su orden obligatorio."
+            : "Solo las marcadas. Recuerda que los adjuntos y los documentos necesitan que los datos ya existan."}
+        </p>
       </fieldset>
 
       <ModoEjecucion
