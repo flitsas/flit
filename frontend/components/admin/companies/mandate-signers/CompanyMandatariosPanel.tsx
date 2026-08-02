@@ -7,11 +7,13 @@ import {
   createCompanyMandateSigner,
   fetchCompanyMandateSigners,
   fetchCompanyTransitOffices,
+  fetchRepresentedCompanies,
   inactivateCompanyMandateSigner,
   reactivateCompanyMandateSigner,
   updateCompanyMandateSigner,
   type CompanyMandateSignerInput,
   type CompanyTransitOfficeOption,
+  type RepresentedCompanyOption,
   type MandateSigner,
 } from "@/lib/api/admin-mandate-signers";
 import { formatDocumentWithType } from "@/lib/display/document-number";
@@ -29,6 +31,7 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [signers, setSigners] = useState<MandateSigner[]>([]);
   const [offices, setOffices] = useState<CompanyTransitOfficeOption[]>([]);
+  const [companies, setCompanies] = useState<RepresentedCompanyOption[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<MandateSigner | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -37,15 +40,19 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const [signerResult, officeList] = await Promise.all([
+        const [signerResult, officeList, companyList] = await Promise.all([
           fetchCompanyMandateSigners(tenantId, signal),
           fetchCompanyTransitOffices(tenantId, signal),
+          // Best-effort: sin empresas el formulario sigue funcionando y el mandatario aplica a todas,
+          // que es el comportamiento por defecto.
+          fetchRepresentedCompanies(tenantId, signal).catch(() => []),
         ]);
         if (signal?.aborted) {
           return;
         }
         setSigners(signerResult.signers);
         setOffices(officeList);
+        setCompanies(companyList);
         setStatus(signerResult.signers.length === 0 ? "empty" : "ready");
       } catch {
         if (!signal?.aborted) {
@@ -200,6 +207,7 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
         <CompanyMandatarioForm
           tenantId={tenantId}
           offices={offices}
+          companies={companies}
           onIdentityChanged={() => void load()}
           editing={editing}
           onCancel={() => {

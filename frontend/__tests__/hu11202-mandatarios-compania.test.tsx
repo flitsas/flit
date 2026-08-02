@@ -11,6 +11,10 @@ import userEvent from "@testing-library/user-event";
 const mocks = vi.hoisted(() => ({
   fetchCompanyMandateSigners: vi.fn(),
   fetchCompanyTransitOffices: vi.fn(),
+  // El panel las carga para acotar para qué empresas firma el mandatario en cada organismo. Sin este
+  // doble, llamar a una función inexistente rompe la carga entera y el panel cae en estado de error.
+  fetchRepresentedCompanies: vi.fn().mockResolvedValue([]),
+  mandateSignerIdentityAction: vi.fn(),
   createCompanyMandateSigner: vi.fn(),
   updateCompanyMandateSigner: vi.fn(),
   inactivateCompanyMandateSigner: vi.fn(),
@@ -69,7 +73,65 @@ function renderPanel() {
   return render(<CompanyMandatariosPanel tenantId="tenant-1" />);
 }
 
+const EMPRESAS = [
+  { id: "emp-acme", documentNumber: "900111111", name: "ACME SAS" },
+  { id: "emp-beta", documentNumber: "900222222", name: "BETA SAS" },
+];
+
 describe("HU #11202 — mandatarios desde el configurador de la compañía", () => {
+  // ── Acotación por empresa representada ────────────────────────────────────
+
+  it("se puede acotar para qué empresas firma en cada organismo", async () => {
+    // El mandatario se llaveaba solo contra la gestora, así que no había forma de decir "firma para
+    // ESTA empresa". Las empresas se listan con su NIT, que es lo que distingue dos homónimas.
+    mocks.fetchRepresentedCompanies.mockResolvedValue(EMPRESAS);
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Nuevo mandatario" }));
+    await user.type(screen.getByLabelText("Nombre completo"), "Ana Restrepo");
+    await user.type(screen.getByLabelText("Número de documento"), "1020304050");
+    await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
+
+    // La empresa se identifica por NIT, no solo por razón social.
+    await user.click(
+      screen.getByRole("checkbox", { name: /ACME SAS \(900111111\) en Secretaría de Movilidad de Medellín/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(mocks.createCompanyMandateSigner).toHaveBeenCalledWith(
+        "tenant-1",
+        expect.objectContaining({
+          officeCompanies: [
+            { transitOfficeId: "ot-medellin", representedCompanyIds: ["emp-acme"] },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("sin empresas marcadas NO se manda acotación: aplica a todas", async () => {
+    // La ausencia es lo que significa "todas". Mandar un arreglo vacío diría "ninguna" y dejaría al
+    // mandatario sin poder firmar nada.
+    mocks.fetchRepresentedCompanies.mockResolvedValue(EMPRESAS);
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Nuevo mandatario" }));
+    await user.type(screen.getByLabelText("Nombre completo"), "Ana Restrepo");
+    await user.type(screen.getByLabelText("Número de documento"), "1020304050");
+    await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(mocks.createCompanyMandateSigner).toHaveBeenCalledWith(
+        "tenant-1",
+        expect.objectContaining({ officeCompanies: [] }),
+      ),
+    );
+  });
+
   it("AC1: se registra un mandatario con sus datos desde la compañía", async () => {
     const user = userEvent.setup();
     renderPanel();

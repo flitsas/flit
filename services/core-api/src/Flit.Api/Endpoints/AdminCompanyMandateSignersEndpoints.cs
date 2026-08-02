@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Companies.MandateSigners;
 using Flit.Admin.Application.Identity;
+using Flit.Admin.Domain.Companies.LegalRepresentatives;
 using Flit.Admin.Domain.Companies.MandateSigners;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
@@ -73,6 +74,28 @@ public static class AdminCompanyMandateSignersEndpoints
             .WithSummary("Reactiva un mandatario inactivado de la compañía")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound);
+
+        // Empresas representadas de la compañía: las que se dan de alta dentro del formulario del
+        // representante legal. Son la lista que el formulario del mandatario ofrece para acotar para
+        // quién firma en cada organismo. Ya vienen únicas por (tenant, NIT).
+        group.MapGet("/represented-companies", async (
+                Guid tenantId,
+                [FromServices] ILegalRepresentativeReader reader,
+                CancellationToken ct) =>
+            {
+                var empresas = await reader.ListRepresentedCompaniesAsync(tenantId, ct).ConfigureAwait(false);
+                return Results.Ok(new
+                {
+                    items = empresas.Select(e => new
+                    {
+                        id = e.Id,
+                        documentNumber = e.DocumentNumber,
+                        name = e.Name,
+                    }),
+                });
+            })
+            .WithName("AdminCompanyMandateSignerRepresentedCompanies")
+            .WithSummary("Empresas representadas de la compañía, para acotar para quién firma el mandatario");
 
         // Identidad del mandatario desde el configurador de la COMPAÑÍA. Los mismos métodos existían
         // solo bajo /transit-offices/... y ningún componente los llamaba: la empresa registra a su

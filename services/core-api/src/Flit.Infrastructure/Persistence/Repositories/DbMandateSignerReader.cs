@@ -167,11 +167,14 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     .ConfigureAwait(false);
                 var physicalBySigner = await LoadPhysicalOfficeIdsBySignerAsync(signerIds, cancellationToken)
                     .ConfigureAwait(false);
+                var companiesByOffice = await LoadOfficeCompaniesAsync(signerIds, cancellationToken)
+                    .ConfigureAwait(false);
 
                 IReadOnlyList<MandateSignerItem> items =
                 [
-                    .. signers.Select(s =>
-                        Project(s, companiesBySigner, officesBySigner, vigenciaBySigner, physicalBySigner)),
+                    .. signers.Select(s => Project(
+                        s, companiesBySigner, officesBySigner, vigenciaBySigner, physicalBySigner,
+                        companiesByOffice)),
                 ];
                 return items;
             },
@@ -366,6 +369,33 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
     }
 
     /// <summary>Organismos ACTIVOS de cada mandatario, para pintarlos en la consola de gestión.</summary>
+    /// <summary>Empresas representadas por (mandatario, organismo).</summary>
+    private async Task<Dictionary<Guid, List<MandateSignerOfficeCompanies>>> LoadOfficeCompaniesAsync(
+        List<Guid> signerIds,
+        CancellationToken cancellationToken)
+    {
+        if (signerIds.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = await _context.MandateSignerRepresentedCompanies
+            .AsNoTracking()
+            .Where(x => signerIds.Contains(x.MandateSignerId) && x.IsActive)
+            .Select(x => new { x.MandateSignerId, x.TransitOfficeId, x.RepresentedCompanyId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.MandateSignerId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(r => r.TransitOfficeId)
+                    .Select(o => new MandateSignerOfficeCompanies(
+                        o.Key, [.. o.Select(r => r.RepresentedCompanyId)]))
+                    .ToList());
+    }
+
     /// <summary>Organismos donde el mandatario firma a mano, por mandatario.</summary>
     private async Task<Dictionary<Guid, List<Guid>>> LoadPhysicalOfficeIdsBySignerAsync(
         List<Guid> signerIds,
@@ -414,7 +444,8 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         Dictionary<Guid, List<Guid>> companiesBySigner,
         Dictionary<Guid, List<Guid>> officesBySigner,
         Dictionary<Guid, AdminIdentityVigencia.Resultado> vigenciaBySigner,
-        Dictionary<Guid, List<Guid>>? physicalBySigner = null)
+        Dictionary<Guid, List<Guid>>? physicalBySigner = null,
+        Dictionary<Guid, List<MandateSignerOfficeCompanies>>? companiesByOffice = null)
     {
         var vigencia = vigenciaBySigner.GetValueOrDefault(
             signer.Id, new AdminIdentityVigencia.Resultado(AdminIdentityVigencia.None, null));
@@ -438,6 +469,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             CompanyTenantIds = companiesBySigner.GetValueOrDefault(signer.Id, []),
             TransitOfficeIds = officesBySigner.GetValueOrDefault(signer.Id, []),
             PhysicalSignatureOfficeIds = physicalBySigner?.GetValueOrDefault(signer.Id, []) ?? [],
+            OfficeCompanies = companiesByOffice?.GetValueOrDefault(signer.Id, []) ?? [],
         };
     }
 

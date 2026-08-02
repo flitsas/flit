@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Companies.MandateSigners;
 namespace Flit.Admin.Application.Companies.MandateSigners.ListMandateSigners;
 
 /// <summary>
@@ -29,4 +30,9 @@ public sealed record MandateSignerResponse(
     /// Subconjunto de <see cref="TransitOfficeIds"/> donde el mandatario firma A MANO. Lo necesita el
     /// formulario para precargar la marca al editar.
     /// </summary>
-    IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null);
+    IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null,
+    /// <summary>
+    /// Empresas representadas por organismo. Lo necesita el formulario para precargar la selección al
+    /// editar; vacío para un organismo significa "aplica a todas allí".
+    /// </summary>
+    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null);

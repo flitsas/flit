@@ -62,6 +62,12 @@ public sealed class MandateSignerItem
     /// la línea de guiones bajos y no estampa firma del baúl ni sello de identidad.
     /// </summary>
     public IReadOnlyList<Guid> PhysicalSignatureOfficeIds { get; init; } = [];
+
+    /// <summary>
+    /// Empresas representadas para las que firma, POR ORGANISMO. Lista vacía para un organismo ⇒ aplica
+    /// a todas las empresas allí. Lo necesita el formulario para precargar la selección al editar.
+    /// </summary>
+    public IReadOnlyList<MandateSignerOfficeCompanies> OfficeCompanies { get; init; } = [];
 }
 
 /// <summary>

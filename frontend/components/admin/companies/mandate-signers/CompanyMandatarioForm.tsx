@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { ApiValidationError } from "@/lib/api/types";
 import { SignatureVaultSelector } from "@/components/admin/companies/legal-representatives/SignatureVaultSelector";
 import { MandatarioIdentidadBlock } from "./MandatarioIdentidadBlock";
+import type { RepresentedCompanyOption } from "@/lib/api/admin-mandate-signers";
 import type {
   CompanyMandateSignerInput,
   CompanyTransitOfficeOption,
@@ -22,6 +23,7 @@ const DOC_TYPES = ["CC", "CE", "PAS", "NIT"];
 export function CompanyMandatarioForm({
   tenantId,
   offices,
+  companies = [],
   editing,
   onCancel,
   onSubmit,
@@ -29,6 +31,8 @@ export function CompanyMandatarioForm({
 }: {
   tenantId: string;
   offices: CompanyTransitOfficeOption[];
+  /** Empresas representadas de la compañía, para acotar para quién firma en cada organismo. */
+  companies?: RepresentedCompanyOption[];
   editing: MandateSigner | null;
   onCancel: () => void;
   onSubmit: (input: CompanyMandateSignerInput) => Promise<MandateSignerSaved>;
@@ -48,6 +52,28 @@ export function CompanyMandatarioForm({
   const [signatureVaultId, setSignatureVaultId] = useState<string | null>(
     editing?.signatureVaultId ?? null,
   );
+  // Empresas por organismo. La ausencia de entrada para un organismo significa "todas": es como se
+  // comportan los mandatarios que ya existen, y por eso el estado arranca solo con lo que hay guardado.
+  const [empresasPorOt, setEmpresasPorOt] = useState<Record<string, string[]>>(() =>
+    Object.fromEntries(
+      (editing?.officeCompanies ?? []).map((o) => [o.transitOfficeId, o.representedCompanyIds]),
+    ),
+  );
+
+  const toggleEmpresa = (officeId: string, companyId: string) => {
+    setEmpresasPorOt((prev) => {
+      const actuales = prev[officeId] ?? [];
+      const siguientes = actuales.includes(companyId)
+        ? actuales.filter((x) => x !== companyId)
+        : [...actuales, companyId];
+      // Sin ninguna marcada se borra la entrada: la ausencia es lo que significa "todas", y dejar un
+      // arreglo vacío diría "ninguna", que dejaría al mandatario sin poder firmar nada.
+      const next = { ...prev };
+      if (siguientes.length === 0) delete next[officeId];
+      else next[officeId] = siguientes;
+      return next;
+    });
+  };
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,7 +83,14 @@ export function CompanyMandatarioForm({
       const quitando = prev.includes(id);
       // Al retirar el organismo se retira también su marca de firma física: dejarla colgando haría
       // que al volver a añadirlo reapareciera una firma a mano que nadie pidió.
-      if (quitando) setFisicos((f) => f.filter((x) => x !== id));
+      if (quitando) {
+        setFisicos((f) => f.filter((x) => x !== id));
+        setEmpresasPorOt((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
       return quitando ? prev.filter((x) => x !== id) : [...prev, id];
     });
   };
@@ -88,6 +121,13 @@ export function CompanyMandatarioForm({
         transitOfficeIds: selected,
         physicalSignatureOfficeIds: fisicos,
         signatureVaultId,
+        officeCompanies: Object.entries(empresasPorOt)
+          // Solo de los organismos que siguen elegidos: retirar uno se lleva su acotación.
+          .filter(([officeId]) => selected.includes(officeId))
+          .map(([transitOfficeId, representedCompanyIds]) => ({
+            transitOfficeId,
+            representedCompanyIds,
+          })),
       });
     } catch (err) {
       setError(
@@ -232,6 +272,37 @@ export function CompanyMandatarioForm({
                       {o.code && <span className="opacity-70"> · {o.code}</span>}
                     </span>
                   </label>
+                  {/* Acotación por empresa, solo donde el mandatario aplica. Sin ninguna marcada
+                      firma para TODAS las empresas de ese organismo. */}
+                  {selected.includes(o.transitOfficeId) && companies.length > 0 && (
+                    <div className="mt-1 ml-6">
+                      <p className="text-[11px] opacity-70">
+                        {(empresasPorOt[o.transitOfficeId]?.length ?? 0) === 0
+                          ? "Firma para todas las empresas de este organismo."
+                          : `Firma solo para ${empresasPorOt[o.transitOfficeId]!.length} empresa(s):`}
+                      </p>
+                      <div className="mt-1 space-y-1">
+                        {companies.map((e) => (
+                          <label
+                            key={`${o.transitOfficeId}-${e.id}`}
+                            className="flex items-center gap-2 text-[11px]"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={(empresasPorOt[o.transitOfficeId] ?? []).includes(e.id)}
+                              onChange={() => toggleEmpresa(o.transitOfficeId, e.id)}
+                              aria-label={`${e.name} (${e.documentNumber}) en ${o.name}`}
+                            />
+                            <span>
+                              {e.name}
+                              <span className="opacity-70"> · NIT {e.documentNumber}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Solo tiene sentido marcar la firma a mano donde el mandatario aplica. */}
                   {selected.includes(o.transitOfficeId) && (
                     <label className="mt-1 ml-6 flex items-center gap-2 text-[11px] opacity-80">

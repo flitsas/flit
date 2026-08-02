@@ -47,6 +47,8 @@ export interface MandateSigner {
   transitOfficeIds?: string[];
   /** Subconjunto de los anteriores donde el mandatario firma a mano. */
   physicalSignatureOfficeIds?: string[];
+  /** Empresas representadas por organismo; vacío para un organismo ⇒ aplica a todas allí. */
+  officeCompanies?: MandateSignerOfficeCompanies[];
 }
 
 /**
@@ -257,6 +259,40 @@ export interface CompanyMandateSignerInput {
    * el comportamiento previo.
    */
   signatureVaultId?: string | null;
+  /**
+   * Empresas representadas por organismo. Omitir la entrada de un organismo ⇒ el mandatario aplica a
+   * todas las empresas allí.
+   */
+  officeCompanies?: MandateSignerOfficeCompanies[];
+}
+
+/** Empresa representada de la compañía: las que se dan de alta en el formulario del representante. */
+export interface RepresentedCompanyOption {
+  id: string;
+  /** NIT. Es lo que distingue dos empresas con la misma razón social. */
+  documentNumber: string;
+  name: string;
+}
+
+/**
+ * Empresas representadas para las que el mandatario firma en un organismo. Lista vacía ⇒ aplica a
+ * TODAS las de ese organismo, que es como se comportan los mandatarios que ya existen.
+ */
+export interface MandateSignerOfficeCompanies {
+  transitOfficeId: string;
+  representedCompanyIds: string[];
+}
+
+/** GET — empresas representadas de la compañía. Ya vienen únicas por NIT. */
+export async function fetchRepresentedCompanies(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<RepresentedCompanyOption[]> {
+  const r = await apiFetch<{ items: RepresentedCompanyOption[] }>(
+    `${companyBase(tenantId)}/represented-companies`,
+    { signal },
+  );
+  return r?.items ?? [];
 }
 
 /** Desenlace de una acción de identidad sobre el mandatario. */
