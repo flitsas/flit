@@ -759,16 +759,22 @@ public static class InfrastructureExtensions
             o.Model = Cfg("Anthropic:Model", "ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001";
             o.TimeoutSeconds = int.TryParse(Cfg("Anthropic:TimeoutSeconds", "ANTHROPIC_TIMEOUT_SECONDS"), out var t) ? t : 60;
             o.MaxTokens = int.TryParse(Cfg("Anthropic:MaxTokens", "ANTHROPIC_MAX_TOKENS"), out var m) ? m : 2000;
+            o.ClassifierModel = Cfg("Anthropic:ClassifierModel", "ANTHROPIC_CLASSIFIER_MODEL") ?? "claude-sonnet-5";
+            o.ClassifierMaxTokens = int.TryParse(Cfg("Anthropic:ClassifierMaxTokens", "ANTHROPIC_CLASSIFIER_MAX_TOKENS"), out var cm) ? cm : 8000;
+            o.ClassifierTimeoutSeconds = int.TryParse(Cfg("Anthropic:ClassifierTimeoutSeconds", "ANTHROPIC_CLASSIFIER_TIMEOUT_SECONDS"), out var ctd) ? ctd : 180;
         });
 
-        // Typed HttpClient (compatible con PublishAot, como Verifik/Kyverum).
+        // Typed HttpClient (compatible con PublishAot, como Verifik/Kyverum). El timeout del cliente es
+        // el MAYOR de los dos deadlines (analizador y clasificador); cada llamada impone el suyo con un
+        // CTS enlazado, así el analizador conserva sus 60s y el clasificador dispone de los suyos.
         services.AddHttpClient<AnthropicMessagesClient>((sp, c) =>
         {
             var o = sp.GetRequiredService<IOptions<AnthropicOptions>>().Value;
             c.BaseAddress = new Uri(o.BaseUrl);
-            c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+            c.Timeout = TimeSpan.FromSeconds(Math.Max(o.TimeoutSeconds, o.ClassifierTimeoutSeconds));
         });
         services.AddScoped<AnthropicDocumentOcrAnalyzer>();
+        services.AddScoped<AnthropicDocumentBatchClassifier>();
 
         // Recorte de páginas de PDFs multi-documento (PdfSharpCore). Stateless ⇒ singleton. El handler
         // (Application) lo usa tras el análisis para devolver sólo el subconjunto de páginas del tipo.
@@ -779,9 +785,15 @@ public static class InfrastructureExtensions
         // Application; el handler (AnalyzeDocumentHandler) se registra en Application DI y no cambia.
         var provider = Cfg("Ocr:Provider", "OCR_PROVIDER") ?? "mock";
         if (string.Equals(provider, "anthropic", StringComparison.OrdinalIgnoreCase))
+        {
             services.AddScoped<IDocumentOcrAnalyzer>(sp => sp.GetRequiredService<AnthropicDocumentOcrAnalyzer>());
+            services.AddScoped<IDocumentBatchClassifier>(sp => sp.GetRequiredService<AnthropicDocumentBatchClassifier>());
+        }
         else
+        {
             services.AddScoped<IDocumentOcrAnalyzer, MockDocumentOcrAnalyzer>();
+            services.AddScoped<IDocumentBatchClassifier, MockDocumentBatchClassifier>();
+        }
     }
 
     public static async Task InitializeInfrastructureAsync(

@@ -233,6 +233,10 @@ public static class DependencyInjection
         // (AddOcr) — mismo split app-layer/infra que los consultation providers.
         services.AddScoped<Ocr.AnalyzeDocumentHandler>();
 
+        // Cargue masivo: clasifica el archivo, recorta y verifica cada documento. Mismo split — el
+        // IDocumentBatchClassifier (mock | Anthropic) también se registra en AddOcr.
+        services.AddScoped<Ocr.AnalyzeBatchHandler>();
+
         services.AddScoped<ListProcedureEntitiesHandler>();
         services.AddScoped<ListExternalDataSourcesHandler>();
         services.AddScoped<ListConsultationTemplatesHandler>();

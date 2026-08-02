@@ -31,13 +31,115 @@ internal static class MigracionEndpoints
         var group = app
             .MapGroup("/api/v1/migracion")
             // En el grupo, para que ninguna ruta futura pueda olvidar la llave.
-            .AddEndpointFilter<MigracionKeyFilter>()
-            .AddEndpointFilter<MigracionConcurrencyFilter>();
+            .AddEndpointFilter<MigracionKeyFilter>();
 
+        // El tope de concurrencia va SOLO aquí y no en el grupo: protege la memoria del contenedor
+        // frente a los buffers de 256 MB de la instancia 3, y una consulta de estado no reserva ni
+        // un byte de esos. Colgarlo del grupo haría que refrescar la consola —que reconcilia al
+        // cargar— devolviera 429 mientras hay dos migraciones en curso, justo cuando más falta hace
+        // poder mirar.
         group.MapPost("/{tramite}/{v1Id:long}", MigrarAsync)
+            .AddEndpointFilter<MigracionConcurrencyFilter>()
             .WithName("MigrarTramite");
 
+        group.MapGet("/estado/{tramite}", ConsultarEstadoAsync)
+            .WithName("ConsultarEstadoMigracion");
+
         return app;
+    }
+
+    /// <summary>
+    /// Solo lectura: dice qué ids de la lista ya están en la libreta. No toca V1, no toca V2 y no
+    /// pide el candado — no hay nada que serializar contra una lectura.
+    /// <para>
+    /// Los ids viajan en el query como lista separada por comas y no en un cuerpo JSON porque un
+    /// GET con cuerpo es terreno resbaladizo (proxies que lo descartan, <c>fetch</c> que lo
+    /// prohíbe). El tope de <see cref="MaxIdsPorConsulta"/> es lo que impide que una URL enorme
+    /// tumbe la petición contra el límite de cabeceras de nginx con un 414 críptico.
+    /// </para>
+    /// </summary>
+    private static async Task<IResult> ConsultarEstadoAsync(
+        string tramite,
+        [FromServices] MigrationMapStore migrationMap,
+        CancellationToken cancellationToken,
+        [FromQuery] string? ids = null)
+    {
+        var kind = ResolveKind(tramite);
+        if (kind is null)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "migracion.tramite_desconocido",
+                detail: $"'{tramite}' no es un tipo de trámite. Válidos: registration, transfer.");
+        }
+
+        var (pedidos, invalido) = ParseIds(ids);
+        if (invalido is not null)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "migracion.id_invalido",
+                detail: $"'{invalido}' no es un id de V1. Se espera una lista de enteros separados por comas.");
+        }
+
+        if (pedidos.Count == 0)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "migracion.sin_ids",
+                detail: "Indica al menos un id en el parámetro 'ids'.");
+        }
+
+        if (pedidos.Count > MaxIdsPorConsulta)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "migracion.demasiados_ids",
+                detail: $"Máximo {MaxIdsPorConsulta} ids por consulta; llegaron {pedidos.Count}. Divide la lista.");
+        }
+
+        var encontrados = await migrationMap.FindEntriesAsync(
+            kind.Tables.Master, pedidos, cancellationToken);
+
+        // Se responde en el ORDEN en que llegaron y con un item por id pedido, incluidos los que no
+        // están en la libreta: así el cliente casa la respuesta con su tabla por posición y no tiene
+        // que inventar los huecos.
+        var items = pedidos
+            .Select(id => EstadoItemDto.From(id, encontrados.GetValueOrDefault(id)))
+            .ToList();
+
+        return Results.Ok(new EstadoRespuesta(kind.CliName, kind.Tables.Master, items));
+    }
+
+    /// <summary>
+    /// Tope de ids por consulta de estado. Doscientos caben de sobra en una URL (unos 1,4 kB en el
+    /// peor caso, frente a los 8 kB que admite nginx por defecto) y cubren un CSV grande de una ola.
+    /// </summary>
+    private const int MaxIdsPorConsulta = 200;
+
+    private static (IReadOnlyList<long> Ids, string? Invalido) ParseIds(string? ids)
+    {
+        if (string.IsNullOrWhiteSpace(ids))
+        {
+            return ([], null);
+        }
+
+        var vistos = new List<long>();
+        foreach (var token in ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!long.TryParse(token, System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture, out var id))
+            {
+                return ([], token);
+            }
+
+            if (!vistos.Contains(id))
+            {
+                vistos.Add(id);
+            }
+        }
+
+        return (vistos, null);
     }
 
     /// <summary>
@@ -139,12 +241,26 @@ internal static class MigracionEndpoints
             }
         }
 
+        // Se relee la libreta DESPUÉS de correr para saber dónde quedó el trámite. No se deduce del
+        // V2Id que ya traen las instancias porque falta la otra mitad —el tenant— y porque en un
+        // dry-run ese id es el que TENDRÍA, no uno que exista: ofrecer un enlace ahí llevaría a un
+        // 404. Por eso se consulta la libreta, que solo tiene fila si algo se escribió de verdad.
+        var destino = dryRun
+            ? null
+            : DestinoDe(await migrationMap.FindEntryAsync(kind.Tables.Master, v1Id, cancellationToken));
+
         var respuesta = new MigracionRespuesta(
-            OrigenDto.From(origen!, v1Id), YaMigradoDto.From(previo), resultados);
+            OrigenDto.From(origen!, v1Id), YaMigradoDto.From(previo), resultados)
+        {
+            Destino = destino,
+        };
 
         MigracionLog.Terminado(logger, v1Id, lote, respuesta.ConProblemas);
         return Results.Ok(respuesta);
     }
+
+    private static DestinoDto? DestinoDe(MigrationMapEntry? entry) =>
+        entry is null ? null : new DestinoDto(entry.V2Id, entry.TenantId);
 
     private static (InstanciaDto? Dto, MigrationFailure? Failure) Project<TReport>(
         (TReport? Report, MigrationFailure? Failure) outcome, Func<TReport, InstanciaDto> map)
