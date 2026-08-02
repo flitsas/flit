@@ -56,6 +56,12 @@ export function ComoSeUsa() {
             una carga se corta a la mitad, vuelve a lanzarla sin miedo.
           </Punto>
 
+          <Punto titulo="Simular adjuntos exige que ya esté migrado">
+            Los adjuntos y los documentos se cuelgan de la data plana, y en simulación esa no se
+            escribe. Si simulas las tres sobre un trámite que aún no está en V2, esas dos saldrán en
+            rojo como «Sin migrar» y no es un fallo. Para la primera pasada, simula solo «Datos».
+          </Punto>
+
           <Punto titulo="Las tres instancias van en orden">
             Los datos primero, luego los adjuntos y al final los documentos: los dos últimos
             necesitan que el trámite exista. Puedes correr solo una, pero si los datos no entraron,

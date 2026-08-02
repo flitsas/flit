@@ -158,15 +158,22 @@ export function etiquetaEstadoInstancia(estado: string): string {
 }
 
 /**
- * Nombre de negocio de un tipo de trámite a partir del slug que devuelve el host.
+ * Nombre de negocio del tipo de trámite tal como viene en la respuesta.
  *
- * Existe además de `ETIQUETA_TRAMITE` porque en las respuestas el tipo llega como `string` suelto
- * —es el `CliName` que el host repite tal cual— y no como `TipoTramite`. Sin esto, el reporte
- * mostraba «transfer #26350» a diez centímetros de una tabla que decía «Traspaso» en la misma fila.
- * Si algún día el motor añade un tipo, se muestra el slug antes que un hueco.
+ * Comprobado contra el host real: `origen.tramite` NO es el `CliName` que viaja en la URL
+ * (`transfer`), sino `V1ProcedureKind.Nombre` —«traspaso», «matrícula inicial»—, que ya está en
+ * castellano y escrito para leerse. Lo único que le falta es la mayúscula inicial, porque en el
+ * reporte de consola va dentro de una frase y aquí encabeza un dato.
+ *
+ * Se sigue aceptando el slug por si alguna respuesta lo trae: es el mismo dato con dos nombres
+ * según por dónde entre, y equivocarse aquí solo cuesta una etiqueta fea.
  */
-export function etiquetaTramite(slug: string): string {
-  return ETIQUETA_TRAMITE[slug as TipoTramite] ?? slug;
+export function etiquetaTramite(valor: string): string {
+  const porSlug = ETIQUETA_TRAMITE[valor as TipoTramite];
+  if (porSlug) {
+    return porSlug;
+  }
+  return valor.charAt(0).toUpperCase() + valor.slice(1);
 }
 
 /**

@@ -1,6 +1,6 @@
 "use client";
 
-import { FlaskConical, Flame } from "lucide-react";
+import { AlertTriangle, FlaskConical, Flame } from "lucide-react";
 import { DESCRIPCION_INSTANCIA, INSTANCIAS, type Instancia } from "@/lib/migracion/types";
 
 /**
@@ -32,16 +32,38 @@ export function OpcionesMigracion({
   disposicion?: "columna" | "fila";
 }) {
   const enFila = disposicion === "fila";
+  /**
+   * Lo que está marcado DE VERDAD. La lista vacía significa «las tres» —es lo que hace el host sin
+   * el parámetro— y las tres casillas se pintan marcadas, así que hay que expandirla antes de
+   * tocar nada.
+   *
+   * Sin expandir, alternar hacía lo contrario de lo que se veía: con la lista vacía, un clic sobre
+   * Documentos —que se veía MARCADO— no lo encontraba en la lista, así que lo AÑADÍA y dejaba solo
+   * esa instancia. Desmarcar una acababa desmarcando las otras dos. Visto usando la consola.
+   */
+  const marcadas: readonly Instancia[] = instancias.length === 0 ? INSTANCIAS : instancias;
+  // No se puede correr ninguna instancia, y con la lista vacía queriendo decir «las tres», quitar
+  // la última volvería a marcarlas todas. Se bloquea la casilla en vez de hacer eso.
+  const ultima = marcadas.length === 1;
+
   const alternar = (instancia: Instancia) => {
     onInstancias(
-      instancias.includes(instancia)
-        ? instancias.filter((i) => i !== instancia)
+      marcadas.includes(instancia)
+        ? marcadas.filter((i) => i !== instancia)
         : // Se reordena al orden canónico para que la interfaz muestre lo mismo que va a correr.
-          INSTANCIAS.filter((i) => i === instancia || instancias.includes(i)),
+          INSTANCIAS.filter((i) => i === instancia || marcadas.includes(i)),
     );
   };
 
-  const todas = instancias.length === 0 || instancias.length === INSTANCIAS.length;
+  const todas = marcadas.length === INSTANCIAS.length;
+
+  // Adjuntos y documentos SE CUELGAN de la data plana: el motor los busca en `migration_map` y, si
+  // el trámite no está, responde `NotMigrated` con problemas. En una simulación la data plana no se
+  // escribe, así que sobre un trámite todavía sin migrar esas dos instancias fallan SIEMPRE — y el
+  // lote entero se pinta de rojo sin que nada esté mal. Verificado contra el host real con el
+  // traspaso 26350. Se avisa antes en vez de decidir por quien opera: simular los adjuntos de un
+  // trámite que YA está migrado es legítimo y funciona.
+  const dependeDeDatos = marcadas.some((i) => i === "adjuntos" || i === "documentos");
 
   return (
     <div
@@ -72,7 +94,8 @@ export function OpcionesMigracion({
               <input
                 type="checkbox"
                 className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF]"
-                checked={instancias.length === 0 || instancias.includes(instancia)}
+                checked={marcadas.includes(instancia)}
+                disabled={ultima && marcadas.includes(instancia)}
                 onChange={() => alternar(instancia)}
               />
               <span className="min-w-0">
@@ -97,6 +120,7 @@ export function OpcionesMigracion({
         onDryRun={onDryRun}
         deshabilitado={deshabilitado}
         anchoFijo={enFila}
+        avisarDependencia={dryRun && dependeDeDatos}
       />
     </div>
   );
@@ -115,11 +139,13 @@ function ModoEjecucion({
   onDryRun,
   deshabilitado,
   anchoFijo,
+  avisarDependencia,
 }: {
   dryRun: boolean;
   onDryRun: (valor: boolean) => void;
   deshabilitado: boolean;
   anchoFijo: boolean;
+  avisarDependencia: boolean;
 }) {
   return (
     <fieldset
@@ -167,6 +193,18 @@ function ModoEjecucion({
           ? "Lee todo y reporta qué haría, sin crear nada."
           : "Los trámites quedarán creados en V2. Reintentar sigue siendo seguro: no se duplican."}
       </p>
+
+      {avisarDependencia && (
+        <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            Simulando, los adjuntos y los documentos solo se pueden comprobar en trámites que{" "}
+            <strong className="font-semibold">ya estén migrados</strong>: se cuelgan de la data
+            plana, y en simulación esa no se escribe. En los demás saldrán en rojo como «Sin
+            migrar». No es un fallo. Para una primera pasada, simula solo «Datos».
+          </span>
+        </p>
+      )}
     </fieldset>
   );
 }
