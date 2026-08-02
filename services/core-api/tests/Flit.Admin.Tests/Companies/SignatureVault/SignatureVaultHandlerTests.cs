@@ -190,6 +190,42 @@ public sealed class SignatureVaultHandlerTests
     }
 
     [Fact]
+    public async Task Create_CodigoHashDemasiadoLargo_Responde422_NoRevientaEnLaBaseDeDatos()
+    {
+        // La columna es varchar(100) y el contrato ya declaraba `maxLength: 100`, pero nadie lo
+        // comprobaba: el valor llegaba a PostgreSQL y salía como 500 (22001) en vez del 422 que el
+        // contrato promete.
+        await using var ctx = NewContext();
+        var (create, _, _, _) = Handlers(ctx, out _);
+
+        var result = await create.HandleAsync(NewCreate(codigoHash: new string('X', 101)), Ct);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Code.Should().Be("codigo_hash_invalido");
+    }
+
+    [Fact]
+    public async Task Create_CodigoHashConEspacios_SeGuardaRecortado_YEnBlancoQuedaNulo()
+    {
+        // El sello del documento decide si imprime la línea "Hash:" comprobando que no venga vacío, así
+        // que una cadena de espacios pasaría por código válido y pintaría una línea sin valor.
+        await using var ctx = NewContext();
+        var (create, _, get, _) = Handlers(ctx, out _);
+
+        var conEspacios = await create.HandleAsync(NewCreate(codigoHash: "  ABC-123  "), Ct);
+        var detalle = await get.HandleAsync(
+            new GetSignatureVaultByIdQuery { TenantId = Tenant, Id = conEspacios.SignatureVaultId!.Value }, Ct);
+        detalle!.CodigoHash.Should().Be("ABC-123");
+
+        var enBlanco = await create.HandleAsync(
+            NewCreate(codigoHash: "   ", documentNumber: "555999888"), Ct);
+        var detalleBlanco = await get.HandleAsync(
+            new GetSignatureVaultByIdQuery { TenantId = Tenant, Id = enBlanco.SignatureVaultId!.Value }, Ct);
+        detalleBlanco!.CodigoHash.Should().BeNull();
+    }
+
+    [Fact]
     public async Task FindActiveByDocument_FindsByPerson_IgnoringNit()
     {
         // HU #10930: el consumo por persona resuelve la firma activa por (tenant, tipo + documento).

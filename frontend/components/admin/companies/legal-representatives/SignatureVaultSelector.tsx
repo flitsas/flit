@@ -33,6 +33,16 @@ export interface SignatureVaultSelectorProps {
 }
 
 /**
+ * Cómo se nombra una firma en esta pantalla. Incluye el código hash porque es lo que se estampa en los
+ * documentos: sin mostrarlo aquí, una firma capturada sin código era indistinguible de una completa
+ * hasta que alguien generaba un PDF y notaba que faltaba la línea «Hash:».
+ */
+function etiquetaFirma(sig: SignatureVaultItem): string {
+  const base = `${sig.fullName} — vigente hasta ${formatFecha(sig.vigenciaHasta)}`;
+  return sig.codigoHash ? `${base} · Hash ${sig.codigoHash}` : `${base} · sin código hash`;
+}
+
+/**
  * Selector de firma del baúl filtrado por documento de la persona (AC1).
  * Consulta `GET .../signature-vault?documentType=&documentNumber=&soloVigentes=true`
  * cuando el documento está completo. AC3: si no hay firmas vigentes muestra aviso con
@@ -152,6 +162,14 @@ export function SignatureVaultSelector({
         La firma se registra a nombre de <b>{fullName}</b> con el documento {documentType}{" "}
         {documentNumber} del representante.
       </p>
+      {items.length > 0 && (
+        // HU #11193 (D7) — el backend revoca la activa y crea la nueva. Se avisa antes de capturar:
+        // sustituir la firma de una persona no es algo que deba descubrirse después de guardar.
+        <p className="text-[11px] font-semibold" style={{ color: "#F9AC00" }}>
+          Esta firma sustituirá a la que la persona tiene vigente. La anterior queda revocada, no se
+          borra.
+        </p>
+      )}
       <SignatureCapture value={artefacto} onChange={setArtefacto} disabled={saving} />
       <label className="block text-[11px] font-semibold">
         Código hash <span className="font-normal opacity-60">(opcional)</span>
@@ -162,6 +180,7 @@ export function SignatureVaultSelector({
           disabled={saving}
           placeholder="Código alfanumérico"
           aria-label="Código hash"
+          maxLength={100}
         />
       </label>
       <div className="flex gap-2">
@@ -285,29 +304,46 @@ export function SignatureVaultSelector({
     const selected = items.find((i) => i.id === value);
     return (
       <p className="text-xs" data-testid="sig-selector-readonly">
-        {selected
-          ? `${selected.fullName} — vigente hasta ${formatFecha(selected.vigenciaHasta)}`
-          : "Sin firma seleccionada"}
+        {selected ? etiquetaFirma(selected) : "Sin firma seleccionada"}
       </p>
     );
   }
 
   // AC1 — lista de firmas vigentes
   return (
-    <select
-      id="lr-sig-vault"
-      aria-label="Firma del baúl"
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value || null)}
-      className={OT_INPUT_CLS}
-      data-testid="sig-selector-select"
-    >
-      <option value="">Sin firma seleccionada</option>
-      {items.map((sig) => (
-        <option key={sig.id} value={sig.id}>
-          {sig.fullName} — vigente hasta {formatFecha(sig.vigenciaHasta)}
-        </option>
-      ))}
-    </select>
+    <div>
+      <select
+        id="lr-sig-vault"
+        aria-label="Firma del baúl"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        className={OT_INPUT_CLS}
+        data-testid="sig-selector-select"
+      >
+        <option value="">Sin firma seleccionada</option>
+        {items.map((sig) => (
+          <option key={sig.id} value={sig.id}>
+            {etiquetaFirma(sig)}
+          </option>
+        ))}
+      </select>
+
+      {/* La captura solo se ofrecía cuando la persona NO tenía firmas, así que un código hash mal
+          digitado —o ausente— no se podía corregir desde aquí: había que salir al tab del Baúl y
+          anular la firma primero. El backend ya sustituye la activa (HU #11193, D7); lo que faltaba
+          era ofrecerlo. */}
+      {!readOnly && fullName && !capturing && (
+        <button
+          type="button"
+          className="mt-2 rounded-xl border px-3 py-1.5 text-[11px] font-semibold"
+          style={{ color: "#557EFF", borderColor: "#557EFF" }}
+          onClick={() => setCapturing(true)}
+          data-testid="sig-capture-replace"
+        >
+          Capturar firma nueva
+        </button>
+      )}
+      {capturing && bloqueCaptura}
+    </div>
   );
 }

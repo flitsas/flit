@@ -19,6 +19,9 @@ namespace Flit.Admin.Application.Companies.SignatureVault.CreateSignatureVault;
 /// </summary>
 public sealed class CreateSignatureVaultHandler
 {
+    /// <summary>Longitud de <c>admin.signature_vault.codigo_hash</c> (varchar(100)).</summary>
+    private const int CodigoHashMaxLength = 100;
+
     private readonly ISignatureVaultArtifactStorage _artifactStorage;
     private readonly ISignatureVaultRepository _repository;
     private readonly ISignatureVaultReader? _reader;
@@ -69,7 +72,10 @@ public sealed class CreateSignatureVaultHandler
             command.MandateSignerId,
             command.CreatedBy,
             command.CorrelationId,
-            CodigoHash: command.CodigoHash);
+            // Normalizado como el resto de campos: era el único que se persistía en crudo, así que un
+            // código con espacios de sobra los arrastraba hasta la línea "Hash:" del documento. Vacío se
+            // guarda como null para que el sello omita la línea en vez de imprimir "Hash:" sin valor.
+            CodigoHash: NormalizeCodigoHash(command.CodigoHash));
 
         try
         {
@@ -143,6 +149,17 @@ public sealed class CreateSignatureVaultHandler
         return activa?.Id;
     }
 
+    /// <summary>
+    /// Código hash recortado, o <c>null</c> si viene vacío o en blanco. El sello del documento decide si
+    /// imprime la línea "Hash:" comprobando que no esté vacío, así que una cadena de espacios pasaría por
+    /// código válido y pintaría una línea sin valor.
+    /// </summary>
+    private static string? NormalizeCodigoHash(string? codigoHash)
+    {
+        var v = codigoHash?.Trim();
+        return string.IsNullOrEmpty(v) ? null : v;
+    }
+
     private static (List<SignatureVaultValidationError> Errors, byte[]? Artifact) Validate(
         CreateSignatureVaultCommand command)
     {
@@ -158,6 +175,16 @@ public sealed class CreateSignatureVaultHandler
             errors.Add(new SignatureVaultValidationError(
                 "vigenciaHasta", "vigencia_invalida",
                 "La vigencia hasta no puede ser anterior a la vigencia desde."));
+        }
+
+        // El contrato ya declaraba `maxLength: 100` y la columna es varchar(100), pero nadie lo
+        // comprobaba: un código más largo llegaba hasta PostgreSQL y salía como 500 (error 22001) en vez
+        // de como el 422 legible que promete el contrato.
+        if (command.CodigoHash?.Trim().Length > CodigoHashMaxLength)
+        {
+            errors.Add(new SignatureVaultValidationError(
+                "codigoHash", "codigo_hash_invalido",
+                $"El código hash no puede superar {CodigoHashMaxLength} caracteres."));
         }
 
         var artifact = TryDecodeArtifact(command.ArtefactoFirmaBase64);

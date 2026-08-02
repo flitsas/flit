@@ -25,6 +25,17 @@ import {
 } from "@/lib/api/admin-signature-vault";
 
 const TENANT = "tenant-1";
+
+/** Firma vigente de la persona, SIN código hash: el caso que el punto 1 dejaba invisible. */
+const VIGENTE_SIN_HASH = {
+  id: "firma-1",
+  documentType: "CC",
+  documentNumber: "1038409485",
+  fullName: "Juan Felipe Montoya",
+  estado: "activa",
+  vigenciaDesde: "2026-01-01",
+  vigenciaHasta: "2027-01-01",
+} as never;
 const PROPS = {
   tenantId: TENANT,
   documentType: "CC",
@@ -133,18 +144,8 @@ describe("SignatureVaultSelector — HU #11193 (captura desde el formulario)", (
     expect(screen.getByTestId("sig-capture-block")).toBeInTheDocument();
   });
 
-  it("AC5 con firmas vigentes no se ofrece capturar", async () => {
-    vi.mocked(fetchSignatureVaultByDocument).mockResolvedValue([
-      {
-        id: "firma-1",
-        documentType: "CC",
-        documentNumber: "1038409485",
-        fullName: "Juan Felipe Montoya",
-        estado: "activa",
-        vigenciaDesde: "2026-01-01",
-        vigenciaHasta: "2027-01-01",
-      } as never,
-    ]);
+  it("AC5 con firmas vigentes se elige de la lista, no se pide capturar una primera", async () => {
+    vi.mocked(fetchSignatureVaultByDocument).mockResolvedValue([VIGENTE_SIN_HASH]);
     render(<SignatureVaultSelector {...PROPS} onChange={vi.fn()} />);
 
     expect(await screen.findByTestId("sig-selector-select")).toBeInTheDocument();
@@ -157,5 +158,44 @@ describe("SignatureVaultSelector — HU #11193 (captura desde el formulario)", (
 
     await screen.findByTestId("sig-selector-empty");
     expect(screen.queryByTestId("sig-capture-open")).not.toBeInTheDocument();
+  });
+
+  // ── Corregir una firma ya capturada (hallado al auditar el código hash) ──
+
+  it("con una firma vigente SI se puede capturar otra: es la unica forma de corregir el hash", async () => {
+    // La captura solo se ofrecía cuando la persona no tenía firmas, así que un código hash mal
+    // digitado no se podía corregir desde el panel del representante: había que salir al Baúl y
+    // anular la firma primero. El backend ya sustituye la activa (D7); faltaba ofrecerlo.
+    vi.mocked(fetchSignatureVaultByDocument).mockResolvedValue([VIGENTE_SIN_HASH]);
+    const user = userEvent.setup();
+    render(<SignatureVaultSelector {...PROPS} onChange={vi.fn()} />);
+
+    await user.click(await screen.findByTestId("sig-capture-replace"));
+
+    expect(await screen.findByTestId("sig-capture-block")).toBeInTheDocument();
+    // Sustituir la firma de una persona no debe descubrirse después de guardar.
+    expect(screen.getByText(/sustituirá a la que la persona tiene vigente/i)).toBeInTheDocument();
+  });
+
+  it("una firma sin codigo hash se distingue de una completa en la lista", async () => {
+    // Sin mostrarlo, una firma capturada sin código era indistinguible de una completa hasta que
+    // alguien generaba un PDF y notaba que faltaba la línea "Hash:".
+    vi.mocked(fetchSignatureVaultByDocument).mockResolvedValue([
+      VIGENTE_SIN_HASH,
+      { ...(VIGENTE_SIN_HASH as object), id: "firma-2", codigoHash: "A1B2C3" } as never,
+    ]);
+    render(<SignatureVaultSelector {...PROPS} onChange={vi.fn()} />);
+
+    await screen.findByTestId("sig-selector-select");
+    expect(screen.getByRole("option", { name: /sin código hash/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Hash A1B2C3/ })).toBeInTheDocument();
+  });
+
+  it("en modo consulta no se ofrece recapturar aunque haya firma", async () => {
+    vi.mocked(fetchSignatureVaultByDocument).mockResolvedValue([VIGENTE_SIN_HASH]);
+    render(<SignatureVaultSelector {...PROPS} readOnly onChange={vi.fn()} />);
+
+    await screen.findByTestId("sig-selector-readonly");
+    expect(screen.queryByTestId("sig-capture-replace")).not.toBeInTheDocument();
   });
 });
