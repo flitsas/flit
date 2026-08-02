@@ -78,6 +78,13 @@ export function ComoSeUsa() {
             contra el servidor cuáles quedaron migrados de verdad.
           </Punto>
 
+          <Punto titulo="Para empezar otro lote, carga otro archivo">
+            No hace falta descartar nada primero: el archivo nuevo reemplaza al anterior, también
+            el avance guardado en este navegador. «Descartar el lote» solo se usa para dejar la
+            pantalla vacía sin cargar nada. Y descartar no borra nada de V2: lo migrado sigue
+            migrado.
+          </Punto>
+
           <Punto titulo="Para el archivo, usa la plantilla">
             Dos columnas: el tipo (traspaso o matrícula) y el id de V1. Se aceptan .csv y .xlsx. Al
             cargarlo se revisa fila por fila y se dice cuáles no sirven, sin bloquear las demás.

@@ -144,6 +144,47 @@ describe("CargueMasivo", () => {
     expect(screen.getAllByText("Migrado")).toHaveLength(2);
   });
 
+  /**
+   * Terminada una ola, la pantalla se quedaba con el lote hecho y un botón deshabilitado sin decir
+   * por dónde se empieza otra. Lo natural es suponer que hay que descartar primero —el camino
+   * largo, y que además hace pensar que se pierde algo—, cuando basta con cargar el archivo nuevo.
+   */
+  it("terminado el lote, dice cómo empezar otro", async () => {
+    const usuario = userEvent.setup();
+    migrarTramite.mockImplementation(async (p: { v1Id: number }) => respuestaOk(p.v1Id));
+
+    render(<CargueMasivo />);
+    await cargarCsv(usuario, "tipo,id\ntraspaso,1\ntraspaso,2");
+
+    expect(screen.queryByText(/Lote terminado/i)).not.toBeInTheDocument();
+
+    await usuario.click(await screen.findByRole("radio", { name: /Migración/i }));
+    await usuario.click(await screen.findByRole("button", { name: /^Migrar 2 trámites/i }));
+
+    await waitFor(() => expect(screen.getByText(/Lote terminado/i)).toBeInTheDocument());
+    expect(screen.getByText(/carga un archivo nuevo/i)).toBeInTheDocument();
+  });
+
+  /** Y que sea verdad: el archivo nuevo reemplaza al anterior sin pasar por «Descartar el lote». */
+  it("cargar otro archivo reemplaza el lote terminado", async () => {
+    const usuario = userEvent.setup();
+    migrarTramite.mockImplementation(async (p: { v1Id: number }) => respuestaOk(p.v1Id));
+
+    render(<CargueMasivo />);
+    await cargarCsv(usuario, "tipo,id\ntraspaso,1");
+    await usuario.click(await screen.findByRole("radio", { name: /Migración/i }));
+    await usuario.click(await screen.findByRole("button", { name: /^Migrar 1 trámite/i }));
+    await waitFor(() => expect(screen.getByText(/Lote terminado/i)).toBeInTheDocument());
+
+    const otro = new File(["tipo,id\nmatricula,7426"], "ola-2.csv", { type: "text/csv" });
+    await usuario.upload(document.querySelector('input[type="file"]') as HTMLInputElement, otro);
+
+    expect(await screen.findByText("ola-2.csv")).toBeInTheDocument();
+    expect(screen.getByText("7426")).toBeInTheDocument();
+    expect(screen.queryByText("ola.csv")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Lote terminado/i)).not.toBeInTheDocument();
+  });
+
   it("recupera el avance al volver a la pantalla", async () => {
     window.localStorage.setItem(
       "flit:migracion:progreso",

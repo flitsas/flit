@@ -239,6 +239,9 @@ export function CargueMasivo() {
   const pendientes =
     lote?.filas.filter((f) => seleccion.has(claveFila(f)) && !estaTerminada(f)) ?? [];
   const listas = lote?.filas.filter(estaTerminada).length ?? 0;
+  // Ni una fila por hacer. Se mira sobre TODAS las filas y no sobre las seleccionadas: con
+  // `pendientes` bastaría con desmarcarlas para que la pantalla dijera que terminó.
+  const loteTerminado = lote !== null && lote.filas.length > 0 && lote.filas.every(estaTerminada);
 
   return (
     <div className="flex flex-col gap-4">
@@ -346,6 +349,21 @@ export function CargueMasivo() {
                   <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
                     No se pudo contrastar con el servidor. Lo que ves es el avance guardado en este
                     navegador y puede estar desactualizado.
+                  </p>
+                )}
+
+                {/*
+                  Qué hacer DESPUÉS. Sin esto, terminada una ola la pantalla se queda con el lote
+                  hecho y un botón deshabilitado, sin decir por dónde se empieza otra; lo natural
+                  es suponer que hay que descartar primero, que es el camino largo y hace pensar
+                  que se pierde algo. Cargar el archivo nuevo basta.
+                */}
+                {loteTerminado && !corriendo && (
+                  <p className="mt-1 text-xs opacity-70">
+                    Lote terminado. Para empezar otro,{" "}
+                    <strong className="font-semibold opacity-100">carga un archivo nuevo</strong>:
+                    reemplaza a este. «Descartar el lote» solo hace falta si quieres dejar la
+                    pantalla vacía.
                   </p>
                 )}
               </div>
