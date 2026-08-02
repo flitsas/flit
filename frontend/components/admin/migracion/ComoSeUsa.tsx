@@ -47,8 +47,8 @@ export function ComoSeUsa() {
 
           <Punto titulo="La simulación no escribe nada">
             En modo «Simulación» el migrador lee todo, dice qué haría y no crea nada. Es el modo por
-            defecto, y las filas simuladas siguen pendientes: para migrarlas de verdad, cambia a
-            «Migrar de verdad» y vuelve a lanzarlas.
+            defecto, y las filas simuladas siguen pendientes: para migrarlas de verdad, cambia el
+            modo a «Migración» y vuelve a lanzarlas.
           </Punto>
 
           <Punto titulo="Reintentar es seguro">

@@ -317,7 +317,11 @@ export function CargueMasivo() {
 
       {lote && (
         <>
-          <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+          {/*
+            `items-start`: sin él las dos tarjetas se estiran a la altura de la más alta, y como la
+            de opciones mide el doble, la del lote quedaba con 300 px de vacío bajo el botón.
+          */}
+          <section className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
             <div className="rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10">
               <OpcionesMigracion
                 instancias={instancias}
@@ -430,11 +434,6 @@ export function CargueMasivo() {
 }
 
 /**
- * Actualiza UNA fila. La identidad es tipo + id, nunca el id solo: un traspaso y una matrícula
- * pueden compartir el mismo id de V1 —son tablas distintas— y con la clave corta, migrar el
- * traspaso 26350 marcaría también la matrícula 26350 como hecha sin haberla tocado.
- */
-/**
  * Pregunta al servidor cuáles de los trámites del lote ya están migrados, agrupando por tipo
  * porque la consulta de estado es por tipo de trámite (los ids viven en tablas distintas).
  */
@@ -457,6 +456,11 @@ async function consultarMigrados(lote: Lote): Promise<Set<string>> {
   return migrados;
 }
 
+/**
+ * Actualiza UNA fila. La identidad es tipo + id, nunca el id solo: un traspaso y una matrícula
+ * pueden compartir el mismo id de V1 —son tablas distintas— y con la clave corta, migrar el
+ * traspaso 26350 marcaría también la matrícula 26350 como hecha sin haberla tocado.
+ */
 function marcar(
   lote: Lote,
   objetivo: { tramite: TipoTramite; v1Id: number },

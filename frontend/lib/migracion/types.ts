@@ -158,6 +158,18 @@ export function etiquetaEstadoInstancia(estado: string): string {
 }
 
 /**
+ * Nombre de negocio de un tipo de trámite a partir del slug que devuelve el host.
+ *
+ * Existe además de `ETIQUETA_TRAMITE` porque en las respuestas el tipo llega como `string` suelto
+ * —es el `CliName` que el host repite tal cual— y no como `TipoTramite`. Sin esto, el reporte
+ * mostraba «transfer #26350» a diez centímetros de una tabla que decía «Traspaso» en la misma fila.
+ * Si algún día el motor añade un tipo, se muestra el slug antes que un hueco.
+ */
+export function etiquetaTramite(slug: string): string {
+  return ETIQUETA_TRAMITE[slug as TipoTramite] ?? slug;
+}
+
+/**
  * Identidad de un trámite dentro de un lote: tipo + id, NUNCA el id solo.
  *
  * Los ids de V1 se repiten entre tipos porque viven en tablas distintas (hay 12.807 ids que

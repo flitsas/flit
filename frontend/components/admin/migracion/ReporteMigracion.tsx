@@ -5,6 +5,7 @@ import {
   enlaceTramite,
   etiquetaConteo,
   etiquetaEstadoInstancia,
+  etiquetaTramite,
   type MigracionRespuesta,
 } from "@/lib/migracion/types";
 
@@ -25,7 +26,7 @@ export function ReporteMigracion({ respuesta }: { respuesta: MigracionRespuesta 
 
       <Bloque titulo="Origen">
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 sm:grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
-          <Dato etiqueta="Trámite" valor={`${origen.tramite} #${origen.v1Id}`} />
+          <Dato etiqueta="Trámite" valor={`${etiquetaTramite(origen.tramite)} #${origen.v1Id}`} />
           <Dato etiqueta="Tipo en V2" valor={origen.tipoV2} />
           <Dato etiqueta="Tabla de V1" valor={origen.tablaV1} />
           <Dato etiqueta="Lote" valor={origen.lote} />
@@ -54,10 +55,7 @@ export function ReporteMigracion({ respuesta }: { respuesta: MigracionRespuesta 
       {instancias.map((instancia) => (
         <Bloque key={instancia.instancia} titulo={`Instancia: ${instancia.instancia}`}>
           <div className="flex flex-wrap items-center gap-2">
-            <Insignia
-              tono={instancia.conProblemas ? "malo" : "bueno"}
-              texto={etiquetaEstadoInstancia(instancia.estado)}
-            />
+            <Insignia estado={instancia.estado} conProblemas={instancia.conProblemas} />
             {instancia.motivo && <span className="opacity-80">{instancia.motivo}</span>}
           </div>
 
@@ -128,7 +126,9 @@ function Encabezado({ respuesta }: { respuesta: MigracionRespuesta }) {
       <Titular
         icono={<Info className="h-5 w-5" aria-hidden="true" style={{ color: "#557EFF" }} />}
         texto="Simulación completada"
-        detalle="Nada se escribió. Vuelve a lanzarla sin simulación para migrar de verdad."
+        // Se nombra el control tal y como está rotulado en pantalla: la versión anterior decía
+        // «vuelve a lanzarla sin simulación» y ese botón no existe con ese nombre en ningún sitio.
+        detalle="Nada se escribió. Cambia el modo a «Migración» y vuelve a lanzarla para migrar de verdad."
       />
     );
   }
@@ -194,13 +194,30 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   );
 }
 
-function Insignia({ tono, texto }: { tono: "bueno" | "malo"; texto: string }) {
-  const clases =
-    tono === "bueno"
-      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-      : "bg-red-500/10 text-red-600 dark:text-red-400";
+/**
+ * Estados de instancia que NO merecen el verde de «hecho», con el mismo color que les da la tabla
+ * del lote (ver `TONO` en `TablaLote`).
+ *
+ * El verde es la señal de que el trámite quedó en V2, y aquí se leía sobre la palabra «Simulado»:
+ * la misma fila decía «Simulado» en azul en la tabla y «Simulado» en verde tres centímetros más
+ * abajo, en la pantalla donde el color es justo lo que la gente mira para saber si ya migró.
+ */
+const TONO_ESTADO: Record<string, string> = {
+  Simulated: "bg-[#557EFF]/10 text-[#557EFF] dark:text-[#8AA6FF]",
+  Skipped: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
+  NotMigrated: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
+  NoAttachments: "bg-slate-500/10 text-slate-600 dark:text-slate-300",
+  NotFoundInV1: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+};
+
+function Insignia({ estado, conProblemas }: { estado: string; conProblemas: boolean }) {
+  const clases = conProblemas
+    ? "bg-red-500/10 text-red-600 dark:text-red-400"
+    : (TONO_ESTADO[estado] ?? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400");
 
   return (
-    <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${clases}`}>{texto}</span>
+    <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${clases}`}>
+      {etiquetaEstadoInstancia(estado)}
+    </span>
   );
 }

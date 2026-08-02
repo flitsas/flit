@@ -116,7 +116,7 @@ describe("CargueMasivo", () => {
     expect(screen.getAllByText("Simulado, sin migrar")).toHaveLength(2);
     expect(screen.queryByText("Migrado")).not.toBeInTheDocument();
 
-    await usuario.click(screen.getByRole("radio", { name: /Migrar de verdad/i }));
+    await usuario.click(screen.getByRole("radio", { name: /Migración/i }));
     await usuario.click(await screen.findByRole("button", { name: /^Migrar 2 trámites/i }));
 
     await waitFor(() => expect(migrarTramite).toHaveBeenCalledTimes(4));

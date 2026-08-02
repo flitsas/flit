@@ -114,12 +114,17 @@ function ModoEjecucion({
           detalle="No escribe nada"
           clasesActivo="border-[#557EFF] bg-[#557EFF]/10 text-[#557EFF]"
         />
+        {/*
+          «Migración» y no «Migrar de verdad»: el título largo partía en dos renglones y descuadraba
+          las dos tarjetas. El par de sustantivos cabe en una línea cada uno, y lo que de verdad
+          avisa —«Escribe en V2», el ámbar y el párrafo de abajo— no depende del título.
+        */}
         <Modo
           activo={!dryRun}
           onClick={() => onDryRun(false)}
           deshabilitado={deshabilitado}
           icono={<Flame className="h-4 w-4" aria-hidden="true" />}
-          titulo="Migrar de verdad"
+          titulo="Migración"
           detalle="Escribe en V2"
           clasesActivo="border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
         />
@@ -163,7 +168,7 @@ function Modo({
       }`}
     >
       <span className="flex items-center gap-1.5 text-sm font-semibold">
-        {icono}
+        <span className="shrink-0">{icono}</span>
         {titulo}
       </span>
       <span className="text-xs opacity-80">{detalle}</span>
