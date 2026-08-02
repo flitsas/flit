@@ -100,15 +100,22 @@ export function MandatarioSection({
                 <span className="block text-[11px] opacity-70">
                   {o.tipoDocumento} {o.documento}
                 </span>
-                {o.identidadVigente ? (
+                {/* Son dos vías ALTERNATIVAS, no requisitos acumulativos: con cualquiera de las dos
+                    el mandato se firma. Antes solo se nombraba la identidad, así que un mandatario con
+                    su firma del baúl vigente se anunciaba como si le faltara algo. */}
+                {o.firmaBaulVigente ? (
+                  <span className="block text-[11px]" style={{ color: '#5B8A1F' }}>
+                    Firma del baúl vigente
+                  </span>
+                ) : o.identidadVigente ? (
                   <span className="block text-[11px]" style={{ color: '#5B8A1F' }}>
                     Identidad vigente
                     {o.identidadHasta ? ` hasta el ${formatFecha(o.identidadHasta)}` : ''}
                   </span>
                 ) : (
                   <span className="block text-[11px]" style={{ color: '#F9AC00' }}>
-                    Sin identidad vigente. Debe validarla antes de que el organismo pueda aprobar el
-                    trámite.
+                    Sin firma del baúl ni identidad vigentes. Puedes dejar el trámite marcado para
+                    firmar más adelante.
                   </span>
                 )}
               </span>

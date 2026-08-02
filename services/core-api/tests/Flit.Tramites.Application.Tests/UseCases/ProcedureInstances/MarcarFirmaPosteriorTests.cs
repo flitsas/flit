@@ -22,8 +22,12 @@ public sealed class MarcarFirmaPosteriorTests
     private readonly IDeferredSignatureMarkRepository _marks =
         Substitute.For<IDeferredSignatureMarkRepository>();
     private readonly ISignatureVaultPolicy _vault = Substitute.For<ISignatureVaultPolicy>();
+    private readonly IMandateSignerDirectory _mandatarios = Substitute.For<IMandateSignerDirectory>();
 
-    private MarcarFirmaPosteriorHandler Handler() => new(_repo, _marks, _vault);
+    /// <summary>Instancia sembrada por <see cref="SeedTramite"/>, para poder completarla después.</summary>
+    private ProcedureInstance _instance = null!;
+
+    private MarcarFirmaPosteriorHandler Handler() => new(_repo, _marks, _vault, _mandatarios);
 
     [Fact]
     public async Task AC1_ConIdentidadYFirmaVencidas_ElTramiteQuedaMarcadoParaEsaEmpresaYEseRepresentante()
@@ -183,6 +187,90 @@ public sealed class MarcarFirmaPosteriorTests
         result!.Aplica.Should().BeFalse();
     }
 
+    // ── El mandatario (ajuste tras validación manual) ───────────────────────────
+
+    [Fact]
+    public async Task Mandatario_SinFirmaNiIdentidad_SeMarcaSinInventarUnNitRepresentado()
+    {
+        // El mandatario firma el mandato por la compañía gestora: no representa a ninguna de las partes
+        // del trámite, así que anotarle un NIT representado afirmaría un vínculo que no existe.
+        var ct = TestContext.Current.CancellationToken;
+        var id = SeedTramite();
+        SeedMandatario(identidadVigente: false);
+        DeferredSignatureMark? guardada = null;
+        _marks.When(m => m.Add(Arg.Any<DeferredSignatureMark>()))
+            .Do(call => guardada = call.Arg<DeferredSignatureMark>());
+
+        var (result, error) = await Handler().HandleAsync(id, Tenant, "mandatario", ct);
+
+        error.Should().BeNull();
+        result!.Marcado.Should().BeTrue();
+        guardada.Should().NotBeNull();
+        guardada!.PartyRole.Should().Be("mandatario");
+        guardada.CompanyDocumentNumber.Should().BeNull();
+        guardada.RepresentativeDocumentNumber.Should().Be("70111222");
+        guardada.Estado.Should().Be(DeferredSignatureEstados.Pendiente);
+    }
+
+    [Fact]
+    public async Task Mandatario_ConIdentidadVigenteEnAdmin_NoSePuedeDiferir()
+    {
+        // Su identidad NO vive en las biométricas del trámite sino en las validaciones de Admin. Un
+        // handler que la buscara solo donde están las de las partes daría por vencida una identidad
+        // vigente y ofrecería diferir un mandato que puede firmarse hoy.
+        var ct = TestContext.Current.CancellationToken;
+        var id = SeedTramite();
+        SeedMandatario(identidadVigente: true);
+
+        var (_, error) = await Handler().HandleAsync(id, Tenant, "mandatario", ct);
+
+        error.Should().Be("firma_disponible");
+        _marks.DidNotReceive().Add(Arg.Any<DeferredSignatureMark>());
+    }
+
+    [Fact]
+    public async Task Mandatario_ConFirmaDelBaulVigente_NoSePuedeDiferir()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = SeedTramite();
+        SeedMandatario(identidadVigente: false);
+        _vault.ResolveAsync(Tenant, "CC", "70111222", Arg.Any<CancellationToken>())
+            .Returns(new SignatureVaultMatch(
+                Guid.NewGuid(), "Carlos Ruiz", "hash", "vault/f.png", "sha",
+                new DateOnly(2026, 1, 1), new DateOnly(2027, 1, 1), "70111222"));
+
+        var (_, error) = await Handler().HandleAsync(id, Tenant, "mandatario", ct);
+
+        error.Should().Be("firma_disponible");
+    }
+
+    [Fact]
+    public async Task SinMandatarioElegido_LaConsultaNoRompeLaPantalla()
+    {
+        // Mismo criterio que la persona natural: la opción sencillamente no existe para ese trámite y no
+        // debe llegar a la pantalla como un error.
+        var ct = TestContext.Current.CancellationToken;
+        var id = SeedTramite();
+
+        var (result, error) = await Handler().ConsultarAsync(id, Tenant, "mandatario", ct);
+
+        error.Should().BeNull();
+        result!.Aplica.Should().BeFalse();
+        result.Marcado.Should().BeFalse();
+    }
+
+    /// <summary>Elige un mandatario para el trámite sembrado y lo publica en el directorio.</summary>
+    private Guid SeedMandatario(bool identidadVigente)
+    {
+        var signerId = Guid.NewGuid();
+        _instance.MandateSignerId = signerId;
+        _mandatarios.GetByIdAsync(signerId, Arg.Any<CancellationToken>())
+            .Returns(new MandateSignerCandidate(
+                signerId, "Carlos Ruiz", "70111222", null, identidadVigente,
+                SignatureVaultId: null, TipoDocumento: "CC"));
+        return signerId;
+    }
+
     private Guid SeedTramite(string status = TramiteEstado.Borrador, bool juridica = true)
     {
         var id = Guid.NewGuid();
@@ -213,6 +301,7 @@ public sealed class MarcarFirmaPosteriorTests
             CreatedAt = DateTimeOffset.UtcNow,
         });
         _repo.GetByIdWithBiometricsAndActorsAsync(id, Tenant, Arg.Any<CancellationToken>()).Returns(instance);
+        _instance = instance;
         return id;
     }
 }

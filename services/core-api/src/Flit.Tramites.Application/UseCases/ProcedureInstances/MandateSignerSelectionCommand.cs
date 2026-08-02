@@ -6,9 +6,11 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 /// <summary>
 /// HU #11203 — un mandatario que el gestor puede elegir para que firme el mandato del trámite. Lleva
-/// los datos que necesita para decidir: quién es, con qué documento y hasta cuándo vale su validación
-/// de identidad. Sin identidad vigente el mandato no se puede aprobar, así que se informa aquí y no en
-/// el último paso.
+/// los datos que necesita para decidir: quién es, con qué documento y con QUÉ puede firmar.
+///
+/// <para>Son dos vías alternativas, no acumulativas: firma del baúl vigente <b>o</b> validación de
+/// identidad vigente. Antes solo se informaba la identidad, así que un mandatario perfectamente capaz
+/// de firmar con su firma del baúl se anunciaba como si le faltara algo.</para>
 /// </summary>
 public sealed record MandateSignerOptionDto(
     Guid Id,
@@ -16,7 +18,8 @@ public sealed record MandateSignerOptionDto(
     string TipoDocumento,
     string Documento,
     bool IdentidadVigente,
-    DateTimeOffset? IdentidadHasta);
+    DateTimeOffset? IdentidadHasta,
+    bool FirmaBaulVigente = false);
 
 /// <summary>
 /// Mandatarios disponibles para el trámite y cuál está elegido. <see cref="Editable"/> es falso fuera
@@ -34,8 +37,11 @@ public sealed record MandateSignerSelectionDto(
 /// </summary>
 public sealed class ListMandateSignerOptionsHandler(
     IProcedureInstanceRepository repo,
-    IMandateSignerDirectory directory)
+    IMandateSignerDirectory directory,
+    ISignatureVaultPolicy? vaultPolicy = null)
 {
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
     public async Task<(MandateSignerSelectionDto? Result, string? Error)> HandleAsync(
         Guid instanceId,
         Guid tenantId,
@@ -57,10 +63,22 @@ public sealed class ListMandateSignerOptionsHandler(
             .GetCandidatesAsync(officeId, tenantId, ct)
             .ConfigureAwait(false);
 
-        var opciones = candidatos
-            .Select(c => new MandateSignerOptionDto(
-                c.Id, c.Nombre, c.TipoDocumento ?? "CC", c.Documento, c.IdentityVigente, c.IdentityValidUntil))
-            .ToList();
+        // La firma del baúl se resuelve por documento y contra el tenant de la gestora, igual que hace el
+        // generador del mandato (HU #11030). Son un puñado de mandatarios por organismo, así que se
+        // resuelven uno a uno en vez de montar una consulta en lote que duplicaría la política del baúl
+        // (incluido el flag signature_vault_enabled del tenant).
+        var opciones = new List<MandateSignerOptionDto>(candidatos.Count);
+        foreach (var c in candidatos)
+        {
+            var tipoDoc = string.IsNullOrWhiteSpace(c.TipoDocumento) ? "CC" : c.TipoDocumento.Trim();
+            var conBaul = !string.IsNullOrWhiteSpace(c.Documento)
+                && await _vaultPolicy
+                    .ResolveAsync(tenantId, tipoDoc, c.Documento.Trim(), ct)
+                    .ConfigureAwait(false) is not null;
+
+            opciones.Add(new MandateSignerOptionDto(
+                c.Id, c.Nombre, tipoDoc, c.Documento, c.IdentityVigente, c.IdentityValidUntil, conBaul));
+        }
 
         // AC3 — con un único mandatario habilitado no hay nada que decidir: queda elegido.
         var elegido = instance.MandateSignerId

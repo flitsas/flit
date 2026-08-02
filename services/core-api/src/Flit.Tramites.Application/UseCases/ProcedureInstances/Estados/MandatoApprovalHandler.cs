@@ -16,8 +16,9 @@ public enum MandatoApprovalOutcome
     RequiereSeleccion,
 
     /// <summary>
-    /// El mandatario resuelto NO tiene identidad validada vigente (HU #10911/#10916): debe validar su
-    /// identidad antes de firmar (⇒ 409 mandatario_identidad_requerida).
+    /// El mandatario resuelto no tiene NINGUNA de las dos formas de firmar —ni firma del baúl vigente ni
+    /// identidad validada vigente—, así que debe conseguir una antes de firmar
+    /// (⇒ 409 mandatario_identidad_requerida).
     /// </summary>
     IdentidadRequerida,
 }
@@ -36,8 +37,14 @@ public sealed record MandatoApprovalDecision(MandatoApprovalOutcome Outcome, Gui
 /// </summary>
 public sealed class MandatoApprovalHandler(
     IProcedureInstanceRepository repo,
-    IMandateSignerDirectory directory)
+    IMandateSignerDirectory directory,
+    ISignatureVaultPolicy? vaultPolicy = null)
 {
+    // El mandatario firma igual que cualquier otra parte: con la firma del baúl si la tiene, y si no con
+    // el sello de su validación de identidad (misma precedencia que aplica el generador del mandato).
+    // Default inerte ⇒ sin baúl configurado el gate se comporta como antes.
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
     public async Task<MandatoApprovalDecision> CheckAsync(
         Guid instanceId,
         Guid clientTenantId,
@@ -69,12 +76,17 @@ public sealed class MandatoApprovalHandler(
 
         var resolution = MandateSignerSelector.Resolve(candidates, approvingUserId, elegido);
 
+        // El gate miraba SOLO la identidad, así que bloqueaba con "mandatario_identidad_requerida" a un
+        // mandatario que tenía su firma del baúl vigente y podía firmar perfectamente. Son alternativas,
+        // no requisitos acumulativos: basta cualquiera de las dos.
+        var puedeFirmar = resolution.Status == MandateSignerResolutionStatus.Resolved
+            && (resolution.Signer!.IdentityVigente
+                || await TieneFirmaDelBaulAsync(instance.TenantId, resolution.Signer, ct).ConfigureAwait(false));
+
         return resolution.Status switch
         {
-            // Un único candidato / cotejo por usuario / selección explícita válida. El firmante debe tener
-            // identidad validada VIGENTE (HU #10911/#10916): si no, se exige validar antes de aprobar.
-            MandateSignerResolutionStatus.Resolved when resolution.Signer!.IdentityVigente =>
-                new MandatoApprovalDecision(MandatoApprovalOutcome.Resolved, resolution.Signer.Id),
+            MandateSignerResolutionStatus.Resolved when puedeFirmar =>
+                new MandatoApprovalDecision(MandatoApprovalOutcome.Resolved, resolution.Signer!.Id),
             MandateSignerResolutionStatus.Resolved =>
                 new MandatoApprovalDecision(MandatoApprovalOutcome.IdentidadRequerida, null),
             // Varios sin match: el aprobador debe elegir (409).
@@ -83,5 +95,22 @@ public sealed class MandatoApprovalHandler(
             // Sin mandatarios configurados (p. ej. Sabaneta institucional): aprobar sin firmante persona.
             _ => new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null),
         };
+    }
+
+    /// <summary>
+    /// ¿El mandatario tiene firma del baúl activa y vigente? Se resuelve por su DOCUMENTO y contra el
+    /// tenant de la compañía gestora, igual que hace el generador del mandato (HU #11030):
+    /// <c>mandate_signers.signature_vault_id</c> no se escribe nunca, así que esa FK no sirve para saberlo.
+    /// </summary>
+    private async Task<bool> TieneFirmaDelBaulAsync(
+        Guid clientTenantId, MandateSignerCandidate signer, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(signer.Documento))
+            return false;
+
+        var tipoDoc = string.IsNullOrWhiteSpace(signer.TipoDocumento) ? "CC" : signer.TipoDocumento.Trim();
+        return await _vaultPolicy
+            .ResolveAsync(clientTenantId, tipoDoc, signer.Documento.Trim(), ct)
+            .ConfigureAwait(false) is not null;
     }
 }

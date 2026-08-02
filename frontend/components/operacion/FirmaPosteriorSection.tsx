@@ -6,15 +6,26 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import { formatFecha } from '@/lib/format/date';
 import type { FirmaPosteriorEstado } from '@/lib/api/types/procedure-runtime';
 
-/** Partes que pueden ser persona jurídica y por tanto tener representante legal. */
+/**
+ * Firmantes que pueden quedarse sin con qué firmar. Vendedor y comprador firman por su representante
+ * legal cuando son personas jurídicas; el mandatario firma el contrato de mandato por la gestora.
+ */
 const PARTES = [
   { rol: 'vendedor', label: 'Vendedor' },
   { rol: 'comprador', label: 'Comprador' },
+  { rol: 'mandatario', label: 'Mandatario' },
 ] as const;
 
 const AVISO_METODO =
   'Se firmará con la validación de identidad del representante legal. La firma se aplicará sola ' +
   'cuando él la complete, sin que tengas que volver a este trámite.';
+
+// El mandatario no se destraba con el lote por validación de identidad: la suya vive en la
+// configuración del organismo, y además puede resolverse capturándole una firma del baúl. El mandato
+// se rehace al entregar o aprobar, que es cuando recoge lo que exista para entonces.
+const AVISO_MANDATARIO =
+  'El contrato de mandato se volverá a generar al entregar el trámite al organismo, con la firma del ' +
+  'baúl o la validación de identidad que el mandatario tenga para entonces.';
 
 /**
  * HU #11197 — opción de firmar a posteriori.
@@ -106,11 +117,15 @@ export function FirmaPosteriorSection({
                   {estado.representanteNombre ? ` · ${estado.representanteNombre}` : ''}
                 </p>
                 <p className="mt-1 text-[11px] opacity-70">
-                  {estado.marcado
-                    ? // AC4 — al volver al trámite se ve que está esperando.
-                      `Pendiente de firma. ${AVISO_METODO}`
-                    : // AC3 — se informa el método y el efecto ANTES de confirmar.
-                      `El representante no tiene firma ni identidad vigentes. ${AVISO_METODO}`}
+                  {rol === 'mandatario'
+                    ? estado.marcado
+                      ? `Pendiente de firma. ${AVISO_MANDATARIO}`
+                      : `El mandatario no tiene firma del baúl ni identidad vigentes. ${AVISO_MANDATARIO}`
+                    : estado.marcado
+                      ? // AC4 — al volver al trámite se ve que está esperando.
+                        `Pendiente de firma. ${AVISO_METODO}`
+                      : // AC3 — se informa el método y el efecto ANTES de confirmar.
+                        `El representante no tiene firma ni identidad vigentes. ${AVISO_METODO}`}
                 </p>
                 {estado.marcado && estado.marcadoAt && (
                   <p className="mt-1 text-[11px] opacity-60">

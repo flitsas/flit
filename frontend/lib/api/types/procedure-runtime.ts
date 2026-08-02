@@ -1606,9 +1606,11 @@ export interface StatusHistoryPage {
 }
 
 /**
- * HU #11203 — un mandatario que puede firmar el mandato del trámite. `identidadHasta` es hasta cuándo
- * vale su validación de identidad: sin una vigente el mandato no se puede aprobar, así que se informa
- * al elegir y no en el último paso.
+ * HU #11203 — un mandatario que puede firmar el mandato del trámite.
+ *
+ * Puede firmar por cualquiera de dos vías ALTERNATIVAS: `firmaBaulVigente` o `identidadVigente`. Antes
+ * solo se informaba la identidad, así que un mandatario con su firma del baúl vigente —perfectamente
+ * capaz de firmar— se anunciaba como si le faltara algo.
  */
 export interface MandateSignerOption {
   id: string;
@@ -1617,6 +1619,7 @@ export interface MandateSignerOption {
   documento: string;
   identidadVigente: boolean;
   identidadHasta: string | null;
+  firmaBaulVigente?: boolean;
 }
 
 /** Mandatarios disponibles y cuál está elegido. `editable` es falso fuera de borrador. */

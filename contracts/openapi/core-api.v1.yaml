@@ -6019,15 +6019,18 @@ paths:
         - bearerAuth: []
       summary: "¿Aplica la firma a posteriori para esta parte y ya está marcada?"
       description: >
-        HU #11197 (AC1/AC2/AC4). `aplica` es true solo cuando la parte es una empresa cuyo representante
-        legal tiene la identidad Y la firma del baúl vencidas: con cualquiera de las dos vigente el
-        trámite puede firmarse ya y la opción no se ofrece. En persona natural responde
+        HU #11197 (AC1/AC2/AC4). `aplica` es true solo cuando el firmante de esa parte tiene la identidad
+        Y la firma del baúl vencidas: con cualquiera de las dos vigente el trámite puede firmarse ya y la
+        opción no se ofrece. En persona natural, o sin mandatario elegido, responde
         `{aplica:false, marcado:false}`, no un error.
+        `mandatario` es el firmante del contrato de mandato: su identidad vive en la configuración del
+        organismo, así que su marca no la cierra el lote por validación sino la regeneración del
+        expediente al entregar o aprobar.
       parameters:
         - name: parte
           in: query
           required: true
-          schema: { type: string, enum: [comprador, vendedor] }
+          schema: { type: string, enum: [comprador, vendedor, mandatario] }
       responses:
         "200":
           description: "Estado de la firma a posteriori para esa parte."
@@ -6046,8 +6049,10 @@ paths:
       summary: "Marca el trámite para firmarse cuando el representante valide su identidad"
       description: >
         HU #11196 (AC1). Idempotente: volver a marcar no crea una segunda marca ni mueve la fecha
-        original. Cuando esa persona apruebe su validación, TODOS sus trámites marcados del tenant que
-        sigan en borrador o subsanación se firman de una (el estado se revalida al aplicar, no al marcar).
+        original. Para comprador/vendedor, cuando esa persona apruebe su validación TODOS sus trámites
+        marcados del tenant que sigan en borrador o subsanación se firman de una (el estado se revalida al
+        aplicar, no al marcar). Para `mandatario` la marca se cierra al regenerarse el expediente en la
+        entrega o la aprobación, que es cuando recoge la firma del baúl o la identidad que tenga entonces.
       requestBody:
         required: true
         content:
@@ -6055,7 +6060,7 @@ paths:
             schema:
               type: object
               properties:
-                parte: { type: string, enum: [comprador, vendedor] }
+                parte: { type: string, enum: [comprador, vendedor, mandatario] }
               required: [parte]
       responses:
         "200":

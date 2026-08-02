@@ -32,6 +32,17 @@ public sealed class TramiteFirmaAplicador(
     {
         ArgumentNullException.ThrowIfNull(instance);
 
+        // El mandatario no es parte de la compraventa: lo único que hay que rehacer es la generación
+        // documental, que es donde se estampa su firma en el contrato de mandato. Pasarlo por la firma de
+        // la compraventa le atribuiría un rol que no tiene en el negocio jurídico.
+        if (string.Equals(parte, MarcarFirmaPosteriorHandler.ParteMandatario, StringComparison.Ordinal))
+        {
+            var (_, mandatoError) = await furHandler
+                .HandleAsync(instance.Id, tenantId, cancellationToken)
+                .ConfigureAwait(false);
+            return ("mandato", mandatoError);
+        }
+
         var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada)
             == TramiteModalidadEntrada.Traspaso;
 

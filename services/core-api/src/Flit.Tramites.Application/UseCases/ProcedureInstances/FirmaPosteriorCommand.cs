@@ -29,9 +29,18 @@ public sealed record FirmaPosteriorEstadoDto(
 public sealed class MarcarFirmaPosteriorHandler(
     IProcedureInstanceRepository repo,
     IDeferredSignatureMarkRepository marks,
-    ISignatureVaultPolicy? vaultPolicy = null)
+    ISignatureVaultPolicy? vaultPolicy = null,
+    IMandateSignerDirectory? mandateDirectory = null)
 {
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
+    // El mandatario tambien puede quedarse sin con que firmar, y entonces necesita la misma salida que
+    // el representante legal en vez de un bloqueo. Default inerte: sin directorio la opcion no se ofrece.
+    private readonly IMandateSignerDirectory _mandateDirectory =
+        mandateDirectory ?? NullMandateSignerDirectory.Instance;
+
+    /// <summary>Parte sintetica del mandatario: no es un actor del tramite, pero si un firmante.</summary>
+    public const string ParteMandatario = "mandatario";
 
     public async Task<(FirmaPosteriorEstadoDto? Result, string? Error)> HandleAsync(
         Guid id, Guid tenantId, string? parte, CancellationToken ct = default)
@@ -48,13 +57,13 @@ public sealed class MarcarFirmaPosteriorHandler(
         if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
             return (null, "not_draft");
 
-        var (actor, subject, error) = ResolverSujeto(instance, normalized);
+        var (actor, subject, identidadAdmin, error) = await ResolverSujetoAsync(instance, normalized, ct);
         if (error is not null)
             return (null, error);
 
         // Si ya hay con qué firmar, la opción no aplica (AC2 de la HU #11197): ofrecerla invitaría a
         // demorar un trámite que puede cerrarse hoy.
-        if (await TieneFirmaDisponibleAsync(tenantId, instance, subject!, ct))
+        if (identidadAdmin || await TieneFirmaDisponibleAsync(tenantId, instance, subject!, ct))
             return (null, "firma_disponible");
 
         var existente = await marks.FindPendienteAsync(tenantId, id, normalized, ct);
@@ -70,7 +79,8 @@ public sealed class MarcarFirmaPosteriorHandler(
             TenantId = tenantId,
             ProcedureInstanceId = id,
             PartyRole = normalized,
-            CompanyDocumentNumber = actor!.DocumentNumber,
+            // El mandatario no representa a ninguna parte del trámite: no hay NIT representado que anotar.
+            CompanyDocumentNumber = actor?.DocumentNumber,
             RepresentativeDocumentType = subject!.TipoDocumento!,
             RepresentativeDocumentNumber = subject.NumeroDocumento!,
             Estado = DeferredSignatureEstados.Pendiente,
@@ -97,15 +107,17 @@ public sealed class MarcarFirmaPosteriorHandler(
         if (instance is null)
             return (null, "not_found");
 
-        var (_, subject, error) = ResolverSujeto(instance, normalized);
+        var (_, subject, identidadAdmin, error) = await ResolverSujetoAsync(instance, normalized, ct);
         if (error is not null)
-            // Persona natural o sin representante: la opción sencillamente no existe, no es un error
-            // que deba romperle la pantalla al gestor.
+            // Persona natural, sin representante o sin mandatario elegido: la opción sencillamente no
+            // existe, no es un error que deba romperle la pantalla al gestor.
             return (new FirmaPosteriorEstadoDto(Aplica: false, Marcado: false), null);
 
         var existente = await marks.FindPendienteAsync(tenantId, id, normalized, ct);
         var editable = TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva);
-        var aplica = editable && !await TieneFirmaDisponibleAsync(tenantId, instance, subject!, ct);
+        var aplica = editable
+            && !identidadAdmin
+            && !await TieneFirmaDisponibleAsync(tenantId, instance, subject!, ct);
 
         return (Estado(aplica || existente is not null, existente, subject!.Nombre), null);
     }
@@ -133,25 +145,55 @@ public sealed class MarcarFirmaPosteriorHandler(
         return await repo.FindVigenteApprovedByDocumentAsync(tenantId, tipo, documento, now, ct) is not null;
     }
 
-    /// <summary>Actor de la parte y su sujeto de identidad. La firma a posteriori solo existe en persona jurídica.</summary>
-    private static (ProcedureInstanceActor? Actor, IdentitySubject? Subject, string? Error) ResolverSujeto(
-        ProcedureInstance instance, string parte)
+    /// <summary>
+    /// Quién firma esta parte y con qué documento.
+    ///
+    /// <para>Hay dos formas distintas de firmante. Las partes del trámite (comprador/vendedor) firman por
+    /// su representante legal cuando son personas jurídicas. El <b>mandatario</b> no es un actor del
+    /// trámite sino el firmante del mandato elegido para él, y su identidad vive en las validaciones de
+    /// Admin —no en las biométricas del trámite—, así que su vigencia se devuelve aparte
+    /// (<c>IdentidadAdmin</c>) en vez de buscarla donde no está.</para>
+    /// </summary>
+    private async Task<(ProcedureInstanceActor? Actor, IdentitySubject? Subject, bool IdentidadAdmin, string? Error)>
+        ResolverSujetoAsync(ProcedureInstance instance, string parte, CancellationToken ct)
     {
+        if (string.Equals(parte, ParteMandatario, StringComparison.Ordinal))
+        {
+            if (instance.MandateSignerId is not { } signerId)
+                return (null, null, false, "sin_mandatario");
+
+            var signer = await _mandateDirectory.GetByIdAsync(signerId, ct).ConfigureAwait(false);
+            if (signer is null || string.IsNullOrWhiteSpace(signer.Documento))
+                return (null, null, false, "sin_mandatario");
+
+            var sujetoMandatario = new IdentitySubject(
+                Nombre: signer.Nombre,
+                TipoDocumento: string.IsNullOrWhiteSpace(signer.TipoDocumento) ? "CC" : signer.TipoDocumento!.Trim(),
+                NumeroDocumento: signer.Documento.Trim(),
+                // No hay correo del mandatario en el directorio de trámites, y aquí no hace falta: la
+                // marca solo necesita a quién esperar, no a quién escribirle.
+                Email: null,
+                // No firma como representante legal de una parte: firma el mandato por la gestora.
+                EsRepresentanteLegal: false);
+
+            return (null, sujetoMandatario, signer.IdentityVigente, null);
+        }
+
         var actor = instance.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
         if (actor is null)
-            return (null, null, "sin_actor");
+            return (null, null, false, "sin_actor");
 
         if (!ActorPersonTypes.IsJuridical(actor.PersonType))
-            return (null, null, "no_aplica");
+            return (null, null, false, "no_aplica");
 
         var subject = IdentitySubjectResolver.For(actor);
         if (!subject.EsRepresentanteLegal
             || string.IsNullOrWhiteSpace(subject.TipoDocumento)
             || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
-            return (null, null, "sin_representante");
+            return (null, null, false, "sin_representante");
 
-        return (actor, subject, null);
+        return (actor, subject, false, null);
     }
 
     private static FirmaPosteriorEstadoDto Estado(bool aplica, DeferredSignatureMark? mark, string? nombre) =>
@@ -160,6 +202,8 @@ public sealed class MarcarFirmaPosteriorHandler(
     private static string? NormalizeParte(string? parte)
     {
         var p = parte?.Trim().ToLowerInvariant();
-        return p is BiometricRules.ParteComprador or BiometricRules.ParteVendedor ? p : null;
+        return p is BiometricRules.ParteComprador or BiometricRules.ParteVendedor or ParteMandatario
+            ? p
+            : null;
     }
 }

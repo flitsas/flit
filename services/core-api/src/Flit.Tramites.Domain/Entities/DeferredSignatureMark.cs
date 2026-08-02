@@ -36,7 +36,11 @@ public sealed class DeferredSignatureMark
     public string PartyRole { get; set; } = string.Empty;
 
     /// <summary>NIT de la empresa representada. PII (Ley 1581): no loguear.</summary>
-    public string CompanyDocumentNumber { get; set; } = string.Empty;
+    /// <summary>
+    /// NIT de la empresa representada, solo para la traza. <c>null</c> cuando la parte es el mandatario:
+    /// no representa a ninguna de las partes del trámite, firma en nombre de la compañía gestora.
+    /// </summary>
+    public string? CompanyDocumentNumber { get; set; }
 
     public string RepresentativeDocumentType { get; set; } = string.Empty;
 
@@ -60,7 +64,13 @@ public sealed class DeferredSignatureMark
     public bool EstaPendiente => Estado == DeferredSignatureEstados.Pendiente;
 
     /// <summary>Cierra la marca como aplicada, dejando la traza de con qué validación se firmó.</summary>
-    public void Aplicar(Guid validationId, DateTimeOffset now)
+    /// <param name="validationId">
+    /// Validación de identidad que destrabó la firma, cuando la hubo. Es <c>null</c> para el mandatario:
+    /// su marca la cierra la regeneración del expediente al entregar/aprobar, que recoge tanto una
+    /// identidad validada en Admin como una firma del baúl capturada — y esta última no nace de ninguna
+    /// validación que se pueda citar.
+    /// </param>
+    public void Aplicar(Guid? validationId, DateTimeOffset now)
     {
         Estado = DeferredSignatureEstados.Aplicada;
         AppliedValidationId = validationId;

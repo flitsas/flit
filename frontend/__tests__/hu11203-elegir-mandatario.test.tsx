@@ -70,8 +70,23 @@ describe('HU #11203 — elegir el mandatario que firma', () => {
 
     expect(await screen.findByText('CC 1020304050')).toBeInTheDocument();
     expect(screen.getByText(/Identidad vigente hasta el 2026\/12\/31/)).toBeInTheDocument();
-    // Sin identidad vigente el organismo no podría aprobar: se avisa al elegir, no al final.
-    expect(screen.getByText(/Sin identidad vigente/)).toBeInTheDocument();
+    // Sin ninguna de las dos vías el mandato no puede firmarse hoy: se avisa al elegir, no al final,
+    // y se apunta a la salida (firmar más adelante) en vez de dejar al gestor bloqueado.
+    expect(screen.getByText(/Sin firma del baúl ni identidad vigentes/)).toBeInTheDocument();
+  });
+
+  it('un mandatario con firma del baúl vigente NO se anuncia como si le faltara algo', async () => {
+    // Son dos vías alternativas. El gate de aprobación bloqueaba —y la UI avisaba— mirando solo la
+    // identidad, así que quien podía firmar con su firma del baúl aparecía como incompleto.
+    mocks.listMandateSigners.mockResolvedValue({
+      opciones: [{ ...CARLOS, firmaBaulVigente: true }],
+      elegidoId: null,
+      editable: true,
+    });
+    renderSection();
+
+    expect(await screen.findByText(/Firma del baúl vigente/)).toBeInTheDocument();
+    expect(screen.queryByText(/Sin firma del baúl ni identidad vigentes/)).not.toBeInTheDocument();
   });
 
   it('AC3: con un único mandatario habilitado queda seleccionado por defecto', async () => {

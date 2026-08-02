@@ -21,7 +21,7 @@ internal sealed class DeferredSignatureMarkConfiguration : IEntityTypeConfigurat
         builder.Property(x => x.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(x => x.ProcedureInstanceId).HasColumnName("procedure_instance_id").IsRequired();
         builder.Property(x => x.PartyRole).HasColumnName("party_role").IsRequired();
-        builder.Property(x => x.CompanyDocumentNumber).HasColumnName("company_document_number").IsRequired();
+        builder.Property(x => x.CompanyDocumentNumber).HasColumnName("company_document_number");
         builder.Property(x => x.RepresentativeDocumentType)
             .HasColumnName("representative_document_type").IsRequired();
         builder.Property(x => x.RepresentativeDocumentNumber)

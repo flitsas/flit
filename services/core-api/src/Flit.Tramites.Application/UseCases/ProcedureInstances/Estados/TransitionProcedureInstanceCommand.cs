@@ -1,3 +1,4 @@
+using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.Extensions.Logging;
 
@@ -13,7 +14,8 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 public sealed class TransitionProcedureInstanceHandler(
     ITramiteLifecycleService lifecycle,
     GenerarFurHandler? furHandler = null,
-    ILogger<TransitionProcedureInstanceHandler>? logger = null)
+    ILogger<TransitionProcedureInstanceHandler>? logger = null,
+    IDeferredSignatureMarkRepository? marks = null)
 {
     public async Task<(ProcedureInstanceSummary? Result, string? ErrorCode, string? ErrorDetail)> HandleAsync(
         Guid id,
@@ -48,9 +50,47 @@ public sealed class TransitionProcedureInstanceHandler(
             var (_, regenError) = await furHandler.HandleAsync(id, tenantId, ct).ConfigureAwait(false);
             if (regenError is not null && logger is not null)
                 TransitionLog.RegeneracionMandatoOmitida(logger, id, regenError);
+
+            await CerrarFirmaPosteriorDelMandatarioAsync(id, tenantId, regenError is null, ct)
+                .ConfigureAwait(false);
         }
 
         return (CreateProcedureInstanceHandler.ToSummary(outcome.Instance!), null, null);
+    }
+
+    /// <summary>
+    /// Cierra la marca de firma a posteriori del MANDATARIO cuando el expediente acaba de regenerarse.
+    ///
+    /// <para>Es aquí donde esa marca se resuelve, y no en el lote por validación de identidad: el
+    /// mandatario valida su identidad en Admin, que no emite el evento que dispara el lote, y además puede
+    /// resolverse capturando una firma del baúl, que no emite ningún evento en absoluto. La regeneración
+    /// al entregar/aprobar ya recoge lo que exista en ese momento, así que la marca se cierra contra el
+    /// hecho consumado en vez de contra una notificación que puede no llegar nunca.</para>
+    ///
+    /// <para>Best-effort: si la regeneración falló, la marca se queda pendiente —el mandato no se rehízo,
+    /// así que darla por aplicada mentiría—. Un fallo al cerrarla no revierte la transición.</para>
+    /// </summary>
+    private async Task CerrarFirmaPosteriorDelMandatarioAsync(
+        Guid id, Guid tenantId, bool regeneracionOk, CancellationToken ct)
+    {
+        if (marks is null || !regeneracionOk)
+            return;
+
+        try
+        {
+            var mark = await marks
+                .FindPendienteAsync(tenantId, id, MarcarFirmaPosteriorHandler.ParteMandatario, ct)
+                .ConfigureAwait(false);
+            if (mark is null)
+                return;
+
+            mark.Aplicar(validationId: null, DateTimeOffset.UtcNow);
+            await marks.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (logger is not null)
+        {
+            TransitionLog.RegeneracionMandatoOmitida(logger, id, ex.Message);
+        }
     }
 }
 

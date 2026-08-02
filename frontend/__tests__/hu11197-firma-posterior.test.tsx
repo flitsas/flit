@@ -27,7 +27,7 @@ const estado = (over: Partial<{ aplica: boolean; marcado: boolean; representante
   ...over,
 });
 
-/** Configura qué responde el backend por parte (vendedor/comprador). */
+/** Configura qué responde el backend por parte (vendedor/comprador/mandatario). */
 function backend(porParte: Record<string, ReturnType<typeof estado>>) {
   getFirmaPosterior.mockImplementation((_id: string, parte: string) =>
     Promise.resolve(porParte[parte] ?? estado()),
@@ -52,7 +52,7 @@ describe('HU #11197 — firma a posteriori en el registro', () => {
     backend({});
     const { container } = render(<FirmaPosteriorSection instanceId="i-1" />);
 
-    await waitFor(() => expect(getFirmaPosterior).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(getFirmaPosterior).toHaveBeenCalledTimes(3));
     expect(screen.queryByRole('button', { name: /Firmar más adelante/i })).not.toBeInTheDocument();
     // Sin partes aplicables la sección no se pinta: una sección vacía solo añade ruido al paso.
     expect(container.querySelector('[data-testid="firma-posterior"]')).toBeNull();
@@ -103,10 +103,34 @@ describe('HU #11197 — firma a posteriori en el registro', () => {
     getFirmaPosterior.mockImplementation((_id: string, parte: string) =>
       parte === 'vendedor'
         ? Promise.reject(new Error('404'))
-        : Promise.resolve(estado({ aplica: true })),
+        : Promise.resolve(estado({ aplica: parte === 'comprador' })),
     );
     render(<FirmaPosteriorSection instanceId="i-1" />);
 
     expect(await screen.findByRole('button', { name: /Firmar más adelante/i })).toBeInTheDocument();
+  });
+
+  // ── El mandatario también puede quedarse sin con qué firmar ─────────────────
+
+  it('el mandatario sin firma ni identidad tambien puede diferirse', async () => {
+    const user = userEvent.setup();
+    backend({ mandatario: estado({ aplica: true, representanteNombre: 'Carlos Ruiz' }) });
+    marcarFirmaPosterior.mockResolvedValue(estado({ aplica: true, marcado: true }));
+    render(<FirmaPosteriorSection instanceId="i-1" />);
+
+    await user.click(await screen.findByRole('button', { name: /Firmar más adelante/i }));
+
+    expect(marcarFirmaPosterior).toHaveBeenCalledWith('i-1', 'mandatario', undefined);
+  });
+
+  it('al mandatario se le explica que se resuelve al entregar, no con el lote de identidad', async () => {
+    // Su identidad vive en la configuración del organismo y no dispara el lote; además puede
+    // resolverse capturándole una firma del baúl, que no emite ningún evento. Prometerle el mismo
+    // automatismo que al representante legal sería prometer algo que no va a ocurrir.
+    backend({ mandatario: estado({ aplica: true }) });
+    render(<FirmaPosteriorSection instanceId="i-1" />);
+
+    expect(await screen.findByText(/al entregar el trámite al organismo/i)).toBeInTheDocument();
+    expect(screen.queryByText(/se aplicará sola cuando él la complete/i)).not.toBeInTheDocument();
   });
 });
