@@ -7,7 +7,7 @@ namespace Flit.Infrastructure.Migrations
 {
     /// <summary>
     /// HU #11196 (ajuste tras validación manual) — la firma a posteriori también cubre al MANDATARIO. El
-    /// DDL embebido (<c>52-HU11196-firma-posterior-mandatario.sql</c>) afloja
+    /// DDL embebido (<c>51-HU11196-firma-posterior-mandatario.sql</c>) afloja
     /// <c>company_document_number</c> a NULL: el mandatario no representa a ninguna de las partes del
     /// trámite, así que no hay NIT representado que anotar y rellenarlo con un valor inventado haría que
     /// la traza afirmara un vínculo inexistente.
@@ -20,7 +20,7 @@ namespace Flit.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql(EmbeddedDdl.LoadUp("52-HU11196-firma-posterior-mandatario.sql"));
+            migrationBuilder.Sql(EmbeddedDdl.LoadUp("51-HU11196-firma-posterior-mandatario.sql"));
         }
 
         /// <inheritdoc />
