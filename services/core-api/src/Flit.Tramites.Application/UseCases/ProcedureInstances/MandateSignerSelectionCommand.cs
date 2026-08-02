@@ -65,7 +65,7 @@ public sealed class ListMandateSignerOptionsHandler(
             return (new MandateSignerSelectionDto([], instance.MandateSignerId, editable), null);
 
         var candidatos = await directory
-            .GetCandidatesAsync(officeId, tenantId, ct)
+            .GetCandidatesAsync(officeId, tenantId, MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
             .ConfigureAwait(false);
 
         // La firma del baúl se resuelve por documento y contra el tenant de la gestora, igual que hace el
@@ -125,7 +125,7 @@ public sealed class SetMandateSignerHandler(
         // cualquier id dejaría el trámite apuntando a un mandatario que no puede firmarlo, y eso solo
         // se descubriría al aprobar.
         var candidatos = await directory
-            .GetCandidatesAsync(officeId, tenantId, ct)
+            .GetCandidatesAsync(officeId, tenantId, MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
             .ConfigureAwait(false);
         if (candidatos.All(c => c.Id != mandateSignerId))
             return "mandatario_no_habilitado";
@@ -139,6 +139,25 @@ public sealed class SetMandateSignerHandler(
 /// <summary>Resolución compartida del organismo del trámite, para no duplicarla entre los dos casos.</summary>
 internal static class MandateSignerSelectionResolver
 {
+    /// <summary>
+    /// NIT de la empresa que OTORGA el mandato: el vendedor en traspaso —es su vehículo el que se
+    /// transfiere— y el radicador en matrícula inicial, donde no hay vendedor. Misma regla que
+    /// <c>FurDocumentData.Otorgante</c>, de la que depende a nombre de quién se emite el contrato.
+    ///
+    /// <para><c>null</c> si esa parte no está capturada todavía: entonces no hay contra qué acotar y se
+    /// ofrecen todos los mandatarios del organismo.</para>
+    /// </summary>
+    public static string? ResolveNitMandante(Flit.Tramites.Domain.Entities.ProcedureInstance instance)
+    {
+        var otorgante = instance.Actors.FirstOrDefault(a =>
+                string.Equals(a.ActorType, "vendedor", StringComparison.OrdinalIgnoreCase))
+            ?? instance.Actors.FirstOrDefault(a =>
+                string.Equals(a.ActorType, "comprador", StringComparison.OrdinalIgnoreCase));
+
+        var nit = otorgante?.DocumentNumber?.Trim();
+        return string.IsNullOrEmpty(nit) ? null : nit;
+    }
+
     /// <summary>
     /// Organismo del trámite. Durante el wizard vive en <c>field_values.transit_office_id</c>; la columna
     /// solo se fija al radicar (<c>TramiteLifecycleService</c>), así que mirar solo la columna dejaría la

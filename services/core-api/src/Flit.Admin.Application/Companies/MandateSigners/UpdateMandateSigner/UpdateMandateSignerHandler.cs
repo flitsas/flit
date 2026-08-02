@@ -98,6 +98,7 @@ public sealed class UpdateMandateSignerHandler
                 command.TransitOfficeIds,
                 command.PhysicalSignatureOfficeIds,
                 command.SignatureVaultId,
+                command.OfficeCompanies,
                 command.ActualizaFirma,
                 // Tras la edición, el organismo bajo el que se editó es el primario. Solo cambia algo
                 // cuando la lista retira al primario anterior; en la edición desde el perfil del

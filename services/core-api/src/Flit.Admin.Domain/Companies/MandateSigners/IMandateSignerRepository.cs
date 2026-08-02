@@ -75,7 +75,12 @@ public sealed record CreateMandateSignerData(
     /// Firma del baúl elegida para el mandatario. <c>null</c> ⇒ el trámite la resuelve por documento,
     /// que es el comportamiento previo.
     /// </summary>
-    Guid? SignatureVaultId = null);
+    Guid? SignatureVaultId = null,
+    /// <summary>
+    /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
+    /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
+    /// </summary>
+    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null);
 
 /// <summary>Datos de edición. La huella ya viene recalculada con la fecha de registro original.</summary>
 public sealed record UpdateMandateSignerData(
@@ -109,6 +114,11 @@ public sealed record UpdateMandateSignerData(
     /// </summary>
     Guid? SignatureVaultId = null,
     /// <summary>
+    /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
+    /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
+    /// </summary>
+    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null,
+    /// <summary>
     /// El llamante gestiona la firma del baúl y <see cref="SignatureVaultId"/> es su valor deseado
     /// (incluido <c>null</c>, que la desvincula). En <c>false</c> la firma NO se toca.
     ///
@@ -124,6 +134,14 @@ public sealed record UpdateMandateSignerData(
     /// primario— lo resucitaría. <c>null</c> ⇒ se conserva el que ya tiene.
     /// </summary>
     Guid? NuevoOrganismoPrimario = null);
+
+/// <summary>
+/// Empresas representadas que un mandatario atiende en un organismo. La lista vacía significa "todas":
+/// no hay forma de decir "ninguna", porque un mandatario sin empresas no podría firmar nada.
+/// </summary>
+public sealed record MandateSignerOfficeCompanies(
+    Guid TransitOfficeId,
+    IReadOnlyList<Guid> RepresentedCompanyIds);
 
 /// <summary>Datos de inactivación.</summary>
 public sealed record InactivateMandateSignerData(

@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Companies.MandateSigners;
 namespace Flit.Admin.Application.Companies.MandateSigners.UpdateMandateSigner;
 
 /// <summary>
@@ -55,6 +56,12 @@ public sealed class UpdateMandateSignerCommand
     /// que es el comportamiento previo.
     /// </summary>
     public Guid? SignatureVaultId { get; init; }
+
+    /// <summary>
+    /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
+    /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
+    /// </summary>
+    public IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies { get; init; }
 
     /// <summary>
     /// El llamante gestiona la firma del baúl y <see cref="SignatureVaultId"/> es su valor deseado

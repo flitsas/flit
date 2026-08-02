@@ -168,7 +168,7 @@ public sealed class MandateSignerVariosOrganismosTests
         var signerId = await repo.CreateAsync(Alta([OtMedellin, OtEnvigado]), ct);
 
         // Antes de retirarlo firma en los dos.
-        (await directorio.GetCandidatesAsync(OtEnvigado, Compania, ct)).Should().ContainSingle();
+        (await directorio.GetCandidatesAsync(OtEnvigado, Compania, null, ct)).Should().ContainSingle();
 
         await repo.UpdateAsync(
             new UpdateMandateSignerData(
@@ -177,8 +177,8 @@ public sealed class MandateSignerVariosOrganismosTests
                 TransitOfficeIds: [OtMedellin]),
             ct);
 
-        (await directorio.GetCandidatesAsync(OtEnvigado, Compania, ct)).Should().BeEmpty();
-        (await directorio.GetCandidatesAsync(OtMedellin, Compania, ct)).Should().ContainSingle();
+        (await directorio.GetCandidatesAsync(OtEnvigado, Compania, null, ct)).Should().BeEmpty();
+        (await directorio.GetCandidatesAsync(OtMedellin, Compania, null, ct)).Should().ContainSingle();
     }
 
     // ── AC4 — los mandatarios actuales siguen funcionando ─────────────────────
@@ -287,7 +287,7 @@ public sealed class MandateSignerVariosOrganismosTests
         porId.SignatureVaultId.Should().Be(firmaId);
 
         // Y en el organismo nuevo el trámite lo ofrece sin haber duplicado la persona.
-        (await directorio.GetCandidatesAsync(OtBello, Compania, ct)).Should().ContainSingle()
+        (await directorio.GetCandidatesAsync(OtBello, Compania, null, ct)).Should().ContainSingle()
             .Which.Id.Should().Be(signerId);
         (await ctx.MandateSigners.CountAsync(ct)).Should().Be(1);
     }
@@ -306,8 +306,8 @@ public sealed class MandateSignerVariosOrganismosTests
 
         await repo.InactivateAsync(new InactivateMandateSignerData(signerId, OtTenant, null, null), ct);
 
-        (await directorio.GetCandidatesAsync(OtMedellin, Compania, ct)).Should().BeEmpty();
-        (await directorio.GetCandidatesAsync(OtEnvigado, Compania, ct)).Should().BeEmpty();
+        (await directorio.GetCandidatesAsync(OtMedellin, Compania, null, ct)).Should().BeEmpty();
+        (await directorio.GetCandidatesAsync(OtEnvigado, Compania, null, ct)).Should().BeEmpty();
     }
 
     [Fact]

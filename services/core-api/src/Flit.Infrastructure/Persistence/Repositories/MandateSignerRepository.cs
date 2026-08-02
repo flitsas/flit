@@ -116,6 +116,8 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             }
         }
 
+        EscribirEmpresasRepresentadas(signerId, data.OfficeCompanies, now);
+
         AddAudit(
             data.OtTenantId,
             fieldName: "created",
@@ -218,6 +220,9 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
         {
             _context.MandateSignerCompanies.Add(NewAssignment(signer.Id, officeId, companyId, now));
         }
+
+        await ReemplazarEmpresasRepresentadasAsync(
+            signer.Id, data.OfficeCompanies, now, cancellationToken).ConfigureAwait(false);
 
         AddAudit(
             data.OtTenantId,
@@ -437,6 +442,75 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
     {
         var lista = Distinct(ids ?? []);
         return lista.Count == 0 ? [primario] : lista;
+    }
+
+    /// <summary>
+    /// Empresas representadas por organismo en el ALTA. Sin lista no se escribe nada, y esa ausencia
+    /// significa "aplica a todas": es como se comportan los mandatarios que ya existen.
+    /// </summary>
+    private void EscribirEmpresasRepresentadas(
+        Guid signerId, IReadOnlyList<MandateSignerOfficeCompanies>? officeCompanies, DateTimeOffset now)
+    {
+        foreach (var porOrganismo in officeCompanies ?? [])
+        {
+            foreach (var companyId in Distinct(porOrganismo.RepresentedCompanyIds))
+            {
+                _context.MandateSignerRepresentedCompanies.Add(new MandateSignerRepresentedCompany
+                {
+                    Id = Guid.NewGuid(),
+                    MandateSignerId = signerId,
+                    TransitOfficeId = porOrganismo.TransitOfficeId,
+                    RepresentedCompanyId = companyId,
+                    IsActive = true,
+                    CreatedAt = now,
+                });
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reemplaza las empresas representadas del mandatario. <c>null</c> ⇒ no se tocan (la edición desde
+    /// el perfil del organismo no gestiona este campo, y escribir sobre él le borraría a la compañía lo
+    /// que acaba de elegir). Una lista reemplaza el conjunto: lo que no venga se retira con baja lógica.
+    /// </summary>
+    private async Task ReemplazarEmpresasRepresentadasAsync(
+        Guid signerId,
+        IReadOnlyList<MandateSignerOfficeCompanies>? officeCompanies,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (officeCompanies is null)
+        {
+            return;
+        }
+
+        var deseadas = officeCompanies
+            .SelectMany(o => Distinct(o.RepresentedCompanyIds).Select(c => (o.TransitOfficeId, Company: c)))
+            .ToHashSet();
+
+        var existentes = await _context.MandateSignerRepresentedCompanies
+            .Where(x => x.MandateSignerId == signerId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        foreach (var fila in existentes)
+        {
+            fila.IsActive = deseadas.Contains((fila.TransitOfficeId, fila.RepresentedCompanyId));
+        }
+
+        var yaExistentes = existentes.Select(x => (x.TransitOfficeId, Company: x.RepresentedCompanyId)).ToHashSet();
+        foreach (var (officeId, companyId) in deseadas.Where(p => !yaExistentes.Contains(p)))
+        {
+            _context.MandateSignerRepresentedCompanies.Add(new MandateSignerRepresentedCompany
+            {
+                Id = Guid.NewGuid(),
+                MandateSignerId = signerId,
+                TransitOfficeId = officeId,
+                RepresentedCompanyId = companyId,
+                IsActive = true,
+                CreatedAt = now,
+            });
+        }
     }
 
     private static MandateSignerTransitOffice NewOffice(

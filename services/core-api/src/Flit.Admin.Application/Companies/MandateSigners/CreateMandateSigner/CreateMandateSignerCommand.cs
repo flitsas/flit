@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Companies.MandateSigners;
 namespace Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 
 /// <summary>Alta de un mandatario en un OT. <c>DocumentNumber</c> es PII: no loguear.</summary>
@@ -35,6 +36,12 @@ public sealed class CreateMandateSignerCommand
     /// que es el comportamiento previo.
     /// </summary>
     public Guid? SignatureVaultId { get; init; }
+
+    /// <summary>
+    /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
+    /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
+    /// </summary>
+    public IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies { get; init; }
 
     public Guid? CreatedBy { get; init; }
     public Guid? CorrelationId { get; init; }

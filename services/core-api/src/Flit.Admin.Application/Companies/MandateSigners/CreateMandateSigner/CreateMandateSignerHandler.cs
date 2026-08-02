@@ -83,7 +83,8 @@ public sealed class CreateMandateSignerHandler
                 command.UserId,
                 command.TransitOfficeIds,
                 command.PhysicalSignatureOfficeIds,
-                command.SignatureVaultId),
+                command.SignatureVaultId,
+                command.OfficeCompanies),
             cancellationToken).ConfigureAwait(false);
 
         // HU #10911 — envío de validación de identidad al registrar (best-effort). Un fallo del

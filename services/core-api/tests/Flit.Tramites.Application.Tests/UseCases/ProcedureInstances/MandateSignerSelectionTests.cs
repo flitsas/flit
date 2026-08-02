@@ -30,7 +30,8 @@ public sealed class MandateSignerSelectionTests
     private sealed class Directorio(params MandateSignerCandidate[] candidatos) : IMandateSignerDirectory
     {
         public Task<IReadOnlyList<MandateSignerCandidate>> GetCandidatesAsync(
-            Guid transitOfficeId, Guid companyTenantId, CancellationToken ct = default) =>
+            Guid transitOfficeId, Guid companyTenantId, string? nitMandante = null,
+            CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<MandateSignerCandidate>>(
                 transitOfficeId == Ot && companyTenantId == Tenant ? candidatos : []);
 

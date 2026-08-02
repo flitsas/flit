@@ -23,7 +23,12 @@ public sealed record CompanyMandateSignerRequest(
     /// Firma del baúl elegida para el mandatario. <c>null</c> ⇒ el trámite la resuelve por documento,
     /// que es el comportamiento previo.
     /// </summary>
-    Guid? SignatureVaultId = null);
+    Guid? SignatureVaultId = null,
+    /// <summary>
+    /// Empresas representadas para las que firma, POR ORGANISMO. Vacío o ausente ⇒ el mandatario aplica
+    /// a todas las empresas de ese organismo, que es como se comportan los que ya existen.
+    /// </summary>
+    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null);
 
 /// <summary>
 /// HU #11202 — alta de un mandatario desde el configurador de la COMPAÑÍA. La empresa captura los datos
@@ -88,6 +93,7 @@ public sealed class CreateCompanyMandateSignerHandler
                 TransitOfficeIds = offices,
                 PhysicalSignatureOfficeIds = request.PhysicalSignatureOfficeIds,
                 SignatureVaultId = request.SignatureVaultId,
+                OfficeCompanies = request.OfficeCompanies,
                 CreatedBy = createdBy,
             },
             cancellationToken).ConfigureAwait(false);
@@ -248,6 +254,7 @@ public sealed class UpdateCompanyMandateSignerHandler
                 TransitOfficeIds = offices,
                 PhysicalSignatureOfficeIds = request.PhysicalSignatureOfficeIds,
                 SignatureVaultId = request.SignatureVaultId,
+                OfficeCompanies = request.OfficeCompanies,
                 // El configurador de la compañía SÍ gestiona la firma: su null significa "quítala".
                 ActualizaFirma = true,
                 UpdatedBy = updatedBy,

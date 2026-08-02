@@ -43,8 +43,19 @@ public interface IMandateSignerDirectory
     /// <paramref name="transitOfficeId"/> (join <c>mandate_signers ↔ mandate_signer_companies</c>).
     /// Lista vacía si el OT/compañía no tiene mandatarios configurados.
     /// </summary>
+    /// <param name="nitMandante">
+    /// NIT de la empresa que otorga el mandato. Cuando viene, la lista se acota a los mandatarios
+    /// asociados a ESA empresa en ese organismo, más los que no tienen ninguna asociada.
+    ///
+    /// <para>La ausencia de asociación significa "aplica a todas" a propósito: los mandatarios
+    /// registrados antes de esta acotación no tienen ninguna, y sin esa regla desaparecerían de todos
+    /// los trámites al desplegar.</para>
+    /// </param>
     Task<IReadOnlyList<MandateSignerCandidate>> GetCandidatesAsync(
-        Guid transitOfficeId, Guid companyTenantId, CancellationToken cancellationToken = default);
+        Guid transitOfficeId,
+        Guid companyTenantId,
+        string? nitMandante = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>El mandatario por su id (para rellenar el PDF al regenerar), o <c>null</c> si no existe/inactivo.</summary>
     Task<MandateSignerCandidate?> GetByIdAsync(Guid mandateSignerId, CancellationToken cancellationToken = default);
@@ -56,7 +67,10 @@ public sealed class NullMandateSignerDirectory : IMandateSignerDirectory
     public static NullMandateSignerDirectory Instance { get; } = new();
 
     public Task<IReadOnlyList<MandateSignerCandidate>> GetCandidatesAsync(
-        Guid transitOfficeId, Guid companyTenantId, CancellationToken cancellationToken = default) =>
+        Guid transitOfficeId,
+        Guid companyTenantId,
+        string? nitMandante = null,
+        CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<MandateSignerCandidate>>([]);
 
     public Task<MandateSignerCandidate?> GetByIdAsync(

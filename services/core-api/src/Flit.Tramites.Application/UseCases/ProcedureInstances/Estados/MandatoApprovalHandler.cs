@@ -65,7 +65,9 @@ public sealed class MandatoApprovalHandler(
             return new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null);
 
         var candidates = await directory
-            .GetCandidatesAsync(transitOfficeId, instance.TenantId, ct)
+            .GetCandidatesAsync(
+                transitOfficeId, instance.TenantId,
+                MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
             .ConfigureAwait(false);
 
         // HU #11203 — la elección hecha al REGISTRAR el trámite manda sobre la resolución automática:

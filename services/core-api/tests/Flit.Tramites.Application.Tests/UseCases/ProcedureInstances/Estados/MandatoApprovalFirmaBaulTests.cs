@@ -134,7 +134,7 @@ public sealed class MandatoApprovalFirmaBaulTests
         });
         _repo.GetByIdWithFurGraphAsync(id, Tenant, Arg.Any<CancellationToken>()).Returns(instance);
 
-        _directory.GetCandidatesAsync(OfficeId, Tenant, Arg.Any<CancellationToken>())
+        _directory.GetCandidatesAsync(OfficeId, Tenant, Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns<IReadOnlyList<MandateSignerCandidate>>(
             [
                 new MandateSignerCandidate(
