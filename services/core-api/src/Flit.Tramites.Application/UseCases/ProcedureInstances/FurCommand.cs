@@ -49,6 +49,7 @@ public sealed class GenerarFurHandler(
     ISolicitudVirtualGenerator? solicitudVirtualGenerator = null,
     IMandatoGenerator? mandatoGenerator = null,
     IMandateRequirementPolicy? mandatePolicy = null,
+    IMandatoFirmaPolicy? mandatoFirmaPolicy = null,
     IMandateSignerDirectory? mandateDirectory = null,
     ISoatRtmCertificateGenerator? soatRtmGenerator = null,
     GetSuggestedCommercialValueHandler? avaluoHandler = null,
@@ -83,6 +84,10 @@ public sealed class GenerarFurHandler(
     // ADR-0036 (HU #10912/#10915) — config de mandato por OT (plantilla / exige a PN / mandatario
     // institucional). Default seguro (NUNCA resuelve ⇒ plantilla genérica, solo PJ) si no se inyecta.
     private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
+
+    // Convenio compañía↔organismo y firma física del mandatario: deciden si el mandato lleva bloque de
+    // firma del mandatario. Default seguro ⇒ lo lleva (es un actor obligatorio).
+    private readonly IMandatoFirmaPolicy _mandatoFirmaPolicy = mandatoFirmaPolicy ?? NullMandatoFirmaPolicy.Instance;
 
     // ADR-0036 §D9 (HU #10916) — directorio de mandatarios: rellena el firmante del PDF del mandato desde
     // instance.MandateSignerId (resuelto al aprobar). Default seguro (NUNCA resuelve) si no se inyecta.
@@ -844,6 +849,14 @@ public sealed class GenerarFurHandler(
             }
         }
 
+        // El convenio se llavea por (compañía del trámite, organismo). El organismo del trámite se
+        // conoce aquí por su CÓDIGO; el id lo aporta la configuración del OT, que ya se resolvió arriba
+        // por ese mismo código: sin fila de configuración no hay id y el mandato conserva el bloque, que
+        // es el default seguro.
+        var modoFirma = await _mandatoFirmaPolicy
+            .ResolveAsync(data.TenantIdParaFirmas, config?.TransitOfficeId ?? Guid.Empty, mandateSignerId, ct)
+            .ConfigureAwait(false);
+
         var mandatoData = new MandatoData(
             data,
             config?.TemplateCode ?? MandatoTemplateResolver.Generico,
@@ -856,7 +869,15 @@ public sealed class GenerarFurHandler(
             config?.ChamberCity,
             config?.MandatarySigla,
             // HU #11206 — las transformaciones entran DENTRO del objeto del contrato, sin cláusula nueva.
-            transformaciones);
+            transformaciones,
+            // Con convenio, el recuadro de firmas solo lleva al MANDANTE; sin convenio el mandatario
+            // firma, porque es un actor obligatorio. La firma física conserva el bloque pero deja la
+            // línea para firmar a mano.
+            modoFirma.TieneConvenio
+                ? MandatarioFirmaModo.SinBloque
+                : modoFirma.FirmaFisica
+                    ? MandatarioFirmaModo.Manual
+                    : MandatarioFirmaModo.Estampada);
 
         return _mandatoGenerator.GenerateMandato(mandatoData);
     }

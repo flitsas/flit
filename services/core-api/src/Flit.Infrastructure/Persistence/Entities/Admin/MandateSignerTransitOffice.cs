@@ -18,5 +18,15 @@ public sealed class MandateSignerTransitOffice
     public Guid MandateSignerId { get; set; }
     public Guid TransitOfficeId { get; set; }
     public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// El mandatario firma A MANO ante este organismo: el documento deja la línea de guiones bajos con
+    /// sus datos debajo y no estampa firma del baúl ni sello de identidad.
+    ///
+    /// <para>Va aquí y no en el mandatario porque la misma persona puede firmar a mano ante un organismo
+    /// y electrónicamente ante otro: es una propiedad del vínculo, no de la persona.</para>
+    /// </summary>
+    public bool SignsPhysically { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 }

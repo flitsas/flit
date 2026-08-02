@@ -24,6 +24,8 @@ internal sealed class MandateSignerTransitOfficeConfiguration
         builder.Property(x => x.MandateSignerId).IsRequired();
         builder.Property(x => x.TransitOfficeId).IsRequired();
         builder.Property(x => x.IsActive).IsRequired().HasDefaultValue(true);
+        builder.Property(x => x.SignsPhysically).HasColumnName("signs_physically")
+            .IsRequired().HasDefaultValue(false);
         builder.Property(x => x.CreatedAt).IsRequired();
 
         builder.HasIndex(x => new { x.MandateSignerId, x.TransitOfficeId })

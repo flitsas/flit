@@ -53,6 +53,13 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
 
+    /// <summary>
+    /// Convenio comercial compañía ↔ organismo. Distinto del grant de arriba, que es el permiso para
+    /// radicar: este solo decide si el mandato lleva bloque de firma del mandatario.
+    /// </summary>
+    public DbSet<CompanyTransitOfficeAgreement> CompanyTransitOfficeAgreements =>
+        Set<CompanyTransitOfficeAgreement>();
+
     // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
     public DbSet<TenantTransitOfficeConsultationRestriction> TenantTransitOfficeConsultationRestrictions =>
         Set<TenantTransitOfficeConsultationRestriction>();

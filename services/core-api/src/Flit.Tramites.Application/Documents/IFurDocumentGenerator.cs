@@ -214,7 +214,41 @@ public sealed record MandatoData(
     string? MandatarySigla = null,
     // HU #11206 — transformaciones declaradas en el trámite (claves de field_values). Se componen DENTRO
     // del objeto del contrato, sin cláusula nueva: ninguna plantilla del PO las menciona.
-    IReadOnlyList<string>? Transformaciones = null);
+    IReadOnlyList<string>? Transformaciones = null,
+    /// <summary>
+    /// Qué hacer con el bloque de firma del MANDATARIO. Se resuelve fuera del generador porque depende
+    /// del convenio comercial compañía↔organismo y de la marca de firma física del mandatario, datos que
+    /// viven en Admin.
+    /// </summary>
+    MandatarioFirmaModo ModoFirmaMandatario = MandatarioFirmaModo.Estampada);
+
+/// <summary>
+/// Cómo aparece el MANDATARIO en el recuadro de firmas del contrato de mandato.
+///
+/// <para>Sus datos siguen nombrados en el CUERPO del contrato en los tres casos: lo que cambia es solo
+/// el recuadro de firmas.</para>
+/// </summary>
+public enum MandatarioFirmaModo
+{
+    /// <summary>
+    /// Bloque con estampa: firma del baúl si la tiene, si no el sello de su validación de identidad, y
+    /// si no la línea vacía. Es el caso por defecto — el mandatario es un actor obligatorio.
+    /// </summary>
+    Estampada,
+
+    /// <summary>
+    /// Bloque con línea de guiones bajos y sus datos debajo, sin estampa: firma a mano. Lo activan la
+    /// marca de firma física del mandatario en ese organismo y los organismos cuyo mandatario es el
+    /// propio organismo (familia <c>organismo_transito</c>).
+    /// </summary>
+    Manual,
+
+    /// <summary>
+    /// Sin bloque de mandatario: el recuadro de firmas solo lleva al MANDANTE. Lo activa el convenio
+    /// comercial entre la compañía y el organismo.
+    /// </summary>
+    SinBloque,
+}
 
 /// <summary>
 /// Contrato del generador del <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). Solo aplica

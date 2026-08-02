@@ -115,6 +115,11 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandateRequirementPolicy,
             Flit.Infrastructure.OtRules.MandateRequirementPolicy>();
 
+        // Convenio comercial compañía↔organismo + firma física del mandatario: deciden si el contrato de
+        // mandato lleva bloque de firma del mandatario y de qué forma.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IMandatoFirmaPolicy,
+            Flit.Infrastructure.OtRules.MandatoFirmaPolicy>();
+
         // HU #10916 (ADR-0036 §D9) — directorio de mandatarios por OT/compañía: resuelve el firmante del
         // mandato al aprobar y rellena su nombre/documento en el PDF regenerado.
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandateSignerDirectory,

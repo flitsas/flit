@@ -264,12 +264,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     {
         var tramite = data.Tramite;
 
-        // HU #11205 — con EMPRESA RELACIONADA como mandatario, la firma del mandatario es MANUAL: no se
-        // plasma su validación de identidad (AC1), pero SÍ queda la línea sobre su identificación para
-        // que pueda firmarla a mano (AC2). Antes, Sabaneta no pintaba bloque de mandatario en absoluto
-        // —no había dónde firmar— y Bello le estampaba la firma electrónica. El MANDANTE no cambia en
-        // ningún caso (AC4).
-        var mandatarioEsEmpresa = MandatarioEsEmpresa(data);
+        var modo = ModoFirmaMandatario(data);
 
         // HU #11034 — separación reducida para que las firmas quepan en la misma hoja que el cuerpo.
         col.Item().PaddingTop(16).Row(row =>
@@ -279,6 +274,14 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                 sig.Item().Text(t => t.Span("MANDANTE").Bold());
                 RenderMandanteFirma(sig, tramite, parte, esJuridica);
             });
+
+            // Con convenio entre la compañía y el organismo, el recuadro solo lleva al MANDANTE: el
+            // mandatario no firma. Sus datos siguen nombrados en el CUERPO del contrato, así que el
+            // documento no pierde al actor, solo su espacio de firma.
+            if (modo == MandatarioFirmaModo.SinBloque)
+                return;
+
+            var manual = modo == MandatarioFirmaModo.Manual;
             row.RelativeItem().Column(sig =>
             {
                 sig.Item().Text(t => t.Span("MANDATARIO").Bold());
@@ -288,14 +291,34 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                 // HU #11170 — la firma del baúl del mandatario también lleva su vigencia y su hash.
                 FlitFirmaBlock.Render(
                     sig,
-                    mandatarioEsEmpresa ? null : data.Mandatario?.FirmaImagen,
-                    mandatarioEsEmpresa ? null : data.Mandatario?.SelloIdentidad,
+                    manual ? null : data.Mandatario?.FirmaImagen,
+                    manual ? null : data.Mandatario?.SelloIdentidad,
                     MandatarioIdentificacion(data.Mandatario, data),
                     FlitFirmaLinea.Underscores,
-                    selloBaul: mandatarioEsEmpresa ? null : SelloBaulDe(data.Mandatario));
+                    selloBaul: manual ? null : SelloBaulDe(data.Mandatario));
             });
         });
     }
+
+    /// <summary>
+    /// Cómo aparece el MANDATARIO en el recuadro de firmas. Orden deliberado:
+    /// <list type="number">
+    ///   <item><b>Sin bloque</b> si el modo ya viene resuelto así desde la aplicación (convenio
+    ///   comercial compañía↔organismo).</item>
+    ///   <item><b>Manual</b> si el mandatario es el propio organismo (familia <c>organismo_transito</c>,
+    ///   HU #11205): ahí firma la empresa a mano sobre la línea.</item>
+    ///   <item>Lo que diga el modo resuelto fuera — <b>manual</b> también cuando el mandatario está
+    ///   marcado como firmante físico en ese organismo.</item>
+    /// </list>
+    /// La familia se comprueba aquí y no fuera porque es un dato del propio documento (la plantilla del
+    /// OT), no del convenio ni del mandatario.
+    /// </summary>
+    private static MandatarioFirmaModo ModoFirmaMandatario(MandatoData data) =>
+        data.ModoFirmaMandatario == MandatarioFirmaModo.SinBloque
+            ? MandatarioFirmaModo.SinBloque
+            : MandatarioEsEmpresa(data)
+                ? MandatarioFirmaModo.Manual
+                : data.ModoFirmaMandatario;
 
     /// <summary>
     /// HU #11205 (D4) — ¿el mandatario del OT es una empresa relacionada? La señal explícita es la
