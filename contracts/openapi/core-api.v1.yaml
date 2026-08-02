@@ -60,6 +60,11 @@ tags:
       radicaciones por placa/trámite/radicado y línea de tiempo de eventos con detalle
       técnico sanitizado y enmascarado. Solo lectura; permiso logqx.read (HU #10794,
       SuperAdmin bypassa).
+  - name: Preferencias de UI
+    description: >
+      Base compartida para que el usuario elija qué ve en la UI (p. ej. columnas
+      visibles en las tablas de trámites) y esa elección persista entre sesiones,
+      por tenant + usuario + scope (lista blanca fija de scopes soportados).
 
 paths:
   /api/v1/auth/login:
@@ -5662,6 +5667,74 @@ paths:
         "404": { description: "Trámite no encontrado." }
         "409": { description: "sin_adjuntos — No hay adjuntos disponibles para consolidar; o adjunto_no_disponible / mimetype_no_soportado." }
 
+  /api/v1/me/ui-preferences/{scope}:
+    parameters:
+      - name: scope
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [tramites.columns, ot.procedures.columns]
+        description: >
+          Lista blanca fija de scopes soportados. Cualquier otro valor responde 400.
+      - in: header
+        name: X-Tenant-Id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Preferencias de UI]
+      operationId: getUserUiPreference
+      summary: Obtiene la preferencia de UI del usuario autenticado para un scope
+      description: >
+        El `user_id` sale exclusivamente del claim JWT (`sub`), nunca de la URL ni del
+        body. Si el usuario nunca guardó una preferencia para ese scope, responde 200
+        con `value: {}` — NUNCA 404 (no guardado y preferencia vacía son el mismo estado
+        para la UI: usar las columnas por defecto).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Preferencia guardada (o `{}` si nunca se guardó).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserUiPreferenceResponse"
+        "400":
+          description: Falta el header X-Tenant-Id, o scope fuera de la lista blanca.
+        "401":
+          description: No autenticado.
+    put:
+      tags: [Preferencias de UI]
+      operationId: upsertUserUiPreference
+      summary: Guarda (crea o reemplaza) la preferencia de UI del usuario autenticado para un scope
+      description: >
+        Upsert idempotente por tenant + usuario + scope: la primera llamada crea la
+        fila, las siguientes la sobrescriben. `user_id` sale del claim JWT, nunca del body.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: object
+                  description: Valor de UI arbitrario (p. ej. lista de columnas visibles), opaco para el backend.
+              required: [value]
+      responses:
+        "200":
+          description: Preferencia guardada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserUiPreferenceResponse"
+        "400":
+          description: Falta el header X-Tenant-Id, o scope fuera de la lista blanca.
+        "401":
+          description: No autenticado.
+
 components:
   securitySchemes:
     bearerAuth:
@@ -5679,6 +5752,19 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    # ── Preferencias de UI ─────────────────────────────────────────────────────
+    UserUiPreferenceResponse:
+      type: object
+      description: Shape exacto devuelto por GET y PUT /api/v1/me/ui-preferences/{scope}.
+      required: [scope, value]
+      properties:
+        scope:
+          type: string
+          enum: [tramites.columns, ot.procedures.columns]
+        value:
+          type: object
+          additionalProperties: true
+          description: "{} si el usuario nunca guardó una preferencia para ese scope."
     # ── Trámites · Configurador dinámico (FEATURE-08 / CFD-01) ────────────────
     ProcedureTypeSummaryF08:
       type: object

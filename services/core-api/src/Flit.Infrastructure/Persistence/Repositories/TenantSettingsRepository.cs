@@ -152,6 +152,7 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         policy.SignatureVaultEnabled = settings.SignatureVaultEnabled;
         policy.PlatePreassignEnabled = settings.PlatePreassignEnabled;
         policy.PlateFlowSkipToTerminado = settings.PlateFlowSkipToTerminado;
+        policy.ValidateSoatWithRunt = settings.ValidateSoatWithRunt;
         policy.NotificationChannel = TenantSettingsCodes.ToDb(settings.NotificationChannel);
         policy.NotificationTarget = TenantSettingsCodes.ToDb(settings.NotificationTarget);
         policy.PaymentMethods = JsonSerializer.Serialize(settings.PaymentMethods);
@@ -169,6 +170,7 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         OnlyOwnVehicles = entity.OnlyOwnVehicles,
         SignatureVaultEnabled = entity.SignatureVaultEnabled,
         PlatePreassignEnabled = entity.PlatePreassignEnabled,
+        ValidateSoatWithRunt = entity.ValidateSoatWithRunt,
         PlateFlowSkipToTerminado = entity.PlateFlowSkipToTerminado,
         NotificationChannel = TenantSettingsCodes.ParseChannelDb(entity.NotificationChannel),
         NotificationTarget = TenantSettingsCodes.ParseTargetDb(entity.NotificationTarget),

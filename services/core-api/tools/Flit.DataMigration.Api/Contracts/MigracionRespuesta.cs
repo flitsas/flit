@@ -141,6 +141,8 @@ public sealed record InstanciaDto(
                 ["yaMaterializados"] = r.Skipped,
                 ["fallidos"] = r.Failed,
                 ["yaVenianComoAdjunto"] = r.Duplicated,
+                ["identidadesMarcadas"] = r.IdentidadesMarcadas,
+                ["identidadesYaMarcadas"] = r.IdentidadesExistentes,
             },
             avisos);
     }

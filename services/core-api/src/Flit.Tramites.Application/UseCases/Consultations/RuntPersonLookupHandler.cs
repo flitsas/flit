@@ -1,4 +1,6 @@
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Tramites.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -86,6 +88,24 @@ public sealed class RuntPersonLookupHandler(
         // la fuente no está catalogada o el TTL es 0, no cachea, sin afectar la respuesta ya calculada.
         await cacheService.SavePersonResultAsync(
             tenantId, RuntSourceCode, documentType, documentNumber, instanceId, result.HydratedFields, now, ct);
+
+        // Evidencia de que ESTE documento se consultó de verdad en el RUNT dentro de este trámite.
+        // El gate de actores la exige cuando el tipo de trámite marca el actor con requiresRunt: sin
+        // ella, el wizard daba la consulta por hecha con solo tener el documento digitado.
+        if (dto.Found)
+        {
+            await repo.AddEventAsync(
+                new ProcedureInstanceEvent
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ProcedureInstanceId = instanceId,
+                    Tipo = RuntPersonaConsultada.Tipo,
+                    Payload = RuntPersonaConsultada.Payload(documentType, documentNumber),
+                    CreatedAt = now,
+                },
+                ct);
+        }
 
         return (dto, null);
     }

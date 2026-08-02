@@ -235,6 +235,13 @@ internal static class ConsoleReport
                 output.WriteLine($"      → {result.Materialized} documento(s) · {result.Skipped} ya materializados · {result.Failed} fallidos · {result.Duplicated} ya venían como adjunto");
             }
 
+            // Solo se imprime cuando hay algo que decir: un trámite sin identidades acreditadas en V1
+            // no gana una línea vacía, y el reporte de siempre no cambia para quien no las tiene.
+            if (result.IdentidadesMarcadas + result.IdentidadesExistentes > 0)
+            {
+                output.WriteLine($"      → identidad ya validada en V1: {result.IdentidadesMarcadas} marcada(s) en V2 · {result.IdentidadesExistentes} ya estaban");
+            }
+
             if (result.Reason is not null)
             {
                 output.WriteLine($"      motivo: {result.Reason}");
@@ -258,6 +265,12 @@ internal static class ConsoleReport
         output.WriteLine($"  {"fallidos",-26} {results.Sum(r => r.Failed)}");
         output.WriteLine($"  {"ya venían como adjunto",-26} {results.Sum(r => r.Duplicated)}");
         output.WriteLine($"  {"piezas no entregadas por V1",-26} {results.Sum(r => r.Issues.Count)}");
+
+        var identidades = results.Sum(r => r.IdentidadesMarcadas);
+        if (identidades > 0)
+        {
+            output.WriteLine($"  {"identidades marcadas",-26} {identidades}");
+        }
 
         if (dryRun)
         {

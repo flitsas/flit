@@ -40,8 +40,11 @@ public sealed class V1ProcedureKind
     /// <summary>Columnas <c>id_attach*</c> → <c>tipo</c> de adjunto de V2.</summary>
     public required V1AttachmentMap AttachmentMap { get; init; }
 
-    /// <summary>Qué imágenes de identidad absorbe la carta selfie, y de qué partes.</summary>
-    public required IdentityAttachmentPolicy IdentityPolicy { get; init; }
+    /// <summary>
+    /// Las partes con validación de identidad: qué imágenes absorbe su carta selfie y cómo se sabe si
+    /// V1 dio su identidad por acreditada.
+    /// </summary>
+    public required IdentityPolicy IdentityPolicy { get; init; }
 
     /// <summary>Ruta por defecto del endpoint de snapshot de V1 (instancia 3).</summary>
     public required string SnapshotPath { get; init; }
@@ -57,7 +60,7 @@ public sealed class V1ProcedureKind
         ProcedureTypeCode = "TRASPASO_STANDARD",
         StateMap = TransferStateMap.Instance,
         AttachmentMap = TransferAttachmentMap.Instance,
-        IdentityPolicy = IdentityAttachmentPolicy.Transfer,
+        IdentityPolicy = IdentityPolicy.Transfer,
         SnapshotPath = "api/v1/vehicle-transfer-migration",
         Map = TransferMapper.Map,
     };
@@ -74,7 +77,7 @@ public sealed class V1ProcedureKind
         ProcedureTypeCode = "MATRICULA_NUEVA",
         StateMap = RegistrationStateMap.Instance,
         AttachmentMap = RegistrationAttachmentMap.Instance,
-        IdentityPolicy = IdentityAttachmentPolicy.Registration,
+        IdentityPolicy = IdentityPolicy.Registration,
         SnapshotPath = "api/v1/vehicle-registration-migration",
         Map = RegistrationMapper.Map,
     };

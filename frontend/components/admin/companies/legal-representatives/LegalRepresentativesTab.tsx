@@ -23,7 +23,7 @@ import {
 import { useCompanyTabsNav } from "../CompanyConfigTabs";
 import { LegalRepresentativesFormPanel } from "./LegalRepresentativesFormPanel";
 import { LegalRepresentativeDetailModal } from "./LegalRepresentativeDetailModal";
-import { fullName, maskDocument, procedureTypeLabels, signatureStatus } from "./legalRepresentativesDisplay";
+import { formatDocumentNumber, fullName, procedureTypeLabels, signatureStatus } from "./legalRepresentativesDisplay";
 
 const PAGE_SIZE = 20;
 
@@ -259,7 +259,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
                     <tr key={item.id} className="bg-white dark:bg-[#0B0F14]">
                       <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">{fullName(item)}</td>
                       <td className="border-y px-4 py-3 font-mono">
-                        {item.documentType} {maskDocument(item.documentNumber)}
+                        {item.documentType} {formatDocumentNumber(item.documentNumber)}
                       </td>
                       <td className="border-y px-4 py-3">
                         <div className="flex flex-wrap gap-1">

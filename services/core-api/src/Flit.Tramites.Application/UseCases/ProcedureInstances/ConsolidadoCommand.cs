@@ -4,6 +4,7 @@ using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -100,15 +101,25 @@ public sealed class GenerarConsolidadoHandler(
         if (instance is null)
             return (null, "not_found");
 
-        // Migración V1→V2 — un trámite migrado es una FOTO de solo lectura: NO se regenera el
-        // consolidado. V1 ya trae su propio expediente consolidado (tipo 'consolidado', source=migration);
-        // regenerarlo aquí lo reemplazaría por uno nuevo del sistema, perdiendo el histórico.
+        // Migración V1→V2 — el "modo foto" solo aplica a los trámites migrados en estado FINAL. En
+        // aprobado o anulado V1 ya trae su propio expediente (tipo 'consolidado', source=migration) y
+        // regenerarlo lo reemplazaría por uno nuevo del sistema, perdiendo el histórico con el que el
+        // organismo de tránsito aprobó.
+        //
+        // Un BORRADOR migrado es lo contrario: se trajo precisamente para seguir trabajándolo en V2, y
+        // su consolidado debe generarse aquí. Antes este guard no miraba el estado y dejaba al gestor
+        // sin poder generar el expediente de un borrador que sí es suyo.
+        //
+        // Por la ruta del gestor los finales ya los frena GeneracionDocumentalGestorGuard (HU #11051)
+        // con un mensaje mejor ("su documentación es definitiva"). Este guard NO sobra: AdminOtEndpoints
+        // llama a este handler SIN pasar por aquel gate, y es el camino por el que el OT regenera al
+        // aprobar. Sin esta condición, ese camino borraría los PDF migrados de V1.
         //
         // Va ANTES del caché y de la regeneración en cascada de HU #10860 a propósito: un trámite
         // migrado llega con ConsolidadoWizardVigente en false (el default de la columna), así que si
         // este guard fuera después, la cascada regeneraría el FUR y los documentos en caliente —
         // exactamente lo que el modo foto existe para impedir.
-        if (instance.IsMigrated)
+        if (instance.IsMigrated && TramiteEstado.EsFinal(instance.Status))
             return (null, "migrado_solo_lectura");
 
         // HU #10860 (ADR-0032) — caché explícita del expediente del wizard: si está vigente y el

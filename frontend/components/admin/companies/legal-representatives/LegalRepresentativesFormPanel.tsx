@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { OtSidePanel } from "@/components/admin/transit-offices/OtSidePanel";
 import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
 import { ApiValidationError } from "@/lib/api/types";
@@ -281,7 +281,7 @@ export function LegalRepresentativesFormPanel({
               className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold"
               style={{ color: "#557EFF", borderColor: "#557EFF" }}
             >
-              <Plus className="h-3.5 w-3.5" /> Agregar empresa
+              Agregar empresa
             </button>
           </div>
           <p className="text-[11px] opacity-60">

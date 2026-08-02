@@ -54,7 +54,7 @@ describe("AdminTransitOfficesPage — refactor adminOT", () => {
     render(<AdminTransitOfficesPage />);
 
     await waitFor(() =>
-      expect(mockReplace).toHaveBeenCalledWith("/admin/transit-offices/ot-own-id/tramites"),
+      expect(mockReplace).toHaveBeenCalledWith("/admin/transit-offices/ot-own-id/client-procedures"),
     );
     expect(screen.queryByText("Administración de organismos de tránsito")).not.toBeInTheDocument();
   });

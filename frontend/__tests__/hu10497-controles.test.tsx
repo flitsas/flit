@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -12,6 +12,24 @@ import { SwitchToggle } from "@/components/ui/SwitchToggle";
 
 const FE_ROOT = path.resolve(__dirname, "..");
 const read = (rel: string) => readFileSync(path.join(FE_ROOT, rel), "utf8");
+
+/** Todo el árbol de UI, para invariantes que deben valer en la plataforma entera. */
+function collectTsx(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    if (entry === "node_modules" || entry === ".next") continue;
+    const full = path.join(dir, entry);
+    if (statSync(full).isDirectory()) out.push(...collectTsx(full));
+    else if (entry.endsWith(".tsx")) out.push(full);
+  }
+  return out;
+}
+
+const uiFiles = [
+  ...collectTsx(path.join(FE_ROOT, "components")),
+  ...collectTsx(path.join(FE_ROOT, "app")),
+];
+const uiContents = uiFiles.map((f) => readFileSync(f, "utf8"));
 
 describe("HU #10497 — SwitchToggle (AC2)", () => {
   it("happy path: es un control role=switch con nombre accesible y refleja checked", () => {
@@ -65,6 +83,11 @@ describe("HU #10497 — AC1: botones sin icono '+' (iconografía superflua)", ()
     "components/admin/transit-offices/RuleFormPanel.tsx",
     "components/admin/documents/panels/OrderOverrideForm.tsx",
     "components/admin/documents/tabs/RequirementsTab.tsx",
+    // Últimos botones de crear/agregar que conservaban el "+" genérico.
+    "components/admin/companies/legal-representatives/CompanyDeedsSection.tsx",
+    "components/admin/companies/legal-representatives/LegalRepresentativeDetailModal.tsx",
+    "components/admin/companies/legal-representatives/LegalRepresentativesFormPanel.tsx",
+    "components/atom/modules/PrevalidacionesModule.tsx",
   ];
 
   it("ninguno renderiza ya el icono <Plus /> ni lo importa", () => {
@@ -81,6 +104,17 @@ describe("HU #10497 — AC1: botones sin icono '+' (iconografía superflua)", ()
     expect(read("components/atom/modules/RbacAdmin.tsx")).toMatch(/Nuevo rol/);
     expect(read("components/atom/DashboardGrid.tsx")).toMatch(/Iniciar Nuevo Traspaso/);
     expect(read("components/admin/documents/tabs/RequirementsTab.tsx")).toMatch(/Agregar/);
+    expect(read("components/admin/companies/legal-representatives/CompanyDeedsSection.tsx"))
+      .toMatch(/Cargar escritura/);
+    expect(read("components/admin/companies/legal-representatives/LegalRepresentativesFormPanel.tsx"))
+      .toMatch(/Agregar empresa/);
+    expect(read("components/atom/modules/PrevalidacionesModule.tsx"))
+      .toMatch(/Nueva prevalidación/);
+  });
+
+  it("no queda ningún <Plus /> en toda la UI", () => {
+    const offenders = uiFiles.filter((_, i) => /<Plus[\s/>]/.test(uiContents[i]));
+    expect(offenders).toEqual([]);
   });
 });
 

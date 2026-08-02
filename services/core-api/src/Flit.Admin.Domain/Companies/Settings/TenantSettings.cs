@@ -34,6 +34,12 @@ public sealed class TenantSettings
     /// </summary>
     public bool PlateFlowSkipToTerminado { get; init; }
 
+    /// <summary>
+    /// Al procesar en sub-estado asignado se valida el SOAT contra el RUNT y, sin SOAT vigente, el
+    /// avance se detiene. Desactivada, el hallazgo solo se informa.
+    /// </summary>
+    public bool ValidateSoatWithRunt { get; init; }
+
     /// <summary>Canal de enrutamiento de notificaciones (<c>notification_channel</c>).</summary>
     public required NotificationChannel NotificationChannel { get; init; }
 
@@ -84,6 +90,7 @@ public sealed class TenantSettings
         SignatureVaultEnabled = false,
         PlatePreassignEnabled = false,
         PlateFlowSkipToTerminado = false,
+        ValidateSoatWithRunt = false,
         NotificationChannel = NotificationChannel.FlitSmtp,
         NotificationTarget = NotificationTarget.Radicador,
         PaymentMethods = [],

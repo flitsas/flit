@@ -98,6 +98,18 @@ export interface ProcedureInstanceSummary {
   draftFinalizedAt?: string | null;
 }
 
+/**
+ * Respuesta de POST /instances/{id}/plate-flow/complete. El trámite avanzó a Terminado, pero puede
+ * hacerlo con salvedades: p. ej. la compañía permite continuar sin SOAT vigente
+ * (`warningCode = 'soat_no_vigente_advertencia'`). La UI debe mostrar `warningMessage` aunque la
+ * llamada haya sido exitosa.
+ */
+export interface CompletePlateFlowResult {
+  instance: ProcedureInstanceSummary | null;
+  warningCode: string | null;
+  warningMessage: string | null;
+}
+
 // ── Listado de instancias (Slice M6) ───────────────────────────────
 // Contrato FIJO acordado con backend:
 //   GET /api/v1/tramites/instances  (X-Tenant-Id)  -> { items: InstanceSummary[] }
@@ -194,9 +206,40 @@ export type TramiteFuente = 'dashboard' | 'integracion' | 'migrado';
  */
 export type FirmaParteEstado = 'pendiente' | 'firmado' | 'rechazado';
 
-/** Respuesta de GET /instances. */
+/**
+ * Query params de GET /api/v1/tramites/instances (filtros + orden server-side).
+ * Si no se envía ninguno, el backend responde el TOP-N legacy sin `total`.
+ */
+export interface ListInstancesParams {
+  /** SuperAdmin: acota el listado a una compañía (header X-Tenant-Id). */
+  filterTenantId?: string;
+  vin?: string;
+  placa?: string;
+  /** Subcadena sobre el nombre del propietario/vendedor. */
+  vendedor?: string;
+  comprador?: string;
+  gestor?: string;
+  /**
+   * Firma electrónica de la compraventa completa (`true`) o pendiente (`false`).
+   * No es el chip de identidad/baúl de la columna de actores.
+   */
+  firmado?: boolean;
+  /** ISO-8601 / fecha `YYYY-MM-DD` (el cliente normaliza a inicio/fin de día). */
+  createdFrom?: string;
+  createdTo?: string;
+  updatedFrom?: string;
+  updatedTo?: string;
+  /** Whitelist backend: vin | placa | comprador | gestor | createdAt | updatedAt */
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+  skip?: number;
+  take?: number;
+}
+
+/** Respuesta de GET /instances. `total` solo viene en el camino filtrado/ordenado. */
 export interface InstancesResponse {
   items: InstanceSummary[];
+  total?: number;
 }
 
 /** Organismo de tránsito habilitado para la empresa (catálogo + grant). */
@@ -823,6 +866,13 @@ export interface WizardState {
   subsanacionActiva?: boolean;
   /** Veces que se activó la subsanación en este expediente. */
   subsanacionCount?: number;
+  /**
+   * Migración V1→V2 — el trámite viene de V1 y no se capturó paso a paso aquí, así que llega sin las
+   * consultas de RUNT/SIMIT hechas (no se migran: caducan en minutos y no quedan atadas al trámite).
+   * El wizard lo usa para DESTACAR la petición de correrlas, sin exponer ese porqué en la UI.
+   * Ausente/false ⇒ trámite nativo de V2.
+   */
+  esMigrado?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
@@ -918,8 +968,12 @@ export type BiometricEstado =
 /** Parte a la que pertenece la validación. null = matrícula (comprador único). */
 export type BiometricParte = 'comprador' | 'vendedor';
 
-/** Proveedor de validación de identidad (espejo de BiometricProviders). */
-export type BiometricProvider = 'mock' | 'kyverum';
+/**
+ * Proveedor de validación de identidad (espejo de BiometricProviders).
+ * `migracion_v1` = identidad que ya venía validada de V1 y la migración trajo como hecho
+ * consumado; no hubo captura ni proveedor externo, y solo acredita a su propio trámite.
+ */
+export type BiometricProvider = 'mock' | 'kyverum' | 'migracion_v1';
 
 /** Estado de vigencia derivado de una identidad aprobada (espejo de BiometricVigenciaEstados). */
 export type BiometricVigenciaEstado = 'vigente' | 'por_vencer' | 'vencida';

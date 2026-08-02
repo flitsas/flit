@@ -18,6 +18,9 @@ public sealed record UpdateTenantSettingsRequest(
     bool PreasignacionPlacaActiva = false,
     // Con placa completa/rango al radicar → Terminado (omite checks gestor). Default false.
     bool PlateFlowSkipToTerminado = false,
+    // Validación del SOAT ante el RUNT al procesar. Default false: bloquear por omisión detendría
+    // trámites que hoy avanzan en compañías que no pidieron la validación.
+    bool ValidarSoatConRunt = false,
     // Feature #10707 — proveedores de avalúo (opcional: si llega null se conserva el valor previo).
     AvaluoProviderConfigDto? AvaluoProviderConfig = null,
     // FEATURE 02 — fuente de comparendos (internal | external); null conserva el valor previo.

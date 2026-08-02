@@ -20,6 +20,11 @@ export interface ActionsMenuItem {
   disabled?: boolean;
   /** Motivo del deshabilitado; se usa como tooltip cuando `disabled` es true. */
   disabledReason?: string;
+  /**
+   * Destaca el ítem (punto ámbar) cuando el disparador tiene `attention` por esta acción
+   * (p. ej. "Procesar" pendiente tras asignar placa).
+   */
+  attention?: boolean;
 }
 
 export interface ActionsMenuProps {
@@ -193,10 +198,21 @@ export function ActionsMenu({
                 close();
                 item.onSelect();
               }}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition hover:bg-[#557EFF]/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition hover:bg-[#557EFF]/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent ${
+                item.attention
+                  ? "bg-amber-50 text-[#92400e] hover:bg-amber-100/80 dark:bg-amber-500/10 dark:text-amber-200"
+                  : ""
+              }`}
             >
               {Icon && <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
-              <span>{item.label}</span>
+              <span className="flex-1">{item.label}</span>
+              {item.attention ? (
+                <span
+                  className="inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                  aria-hidden="true"
+                  title="Acción pendiente"
+                />
+              ) : null}
             </button>
           );
         })}

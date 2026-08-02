@@ -94,6 +94,22 @@ public sealed class WizardMigradoReadonlyTests
     }
 
     [Fact]
+    public async Task ElOrigenMigradoViajaAlWizard_EnCualquierEstado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        // El frontend lo necesita en BORRADOR —no solo en la foto terminal— para explicar en el
+        // pre-vuelo por qué las consultas de RUNT/SIMIT llegan sin hacer: no se migran porque caducan.
+        Setup(Traspaso(TramiteEstado.Borrador, isMigrated: true));
+        var (migrado, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        Setup(Traspaso(TramiteEstado.Borrador, isMigrated: false));
+        var (nativo, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        migrado!.EsMigrado.Should().BeTrue();
+        nativo!.EsMigrado.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task NativoAprobado_SinDatos_NoSeFuerzaCompleto()
     {
         var ct = TestContext.Current.CancellationToken;

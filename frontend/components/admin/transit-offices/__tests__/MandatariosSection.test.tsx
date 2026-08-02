@@ -120,13 +120,14 @@ describe("MandatariosSection (ADR-0023 + ADR-0036)", () => {
     expect(await screen.findByText("Samuel Cárdenas")).toBeInTheDocument();
   });
 
-  it("estado lleno: lista mandatarios con documento enmascarado (PII)", async () => {
+  it("estado lleno: lista mandatarios con el documento completo", async () => {
     vi.mocked(fetchMandateSigners).mockResolvedValue([samuel]);
     renderSection();
     expect(await screen.findByText("Samuel Cárdenas")).toBeInTheDocument();
-    // El número de documento no se muestra completo (Ley 1581): solo los últimos 4.
-    expect(screen.getByText("••••3456")).toBeInTheDocument();
-    expect(screen.queryByText("1090123456")).not.toBeInTheDocument();
+    // El listado muestra el documento completo: los últimos cuatro dígitos no bastan para
+    // identificar al mandatario durante la operación.
+    expect(screen.getByText("1090123456")).toBeInTheDocument();
+    expect(screen.queryByText(/••••/)).not.toBeInTheDocument();
   });
 
   it("multiplicidad: una compañía con otro mandatario NO se deshabilita, solo se anota", async () => {

@@ -12,6 +12,15 @@ describe("ot-nav — refactor adminOT", () => {
   it("otHubModulePath arma la ruta del tab usuarios", () => {
     expect(otHubModulePath("ot-1", "usuarios")).toBe("/admin/transit-offices/ot-1/usuarios");
   });
+
+  // "Trámites" y "Webhooks" salieron de la consola: la ruta sigue viva por URL, pero no se ofrece.
+  it.each(["tramites", "webhooks"])("no ofrece la pestaña '%s'", (id) => {
+    expect(OT_HUB_TABS.some((t) => t.id === id)).toBe(false);
+  });
+
+  it("el primer módulo visible es 'Trámites clientes' (destino del hub)", () => {
+    expect(OT_HUB_TABS[0].id).toBe("client-procedures");
+  });
 });
 
 describe("ot-nav — HU #10236", () => {

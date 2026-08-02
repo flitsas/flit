@@ -5,8 +5,11 @@ interface OtHubIndexPageProps {
   params: Promise<{ id: string }>;
 }
 
-/** Redirige el hub OT al módulo Trámites por defecto (HU #10236). */
+/**
+ * Redirige el hub OT a su primer módulo visible. Era "Trámites", que se retiró de la navegación:
+ * seguir apuntando ahí dejaba el hub abriendo en una pestaña que ya no se ofrece.
+ */
 export default async function OtHubIndexPage({ params }: OtHubIndexPageProps) {
   const { id } = await params;
-  redirect(otHubModulePath(id, "tramites"));
+  redirect(otHubModulePath(id, "client-procedures"));
 }

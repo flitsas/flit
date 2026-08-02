@@ -49,6 +49,11 @@ public sealed class OtClientProcedureResponse
 
     public string? Placa { get; init; }
     public string? Vin { get; init; }
+    /// <summary>Propietario/vendedor (null en matrícula inicial).</summary>
+    public string? VendedorNombre { get; init; }
+    public string? CompradorNombre { get; init; }
+    /// <summary>Gestor que radicó el trámite.</summary>
+    public string? GestorNombre { get; init; }
     public string? Marca { get; init; }
     public string? Linea { get; init; }
     public string? Modelo { get; init; }
@@ -125,6 +130,9 @@ internal static class OtClientProcedureMapper
             }).ToList(),
             Placa = procedure.Placa,
             Vin = procedure.Vin,
+            VendedorNombre = procedure.VendedorNombre,
+            CompradorNombre = procedure.CompradorNombre,
+            GestorNombre = procedure.GestorNombre,
             Marca = procedure.Marca,
             Linea = procedure.Linea,
             Modelo = procedure.Modelo,

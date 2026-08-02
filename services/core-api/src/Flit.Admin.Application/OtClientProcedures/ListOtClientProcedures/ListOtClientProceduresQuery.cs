@@ -10,6 +10,20 @@ public sealed class ListOtClientProceduresQuery
 
     public Guid? ProcedureTypeId { get; init; }
 
+    public string? Vin { get; init; }
+
+    public string? Placa { get; init; }
+
+    public string? Vendedor { get; init; }
+
+    public string? Comprador { get; init; }
+
+    public string? Gestor { get; init; }
+
+    public string? SortBy { get; init; }
+
+    public string? SortDir { get; init; }
+
     public int? Page { get; init; }
 
     public int? PageSize { get; init; }

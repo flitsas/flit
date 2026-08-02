@@ -27,6 +27,7 @@ import {
   puedeRenovarIdentidad,
   vigenciaLabel,
 } from "./mandatario-identity";
+import { formatDocumentNumber } from "@/lib/display/document-number";
 
 /**
  * Pestaña "Mandatario" del hub Admin OT (ADR-0023): lista los mandatarios activos del OT,
@@ -249,7 +250,7 @@ export function MandatariosSection({ transitOfficeId }: { transitOfficeId: strin
                   )}
                 </td>
                 <td className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"}`}>
-                  {maskDocument(signer.documentNumber)}
+                  {formatDocumentNumber(signer.documentNumber)}
                 </td>
                 <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}>
                   {signer.companyTenantIds.length === 0
@@ -427,10 +428,3 @@ function mensajeAlta(identity: MandateSignerSaved["identity"]): string {
   }
 }
 
-/** Enmascara el número de documento (PII, Ley 1581): solo se muestran los últimos 4 dígitos. */
-function maskDocument(documentNumber: string): string {
-  if (documentNumber.length <= 4) {
-    return "••••";
-  }
-  return `••••${documentNumber.slice(-4)}`;
-}

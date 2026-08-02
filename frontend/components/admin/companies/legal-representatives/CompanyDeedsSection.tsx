@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, FileText, Loader2, Plus, RefreshCw } from "lucide-react";
+import { Eye, FileText, Loader2, RefreshCw } from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
@@ -194,7 +194,7 @@ export function CompanyDeedsSection({ tenantId }: { tenantId: string }) {
               : undefined
           }
         >
-          <Plus className="h-3.5 w-3.5" /> Cargar escritura
+          Cargar escritura
         </button>
       </div>
 
