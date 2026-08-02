@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, FlaskConical, Flame } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { DESCRIPCION_INSTANCIA, INSTANCIAS, type Instancia } from "@/lib/migracion/types";
 
 /**
@@ -167,7 +167,6 @@ function ModoEjecucion({
           activo={dryRun}
           onClick={() => onDryRun(true)}
           deshabilitado={deshabilitado}
-          icono={<FlaskConical className="h-4 w-4" aria-hidden="true" />}
           titulo="Simulación"
           detalle="No escribe nada"
           clasesActivo="border-[#557EFF] bg-[#557EFF]/10 text-[#557EFF]"
@@ -181,7 +180,6 @@ function ModoEjecucion({
           activo={!dryRun}
           onClick={() => onDryRun(false)}
           deshabilitado={deshabilitado}
-          icono={<Flame className="h-4 w-4" aria-hidden="true" />}
           titulo="Migración"
           detalle="Escribe en V2"
           clasesActivo="border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
@@ -213,7 +211,6 @@ function Modo({
   activo,
   onClick,
   deshabilitado,
-  icono,
   titulo,
   detalle,
   clasesActivo,
@@ -221,7 +218,6 @@ function Modo({
   activo: boolean;
   onClick: () => void;
   deshabilitado: boolean;
-  icono: React.ReactNode;
   titulo: string;
   detalle: string;
   clasesActivo: string;
@@ -237,10 +233,7 @@ function Modo({
         activo ? clasesActivo : "border-[#DFE5ED] opacity-70 dark:border-white/10"
       }`}
     >
-      <span className="flex items-center gap-1.5 text-sm font-semibold">
-        <span className="shrink-0">{icono}</span>
-        {titulo}
-      </span>
+      <span className="text-sm font-semibold">{titulo}</span>
       <span className="text-xs opacity-80">{detalle}</span>
     </button>
   );

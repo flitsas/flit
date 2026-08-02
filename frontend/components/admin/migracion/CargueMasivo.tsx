@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, FileUp, Loader2, Play, RotateCcw, Square, Trash2 } from "lucide-react";
+import { Loader2, Play, RotateCcw, Square } from "lucide-react";
 import { descargarPlantilla, leerArchivo, type FilaInvalida } from "@/lib/migracion/archivo";
 import { consultarEstado, migrarTramite } from "@/lib/migracion/client";
 import {
@@ -247,9 +247,8 @@ export function CargueMasivo() {
           <button
             type="button"
             onClick={descargarPlantilla}
-            className="flex items-center gap-1.5 rounded-lg border border-[#DFE5ED] px-3 py-2 text-xs font-semibold dark:border-white/10"
+            className="rounded-lg border border-[#DFE5ED] px-3 py-2 text-xs font-semibold dark:border-white/10"
           >
-            <Download className="h-3.5 w-3.5" aria-hidden="true" />
             Descargar plantilla
           </button>
 
@@ -257,10 +256,9 @@ export function CargueMasivo() {
             type="button"
             onClick={() => entradaArchivo.current?.click()}
             disabled={corriendo}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+            className="rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
             style={{ backgroundColor: "#557EFF" }}
           >
-            <FileUp className="h-3.5 w-3.5" aria-hidden="true" />
             Cargar archivo
           </button>
 
@@ -277,9 +275,8 @@ export function CargueMasivo() {
               type="button"
               onClick={limpiar}
               disabled={corriendo}
-              className="flex items-center gap-1.5 rounded-lg border border-[#DFE5ED] px-3 py-2 text-xs font-semibold disabled:opacity-50 dark:border-white/10"
+              className="rounded-lg border border-[#DFE5ED] px-3 py-2 text-xs font-semibold disabled:opacity-50 dark:border-white/10"
             >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               Descartar el lote
             </button>
           )}
