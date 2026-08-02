@@ -83,12 +83,19 @@ async function leerDirectorio(entry: FileSystemEntry): Promise<File[]> {
   return archivos.filter((f): f is File => f !== null);
 }
 
+/** Resultado de un arrastre: lo que sirve y cuántos archivos venían en total. */
+export interface Arrastre {
+  utiles: File[];
+  /** Archivos encontrados antes de filtrar. Sirve para avisar cuando el filtro se lo come todo. */
+  total: number;
+}
+
 /**
  * Extrae los archivos de un evento de arrastre, entrando un nivel en las carpetas. Si el navegador no
  * expone la API de entradas (o el arrastre no trae ninguna), cae al `dataTransfer.files` de siempre,
  * que cubre el caso de arrastrar archivos sueltos.
  */
-export async function archivosDesdeArrastre(dataTransfer: DataTransfer): Promise<File[]> {
+export async function archivosDesdeArrastre(dataTransfer: DataTransfer): Promise<Arrastre> {
   const items = Array.from(dataTransfer.items ?? []);
 
   const entries = items
@@ -97,7 +104,10 @@ export async function archivosDesdeArrastre(dataTransfer: DataTransfer): Promise
     )
     .filter((e): e is FileSystemEntry => e !== null);
 
-  if (entries.length === 0) return filtrarUtiles(Array.from(dataTransfer.files ?? []));
+  if (entries.length === 0) {
+    const sueltos = Array.from(dataTransfer.files ?? []);
+    return { utiles: filtrarUtiles(sueltos), total: sueltos.length };
+  }
 
   const porEntrada = await Promise.all(
     entries.map(async (entry) => {
@@ -107,5 +117,6 @@ export async function archivosDesdeArrastre(dataTransfer: DataTransfer): Promise
     }),
   );
 
-  return filtrarUtiles(porEntrada.flat());
+  const encontrados = porEntrada.flat();
+  return { utiles: filtrarUtiles(encontrados), total: encontrados.length };
 }

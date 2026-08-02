@@ -35,9 +35,13 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
   const dragDepth = useRef(0);
 
   const inactivo = disabled || busy;
+  // Aviso local: el filtro por extensión ocurre aquí, así que si se lo come todo hay que decirlo o el
+  // operador suelta una carpeta entera y no pasa absolutamente nada.
+  const [descartados, setDescartados] = useState(0);
 
-  const entregar = (files: File[]) => {
+  const entregar = (files: File[], seleccionados: number) => {
     if (inactivo) return;
+    setDescartados(files.length === 0 && seleccionados > 0 ? seleccionados : 0);
     if (files.length > 0) onFiles(files);
   };
 
@@ -46,7 +50,8 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
     dragDepth.current = 0;
     setDragging(false);
     if (inactivo) return;
-    entregar(await archivosDesdeArrastre(e.dataTransfer));
+    const { utiles, total } = await archivosDesdeArrastre(e.dataTransfer);
+    entregar(utiles, total);
   };
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -64,7 +69,7 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
   const handlePick = (e: React.ChangeEvent<HTMLInputElement>, plano: boolean) => {
     const seleccion = Array.from(e.target.files ?? []);
     e.target.value = ''; // permite re-seleccionar lo mismo
-    entregar(filtrarUtiles(plano ? soloPrimerNivel(seleccion) : seleccion));
+    entregar(filtrarUtiles(plano ? soloPrimerNivel(seleccion) : seleccion), seleccion.length);
   };
 
   return (
@@ -98,6 +103,14 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
           ? 'Estamos identificando qué documento hay en cada página. Puede tardar un momento.'
           : `O selecciona archivos, una carpeta o un .zip. Repartimos cada documento en su casilla y te lo mostramos antes de adjuntarlo. Máx ${BATCH_MAX_FILES} archivos · ${BATCH_MAX_TOTAL_BYTES / (1024 * 1024)} MB.`}
       </p>
+
+      {descartados > 0 && !busy && (
+        <p className="mt-1 text-[11px] font-medium" style={{ color: '#C23B22' }} role="alert">
+          {descartados === 1
+            ? 'Ese archivo no es de un tipo que podamos leer. Admitimos PDF, JPG, PNG o .zip.'
+            : `Ninguno de los ${descartados} archivos es de un tipo que podamos leer. Admitimos PDF, JPG, PNG o .zip.`}
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
         <input

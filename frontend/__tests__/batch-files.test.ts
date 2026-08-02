@@ -106,7 +106,7 @@ describe('archivosDesdeArrastre', () => {
   it('lee archivos sueltos arrastrados', async () => {
     const dt = dataTransfer([fileEntry('soat.pdf'), fileEntry('impronta.pdf')]);
 
-    const files = await archivosDesdeArrastre(dt);
+    const { utiles: files } = await archivosDesdeArrastre(dt);
 
     expect(files.map((f) => f.name)).toEqual(['soat.pdf', 'impronta.pdf']);
   });
@@ -114,7 +114,7 @@ describe('archivosDesdeArrastre', () => {
   it('entra un nivel en una carpeta arrastrada', async () => {
     const dt = dataTransfer([dirEntry([fileEntry('soat.pdf'), fileEntry('rtm.pdf')])]);
 
-    const files = await archivosDesdeArrastre(dt);
+    const { utiles: files } = await archivosDesdeArrastre(dt);
 
     expect(files.map((f) => f.name)).toEqual(['soat.pdf', 'rtm.pdf']);
   });
@@ -124,7 +124,7 @@ describe('archivosDesdeArrastre', () => {
     const hijos = Array.from({ length: 250 }, (_, i) => fileEntry(`doc${i}.pdf`));
     const dt = dataTransfer([dirEntry(hijos, 100)]);
 
-    const files = await archivosDesdeArrastre(dt);
+    const { utiles: files } = await archivosDesdeArrastre(dt);
 
     expect(files).toHaveLength(250);
   });
@@ -134,7 +134,7 @@ describe('archivosDesdeArrastre', () => {
       dirEntry([fileEntry('soat.pdf'), fileEntry('.DS_Store'), fileEntry('notas.txt')]),
     ]);
 
-    const files = await archivosDesdeArrastre(dt);
+    const { utiles: files } = await archivosDesdeArrastre(dt);
 
     expect(files.map((f) => f.name)).toEqual(['soat.pdf']);
   });
@@ -145,9 +145,19 @@ describe('archivosDesdeArrastre', () => {
       dirEntry([fileEntry('soat.pdf')]),
     ]);
 
-    const files = await archivosDesdeArrastre(dt);
+    const { utiles: files } = await archivosDesdeArrastre(dt);
 
     expect(files.map((f) => f.name)).toEqual(['factura.pdf', 'soat.pdf']);
+  });
+
+  it('informa cuántos archivos venían aunque el filtro se los coma todos', async () => {
+    // Sin este dato la zona de carga se traga una carpeta entera de .docx sin decir nada.
+    const dt = dataTransfer([dirEntry([fileEntry('notas.txt'), fileEntry('acta.docx')])]);
+
+    const { utiles, total } = await archivosDesdeArrastre(dt);
+
+    expect(utiles).toEqual([]);
+    expect(total).toBe(2);
   });
 
   it('cae a dataTransfer.files cuando el navegador no expone entradas', async () => {
@@ -156,7 +166,7 @@ describe('archivosDesdeArrastre', () => {
       files: [file('soat.pdf'), file('.DS_Store')],
     } as unknown as DataTransfer;
 
-    const files = await archivosDesdeArrastre(dt);
+    const { utiles: files } = await archivosDesdeArrastre(dt);
 
     expect(files.map((f) => f.name)).toEqual(['soat.pdf']);
   });
