@@ -12,7 +12,13 @@ public sealed record MandateOtConfig(
     string TemplateCode,
     bool RequiresForNaturalPerson,
     string? InstitutionalMandataryName,
-    string? InstitutionalMandataryNit);
+    string? InstitutionalMandataryNit,
+    // HU #11204 — familia del mandatario (individuo | organismo_transito) y datos propios del OT que
+    // hasta ahora estaban incrustados en el generador. Un organismo nuevo con formato equivalente a uno
+    // ya soportado se da de alta con estos campos, sin desplegar código.
+    string? MandataryFamily = null,
+    string? ChamberCity = null,
+    string? MandatarySigla = null);
 
 /// <summary>
 /// Puerto para resolver la configuración de mandato del OT del trámite (ADR-0036, HU #10912). Se llavea

@@ -37,7 +37,7 @@ public sealed class MandatoApprovalHandlerTests
     }
 
     private void Candidates(params MandateSignerCandidate[] candidates) =>
-        _directory.GetCandidatesAsync(Office, Tenant, Arg.Any<CancellationToken>())
+        _directory.GetCandidatesAsync(Office, Tenant, Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(candidates);
 
     private static MandateSignerCandidate Signer(Guid? userId = null, Guid? id = null, bool vigente = true) =>
@@ -52,7 +52,7 @@ public sealed class MandatoApprovalHandlerTests
 
         decision.Outcome.Should().Be(MandatoApprovalOutcome.NotApplicable);
         await _directory.DidNotReceive().GetCandidatesAsync(
-            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

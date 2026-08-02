@@ -56,6 +56,36 @@ internal sealed class TransitOfficeResolver : ITransitOfficeResolver
     }
 
     /// <summary>
+    /// HU #11199 — mismas dos condiciones que la resolución por nombre, en el mismo orden: el grant
+    /// vigente de la empresa y la entrada del catálogo. <c>GetById</c> solo devuelve organismos
+    /// <c>is_active</c>, así que desactivar un OT lo deja fuera aunque el grant siga vivo.
+    /// </summary>
+    public async Task<ResolvedTransitOffice?> ResolveEnabledByIdAsync(
+        Guid tenantId,
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default)
+    {
+        if (transitOfficeId == Guid.Empty)
+        {
+            return null;
+        }
+
+        var enabledIds = await _grants
+            .ListEnabledOfficeIdsAsync(tenantId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!enabledIds.Contains(transitOfficeId))
+        {
+            return null;
+        }
+
+        var entry = _catalog.GetById(transitOfficeId);
+        return entry is null
+            ? null
+            : new ResolvedTransitOffice(entry.Id, entry.Code, entry.Name, entry.CityCode);
+    }
+
+    /// <summary>
     /// Normaliza un nombre de OT para comparar de forma tolerante: recorta, colapsa espacios internos,
     /// pliega diacríticos españoles (á→a, ñ→n, …) y pasa a mayúsculas invariantes. Así el nombre que
     /// trae el RUNT/Verifik (solo texto, sin DIVIPOLA) casa con el catálogo pese a diferencias de

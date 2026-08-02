@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -19,7 +20,12 @@ public sealed record PreflightPreviewRequest(
     string? Vin,
     string? Plate,
     string? OwnerDocumentType,
-    string? OwnerDocumentNumber);
+    string? OwnerDocumentNumber,
+    /// <summary>
+    /// HU #11199 — secretaría elegida en el primer paso. OBLIGATORIA en matrícula inicial: sin ella
+    /// no se consulta el VIN. En traspaso llega nula (el organismo lo impone el RUNT, HU #11200).
+    /// </summary>
+    Guid? TransitOfficeId = null);
 
 /// <summary>Atributo del vehículo hidratado por la consulta, en la forma que ya consume el wizard.</summary>
 public sealed record PreflightPreviewFieldDto(string FieldKey, string? ValueText, string? ValueJson);
@@ -128,11 +134,19 @@ public sealed class RunPreflightPreviewHandler(
     IConsultationTenantOverrideProvider overrideProvider,
     IConsultationRestrictionPolicy restrictionPolicy,
     IPreflightPreviewStore previewStore,
+    ITransitOfficeResolver transitOfficeResolver,
     IConsultationBlockingPolicy? blockingPolicy = null,
-    TramiteValidationPolicy? validationPolicy = null)
+    TramiteValidationPolicy? validationPolicy = null,
+    IOtOperabilityGate? otOperability = null)
 {
     private readonly IConsultationBlockingPolicy _blockingPolicy =
         blockingPolicy ?? NullConsultationBlockingPolicy.Instance;
+
+    // HU #11200 — el gate del paso 1 comprueba lo MISMO que el de radicación: grant vigente (resolver)
+    // + organismo operativo en la plataforma (esta compuerta). Si comprobara menos, el paso 1 dejaría
+    // pasar trámites que la radicación rechaza, que es justamente lo que la HU viene a evitar. Sin
+    // inyectar ⇒ permisivo, para no bloquear a los tests que no ejercitan la operabilidad.
+    private readonly IOtOperabilityGate _otOperability = otOperability ?? NullOtOperabilityGate.Instance;
 
     // HU #10970 — mismos modos por ambiente que RunPreflightHandler: el paso 1 del wizard no puede
     // divergir del preflight que se persiste al crear el trámite. Sin inyectar ⇒ bloqueo duro.
@@ -158,6 +172,24 @@ public sealed class RunPreflightPreviewHandler(
         if (esMatricula ? vin is null : plate is null)
             return (null, "identificador_requerido", null, null);
 
+        // HU #11199 (AC2/AC5) — en MATRÍCULA INICIAL la secretaría es requisito para consultar: sin ella
+        // no se gasta la consulta al RUNT. Se confirma contra los grants y el catálogo (AC3) porque la
+        // lista pudo cargarse antes de que un administrador desactivara el organismo o revocara el grant.
+        // En traspaso no aplica: allí el organismo lo impone el RUNT y se valida después (HU #11200).
+        ResolvedTransitOffice? secretaria = null;
+        if (esMatricula)
+        {
+            if (request.TransitOfficeId is not { } elegido || elegido == Guid.Empty)
+                return (null, TransitOfficeSelectionPolicy.RequiredErrorCode, null, null);
+
+            secretaria = await transitOfficeResolver
+                .ResolveEnabledByIdAsync(request.TenantId, elegido, ct)
+                .ConfigureAwait(false);
+            if (secretaria is null
+                || !await _otOperability.IsOperableAsync(secretaria.Id, ct).ConfigureAwait(false))
+                return (null, TransitOfficeSelectionPolicy.UnavailableErrorCode, null, null);
+        }
+
         var fieldValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         if (Trim(request.OwnerDocumentType) is { } docType) fieldValues["owner_document_type"] = docType;
         if (Trim(request.OwnerDocumentNumber) is { } docNumber) fieldValues["owner_document_number"] = docNumber;
@@ -177,11 +209,13 @@ public sealed class RunPreflightPreviewHandler(
         }
 
         var tenantOverride = await overrideProvider.GetAsync(request.TenantId, ct);
-        // Sin OT elegido todavía (se selecciona más adelante en el wizard): ambas políticas caen a su
-        // default —permisivo en restricciones, defaults por criterio en bloqueo—, igual que hoy hace el
-        // preflight del paso 1 cuando `transit_office_id` aún no está en field_values.
-        var restrictions = await restrictionPolicy.GetAsync(request.TenantId, null, ct);
-        var blockingRules = await _blockingPolicy.GetAsync(request.TenantId, null, ct);
+        // HU #11199 — en matrícula la secretaría YA se conoce en el paso 1, así que las políticas por OT
+        // se resuelven contra el organismo real y el semáforo del paso 1 deja de divergir del que se
+        // persiste al crear el trámite. En traspaso el OT aún no se conoce (lo trae el RUNT en la
+        // consulta que viene justo después) y ambas políticas siguen cayendo a su default —permisivo en
+        // restricciones, defaults por criterio en bloqueo—, igual que antes.
+        var restrictions = await restrictionPolicy.GetAsync(request.TenantId, secretaria?.Id, ct);
+        var blockingRules = await _blockingPolicy.GetAsync(request.TenantId, secretaria?.Id, ct);
 
         var checks = new List<PreflightCheckDto>();
         var providersUsed = new SortedSet<string>(StringComparer.Ordinal);
@@ -206,6 +240,18 @@ public sealed class RunPreflightPreviewHandler(
         checks.AddRange(vehicleChecks);
         foreach (var p in vehicleProviders)
             providersUsed.Add(p);
+
+        // HU #11200 — TRASPASO: el organismo no se elige, lo impone el RUNT (donde está matriculado el
+        // vehículo). Lo que se adelanta al paso 1 es la comprobación de que ahí se puede radicar. Va
+        // aquí, justo después de la consulta del vehículo y antes de los comparendos, para no gastar
+        // consultas de un trámite que no va a poder seguir.
+        if (!esMatricula)
+        {
+            var bloqueoOt = await ValidarOrganismoDelRuntAsync(request.TenantId, vehicleFields, ct)
+                .ConfigureAwait(false);
+            if (bloqueoOt is not null)
+                return (null, bloqueoOt, null, null);
+        }
 
         VehicleStateBlock? vehicleStateBlock = null;
 
@@ -273,6 +319,36 @@ public sealed class RunPreflightPreviewHandler(
             null,
             null,
             null);
+    }
+
+    /// <summary>
+    /// HU #11200 (AC1/AC2/AC3) — comprueba que el organismo donde el RUNT dice que está matriculado el
+    /// vehículo sirve para radicar: activo en el catálogo y con grant vigente (resolver), y operativo en
+    /// la plataforma (compuerta). Devuelve el código de bloqueo, o <c>null</c> si se puede continuar.
+    ///
+    /// <para>Si el RUNT no devolvió el nombre del organismo NO se bloquea: no hay nada que validar y
+    /// negarle el trámite al gestor por un dato que no vino sería castigarlo por un fallo ajeno. Ese caso
+    /// lo sigue cubriendo la comprobación de la radicación, que es la que no se puede eludir.</para>
+    /// </summary>
+    private async Task<string?> ValidarOrganismoDelRuntAsync(
+        Guid tenantId,
+        IReadOnlyList<HydratedField> vehicleFields,
+        CancellationToken ct)
+    {
+        var runtName = vehicleFields
+            .FirstOrDefault(f => string.Equals(f.FieldKey, "transit_office_name", StringComparison.OrdinalIgnoreCase))
+            ?.ValueText;
+        if (string.IsNullOrWhiteSpace(runtName))
+            return null;
+
+        var organismo = await transitOfficeResolver
+            .ResolveEnabledByNameAsync(tenantId, runtName, ct)
+            .ConfigureAwait(false);
+
+        return organismo is null
+            || !await _otOperability.IsOperableAsync(organismo.Id, ct).ConfigureAwait(false)
+            ? TransitOfficeSelectionPolicy.UnavailableErrorCode
+            : null;
     }
 
     /// <summary>

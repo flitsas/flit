@@ -273,7 +273,9 @@ public sealed class TramiteLifecycleService(
             return null;
 
         var candidates = await _mandateDirectory
-            .GetCandidatesAsync(transitOfficeId, instance.TenantId, ct)
+            .GetCandidatesAsync(
+                transitOfficeId, instance.TenantId,
+                MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
             .ConfigureAwait(false);
 
         var resolution = MandateSignerSelector.Resolve(candidates, command.ChangedByUserId, command.MandateSignerId);

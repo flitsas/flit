@@ -24,12 +24,28 @@ interface Props {
   comprador: { nombre?: string; documento?: string; tipoDoc?: string } | null;
   archivosCount: number;
   identidadAprobada: boolean;
+  /**
+   * Partes cuya firma se plasma desde el baúl. El resumen decía «Identidad: Verificada» para ellas
+   * porque el booleano de arriba no distingue con QUÉ se firmó, y una firma del baúl también deja la
+   * identidad por satisfecha. Decir «verificada» donde nadie hizo biometría desinforma al gestor.
+   */
+  firmaBaulPartes?: string[];
   orgTransito: { nombre?: string; ciudad?: string };
   /** SOAT del vehículo (ruta de placa, HU #10611): estado registrado + vencimiento si lo hay. */
   soat?: { estado?: string | null; vencimiento?: string | null };
 }
 
 // N 03 — labels/tonos desde la fuente única lib/tramites/estados.ts (6 estados de negocio).
+
+/**
+ * Qué se dice de la identidad en el resumen. Si alguna parte firma desde el baúl se nombra ese
+ * mecanismo: no hubo validación biométrica que «verificar». Con las dos vías conviviendo (una parte
+ * por baúl y otra por biometría) se nombran ambas, porque el resumen es de todo el trámite.
+ */
+function identidadLabel(aprobada: boolean, firmaBaulPartes: string[]): string {
+  if (firmaBaulPartes.length === 0) return aprobada ? 'Verificada' : 'Pendiente';
+  return aprobada ? 'Firma del baúl y verificada' : 'Firma del baúl';
+}
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
@@ -50,6 +66,7 @@ export default function MatriculaResumen({
   comprador,
   archivosCount,
   identidadAprobada,
+  firmaBaulPartes = [],
   orgTransito,
   soat,
 }: Props) {
@@ -121,7 +138,7 @@ export default function MatriculaResumen({
           label={vendedor ? 'Documento comprador' : 'Documento'}
           value={comprador?.documento ? `${comprador?.tipoDoc || 'CC'} ${comprador.documento}` : null}
         />
-        <Field label="Identidad" value={identidadAprobada ? 'Verificada' : 'Pendiente'} />
+        <Field label="Identidad" value={identidadLabel(identidadAprobada, firmaBaulPartes)} />
         <Field label="Documentos" value={`${archivosCount} cargado${archivosCount === 1 ? '' : 's'}`} />
         <Field label="Organismo de tránsito" value={orgTxt} />
       </div>

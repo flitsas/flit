@@ -354,12 +354,28 @@ public sealed class TramiteValidationModeTests
 
     // ── CF-01 en el avance del paso 1 al paso 2 (creación diferida, CF-02) ────
 
+    /// <summary>HU #11199 — la matrícula inicial exige secretaría; el resolver la acepta siempre.</summary>
+    private static readonly Guid SecretariaHabilitada = Guid.Parse("22222222-2222-2222-2222-222222222199");
+
+    private sealed class AnyOfficeResolver : ITransitOfficeResolver
+    {
+        public Task<ResolvedTransitOffice?> ResolveEnabledByNameAsync(
+            Guid tenantId, string transitOfficeName, CancellationToken ct = default) =>
+            Task.FromResult<ResolvedTransitOffice?>(null);
+
+        public Task<ResolvedTransitOffice?> ResolveEnabledByIdAsync(
+            Guid tenantId, Guid transitOfficeId, CancellationToken ct = default) =>
+            Task.FromResult<ResolvedTransitOffice?>(
+                new ResolvedTransitOffice(transitOfficeId, "05001000", "Secretaría de Medellín", "05001"));
+    }
+
     private CreateProcedureInstanceFromConsultaHandler FromConsultaHandler(TramiteValidationPolicy policy) =>
         new(_repo,
             new CreateProcedureInstanceHandler(_repo, Substitute.For<IProcedureTypeRepository>()),
             new PatchFieldValuesHandler(_repo),
             Handler(policy),
             Substitute.For<IPreflightPreviewStore>(),
+            new AnyOfficeResolver(),
             policy);
 
     private static CreateFromConsultaRequest FromConsultaRequest() =>
@@ -370,7 +386,8 @@ public sealed class TramiteValidationModeTests
             Plate: null,
             OwnerDocumentType: null,
             OwnerDocumentNumber: null,
-            PreviewToken: null);
+            PreviewToken: null,
+            TransitOfficeId: SecretariaHabilitada);
 
     [Fact]
     public async Task CreateFromConsulta_ModoBlock_DuplicadoDevuelve409SinCrear()

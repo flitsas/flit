@@ -40,8 +40,12 @@ public sealed class UpdateMandateSignerHandler
         var signer = await _reader
             .GetByIdAsync(command.MandateSignerId, cancellationToken).ConfigureAwait(false);
 
-        // 404 si no existe, pertenece a otro OT o ya fue inactivado (baja lógica).
-        if (signer is null || signer.TransitOfficeId != command.TransitOfficeId || !signer.IsActive)
+        // 404 si no existe, pertenece a otro OT o ya fue inactivado (baja lógica). La identidad se
+        // comprueba contra el organismo primario que el mandatario tiene HOY, que no siempre es el
+        // organismo bajo el que se edita: desde el configurador de la compañía se manda la lista
+        // completa de organismos y el primero de ella no tiene por qué ser el primario guardado.
+        var primarioActual = command.OrganismoPrimarioActual ?? command.TransitOfficeId;
+        if (signer is null || signer.TransitOfficeId != primarioActual || !signer.IsActive)
         {
             return UpdateMandateSignerResult.NotFound();
         }
@@ -90,7 +94,16 @@ public sealed class UpdateMandateSignerHandler
                 command.CorrelationId,
                 documentType,
                 email,
-                command.UserId),
+                command.UserId,
+                command.TransitOfficeIds,
+                command.PhysicalSignatureOfficeIds,
+                command.SignatureVaultId,
+                command.OfficeCompanies,
+                command.ActualizaFirma,
+                // Tras la edición, el organismo bajo el que se editó es el primario. Solo cambia algo
+                // cuando la lista retira al primario anterior; en la edición desde el perfil del
+                // organismo ambos coinciden y esto es un no-op.
+                NuevoOrganismoPrimario: command.TransitOfficeId),
             cancellationToken).ConfigureAwait(false);
 
         // HU #10993 — apalancar la validación de identidad también al EDITAR: si el correo se acaba de

@@ -53,6 +53,13 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
 
+    /// <summary>
+    /// Convenio comercial compañía ↔ organismo. Distinto del grant de arriba, que es el permiso para
+    /// radicar: este solo decide si el mandato lleva bloque de firma del mandatario.
+    /// </summary>
+    public DbSet<CompanyTransitOfficeAgreement> CompanyTransitOfficeAgreements =>
+        Set<CompanyTransitOfficeAgreement>();
+
     // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
     public DbSet<TenantTransitOfficeConsultationRestriction> TenantTransitOfficeConsultationRestrictions =>
         Set<TenantTransitOfficeConsultationRestriction>();
@@ -65,6 +72,20 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<MandateSigner> MandateSigners => Set<MandateSigner>();
 
     public DbSet<MandateSignerCompany> MandateSignerCompanies => Set<MandateSignerCompany>();
+
+    /// <summary>
+    /// HU #11201 — organismos donde aplica cada mandatario. Fuente de verdad desde este cambio;
+    /// <c>MandateSigner.TransitOfficeId</c> queda como organismo primario para compatibilidad.
+    /// </summary>
+    public DbSet<MandateSignerTransitOffice> MandateSignerTransitOffices =>
+        Set<MandateSignerTransitOffice>();
+
+    /// <summary>
+    /// Empresas representadas para las que firma cada mandatario, por organismo. Distinto de
+    /// <see cref="MandateSignerCompanies"/>, que lleva la compañía GESTORA.
+    /// </summary>
+    public DbSet<MandateSignerRepresentedCompany> MandateSignerRepresentedCompanies =>
+        Set<MandateSignerRepresentedCompany>();
 
     // ── Admin OT — configuración de mandato por OT (ADR-0036, HU #10912) ───────────
     public DbSet<TransitOfficeMandateConfigEntity> TransitOfficeMandateConfigs =>
@@ -163,6 +184,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // Trámites — biométrica (Slice 6, mock)
     public DbSet<ProcedureInstanceBiometricValidation> ProcedureInstanceBiometricValidations => Set<ProcedureInstanceBiometricValidation>();
+
+    // Trámites — marcas de firma a posteriori (HU #11196): el lote que se firma cuando el representante valida
+    public DbSet<DeferredSignatureMark> DeferredSignatureMarks => Set<DeferredSignatureMark>();
 
     // Trámites — outbox de eventos de validación de identidad (HU #10233, fase 2 event-driven)
     public DbSet<IdentityValidationOutbox> IdentityValidationOutbox => Set<IdentityValidationOutbox>();

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { Building2, FileClock, FileText, Hash, Save, Shuffle, Stamp, Users } from "lucide-react";
+import { Building2, FileClock, FileText, Hash, Save, Shuffle, Stamp, UserCheck, Users } from "lucide-react";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
 import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
@@ -23,6 +23,7 @@ type TabId =
   | "documentos"
   | "placas"
   | "representantes"
+  | "mandatarios"
   | "historial";
 
 /**
@@ -62,6 +63,10 @@ const TABS: TabDef[] = [
   // Ajustes HU #10929: aloja también el Baúl de Firmas como sección interna y es el único punto de
   // alta/edición de escrituras (por compañía, desde el detalle del representante).
   { id: "representantes", label: "Representantes legales", icon: Users, isConfig: false },
+  // HU #11202 (Feature #11190) — los mandatarios los registra la COMPAÑÍA y elige en cuáles de sus
+  // organismos aplican. Antes vivían en el perfil de cada organismo de tránsito, que era quien elegía
+  // compañías: el mandatario es de la empresa, no del organismo.
+  { id: "mandatarios", label: "Mandatarios", icon: UserCheck, isConfig: false },
   { id: "historial", label: "Historial de Cambios", icon: FileClock, isConfig: false },
 ];
 
@@ -83,6 +88,8 @@ export interface CompanyConfigTabsProps {
    * Firmas como sección interna (según `baulFirmasActivo`).
    */
   legalRepresentativesSlot?: ReactNode;
+  /** HU #11202 — mandatarios de la compañía y los organismos donde aplican. */
+  mandatariosSlot?: ReactNode;
   /**
    * HU #11062 — compañía que se está configurando. Se rotula por ENCIMA de la barra de pestañas para
    * que sobreviva al cambio de pestaña, y se repite en la confirmación de guardado. `null` mientras
@@ -100,6 +107,7 @@ export function CompanyConfigTabs({
   documentosSlot,
   platesSlot,
   legalRepresentativesSlot,
+  mandatariosSlot,
   company,
 }: CompanyConfigTabsProps) {
   const [tab, setTab] = useState<TabId>("matricula");
@@ -225,6 +233,7 @@ export function CompanyConfigTabs({
         {activeTabId === "documentos" && documentosSlot}
         {activeTabId === "placas" && platesSlot}
         {activeTabId === "representantes" && legalRepresentativesSlot}
+        {activeTabId === "mandatarios" && mandatariosSlot}
         {activeTabId === "historial" && auditSlot}
       </div>
 

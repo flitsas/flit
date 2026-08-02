@@ -119,8 +119,12 @@ export function SignatureVaultFormPanel({
         for (const e of err.errors) {
           const code = (e as { code?: string }).code;
           if (code === "firma_activa_existente") {
+            // Desde la HU #11193 el servidor SUSTITUYE la firma activa (la revoca y crea la nueva), así
+            // que este código ya no significa «anula primero»: solo llega cuando la sustitución no se
+            // pudo completar. El copy anterior mandaba al usuario a hacer algo que ya no hace falta.
             friendly =
-              "Ya existe una firma activa para esta persona. Anúlala antes de registrar una nueva.";
+              "No se pudo sustituir la firma activa de esta persona. Vuelve a intentarlo; si persiste, " +
+              "anúlala desde el listado y regístrala de nuevo.";
           }
           if (e.field) {
             mapped[e.field] = e.message;
@@ -243,6 +247,9 @@ export function SignatureVaultFormPanel({
             className={OT_INPUT_CLS}
             style={errStyle("codigoHash")}
             placeholder="Código alfanumérico"
+            // La columna es varchar(100) y el contrato ya lo declaraba; sin el tope aquí, el usuario
+            // solo se enteraba al recibir el error del servidor.
+            maxLength={100}
           />
           <FieldError message={fieldErrors.codigoHash} />
         </div>

@@ -186,6 +186,54 @@ internal static class ProcedureInstanceEndpoints
             return Results.Ok(new { items });
         }).WithName("ListEnabledTransitOffices");
 
+        // HU #11203 — mandatarios que pueden firmar el mandato de este trámite, con su documento y la
+        // vigencia de su identidad, más cuál está elegido. Se consulta al registrar, no al aprobar.
+        group.MapGet("/instances/{id:guid}/mandate-signers", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ListMandateSignerOptionsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
+            return error is "not_found"
+                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
+                : Results.Ok(result);
+        }).WithName("ListProcedureInstanceMandateSigners");
+
+        // HU #11203 (AC4/AC5) — fija quién firma. Solo en borrador o subsanación.
+        group.MapPut("/instances/{id:guid}/mandate-signer", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            SetMandateSignerBody body,
+            SetMandateSignerHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var error = await handler.HandleAsync(id, tenantId.Value, body.MandateSignerId, ct);
+            return error switch
+            {
+                null => Results.NoContent(),
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "not_draft" => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "El trámite ya salió de borrador: el mandatario que firma no puede cambiarse."),
+                "sin_organismo" => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "El trámite todavía no tiene organismo de tránsito."),
+                _ => Results.Problem(
+                    statusCode: 422,
+                    title: "Unprocessable Entity",
+                    detail: "El mandatario no está habilitado para el organismo de tránsito del trámite."),
+            };
+        }).WithName("SetProcedureInstanceMandateSigner");
+
         group.MapGet("/instances/{id:guid}", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
@@ -658,13 +706,25 @@ internal static class ProcedureInstanceEndpoints
                     body.Vin,
                     body.Plate,
                     body.OwnerDocumentType,
-                    body.OwnerDocumentNumber),
+                    body.OwnerDocumentNumber,
+                    body.TransitOfficeId),
                 ct);
 
             return err switch
             {
                 "modalidad_not_available" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No hay un tipo de trámite publicado para la modalidad indicada."),
                 "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el VIN (matrícula inicial) o la placa (traspaso) para consultar."),
+                // HU #11199 (AC2) — en matrícula inicial la consulta por VIN no corre sin secretaría.
+                TransitOfficeSelectionPolicy.RequiredErrorCode => Results.Problem(
+                    statusCode: 400,
+                    title: TransitOfficeSelectionPolicy.RequiredErrorCode,
+                    detail: "Seleccione la secretaría de tránsito antes de consultar el vehículo."),
+                // HU #11199 (AC3) / HU #11200 (AC2/AC3) — el organismo no está activo en FLIT o no está
+                // habilitado para la compañía gestora.
+                TransitOfficeSelectionPolicy.UnavailableErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: TransitOfficeSelectionPolicy.UnavailableErrorCode,
+                    detail: "El organismo de tránsito no está activo en FLIT o no está habilitado para la compañía."),
                 InitialProcedureValidationGate.DuplicateActiveProcedure => Results.Problem(
                     statusCode: 409,
                     title: InitialProcedureValidationGate.DuplicateActiveProcedure,
@@ -714,6 +774,15 @@ internal static class ProcedureInstanceEndpoints
             return err switch
             {
                 "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el VIN (matrícula inicial) o la placa (traspaso) para crear el trámite."),
+                // HU #11199 (AC1/AC3) — la secretaría del paso 1 se re-confirma al crear el trámite.
+                TransitOfficeSelectionPolicy.RequiredErrorCode => Results.Problem(
+                    statusCode: 400,
+                    title: TransitOfficeSelectionPolicy.RequiredErrorCode,
+                    detail: "Seleccione la secretaría de tránsito antes de continuar."),
+                TransitOfficeSelectionPolicy.UnavailableErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: TransitOfficeSelectionPolicy.UnavailableErrorCode,
+                    detail: "El organismo de tránsito no está activo en FLIT o no está habilitado para la compañía."),
                 "modalidad_not_available" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No hay un tipo de trámite publicado para la modalidad indicada."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure type not found."),
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
@@ -865,13 +934,18 @@ internal sealed record CompletePlateFlowResponse(
 /// Body de POST /preflight-preview (CF-02). <c>TenantId</c> solo lo usa el SuperAdmin sin
 /// <c>X-Tenant-Id</c>; para un usuario de compañía el backend lo impone desde el JWT.
 /// </summary>
+/// <summary>HU #11203 — cuerpo de la elección del mandatario que firma el mandato del trámite.</summary>
+internal sealed record SetMandateSignerBody(Guid MandateSignerId);
+
 internal sealed record PreflightPreviewBody(
     Guid TenantId,
     string Modalidad,
     string? Vin,
     string? Plate,
     string? OwnerDocumentType,
-    string? OwnerDocumentNumber);
+    string? OwnerDocumentNumber,
+    /// <summary>HU #11199 — secretaría del paso 1; obligatoria en matrícula inicial.</summary>
+    Guid? TransitOfficeId);
 
 /// <summary>
 /// Body de POST /instances/from-consulta (CF-02). <c>PreviewToken</c> es el de la consulta del paso 1:

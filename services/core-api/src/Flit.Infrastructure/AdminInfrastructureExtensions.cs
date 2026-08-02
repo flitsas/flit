@@ -67,6 +67,9 @@ public static class AdminInfrastructureExtensions
         // HU #10192 — grants de organismos de tránsito + catálogo OT desde BD.
         services.AddScoped<ITransitOfficeCatalog, DbTransitOfficeCatalog>();
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
+        // Convenio comercial compañía↔OT. Distinto del grant de arriba: aquel habilita la radicación,
+        // este decide si el contrato de mandato lleva bloque de firma del mandatario.
+        services.AddScoped<ICompanyAgreementRepository, CompanyAgreementRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
 
         // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
@@ -99,10 +102,26 @@ public static class AdminInfrastructureExtensions
             Flit.Infrastructure.Storage.SignatureVaultArtifactStorage>();
         services.AddScoped<ISignatureVaultPolicy, SignatureVaultPolicy>();
 
+        // HU #11195 — el directorio de representantes visto desde trámites: dice si el NIT de una parte
+        // tiene un representante utilizable (escritura vigente + firma o identidad vigente). Sin él, la
+        // ruta de registro no sabe cuándo el gestor se está quedando sin salida.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IRepresentanteLegalDirectory,
+            RepresentanteLegalDirectory>();
+
+        // HU #11196 (AC4) — tras firmar el lote diferido, el directorio queda apuntando a la identidad
+        // recién validada; si no, el siguiente trámite volvería a pedirle la validación a esa persona.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IRepresentanteLegalIdentityUpdater,
+            RepresentanteLegalIdentityUpdater>();
+
         // HU #10912 (ADR-0036) — configuración de mandato por OT (plantilla + exige-PN + mandatario
         // institucional), leída por código de OT para el flujo de trámite.
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandateRequirementPolicy,
             Flit.Infrastructure.OtRules.MandateRequirementPolicy>();
+
+        // Convenio comercial compañía↔organismo + firma física del mandatario: deciden si el contrato de
+        // mandato lleva bloque de firma del mandatario y de qué forma.
+        services.AddScoped<Flit.Tramites.Domain.Integration.IMandatoFirmaPolicy,
+            Flit.Infrastructure.OtRules.MandatoFirmaPolicy>();
 
         // HU #10916 (ADR-0036 §D9) — directorio de mandatarios por OT/compañía: resuelve el firmante del
         // mandato al aprobar y rellena su nombre/documento en el PDF regenerado.

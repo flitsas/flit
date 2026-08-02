@@ -40,7 +40,10 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
                 cfg.TemplateCode,
                 cfg.RequiresForNaturalPerson,
                 cfg.InstitutionalMandataryName,
-                cfg.InstitutionalMandataryNit))
+                cfg.InstitutionalMandataryNit,
+                cfg.MandataryFamily,
+                cfg.ChamberCity,
+                cfg.MandatarySigla))
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
     }

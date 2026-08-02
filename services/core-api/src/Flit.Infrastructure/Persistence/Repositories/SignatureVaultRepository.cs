@@ -33,6 +33,17 @@ internal sealed class SignatureVaultRepository : ISignatureVaultRepository
             cancellationToken);
     }
 
+    public Task<bool> UpdateAsync(
+        UpdateSignatureVaultData data,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        return ExecuteInTenantScopeAsync(
+            data.TenantId,
+            () => PersistUpdateAsync(data, cancellationToken),
+            cancellationToken);
+    }
+
     public Task<bool> RevokeAsync(
         RevokeSignatureVaultData data,
         CancellationToken cancellationToken = default)
@@ -106,6 +117,31 @@ internal sealed class SignatureVaultRepository : ISignatureVaultRepository
         ex.InnerException is PostgresException pg
         && pg.SqlState == PostgresErrorCodes.UniqueViolation
         && pg.ConstraintName == ActiveUniqueIndex;
+
+    private async Task<bool> PersistUpdateAsync(
+        UpdateSignatureVaultData data,
+        CancellationToken cancellationToken)
+    {
+        var entity = await _context.SignatureVault
+            .FirstOrDefaultAsync(s => s.Id == data.Id, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Solo se edita lo vigente: corregir una firma ya revocada cambiaría un dato histórico.
+        if (entity is null || entity.Estado != SignatureVaultEstadoMapping.Activa)
+        {
+            return false;
+        }
+
+        entity.FullName = data.FullName;
+        entity.CodigoHash = data.CodigoHash;
+        entity.VigenciaDesde = data.VigenciaDesde;
+        entity.VigenciaHasta = data.VigenciaHasta;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedBy = data.ChangedBy;
+
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return true;
+    }
 
     private async Task<bool> PersistRevokeAsync(
         RevokeSignatureVaultData data,

@@ -21,7 +21,8 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 public sealed class GenerarConsolidadoMaestroHandler(
     IProcedureInstanceRepository repo,
     IExpedienteConsolidadoMerger merger,
-    IAttachmentStorage storage)
+    IAttachmentStorage storage,
+    IOtConfiguredDocumentOrderProvider? otOrderProvider = null)
 {
     private static readonly HashSet<string> ConsolidadoTipos = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -67,11 +68,20 @@ public sealed class GenerarConsolidadoMaestroHandler(
             .Where(a => !ConsolidadoTipos.Contains(a.Tipo))
             .ToList();
 
-        // AC1: orden por la matriz resuelta (documentos no clasificados al final como "Anexos"); si
-        // no hay matriz disponible, respaldo al orden por modalidad.
-        var ordered = matrizPrecedencia is { Count: > 0 }
-            ? GenericConsolidadoOrdering.SelectByResolvedMatrix(fuentes, matrizPrecedencia)
-            : ConsolidadoOrderingResolver.Select(fuentes, instance.ModalidadEntrada);
+        // HU #11184 — si el OT configuró la prelación de este tipo de trámite, manda ella, y sin
+        // cabecera fija: el FUR y los demás generados ocupan la posición que el organismo eligió.
+        // Resolverla aquí dentro hace que el envío por el canal de radicación (Quipux) use el mismo
+        // orden que la consola, sin tener que componerlo en cada llamador (AC5).
+        var configurado = await ResolverOrdenOtAsync(instance, ct).ConfigureAwait(false);
+
+        // AC1 (HU #10706): sin configuración del OT, orden por la matriz resuelta (documentos no
+        // clasificados al final como "Anexos"); si tampoco hay matriz, respaldo por modalidad.
+        var ordered = configurado.Count > 0
+            ? GenericConsolidadoOrdering.SelectByPrecedence(
+                fuentes, ConsolidadoDocumentCodeMap.ToPrecedence(configurado))
+            : matrizPrecedencia is { Count: > 0 }
+                ? GenericConsolidadoOrdering.SelectByResolvedMatrix(fuentes, matrizPrecedencia)
+                : ConsolidadoOrderingResolver.Select(fuentes, instance.ModalidadEntrada);
         if (ordered.Count == 0)
             return (null, "sin_adjuntos");
 
@@ -160,6 +170,31 @@ public sealed class GenerarConsolidadoMaestroHandler(
 
         var dto = new ConsolidadoDocumentDto(newAttachment.Id, doc.Tipo, doc.Filename, stored.Sha256);
         return (new GenerarConsolidadoResult(dto), null);
+    }
+
+    /// <summary>
+    /// Orden configurado por el OT para el tipo de trámite, o vacío si no configuró nada. Un fallo
+    /// leyéndolo no puede dejar al organismo sin expediente: se cae al comportamiento anterior.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> ResolverOrdenOtAsync(ProcedureInstance instance, CancellationToken ct)
+    {
+        if (otOrderProvider is null)
+            return [];
+
+        try
+        {
+            return await otOrderProvider
+                .GetConfiguredOrderAsync(instance.ProcedureTypeId, instance.TransitOfficeId, ct)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return [];
+        }
     }
 
     private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken ct)

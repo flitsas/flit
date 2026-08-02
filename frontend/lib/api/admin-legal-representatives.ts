@@ -38,6 +38,12 @@ export interface LegalRepresentativeCompanySummary {
   name: string;
   deeds: RepresentativeDeed[];
   /**
+   * HU #11177 — bandera explícita que indica si esta es la compañía principal del representante.
+   * Exactamente UNA compañía viene marcada como principal en cada respuesta. No inferir de la
+   * columna denormalizada deprecada `representedCompanyId`.
+   */
+  isPrimary?: boolean;
+  /**
    * HU #11058 — contacto de la compañía. El formulario de edición reenvía la lista completa de
    * compañías y el backend hace upsert con lo que reciba, así que ESTOS CAMPOS TIENEN QUE
    * PRECARGARSE: mandarlos en blanco los borra.
@@ -138,6 +144,12 @@ export interface LegalRepresentativeInput {
   city?: string | null;
   phone?: string | null;
   procedureTypeIds: string[];
+  /**
+   * HU #11180 — firma del baúl seleccionada explícitamente por el administrador. Si viene,
+   * el backend valida y persiste saltándose el resolver automático; si no viene, el resolver
+   * sigue funcionando como antes (compatibilidad con el wizard).
+   */
+  signatureVaultId?: string | null;
 }
 
 /**
@@ -258,4 +270,16 @@ export function resendLegalRepresentativeIdentity(
   return apiFetch<IdentityValidationSent>(`${base(tenantId)}/${id}/identity/resend`, {
     method: "POST",
   });
+}
+
+/**
+ * POST "/{id}/identity/link" — vincula una validación de identidad ya aprobada al representante
+ * (HU #11180 AC6). Idempotente: si ya está vinculada devuelve la misma respuesta. Devuelve 409 con
+ * código `sin_identidad_vigente` cuando no hay una validación aprobada y vigente que vincular.
+ */
+export function linkLegalRepresentativeIdentity(
+  tenantId: string,
+  id: string,
+): Promise<void> {
+  return apiFetch<void>(`${base(tenantId)}/${id}/identity/link`, { method: "POST" });
 }

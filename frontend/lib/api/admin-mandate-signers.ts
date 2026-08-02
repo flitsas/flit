@@ -40,6 +40,15 @@ export interface MandateSigner {
   registeredAt: string;
   isActive: boolean;
   companyTenantIds: string[];
+  /**
+   * HU #11201 — organismos donde aplica el mandatario. `transitOfficeId` es solo el primario
+   * (deprecado): esta lista es la que dice dónde puede firmar.
+   */
+  transitOfficeIds?: string[];
+  /** Subconjunto de los anteriores donde el mandatario firma a mano. */
+  physicalSignatureOfficeIds?: string[];
+  /** Empresas representadas por organismo; vacío para un organismo ⇒ aplica a todas allí. */
+  officeCompanies?: MandateSignerOfficeCompanies[];
 }
 
 /**
@@ -219,4 +228,160 @@ export function resendMandateSignerIdentity(
     `${base(transitOfficeId)}/${mandateSignerId}/identity/resend`,
     { method: "POST" },
   );
+}
+
+// ── HU #11202 — mandatarios desde el configurador de la COMPAÑÍA ──────────────
+// Vista inversa: la empresa registra a la persona y marca en cuáles de SUS organismos aplica, en vez
+// de que cada organismo elija compañías. Mismos objetos de dominio; cambia la ruta y quién manda.
+
+/** Organismo de tránsito habilitado para la compañía (opción del multiselect). */
+export interface CompanyTransitOfficeOption {
+  transitOfficeId: string;
+  code: string;
+  name: string;
+}
+
+/** Datos que la compañía captura de un mandatario. */
+export interface CompanyMandateSignerInput {
+  fullName: string;
+  documentType: string;
+  documentNumber: string;
+  email: string | null;
+  /** Organismos donde aplica. Al editar, REEMPLAZA a los anteriores: quitar uno lo retira. */
+  transitOfficeIds: string[];
+  /**
+   * Subconjunto de los anteriores donde el mandatario firma A MANO: el contrato deja la línea con sus
+   * datos debajo y no estampa firma del baúl ni sello de identidad.
+   */
+  physicalSignatureOfficeIds?: string[];
+  /**
+   * Firma del baúl elegida para el mandatario. `null` ⇒ el trámite la resuelve por documento, que es
+   * el comportamiento previo.
+   */
+  signatureVaultId?: string | null;
+  /**
+   * Empresas representadas por organismo. Omitir la entrada de un organismo ⇒ el mandatario aplica a
+   * todas las empresas allí.
+   */
+  officeCompanies?: MandateSignerOfficeCompanies[];
+}
+
+/** Empresa representada de la compañía: las que se dan de alta en el formulario del representante. */
+export interface RepresentedCompanyOption {
+  id: string;
+  /** NIT. Es lo que distingue dos empresas con la misma razón social. */
+  documentNumber: string;
+  name: string;
+}
+
+/**
+ * Empresas representadas para las que el mandatario firma en un organismo. Lista vacía ⇒ aplica a
+ * TODAS las de ese organismo, que es como se comportan los mandatarios que ya existen.
+ */
+export interface MandateSignerOfficeCompanies {
+  transitOfficeId: string;
+  representedCompanyIds: string[];
+}
+
+/** GET — empresas representadas de la compañía. Ya vienen únicas por NIT. */
+export async function fetchRepresentedCompanies(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<RepresentedCompanyOption[]> {
+  const r = await apiFetch<{ items: RepresentedCompanyOption[] }>(
+    `${companyBase(tenantId)}/represented-companies`,
+    { signal },
+  );
+  return r?.items ?? [];
+}
+
+/** Desenlace de una acción de identidad sobre el mandatario. */
+export interface MandateSignerIdentityResult {
+  estado: string;
+  reutilizada: boolean;
+}
+
+/**
+ * Acciones de identidad del mandatario desde el configurador de la COMPAÑÍA.
+ *
+ * Existían solo bajo `/transit-offices/...` y ningún componente las llamaba: la empresa registraba a
+ * su mandatario pero no tenía forma de pedirle la validación ni de vincular la que ya tuviera.
+ *
+ * - `send` inicia la validación (el proveedor manda el enlace de captura por correo);
+ * - `resend` reenvía respetando la vigencia (no reenvía si ya hay aprobada y vigente);
+ * - `link` vincula una identidad que esa persona YA validó, sin mandar correo (409 si no tiene).
+ */
+export function mandateSignerIdentityAction(
+  tenantId: string,
+  mandateSignerId: string,
+  accion: "send" | "resend" | "link",
+): Promise<MandateSignerIdentityResult> {
+  return apiFetch<MandateSignerIdentityResult>(
+    `${companyBase(tenantId)}/${mandateSignerId}/identity/${accion}`,
+    { method: "POST" },
+  );
+}
+
+function companyBase(tenantId: string): string {
+  return `/api/v1/admin/companies/${tenantId}/mandate-signers`;
+}
+
+/** GET — mandatarios de la compañía, con sus organismos. */
+export async function fetchCompanyMandateSigners(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<{ signers: MandateSigner[]; mockIdentityEnabled: boolean }> {
+  const result = await apiFetch<{ data: MandateSigner[]; mockIdentityEnabled?: boolean }>(
+    companyBase(tenantId),
+    { signal },
+  );
+  return { signers: result.data, mockIdentityEnabled: result.mockIdentityEnabled === true };
+}
+
+/** GET /transit-offices — organismos que la compañía puede elegir (AC2). */
+export async function fetchCompanyTransitOffices(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<CompanyTransitOfficeOption[]> {
+  const result = await apiFetch<{ data: CompanyTransitOfficeOption[] }>(
+    `${companyBase(tenantId)}/transit-offices`,
+    { signal },
+  );
+  return result.data;
+}
+
+/** POST — alta del mandatario en los organismos elegidos. 422 si alguno no está habilitado. */
+export function createCompanyMandateSigner(
+  tenantId: string,
+  body: CompanyMandateSignerInput,
+): Promise<MandateSignerSaved> {
+  return apiFetch<MandateSignerSaved>(companyBase(tenantId), { method: "POST", body });
+}
+
+/** PUT /{signerId} — edición de datos y organismos. */
+export function updateCompanyMandateSigner(
+  tenantId: string,
+  mandateSignerId: string,
+  body: CompanyMandateSignerInput,
+): Promise<MandateSignerSaved> {
+  return apiFetch<MandateSignerSaved>(`${companyBase(tenantId)}/${mandateSignerId}`, {
+    method: "PUT",
+    body,
+  });
+}
+
+/** POST /{signerId}/inactivate — baja lógica del mandatario. */
+export function inactivateCompanyMandateSigner(
+  tenantId: string,
+  mandateSignerId: string,
+): Promise<void> {
+  return apiFetch<void>(`${companyBase(tenantId)}/${mandateSignerId}/inactivate`, { method: "POST" });
+}
+
+/** POST /{signerId}/reactivate — reactiva un mandatario inactivado. */
+export function reactivateCompanyMandateSigner(
+  tenantId: string,
+  mandateSignerId: string,
+): Promise<void> {
+  return apiFetch<void>(`${companyBase(tenantId)}/${mandateSignerId}/reactivate`, { method: "POST" });
 }

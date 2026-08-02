@@ -46,8 +46,7 @@ var data = new FurDocumentData(
     ValorVenta: 45000000,
     Causal: null,
     SellosFirma: [],
-    SellosIdentidad: sellos,
-    FirmasVisibles: true);
+    SellosIdentidad: sellos);
 
 var mandato = new MandatoPdfGenerator().GenerateMandato(
     new MandatoData(data, "generico", null, null, new MandatarioFirmante("CARLOS ANDRES RUIZ", "71234567")));

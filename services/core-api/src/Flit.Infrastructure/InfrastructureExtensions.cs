@@ -95,6 +95,9 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.ISoatRuntValidationPolicy,
             OtRules.SoatRuntValidationPolicy>();
         services.AddScoped<IProcedureInstanceRepository, ProcedureInstanceRepository>();
+        // HU #11196 — marcas de firma a posteriori (el lote que se firma cuando el representante valida).
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IDeferredSignatureMarkRepository,
+            DeferredSignatureMarkRepository>();
         // IT-3 (Feature #10585) — persistencia del agregado de prenda.
         services.AddScoped<IProcedureInstancePrendaRepository, ProcedureInstancePrendaRepository>();
         services.AddScoped<IIdentityValidationOutboxRepository, IdentityValidationOutboxRepository>();
@@ -111,6 +114,9 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider, ChecklistCompanyParamsProvider>();
         // HU #10522 (RF17/RF22) — puente de la matriz documental resuelta del gestor hacia el checklist (matriz viva).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IResolvedChecklistMatrixProvider, Services.ResolvedChecklistMatrixProvider>();
+        // HU #11184 — orden del expediente configurado por el OT (admin.ot_document_precedence).
+        // Vacío = el OT no configuró nada ⇒ el consolidado conserva el orden por modalidad.
+        services.AddScoped<Flit.Tramites.Domain.Repositories.IOtConfiguredDocumentOrderProvider, Services.OtConfiguredDocumentOrderProvider>();
         // CF-06 (HU #10881) — override OT del documento de prenda (independiente del semáforo de gravámenes),
         // SNAPSHOT: solo overrides activos antes de crear el trámite.
         services.AddScoped<Flit.Tramites.Domain.Repositories.IPrendaDocumentRequirementPolicy, Services.PrendaDocumentRequirementPolicy>();

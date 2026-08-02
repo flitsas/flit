@@ -308,16 +308,20 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         var repIds = rows.Select(r => r.Id).ToList();
 
         // Puente representante ↔ compañía (HU #10932): todas las compañías de cada representante.
+        // HU #11177: se incluye CreatedAt para el orden estable secundario (principal primero, luego
+        // por fecha de asociación ascendente). Sin CreatedAt el orden depende del hash del GUID.
         var bridgeRows = await _context.LegalRepresentativeCompanies
             .AsNoTracking()
             .Where(l => repIds.Contains(l.RepresentativeId))
-            .Select(l => new { l.RepresentativeId, l.RepresentedCompanyId })
+            .Select(l => new { l.RepresentativeId, l.RepresentedCompanyId, l.CreatedAt })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
         var bridgeByRep = bridgeRows
             .GroupBy(b => b.RepresentativeId)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.RepresentedCompanyId).ToList());
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(x => (CompanyId: x.RepresentedCompanyId, CreatedAt: x.CreatedAt)).ToList());
 
         var companyIds = rows.Select(r => r.RepresentedCompanyId)
             .Concat(bridgeRows.Select(b => b.RepresentedCompanyId))
@@ -344,7 +348,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         // HU #11059 — vigencia de identidad y de firma del baúl por representante, en lote. La consola
         // necesita distinguir "vigente" de "vencida" para poder ofrecer la renovación; el booleano
         // HasSignatureOrIdentity no daba para eso. Dos consultas para TODAS las filas (sin N+1).
-        var vigenciaIdentidad = await LoadIdentityVigenciaAsync(repIds, cancellationToken)
+        var vigenciaIdentidad = await LoadIdentityVigenciaAsync(rows, cancellationToken)
             .ConfigureAwait(false);
         var vigenciaFirma = await LoadFirmaBaulVigenciaAsync(rows, cancellationToken).ConfigureAwait(false);
 
@@ -362,36 +366,42 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             companies.TryGetValue(r.RepresentedCompanyId, out var company);
             procedureTypesByRep.TryGetValue(r.Id, out var procedureTypeIds);
 
-            // Compañías del representante: del puente si hay, si no la primaria; la primaria va primero.
-            var repCompanyIds = bridgeByRep.TryGetValue(r.Id, out var linked) && linked.Count > 0
+            // HU #11177 — compañías del representante con bandera explícita de principal y orden
+            // estable: principal primero, luego el resto por fecha de asociación ascendente.
+            // La principal es RepresentedCompanyId (la compañía primaria del alta). El fallback
+            // (sin filas en el puente, datos legados) expone solo la primaria marcada como principal.
+            var linkedEntries = bridgeByRep.TryGetValue(r.Id, out var linked) && linked.Count > 0
                 ? linked
-                : [r.RepresentedCompanyId];
+                : [(CompanyId: r.RepresentedCompanyId, CreatedAt: DateTimeOffset.MinValue)];
+
             IReadOnlyList<LegalRepresentativeCompanySummary> companySummaries =
             [
-                .. repCompanyIds
-                    .OrderBy(cid => cid == r.RepresentedCompanyId ? 0 : 1)
-                    .Where(companies.ContainsKey)
-                    .Select(cid =>
+                .. linkedEntries
+                    .OrderBy(x => x.CompanyId == r.RepresentedCompanyId ? 0 : 1)
+                    .ThenBy(x => x.CreatedAt)
+                    .Where(x => companies.ContainsKey(x.CompanyId))
+                    .Select(x =>
                     {
-                        var c = companies[cid];
+                        var c = companies[x.CompanyId];
                         // HU #11058 — el contacto viaja en el resumen para que la edición lo precargue.
                         // Sin él el formulario reenviaba estos campos en blanco y el upsert los borraba.
                         var summary = new LegalRepresentativeCompanySummary(c.Id, c.DocumentNumber, c.Name)
                         {
+                            IsPrimary = x.CompanyId == r.RepresentedCompanyId,
                             Email = c.Email,
                             Address = c.Address,
                             City = c.City,
                             Phone = c.Phone,
                         };
-                        return deedsByCompany.TryGetValue(cid, out var deeds)
+                        return deedsByCompany.TryGetValue(x.CompanyId, out var deeds)
                             ? summary with { Deeds = deeds }
                             : summary;
                     }),
             ];
 
             var identidad = vigenciaIdentidad.GetValueOrDefault(
-                r.Id, new AdminIdentityVigencia.Resultado(AdminIdentityVigencia.None, null));
-            var firma = vigenciaFirma.GetValueOrDefault(FirmaKey(r));
+                PersonaKey(r), new AdminIdentityVigencia.Resultado(AdminIdentityVigencia.None, null));
+            var firma = vigenciaFirma.GetValueOrDefault(PersonaKey(r));
 
             return new LegalRepresentativeItem
             {
@@ -428,38 +438,62 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
     /// HU #11059 — vigencia de la identidad por representante, con el mismo cálculo que el mandatario
     /// del OT (<see cref="AdminIdentityVigencia"/>). Una consulta para todos los ids.
     /// </summary>
-    private async Task<Dictionary<Guid, AdminIdentityVigencia.Resultado>> LoadIdentityVigenciaAsync(
-        List<Guid> representativeIds,
+    /// <summary>
+    /// HU #11192 — vigencia de identidad de la PERSONA, no del sujeto. Antes se resolvía filtrando por
+    /// <c>subject_type = 'legal_representative'</c> y por el id del representante, mientras la firma del
+    /// baúl se resolvía por documento. Esa asimetría hacía que una validación aprobada y vigente de la
+    /// misma persona creada bajo OTRO sujeto —un mandatario, un actor de trámite, u otra fila del mismo
+    /// representante en otra compañía— fuera invisible, y el panel dijera «Identidad sin validar»
+    /// teniéndola.
+    /// <para>
+    /// Se llavea por <c>(tenant, tipo de documento, documento)</c>, igual que
+    /// <see cref="LoadFirmaBaulVigenciaAsync"/>. El filtro por tenant es obligatorio: la misma persona
+    /// puede ser representante en varios tenants y la validación es tenant-scoped (DDL 40-HU10907).
+    /// </para>
+    /// <para>
+    /// Esto NO vincula la validación al representante: <c>identity_validation_ref</c> solo lo escribe el
+    /// resolutor al guardar o el endpoint de asociación (HU #11176). Un representante puede quedar con
+    /// identidad vigente de la persona y sin vínculo propio, y el panel debe poder distinguirlo.
+    /// </para>
+    /// </summary>
+    private async Task<Dictionary<(Guid, string, string), AdminIdentityVigencia.Resultado>> LoadIdentityVigenciaAsync(
+        List<CompanyLegalRepresentativeEntity> rows,
         CancellationToken cancellationToken)
     {
-        if (representativeIds.Count == 0)
+        if (rows.Count == 0)
         {
             return [];
         }
 
+        var tenantIds = rows.Select(r => r.TenantId).Distinct().ToList();
+        var documentos = rows.Select(r => r.DocumentNumber).Distinct().ToList();
         var now = DateTimeOffset.UtcNow;
-        var rows = await _context.AdminIdentityValidations
+
+        // El filtro por tenant + documento se hace en SQL; el cotejo del tipo de documento se cierra en
+        // memoria al agrupar, porque una tupla compuesta no se traduce a un IN de PostgreSQL (mismo
+        // criterio que la carga de firmas del baúl).
+        var validaciones = await _context.AdminIdentityValidations
             .AsNoTracking()
-            .Where(v => v.SubjectType == AdminIdentitySubjectTypes.LegalRepresentative
-                && representativeIds.Contains(v.SubjectRef))
-            .Select(v => new { v.SubjectRef, v.Status, v.ValidUntil })
+            .Where(v => tenantIds.Contains(v.TenantId) && documentos.Contains(v.DocumentNumber))
+            .Select(v => new { v.TenantId, v.DocumentType, v.DocumentNumber, v.Status, v.ValidUntil })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return rows
-            .GroupBy(r => r.SubjectRef)
+        return validaciones
+            .GroupBy(v => (v.TenantId, v.DocumentType, v.DocumentNumber))
             .ToDictionary(
                 g => g.Key,
                 g => AdminIdentityVigencia.Resumir(
-                    g.Select(r => new AdminIdentityVigencia.Entrada(r.Status, r.ValidUntil)), now));
+                    g.Select(v => new AdminIdentityVigencia.Entrada(v.Status, v.ValidUntil)), now));
     }
 
     /// <summary>
-    /// Llave del baúl para un representante. La firma es de la PERSONA en el tenant (HU #10932), no de
-    /// la compañía: se llavea por (tenant, tipo de documento, documento), igual que
-    /// <c>FindActiveByDocumentAsync</c>, que es lo que consume el guardado.
+    /// Llave de PERSONA dentro del tenant: <c>(tenant, tipo de documento, documento)</c>. La usan tanto
+    /// la firma del baúl (HU #10932, igual que <c>FindActiveByDocumentAsync</c>, que es lo que consume
+    /// el guardado) como la vigencia de identidad (HU #11192). Ninguna de las dos pertenece a la
+    /// compañía ni a la fila del representante, sino a la persona.
     /// </summary>
-    private static (Guid TenantId, string DocumentType, string DocumentNumber) FirmaKey(
+    private static (Guid TenantId, string DocumentType, string DocumentNumber) PersonaKey(
         CompanyLegalRepresentativeEntity r) => (r.TenantId, r.DocumentType, r.DocumentNumber);
 
     /// <summary>

@@ -14,12 +14,23 @@ namespace Flit.Infrastructure.Documents;
 /// <c>mandated/*.hbs</c> de FLIT 1.0 a QuestPDF (tipo <c>mandato</c>), fusionable al Expediente
 /// Consolidado (mismo patrón que <see cref="SolicitudVirtualPdfGenerator"/>). La variante la decide
 /// <see cref="MandatoTemplateResolver"/> por el <c>template_code</c> del OT: <b>genérica</b> (mandatario
-/// persona, ambos firman), <b>Sabaneta</b> (mandatario institucional UT-SETSA, solo firma el mandante) y
+/// persona, ambos firman electrónicamente), <b>Sabaneta</b> (mandatario institucional UT-SETSA) y
 /// <b>Bello</b> (mandatario persona, representante legal de la UT-MAB). Dentro de cada variante, el texto
 /// del MANDANTE cambia según sea persona natural (a nombre propio) o jurídica (su representante legal).
+/// <para><b>HU #11205 — quién firma electrónicamente.</b> Cuando el OT tiene una EMPRESA RELACIONADA como
+/// mandatario (familia <c>organismo_transito</c>), su firma es MANUAL: no se plasma su validación de
+/// identidad, solo queda la línea sobre la razón social y el NIT. Aplica a Sabaneta <b>y a Bello</b>: los
+/// <c>.md</c> de ambos traen un bloque de firma electrónica del mandatario, pero se consideran
+/// desactualizados en ese punto (D4) y se usan como fuente del texto legal, no de la política de firma.
+/// El MANDANTE sigue firmando con su validación de identidad en todos los casos.</para>
 /// <para><b>Texto legal transcrito literal</b> de las plantillas legacy y marcado para revisión del PO
 /// (ADR-0036 §10.2): esta implementación NO reinterpreta las cláusulas.</para>
-/// Las firmas solo se pintan en estado distinto de borrador (<see cref="FurDocumentData.FirmasVisibles"/>).
+/// <para><b>Las firmas se pintan en todos los estados.</b> Hasta ahora se ocultaban en borrador y
+/// subsanación (punto 18 del requerimiento de ADR-0036), lo que dejaba el contrato sin siquiera la
+/// línea para firmar a mano justo cuando el gestor lo revisa; y obligaba a regenerar el expediente
+/// completo al entregar para que el organismo no lo recibiera en blanco. El recuadro se pinta
+/// siempre: lo que no exista todavía sale como línea vacía, que es lo que un contrato en borrador
+/// debe mostrar.</para>
 /// </summary>
 public sealed class MandatoPdfGenerator : IMandatoGenerator
 {
@@ -28,6 +39,18 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     private const string SetsaNit = "900273813-7";
     private const string MabNombre = "UNION TEMPORAL MOVILIDAD AVANZADA DE BELLO MAB";
     private const string MabNit = "901783814-6";
+
+    // HU #11204 — datos del OT que hasta ahora estaban incrustados en el texto. Ahora vienen de la
+    // configuración del organismo; estas constantes quedan como fallback literal, de modo que un OT sin
+    // configurarlos emite exactamente el mismo contrato que antes (AC5).
+    private const string CamaraPorDefecto = "Medellín";
+    private const string SetsaSigla = "UT-SETSA";
+
+    /// <summary>Ciudad de la Cámara de Comercio que acredita al MANDANTE (config del OT, HU #11204).</summary>
+    private static string Camara(MandatoData data) => Val(data.ChamberCity, CamaraPorDefecto);
+
+    /// <summary>Sigla de la unión temporal para la cláusula de obligaciones (config del OT, HU #11204).</summary>
+    private static string Sigla(MandatoData data, string fallback) => Val(data.MandatarySigla, fallback);
 
     static MandatoPdfGenerator()
     {
@@ -46,7 +69,12 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
 
         var esTraspaso = string.Equals(
             tramite.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
-        var nombreTramite = esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL";
+        // HU #11206 — el objeto del contrato incluye las transformaciones del trámite. Se compone aquí,
+        // una sola vez, para que todas las familias de plantilla lo redacten idéntico (AC4). Sin
+        // transformaciones queda exactamente el texto de siempre (AC3).
+        var nombreTramite = MandatoObjetoComposer.Componer(
+            esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL",
+            data.Transformaciones);
 
         var placa = Val(tramite.Placa, "___");
         var ot = Val(tramite.Organismo.Nombre, "___");
@@ -77,8 +105,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                     foreach (var p in parrafos)
                         RenderParrafo(col, p);
 
-                    if (tramite.FirmasVisibles)
-                        RenderFirmas(col, data, parte, esJuridica, variante);
+                    RenderFirmas(col, data, parte, esJuridica, variante);
                 });
             });
         }).GeneratePdf();
@@ -109,7 +136,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             ? $"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} No. {RlDoc(parte)}, " +
               $"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, según lo acredita la " +
               "escritura pública y/o el certificado de existencia y representación expedido por la Cámara de " +
-              "Comercio de Medellín y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
+              $"Comercio de {Camara(data)} y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
               $"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, " +
               "quien para los efectos del presente contrato se denominará EL MANDATARIO, hemos acordado suscribir " +
               ResolucionesCc()
@@ -143,7 +170,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             ? $"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} número No {RlDoc(parte)}, " +
               $"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, según lo acredita la " +
               "escritura pública y/o el certificado de existencia y representación expedido por la Cámara de " +
-              "Comercio de Medellín y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
+              $"Comercio de {Camara(data)} y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
               $"Y de {inst}, con NIT N° {nit}, quien para efectos del presente contrato se denominará EL MANDATARIO, " +
               "hemos acordado suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace " +
               $"cargo de la gestión de realizar el trámite de {nombreTramite} del vehículo de placas: {placa}, " +
@@ -161,7 +188,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             "OBLIGACIONES DEL MANDANTE: EL MANDANTE declara que la información contenida en los documentos que se " +
             "anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante las " +
             "autoridades competentes de cualquier irregularidad que los mismos puedan contener; al igual dejando " +
-            "indemne a la UT-SETSA de cualquier responsabilidad en los que se ve comprometido la confidencialidad y " +
+            $"indemne a la {Sigla(data, SetsaSigla)} de cualquier responsabilidad en los que se ve comprometido la confidencialidad y " +
             "divulgación de la información legalmente protegida mediante los parámetros y disposiciones de la ley " +
             "1581 del 2012 y demás normas que se dicten en la materia.",
             CierreFirma(fecha, ciudad),
@@ -180,7 +207,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             ? $"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} número No {RlDoc(parte)}, " +
               $"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, según lo acredita la " +
               "escritura pública y/o el Certificado de Existencia y Representación expedido por la Cámara de " +
-              "Comercio de Medellín y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
+              $"Comercio de {Camara(data)} y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
               $"Y de la otra parte, {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, " +
               $"Representante Legal de {inst}, con NIT No. {nit}, quien para efectos del presente contrato se " +
               "denominará EL MANDATARIO, hemos acordado suscribir el siguiente contrato de mandato mediante el cual " +
@@ -237,18 +264,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     {
         var tramite = data.Tramite;
 
-        // Sabaneta: mandatario institucional ⇒ solo firma el MANDANTE (+ bloque de identificación).
-        if (variante == MandatoVariante.Sabaneta)
-        {
-            col.Item().PaddingTop(16).Column(sig =>
-            {
-                sig.Item().Text(t => t.Span("MANDANTE").Bold());
-                RenderMandanteFirma(sig, tramite, parte, esJuridica);
-            });
-            return;
-        }
+        var modo = ModoFirmaMandatario(data);
 
-        // Genérica / Bello: firman MANDANTE y MANDATARIO.
         // HU #11034 — separación reducida para que las firmas quepan en la misma hoja que el cuerpo.
         col.Item().PaddingTop(16).Row(row =>
         {
@@ -257,6 +274,14 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                 sig.Item().Text(t => t.Span("MANDANTE").Bold());
                 RenderMandanteFirma(sig, tramite, parte, esJuridica);
             });
+
+            // Con convenio entre la compañía y el organismo, el recuadro solo lleva al MANDANTE: el
+            // mandatario no firma. Sus datos siguen nombrados en el CUERPO del contrato, así que el
+            // documento no pierde al actor, solo su espacio de firma.
+            if (modo == MandatarioFirmaModo.SinBloque)
+                return;
+
+            var manual = modo == MandatarioFirmaModo.Manual;
             row.RelativeItem().Column(sig =>
             {
                 sig.Item().Text(t => t.Span("MANDATARIO").Bold());
@@ -266,14 +291,54 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                 // HU #11170 — la firma del baúl del mandatario también lleva su vigencia y su hash.
                 FlitFirmaBlock.Render(
                     sig,
-                    data.Mandatario?.FirmaImagen,
-                    data.Mandatario?.SelloIdentidad,
-                    MandatarioIdentificacion(data.Mandatario),
+                    manual ? null : data.Mandatario?.FirmaImagen,
+                    manual ? null : data.Mandatario?.SelloIdentidad,
+                    MandatarioIdentificacion(data.Mandatario, data),
                     FlitFirmaLinea.Underscores,
-                    selloBaul: SelloBaulDe(data.Mandatario));
+                    selloBaul: manual ? null : SelloBaulDe(data.Mandatario));
             });
         });
     }
+
+    /// <summary>
+    /// Cómo aparece el MANDATARIO en el recuadro de firmas. Orden deliberado:
+    /// <list type="number">
+    ///   <item><b>Sabaneta: sin bloque SIEMPRE</b>, con o sin convenio. Su mandatario es la propia unión
+    ///   temporal —el contrato la nombra a ella, no a una persona—, así que no hay nadie a quien dejarle
+    ///   un espacio de firma. Es la única variante con esta regla incondicional.</item>
+    ///   <item><b>Sin bloque</b> si el modo ya viene resuelto así desde la aplicación (convenio
+    ///   comercial compañía↔organismo).</item>
+    ///   <item><b>Manual</b> si el mandatario es el propio organismo (familia <c>organismo_transito</c>,
+    ///   HU #11205): ahí firma la empresa a mano sobre la línea. Es el caso de <b>Bello</b>, cuya
+    ///   plantilla sí nombra al representante legal de la unión temporal: hay una persona que puede
+    ///   firmar, y por eso conserva la línea en vez de perder el bloque.</item>
+    ///   <item>Lo que diga el modo resuelto fuera — <b>manual</b> también cuando el mandatario está
+    ///   marcado como firmante físico en ese organismo.</item>
+    /// </list>
+    /// La variante y la familia se comprueban aquí y no fuera porque son datos del propio documento (la
+    /// plantilla del OT), no del convenio ni del mandatario.
+    /// </summary>
+    private static MandatarioFirmaModo ModoFirmaMandatario(MandatoData data) =>
+        MandatoTemplateResolver.Resolve(data.TemplateCode) == MandatoVariante.Sabaneta
+            ? MandatarioFirmaModo.SinBloque
+            : data.ModoFirmaMandatario == MandatarioFirmaModo.SinBloque
+                ? MandatarioFirmaModo.SinBloque
+                : MandatarioEsEmpresa(data)
+                    ? MandatarioFirmaModo.Manual
+                    : data.ModoFirmaMandatario;
+
+    /// <summary>
+    /// HU #11205 (D4) — ¿el mandatario del OT es una empresa relacionada? La señal explícita es la
+    /// familia (HU #11204); el nombre institucional se conserva como señal heredada para los OT que
+    /// todavía no tengan familia configurada.
+    ///
+    /// <para>Manda la REGLA, no las plantillas: los <c>.md</c> de Bello y Sabaneta incluyen un bloque de
+    /// firma electrónica para el mandatario, pero se consideran desactualizados en ese punto y se usan
+    /// como fuente del texto legal, no de la política de firma.</para>
+    /// </summary>
+    private static bool MandatarioEsEmpresa(MandatoData data) =>
+        data.Familia == MandatoFamilia.OrganismoTransito
+        || !string.IsNullOrWhiteSpace(data.InstitutionalMandataryName);
 
     /// <summary>
     /// Bloque de firma del MANDANTE (HU #11046): estampa (baúl o sello de identidad) sobre la línea y,
@@ -427,8 +492,20 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     /// <para>El contacto del mandatario NO se imprime: <c>MandatarioFirmante</c> no lo transporta, y el
     /// dato de contacto que el organismo necesita es el del mandante (quien otorga el poder).</para>
     /// </summary>
-    internal static IEnumerable<string> MandatarioIdentificacion(MandatarioFirmante? mandatario)
+    internal static IEnumerable<string> MandatarioIdentificacion(
+        MandatarioFirmante? mandatario, MandatoData? data = null)
     {
+        // HU #11205 (AC2) — con empresa relacionada, quien firma a mano es la empresa: bajo la línea va
+        // su razón social y su NIT. Poner ahí la cédula de la persona firmante haría que el documento
+        // dijera que firmó alguien distinto de quien lo hace.
+        if (data is not null && MandatarioEsEmpresa(data)
+            && !string.IsNullOrWhiteSpace(data.InstitutionalMandataryName))
+        {
+            yield return $"RAZÓN SOCIAL: {data.InstitutionalMandataryName.Trim()}";
+            yield return $"NIT: {Val(data.InstitutionalMandataryNit, "___")}";
+            yield break;
+        }
+
         var (nombre, documento) = MandatarioTexto(mandatario);
         yield return $"NOMBRE: {nombre}";
         yield return $"CÉDULA DE CIUDADANÍA: {documento}";

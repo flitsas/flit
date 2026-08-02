@@ -13,25 +13,28 @@ import {
   fetchAssignableProcedureTypes,
   fetchLegalRepresentatives,
   sendLegalRepresentativeIdentity,
-  SIGNAL_SIN_FIRMA_NI_IDENTIDAD,
   updateLegalRepresentative,
+  SIGNAL_SIN_FIRMA_NI_IDENTIDAD,
   type AssignableProcedureType,
   type LegalRepresentativeInput,
   type LegalRepresentativeItem,
   type LegalRepresentativeSaved,
 } from "@/lib/api/admin-legal-representatives";
 import { useCompanyTabsNav } from "../CompanyConfigTabs";
-import { LegalRepresentativesFormPanel } from "./LegalRepresentativesFormPanel";
-import { LegalRepresentativeDetailModal } from "./LegalRepresentativeDetailModal";
+import {
+  LegalRepresentativesFormPanel,
+  type PanelMode,
+} from "./LegalRepresentativesFormPanel";
 import { formatDocumentNumber, fullName, procedureTypeLabels, signatureStatus } from "./legalRepresentativesDisplay";
 
 const PAGE_SIZE = 20;
 
 /**
  * Pestaña "Representantes legales" (HU #10904, Feature #10852): CRUD paginado del directorio de
- * representantes por compañía, replicando el patrón del Baúl de Firmas. Al guardar, si el backend
- * emite la señal `sin_firma_ni_identidad`, ofrece "Enviar correo de validación de identidad"
- * (HU #10907) y "Registrar en baúl". El número de documento (PII, Ley 1581) se enmascara en la tabla.
+ * representantes por compañía. HU #11178: una sola superficie — el panel unificado `view`/`create`/`edit`
+ * reemplaza la ventana de detalle separada (`LegalRepresentativeDetailModal`, retirada en esta HU).
+ * El número de documento se muestra completo: los últimos cuatro dígitos no bastan para identificar
+ * al representante durante la operación (decisión traída de develop al integrar).
  */
 export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
   const { show } = useToast();
@@ -41,12 +44,14 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
   const [items, setItems] = useState<LegalRepresentativeItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   // Catálogo de tipos de trámite asignables (activos + publicados), cargado del backend con sus IDs
-  // reales; alimenta el multiselect del formulario y las etiquetas de la tabla/detalle.
+  // reales; alimenta el multiselect del formulario y las etiquetas de la tabla.
   const [procedureTypes, setProcedureTypes] = useState<AssignableProcedureType[]>([]);
 
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<LegalRepresentativeItem | null>(null);
-  const [detail, setDetail] = useState<LegalRepresentativeItem | null>(null);
+  // HU #11178 — panel unificado: modo + id del representante seleccionado.
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelMode, setPanelMode] = useState<PanelMode>("create");
+  const [panelRepresentativeId, setPanelRepresentativeId] = useState<string | null>(null);
+
   const [toDelete, setToDelete] = useState<LegalRepresentativeItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   // Id del representante recién guardado sin firma ni identidad (banner con acciones).
@@ -76,8 +81,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
     return () => controller.abort();
   }, [load]);
 
-  // Carga del catálogo de tipos de trámite asignables (una vez por tenant). Si falla, el multiselect
-  // queda vacío con su aviso: mejor no ofrecer ids inexistentes que romper el guardado.
+  // Carga del catálogo de tipos de trámite asignables (una vez por tenant).
   useEffect(() => {
     const controller = new AbortController();
     fetchAssignableProcedureTypes(tenantId, controller.signal)
@@ -90,32 +94,65 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
     return () => controller.abort();
   }, [tenantId]);
 
+  // ── Apertura del panel en cada modo ─────────────────────────────────────────
+
+  /** AC4: «Nuevo representante» → panel en alta (formulario en blanco). */
+  const openCreate = () => {
+    setPanelMode("create");
+    setPanelRepresentativeId(null);
+    setPanelOpen(true);
+  };
+
+  /** AC1: «Ver» → panel en consulta con toda la información del representante. */
+  const openView = (item: LegalRepresentativeItem) => {
+    setPanelMode("view");
+    setPanelRepresentativeId(item.id);
+    setPanelOpen(true);
+  };
+
+  /** «Editar» desde la tabla → panel en edición directamente. */
+  const openEdit = (item: LegalRepresentativeItem) => {
+    setPanelMode("edit");
+    setPanelRepresentativeId(item.id);
+    setPanelOpen(true);
+  };
+
+  /** AC2: el usuario pulsó «Editar» DENTRO del panel en consulta → cambia modo sin cerrar. */
+  const handleSwitchToEdit = () => {
+    setPanelMode("edit");
+  };
+
+  const closePanel = () => {
+    setPanelOpen(false);
+    setPanelRepresentativeId(null);
+  };
+
+  // ── Submit / saved ───────────────────────────────────────────────────────────
+
   const handleSubmit = (input: LegalRepresentativeInput): Promise<LegalRepresentativeSaved> =>
-    editing
-      ? updateLegalRepresentative(tenantId, editing.id, input)
-      : createLegalRepresentative(tenantId, input);
+    panelMode === "create" || !panelRepresentativeId
+      ? createLegalRepresentative(tenantId, input)
+      : updateLegalRepresentative(tenantId, panelRepresentativeId, input);
 
   const handleSaved = (saved: LegalRepresentativeSaved) => {
-    const wasEditing = editing !== null;
-    setFormOpen(false);
-    setEditing(null);
-    show(wasEditing ? "Representante actualizado." : "Representante registrado.", "success");
-    // La señal no es un error: el registro persistió, pero no hay firma/identidad vigente.
+    const wasCreate = panelMode === "create";
     setPendingSignatureId(
       saved.signals.includes(SIGNAL_SIN_FIRMA_NI_IDENTIDAD) ? saved.id : null,
     );
     void load();
+
+    if (wasCreate) {
+      // AC5: el panel NO se cierra; pasa a modo edición sobre el representante recién creado.
+      show("Representante registrado. Puedes editar sus detalles.", "success");
+      setPanelMode("edit");
+      setPanelRepresentativeId(saved.id);
+    } else {
+      show("Representante actualizado.", "success");
+      closePanel();
+    }
   };
 
-  const openCreate = () => {
-    setEditing(null);
-    setFormOpen(true);
-  };
-
-  const openEdit = (item: LegalRepresentativeItem) => {
-    setEditing(item);
-    setFormOpen(true);
-  };
+  // ── Eliminación ──────────────────────────────────────────────────────────────
 
   const confirmDelete = async () => {
     if (!toDelete) return;
@@ -132,6 +169,8 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
       setDeleting(false);
     }
   };
+
+  // ── Envío de identidad ───────────────────────────────────────────────────────
 
   const handleSendIdentity = async (item: LegalRepresentativeItem) => {
     setSendingIdentityId(item.id);
@@ -233,8 +272,15 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
             <table className="w-full min-w-[820px] border-separate border-spacing-y-2 text-xs">
               <caption className="sr-only">Representantes legales de la compañía</caption>
               <thead>
-                <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
-                  <th scope="col" className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                <tr
+                  className="text-left text-[10px] font-semibold uppercase"
+                  style={{ color: "#162744" }}
+                >
+                  <th
+                    scope="col"
+                    className="rounded-l-xl px-4 py-2.5"
+                    style={{ background: "#DFE5ED" }}
+                  >
                     Representante
                   </th>
                   <th scope="col" className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
@@ -246,7 +292,11 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
                   <th scope="col" className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
                     Firma / Identidad
                   </th>
-                  <th scope="col" className="rounded-r-xl px-4 py-2.5 text-right" style={{ background: "#DFE5ED" }}>
+                  <th
+                    scope="col"
+                    className="rounded-r-xl px-4 py-2.5 text-right"
+                    style={{ background: "#DFE5ED" }}
+                  >
                     Acciones
                   </th>
                 </tr>
@@ -257,7 +307,9 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
                   const tramites = procedureTypeLabels(item.procedureTypeIds, procedureTypes);
                   return (
                     <tr key={item.id} className="bg-white dark:bg-[#0B0F14]">
-                      <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">{fullName(item)}</td>
+                      <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">
+                        {fullName(item)}
+                      </td>
                       <td className="border-y px-4 py-3 font-mono">
                         {item.documentType} {formatDocumentNumber(item.documentNumber)}
                       </td>
@@ -266,7 +318,9 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
                           {tramites.length === 0 ? (
                             <span className="opacity-50">—</span>
                           ) : (
-                            tramites.map((t, i) => <StatusBadge key={`${item.id}-${i}`} tone="info" label={t} />)
+                            tramites.map((t, i) => (
+                              <StatusBadge key={`${item.id}-${i}`} tone="info" label={t} />
+                            ))
                           )}
                         </div>
                       </td>
@@ -287,7 +341,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
                           )}
                           <RowButton
                             label="Ver"
-                            onClick={() => setDetail(item)}
+                            onClick={() => openView(item)}
                             ariaLabel={`Ver detalle de ${fullName(item)}`}
                           />
                           <RowButton
@@ -339,24 +393,18 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
         </div>
       </UiStateBoundary>
 
+      {/* HU #11178 — panel unificado (view / create / edit). Reemplaza LegalRepresentativeDetailModal. */}
       <LegalRepresentativesFormPanel
-        open={formOpen}
-        editing={editing}
+        open={panelOpen}
+        mode={panelMode}
+        representativeId={panelRepresentativeId}
+        tenantId={tenantId}
         procedureTypes={procedureTypes}
-        onClose={() => {
-          setFormOpen(false);
-          setEditing(null);
-        }}
+        onClose={closePanel}
         onSubmit={handleSubmit}
         onSaved={handleSaved}
         onError={(message) => show(message, "error")}
-      />
-
-      <LegalRepresentativeDetailModal
-        tenantId={tenantId}
-        item={detail}
-        procedureTypes={procedureTypes}
-        onClose={() => setDetail(null)}
+        onSwitchToEdit={handleSwitchToEdit}
       />
 
       {toDelete && (

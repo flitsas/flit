@@ -284,6 +284,35 @@ public sealed class CreateCompanyHandlerTests
 
     // ---------- Helpers ----------
 
+    [Fact]
+    public async Task DosCompaniasConElMismoNit_NoSePermiten()
+    {
+        // El NIT identifica a la empresa ante el Estado: dos tenants con el mismo NIT son la misma
+        // empresa duplicada y aparecían dos veces —con la misma razón social— en los listados que las
+        // ofrecen, sin nada que permitiera distinguirlas.
+        var db = NewDbName();
+        await using var ctx = NewContext(db);
+        var handler = new CreateCompanyHandler(new CompanyWriteRepository(ctx));
+        var ct = TestContext.Current.CancellationToken;
+
+        var primera = await handler.HandleAsync(new CreateCompanyCommand
+        {
+            CreatedBy = Operator,
+            Request = new CreateCompanyRequest("Renting Andino S.A.S.", "900123456-1", "RENT1", "RENTING", true),
+        }, ct);
+        primera.IsValid.Should().BeTrue();
+
+        // Mismo NIT, código distinto: antes se creaba sin queja.
+        var segunda = await handler.HandleAsync(new CreateCompanyCommand
+        {
+            CreatedBy = Operator,
+            Request = new CreateCompanyRequest("Renting Andino S.A.S.", "900123456-1", "RENT2", "RENTING", true),
+        }, ct);
+
+        segunda.IsValid.Should().BeFalse();
+        segunda.Errors.Should().Contain(e => e.Field == "nit");
+    }
+
     private static string NewDbName() => $"flit-create-company-{Guid.NewGuid()}";
 
     private static FlitDbContext NewContext(string dbName) =>

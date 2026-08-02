@@ -12,7 +12,13 @@ import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react';
 
 export type InlineAlertTone = 'error' | 'warning' | 'info' | 'success';
 
-const TONES: Record<
+/**
+ * Paleta e icono por tono. Se exporta porque hay avisos que NO pueden usar `InlineAlert` como
+ * contenedor —los que llevan dentro grids de datos, selectores o badges, a los que el componente
+ * teñiría el cuerpo con el color del tono—, y aun así deben pintarse con estos valores en vez de con
+ * hex sueltos. Una sola definición evita que esos avisos vuelvan a derivar hacia otra paleta.
+ */
+export const INLINE_ALERT_TONES: Record<
   InlineAlertTone,
   { color: string; background: string; border: string; Icon: typeof AlertTriangle }
 > = {
@@ -60,7 +66,7 @@ export function InlineAlert({
   action,
   className = '',
 }: InlineAlertProps) {
-  const { color, background, border, Icon } = TONES[tone];
+  const { color, background, border, Icon } = INLINE_ALERT_TONES[tone];
   const interrumpe = tone === 'error' || tone === 'warning';
 
   return (

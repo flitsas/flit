@@ -124,6 +124,8 @@ public static class AdminMandateSignersEndpoints
             DocumentType = request.DocumentType ?? "CC",
             Email = request.Email,
             UserId = request.UserId,
+            // HU #11201 — la misma persona puede firmar en varios organismos.
+            TransitOfficeIds = request.TransitOfficeIds,
             CreatedBy = ResolveUserId(httpContext.User),
         };
 
@@ -161,6 +163,7 @@ public static class AdminMandateSignersEndpoints
             DocumentType = request.DocumentType ?? "CC",
             Email = request.Email,
             UserId = request.UserId,
+            TransitOfficeIds = request.TransitOfficeIds,
             UpdatedBy = ResolveUserId(httpContext.User),
         };
 

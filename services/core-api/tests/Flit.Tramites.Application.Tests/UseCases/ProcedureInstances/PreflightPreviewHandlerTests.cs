@@ -48,6 +48,25 @@ public sealed class PreflightPreviewHandlerTests
             Task.FromResult<ConsultationTenantOverride?>(null);
     }
 
+    /// <summary>
+    /// HU #11199 — resolver que acepta una única secretaría habilitada. La matrícula inicial exige
+    /// secretaría desde el paso 1, así que estos tests la mandan siempre (ver <c>MatriculaRequest</c>).
+    /// </summary>
+    private sealed class SingleOfficeResolver(Guid enabledId) : ITransitOfficeResolver
+    {
+        public Task<ResolvedTransitOffice?> ResolveEnabledByNameAsync(
+            Guid tenantId, string transitOfficeName, CancellationToken ct = default) =>
+            Task.FromResult<ResolvedTransitOffice?>(null);
+
+        public Task<ResolvedTransitOffice?> ResolveEnabledByIdAsync(
+            Guid tenantId, Guid transitOfficeId, CancellationToken ct = default) =>
+            Task.FromResult(transitOfficeId == enabledId
+                ? new ResolvedTransitOffice(enabledId, "05001000", "Secretaría de Medellín", "05001")
+                : null);
+    }
+
+    private static readonly Guid SecretariaHabilitada = Guid.Parse("11111111-1111-1111-1111-111111111199");
+
     private RunPreflightPreviewHandler HandlerWith(params (string key, IConsultationProvider provider)[] providers)
     {
         var registry = new StaticRegistry(providers.ToDictionary(p => p.key, p => p.provider));
@@ -58,6 +77,7 @@ public sealed class PreflightPreviewHandlerTests
             new NullOverrideProvider(),
             NullConsultationRestrictionPolicy.Instance,
             _store,
+            new SingleOfficeResolver(SecretariaHabilitada),
             NullConsultationBlockingPolicy.Instance);
     }
 
@@ -67,7 +87,7 @@ public sealed class PreflightPreviewHandlerTests
             fields);
 
     private static PreflightPreviewRequest MatriculaRequest(Guid tenantId, string vin = VinLibre) =>
-        new(tenantId, TramiteModalidadEntradaCodes.MatriculaInicial, vin, null, null, null);
+        new(tenantId, TramiteModalidadEntradaCodes.MatriculaInicial, vin, null, null, null, SecretariaHabilitada);
 
     [Fact]
     public async Task Preview_MatriculaSinConflictos_DevuelveSemaforoYToken()

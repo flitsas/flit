@@ -49,14 +49,22 @@ public sealed class GenerarFurHandler(
     ISolicitudVirtualGenerator? solicitudVirtualGenerator = null,
     IMandatoGenerator? mandatoGenerator = null,
     IMandateRequirementPolicy? mandatePolicy = null,
+    IMandatoFirmaPolicy? mandatoFirmaPolicy = null,
     IMandateSignerDirectory? mandateDirectory = null,
     ISoatRtmCertificateGenerator? soatRtmGenerator = null,
     GetSuggestedCommercialValueHandler? avaluoHandler = null,
     IFurTemplateResolver? templateResolver = null,
     IProcedureDeedResolver? deedResolver = null,
-    IRuesActorDataResolver? ruesResolver = null)
+    IRuesActorDataResolver? ruesResolver = null,
+    IRepresentanteLegalDirectory? representanteDirectory = null)
     : IExpedienteHotDocumentsRegenerator
 {
+    // HU #11198 (AC3) — respaldo del directorio para el nombre del representante cuando el trámite no lo
+    // trajo. Default inerte (nunca responde) en los tests que no lo ejercitan: sin él, el hueco queda
+    // como estaba, que es el comportamiento previo.
+    private readonly IRepresentanteLegalDirectory _representanteDirectory =
+        representanteDirectory ?? NullRepresentanteLegalDirectory.Instance;
+
     // HU #10990 (Feature #10972) — resuelve el RUES por NIT cuando field_values no lo tiene para ese
     // actor. Default seguro (NUNCA resuelve) en tests que no lo ejercitan: sin él, el certificado se
     // emite solo si el wizard dejó las rues_* del actor, que es el comportamiento previo.
@@ -76,6 +84,10 @@ public sealed class GenerarFurHandler(
     // ADR-0036 (HU #10912/#10915) — config de mandato por OT (plantilla / exige a PN / mandatario
     // institucional). Default seguro (NUNCA resuelve ⇒ plantilla genérica, solo PJ) si no se inyecta.
     private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
+
+    // Convenio compañía↔organismo y firma física del mandatario: deciden si el mandato lleva bloque de
+    // firma del mandatario. Default seguro ⇒ lo lleva (es un actor obligatorio).
+    private readonly IMandatoFirmaPolicy _mandatoFirmaPolicy = mandatoFirmaPolicy ?? NullMandatoFirmaPolicy.Instance;
 
     // ADR-0036 §D9 (HU #10916) — directorio de mandatarios: rellena el firmante del PDF del mandato desde
     // instance.MandateSignerId (resuelto al aprobar). Default seguro (NUNCA resuelve) si no se inyecta.
@@ -201,7 +213,12 @@ public sealed class GenerarFurHandler(
             ? await _templateResolver.ResolveAsync(Get(fv, "vehicle_class"), ct)
             : FurTemplateFormat.Automotor;
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, acreedorPrendaDocumento, firmaImagenes, firmaBaulMetadatos, templateFormat);
+        // HU #11198 (AC3) — el nombre del representante lo manda el trámite; solo si no lo trajo se pide
+        // al directorio de la compañía. Se resuelve ANTES de ensamblar para que AssembleData siga siendo
+        // una función pura y síncrona.
+        var nombresRlDirectorio = await ResolverNombresDelDirectorioAsync(instance, esTraspaso, ct);
+
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, acreedorPrendaDocumento, firmaImagenes, firmaBaulMetadatos, templateFormat, nombresRlDirectorio);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -223,7 +240,8 @@ public sealed class GenerarFurHandler(
         // natural solo si el OT lo exige). El firmante (mandatario) aún NO se resuelve en preparado: se
         // regenera al aprobar con el firmante elegido/filtrado (HU #10916). Generar-o-limpiar: si el
         // trámite dejó de exigir mandato en una regeneración, se retira el adjunto 'mandato' previo.
-        var mandato = await TryGenerateMandatoAsync(data, Get(fv, "transit_office_code"), instance.MandateSignerId, ct);
+        var mandato = await TryGenerateMandatoAsync(
+            data, Get(fv, "transit_office_code"), instance.MandateSignerId, TransformacionesActivas(fv), ct);
         if (mandato is not null)
         {
             generated.Add(mandato);
@@ -491,12 +509,13 @@ public sealed class GenerarFurHandler(
         bool tienePrenda, string? acreedorPrenda, string? acreedorPrendaDocumento,
         IReadOnlyDictionary<string, byte[]>? firmaImagenes,
         IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos,
-        FurTemplateFormat templateFormat)
+        FurTemplateFormat templateFormat,
+        IReadOnlyDictionary<string, string>? nombresRlDirectorio = null)
     {
         var partes = new List<DocumentParte>(2);
-        AddParte(partes, instance, "comprador");
+        AddParte(partes, instance, "comprador", nombresRlDirectorio);
         if (esTraspaso)
-            AddParte(partes, instance, "vendedor");
+            AddParte(partes, instance, "vendedor", nombresRlDirectorio);
 
         var sellos = instance.Signatures
             .Where(s => s.Estado == SignatureEstados.Firmada)
@@ -560,9 +579,6 @@ public sealed class GenerarFurHandler(
             SellosIdentidad: sellosIdentidad,
             TienePrenda: tienePrenda,
             AcreedorPrenda: acreedorPrenda,
-            // ADR-0036 (HU #10914/#10915) — las firmas del mandato/solicitud virtual solo aparecen
-            // fuera de edición (borrador o rechazado en subsanación).
-            FirmasVisibles: !TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva),
             TemplateFormat: templateFormat)
         {
             // HU #11030 — tenant contra el que se resuelve el baúl del mandatario.
@@ -782,8 +798,29 @@ public sealed class GenerarFurHandler(
     /// <c>null</c> (el caller retira el mandato previo). El firmante (mandatario) va <c>null</c>: en
     /// preparado aún no está elegido/filtrado (HU #10916 lo resuelve al aprobar y regenera).
     /// </summary>
+    /// <summary>
+    /// HU #11206 — transformaciones declaradas en el trámite (<c>field_values</c> con valor <c>true</c>).
+    /// Se leen aquí y no en el generador para que el documento no dependa del formato de almacenamiento.
+    /// </summary>
+    private static IReadOnlyList<string> TransformacionesActivas(Dictionary<string, string?> fv)
+    {
+        string[] claves =
+        [
+            MandatoObjetoComposer.CambioColor,
+            MandatoObjetoComposer.CambioCarroceria,
+            MandatoObjetoComposer.CambioCombustible,
+        ];
+
+        return [.. claves.Where(clave =>
+            string.Equals(Get(fv, clave)?.Trim(), "true", StringComparison.OrdinalIgnoreCase))];
+    }
+
     private async Task<GeneratedDocument?> TryGenerateMandatoAsync(
-        FurDocumentData data, string? transitOfficeCode, Guid? mandateSignerId, CancellationToken ct)
+        FurDocumentData data,
+        string? transitOfficeCode,
+        Guid? mandateSignerId,
+        IReadOnlyList<string> transformaciones,
+        CancellationToken ct)
     {
         if (_mandatoGenerator is null || string.IsNullOrWhiteSpace(transitOfficeCode))
             return null;
@@ -812,12 +849,35 @@ public sealed class GenerarFurHandler(
             }
         }
 
+        // El convenio se llavea por (compañía del trámite, organismo). El organismo del trámite se
+        // conoce aquí por su CÓDIGO; el id lo aporta la configuración del OT, que ya se resolvió arriba
+        // por ese mismo código: sin fila de configuración no hay id y el mandato conserva el bloque, que
+        // es el default seguro.
+        var modoFirma = await _mandatoFirmaPolicy
+            .ResolveAsync(data.TenantIdParaFirmas, config?.TransitOfficeId ?? Guid.Empty, mandateSignerId, ct)
+            .ConfigureAwait(false);
+
         var mandatoData = new MandatoData(
             data,
             config?.TemplateCode ?? MandatoTemplateResolver.Generico,
             config?.InstitutionalMandataryName,
             config?.InstitutionalMandataryNit,
-            mandatario);
+            mandatario,
+            // HU #11204 — familia del mandatario y datos propios del OT. Sin configuración el generador
+            // aplica los mismos valores de siempre, así que un OT sin fila sale como hasta ahora (AC5).
+            MandatoFamiliaCodes.Resolve(config?.MandataryFamily),
+            config?.ChamberCity,
+            config?.MandatarySigla,
+            // HU #11206 — las transformaciones entran DENTRO del objeto del contrato, sin cláusula nueva.
+            transformaciones,
+            // Con convenio, el recuadro de firmas solo lleva al MANDANTE; sin convenio el mandatario
+            // firma, porque es un actor obligatorio. La firma física conserva el bloque pero deja la
+            // línea para firmar a mano.
+            modoFirma.TieneConvenio
+                ? MandatarioFirmaModo.SinBloque
+                : modoFirma.FirmaFisica
+                    ? MandatarioFirmaModo.Manual
+                    : MandatarioFirmaModo.Estampada);
 
         return _mandatoGenerator.GenerateMandato(mandatoData);
     }
@@ -1145,7 +1205,51 @@ public sealed class GenerarFurHandler(
         }
     }
 
-    private static void AddParte(List<DocumentParte> partes, ProcedureInstance instance, string rol)
+    /// <summary>
+    /// HU #11198 (AC3) — nombres de respaldo del directorio, por rol, SOLO para las partes jurídicas cuyo
+    /// trámite no registró el nombre del representante. Si el trámite lo trae, no se consulta nada: el
+    /// dato del trámite es el que manda (AC1/AC2) y una consulta de más solo abriría la puerta a que el
+    /// directorio termine ganando por accidente.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, string>?> ResolverNombresDelDirectorioAsync(
+        ProcedureInstance instance, bool esTraspaso, CancellationToken ct)
+    {
+        var roles = esTraspaso ? new[] { "comprador", "vendedor" } : ["comprador"];
+        Dictionary<string, string>? nombres = null;
+
+        foreach (var rol in roles)
+        {
+            var actor = instance.Actors.FirstOrDefault(a =>
+                string.Equals(a.ActorType, rol, StringComparison.OrdinalIgnoreCase));
+            if (actor is null)
+                continue;
+
+            var esJuridica = ActorPersonTypes.IsJuridical(actor.PersonType)
+                || string.Equals(actor.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase);
+            if (!esJuridica)
+                continue;
+
+            var (_, _, rl) = ParseActorMetadata(actor.Metadata);
+            if (!string.IsNullOrWhiteSpace(rl?.NombreCompleto))
+                continue; // El trámite lo trae: no hay nada que respaldar.
+
+            var nombre = await _representanteDirectory.BuscarNombreRepresentanteAsync(
+                instance.TenantId, actor.DocumentNumber, rl?.TipoDocumento, rl?.NumeroDocumento, ct);
+            if (string.IsNullOrWhiteSpace(nombre))
+                continue;
+
+            nombres ??= [];
+            nombres[rol] = nombre;
+        }
+
+        return nombres;
+    }
+
+    private static void AddParte(
+        List<DocumentParte> partes,
+        ProcedureInstance instance,
+        string rol,
+        IReadOnlyDictionary<string, string>? nombresRlDirectorio = null)
     {
         var a = instance.Actors.FirstOrDefault(x =>
             string.Equals(x.ActorType, rol, StringComparison.OrdinalIgnoreCase));
@@ -1164,7 +1268,13 @@ public sealed class GenerarFurHandler(
             ciudad,
             esJuridica,
             // ADR-0036 (HU #10914/#10915) — representante legal del mandante (solo persona jurídica).
-            RepresentanteLegalNombre: Trim(rl?.NombreCompleto),
+            // HU #11198 — el nombre lo manda SIEMPRE el trámite; el directorio es solo respaldo para
+            // cuando el trámite no lo trajo (AC3). Este es el punto ÚNICO donde se arma la parte, así que
+            // el mandato, la compraventa, la solicitud y el FUR quedan consistentes por construcción (AC4).
+            RepresentanteLegalNombre: Trim(rl?.NombreCompleto)
+                ?? (nombresRlDirectorio is not null && nombresRlDirectorio.TryGetValue(rol, out var respaldo)
+                    ? Trim(respaldo)
+                    : null),
             RepresentanteLegalTipoDoc: Trim(rl?.TipoDocumento),
             RepresentanteLegalDocumento: Trim(rl?.NumeroDocumento)));
     }

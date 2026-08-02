@@ -5,11 +5,13 @@ using Flit.Admin.Application.Companies.LegalRepresentatives.GetLegalRepresentati
 using Flit.Admin.Application.Companies.LegalRepresentatives.ListLegalRepresentatives;
 using Flit.Admin.Application.Companies.LegalRepresentatives.UpdateLegalRepresentative;
 using Flit.Admin.Domain.DocumentRequirements;
+using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using SignatureVaultAggregate = Flit.Admin.Domain.Companies.SignatureVault.SignatureVault;
 
 namespace Flit.Admin.Tests.Companies.LegalRepresentatives;
 
@@ -253,6 +255,7 @@ public sealed class LegalRepresentativeCrudHandlerTests
         var writer = new LegalRepresentativeWriter(
             new FakeProcedureTypeCatalog([procType]),
             new FakeSignatureResolver(Resolution.None),
+            new FakeSignatureVaultReader(),
             repo, reader,
             new StubTimeProvider(new DateTimeOffset(2026, 7, 23, 12, 0, 0, TimeSpan.Zero)));
         var create = new CreateLegalRepresentativeHandler(writer);
@@ -296,6 +299,7 @@ public sealed class LegalRepresentativeCrudHandlerTests
         var create = new CreateLegalRepresentativeHandler(new LegalRepresentativeWriter(
             new FakeProcedureTypeCatalog([]),
             new FakeSignatureResolver(Resolution.None),
+            new FakeSignatureVaultReader(),
             repo, reader,
             new StubTimeProvider(new DateTimeOffset(2026, 7, 23, 12, 0, 0, TimeSpan.Zero))));
 
@@ -358,9 +362,10 @@ public sealed class LegalRepresentativeCrudHandlerTests
         var repo = new LegalRepresentativeRepository(ctx);
         var catalog = new FakeProcedureTypeCatalog(procedureTypes);
         var resolver = new FakeSignatureResolver(resolution);
+        var vaultReader = new FakeSignatureVaultReader();
         // El "hoy" no altera el resultado: el resolutor está fakeado y devuelve una resolución fija.
         var clock = new StubTimeProvider(new DateTimeOffset(2026, 7, 23, 12, 0, 0, TimeSpan.Zero));
-        var writer = new LegalRepresentativeWriter(catalog, resolver, repo, reader, clock);
+        var writer = new LegalRepresentativeWriter(catalog, resolver, vaultReader, repo, reader, clock);
 
         return new CrudHandlers(
             new CreateLegalRepresentativeHandler(writer),
@@ -434,5 +439,21 @@ public sealed class LegalRepresentativeCrudHandlerTests
 
         public static LegalRepresentativeSignatureResolution Identity(Guid id) =>
             LegalRepresentativeSignatureResolution.FromIdentity(id);
+    }
+
+    /// <summary>Lector del baúl en memoria: devuelve null para cualquier consulta (sin firmas precargadas).</summary>
+    private sealed class FakeSignatureVaultReader : ISignatureVaultReader
+    {
+        public Task<SignatureVaultAggregate?> FindActiveByNitAsync(Guid tenantId, string nitEmpresa, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SignatureVaultAggregate?>(null);
+
+        public Task<SignatureVaultAggregate?> FindActiveByDocumentAsync(Guid tenantId, string documentType, string documentNumber, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SignatureVaultAggregate?>(null);
+
+        public Task<IReadOnlyList<SignatureVaultItem>> ListByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<SignatureVaultItem>>([]);
+
+        public Task<SignatureVaultItem?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SignatureVaultItem?>(null);
     }
 }

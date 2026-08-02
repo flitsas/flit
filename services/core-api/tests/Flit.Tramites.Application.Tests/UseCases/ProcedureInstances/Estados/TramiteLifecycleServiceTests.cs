@@ -476,6 +476,29 @@ public sealed class TramiteLifecycleServiceTests
         i.SubsanacionActiva.Should().BeFalse();
     }
 
+    /// <summary>
+    /// HU #11200 (AC4) — adelantar la comprobación del organismo al paso 1 NO la retira de la
+    /// radicación. Entre una cosa y la otra pueden pasar días: el trámite queda en borrador y el
+    /// administrador puede revocar el grant. Sin esta segunda comprobación, un trámite que pasó el paso
+    /// 1 se entregaría a un organismo que ya no lo recibe y no aparecería en ninguna bandeja.
+    /// </summary>
+    [Fact]
+    public async Task HU11200_AC4_Entrega_GrantRevocadoDespuesDelPaso1_SigueBloqueando()
+    {
+        var i = Wire(TramiteEstado.Preparado);
+        SeleccionarOt(i, Guid.NewGuid());
+        _grantGate
+            .IsEnabledForTenantAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var outcome = await Transition(i, TramiteEstado.Entregado);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.OrganismoNoHabilitado);
+        i.Status.Should().Be(TramiteEstado.Preparado);
+        _publisher.Published.Should().BeEmpty();
+    }
+
     // HU #10518 — enforcement runtime: con grant, el OT debe estar OPERATIVO para entregar.
     [Fact]
     public async Task Entrega_OtConGrantPeroNoOperable_BloqueaConOrganismoNoOperable()

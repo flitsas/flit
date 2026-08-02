@@ -13,6 +13,7 @@ import { AuditLogPanel } from "@/components/admin/companies/panels/AuditLogPanel
 import { PlatePreassignViewer } from "@/components/admin/companies/panels/PlatePreassignViewer";
 import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
 import { RepresentativesAndVaultTab } from "@/components/admin/companies/legal-representatives/RepresentativesAndVaultTab";
+import { CompanyMandatariosPanel } from "@/components/admin/companies/mandate-signers/CompanyMandatariosPanel";
 import { fetchCompany, fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
 import type { CompanyListItem, TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 
@@ -130,6 +131,7 @@ function CompanyDetail() {
                     baulVisible={settings.baulFirmasActivo}
                   />
                 }
+                mandatariosSlot={<CompanyMandatariosPanel tenantId={tenantId} />}
               />
             </>
           )}

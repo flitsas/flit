@@ -182,6 +182,172 @@ public sealed class ConsolidadoHandlerTests
         _storage.Saved.Should().BeEmpty(); // no generó/sobrescribió el consolidado
     }
 
+    /// <summary>Prelación que el OT dejó configurada para el tipo de trámite (HU #11184).</summary>
+    private sealed class FakeOtOrderProvider(params string[] codigos) : IOtConfiguredDocumentOrderProvider
+    {
+        public int Calls { get; private set; }
+
+        public Task<IReadOnlyList<string>> GetConfiguredOrderAsync(
+            Guid procedureTypeId, Guid? transitOfficeId, CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            return Task.FromResult<IReadOnlyList<string>>(codigos);
+        }
+    }
+
+    private sealed class FailingOtOrderProvider : IOtConfiguredDocumentOrderProvider
+    {
+        public Task<IReadOnlyList<string>> GetConfiguredOrderAsync(
+            Guid procedureTypeId, Guid? transitOfficeId, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("prelación no disponible");
+    }
+
+    [Fact]
+    public async Task HU11184_AC1_AC2_ConPrelacionConfigurada_ElExpedienteSaleEnEseOrden_YElFurNoSeFuerzaAlPrincipio()
+    {
+        // El organismo bajó el FUR: primero compraventa y SOAT. Con la cabecera fija que anteponía
+        // los generados esto era imposible — el FUR salía siempre en la primera página.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var provider = new FakeOtOrderProvider("compraventa", "soat", "fur", "certificado_identidad");
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, null, null, provider);
+
+        var (_, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        provider.Calls.Should().Be(1);
+        var posiciones = PosicionesEnConsolidado("compraventa.pdf", "soat.pdf", "fur.pdf", "cert.pdf");
+        posiciones.Should().NotContain(-1);
+        posiciones.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task HU11184_AC3_SinPrelacionConfigurada_ConservaElOrdenDeSuModalidad()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var handler = new GenerarConsolidadoHandler(
+            _repo, _merger, _storage, null, null, null, new FakeOtOrderProvider());
+
+        var (_, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var posiciones = PosicionesEnConsolidado("fur.pdf", "cert.pdf", "compraventa.pdf", "soat.pdf");
+        posiciones.Should().NotContain(-1);
+        posiciones.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task HU11184_AC3_SiFallaLaConsultaDePrelacion_ElExpedienteSeGeneraIgual()
+    {
+        // Un fallo leyendo la configuración del OT no puede dejar al gestor sin expediente.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var handler = new GenerarConsolidadoHandler(
+            _repo, _merger, _storage, null, null, null, new FailingOtOrderProvider());
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        var posiciones = PosicionesEnConsolidado("fur.pdf", "compraventa.pdf");
+        posiciones.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task HU11184_AC4_ConPrelacionConfigurada_NoIncluyeConsolidadosPrevios()
+    {
+        // La regla "ningún expediente dentro de otro" tiene que sobrevivir al camino nuevo: olvidar
+        // `consolidado_maestro` fue lo que duplicaba el expediente entero al aprobar el OT.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        AddAttachment(instance, "consolidado_maestro", "maestro.pdf", "%PDF-maestro");
+        AddAttachment(instance, "biometric_selfie", "biometric.pdf", "%PDF-biometric");
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var provider = new FakeOtOrderProvider("fur", "compraventa", "consolidado_maestro");
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, null, null, provider);
+
+        var (_, error) = await handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        content.Should().NotContain("maestro.pdf");
+        content.Should().NotContain("biometric.pdf");
+        content.Should().Contain("fur.pdf");
+    }
+
+    /// <summary>
+    /// Índice de cada documento dentro del consolidado, por su nombre de archivo (las pruebas
+    /// guardan el filename como contenido, así que el PDF fusionado es su concatenación).
+    /// </summary>
+    private IReadOnlyList<int> PosicionesEnConsolidado(params string[] filenames)
+    {
+        var content = ConsolidadoContent();
+        return [.. filenames.Select(f => content.IndexOf(f, StringComparison.Ordinal))];
+    }
+
+    [Fact]
+    public async Task HU11183_AC3_TraspasoSinPrelacionConfigurada_ConservaElOrdenDeHoy()
+    {
+        // Golden test del orden vigente de traspaso: la HU #11174 hace configurable la prelación,
+        // pero un OT que no ha configurado nada debe seguir recibiendo EXACTAMENTE este expediente.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        // FUR, certificados, compraventa e impronta por prelación; los que la lista no nombra
+        // (rtm, paz y salvo, cédulas) al final por fecha de carga.
+        var posiciones = PosicionesEnConsolidado(
+            "fur.pdf", "cert.pdf", "cert_vend.pdf", "compraventa.pdf", "impronta.pdf",
+            "soat.pdf", "rtm.pdf", "paz_salvo.pdf", "cedulas.pdf");
+        posiciones.Should().NotContain(-1);
+        posiciones.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task HU11183_AC4_MatriculaSinPrelacionConfigurada_ConservaElOrdenDeHoy()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var posiciones = PosicionesEnConsolidado(
+            "fur.pdf", "cert.pdf", "factura.pdf", "aduana.pdf", "impronta.pdf");
+        posiciones.Should().NotContain(-1);
+        posiciones.Should().BeInAscendingOrder();
+    }
+
     [Fact]
     public async Task HandleAsync_Matricula_OrdenaPorModalidad()
     {

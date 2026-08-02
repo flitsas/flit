@@ -46,6 +46,7 @@ import {
   tramitesClient,
   getDuplicateActiveProcedureId,
   getVehicleStateBlock,
+  isTransitOfficeUnavailable,
   type VehicleStateBlockInfo,
 } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
@@ -73,6 +74,7 @@ import type {
   ProcedureConfiguration,
   ProcedureInstanceSummary,
   StatusHistory,
+  TransitOfficeOption,
   WizardModalidad,
   WizardStep,
   WizardStepStatus,
@@ -121,7 +123,28 @@ type PendingConsulta = {
   plate?: string;
   ownerDocumentType?: string;
   ownerDocumentNumber?: string;
+  /** HU #11199 — secretaría elegida en el paso 1 (solo matrícula inicial). */
+  transitOfficeId?: string;
 };
+
+/**
+ * HU #11199 (AC3) — el listado solo trae los organismos ACTIVOS en FLIT y habilitados para la
+ * compañía, así que hay que decir qué hacer cuando el que se busca no aparece: de otro modo el
+ * gestor concluye que FLIT no lo cubre y abandona el trámite.
+ */
+const SECRETARIA_LISTA_AVISO =
+  'Solo se muestran los organismos de tránsito activos en FLIT. Si el organismo donde vas a radicar no aparece en la lista, solicita al administrador que lo agregue y lo active.';
+
+/** HU #11199 (AC2) — sin secretaría no se gasta una consulta al RUNT. */
+const SECRETARIA_REQUERIDA = 'Selecciona la secretaría de tránsito antes de consultar el vehículo.';
+
+/**
+ * HU #11200 (AC2/AC3) — el vehículo está matriculado en un organismo donde la compañía no puede
+ * radicar. Se avisa en el paso 1, no al final: avanzar el trámite entero para descubrirlo al radicar
+ * es trabajo perdido.
+ */
+const ORGANISMO_NO_DISPONIBLE =
+  'No puedes radicar en este organismo de tránsito. El vehículo está matriculado en un organismo que no está activo en FLIT o no está habilitado para tu compañía. Solicita al administrador que lo active y lo habilite para tu compañía antes de continuar con el trámite.';
 
 const STATUS_BADGE: Record<
   WizardStepStatus,
@@ -750,6 +773,8 @@ export function TramiteWizard(props: Props) {
           ownerDocumentType: pendingConsulta.ownerDocumentType,
           ownerDocumentNumber: pendingConsulta.ownerDocumentNumber,
           previewToken: pendingConsulta.previewToken,
+          // HU #11199 — la secretaría elegida en el paso 1 queda escrita con el trámite.
+          transitOfficeId: pendingConsulta.transitOfficeId,
         });
 
         // Condiciones marcadas en el paso 1 (leasing, carrocería, paz y salvo, riesgo,
@@ -1528,6 +1553,30 @@ function ConsultaStep({
   const hideOwnerDocType =
     !isVin && platePrimaryProvider === 'kyverum_runt' && !ownerDocTypeSuggested;
 
+  // HU #11199 — la secretaría se elige aquí SOLO en matrícula inicial y SOLO mientras el trámite no
+  // existe (AC5 + convivencia D8): los borradores abiertos antes del cambio siguen eligiendo el
+  // organismo en el paso del FUR, donde ya lo tenían.
+  const eligeSecretaria = deferred && deferredModalidad === 'matricula_inicial';
+  const [secretarias, setSecretarias] = useState<TransitOfficeOption[]>([]);
+  const [secretariasError, setSecretariasError] = useState<string | null>(null);
+  const [transitOfficeId, setTransitOfficeId] = useState('');
+
+  useEffect(() => {
+    if (!eligeSecretaria) return;
+    let active = true;
+    void tramitesClient
+      .listTransitOffices()
+      .then((list) => {
+        if (active) setSecretarias(list);
+      })
+      .catch(() => {
+        if (active) setSecretariasError('No se pudieron cargar los organismos de tránsito.');
+      });
+    return () => {
+      active = false;
+    };
+  }, [eligeSecretaria]);
+
   // FEATURE 02 — política "solo vehículos propios" del tenant y NIT de la compañía (del JWT). Cuando la
   // política está activa, en traspaso se autorrellena el documento del propietario con el NIT del tenant
   // y, si el gestor lo edita a otro, se bloquea la consulta al RUNT con un mensaje claro.
@@ -1649,6 +1698,12 @@ function ConsultaStep({
       );
       return;
     }
+    // HU #11199 (AC2) — la secretaría es requisito de la consulta. El botón ya está deshabilitado sin
+    // ella; esta guarda cubre el disparo por Enter en el input del VIN.
+    if (eligeSecretaria && !transitOfficeId) {
+      setError(SECRETARIA_REQUERIDA);
+      return;
+    }
     // FEATURE 02 — "solo vehículos propios": en traspaso, si el documento del propietario no es el NIT
     // del tenant, se bloquea ANTES de consultar el RUNT con un mensaje claro (no se gasta la consulta).
     if (!isVin && onlyOwnVehicles &&
@@ -1679,6 +1734,7 @@ function ConsultaStep({
           plate: isVin ? null : plate.trim(),
           ownerDocumentType: isVin ? null : ownerDocType,
           ownerDocumentNumber: isVin ? null : ownerDocNumber.trim(),
+          transitOfficeId: eligeSecretaria ? transitOfficeId : null,
         });
         setPreviewSnapshot(result.preflight);
         setFieldValues(result.vehicleFields);
@@ -1688,6 +1744,7 @@ function ConsultaStep({
           plate: isVin ? undefined : plate.trim(),
           ownerDocumentType: isVin ? undefined : ownerDocType,
           ownerDocumentNumber: isVin ? undefined : ownerDocNumber.trim(),
+          transitOfficeId: eligeSecretaria ? transitOfficeId : undefined,
         });
         return;
       }
@@ -1711,6 +1768,11 @@ function ConsultaStep({
       const duplicateId = getDuplicateActiveProcedureId(err);
       if (duplicateId) {
         setDuplicateInstanceId(duplicateId);
+      } else if (isTransitOfficeUnavailable(err)) {
+        // HU #11199 (AC3) / HU #11200 (AC2/AC3) — el organismo no es utilizable. No es subsanable
+        // desde el trámite: hasta que el administrador lo active y lo habilite no hay nada que hacer
+        // aquí, así que se muestra el aviso en vez del error genérico y no se ofrece continuar.
+        setError(ORGANISMO_NO_DISPONIBLE);
       } else {
         // AC1/AC2 (HU #10884) — bloqueo DURO "vehículo ya matriculado" (422
         // VEHICLE_STATE_INVALID_FOR_TYPE, CF-03 de HU #10877): banner específico según vehicleStatus,
@@ -1898,7 +1960,8 @@ function ConsultaStep({
     <button
       type="button"
       onClick={() => void handleRun()}
-      disabled={loading}
+      // HU #11199 (AC2) — sin secretaría la consulta no se habilita.
+      disabled={loading || (eligeSecretaria && !transitOfficeId)}
       className="flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
       style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
       aria-label="Consultar RUNT"
@@ -1913,6 +1976,44 @@ function ConsultaStep({
       {/* HU #10906 — collapse (contraído, carga perezosa) de las escrituras vigentes de la compañía.
           Tenant-scoped por el header; el NIT del tenant (tenantNitDigits) queda disponible arriba. */}
       <ActiveDeedsCollapse />
+      {/* HU #11199 — la secretaría se decide ANTES de consultar el VIN, no al final del trámite:
+          descubrir en el último paso que no se puede radicar donde se pensaba invalida todo lo hecho. */}
+      {eligeSecretaria && (
+        <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]">
+          <label htmlFor="consulta-secretaria" className="mb-1.5 block text-xs font-semibold">
+            Secretaría de tránsito
+          </label>
+          <select
+            id="consulta-secretaria"
+            value={transitOfficeId}
+            onChange={(e) => {
+              setTransitOfficeId(e.target.value);
+              // Cambiar de secretaría invalida la consulta previa: el trámite se crea con la que
+              // esté en pantalla, así que no puede quedar un preview de otra.
+              invalidatePreview();
+              setError(null);
+            }}
+            disabled={readOnly}
+            className={`${inputClass} max-w-xl disabled:opacity-60`}
+            aria-describedby="consulta-secretaria-aviso"
+          >
+            <option value="">Selecciona la secretaría…</option>
+            {secretarias.map((o) => (
+              <option key={o.id} value={o.id}>
+                {[o.name, o.code].filter(Boolean).join(' · ')}
+              </option>
+            ))}
+          </select>
+          <p id="consulta-secretaria-aviso" className="mt-2 text-[11px] leading-tight opacity-70">
+            {SECRETARIA_LISTA_AVISO}
+          </p>
+          {secretariasError && (
+            <p className="mt-1 text-[11px] leading-tight" style={{ color: '#E5484D' }}>
+              {secretariasError}
+            </p>
+          )}
+        </div>
+      )}
       {isVin ? (
         <div
           className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"

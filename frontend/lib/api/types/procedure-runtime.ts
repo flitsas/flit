@@ -65,6 +65,12 @@ export interface ConsultaVehiculoInput {
   plate?: string | null;
   ownerDocumentType?: string | null;
   ownerDocumentNumber?: string | null;
+  /**
+   * HU #11199 — secretaría de tránsito elegida en el primer paso. Obligatoria en matrícula inicial
+   * (sin ella el backend no consulta el VIN); en traspaso va nula, porque el organismo lo impone el
+   * RUNT según dónde esté matriculado el vehículo.
+   */
+  transitOfficeId?: string | null;
 }
 
 /**
@@ -1658,4 +1664,45 @@ export interface StatusHistoryPage {
   total: number;
   page: number;
   pageSize: number;
+}
+
+/**
+ * HU #11203 — un mandatario que puede firmar el mandato del trámite.
+ *
+ * Puede firmar por cualquiera de dos vías ALTERNATIVAS: `firmaBaulVigente` o `identidadVigente`. Antes
+ * solo se informaba la identidad, así que un mandatario con su firma del baúl vigente —perfectamente
+ * capaz de firmar— se anunciaba como si le faltara algo.
+ */
+export interface MandateSignerOption {
+  id: string;
+  nombre: string;
+  tipoDocumento: string;
+  documento: string;
+  identidadVigente: boolean;
+  identidadHasta: string | null;
+  firmaBaulVigente?: boolean;
+  /**
+   * Firma A MANO ante el organismo del trámite. Quien firma a mano no necesita ninguna de las dos vías
+   * anteriores: el documento le deja la línea y él la suscribe.
+   */
+  firmaFisica?: boolean;
+}
+
+/** Mandatarios disponibles y cuál está elegido. `editable` es falso fuera de borrador. */
+export interface MandateSignerSelection {
+  opciones: MandateSignerOption[];
+  elegidoId: string | null;
+  editable: boolean;
+}
+
+/**
+ * HU #11197 - estado de la firma a posteriori de una parte. `aplica` es true solo cuando el
+ * representante legal tiene la identidad Y la firma del baul vencidas: con cualquiera de las dos
+ * vigente el tramite puede firmarse ya y la opcion no se ofrece.
+ */
+export interface FirmaPosteriorEstado {
+  aplica: boolean;
+  marcado: boolean;
+  representanteNombre?: string | null;
+  marcadoAt?: string | null;
 }

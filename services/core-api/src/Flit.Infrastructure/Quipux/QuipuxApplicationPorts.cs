@@ -27,6 +27,10 @@ internal sealed class QuipuxConsolidadoMaestroAdapter(GenerarConsolidadoMaestroH
         Guid tenantId,
         CancellationToken cancellationToken = default)
     {
+        // HU #11184 (AC5) — `matrizPrecedencia` sigue en null a propósito: es el parámetro que
+        // compone la consola OT con la matriz del checklist. El orden que el organismo configuró lo
+        // resuelve ahora el propio handler (IOtConfiguredDocumentOrderProvider), así que el envío
+        // por el canal de radicación sale con la misma prelación que ve en su pantalla.
         var (result, error) = await handler
             .HandleAsync(procedureInstanceId, tenantId, matrizPrecedencia: null, cancellationToken)
             .ConfigureAwait(false);

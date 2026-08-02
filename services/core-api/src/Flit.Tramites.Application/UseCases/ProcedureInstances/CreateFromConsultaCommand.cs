@@ -1,3 +1,4 @@
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -21,6 +22,10 @@ public sealed record CreateFromConsultaRequest(
     string? OwnerDocumentType,
     string? OwnerDocumentNumber,
     string? PreviewToken,
+    /// <summary>
+    /// HU #11199 — secretaría elegida en el primer paso. OBLIGATORIA en matrícula inicial; en traspaso
+    /// llega nula porque el organismo lo impone el RUNT y lo fija el preflight (B11, HU #10659).
+    /// </summary>
     Guid? TransitOfficeId = null);
 
 public sealed record CreateFromConsultaResult(
@@ -43,11 +48,17 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
     PatchFieldValuesHandler patchHandler,
     RunPreflightHandler preflightHandler,
     IPreflightPreviewStore previewStore,
-    TramiteValidationPolicy? validationPolicy = null)
+    ITransitOfficeResolver transitOfficeResolver,
+    TramiteValidationPolicy? validationPolicy = null,
+    IOtOperabilityGate? otOperability = null)
 {
     // HU #10970 — mismo modo por ambiente que el resto del flujo. Sin inyectar ⇒ bloqueo duro.
     private readonly TramiteValidationPolicy _validationPolicy =
         validationPolicy ?? TramiteValidationPolicy.BlockAll;
+
+    // HU #11200 — misma pareja de comprobaciones que el paso 1 y que la radicación: grant vigente +
+    // organismo operativo. Sin inyectar ⇒ permisivo (solo queda el grant).
+    private readonly IOtOperabilityGate _otOperability = otOperability ?? NullOtOperabilityGate.Instance;
 
     public async Task<(CreateFromConsultaResult? Result, string? Error, Guid? ExistingProcedureInstanceId, VehicleStateBlock? VehicleState)> HandleAsync(
         CreateFromConsultaRequest request,
@@ -65,6 +76,23 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
 
         if (esMatricula ? vin is null : plate is null)
             return (null, "identificador_requerido", null, null);
+
+        // HU #11199 (AC1/AC3) — la secretaría elegida en el paso 1 se re-confirma aquí, no se copia del
+        // preview: entre la consulta y el avance al paso 2 pudieron revocar el grant o desactivar el
+        // organismo, y este es el punto donde la elección se vuelve permanente.
+        ResolvedTransitOffice? secretaria = null;
+        if (esMatricula)
+        {
+            if (request.TransitOfficeId is not { } elegido || elegido == Guid.Empty)
+                return (null, TransitOfficeSelectionPolicy.RequiredErrorCode, null, null);
+
+            secretaria = await transitOfficeResolver
+                .ResolveEnabledByIdAsync(request.TenantId, elegido, ct)
+                .ConfigureAwait(false);
+            if (secretaria is null
+                || !await _otOperability.IsOperableAsync(secretaria.Id, ct).ConfigureAwait(false))
+                return (null, TransitOfficeSelectionPolicy.UnavailableErrorCode, null, null);
+        }
 
         // CF-01 antes de persistir: si la llave se ocupó mientras el operador revisaba el paso 1, se
         // bloquea SIN dejar registro (el objetivo de CF-02 es justamente no crear trámites inservibles).
@@ -94,6 +122,18 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
         if (esMatricula)
         {
             items.Add(new FieldValueInput(null, "vin", vin, null));
+            // HU #11199 (AC4) — el organismo queda escrito con el trámite, así que el paso del FUR ya no
+            // tiene nada que preguntar. `transit_office_origen` distingue estos trámites de los
+            // borradores anteriores al cambio, que siguen eligiendo el organismo en el FUR (D8).
+            items.Add(new FieldValueInput(null, "transit_office_id", secretaria!.Id.ToString(), null));
+            items.Add(new FieldValueInput(null, "transit_office_code", secretaria.Code, null));
+            items.Add(new FieldValueInput(null, "transit_office_name", secretaria.Name, null));
+            items.Add(new FieldValueInput(null, "transit_office_city", secretaria.CityCode, null));
+            items.Add(new FieldValueInput(
+                null,
+                TransitOfficeSelectionPolicy.OrigenFieldKey,
+                TransitOfficeSelectionPolicy.OrigenPasoUno,
+                null));
         }
         else
         {

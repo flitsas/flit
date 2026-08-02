@@ -299,7 +299,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         setMandatarioTarget(null);
         show(
           "El mandatario debe validar su identidad (vigente) antes de firmar el mandato. " +
-            "Envíale la validación desde la pestaña «Mandatario».",
+            "La compañía se la envía desde la pestaña «Mandatarios» de su configuración.",
           "error",
         );
         return;
@@ -807,8 +807,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
 
             {mandatarioOptions.length === 0 ? (
               <p className="mt-4 rounded-xl border p-3 text-center text-xs opacity-70">
-                No hay mandatarios activos para esta compañía en el organismo. Regístralos en la pestaña
-                «Mandatario» y reintenta.
+                No hay mandatarios activos para esta compañía en el organismo. Ahora los registra la
+                propia compañía, desde la pestaña «Mandatarios» de su configuración, marcando en qué
+                organismos aplican.
               </p>
             ) : (
               <fieldset className="mt-4 space-y-2" data-testid="mandatario-options">

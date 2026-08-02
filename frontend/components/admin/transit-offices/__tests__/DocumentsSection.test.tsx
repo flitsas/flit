@@ -34,6 +34,7 @@ import {
   createOtDocumentTag,
   fetchOtDocumentPrecedence,
   fetchOtDocumentTags,
+  updateOtDocumentPrecedence,
 } from "@/lib/api/admin-ot";
 import { fetchProcedureDocumentRequirements } from "@/lib/api/admin-procedure-documents";
 import {
@@ -97,6 +98,97 @@ describe("DocumentsSection — HU #10224", () => {
     await screen.findByText("SOAT");
     await user.click(screen.getByRole("tab", { name: "Etiquetas" }));
     expect(await screen.findByText(/No hay etiquetas configuradas/i)).toBeInTheDocument();
+  });
+});
+
+// HU #11185 — la pantalla de prelación pasa a ser operativa: lista completa del tipo de trámite,
+// reordenamiento con teclado que guarda, aviso de aplicación diferida y rollback si falla.
+describe("DocumentsSection — HU #11185 (prelación operativa)", () => {
+  const listaCompleta = [
+    {
+      document_type_id: "doc-fur",
+      document_code: "fur",
+      document_name: "Formulario Único de Registro (FUR)",
+      sort_order: 1,
+      is_system_generated: true,
+      is_configured: false,
+    },
+    {
+      document_type_id: "doc-soat",
+      document_code: "soat",
+      document_name: "SOAT",
+      sort_order: 2,
+      is_system_generated: false,
+      is_configured: false,
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(fetchOtDocumentPrecedence).mockResolvedValue({ data: listaCompleta });
+    vi.mocked(fetchOtDocumentTags).mockResolvedValue({ data: [] });
+  });
+
+  it("AC1 lista todos los documentos que aplican, marcando los que genera el sistema", async () => {
+    renderSection();
+
+    expect(await screen.findByText("Formulario Único de Registro (FUR)")).toBeInTheDocument();
+    expect(screen.getByText("SOAT")).toBeInTheDocument();
+    // El FUR lo produce FLIT; el SOAT lo adjunta el gestor.
+    expect(screen.getAllByText("Generado")).toHaveLength(1);
+  });
+
+  it("AC3 y AC4 reordenar con teclado guarda y avisa de que aplica en la próxima generación", async () => {
+    vi.mocked(updateOtDocumentPrecedence).mockResolvedValue({
+      data: [
+        { ...listaCompleta[1], sort_order: 1 },
+        { ...listaCompleta[0], sort_order: 2 },
+      ],
+    });
+    const user = userEvent.setup();
+    renderSection();
+
+    const handle = await screen.findByLabelText(/Reordenar Formulario Único de Registro/i);
+    handle.focus();
+    // La primera flecha toma el documento (patrón WCAG de la lista); la segunda lo baja.
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(updateOtDocumentPrecedence).toHaveBeenCalledWith({
+        procedure_type_id: "pt-1",
+        items: [
+          { document_type_id: "doc-soat", sort_order: 1 },
+          { document_type_id: "doc-fur", sort_order: 2 },
+        ],
+      }),
+    );
+    expect(
+      await screen.findByText(/Orden guardado\. Aplica a partir de la próxima generación/i),
+    ).toBeInTheDocument();
+  });
+
+  it("AC5 si falla el guardado avisa y la lista vuelve al orden anterior", async () => {
+    vi.mocked(updateOtDocumentPrecedence).mockRejectedValue(new Error("500"));
+    const user = userEvent.setup();
+    renderSection();
+
+    const handle = await screen.findByLabelText(/Reordenar Formulario Único de Registro/i);
+    handle.focus();
+    // La primera flecha toma el documento (patrón WCAG de la lista); la segunda lo baja.
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByText(/No se pudo guardar el orden/i)).toBeInTheDocument();
+    await waitFor(() => {
+      const nombres = screen
+        .getAllByRole("listitem")
+        .map((li) => li.textContent ?? "");
+      expect(nombres[0]).toContain("Formulario Único de Registro (FUR)");
+      expect(nombres[1]).toContain("SOAT");
+    });
   });
 });
 

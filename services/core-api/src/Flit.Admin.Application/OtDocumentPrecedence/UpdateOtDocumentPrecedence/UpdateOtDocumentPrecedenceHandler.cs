@@ -80,8 +80,11 @@ public sealed class UpdateOtDocumentPrecedenceHandler
 
         if (updated is null)
         {
+            // HU #11182 — el repositorio pasó a upsert: ya no falla porque el OT no hubiera
+            // configurado nada antes (ese era el 422 que dejaba la pantalla inoperante). Solo
+            // queda el caso de un documento que no existe en el catálogo.
             return UpdateOtDocumentPrecedenceResult.ValidationFailed(
-                new FieldError("items", "PRECEDENCE_NOT_FOUND"));
+                new FieldError("items", "UNKNOWN_DOCUMENT_TYPE"));
         }
 
         return UpdateOtDocumentPrecedenceResult.Updated(updated.Select(OtDocumentPrecedenceMapper.ToResponse).ToList());

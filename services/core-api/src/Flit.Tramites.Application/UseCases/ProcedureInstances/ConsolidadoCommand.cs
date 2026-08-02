@@ -65,7 +65,8 @@ public sealed class GenerarConsolidadoHandler(
     IAttachmentStorage storage,
     ChecklistMatrixCompleteness? matrixCompleteness = null,
     IExpedienteHotDocumentsRegenerator? hotDocsRegenerator = null,
-    IImprontaAutoGenerator? improntaGenerator = null)
+    IImprontaAutoGenerator? improntaGenerator = null,
+    IOtConfiguredDocumentOrderProvider? otOrderProvider = null)
 {
     public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
@@ -193,7 +194,11 @@ public sealed class GenerarConsolidadoHandler(
             : await matrixCompleteness.TryComputeAsync(instance, tenantId, ct);
         var faltantes = checklist?.FaltanObligatorios ?? FaltantesObligatorios(instance);
 
-        var ordered = ConsolidadoOrderingResolver.Select(instance.Attachments, instance.ModalidadEntrada);
+        // HU #11184 — el expediente se arma en el orden que el OT configuró para este tipo de
+        // trámite. Hasta ahora el wizard ignoraba la matriz y usaba siempre la lista hardcodeada por
+        // modalidad, así que reordenar en la consola del OT no tenía ningún efecto sobre el PDF.
+        // Sin configuración del organismo la lista viene vacía y se conserva el orden de siempre.
+        var ordered = await OrdenarAsync(instance, ct).ConfigureAwait(false);
         if (ordered.Count == 0)
             return (null, "sin_adjuntos");
 
@@ -304,6 +309,49 @@ public sealed class GenerarConsolidadoHandler(
     {
         repo.ResetTracking();
         return await repo.GetByIdWithChecklistGraphAsync(id, tenantId, ct).ConfigureAwait(false) ?? fallback;
+    }
+
+    /// <summary>
+    /// Orden del expediente (HU #11184): manda la prelación que el OT configuró para el tipo de
+    /// trámite; sin ella, el orden por modalidad de siempre.
+    /// <para>
+    /// El camino configurado NO antepone la cabecera fija de documentos generados: si el organismo
+    /// bajó el FUR de la primera página, el FUR baja. Esa cabecera era justamente lo que impedía
+    /// mover los documentos que genera el sistema.
+    /// </para>
+    /// <para>
+    /// Best-effort a propósito: un fallo leyendo la configuración del OT no puede dejar al gestor
+    /// sin expediente, así que se cae al orden por modalidad.
+    /// </para>
+    /// </summary>
+    private async Task<IReadOnlyList<ProcedureInstanceAttachment>> OrdenarAsync(
+        ProcedureInstance instance, CancellationToken ct)
+    {
+        IReadOnlyList<string> configurado = [];
+        if (otOrderProvider is not null)
+        {
+            try
+            {
+                configurado = await otOrderProvider
+                    .GetConfiguredOrderAsync(instance.ProcedureTypeId, instance.TransitOfficeId, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                configurado = [];
+            }
+        }
+
+        if (configurado.Count == 0)
+            return ConsolidadoOrderingResolver.Select(instance.Attachments, instance.ModalidadEntrada);
+
+        return GenericConsolidadoOrdering.SelectByPrecedence(
+            instance.Attachments,
+            ConsolidadoDocumentCodeMap.ToPrecedence(configurado));
     }
 
     private static bool TieneFur(ProcedureInstance instance) =>

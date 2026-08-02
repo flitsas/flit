@@ -8,7 +8,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { AlertTriangle, Search, UserRound } from 'lucide-react';
+import { AlertTriangle, Info, Search, UserRound } from 'lucide-react';
+import { INLINE_ALERT_TONES, type InlineAlertTone } from '@/components/atom/InlineAlert';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { Modal } from '@/components/atom/Modal';
 import { FineDetailList } from './PreflightPanel';
@@ -243,6 +244,25 @@ const INPUT_BASE =
   'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF] aria-[invalid=true]:border-[#FF4E00]';
 
 const GRADIENT = 'linear-gradient(135deg,#557EFF,#00DBD5)';
+
+/**
+ * Marco de las tarjetas de resultado de consulta (precarga del directorio, RUES, RUNT, comparendos).
+ *
+ * <p>Traían borde y fondo en verde lima `#8CC63F`/`#5a8a1f`, hex que no existen ni en `globals.css`
+ * ni en los tokens de diseño y que `docs/plan-alineacion-tablas-y-badges.md` señala como divergencia
+ * a erradicar: convivían en el mismo recuadro con los `StatusBadge`, que sí usan tokens.</p>
+ *
+ * <p>No se usa `InlineAlert` como contenedor porque estas tarjetas llevan dentro grids de datos,
+ * selectores y badges, y el componente teñiría todo el cuerpo con el color del tono. Se toma su
+ * paleta, que es lo que había que unificar.</p>
+ */
+/** Color de texto para un valor/estado válido. Antes eran tres verdes distintos. */
+const OK_FG = INLINE_ALERT_TONES.success.color;
+
+function cardTone(tone: InlineAlertTone) {
+  const { color, background, border } = INLINE_ALERT_TONES[tone];
+  return { card: { borderColor: border, background }, title: { color } };
+}
 
 /**
  * Estado por actor de la consulta de identidad (autopopulado). Bifurca por tipo de persona:
@@ -979,7 +999,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       {state.saved ? (
         <span
           className="text-[11px] font-semibold"
-          style={{ color: '#8CC63F' }}
+          style={{ color: OK_FG }}
           role="status"
           aria-live="polite"
         >
@@ -1084,12 +1104,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       const identidadVigente = rep?.identidadVigente ?? false;
       return (
         <div className="space-y-2" role="status" aria-live="polite">
-          <div
-            className="rounded-xl p-3 text-xs border"
-            style={{ borderColor: '#8CC63F', background: 'rgba(140,198,63,0.08)' }}
-          >
-            <p className="font-semibold mb-2 flex items-center gap-1.5" style={{ color: '#5a8a1f' }}>
-              <span aria-hidden="true">✓</span>
+          <div className="rounded-xl p-3 text-xs border" style={cardTone('info').card}>
+            {/* Tono informativo, no de éxito: el aviso dice de DÓNDE salió el dato (no se consultó
+                RUES/RUNT), no que algo sea válido. Es el mismo azul del badge «Dato reutilizado». */}
+            <p
+              className="font-semibold mb-2 flex items-center gap-1.5"
+              style={cardTone('info').title}
+            >
+              <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               Precargado desde el directorio de la compañía
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
@@ -1183,12 +1205,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       const activa = (r.estado ?? '').toUpperCase() === 'ACTIVA';
       return (
         <div className="space-y-2" role="status" aria-live="polite">
-          <div
-            className="rounded-xl p-3 text-xs border"
-            style={{ borderColor: '#8CC63F', background: 'rgba(140,198,63,0.08)' }}
-          >
-            <p className="font-semibold mb-2 flex items-center gap-1.5 flex-wrap" style={{ color: '#5a8a1f' }}>
-              <span aria-hidden="true">✓</span>
+          <div className="rounded-xl p-3 text-xs border" style={cardTone('info').card}>
+            <p
+              className="font-semibold mb-2 flex items-center gap-1.5 flex-wrap"
+              style={cardTone('info').title}
+            >
+              <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               Empresa encontrada en RUES
               {originBadge(r.mode, 'RUES')}
             </p>
@@ -1209,7 +1231,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 <span className="opacity-60 font-normal">Estado: </span>
                 <span
                   className="font-semibold"
-                  style={{ color: activa ? '#5a8a1f' : '#FF4E00' }}
+                  style={{ color: activa ? OK_FG : INLINE_ALERT_TONES.error.color }}
                 >
                   {r.estado ?? '—'}
                 </span>
@@ -1233,12 +1255,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       return (
         <div className="space-y-2" role="status" aria-live="polite">
           {/* Card A — Datos del conductor */}
-          <div
-            className="rounded-xl p-3 text-xs border"
-            style={{ borderColor: '#8CC63F', background: 'rgba(140,198,63,0.08)' }}
-          >
-            <p className="font-semibold mb-2 flex items-center gap-1.5 flex-wrap" style={{ color: '#5a8a1f' }}>
-              <span aria-hidden="true">✓</span>
+          <div className="rounded-xl p-3 text-xs border" style={cardTone('info').card}>
+            <p
+              className="font-semibold mb-2 flex items-center gap-1.5 flex-wrap"
+              style={cardTone('info').title}
+            >
+              <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               Persona encontrada en RUNT
               {originBadge(r.mode, 'RUNT')}
             </p>
@@ -1265,7 +1287,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 <span className="opacity-60 font-normal">Estado: </span>
                 <span
                   className="font-semibold"
-                  style={{ color: r.citizenStatus === 'ACTIVA' ? '#5a8a1f' : '#162744' }}
+                  style={{ color: r.citizenStatus === 'ACTIVA' ? OK_FG : '#162744' }}
                 >
                   {r.citizenStatus ?? r.licenseStatus ?? '—'}
                 </span>
@@ -1282,7 +1304,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 <span className="opacity-60 font-normal">Conductor: </span>
                 <span
                   className="font-semibold"
-                  style={{ color: r.licenseStatus === 'ACTIVO' ? '#5a8a1f' : '#162744' }}
+                  style={{ color: r.licenseStatus === 'ACTIVO' ? OK_FG : '#162744' }}
                 >
                   {r.licenseStatus ?? '—'}
                 </span>
@@ -1291,14 +1313,16 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           </div>
 
           {/* Card B — Multas. Con multas pendientes, bajo la alerta se lista el detalle de cada
-              comparendo (SIMIT best-effort); si el detalle no llegó, se conserva solo la alerta. */}
+              comparendo (SIMIT best-effort); si el detalle no llegó, se conserva solo la alerta.
+              A diferencia de las tarjetas de arriba, esta SÍ afirma validez, así que conserva la
+              lectura de éxito/alerta en vez de pasar a informativa. */}
           {r.hasPendingFines !== undefined && (
             <div
               className="rounded-xl p-3 text-xs border"
               style={
                 r.hasPendingFines
-                  ? { borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }
-                  : { borderColor: '#8CC63F', background: 'rgba(140,198,63,0.06)', color: '#5a8a1f' }
+                  ? { ...cardTone('error').card, ...cardTone('error').title }
+                  : { ...cardTone('success').card, ...cardTone('success').title }
               }
               role="status"
             >
@@ -1435,7 +1459,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               )}
             </div>
             {rlState.status === 'found' && (
-              <p className="text-[10px] mt-1" style={{ color: '#5a8a1f' }}>
+              <p className="text-[10px] mt-1" style={{ color: INLINE_ALERT_TONES.info.color }}>
                 Representante encontrado en RUNT.
               </p>
             )}
@@ -1551,7 +1575,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     }
     if (c.status === 'found') {
       return (
-        <p className="text-[10px]" style={{ color: '#5a8a1f' }} role="status" aria-live="polite">
+        <p
+          className="text-[10px]"
+          style={{ color: INLINE_ALERT_TONES.info.color }}
+          role="status"
+          aria-live="polite"
+        >
           Contacto precargado desde un trámite anterior de esta persona en la compañía — puedes
           editarlo.
         </p>

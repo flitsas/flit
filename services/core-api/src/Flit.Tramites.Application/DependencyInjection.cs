@@ -106,6 +106,10 @@ public static class DependencyInjection
         services.AddScoped<RunPreflightPreviewHandler>();
         services.AddScoped<CreateProcedureInstanceFromConsultaHandler>();
 
+        // HU #11203 — elección del mandatario que firma, adelantada al registro del trámite.
+        services.AddScoped<ListMandateSignerOptionsHandler>();
+        services.AddScoped<SetMandateSignerHandler>();
+
         // FEATURE 05 — consulta RNMC desacoplada del pre-vuelo (corre en el paso final, por actor).
         services.AddScoped<RunRnmcConsultHandler>();
         services.AddScoped<GetRnmcHandler>();
@@ -153,6 +157,12 @@ public static class DependencyInjection
         // HU #10349 (fase 2) — consumidor de IdentityValidationCompleted: encadena firma/FUR de los
         // borradores finalizados del sujeto validado. Lo invoca el procesador de outbox (Infraestructura).
         services.AddScoped<Identity.IdentityValidationCompletedConsumer>();
+        // HU #11196 — consumidor del MISMO evento para el lote de firma a posteriori: firma de una todos
+        // los trámites marcados que esperaban a esa persona. Separado del anterior a propósito: son dos
+        // políticas distintas y mezclarlas haría imposible saber cuál disparó qué.
+        services.AddScoped<Identity.DeferredSignatureBatchConsumer>();
+        services.AddScoped<ITramiteFirmaAplicador, TramiteFirmaAplicador>();
+        services.AddScoped<MarcarFirmaPosteriorHandler>();
         // HU #10349 (fase 2) — observabilidad: consulta + reencolar eventos de identidad ATASCADOS (dead-letter).
         services.AddScoped<ListStuckIdentityValidationsHandler>();
         services.AddScoped<RequeueStuckIdentityValidationHandler>();

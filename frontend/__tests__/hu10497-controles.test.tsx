@@ -84,8 +84,9 @@ describe("HU #10497 — AC1: botones sin icono '+' (iconografía superflua)", ()
     "components/admin/documents/panels/OrderOverrideForm.tsx",
     "components/admin/documents/tabs/RequirementsTab.tsx",
     // Últimos botones de crear/agregar que conservaban el "+" genérico.
-    "components/admin/companies/legal-representatives/CompanyDeedsSection.tsx",
-    "components/admin/companies/legal-representatives/LegalRepresentativeDetailModal.tsx",
+    // HU #11178/#11179 retiraron CompanyDeedsSection y LegalRepresentativeDetailModal; sus botones
+    // ("Cargar escritura", "Asociar escritura", "Agregar empresa") viven ahora en el acordeón.
+    "components/admin/companies/legal-representatives/RepresentativeCompaniesAccordion.tsx",
     "components/admin/companies/legal-representatives/LegalRepresentativesFormPanel.tsx",
     "components/atom/modules/PrevalidacionesModule.tsx",
   ];
@@ -104,9 +105,9 @@ describe("HU #10497 — AC1: botones sin icono '+' (iconografía superflua)", ()
     expect(read("components/atom/modules/RbacAdmin.tsx")).toMatch(/Nuevo rol/);
     expect(read("components/atom/DashboardGrid.tsx")).toMatch(/Iniciar Nuevo Traspaso/);
     expect(read("components/admin/documents/tabs/RequirementsTab.tsx")).toMatch(/Agregar/);
-    expect(read("components/admin/companies/legal-representatives/CompanyDeedsSection.tsx"))
-      .toMatch(/Cargar escritura/);
-    expect(read("components/admin/companies/legal-representatives/LegalRepresentativesFormPanel.tsx"))
+    expect(read("components/admin/companies/legal-representatives/RepresentativeCompaniesAccordion.tsx"))
+      .toMatch(/Asociar escritura/);
+    expect(read("components/admin/companies/legal-representatives/RepresentativeCompaniesAccordion.tsx"))
       .toMatch(/Agregar empresa/);
     expect(read("components/atom/modules/PrevalidacionesModule.tsx"))
       .toMatch(/Nueva prevalidación/);

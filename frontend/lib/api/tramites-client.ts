@@ -41,6 +41,8 @@ import type {
   InstanceSummary,
   InstancesResponse,
   ListInstancesParams,
+  FirmaPosteriorEstado,
+  MandateSignerSelection,
   TransitOfficeOption,
   TransitOfficesResponse,
   IniciarBiometriaInput,
@@ -294,6 +296,23 @@ export function getVehicleStateBlock(err: unknown): VehicleStateBlockInfo | null
   return { vehicleStatus, procedureType: typeof procedureType === 'string' ? procedureType : '' };
 }
 
+/**
+ * HU #11199 (AC3) / HU #11200 (AC2/AC3) — detecta el bloqueo del organismo de tránsito (422
+ * `TRANSIT_OFFICE_NOT_AVAILABLE`): el organismo no está activo en FLIT o no está habilitado para la
+ * compañía gestora. En matrícula inicial es la secretaría que el gestor eligió; en traspaso es el
+ * organismo donde el RUNT dice que está matriculado el vehículo. Como en ambos casos lo que el gestor
+ * debe hacer es lo mismo (pedirle al administrador que lo active y lo habilite), no se distingue el
+ * motivo: la señal es booleana a propósito.
+ *
+ * Duck-typing sobre `{ status, problem }`, mismo patrón que `getVehicleStateBlock`.
+ */
+export function isTransitOfficeUnavailable(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 422 || !problem || typeof problem !== 'object') return false;
+  return (problem as { title?: unknown }).title === 'TRANSIT_OFFICE_NOT_AVAILABLE';
+}
+
 // Exportado para que otros clientes del mismo dominio (p. ej. lib/api/ui-preferences.ts)
 // reutilicen el mismo manejo de errores/JSON en vez de reimplementarlo.
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -498,6 +517,37 @@ export const tramitesClient = {
     );
     return res?.items ?? [];
   },
+
+  // HU #11203 — mandatarios que pueden firmar el mandato de este trámite (los habilitados para su
+  // organismo en la compañía), con la vigencia de su identidad y cuál está elegido.
+  listMandateSigners: (id: string, tenantId?: string) =>
+    request<MandateSignerSelection>(`/api/v1/tramites/instances/${id}/mandate-signers`, {
+      headers: tenantHeader(tenantId),
+    }),
+
+  // HU #11203 — fija quién firma. 409 fuera de borrador; 422 si no está habilitado para el organismo.
+  setMandateSigner: (id: string, mandateSignerId: string, tenantId?: string) =>
+    request<void>(`/api/v1/tramites/instances/${id}/mandate-signer`, {
+      method: 'PUT',
+      headers: tenantHeader(tenantId),
+      body: JSON.stringify({ mandateSignerId }),
+    }),
+
+  // HU #11197 — ¿se ofrece la firma a posteriori para esta parte y ya está marcada? En persona natural
+  // responde `aplica:false` en vez de un error: para el gestor la opción sencillamente no existe.
+  getFirmaPosterior: (id: string, parte: string, tenantId?: string) =>
+    request<FirmaPosteriorEstado>(
+      `/api/v1/tramites/instances/${id}/deferred-signature?parte=${encodeURIComponent(parte)}`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
+  // HU #11196 — marca el trámite para firmarse cuando el representante valide su identidad. Idempotente.
+  marcarFirmaPosterior: (id: string, parte: string, tenantId?: string) =>
+    request<FirmaPosteriorEstado>(`/api/v1/tramites/instances/${id}/deferred-signature`, {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: JSON.stringify({ parte }),
+    }),
 
   getInstance: (id: string, tenantId?: string) =>
     request<ProcedureInstanceDetail>(`/api/v1/tramites/instances/${id}`, {
@@ -985,6 +1035,7 @@ export const tramitesClient = {
         plate: input.plate ?? null,
         ownerDocumentType: input.ownerDocumentType ?? null,
         ownerDocumentNumber: input.ownerDocumentNumber ?? null,
+        transitOfficeId: input.transitOfficeId ?? null,
       }),
     });
     return {
@@ -1023,7 +1074,9 @@ export const tramitesClient = {
         ownerDocumentType: input.ownerDocumentType ?? null,
         ownerDocumentNumber: input.ownerDocumentNumber ?? null,
         previewToken: input.previewToken ?? null,
-        transitOfficeId: null,
+        // HU #11199 — la secretaría elegida en el paso 1 viaja a la creación: es lo que la vuelve
+        // permanente y lo que hace que el paso del FUR ya no tenga que preguntarla.
+        transitOfficeId: input.transitOfficeId ?? null,
       }),
     });
     return {

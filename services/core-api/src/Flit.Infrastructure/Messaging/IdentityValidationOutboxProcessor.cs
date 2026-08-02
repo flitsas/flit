@@ -95,15 +95,22 @@ internal sealed class IdentityValidationOutboxProcessor(
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
         var consumer = scope.ServiceProvider.GetRequiredService<IdentityValidationCompletedConsumer>();
+        // HU #11196 — el lote de firma a posteriori consume el MISMO evento. Va aquí y no dentro del otro
+        // consumidor porque son dos políticas distintas (aquel encadena borradores finalizados por actor;
+        // este aplica marcas explícitas) y mezclarlas haría imposible saber cuál disparó qué.
+        var deferred = scope.ServiceProvider.GetRequiredService<DeferredSignatureBatchConsumer>();
 
         // El DbContext usa EnableRetryOnFailure → la transacción manual debe ir dentro de la execution
         // strategy (reintenta el bloque completo ante fallos transitorios de BD).
         var strategy = db.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () => await ProcessOneAsync(db, consumer, ct));
+        return await strategy.ExecuteAsync(async () => await ProcessOneAsync(db, consumer, deferred, ct));
     }
 
     private async Task<bool> ProcessOneAsync(
-        FlitDbContext db, IdentityValidationCompletedConsumer consumer, CancellationToken ct)
+        FlitDbContext db,
+        IdentityValidationCompletedConsumer consumer,
+        DeferredSignatureBatchConsumer deferred,
+        CancellationToken ct)
     {
         db.ChangeTracker.Clear(); // estado limpio en cada (re)intento de la strategy
         await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -125,6 +132,10 @@ internal sealed class IdentityValidationOutboxProcessor(
             {
                 var result = await consumer.HandleAsync(evt, ct);
                 OutboxProcessorLog.Dispatched(logger, row.ValidationId, result.Matched, result.Processed);
+
+                // HU #11196 — y el lote de los trámites que quedaron marcados esperando a esta persona.
+                var lote = await deferred.HandleAsync(evt, ct);
+                OutboxProcessorLog.Dispatched(logger, row.ValidationId, lote.Marcados, lote.Firmados);
             }
 
             row.PublishedAt = DateTimeOffset.UtcNow;
