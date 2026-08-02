@@ -113,4 +113,41 @@ describe("llamarMigracion", () => {
 
     expect(respuesta.estado).toBe(502);
   });
+
+  /**
+   * El caso MÁS probable: `MigracionApi:Enabled` viene apagado por defecto en todos los ambientes,
+   * y con él las rutas ni se registran. El host devuelve el 404 pelado de ASP.NET, sin cuerpo, y
+   * sin este código la consola caía en su mensaje genérico —«La migración no se pudo lanzar. El
+   * servidor respondió 404»—, que no dice qué hacer justo cuando la solución es una variable.
+   */
+  it("un 404 sin cuerpo se traduce a «el migrador está apagado»", async () => {
+    vi.stubEnv("MIGRACION_API_KEY", "llave");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ status: 404, text: () => Promise.resolve("") }),
+    );
+
+    const respuesta = await llamarMigracion("/api/v1/migracion/estado/registration?ids=1", {
+      method: "GET",
+    });
+
+    expect(respuesta.estado).toBe(404);
+    expect((respuesta.cuerpo as { title: string }).title).toBe("migracion.apagado");
+  });
+
+  /** Un 404 que el host SÍ explica se respeta tal cual: no todo 404 es el migrador apagado. */
+  it("no pisa un 404 que viene explicado", async () => {
+    vi.stubEnv("MIGRACION_API_KEY", "llave");
+    const cuerpo = JSON.stringify({ title: "migracion.otra_cosa", detail: "…", status: 404 });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ status: 404, text: () => Promise.resolve(cuerpo) }),
+    );
+
+    const respuesta = await llamarMigracion("/api/v1/migracion/estado/registration?ids=1", {
+      method: "GET",
+    });
+
+    expect((respuesta.cuerpo as { title: string }).title).toBe("migracion.otra_cosa");
+  });
 });

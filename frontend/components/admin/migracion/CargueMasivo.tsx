@@ -37,6 +37,9 @@ import { AvisoError } from "./AvisoError";
 export function CargueMasivo() {
   const [lote, setLote] = useState<Lote | null>(null);
   const [invalidas, setInvalidas] = useState<FilaInvalida[]>([]);
+  // El último archivo no aportó ni una fila migrable. Se guarda aparte de `invalidas` porque el
+  // texto cambia: «el resto sí» es mentira cuando no hay resto.
+  const [sinFilasValidas, setSinFilasValidas] = useState(false);
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set());
   const [instancias, setInstancias] = useState<Instancia[]>([]);
   const [dryRun, setDryRun] = useState(true);
@@ -145,18 +148,22 @@ export function CargueMasivo() {
     }
 
     setError(null);
-    // Desde este momento la restauración pendiente ya no debe aplicarse: el archivo nuevo manda.
-    loteReemplazado.current = true;
     try {
       const { validas, invalidas: malas } = await leerArchivo(archivo);
       setInvalidas(malas);
+      setSinFilasValidas(validas.length === 0);
 
       if (validas.length === 0) {
-        setLote(null);
-        borrarLote();
+        // NO se toca el lote que hubiera. Antes se borraba —también lo guardado en el navegador—,
+        // así que equivocarse de archivo, o cargar uno con la columna mal escrita, costaba la ola
+        // que estuviera a medias. Un archivo ilegible es un aviso, no una orden de descartar.
         return;
       }
 
+      // Solo a partir de aquí la restauración pendiente deja de aplicarse: el archivo nuevo manda.
+      // Se marca junto al reemplazo y no al entrar, para que un archivo que no aporta ni una fila
+      // no bloquee la recuperación del lote guardado.
+      loteReemplazado.current = true;
       const creado = nuevoLote(archivo.name, validas, instancias, dryRun);
       persistir(creado);
       // Todo seleccionado al cargar: lo normal es querer migrarlo entero, y quitar lo que no se
@@ -230,6 +237,7 @@ export function CargueMasivo() {
     borrarLote();
     setLote(null);
     setInvalidas([]);
+    setSinFilasValidas(false);
     setSeleccion(new Set());
     setError(null);
   }
@@ -297,12 +305,22 @@ export function CargueMasivo() {
       {invalidas.length > 0 && (
         <section className="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-4">
           <h3 className="text-sm font-semibold">
-            {invalidas.length === 1
-              ? "1 fila del archivo no se puede migrar"
-              : `${invalidas.length} filas del archivo no se pueden migrar`}
+            {sinFilasValidas
+              ? "Ninguna fila del archivo se puede migrar"
+              : invalidas.length === 1
+                ? "1 fila del archivo no se puede migrar"
+                : `${invalidas.length} filas del archivo no se pueden migrar`}
           </h3>
           <p className="mt-0.5 text-xs opacity-70">
-            El resto sí; corrige estas y vuelve a cargar el archivo si las necesitas.
+            {sinFilasValidas ? (
+              <>
+                No se cargó nada. Revisa que las columnas sean <strong>tipo</strong> e{" "}
+                <strong>id</strong> —la plantilla las trae— y vuelve a cargarlo.
+                {lote && " El lote que tenías sigue intacto."}
+              </>
+            ) : (
+              "El resto sí; corrige estas y vuelve a cargar el archivo si las necesitas."
+            )}
           </p>
           <ul className="mt-2 flex flex-col gap-1 text-xs">
             {invalidas.map((f) => (

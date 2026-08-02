@@ -38,6 +38,8 @@ function titulo(codigo: string): string {
     case "migracion.sin_llave":
     case "migracion.host_inalcanzable":
       return "El migrador no está disponible en este ambiente";
+    case "migracion.apagado":
+      return "El migrador está apagado en este ambiente";
     case "migracion.no_autorizado":
       return "No tienes acceso a la consola de migración";
     case "migracion.sesion_expirada":
@@ -58,6 +60,8 @@ function sugerencia(codigo: string): string | null {
       return "Es configuración del ambiente: la llave del frontend y la del migrador no coinciden. Avisa a quien administra el despliegue.";
     case "migracion.host_inalcanzable":
       return "Puede que el migrador esté apagado aquí. Se enciende por ambiente mientras dura una ola.";
+    case "migracion.apagado":
+      return "Se enciende poniendo FLITMIG_MIGRACION_API_ENABLED=true en el .env del ambiente y recreando el contenedor migracion-api; no hace falta desplegar. Avisa a quien administra el despliegue.";
     case "migracion.sesion_expirada":
       return "Vuelve a entrar y repite la operación.";
     default:

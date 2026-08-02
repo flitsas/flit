@@ -158,6 +158,41 @@ describe("CargueMasivo", () => {
     expect(screen.getByText(/Reintentar es seguro/i)).toBeInTheDocument();
   });
 
+  /**
+   * Bug real: un archivo sin ni una fila migrable llamaba a `borrarLote()`. Equivocarse de archivo
+   * —o cargar uno con las columnas mal escritas— costaba la ola que estuviera a medias, incluido lo
+   * guardado en el navegador. Un archivo ilegible es un aviso, no una orden de descartar.
+   */
+  it("un archivo sin filas válidas NO borra el lote que ya había", async () => {
+    const usuario = userEvent.setup();
+    render(<CargueMasivo />);
+
+    await cargarCsv(usuario, "tipo,id\ntraspaso,26350\ntraspaso,24860");
+    expect(await screen.findByText("26350")).toBeInTheDocument();
+
+    const basura = new File(["columna,otra\nnada,nada"], "malo.csv", { type: "text/csv" });
+    await usuario.upload(document.querySelector('input[type="file"]') as HTMLInputElement, basura);
+
+    expect(await screen.findByText(/Ninguna fila del archivo se puede migrar/i)).toBeInTheDocument();
+    expect(screen.getByText(/El lote que tenías sigue intacto/i)).toBeInTheDocument();
+    // El lote anterior sigue en pantalla y en el navegador.
+    expect(screen.getByText("ola.csv")).toBeInTheDocument();
+    expect(screen.getByText("26350")).toBeInTheDocument();
+    expect(window.localStorage.getItem("flit:migracion:progreso")).not.toBeNull();
+  });
+
+  /** «El resto sí» es mentira cuando no hay resto. */
+  it("distingue «algunas filas malas» de «ninguna sirve»", async () => {
+    const usuario = userEvent.setup();
+    render(<CargueMasivo />);
+
+    await cargarCsv(usuario, "tipo,id\ntraspaso,26350\nbasura,999");
+
+    expect(await screen.findByText(/1 fila del archivo no se puede migrar/i)).toBeInTheDocument();
+    expect(screen.getByText(/El resto sí/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Ninguna fila/i)).not.toBeInTheDocument();
+  });
+
   /** Que el tercero falle no es motivo para no intentar los demás. */
   it("un fallo no detiene la cola", async () => {
     const usuario = userEvent.setup();

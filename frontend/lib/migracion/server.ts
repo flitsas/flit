@@ -111,6 +111,25 @@ export async function llamarMigracion(
   }
 
   const texto = await response.text();
+
+  /**
+   * 404 sin cuerpo = las rutas de migración ni se registraron, o sea `MigracionApi:Enabled=false`.
+   *
+   * Es el fallo MÁS probable de todos —viene apagado por defecto en todos los ambientes y se
+   * enciende por ola— y sin esto era el que peor se explicaba: el host devuelve el 404 pelado de
+   * ASP.NET, así que la consola caía en su mensaje genérico y decía «La migración no se pudo
+   * lanzar. El servidor respondió 404», que no le dice a nadie qué hacer.
+   *
+   * Se comprueba que el cuerpo esté vacío para no pisar un 404 que sí venga explicado.
+   */
+  if (response.status === 404 && !texto) {
+    return problema(
+      404,
+      "migracion.apagado",
+      "El host de migración está encendido pero con las rutas desactivadas: respondió 404 sin más.",
+    );
+  }
+
   if (!texto) {
     return { estado: response.status, cuerpo: null };
   }
