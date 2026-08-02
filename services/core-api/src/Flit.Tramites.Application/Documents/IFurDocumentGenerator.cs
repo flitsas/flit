@@ -100,9 +100,6 @@ public sealed record FurDocumentData(
     // recuadro OBSERVACIONES es el sitio del formulario donde se declara (decisión D2 del plan de
     // completitud documental). Este campo queda como dato del modelo para consumidores futuros.
     string? AcreedorPrenda = null,
-    // ADR-0036 (HU #10914/#10915) — las firmas (mandato / solicitud virtual) solo se muestran en
-    // estado distinto de borrador. Por defecto true (no afecta FUR/compraventa).
-    bool FirmasVisibles = true,
     // HU #10920 (Feature #10918) — plantilla de FUR a generar según la clasificación del vehículo
     // (resuelta por IFurTemplateResolver). Por defecto AUTOMOTOR (comportamiento previo intacto).
     FurTemplateFormat TemplateFormat = FurTemplateFormat.Automotor)

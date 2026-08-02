@@ -574,9 +574,6 @@ public sealed class GenerarFurHandler(
             SellosIdentidad: sellosIdentidad,
             TienePrenda: tienePrenda,
             AcreedorPrenda: acreedorPrenda,
-            // ADR-0036 (HU #10914/#10915) — las firmas del mandato/solicitud virtual solo aparecen
-            // fuera de edición (borrador o rechazado en subsanación).
-            FirmasVisibles: !TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva),
             TemplateFormat: templateFormat)
         {
             // HU #11030 — tenant contra el que se resuelve el baúl del mandatario.

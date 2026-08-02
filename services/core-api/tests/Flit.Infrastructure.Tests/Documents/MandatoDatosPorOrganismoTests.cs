@@ -120,8 +120,7 @@ public sealed class MandatoDatosPorOrganismoTests
             Partes: [parte],
             ValorVenta: null,
             Causal: null,
-            SellosFirma: [],
-            FirmasVisibles: true);
+            SellosFirma: []);
 
         var data = new MandatoData(
             tramite,

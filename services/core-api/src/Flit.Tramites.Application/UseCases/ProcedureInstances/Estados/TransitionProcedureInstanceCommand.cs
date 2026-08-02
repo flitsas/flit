@@ -34,10 +34,12 @@ public sealed class TransitionProcedureInstanceHandler(
 
         // ADR-0036 §D9 (HU #10916) — al aprobar con firmante resuelto, regenerar el mandato con el
         // mandatario (el generado en preparado llevaba placeholders).
-        // HU #11032 — y al ENTREGAR al organismo, regenerar TODO el expediente: los documentos creados
-        // en borrador salen sin firmas (FirmasVisibles = estado != borrador), así que el OT recibía el
-        // mandato y la solicitud de trámite virtual con el espacio de firma vacío. Al regenerar ya en
-        // 'entregado' se estampan las firmas del baúl y los sellos de identidad.
+        // HU #11032 — y al ENTREGAR al organismo, regenerar TODO el expediente para que se estampen las
+        // firmas y los sellos que se hayan conseguido después de generar los documentos.
+        // Nota: esta regeneración nació para compensar que en borrador los documentos salían SIN firmas
+        // (el gate FirmasVisibles, ya retirado). Ese motivo desapareció, pero sigue haciendo falta: entre
+        // la generación y la entrega pueden completarse validaciones de identidad o capturarse firmas del
+        // baúl, y es aquí donde el expediente recoge lo que existe en el momento de salir.
         // Best-effort en ambos casos: un fallo aquí NO revierte la transición ya persistida.
         if (furHandler is not null
             && (status == TramiteEstado.Entregado

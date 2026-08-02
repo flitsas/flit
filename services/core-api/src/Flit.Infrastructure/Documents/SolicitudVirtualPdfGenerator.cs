@@ -14,8 +14,10 @@ namespace Flit.Infrastructure.Documents;
 /// Expediente Consolidado (mismo patrón que <see cref="FurCompraventaDocumentGenerator"/>). Solo varía
 /// el firmante: persona natural a nombre propio; persona jurídica su representante legal en nombre de
 /// la empresa. El texto legal (Resoluciones 12379/2012 y 20233040017145/2023) se transcribe literal.
-/// Las firmas/datos del firmante solo se pintan en estado distinto de borrador
-/// (<see cref="FurDocumentData.FirmasVisibles"/>).
+/// <para><b>Las firmas se pintan en todos los estados.</b> Ocultarlas en borrador (punto 18 del
+/// requerimiento de ADR-0036) dejaba la solicitud terminando en «Cordialmente,» y nada debajo: ni
+/// línea, ni nombre, ni documento. Lo que aún no exista sale vacío, que es lo correcto en un
+/// borrador.</para>
 /// </summary>
 public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
 {
@@ -79,24 +81,21 @@ public sealed class SolicitudVirtualPdfGenerator : ISolicitudVirtualGenerator
 
                     col.Item().PaddingTop(10).Text("Cordialmente,");
 
-                    if (data.FirmasVisibles)
-                    {
-                        // HU #11046 — la estampa (imagen del baúl o sello de identidad) va SOBRE la línea
-                        // y los datos del firmante debajo. FlitFirmaBlock centraliza la composición y la
-                        // prioridad del baúl (HU #11031), compartidas con el contrato de mandato.
-                        col.Item().PaddingTop(24).Column(sig =>
-                            FlitFirmaBlock.Render(
-                                sig,
-                                FirmaBaulDe(data, parte?.Rol),
-                                SelloIdentidadDe(data, parte?.Rol),
-                                FirmaBlock(parte, esJuridica),
-                                FlitFirmaLinea.Grafica,
-                                datosBold: true,
-                                // HU #11170 — vigencia y hash de la firma del baúl, como en el FUR: sin
-                                // ellos la imagen queda sin nada que permita verificarla.
-                                selloBaul: FlitFirmaBaulSello.Resolve(
-                                    data.FirmaBaulMetadatos, parte?.Rol, incluirIdentificacion: false)));
-                    }
+                    // HU #11046 — la estampa (imagen del baúl o sello de identidad) va SOBRE la línea
+                    // y los datos del firmante debajo. FlitFirmaBlock centraliza la composición y la
+                    // prioridad del baúl (HU #11031), compartidas con el contrato de mandato.
+                    col.Item().PaddingTop(24).Column(sig =>
+                        FlitFirmaBlock.Render(
+                            sig,
+                            FirmaBaulDe(data, parte?.Rol),
+                            SelloIdentidadDe(data, parte?.Rol),
+                            FirmaBlock(parte, esJuridica),
+                            FlitFirmaLinea.Grafica,
+                            datosBold: true,
+                            // HU #11170 — vigencia y hash de la firma del baúl, como en el FUR: sin
+                            // ellos la imagen queda sin nada que permita verificarla.
+                            selloBaul: FlitFirmaBaulSello.Resolve(
+                                data.FirmaBaulMetadatos, parte?.Rol, incluirIdentificacion: false)));
                 });
             });
         }).GeneratePdf();

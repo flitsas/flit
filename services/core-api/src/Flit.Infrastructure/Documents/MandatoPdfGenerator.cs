@@ -25,7 +25,12 @@ namespace Flit.Infrastructure.Documents;
 /// El MANDANTE sigue firmando con su validación de identidad en todos los casos.</para>
 /// <para><b>Texto legal transcrito literal</b> de las plantillas legacy y marcado para revisión del PO
 /// (ADR-0036 §10.2): esta implementación NO reinterpreta las cláusulas.</para>
-/// Las firmas solo se pintan en estado distinto de borrador (<see cref="FurDocumentData.FirmasVisibles"/>).
+/// <para><b>Las firmas se pintan en todos los estados.</b> Hasta ahora se ocultaban en borrador y
+/// subsanación (punto 18 del requerimiento de ADR-0036), lo que dejaba el contrato sin siquiera la
+/// línea para firmar a mano justo cuando el gestor lo revisa; y obligaba a regenerar el expediente
+/// completo al entregar para que el organismo no lo recibiera en blanco. El recuadro se pinta
+/// siempre: lo que no exista todavía sale como línea vacía, que es lo que un contrato en borrador
+/// debe mostrar.</para>
 /// </summary>
 public sealed class MandatoPdfGenerator : IMandatoGenerator
 {
@@ -100,8 +105,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                     foreach (var p in parrafos)
                         RenderParrafo(col, p);
 
-                    if (tramite.FirmasVisibles)
-                        RenderFirmas(col, data, parte, esJuridica, variante);
+                    RenderFirmas(col, data, parte, esJuridica, variante);
                 });
             });
         }).GeneratePdf();

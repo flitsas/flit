@@ -115,8 +115,7 @@ public sealed class MandatoFirmaManualTests
             Partes: [parte],
             ValorVenta: null,
             Causal: null,
-            SellosFirma: [],
-            FirmasVisibles: true);
+            SellosFirma: []);
 
         return new MandatoData(
             tramite, template, instName, instNit,
