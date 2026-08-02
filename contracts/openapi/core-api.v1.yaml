@@ -5770,6 +5770,32 @@ paths:
         "401": { description: "No autenticado." }
         "403": { description: "Sin permiso (requiere SuperAdmin)." }
         "404": { description: "Firma no encontrada en el baúl de esta compañía." }
+    put:
+      operationId: adminSignatureVaultUpdate
+      tags: ["Admin · Baúl de Firmas"]
+      security:
+        - bearerAuth: []
+      summary: "Corrige los datos capturados de una firma del baúl"
+      description: >
+        Cierra el CRUD, que era alta + consulta + anulación: un dato mal digitado —el código hash sobre
+        todo, que es lo que se estampa como «Hash» junto a la firma en los documentos— solo se podía
+        arreglar anulando la firma y volviéndola a registrar.
+
+
+        Solo sobre firmas ACTIVAS: el contenido de una revocada es histórico y no se corrige.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSignatureVaultRequest"
+      responses:
+        "204": { description: "Firma corregida." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin permiso (requiere SuperAdmin)." }
+        "404": { description: "Firma no encontrada en el baúl de esta compañía." }
+        "409": { description: "La firma está revocada: su contenido es histórico." }
+        "422": { description: "requerido, vigencia_invalida o codigo_hash_invalido." }
 
   /api/v1/admin/companies/{tenantId}/signature-vault/{id}/revoke:
     parameters:
@@ -6360,6 +6386,20 @@ components:
         updatedAt: { type: string, format: date-time, nullable: true }
         codigoHash: { type: string, nullable: true }
       required: [id, documentType, documentNumber, fullName, signatureHash, storagePath, storageSha256, estado, vigenciaDesde, vigenciaHasta, createdAt]
+
+    UpdateSignatureVaultRequest:
+      type: object
+      description: >
+        Corrección de los datos capturados de una firma ACTIVA. NO admite cambiar el documento (identifica
+        a la persona dueña de la firma) ni el artefacto (lo ya emitido se estampó con esa imagen, así que
+        sustituirla en sitio invalidaría en silencio documentos ya firmados): para eso se registra una
+        firma nueva de la persona, que revoca la anterior y la conserva como histórico.
+      properties:
+        fullName: { type: string }
+        codigoHash: { type: string, nullable: true, maxLength: 100 }
+        vigenciaDesde: { type: string, format: date }
+        vigenciaHasta: { type: string, format: date }
+      required: [fullName, vigenciaDesde, vigenciaHasta]
 
     CreateSignatureVaultRequest:
       type: object

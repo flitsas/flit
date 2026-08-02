@@ -3,6 +3,7 @@ using Flit.Admin.Application.Companies.SignatureVault.CreateSignatureVault;
 using Flit.Admin.Application.Companies.SignatureVault.GetSignatureVault;
 using Flit.Admin.Application.Companies.SignatureVault.ListSignatureVault;
 using Flit.Admin.Application.Companies.SignatureVault.RevokeSignatureVault;
+using Flit.Admin.Application.Companies.SignatureVault.UpdateSignatureVault;
 using Flit.Admin.Domain.Companies.SignatureVault;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -333,8 +334,109 @@ public sealed class SignatureVaultHandlerTests
             CodigoHash = codigoHash,
         };
 
+    // ── Edición: cierra el CRUD (hallado en validación manual) ────────────────
+
+    [Fact]
+    public async Task Update_CorrigeCodigoHashNombreYVigencia_SinTocarDocumentoNiArtefacto()
+    {
+        // Antes solo se podía corregir un dato mal capturado revocando la firma y registrándola otra
+        // vez, lo que rompía la continuidad de la firma de esa persona.
+        await using var ctx = NewContext();
+        var (create, _, get, _) = Handlers(ctx, out _);
+        var creada = await create.HandleAsync(NewCreate(codigoHash: "VIEJO"), Ct);
+        var id = creada.SignatureVaultId!.Value;
+        var antes = await get.HandleAsync(new GetSignatureVaultByIdQuery { TenantId = Tenant, Id = id }, Ct);
+
+        var result = await Editor(ctx).HandleAsync(NewUpdate(id), Ct);
+
+        result.Outcome.Should().Be(UpdateSignatureVaultOutcome.Updated);
+        var despues = await get.HandleAsync(new GetSignatureVaultByIdQuery { TenantId = Tenant, Id = id }, Ct);
+        despues!.CodigoHash.Should().Be("NUEVO-1");
+        despues.FullName.Should().Be("Ana Corregida");
+        despues.VigenciaHasta.Should().Be(new DateOnly(2027, 1, 1));
+        // La identidad de la firma no se toca: sigue siendo de la misma persona y del mismo artefacto.
+        despues.DocumentNumber.Should().Be(antes!.DocumentNumber);
+        despues.StoragePath.Should().Be(antes.StoragePath);
+        despues.SignatureHash.Should().Be(antes.SignatureHash);
+    }
+
+    [Fact]
+    public async Task Update_DejarElCodigoEnBlanco_LoBorra_YElSelloVuelveAOmitirLaLinea()
+    {
+        await using var ctx = NewContext();
+        var (create, _, get, _) = Handlers(ctx, out _);
+        var id = (await create.HandleAsync(NewCreate(codigoHash: "VIEJO"), Ct)).SignatureVaultId!.Value;
+
+        await Editor(ctx).HandleAsync(NewUpdate(id, codigoHash: "   "), Ct);
+
+        var despues = await get.HandleAsync(new GetSignatureVaultByIdQuery { TenantId = Tenant, Id = id }, Ct);
+        despues!.CodigoHash.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Update_DeUnaFirmaRevocada_NoSePermite()
+    {
+        // Su contenido es histórico: corregirlo cambiaría el dato con el que se firmó en su momento.
+        await using var ctx = NewContext();
+        var (create, _, _, revoke) = Handlers(ctx, out _);
+        var id = (await create.HandleAsync(NewCreate(), Ct)).SignatureVaultId!.Value;
+        await revoke.HandleAsync(NewRevoke(id), Ct);
+
+        var result = await Editor(ctx).HandleAsync(NewUpdate(id), Ct);
+
+        result.Outcome.Should().Be(UpdateSignatureVaultOutcome.Revoked);
+    }
+
+    [Fact]
+    public async Task Update_DeOtroTenant_Responde404()
+    {
+        await using var ctx = NewContext();
+        var (create, _, _, _) = Handlers(ctx, out _);
+        var id = (await create.HandleAsync(NewCreate(), Ct)).SignatureVaultId!.Value;
+
+        var result = await Editor(ctx).HandleAsync(NewUpdate(id, tenantId: Guid.NewGuid()), Ct);
+
+        result.Outcome.Should().Be(UpdateSignatureVaultOutcome.NotFound);
+    }
+
+    [Fact]
+    public async Task Update_ConVigenciaInvertidaOCodigoLargo_Responde422()
+    {
+        await using var ctx = NewContext();
+        var (create, _, _, _) = Handlers(ctx, out _);
+        var id = (await create.HandleAsync(NewCreate(), Ct)).SignatureVaultId!.Value;
+
+        var vigencia = await Editor(ctx).HandleAsync(
+            NewUpdate(id, vigenciaHasta: new DateOnly(2025, 1, 1)), Ct);
+        vigencia.Outcome.Should().Be(UpdateSignatureVaultOutcome.Invalid);
+        vigencia.Errors.Should().Contain(e => e.Code == "vigencia_invalida");
+
+        var largo = await Editor(ctx).HandleAsync(NewUpdate(id, codigoHash: new string('X', 101)), Ct);
+        largo.Outcome.Should().Be(UpdateSignatureVaultOutcome.Invalid);
+        largo.Errors.Should().Contain(e => e.Code == "codigo_hash_invalido");
+    }
+
     private static RevokeSignatureVaultCommand NewRevoke(Guid id) =>
         new() { TenantId = Tenant, Id = id };
+
+    private static UpdateSignatureVaultHandler Editor(FlitDbContext ctx) =>
+        new(new DbSignatureVaultReader(ctx), new SignatureVaultRepository(ctx));
+
+    private static UpdateSignatureVaultCommand NewUpdate(
+        Guid id,
+        string? codigoHash = "NUEVO-1",
+        string? fullName = "Ana Corregida",
+        DateOnly? vigenciaHasta = null,
+        Guid? tenantId = null) =>
+        new()
+        {
+            TenantId = tenantId ?? Tenant,
+            Id = id,
+            FullName = fullName,
+            CodigoHash = codigoHash,
+            VigenciaDesde = new DateOnly(2026, 1, 1),
+            VigenciaHasta = vigenciaHasta ?? new DateOnly(2027, 1, 1),
+        };
 
     private static (
         CreateSignatureVaultHandler Create,
@@ -376,6 +478,9 @@ public sealed class SignatureVaultHandlerTests
         public Task<Guid> CreateAsync(CreateSignatureVaultData data, CancellationToken cancellationToken = default) =>
             throw new SignatureVaultActiveConflictException();
 
+        public Task<bool> UpdateAsync(UpdateSignatureVaultData data, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+
         public Task<bool> RevokeAsync(RevokeSignatureVaultData data, CancellationToken cancellationToken = default) =>
             Task.FromResult(true);
     }
@@ -399,6 +504,9 @@ public sealed class SignatureVaultHandlerTests
 
             return inner.CreateAsync(data, cancellationToken);
         }
+
+        public Task<bool> UpdateAsync(UpdateSignatureVaultData data, CancellationToken cancellationToken = default) =>
+            inner.UpdateAsync(data, cancellationToken);
 
         public Task<bool> RevokeAsync(RevokeSignatureVaultData data, CancellationToken cancellationToken = default) =>
             inner.RevokeAsync(data, cancellationToken);

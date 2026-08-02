@@ -31,6 +31,17 @@ export interface SignatureVaultItem {
   mandateSignerId?: string | null;
 }
 
+/**
+ * Payload de edición (PUT). Solo los campos corregibles: el documento identifica a la persona y el
+ * artefacto ya se estampó en lo emitido, así que ninguno de los dos se edita en sitio.
+ */
+export interface SignatureVaultEditInput {
+  fullName: string;
+  codigoHash?: string | null;
+  vigenciaDesde: string;
+  vigenciaHasta: string;
+}
+
 /** Payload de alta de firma (POST). `artefactoFirmaBase64` acepta el prefijo data:image/png. */
 export interface SignatureVaultInput {
   documentType: string;
@@ -113,6 +124,21 @@ export function createSignatureVaultEntry(
     method: "POST",
     body: { mandateSignerId: null, ...body },
   });
+}
+
+/**
+ * PUT "/{id}" — corrige los datos capturados de una firma ACTIVA (204).
+ *
+ * No admite cambiar el documento (identifica a la persona dueña de la firma) ni el artefacto (lo ya
+ * emitido se estampó con esa imagen): para eso se captura una firma nueva, que revoca la anterior y la
+ * conserva. Lanza ApiValidationError en 422 (requerido, vigencia_invalida, codigo_hash_invalido).
+ */
+export function updateSignatureVaultEntry(
+  tenantId: string,
+  id: string,
+  body: SignatureVaultEditInput,
+): Promise<void> {
+  return apiFetch<void>(`${base(tenantId)}/${id}`, { method: "PUT", body });
 }
 
 /** POST "/{id}/revoke" — anula una firma (204, idempotente). */

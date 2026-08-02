@@ -174,6 +174,7 @@ public static class DependencyInjection
         services.AddScoped<Companies.SignatureVault.CreateSignatureVault.CreateSignatureVaultHandler>();
         services.AddScoped<Companies.SignatureVault.ListSignatureVault.ListSignatureVaultHandler>();
         services.AddScoped<Companies.SignatureVault.GetSignatureVault.GetSignatureVaultByIdHandler>();
+        services.AddScoped<Companies.SignatureVault.UpdateSignatureVault.UpdateSignatureVaultHandler>();
         services.AddScoped<Companies.SignatureVault.RevokeSignatureVault.RevokeSignatureVaultHandler>();
 
         // HU #10900 (ADR-0033) — resolutor de firma/identidad al guardar un representante legal
