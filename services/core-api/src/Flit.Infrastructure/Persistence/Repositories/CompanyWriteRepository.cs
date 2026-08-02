@@ -26,6 +26,9 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
     public Task<bool> CodeExistsAsync(string code, CancellationToken cancellationToken = default) =>
         _context.Tenants.AsNoTracking().AnyAsync(t => t.Code == code, cancellationToken);
 
+    public Task<bool> TaxIdExistsAsync(string taxId, CancellationToken cancellationToken = default) =>
+        _context.Tenants.AsNoTracking().AnyAsync(t => t.TaxId == taxId, cancellationToken);
+
     public async Task<CompanyListItem> CreateAsync(
         NewCompany company,
         CancellationToken cancellationToken = default)

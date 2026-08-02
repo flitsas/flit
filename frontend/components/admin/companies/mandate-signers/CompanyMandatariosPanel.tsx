@@ -200,6 +200,7 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
         <CompanyMandatarioForm
           tenantId={tenantId}
           offices={offices}
+          onIdentityChanged={() => void load()}
           editing={editing}
           onCancel={() => {
             setFormOpen(false);

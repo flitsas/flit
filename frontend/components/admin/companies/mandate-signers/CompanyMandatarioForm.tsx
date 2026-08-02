@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { ApiValidationError } from "@/lib/api/types";
 import { SignatureVaultSelector } from "@/components/admin/companies/legal-representatives/SignatureVaultSelector";
+import { MandatarioIdentidadBlock } from "./MandatarioIdentidadBlock";
 import type {
   CompanyMandateSignerInput,
   CompanyTransitOfficeOption,
@@ -24,12 +25,15 @@ export function CompanyMandatarioForm({
   editing,
   onCancel,
   onSubmit,
+  onIdentityChanged,
 }: {
   tenantId: string;
   offices: CompanyTransitOfficeOption[];
   editing: MandateSigner | null;
   onCancel: () => void;
   onSubmit: (input: CompanyMandateSignerInput) => Promise<MandateSignerSaved>;
+  /** Refresca el listado tras una acción de identidad, que cambia el estado del mandatario. */
+  onIdentityChanged?: () => void;
 }) {
   const [fullName, setFullName] = useState(editing?.fullName ?? "");
   const [documentType, setDocumentType] = useState(editing?.documentType ?? "CC");
@@ -178,6 +182,16 @@ export function CompanyMandatarioForm({
               una vigente, se reutiliza y no se le vuelve a escribir.
             </p>
           </div>
+
+          {/* Solo al EDITAR: en el alta el mandatario aún no tiene id contra el que actuar, y el envío
+              inicial ya lo dispara el propio alta cuando hay correo. */}
+          {editing && (
+            <MandatarioIdentidadBlock
+              tenantId={tenantId}
+              signer={editing}
+              onRefresh={() => onIdentityChanged?.()}
+            />
+          )}
 
           {/* Igual que en el panel del representante legal, pero sin escrituras: el mandatario no las
               necesita. Sirve para elegir su firma o capturarla ahí mismo si aún no tiene. */}

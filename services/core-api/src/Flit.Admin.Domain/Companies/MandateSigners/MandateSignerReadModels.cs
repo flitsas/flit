@@ -73,6 +73,12 @@ public sealed class OtCompanyOption
     public Guid CompanyTenantId { get; init; }
     public string LegalName { get; init; } = string.Empty;
 
+    /// <summary>
+    /// NIT de la compañía. Sin él, dos empresas homónimas eran indistinguibles en pantalla: se veían
+    /// dos filas con el mismo nombre y nada que permitiera elegir la correcta.
+    /// </summary>
+    public string? TaxId { get; init; }
+
     /// <summary>La compañía (tenant) está activa — <c>identity.tenants.is_active</c>.</summary>
     public bool IsActive { get; init; }
 
