@@ -67,6 +67,9 @@ public static class AdminInfrastructureExtensions
         // HU #10192 — grants de organismos de tránsito + catálogo OT desde BD.
         services.AddScoped<ITransitOfficeCatalog, DbTransitOfficeCatalog>();
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
+        // Convenio comercial compañía↔OT. Distinto del grant de arriba: aquel habilita la radicación,
+        // este decide si el contrato de mandato lleva bloque de firma del mandatario.
+        services.AddScoped<ICompanyAgreementRepository, CompanyAgreementRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
 
         // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.

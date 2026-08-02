@@ -10,7 +10,14 @@ public sealed record CompanyMandateSignerRequest(
     string? DocumentNumber,
     IReadOnlyList<Guid>? TransitOfficeIds,
     string? DocumentType = null,
-    string? Email = null);
+    string? Email = null,
+    /// <summary>
+    /// Organismos (subconjunto de los anteriores) en los que este mandatario firma A MANO: el contrato
+    /// deja la línea de guiones bajos con sus datos debajo y no estampa firma del baúl ni sello de
+    /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
+    /// electrónicamente ante otro.
+    /// </summary>
+    IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null);
 
 /// <summary>
 /// HU #11202 — alta de un mandatario desde el configurador de la COMPAÑÍA. La empresa captura los datos
@@ -61,6 +68,7 @@ public sealed class CreateCompanyMandateSignerHandler
                 DocumentType = request.DocumentType ?? "CC",
                 Email = request.Email,
                 TransitOfficeIds = offices,
+                PhysicalSignatureOfficeIds = request.PhysicalSignatureOfficeIds,
                 CreatedBy = createdBy,
             },
             cancellationToken).ConfigureAwait(false);
@@ -160,6 +168,7 @@ public sealed class UpdateCompanyMandateSignerHandler
                 DocumentType = request.DocumentType ?? "CC",
                 Email = request.Email,
                 TransitOfficeIds = offices,
+                PhysicalSignatureOfficeIds = request.PhysicalSignatureOfficeIds,
                 UpdatedBy = updatedBy,
             },
             cancellationToken).ConfigureAwait(false);

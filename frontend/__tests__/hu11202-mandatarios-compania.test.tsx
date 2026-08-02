@@ -71,7 +71,7 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     await user.type(screen.getByLabelText("Nombre completo"), "Carlos Pérez");
     await user.type(screen.getByLabelText("Número de documento"), "9080706050");
     await user.type(screen.getByLabelText("Correo"), "carlos@ejemplo.com");
-    await user.click(screen.getByRole("checkbox", { name: /Medellín/ }));
+    await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() =>
@@ -96,14 +96,14 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     // Exactamente los que la compañía tiene habilitados: ni uno más.
     const casillas = screen.getAllByRole("checkbox");
     expect(casillas).toHaveLength(OFICINAS.length);
-    expect(screen.getByRole("checkbox", { name: /Medellín/ })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /Envigado/ })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Tránsito de Envigado" })).toBeInTheDocument();
 
     // Selección múltiple: los dos a la vez.
     await user.type(screen.getByLabelText("Nombre completo"), "Carlos Pérez");
     await user.type(screen.getByLabelText("Número de documento"), "9080706050");
-    await user.click(screen.getByRole("checkbox", { name: /Medellín/ }));
-    await user.click(screen.getByRole("checkbox", { name: /Envigado/ }));
+    await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
+    await user.click(screen.getByRole("checkbox", { name: "Tránsito de Envigado" }));
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() =>
@@ -141,10 +141,10 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     // Edición: el formulario llega precargado y quitar un organismo lo retira.
     await user.click(within(fila).getByRole("button", { name: "Editar" }));
     expect(screen.getByLabelText("Nombre completo")).toHaveValue("Ana Restrepo");
-    expect(screen.getByRole("checkbox", { name: /Medellín/ })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: /Envigado/ })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Tránsito de Envigado" })).toBeChecked();
 
-    await user.click(screen.getByRole("checkbox", { name: /Envigado/ }));
+    await user.click(screen.getByRole("checkbox", { name: "Tránsito de Envigado" }));
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() =>

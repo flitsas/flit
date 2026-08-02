@@ -24,4 +24,9 @@ public sealed record MandateSignerResponse(
     /// HU #11201 — organismos donde aplica el mandatario. <c>TransitOfficeId</c> es solo el primario
     /// (deprecado): esta lista es la que dice dónde puede firmar.
     /// </summary>
-    IReadOnlyList<Guid> TransitOfficeIds);
+    IReadOnlyList<Guid> TransitOfficeIds,
+    /// <summary>
+    /// Subconjunto de <see cref="TransitOfficeIds"/> donde el mandatario firma A MANO. Lo necesita el
+    /// formulario para precargar la marca al editar.
+    /// </summary>
+    IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null);

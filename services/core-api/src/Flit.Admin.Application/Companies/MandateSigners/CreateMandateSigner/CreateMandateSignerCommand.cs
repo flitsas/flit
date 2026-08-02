@@ -22,6 +22,14 @@ public sealed class CreateMandateSignerCommand
     /// </summary>
     public IReadOnlyList<Guid>? TransitOfficeIds { get; init; }
 
+    /// <summary>
+    /// Organismos (subconjunto de los anteriores) en los que este mandatario firma A MANO: el contrato
+    /// deja la línea de guiones bajos con sus datos debajo y no estampa firma del baúl ni sello de
+    /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
+    /// electrónicamente ante otro.
+    /// </summary>
+    public IReadOnlyList<Guid>? PhysicalSignatureOfficeIds { get; init; }
+
     public Guid? CreatedBy { get; init; }
     public Guid? CorrelationId { get; init; }
 }

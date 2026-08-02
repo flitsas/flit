@@ -56,6 +56,12 @@ public sealed class MandateSignerItem
     /// primario (deprecado): esta lista es la que dice dónde puede firmar.
     /// </summary>
     public IReadOnlyList<Guid> TransitOfficeIds { get; init; } = [];
+
+    /// <summary>
+    /// Subconjunto de <see cref="TransitOfficeIds"/> donde el mandatario firma A MANO: el contrato deja
+    /// la línea de guiones bajos y no estampa firma del baúl ni sello de identidad.
+    /// </summary>
+    public IReadOnlyList<Guid> PhysicalSignatureOfficeIds { get; init; } = [];
 }
 
 /// <summary>

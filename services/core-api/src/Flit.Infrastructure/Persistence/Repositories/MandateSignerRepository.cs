@@ -97,9 +97,11 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
         // HU #11201 — los organismos van al puente. Sin lista, el único organismo es el primario, que
         // es exactamente lo que manda el alta desde el perfil del organismo.
         var offices = OrganismosDe(data.TransitOfficeIds, data.TransitOfficeId);
+        var fisicos = Distinct(data.PhysicalSignatureOfficeIds).ToHashSet();
         foreach (var officeId in offices)
         {
-            _context.MandateSignerTransitOffices.Add(NewOffice(signerId, officeId, now));
+            _context.MandateSignerTransitOffices.Add(
+                NewOffice(signerId, officeId, now, fisicos.Contains(officeId)));
         }
 
         // La asignación a compañías se escribe por CADA organismo: es la que consulta el trámite para
@@ -180,7 +182,8 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
         // organismos, porque la persona es una sola fila. La lista de organismos, si viene, reemplaza
         // al conjunto: los que no vengan se retiran con baja lógica y dejan de estar disponibles ahí.
         var organismos = data.TransitOfficeIds is not null
-            ? await ReemplazarOrganismosAsync(signer.Id, data.TransitOfficeIds, now, cancellationToken)
+            ? await ReemplazarOrganismosAsync(
+                    signer.Id, data.TransitOfficeIds, data.PhysicalSignatureOfficeIds, now, cancellationToken)
                 .ConfigureAwait(false)
             : await OrganismosActivosAsync(signer.Id, signer.TransitOfficeId, cancellationToken)
                 .ConfigureAwait(false);
@@ -346,10 +349,12 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
     private async Task<IReadOnlyList<Guid>> ReemplazarOrganismosAsync(
         Guid signerId,
         IReadOnlyList<Guid> deseados,
+        IReadOnlyList<Guid>? firmaFisica,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         var objetivo = Distinct(deseados).ToHashSet();
+        var fisicos = Distinct(firmaFisica).ToHashSet();
 
         var existentes = await _context.MandateSignerTransitOffices
             .Where(o => o.MandateSignerId == signerId)
@@ -359,12 +364,18 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
         foreach (var fila in existentes)
         {
             fila.IsActive = objetivo.Contains(fila.TransitOfficeId);
+            // La marca de firma física se reemplaza junto con la lista, igual que el resto: si el
+            // gestor la desmarca, el organismo vuelve a estampar. Conservarla al editar dejaría un
+            // mandato firmándose a mano sin que nadie lo hubiera pedido.
+            if (fila.IsActive)
+                fila.SignsPhysically = fisicos.Contains(fila.TransitOfficeId);
         }
 
         var yaRepresentados = existentes.Select(o => o.TransitOfficeId).ToHashSet();
         foreach (var officeId in objetivo.Where(id => !yaRepresentados.Contains(id)))
         {
-            _context.MandateSignerTransitOffices.Add(NewOffice(signerId, officeId, now));
+            _context.MandateSignerTransitOffices.Add(
+                NewOffice(signerId, officeId, now, fisicos.Contains(officeId)));
         }
 
         return [.. objetivo];
@@ -420,13 +431,14 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
     }
 
     private static MandateSignerTransitOffice NewOffice(
-        Guid signerId, Guid transitOfficeId, DateTimeOffset now) =>
+        Guid signerId, Guid transitOfficeId, DateTimeOffset now, bool signsPhysically = false) =>
         new()
         {
             Id = Guid.NewGuid(),
             MandateSignerId = signerId,
             TransitOfficeId = transitOfficeId,
             IsActive = true,
+            SignsPhysically = signsPhysically,
             CreatedAt = now,
         };
 
@@ -451,7 +463,7 @@ internal sealed class MandateSignerRepository : IMandateSignerRepository
             companyTenantIds = Distinct(companyTenantIds),
         });
 
-    private static IReadOnlyList<Guid> Distinct(IReadOnlyList<Guid> ids) =>
+    private static IReadOnlyList<Guid> Distinct(IReadOnlyList<Guid>? ids) =>
         ids is null ? [] : [.. ids.Distinct()];
 
     /// <summary>

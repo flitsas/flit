@@ -23,6 +23,10 @@ public static class DevelopmentAuthSeeder
     public const string OtSabanetaEmail = "otsabaneta@flit.local";
     public const string OtSabanetaPassword = "OtSabaneta1!";
 
+    /// <summary>Admin OT Envigado (DEV) — tenant vinculado al catálogo RUNT 5266000.</summary>
+    public const string OtEnvigadoEmail = "otenvigado@flit.local";
+    public const string OtEnvigadoPassword = "OtEnvigado1!";
+
     /// <summary>Usuario fijo del tab Operación (HU #10200); el SQL seed crea la fila sin credencial.</summary>
     public const string DevOperacionEmail = "dev@flitsas.io";
     public const string DevOperacionPassword = "DevPass1!";
@@ -59,6 +63,20 @@ public static class DevelopmentAuthSeeder
     public static readonly Guid OtSabanetaProfileId =
         Guid.Parse("b9ec839d-7b78-4165-8860-cf29b104c76d");
 
+    /// <summary>Tenant OT Envigado (DEV) — perfil → catálogo <c>5266000</c>.</summary>
+    public static readonly Guid OtEnvigadoTenantId =
+        Guid.Parse("bbbbbbbb-0004-4000-8000-000000000001");
+
+    /// <summary>Oficina Envigado en <c>catalogs.transit_offices</c> (seed RUNT HU #10659).</summary>
+    public static readonly Guid OtEnvigadoCatalogOfficeId =
+        Guid.Parse("69f48545-a7cf-5201-9198-6e3b3fab9a99");
+
+    public static readonly Guid OtEnvigadoUserId =
+        Guid.Parse("ec4dddb9-ade5-43e8-b33b-c6036eba49d2");
+
+    public static readonly Guid OtEnvigadoProfileId =
+        Guid.Parse("b9ec839d-7b78-4165-8860-cf29b104c76e");
+
     public static async Task SeedAsync(
         FlitDbContext db,
         IPasswordHasher passwordHasher,
@@ -77,6 +95,7 @@ public static class DevelopmentAuthSeeder
         await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
         await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
         await SeedSabanetaOtAdminAsync(db, passwordHasher, cancellationToken);
+        await SeedEnvigadoOtAdminAsync(db, passwordHasher, cancellationToken);
         await SeedBaseModulesAsync(db, cancellationToken);
         await SeedReportesPermissionsAsync(db, cancellationToken);
         await SeedDetailedReportPermissionsAsync(db, cancellationToken);
@@ -495,6 +514,104 @@ public static class DevelopmentAuthSeeder
 
         await db.SaveChangesAsync(cancellationToken);
         await EnsureOtAdminAssignmentAsync(db, OtSabanetaUserId, tenantId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Tenant OT Envigado + perfil sobre catálogo RUNT 5266000 + usuario
+    /// <see cref="OtEnvigadoEmail"/> / <see cref="OtEnvigadoPassword"/> (DEV).
+    /// Idempotente. Requiere que el seed del catálogo RUNT (HU #10659) haya corrido.
+    /// </summary>
+    private static async Task SeedEnvigadoOtAdminAsync(
+        FlitDbContext db,
+        IPasswordHasher passwordHasher,
+        CancellationToken cancellationToken)
+    {
+        var catalogExists = await db.TransitOffices
+            .AnyAsync(o => o.Id == OtEnvigadoCatalogOfficeId, cancellationToken);
+        if (!catalogExists)
+            return;
+
+        var now = DateTimeOffset.UtcNow;
+
+        // 1. Tenant OT-ENVIGADO
+        var tenant = await db.Tenants
+            .FirstOrDefaultAsync(t => t.Id == OtEnvigadoTenantId || t.Code == "OT-ENVIGADO", cancellationToken);
+        if (tenant is null)
+        {
+            tenant = new Tenant
+            {
+                Id = OtEnvigadoTenantId,
+                Code = "OT-ENVIGADO",
+                LegalName = "STRIA TTEyTTO ENVIGADO (DEV)",
+                TaxId = "900000266-5",
+                TenantType = "RENTING",
+                IsActive = true,
+                CreatedAt = now,
+                RowVersion = 0,
+            };
+            db.Tenants.Add(tenant);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        var tenantId = tenant.Id;
+
+        // 2. Perfil OT → catálogo Envigado (una oficina física = un solo tenant)
+        var existingProfileForOffice = await db.TransitOfficeProfiles
+            .FirstOrDefaultAsync(p => p.TransitOfficeId == OtEnvigadoCatalogOfficeId, cancellationToken);
+        if (existingProfileForOffice is null)
+        {
+            db.TransitOfficeProfiles.Add(new TransitOfficeProfile
+            {
+                Id = OtEnvigadoProfileId,
+                TenantId = tenantId,
+                TransitOfficeId = OtEnvigadoCatalogOfficeId,
+                OperationMode = "dashboard",
+                QuipuxReadOnly = false,
+                CreatedAt = now,
+                RowVersion = 0,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            tenantId = existingProfileForOffice.TenantId;
+        }
+
+        // 3. Usuario + credencial
+        var existingUser = await db.Users
+            .FirstOrDefaultAsync(u => u.Email == OtEnvigadoEmail, cancellationToken);
+        if (existingUser is not null)
+        {
+            await EnsureUserCredentialsAsync(
+                db, existingUser.Id, OtEnvigadoPassword, passwordHasher, cancellationToken);
+            await EnsureOtAdminAssignmentAsync(db, existingUser.Id, tenantId, cancellationToken);
+            return;
+        }
+
+        db.Users.Add(new User
+        {
+            Id = OtEnvigadoUserId,
+            Email = OtEnvigadoEmail,
+            DisplayName = "Administrador OT Envigado",
+            Status = "active",
+            HomeTenantId = tenantId,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        db.UserCredentials.Add(new UserCredential
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = OtEnvigadoUserId,
+            PasswordHash = passwordHasher.Hash(OtEnvigadoPassword),
+            MustChangePassword = false,
+            FailedLoginAttempts = 0,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        await EnsureOtAdminAssignmentAsync(db, OtEnvigadoUserId, tenantId, cancellationToken);
     }
 
     /// <summary>

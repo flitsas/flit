@@ -44,7 +44,8 @@ public sealed class ListCompanyMandateSignersHandler
                 s.RegisteredAt,
                 s.IsActive,
                 s.CompanyTenantIds,
-                s.TransitOfficeIds)),
+                s.TransitOfficeIds,
+                s.PhysicalSignatureOfficeIds)),
         ];
     }
 }

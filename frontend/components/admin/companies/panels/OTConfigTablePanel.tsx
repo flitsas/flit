@@ -10,9 +10,11 @@ import {
   addTransitGrant,
   fetchOtBlockingPolicies,
   fetchOtConsultationRestrictions,
+  fetchTransitAgreements,
   fetchTransitGrants,
   fetchTransitOffices,
   removeTransitGrant,
+  setTransitAgreement,
   setOtBlockingPolicy,
   setOtConsultationRestriction,
 } from "@/lib/api/admin-companies";
@@ -43,6 +45,8 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [offices, setOffices] = useState<TransitOffice[]>([]);
   const [grantedIds, setGrantedIds] = useState<string[]>([]);
+  // Convenio comercial: distinto del grant. Se carga aparte porque no depende de él.
+  const [agreementIds, setAgreementIds] = useState<string[]>([]);
   const [operationalById, setOperationalById] = useState<Record<string, OtOperationalInfo>>({});
   const [policies, setPolicies] = useState<OtBlockingPolicy[]>([]);
   const [restrictions, setRestrictions] = useState<OtConsultationRestriction[]>([]);
@@ -53,9 +57,12 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const [catalog, grants, opStatus, blockingRows, restrictionRows] = await Promise.all([
+        const [catalog, grants, agreements, opStatus, blockingRows, restrictionRows] = await Promise.all([
           fetchTransitOffices(undefined, signal),
           fetchTransitGrants(tenantId, signal),
+          // Best-effort como el estado operativo: si falla, la tabla sigue funcionando sin la
+          // columna poblada en vez de dejar al gestor sin pantalla.
+          fetchTransitAgreements(tenantId, signal).catch(() => ({ transitOfficeIds: [] })),
           // HU #10518 — estado operativo por OT para bloquear habilitación. Best-effort:
           // si falla (p. ej. permisos), la tabla sigue y el backend hace de árbitro (422).
           fetchTransitOfficesOperationalStatus(signal).catch(
@@ -69,6 +76,7 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
         }
         setOffices(catalog);
         setGrantedIds(grants.transitOfficeIds);
+        setAgreementIds(agreements.transitOfficeIds);
         setOperationalById(
           Object.fromEntries(
             opStatus.map((s) => [s.id, { hasTenant: s.hasTenant, estadoActivo: s.estadoActivo }]),
@@ -93,6 +101,13 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  const handleToggleAgreement = async (officeId: string, active: boolean) => {
+    await setTransitAgreement(tenantId, officeId, active);
+    setAgreementIds((current) =>
+      active ? Array.from(new Set([...current, officeId])) : current.filter((id) => id !== officeId),
+    );
+  };
 
   const handleToggleGrant = async (officeId: string, enabled: boolean) => {
     if (enabled) {
@@ -169,6 +184,8 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
         <OTConfigTable
           offices={pageOffices}
           grantedIds={grantedIds}
+          agreementIds={agreementIds}
+          onToggleAgreement={handleToggleAgreement}
           operationalById={operationalById}
           onToggleGrant={handleToggleGrant}
           onOpenConfig={(office) => setConfigOffice(office)}

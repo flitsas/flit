@@ -33,12 +33,26 @@ export function CompanyMandatarioForm({
   const [documentNumber, setDocumentNumber] = useState(editing?.documentNumber ?? "");
   const [email, setEmail] = useState(editing?.email ?? "");
   const [selected, setSelected] = useState<string[]>(editing?.transitOfficeIds ?? []);
+  // Organismos donde esta persona firma A MANO. Va por organismo y no por persona porque la misma
+  // puede firmar a mano ante uno y electrónicamente ante otro.
+  const [fisicos, setFisicos] = useState<string[]>(editing?.physicalSignatureOfficeIds ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const toggleOffice = (id: string) => {
     setError(null);
-    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setSelected((prev) => {
+      const quitando = prev.includes(id);
+      // Al retirar el organismo se retira también su marca de firma física: dejarla colgando haría
+      // que al volver a añadirlo reapareciera una firma a mano que nadie pidió.
+      if (quitando) setFisicos((f) => f.filter((x) => x !== id));
+      return quitando ? prev.filter((x) => x !== id) : [...prev, id];
+    });
+  };
+
+  const toggleFisico = (id: string) => {
+    setError(null);
+    setFisicos((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const handleSave = async () => {
@@ -60,6 +74,7 @@ export function CompanyMandatarioForm({
         documentNumber: documentNumber.trim(),
         email: email.trim() === "" ? null : email.trim(),
         transitOfficeIds: selected,
+        physicalSignatureOfficeIds: fisicos,
       });
     } catch (err) {
       setError(
@@ -161,22 +176,41 @@ export function CompanyMandatarioForm({
             </legend>
             <div className="space-y-1.5 rounded-xl border p-3">
               {offices.map((o) => (
-                <label key={o.transitOfficeId} className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(o.transitOfficeId)}
-                    onChange={() => toggleOffice(o.transitOfficeId)}
-                  />
-                  <span>
-                    {o.name}
-                    {o.code && <span className="opacity-70"> · {o.code}</span>}
-                  </span>
-                </label>
+                <div key={o.transitOfficeId}>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(o.transitOfficeId)}
+                      onChange={() => toggleOffice(o.transitOfficeId)}
+                      aria-label={o.name}
+                    />
+                    <span>
+                      {o.name}
+                      {o.code && <span className="opacity-70"> · {o.code}</span>}
+                    </span>
+                  </label>
+                  {/* Solo tiene sentido marcar la firma a mano donde el mandatario aplica. */}
+                  {selected.includes(o.transitOfficeId) && (
+                    <label className="mt-1 ml-6 flex items-center gap-2 text-[11px] opacity-80">
+                      <input
+                        type="checkbox"
+                        checked={fisicos.includes(o.transitOfficeId)}
+                        onChange={() => toggleFisico(o.transitOfficeId)}
+                        aria-label={`Firma de forma física · ${o.name}`}
+                      />
+                      <span>Firma de forma física</span>
+                    </label>
+                  )}
+                </div>
               ))}
             </div>
             <p className="mt-1 text-[11px] leading-tight opacity-70">
               Solo se listan los organismos habilitados para esta compañía. Al editar, quitar uno
               retira al mandatario de ese organismo y lo deja en los demás.
+              <br />
+              Con «firma de forma física», el contrato de mandato de ese organismo deja la línea con sus
+              datos debajo para firmarla a mano, en vez de estampar su firma del baúl o su sello de
+              identidad.
             </p>
           </fieldset>
 

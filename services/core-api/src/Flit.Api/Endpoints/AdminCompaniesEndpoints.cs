@@ -15,6 +15,7 @@ using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.SetOtBlockingPolicy;
 using Flit.Admin.Application.Companies.TransitOffices.SetOtConsultationRestriction;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Application.Companies.Whitelist;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
 using Flit.Admin.Application.Companies.Whitelist.GetWhitelist;
@@ -166,6 +167,25 @@ public static class AdminCompaniesEndpoints
             .WithName("AdminCompanyGetTransitGrants")
             .WithSummary("Lista los OT habilitados del tenant")
             .WithDescription("Retorna los Organismos de Tránsito habilitados para la compañía. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // PUT /api/v1/admin/companies/{tenantId}/transit-agreements/{transitOfficeId} — convenio comercial.
+        group.MapPut("/{tenantId:guid}/transit-agreements/{transitOfficeId:guid}", SetTransitAgreementAsync)
+            .WithName("AdminCompanySetTransitAgreement")
+            .WithSummary("Marca o desmarca el convenio de la compañía con un Organismo de Tránsito")
+            .WithDescription("El convenio NO es el permiso para radicar (eso son los transit-grants): es un "
+                + "acuerdo comercial cuyo efecto es documental — con convenio, el contrato de mandato no "
+                + "lleva bloque de firma del mandatario. Idempotente. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        // GET /api/v1/admin/companies/{tenantId}/transit-agreements — OT con convenio activo.
+        group.MapGet("/{tenantId:guid}/transit-agreements", GetTransitAgreementsAsync)
+            .WithName("AdminCompanyGetTransitAgreements")
+            .WithSummary("Lista los OT con los que la compañía tiene convenio")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
@@ -431,6 +451,41 @@ public static class AdminCompaniesEndpoints
 
         return Results.Ok(result);
     }
+
+    /// <summary>
+    /// Marca o desmarca el convenio comercial de la compañía con un organismo. Distinto del grant: aquel
+    /// habilita la radicación, este solo decide si el mandato lleva bloque de firma del mandatario.
+    /// </summary>
+    private static async Task<IResult> SetTransitAgreementAsync(
+        Guid tenantId,
+        Guid transitOfficeId,
+        SetTransitAgreementRequest request,
+        HttpContext httpContext,
+        [FromServices] ICompanyAgreementRepository repository,
+        CancellationToken cancellationToken)
+    {
+        await repository
+            .SetAsync(
+                tenantId, transitOfficeId, request?.Active ?? false,
+                ResolveUserId(httpContext.User), cancellationToken)
+            .ConfigureAwait(false);
+
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> GetTransitAgreementsAsync(
+        Guid tenantId,
+        [FromServices] ICompanyAgreementRepository repository,
+        CancellationToken cancellationToken)
+    {
+        var ids = await repository
+            .ListActiveOfficeIdsAsync(tenantId, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { transitOfficeIds = ids });
+    }
+
+    /// <summary>Cuerpo del convenio: si queda activo o no.</summary>
+    public sealed record SetTransitAgreementRequest(bool Active);
 
     private static async Task<IResult> AddTransitGrantAsync(
         Guid tenantId,

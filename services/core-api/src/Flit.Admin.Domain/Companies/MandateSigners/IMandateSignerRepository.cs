@@ -63,7 +63,14 @@ public sealed record CreateMandateSignerData(
     /// <see cref="TransitOfficeId"/> queda como organismo PRIMARIO (deprecado, se conserva por
     /// compatibilidad); la lista es la que decide dónde puede firmar.
     /// </summary>
-    IReadOnlyList<Guid>? TransitOfficeIds = null);
+    IReadOnlyList<Guid>? TransitOfficeIds = null,
+    /// <summary>
+    /// Organismos (subconjunto de los anteriores) en los que este mandatario firma A MANO: el contrato
+    /// deja la línea de guiones bajos con sus datos debajo y no estampa firma del baúl ni sello de
+    /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
+    /// electrónicamente ante otro.
+    /// </summary>
+    IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null);
 
 /// <summary>Datos de edición. La huella ya viene recalculada con la fecha de registro original.</summary>
 public sealed record UpdateMandateSignerData(
@@ -84,6 +91,13 @@ public sealed record UpdateMandateSignerData(
     /// vacía, REEMPLAZA el conjunto: los organismos que no vengan se retiran (AC3).
     /// </summary>
     IReadOnlyList<Guid>? TransitOfficeIds = null,
+    /// <summary>
+    /// Organismos (subconjunto de los anteriores) en los que este mandatario firma A MANO: el contrato
+    /// deja la línea de guiones bajos con sus datos debajo y no estampa firma del baúl ni sello de
+    /// identidad. Va por organismo y no por persona porque la misma puede firmar a mano ante uno y
+    /// electrónicamente ante otro.
+    /// </summary>
+    IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null,
     /// <summary>
     /// Organismo que pasa a ser el PRIMARIO (<c>mandate_signers.transit_office_id</c>). Solo hace falta
     /// cuando la edición retira de la lista al primario actual: sin repuntarlo, la fila quedaría

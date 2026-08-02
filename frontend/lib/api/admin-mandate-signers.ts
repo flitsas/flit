@@ -45,6 +45,8 @@ export interface MandateSigner {
    * (deprecado): esta lista es la que dice dónde puede firmar.
    */
   transitOfficeIds?: string[];
+  /** Subconjunto de los anteriores donde el mandatario firma a mano. */
+  physicalSignatureOfficeIds?: string[];
 }
 
 /**
@@ -245,6 +247,11 @@ export interface CompanyMandateSignerInput {
   email: string | null;
   /** Organismos donde aplica. Al editar, REEMPLAZA a los anteriores: quitar uno lo retira. */
   transitOfficeIds: string[];
+  /**
+   * Subconjunto de los anteriores donde el mandatario firma A MANO: el contrato deja la línea con sus
+   * datos debajo y no estampa firma del baúl ni sello de identidad.
+   */
+  physicalSignatureOfficeIds?: string[];
 }
 
 function companyBase(tenantId: string): string {

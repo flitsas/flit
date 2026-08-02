@@ -58,9 +58,13 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                 var vigenciaBySigner = await LoadIdentityVigenciaAsync(
                     [.. signers.Select(s => s.Id)], cancellationToken).ConfigureAwait(false);
 
+                var physicalBySigner = await LoadPhysicalOfficeIdsBySignerAsync(
+                    [.. signers.Select(s => s.Id)], cancellationToken).ConfigureAwait(false);
+
                 IReadOnlyList<MandateSignerItem> items =
                 [
-                    .. signers.Select(s => Project(s, companiesBySigner, officesBySigner, vigenciaBySigner)),
+                    .. signers.Select(s =>
+                        Project(s, companiesBySigner, officesBySigner, vigenciaBySigner, physicalBySigner)),
                 ];
                 return items;
             },
@@ -95,11 +99,15 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                 var vigenciaBySigner = await LoadIdentityVigenciaAsync(
                     [signer.Id], cancellationToken).ConfigureAwait(false);
 
+                var physicalBySigner = await LoadPhysicalOfficeIdsBySignerAsync(
+                    [signer.Id], cancellationToken).ConfigureAwait(false);
+
                 return new MandateSignerItem
                 {
                     Id = signer.Id,
                     TransitOfficeId = signer.TransitOfficeId,
                     TransitOfficeIds = officesBySigner.GetValueOrDefault(signer.Id, []),
+                    PhysicalSignatureOfficeIds = physicalBySigner.GetValueOrDefault(signer.Id, []),
                     FullName = signer.FullName,
                     DocumentType = signer.DocumentType,
                     DocumentNumber = signer.DocumentNumber,
@@ -157,10 +165,13 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     .ConfigureAwait(false);
                 var vigenciaBySigner = await LoadIdentityVigenciaAsync(signerIds, cancellationToken)
                     .ConfigureAwait(false);
+                var physicalBySigner = await LoadPhysicalOfficeIdsBySignerAsync(signerIds, cancellationToken)
+                    .ConfigureAwait(false);
 
                 IReadOnlyList<MandateSignerItem> items =
                 [
-                    .. signers.Select(s => Project(s, companiesBySigner, officesBySigner, vigenciaBySigner)),
+                    .. signers.Select(s =>
+                        Project(s, companiesBySigner, officesBySigner, vigenciaBySigner, physicalBySigner)),
                 ];
                 return items;
             },
@@ -355,6 +366,28 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
     }
 
     /// <summary>Organismos ACTIVOS de cada mandatario, para pintarlos en la consola de gestión.</summary>
+    /// <summary>Organismos donde el mandatario firma a mano, por mandatario.</summary>
+    private async Task<Dictionary<Guid, List<Guid>>> LoadPhysicalOfficeIdsBySignerAsync(
+        List<Guid> signerIds,
+        CancellationToken cancellationToken)
+    {
+        if (signerIds.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = await _context.MandateSignerTransitOffices
+            .AsNoTracking()
+            .Where(o => signerIds.Contains(o.MandateSignerId) && o.IsActive && o.SignsPhysically)
+            .Select(o => new { o.MandateSignerId, o.TransitOfficeId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return rows
+            .GroupBy(r => r.MandateSignerId)
+            .ToDictionary(g => g.Key, g => g.Select(r => r.TransitOfficeId).ToList());
+    }
+
     private async Task<Dictionary<Guid, List<Guid>>> LoadOfficeIdsBySignerAsync(
         List<Guid> signerIds,
         CancellationToken cancellationToken)
@@ -367,7 +400,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         var rows = await _context.MandateSignerTransitOffices
             .AsNoTracking()
             .Where(o => signerIds.Contains(o.MandateSignerId) && o.IsActive)
-            .Select(o => new { o.MandateSignerId, o.TransitOfficeId })
+            .Select(o => new { o.MandateSignerId, o.TransitOfficeId, o.SignsPhysically })
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -380,7 +413,8 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         Entities.Admin.MandateSigner signer,
         Dictionary<Guid, List<Guid>> companiesBySigner,
         Dictionary<Guid, List<Guid>> officesBySigner,
-        Dictionary<Guid, AdminIdentityVigencia.Resultado> vigenciaBySigner)
+        Dictionary<Guid, AdminIdentityVigencia.Resultado> vigenciaBySigner,
+        Dictionary<Guid, List<Guid>>? physicalBySigner = null)
     {
         var vigencia = vigenciaBySigner.GetValueOrDefault(
             signer.Id, new AdminIdentityVigencia.Resultado(AdminIdentityVigencia.None, null));
@@ -403,6 +437,7 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
             IsActive = signer.IsActive,
             CompanyTenantIds = companiesBySigner.GetValueOrDefault(signer.Id, []),
             TransitOfficeIds = officesBySigner.GetValueOrDefault(signer.Id, []),
+            PhysicalSignatureOfficeIds = physicalBySigner?.GetValueOrDefault(signer.Id, []) ?? [],
         };
     }
 
