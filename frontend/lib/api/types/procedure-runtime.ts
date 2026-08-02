@@ -1620,6 +1620,11 @@ export interface MandateSignerOption {
   identidadVigente: boolean;
   identidadHasta: string | null;
   firmaBaulVigente?: boolean;
+  /**
+   * Firma A MANO ante el organismo del trámite. Quien firma a mano no necesita ninguna de las dos vías
+   * anteriores: el documento le deja la línea y él la suscribe.
+   */
+  firmaFisica?: boolean;
 }
 
 /** Mandatarios disponibles y cuál está elegido. `editable` es falso fuera de borrador. */

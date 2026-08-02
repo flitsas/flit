@@ -19,7 +19,16 @@ public sealed record MandateSignerCandidate(
     // HU #11203 — hasta cuándo vale su identidad. El gestor elige quién firma al registrar el trámite y
     // necesita ver la vigencia ahí mismo: un mandatario cuya validación caduca antes de la aprobación
     // bloquearía el trámite justo al final.
-    DateTimeOffset? IdentityValidUntil = null);
+    DateTimeOffset? IdentityValidUntil = null,
+    /// <summary>
+    /// Firma A MANO ante el organismo consultado. Quien firma a mano NO necesita firma del baúl ni
+    /// validación de identidad: el documento le deja la línea y él la suscribe. Exigirle una de las dos
+    /// bloquearía un mandato que se firma en papel.
+    ///
+    /// <para>Es una propiedad del vínculo (mandatario × organismo), así que solo tiene sentido cuando la
+    /// consulta trae organismo: <c>GetByIdAsync</c> no lo sabe y devuelve <c>false</c>.</para>
+    /// </summary>
+    bool FirmaFisica = false);
 
 /// <summary>
 /// Puerto para consultar los mandatarios registrados por el OT para una compañía gestora (ADR-0036,

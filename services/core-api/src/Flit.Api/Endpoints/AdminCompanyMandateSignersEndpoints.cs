@@ -1,5 +1,8 @@
 using System.Security.Claims;
 using Flit.Admin.Application.Companies.MandateSigners;
+using Flit.Admin.Application.Identity;
+using Flit.Admin.Domain.Companies.MandateSigners;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
@@ -71,7 +74,91 @@ public static class AdminCompanyMandateSignersEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound);
 
+        // Identidad del mandatario desde el configurador de la COMPAÑÍA. Los mismos métodos existían
+        // solo bajo /transit-offices/... y ningún componente los llamaba: la empresa registra a su
+        // mandatario pero no tenía forma de pedirle la validación ni de vincular la que ya tuviera.
+        group.MapPost("/{mandateSignerId:guid}/identity/send", (
+                Guid tenantId, Guid mandateSignerId, HttpContext httpContext,
+                [FromServices] IMandateSignerReader reader,
+                [FromServices] ITransitOfficeOperationalStatusReader otStatus,
+                [FromServices] IAdminIdentityValidationService service,
+                CancellationToken ct) =>
+                IdentidadAsync(tenantId, mandateSignerId, httpContext, reader, otStatus, service, "send", ct))
+            .WithName("AdminCompanyMandateSignerIdentitySend")
+            .WithSummary("Inicia la validación de identidad del mandatario por correo");
+
+        group.MapPost("/{mandateSignerId:guid}/identity/resend", (
+                Guid tenantId, Guid mandateSignerId, HttpContext httpContext,
+                [FromServices] IMandateSignerReader reader,
+                [FromServices] ITransitOfficeOperationalStatusReader otStatus,
+                [FromServices] IAdminIdentityValidationService service,
+                CancellationToken ct) =>
+                IdentidadAsync(tenantId, mandateSignerId, httpContext, reader, otStatus, service, "resend", ct))
+            .WithName("AdminCompanyMandateSignerIdentityResend")
+            .WithSummary("Reenvía la validación de identidad del mandatario (respeta vigencia)");
+
+        group.MapPost("/{mandateSignerId:guid}/identity/link", (
+                Guid tenantId, Guid mandateSignerId, HttpContext httpContext,
+                [FromServices] IMandateSignerReader reader,
+                [FromServices] ITransitOfficeOperationalStatusReader otStatus,
+                [FromServices] IAdminIdentityValidationService service,
+                CancellationToken ct) =>
+                IdentidadAsync(tenantId, mandateSignerId, httpContext, reader, otStatus, service, "link", ct))
+            .WithName("AdminCompanyMandateSignerIdentityLink")
+            .WithSummary("Vincula al mandatario una validación de identidad ya vigente de esa persona");
+
         return app;
+    }
+
+    /// <summary>
+    /// Envía, reenvía o vincula la validación de identidad de un mandatario, comprobando primero que sea
+    /// de ESTA compañía.
+    ///
+    /// <para>El descriptor se arma contra el organismo PRIMARIO del mandatario, que es donde vive su
+    /// tenant de identidad. Reutiliza el resolutor de la ruta del organismo para no duplicar la
+    /// validación de alta del OT ni la exigencia de correo.</para>
+    /// </summary>
+    private static async Task<IResult> IdentidadAsync(
+        Guid tenantId,
+        Guid mandateSignerId,
+        HttpContext httpContext,
+        IMandateSignerReader reader,
+        ITransitOfficeOperationalStatusReader otStatus,
+        IAdminIdentityValidationService service,
+        string accion,
+        CancellationToken cancellationToken)
+    {
+        var propios = await reader.ListByCompanyAsync(tenantId, cancellationToken).ConfigureAwait(false);
+        var signer = propios.FirstOrDefault(s => s.Id == mandateSignerId);
+        if (signer is null)
+        {
+            return Results.NotFound(
+                new { error = $"No existe el mandatario {mandateSignerId} en esta compañía." });
+        }
+
+        var (descriptor, error) = await AdminMandateSignerIdentityEndpoints.BuildDescriptorAsync(
+                signer.TransitOfficeId, mandateSignerId, httpContext, reader, otStatus,
+                requireEmail: accion != "link", cancellationToken)
+            .ConfigureAwait(false);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        if (accion == "link")
+        {
+            var vinculada = await service.LinkExistingAsync(descriptor!, cancellationToken).ConfigureAwait(false);
+            return vinculada is null
+                // Nada que vincular: esa persona no tiene identidad aprobada y vigente en este tenant.
+                ? Results.Json(new { error = "sin_identidad_vigente" }, statusCode: StatusCodes.Status409Conflict)
+                : Results.Ok(new { estado = vinculada.Validation.Status, reutilizada = vinculada.Reused });
+        }
+
+        var resultado = accion == "resend"
+            ? await service.ResendAsync(descriptor!, cancellationToken).ConfigureAwait(false)
+            : await service.EnsureAsync(descriptor!, cancellationToken).ConfigureAwait(false);
+
+        return Results.Ok(new { estado = resultado.Validation.Status, reutilizada = resultado.Reused });
     }
 
     private static async Task<IResult> ListAsync(

@@ -100,10 +100,14 @@ export function MandatarioSection({
                 <span className="block text-[11px] opacity-70">
                   {o.tipoDocumento} {o.documento}
                 </span>
-                {/* Son dos vías ALTERNATIVAS, no requisitos acumulativos: con cualquiera de las dos
-                    el mandato se firma. Antes solo se nombraba la identidad, así que un mandatario con
-                    su firma del baúl vigente se anunciaba como si le faltara algo. */}
-                {o.firmaBaulVigente ? (
+                {/* Tres vías ALTERNATIVAS, no requisitos acumulativos. Quien firma a mano no necesita
+                    ninguna de las otras dos: el documento le deja la línea. Antes solo se nombraba la
+                    identidad, así que quien podía firmar por otra vía se anunciaba como incompleto. */}
+                {o.firmaFisica ? (
+                  <span className="block text-[11px]" style={{ color: '#5B8A1F' }}>
+                    Firma de forma física
+                  </span>
+                ) : o.firmaBaulVigente ? (
                   <span className="block text-[11px]" style={{ color: '#5B8A1F' }}>
                     Firma del baúl vigente
                   </span>

@@ -78,9 +78,14 @@ public sealed class MandatoApprovalHandler(
 
         // El gate miraba SOLO la identidad, así que bloqueaba con "mandatario_identidad_requerida" a un
         // mandatario que tenía su firma del baúl vigente y podía firmar perfectamente. Son alternativas,
-        // no requisitos acumulativos: basta cualquiera de las dos.
+        // no requisitos acumulativos: basta cualquiera de las tres.
+        //
+        // Y quien firma A MANO ante ese organismo no necesita ninguna: el documento le deja la línea y
+        // él la suscribe en papel. Exigirle firma del baúl o identidad bloquearía un mandato que se
+        // firma justamente porque no las tiene.
         var puedeFirmar = resolution.Status == MandateSignerResolutionStatus.Resolved
-            && (resolution.Signer!.IdentityVigente
+            && (resolution.Signer!.FirmaFisica
+                || resolution.Signer.IdentityVigente
                 || await TieneFirmaDelBaulAsync(instance.TenantId, resolution.Signer, ct).ConfigureAwait(false));
 
         return resolution.Status switch

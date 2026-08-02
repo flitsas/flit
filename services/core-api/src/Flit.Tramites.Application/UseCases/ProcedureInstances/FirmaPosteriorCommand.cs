@@ -176,7 +176,9 @@ public sealed class MarcarFirmaPosteriorHandler(
                 // No firma como representante legal de una parte: firma el mandato por la gestora.
                 EsRepresentanteLegal: false);
 
-            return (null, sujetoMandatario, signer.IdentityVigente, null);
+            // Quien firma A MANO no tiene nada que esperar: el documento le deja la línea y la suscribe
+            // en papel. Ofrecerle diferir la firma sería ofrecerle aplazar algo que no depende de nadie.
+            return (null, sujetoMandatario, signer.IdentityVigente || signer.FirmaFisica, null);
         }
 
         var actor = instance.Actors.FirstOrDefault(a =>

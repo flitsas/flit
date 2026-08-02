@@ -19,7 +19,12 @@ public sealed record MandateSignerOptionDto(
     string Documento,
     bool IdentidadVigente,
     DateTimeOffset? IdentidadHasta,
-    bool FirmaBaulVigente = false);
+    bool FirmaBaulVigente = false,
+    /// <summary>
+    /// Firma A MANO ante el organismo del trámite. Quien firma a mano no necesita ninguna de las dos
+    /// vías anteriores: el documento le deja la línea.
+    /// </summary>
+    bool FirmaFisica = false);
 
 /// <summary>
 /// Mandatarios disponibles para el trámite y cuál está elegido. <see cref="Editable"/> es falso fuera
@@ -71,13 +76,16 @@ public sealed class ListMandateSignerOptionsHandler(
         foreach (var c in candidatos)
         {
             var tipoDoc = string.IsNullOrWhiteSpace(c.TipoDocumento) ? "CC" : c.TipoDocumento.Trim();
-            var conBaul = !string.IsNullOrWhiteSpace(c.Documento)
+            // Quien firma a mano no necesita el baúl: ni se consulta.
+            var conBaul = !c.FirmaFisica
+                && !string.IsNullOrWhiteSpace(c.Documento)
                 && await _vaultPolicy
                     .ResolveAsync(tenantId, tipoDoc, c.Documento.Trim(), ct)
                     .ConfigureAwait(false) is not null;
 
             opciones.Add(new MandateSignerOptionDto(
-                c.Id, c.Nombre, tipoDoc, c.Documento, c.IdentityVigente, c.IdentityValidUntil, conBaul));
+                c.Id, c.Nombre, tipoDoc, c.Documento, c.IdentityVigente, c.IdentityValidUntil, conBaul,
+                c.FirmaFisica));
         }
 
         // AC3 — con un único mandatario habilitado no hay nada que decidir: queda elegido.

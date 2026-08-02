@@ -68,6 +68,22 @@ public sealed class MandatoApprovalFirmaBaulTests
     }
 
     [Fact]
+    public async Task QuienFirmaAMano_NoNecesitaNiBaulNiIdentidad()
+    {
+        // El documento le deja la línea y él la suscribe en papel. Exigirle una de las dos vías
+        // bloquearía un mandato que se firma justamente porque no las tiene.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Seed(identidadVigente: false, firmaFisica: true);
+
+        var decision = await Handler().CheckAsync(id, Tenant, null, null, ct);
+
+        decision.Outcome.Should().Be(MandatoApprovalOutcome.Resolved);
+        // Ni siquiera se consulta el baúl: la marca de firma física ya resuelve.
+        await _vault.DidNotReceive().ResolveAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task LaFirmaDelMandatarioSeBuscaEnElTenantDeLaGestora_NoEnElDelOrganismo()
     {
         // Misma convención que el generador del mandato (HU #11030). Resolverla contra el organismo la
@@ -92,7 +108,7 @@ public sealed class MandatoApprovalFirmaBaulTests
                 new DateOnly(2026, 1, 1), new DateOnly(2027, 1, 1), "70111222"));
 
     /// <summary>Trámite con mandato ya generado (que es lo que hace exigible al firmante) y un mandatario.</summary>
-    private Guid Seed(bool identidadVigente)
+    private Guid Seed(bool identidadVigente, bool firmaFisica = false)
     {
         var id = Guid.NewGuid();
         var instance = new ProcedureInstance
@@ -123,7 +139,7 @@ public sealed class MandatoApprovalFirmaBaulTests
             [
                 new MandateSignerCandidate(
                     SignerId, "Carlos Ruiz", "70111222", null, identidadVigente,
-                    SignatureVaultId: null, TipoDocumento: "CC"),
+                    SignatureVaultId: null, TipoDocumento: "CC", FirmaFisica: firmaFisica),
             ]);
         return id;
     }

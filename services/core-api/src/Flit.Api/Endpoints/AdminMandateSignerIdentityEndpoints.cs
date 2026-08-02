@@ -167,7 +167,7 @@ public static class AdminMandateSignerIdentityEndpoints
     /// distingue las acciones que mandan correo (send/resend) de las que no (link/mock): vincular una
     /// identidad ya validada no necesita buzón.
     /// </summary>
-    private static async Task<(AdminIdentitySubjectDescriptor? Descriptor, IResult? Error)> BuildDescriptorAsync(
+    internal static async Task<(AdminIdentitySubjectDescriptor? Descriptor, IResult? Error)> BuildDescriptorAsync(
         Guid transitOfficeId,
         Guid id,
         HttpContext httpContext,

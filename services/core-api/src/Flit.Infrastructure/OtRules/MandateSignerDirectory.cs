@@ -58,12 +58,21 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
         var vigentes = await LoadVigentIdentitiesAsync(
             signers.Select(s => s.Id).ToList(), cancellationToken).ConfigureAwait(false);
 
+        // Quién firma a mano ANTE ESTE organismo: es una propiedad del vínculo, no de la persona.
+        var fisicos = await _context.MandateSignerTransitOffices.AsNoTracking()
+            .Where(o => o.TransitOfficeId == transitOfficeId && o.IsActive && o.SignsPhysically)
+            .Select(o => o.MandateSignerId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var firmanAMano = fisicos.ToHashSet();
+
         return
         [
             .. signers.Select(s => new MandateSignerCandidate(
                 s.Id, s.FullName, s.DocumentNumber, s.UserId, vigentes.ContainsKey(s.Id),
                 s.SignatureVaultId, s.DocumentType, vigentes.GetValueOrDefault(s.Id)?.Certificado,
-                vigentes.GetValueOrDefault(s.Id)?.ValidUntil)),
+                vigentes.GetValueOrDefault(s.Id)?.ValidUntil,
+                firmanAMano.Contains(s.Id))),
         ];
     }
 
