@@ -6,11 +6,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 
-// Resumen consolidado de la matrícula (paso FUR): muestra el estado final de un
-// vistazo (placa, vehículo, comprador, identidad, documentos, organismo) sin
-// tener que entrar a cada pestaña del expediente. El detalle por pestañas sigue
-// debajo (ExpedienteVisor). Adaptado del MatriculaResumen de Johan a la capa de
-// datos de FLIT (InstanceStatus + field_values + actors).
+// Feature #11211 — resumen hero compacto (summary-first). El detalle técnico vive en ExpedienteVisor.
 
 interface Props {
   /** Modalidad del trámite: ajusta el título del resumen (matrícula vs traspaso). */
@@ -35,44 +31,16 @@ interface Props {
   soat?: { estado?: string | null; vencimiento?: string | null };
 }
 
-// N 03 — labels/tonos desde la fuente única lib/tramites/estados.ts (6 estados de negocio).
-
-/**
- * Qué se dice de la identidad en el resumen. Si alguna parte firma desde el baúl se nombra ese
- * mecanismo: no hubo validación biométrica que «verificar». Con las dos vías conviviendo (una parte
- * por baúl y otra por biometría) se nombran ambas, porque el resumen es de todo el trámite.
- */
-function identidadLabel(aprobada: boolean, firmaBaulPartes: string[]): string {
-  if (firmaBaulPartes.length === 0) return aprobada ? 'Verificada' : 'Pendiente';
-  return aprobada ? 'Firma del baúl y verificada' : 'Firma del baúl';
-}
-
-function Field({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wide opacity-60">{label}</p>
-      <p className="text-sm">{value || '—'}</p>
-    </div>
-  );
-}
-
 export default function MatriculaResumen({
   modalidad,
   status,
   placa,
   vehiculo,
-  vin,
-  vendedor,
   comprador,
-  archivosCount,
-  identidadAprobada,
-  firmaBaulPartes = [],
-  orgTransito,
+  vendedor,
   soat,
 }: Props) {
   const tone = estadoChipStyle(status).color;
-  const orgTxt = [orgTransito?.nombre, orgTransito?.ciudad].filter(Boolean).join(' · ');
-  // SOAT (ruta de placa): el field soat_estado se registra en 'asignado' (RUNT o PDF, HU #10611).
   const soatEstado = (soat?.estado ?? '').toLowerCase();
   const soatLabel =
     soatEstado === 'vigente'
@@ -84,15 +52,11 @@ export default function MatriculaResumen({
           : '—';
   const soatColor =
     soatEstado === 'vigente' ? '#15803d' : soatEstado === 'vencido' ? '#c2410c' : undefined;
-  // Traspaso y matrícula son procesos distintos: el resumen se rotula acorde.
-  const resumenTitulo =
-    modalidad === 'traspaso' ? 'Resumen del traspaso' : 'Resumen de la matrícula';
+  const resumenTitulo = 'Resumen del trámite';
+  const partesTxt = [vendedor?.nombre, comprador?.nombre].filter(Boolean).join(' · ');
 
   return (
-    <section
-      aria-label={resumenTitulo}
-      className="rounded-xl border p-4"
-    >
+    <section aria-label={resumenTitulo} className="rounded-xl border p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="h-5 w-1.5 rounded-full" style={{ background: tone }} aria-hidden="true" />
@@ -107,7 +71,7 @@ export default function MatriculaResumen({
       </div>
 
       {placa && (
-        <div className="mb-3 flex items-center gap-3">
+        <div className="mb-2 flex flex-wrap items-center gap-3">
           <span className="font-mono text-2xl font-bold tracking-widest" style={{ color: tone }}>
             {placa}
           </span>
@@ -121,30 +85,21 @@ export default function MatriculaResumen({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
-        <Field label="Vehículo" value={vehiculo} />
-        <Field label="VIN" value={vin} />
-        {vendedor && (
-          <>
-            <Field label="Vendedor" value={vendedor.nombre} />
-            <Field
-              label="Documento vendedor"
-              value={vendedor.documento ? `${vendedor.tipoDoc || 'CC'} ${vendedor.documento}` : null}
-            />
-          </>
-        )}
-        <Field label="Comprador" value={comprador?.nombre} />
-        <Field
-          label={vendedor ? 'Documento comprador' : 'Documento'}
-          value={comprador?.documento ? `${comprador?.tipoDoc || 'CC'} ${comprador.documento}` : null}
-        />
-        <Field label="Identidad" value={identidadLabel(identidadAprobada, firmaBaulPartes)} />
-        <Field label="Documentos" value={`${archivosCount} cargado${archivosCount === 1 ? '' : 's'}`} />
-        <Field label="Organismo de tránsito" value={orgTxt} />
-      </div>
+      {vehiculo ? (
+        <p className="text-sm font-medium" style={{ color: '#162744' }}>
+          {vehiculo}
+        </p>
+      ) : null}
+
+      {partesTxt ? (
+        <p className="mt-1 text-xs opacity-70">
+          {modalidad === 'traspaso' ? 'Partes: ' : 'Comprador: '}
+          {partesTxt}
+        </p>
+      ) : null}
 
       <p className="mt-3 text-[11px] opacity-60">
-        El detalle completo (documentos, identidad, FUR) está en el expediente, abajo.
+        Revisa el expediente digital abajo para el detalle completo.
       </p>
     </section>
   );

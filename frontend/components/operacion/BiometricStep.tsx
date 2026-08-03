@@ -31,7 +31,7 @@ interface Props {
   /**
    * Oculta el párrafo introductorio cuando el contenedor ya describe el paso
    * (paso `identidad`: el h2 + subtítulo del wizard lo cubren). En `fur` NO se
-   * oculta: ahí la biométrica es una subsección dentro de "Generar FUR".
+   * oculta: ahí la biométrica es una subsección dentro de "Resumen del trámite".
    */
   hideIntro?: boolean;
   /**
@@ -176,6 +176,26 @@ export function BiometricStep({
   //    vacío = acción de iniciar; lleno = verificado/en proceso/rechazado).
   const initialLoading = instanceId != null && validations === null && error === null;
 
+  // Feature #11211 — ocultar "Actualizar" global cuando todas las partes están resueltas
+  // (baúl) o no queda biométrica pendiente de aprobación.
+  const todasCoveredByVault =
+    partes.length > 0 &&
+    partes.every(
+      (p) => firmaBaulServidor.includes(p) || vaultCoveredPartes.includes(p),
+    );
+  const algunaPendienteBiometria = partes.some((p) => {
+    if (firmaBaulServidor.includes(p) || vaultCoveredPartes.includes(p)) return false;
+    const matches = (validations ?? []).filter((v) =>
+      modalidad === 'traspaso'
+        ? v.partyRole === p
+        : v.partyRole === null || v.partyRole === 'comprador',
+    );
+    const validation = matches.length > 0 ? matches[matches.length - 1] : null;
+    return !validation || validation.status !== 'aprobado';
+  });
+  const showRefreshHeader =
+    !readOnly && !todasCoveredByVault && (validations === null || algunaPendienteBiometria);
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -187,7 +207,7 @@ export function BiometricStep({
             por correo; el resultado se actualiza automáticamente.
           </p>
         )}
-        {!readOnly && (
+        {showRefreshHeader && (
           <button
             type="button"
             onClick={() => void handleRefresh()}

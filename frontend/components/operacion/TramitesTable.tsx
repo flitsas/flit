@@ -163,7 +163,7 @@ const STEP_LABELS: Record<WizardModalidad, string[]> = {
     'Documentos',
     'Comprador',
     'Identidad',
-    'Generar FUR',
+    'Resumen del trámite',
   ],
   traspaso: [
     'Consulta del vehículo',
@@ -171,7 +171,7 @@ const STEP_LABELS: Record<WizardModalidad, string[]> = {
     'Vendedor',
     'Comprador',
     'Datos comerciales',
-    'Generar FUR',
+    'Resumen del trámite',
   ],
 };
 

@@ -46,7 +46,9 @@ public sealed class TipologiaMatrizCatalogTests
     {
         var paso6 = TipologiaMatrizCatalog.GetPasoTipologia(TramiteTipologiaCatalog.CodigoTraspasoStandard, 6);
         paso6.Should().NotBeNull();
-        paso6!.Titulo.Should().Contain("FUR");
+        paso6!.Titulo.Should().Contain("Resumen");
+        TipologiaMatrizCatalog.GetPasoTipologia(TramiteTipologiaCatalog.CodigoMatriculaInicial, 5)!
+            .Titulo.Should().Be("Resumen del trámite");
 
         TipologiaMatrizCatalog.GetPasoTipologia(TramiteTipologiaCatalog.CodigoMatriculaInicial, 6)
             .Should().BeNull(); // matrícula solo tiene 5 pasos
