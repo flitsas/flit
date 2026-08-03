@@ -15,13 +15,16 @@ import { CompanyListTable } from "@/components/admin/companies/CompanyListTable"
 import { CompanyStatusDialog } from "@/components/admin/companies/CompanyStatusDialog";
 import { CreateCompanyDialog } from "@/components/admin/companies/CreateCompanyDialog";
 import { EditCompanyDialog } from "@/components/admin/companies/EditCompanyDialog";
+import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { createCompany, fetchCompaniesIndex, updateCompany } from "@/lib/api/admin-companies";
 import type { CompanyListItem, CompanyPagedResult } from "@/lib/api/types";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const PAGE_SIZE = 20;
 
 // Consola admin — listado de compañías (HU #10194, AC1/AC7) + alta de compañías
 // (#10118). Filtrado y paginación server-side; 4 estados UI vía UiStateBoundary.
+// HU #11227: SuperAdmin puede incluir OT con toggle. HU #11228: AdminCompany redirige a su ficha.
 export default function AdminCompaniesPage() {
   return (
     <ToastProvider>
@@ -33,20 +36,39 @@ export default function AdminCompaniesPage() {
 function CompaniesList() {
   const router = useRouter();
   const { show } = useToast();
+  const { isSuperAdmin, isAdminCompany, tenantId } = usePermissions();
   const [filters, setFilters] = useState<CompanyFilters>({});
   const [page, setPage] = useState(1);
+  // HU #11227 — solo SuperAdmin; desactivado = excluir OT (default).
+  const [includeTransitOffices, setIncludeTransitOffices] = useState(false);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [result, setResult] = useState<CompanyPagedResult | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CompanyListItem | null>(null);
   const [toggleTarget, setToggleTarget] = useState<CompanyListItem | null>(null);
 
+  // HU #11228 — AdminCompany no ve el listado multi-compañía: va al configurador de su tenant.
+  useEffect(() => {
+    if (isAdminCompany && !isSuperAdmin && tenantId) {
+      router.replace(`/admin/companies/${tenantId}`);
+    }
+  }, [isAdminCompany, isSuperAdmin, tenantId, router]);
+
   const load = useCallback(
     async (signal?: AbortSignal) => {
+      if (isAdminCompany && !isSuperAdmin) {
+        return;
+      }
       setStatus("loading");
       try {
         const data = await fetchCompaniesIndex(
-          { ...filters, page, pageSize: PAGE_SIZE, excludeTransitOffices: true },
+          {
+            ...filters,
+            page,
+            pageSize: PAGE_SIZE,
+            // SuperAdmin: toggle; cualquier otro caso (defensa) excluye OT.
+            excludeTransitOffices: isSuperAdmin ? !includeTransitOffices : true,
+          },
           signal,
         );
         if (signal?.aborted) {
@@ -60,7 +82,7 @@ function CompaniesList() {
         }
       }
     },
-    [filters, page],
+    [filters, page, includeTransitOffices, isSuperAdmin, isAdminCompany],
   );
 
   useEffect(() => {
@@ -129,6 +151,19 @@ function CompaniesList() {
         />
         <CreateButton label="Crear compañía" icon={Building2} onClick={() => setCreateOpen(true)} />
       </div>
+
+      {isSuperAdmin && (
+        <ToggleSwitch
+          id="include-transit-offices"
+          label="Incluir organismos de tránsito"
+          description="Solo SuperAdmin. Desactivado = solo compañías B2B."
+          checked={includeTransitOffices}
+          onChange={(next) => {
+            setIncludeTransitOffices(next);
+            setPage(1);
+          }}
+        />
+      )}
 
       <CompanyFiltersPanel onApply={handleApplyFilters} initialValue={filters} />
 
