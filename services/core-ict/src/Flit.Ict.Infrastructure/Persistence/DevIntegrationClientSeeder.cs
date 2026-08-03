@@ -49,11 +49,16 @@ public sealed partial class DevIntegrationClientSeeder(
             }
 
             var hash = hasher.Hash(DevPassword);
+            // El árbitro del ON CONFLICT DEBE ser el índice único FUNCIONAL sobre lower(username)
+            // (uq_integration_clients_username_lower). Tras quitar la dependencia de citext ya NO existe un
+            // índice plano sobre la columna username, así que "ON CONFLICT (username)" fallaría con 42P10
+            // ("no hay restricción única que coincida"), reventando este IHostedService en el arranque y
+            // dejando core-ict en crash-loop (502 en todo /api/v1/ict/*). DevUsername ya va en minúsculas.
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO ict.integration_clients (tenant_id, username, password_hash, scopes, is_active)
                 VALUES ({tenantId.Value}, {DevUsername}, {hash},
                         '["ict.transactions.write","ict.status.read"]'::jsonb, true)
-                ON CONFLICT (username) DO NOTHING
+                ON CONFLICT ((lower(username))) DO NOTHING
                 """, cancellationToken);
             Log.Seeded(logger, DevUsername);
         }
