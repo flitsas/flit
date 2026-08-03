@@ -21,33 +21,37 @@ export function ProcedureDocsPreviewInformativo({
   transitOfficeId?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<DocumentoInformativoPreviewItem[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // El resultado se guarda junto a la llave que lo produjo: así `loading` se deriva del render
+  // (llave pedida != llave cargada) y no hace falta un setState síncrono dentro del efecto.
+  const [result, setResult] = useState<{
+    key: string;
+    items: DocumentoInformativoPreviewItem[] | null;
+    error: string | null;
+  } | null>(null);
+
+  const key = `${modalidad}|${transitOfficeId ?? ''}`;
+  const loaded = result?.key === key ? result : null;
+  const loading = open && loaded === null;
+  const items = loaded?.items ?? null;
+  const error = loaded?.error ?? null;
 
   useEffect(() => {
     if (!open) return;
     let active = true;
-    setLoading(true);
-    setError(null);
     void tramitesClient
       .fetchDocumentRequirementsPreview(modalidad, transitOfficeId)
       .then((list) => {
-        if (active) setItems(list);
+        if (active) setResult({ key, items: list, error: null });
       })
       .catch(() => {
         if (active) {
-          setItems(null);
-          setError('No se pudo cargar la lista de documentos.');
+          setResult({ key, items: null, error: 'No se pudo cargar la lista de documentos.' });
         }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [open, modalidad, transitOfficeId]);
+  }, [open, key, modalidad, transitOfficeId]);
 
   return (
     <>

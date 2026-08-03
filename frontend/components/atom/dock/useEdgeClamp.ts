@@ -10,10 +10,7 @@ export function useEdgeClamp<T extends HTMLElement>(open: string | null) {
   const [shift, setShift] = useState(0);
 
   useLayoutEffect(() => {
-    if (!open) {
-      setShift(0);
-      return;
-    }
+    if (!open) return;
     const el = ref.current;
     const anchor = el?.offsetParent as HTMLElement | null;
     if (!el || !anchor) return;
@@ -28,5 +25,7 @@ export function useEdgeClamp<T extends HTMLElement>(open: string | null) {
     return () => window.removeEventListener("resize", compute);
   }, [open]);
 
-  return { ref, shift };
+  // Con el panel cerrado el desplazamiento no aplica: se deriva en el render en vez de
+  // resetearlo con un setState dentro del efecto.
+  return { ref, shift: open ? shift : 0 };
 }

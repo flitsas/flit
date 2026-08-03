@@ -35,10 +35,18 @@ export const DOCK_GROUP_LABEL: Record<DockGroupId, string> = {
   ayuda: "Ayuda",
 };
 
-export const DOCK_GROUP_ICON: Record<
-  DockGroupId,
-  ComponentType<{ className?: string; style?: CSSProperties; strokeWidth?: number; "aria-hidden"?: boolean }>
-> = {
+/**
+ * Firma mínima de los iconos del dock (lucide-react). `aria-hidden` admite también la forma
+ * string porque así se escribe en JSX (`aria-hidden="true"`).
+ */
+export type DockIconComponent = ComponentType<{
+  className?: string;
+  style?: CSSProperties;
+  strokeWidth?: number;
+  "aria-hidden"?: boolean | "true" | "false";
+}>;
+
+export const DOCK_GROUP_ICON: Record<DockGroupId, DockIconComponent> = {
   operacion: LayoutGrid,
   reportes: BarChart3,
   usuarios: Users,
@@ -73,7 +81,7 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
 export type DockEntryLike = {
   key: string;
   label: string;
-  icon: ComponentType<{ className?: string; style?: CSSProperties; strokeWidth?: number; "aria-hidden"?: boolean }>;
+  icon: DockIconComponent;
   active: boolean;
   onClick: () => void;
 };
