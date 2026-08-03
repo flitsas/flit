@@ -10,9 +10,10 @@ namespace Flit.Ict.Infrastructure.Jobs;
 public sealed class BusinessValidationJob(
     IServiceScopeFactory scopeFactory,
     IOptions<IctJobOptions> options,
-    ILogger<BusinessValidationJob> logger) : IctPollingJob(scopeFactory, options, logger)
+    IIctJobSettingsProvider settings,
+    ILogger<BusinessValidationJob> logger) : IctPollingJob(scopeFactory, options, settings, logger)
 {
-    protected override TimeSpan PollInterval => TimeSpan.FromSeconds(Options.BusinessPollSeconds);
+    protected override TimeSpan PollInterval => TimeSpan.FromSeconds(JobSettings.BusinessPollSeconds);
 
     protected override string JobName => "business-validation";
 
@@ -30,9 +31,10 @@ public sealed class BusinessValidationJob(
 public sealed class ExternalValidationJob(
     IServiceScopeFactory scopeFactory,
     IOptions<IctJobOptions> options,
-    ILogger<ExternalValidationJob> logger) : IctPollingJob(scopeFactory, options, logger)
+    IIctJobSettingsProvider settings,
+    ILogger<ExternalValidationJob> logger) : IctPollingJob(scopeFactory, options, settings, logger)
 {
-    protected override TimeSpan PollInterval => TimeSpan.FromSeconds(Options.ExternalPollSeconds);
+    protected override TimeSpan PollInterval => TimeSpan.FromSeconds(JobSettings.ExternalPollSeconds);
 
     protected override string JobName => "external-validation";
 

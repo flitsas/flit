@@ -7,7 +7,9 @@
 -- =============================================================================
 
 CREATE SCHEMA IF NOT EXISTS ict;
-CREATE EXTENSION IF NOT EXISTS citext;
+-- NOTA: NO se usa la extensión citext. En PDN el rol de la app no puede CREATE EXTENSION, y era la ÚNICA
+-- dependencia de esa extensión en el monorepo. La case-insensitivity del username del login se resuelve
+-- normalizando a minúsculas en la app (igual que core-api con emails) + un índice único sobre lower(username).
 
 -- Trigger local de row_version (core-ict no depende del trg_row_version de core-api).
 CREATE OR REPLACE FUNCTION ict.set_row_version() RETURNS trigger AS $$
@@ -25,7 +27,7 @@ $$ LANGUAGE plpgsql;
 CREATE TABLE IF NOT EXISTS ict.integration_clients (
     id                     uuid NOT NULL DEFAULT uuidv7(),
     tenant_id              uuid NOT NULL,
-    username               citext NOT NULL,
+    username               varchar(50) NOT NULL,
     password_hash          varchar(255) NOT NULL,
     previous_password_hash varchar(255),
     password_changed_at    timestamptz,
@@ -46,8 +48,23 @@ CREATE TABLE IF NOT EXISTS ict.integration_clients (
     CONSTRAINT fk_integration_clients_tenant FOREIGN KEY (tenant_id)
         REFERENCES identity.tenants (id) ON DELETE RESTRICT ON UPDATE CASCADE
 );
-CREATE UNIQUE INDEX IF NOT EXISTS uq_integration_clients_username
-    ON ict.integration_clients (username);
+-- Migración a varchar sin citext (idempotente): si una BD anterior dejó la columna como citext, se
+-- convierte a varchar (la extensión deja de ser necesaria). La unicidad case-insensitive se preserva con
+-- un índice funcional sobre lower(username); la app además guarda el username ya en minúsculas.
+DO $migrate_username$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'ict' AND table_name = 'integration_clients'
+          AND column_name = 'username' AND udt_name = 'citext'
+    ) THEN
+        ALTER TABLE ict.integration_clients ALTER COLUMN username TYPE varchar(50);
+    END IF;
+END
+$migrate_username$;
+DROP INDEX IF EXISTS ict.uq_integration_clients_username;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_integration_clients_username_lower
+    ON ict.integration_clients (lower(username));
 COMMENT ON COLUMN ict.integration_clients.password_hash IS '@pii:high';
 CREATE OR REPLACE TRIGGER tr_integration_clients_row_version
     BEFORE UPDATE ON ict.integration_clients
@@ -155,6 +172,28 @@ CREATE POLICY tenant_isolation ON ict.external_integration_master
 CREATE OR REPLACE TRIGGER tr_eim_row_version
     BEFORE UPDATE ON ict.external_integration_master
     FOR EACH ROW EXECUTE FUNCTION ict.set_row_version();
+
+-- -----------------------------------------------------------------------------
+-- transaction_number — identificador NUMÉRICO secuencial del trámite, asignado por FLIT (paridad v1).
+-- En v1 el TransactionFlit que se devolvía al cliente era la PK numérica autoincremental del master.
+-- En v2 la PK es id uuid (de ella cuelgan las FKs, la RLS y la correlación gRPC external_ref con
+-- core-api), así que el número se agrega como columna APARTE: es la llave pública que /register devuelve
+-- y por la que el cliente consulta estado/reproceso (además del manager_id_transaction propio del gestor).
+-- Idempotente: ADD COLUMN IF NOT EXISTS + backfill único de filas previas a esta columna.
+-- -----------------------------------------------------------------------------
+CREATE SEQUENCE IF NOT EXISTS ict.transaction_number_seq AS bigint START WITH 1 INCREMENT BY 1;
+ALTER TABLE ict.external_integration_master
+    ADD COLUMN IF NOT EXISTS transaction_number bigint;
+ALTER TABLE ict.external_integration_master
+    ALTER COLUMN transaction_number SET DEFAULT nextval('ict.transaction_number_seq');
+UPDATE ict.external_integration_master
+    SET transaction_number = nextval('ict.transaction_number_seq')
+    WHERE transaction_number IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_eim_transaction_number
+    ON ict.external_integration_master (transaction_number)
+    WHERE deleted_at IS NULL;
+COMMENT ON COLUMN ict.external_integration_master.transaction_number
+    IS 'Identificador numérico secuencial del trámite asignado por FLIT (llave pública, paridad v1). La PK sigue siendo id uuid.';
 
 -- -----------------------------------------------------------------------------
 -- ict.external_integration_actors — actores del pre-trámite. RLS por tenant_id.

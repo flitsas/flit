@@ -30,11 +30,14 @@ public sealed record StatusProcessV1Response(
     string StatusMessage,
     IReadOnlyList<StatusProcessV1Item> StatusProcess);
 
-/// <summary>Consulta del estado de un trámite en la forma v1, por su manager_id_transaction (TransactionFlit).</summary>
+/// <summary>
+/// Consulta del estado de un trámite en la forma v1, por su referencia pública: el número secuencial
+/// (transaction_number, paridad v1) o el manager_id_transaction propio del gestor.
+/// </summary>
 public interface IStatusProcessV1Query
 {
     Task<StatusProcessV1Response?> GetByManagerIdTransactionAsync(
-        string managerIdTransaction,
+        string reference,
         Guid tenantId,
         CancellationToken ct = default);
 }

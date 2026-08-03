@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, X, Users, Shield, Ban, Clock, ShieldOff, Landmark, ArrowRight, Pencil, Trash2, RotateCcw, MailX } from "lucide-react";
+import { Search, X, Users, Shield, Ban, Clock, ShieldOff, Landmark, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound } from "lucide-react";
 import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, TenantUser, TenantRole } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
 import { EditUserModal } from "./users/EditUserModal";
@@ -16,6 +16,8 @@ import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import { fetchTransitOfficeTenants, type TransitOfficeTenantItem } from "@/lib/api/admin-transit-office-tenants";
 import type { CompanyListItem } from "@/lib/api/types";
 import { usePermissions } from "@/hooks/usePermissions";
+import { ICT_CLIENTS_MANAGE_PERMISSION } from "@/lib/auth/jwt";
+import { IctClientsPanel } from "./users/IctClientsPanel";
 import {
   SuspendOrDeactivateModal,
   type SuspendMode,
@@ -26,6 +28,7 @@ import {
 const ALL_TABS = [
   { id: "usuarios", label: "Usuarios", icon: Users },
   { id: "roles", label: "Roles y permisos", icon: Shield },
+  { id: "clientes-ict", label: "Clientes ICT", icon: KeyRound },
   { id: "eliminados", label: "Eliminados", icon: Trash2 },
 ] as const;
 
@@ -61,7 +64,9 @@ function formatDateTime(iso: string | null | undefined): string {
 }
 
 export function Usuarios() {
-  const { isSuperAdmin, userId: currentUserId } = usePermissions();
+  const { isSuperAdmin, userId: currentUserId, permissions, tenantId } = usePermissions();
+  // Clientes ICT: SuperAdmin (bypass por rol) o quien tenga el permiso ict.clients.manage.
+  const canManageIctClients = isSuperAdmin || permissions.includes(ICT_CLIENTS_MANAGE_PERMISSION);
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("usuarios");
   const [users, setUsers] = useState<TenantUser[]>([]);
@@ -80,8 +85,12 @@ export function Usuarios() {
   // HU #10628 — objetivo del diálogo de confirmación "Cancelar invitación" (filas "Pendiente").
   const [cancelTarget, setCancelTarget] = useState<TenantUser | null>(null);
 
-  // AC4 (HU #10623): "Eliminados" es exclusivo de SuperAdmin.
-  const tabs = isSuperAdmin ? ALL_TABS : ALL_TABS.filter((t) => t.id !== "eliminados");
+  // AC4 (HU #10623): "Eliminados" es exclusivo de SuperAdmin. "Clientes ICT" requiere ict.clients.manage.
+  const tabs = ALL_TABS.filter(
+    (t) =>
+      (t.id !== "eliminados" || isSuperAdmin) &&
+      (t.id !== "clientes-ict" || canManageIctClients),
+  );
 
   async function loadUsers() {
     setLoading(true);
@@ -385,6 +394,12 @@ export function Usuarios() {
             )}
           </div>
         </>
+      )}
+
+      {tab === "clientes-ict" && canManageIctClients && (
+        // Clientes de integración ICT (ronda 2, Feature #10888): CRUD de las credenciales que usan los
+        // gestores para registrar pre-trámites. SuperAdmin administra cualquier compañía; el resto la suya.
+        <IctClientsPanel isSuperAdmin={isSuperAdmin} tenantId={tenantId} />
       )}
 
       {tab === "eliminados" && isSuperAdmin && (

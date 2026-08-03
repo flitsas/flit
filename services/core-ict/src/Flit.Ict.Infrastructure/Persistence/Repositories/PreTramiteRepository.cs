@@ -1,3 +1,4 @@
+using System.Globalization;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -45,15 +46,38 @@ public sealed class PreTramiteRepository(IctDbContext db) : IPreTramiteRepositor
             ct);
 
     public Task<ExternalIntegrationMaster?> FindByManagerIdTransactionAsync(
-        string managerIdTransaction,
+        string reference,
         Guid tenantId,
-        CancellationToken ct = default) =>
-        InTenantTransactionAsync(
+        CancellationToken ct = default)
+    {
+        // La referencia pública puede ser el número secuencial que devuelve /register (transaction_number,
+        // paridad v1) o el manager_id_transaction propio del gestor. Se prioriza el número (llave asignada
+        // por FLIT): si la referencia es numérica y hay match por número, se usa ese; si no, se cae al
+        // manager_id_transaction. Determinístico y sin ambigüedad de colisión número↔ref.
+        var number = long.TryParse(reference, NumberStyles.None, CultureInfo.InvariantCulture, out var n)
+            ? n
+            : (long?)null;
+        return InTenantTransactionAsync(
             tenantId,
-            () => db.Masters
-                .Include(m => m.Actors)
-                .FirstOrDefaultAsync(m => m.ManagerIdTransaction == managerIdTransaction && m.DeletedAt == null, ct),
+            async () =>
+            {
+                if (number is not null)
+                {
+                    var byNumber = await db.Masters
+                        .Include(m => m.Actors)
+                        .FirstOrDefaultAsync(m => m.TransactionNumber == number && m.DeletedAt == null, ct);
+                    if (byNumber is not null)
+                    {
+                        return byNumber;
+                    }
+                }
+
+                return await db.Masters
+                    .Include(m => m.Actors)
+                    .FirstOrDefaultAsync(m => m.ManagerIdTransaction == reference && m.DeletedAt == null, ct);
+            },
             ct);
+    }
 
     public async Task SaveAsync(Guid tenantId, CancellationToken ct = default)
     {
