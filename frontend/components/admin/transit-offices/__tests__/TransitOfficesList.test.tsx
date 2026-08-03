@@ -279,10 +279,10 @@ describe("TransitOfficesList — radicación Quipux (HU #10710)", () => {
 
     const badge = within(rowFor("Medellín — Secretaría de Movilidad")).getByText("Sin DIVIPO");
     expect(badge).toBeInTheDocument();
-    // Un DIVIPO vacío es el estado normal de una secretaría no integrada: no se anuncia
-    // como alerta ni se pinta con el color de error.
+    // Un DIVIPO vacío es el estado normal: StatusBadge tone=neutral (no alert / no danger).
     expect(badge).not.toHaveAttribute("role", "alert");
-    expect(badge).toHaveStyle({ backgroundColor: "#E2E8F0" });
+    expect(badge).toHaveAttribute("role", "status");
+    expect(badge).toHaveStyle({ background: "var(--badge-neutral-bg)" });
   });
 
   it("avisa cuando hay banderas activas sin DIVIPO (se declara pero no se radica)", async () => {
@@ -406,7 +406,7 @@ describe("TransitOfficesList — radicación Quipux (HU #10710)", () => {
     expect(updateTransitOfficeQuipuxSettings).not.toHaveBeenCalled();
   });
 
-  it("rechaza un DIVIPO no numérico sin llamar a la API", async () => {
+  it("filtra caracteres no numéricos del DIVIPO al escribir (sin llamar a la API)", async () => {
     const user = userEvent.setup();
     renderList();
     await screen.findByText("Medellín — Secretaría de Movilidad");
@@ -415,10 +415,11 @@ describe("TransitOfficesList — radicación Quipux (HU #10710)", () => {
       screen.getByRole("button", { name: /Parametrizar radicación Quipux de Medellín/ }),
     );
     const dialog = await screen.findByRole("dialog");
-    await user.type(within(dialog).getByLabelText(/Código DIVIPO/i), "05-001");
+    const input = within(dialog).getByLabelText(/Código DIVIPO/i);
+    await user.type(input, "05-001");
 
-    expect(await within(dialog).findByText(/debe ser numérico/i)).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: /^Guardar$/ })).toBeDisabled();
+    // El input solo admite dígitos: el guion se descarta y no se dispara la API.
+    expect(input).toHaveValue("05001");
     expect(updateTransitOfficeQuipuxSettings).not.toHaveBeenCalled();
   });
 

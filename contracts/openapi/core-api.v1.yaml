@@ -6799,6 +6799,12 @@ components:
             Tipo de compañía del catálogo B2B. La migración RestrictTenantTypeCatalog
             normalizó los tipos heredados (p.ej. standard, transit_office) a RENTING y
             agregó el CHECK ck_tenants_tenant_type, por lo que la BD solo admite estos tres.
+        isTransitOffice:
+          type: boolean
+          description: >-
+            true si el tenant es Organismo de Tránsito (existe en
+            admin.transit_office_profiles). Fuente de verdad OT; tenantType solo no basta
+            porque los OT también usan RENTING.
         estadoActivo: { type: boolean }
         fechaCreacion: { type: string, format: date-time }
         rowVersion:
@@ -6807,7 +6813,7 @@ components:
           description: >-
             Token de concurrencia optimista (identity.tenants.row_version). Se reenvía en
             UpdateCompanyRequest para detectar ediciones concurrentes (409).
-      required: [id, nit, razonSocial, code, tenantType, estadoActivo, fechaCreacion, rowVersion]
+      required: [id, nit, razonSocial, code, tenantType, isTransitOffice, estadoActivo, fechaCreacion, rowVersion]
 
     CompanyPagedResult:
       type: object

@@ -81,6 +81,7 @@ const COMPANY: CompanyListItem = {
   razonSocial: "Transportes Andinos S.A.S.",
   code: "AND",
   tenantType: "RENTING",
+  isTransitOffice: false,
   estadoActivo: true,
   fechaCreacion: "2026-01-01T00:00:00Z",
   rowVersion: 1,

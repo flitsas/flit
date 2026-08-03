@@ -17,6 +17,7 @@ const company: CompanyListItem = {
   razonSocial: "Renting Andino S.A.S.",
   code: "RENTANDINO",
   tenantType: "RENTING",
+  isTransitOffice: false,
   estadoActivo: true,
   fechaCreacion: "2026-06-19T00:00:00Z",
   rowVersion: 4,
