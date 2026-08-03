@@ -238,7 +238,8 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             .AsNoTracking()
             .Where(r => r.TenantId == tenantId
                 && r.IsActive
-                && (bridgeRepIds.Contains(r.Id) || companyIds.Contains(r.RepresentedCompanyId)))
+                && (bridgeRepIds.Contains(r.Id)
+                    || (r.RepresentedCompanyId != null && companyIds.Contains(r.RepresentedCompanyId.Value))))
             .OrderByDescending(r => r.CreatedAt)
             .ThenByDescending(r => r.Id)
             .ToListAsync(cancellationToken)
@@ -324,6 +325,8 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
                 g => g.Select(x => (CompanyId: x.RepresentedCompanyId, CreatedAt: x.CreatedAt)).ToList());
 
         var companyIds = rows.Select(r => r.RepresentedCompanyId)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
             .Concat(bridgeRows.Select(b => b.RepresentedCompanyId))
             .Distinct()
             .ToList();
@@ -363,16 +366,21 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
 
         return [.. rows.Select(r =>
         {
-            companies.TryGetValue(r.RepresentedCompanyId, out var company);
+            RepresentedCompanyEntity? company = null;
+            if (r.RepresentedCompanyId is { } primaryCompanyId)
+            {
+                companies.TryGetValue(primaryCompanyId, out company);
+            }
             procedureTypesByRep.TryGetValue(r.Id, out var procedureTypeIds);
 
             // HU #11177 — compañías del representante con bandera explícita de principal y orden
             // estable: principal primero, luego el resto por fecha de asociación ascendente.
-            // La principal es RepresentedCompanyId (la compañía primaria del alta). El fallback
-            // (sin filas en el puente, datos legados) expone solo la primaria marcada como principal.
+            // Persona sin NITs: linkedEntries vacío.
             var linkedEntries = bridgeByRep.TryGetValue(r.Id, out var linked) && linked.Count > 0
                 ? linked
-                : [(CompanyId: r.RepresentedCompanyId, CreatedAt: DateTimeOffset.MinValue)];
+                : r.RepresentedCompanyId is { } pid
+                    ? [(CompanyId: pid, CreatedAt: DateTimeOffset.MinValue)]
+                    : [];
 
             IReadOnlyList<LegalRepresentativeCompanySummary> companySummaries =
             [

@@ -13,7 +13,7 @@ public sealed class CompanyLegalRepresentativeEntity
 
     public Guid TenantId { get; set; }
 
-    public Guid RepresentedCompanyId { get; set; }
+    public Guid? RepresentedCompanyId { get; set; }
 
     public string DocumentType { get; set; } = string.Empty;
 

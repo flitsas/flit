@@ -142,7 +142,7 @@ const ITEM_PENDING: LegalRepresentativeItem = {
 type SubmitFn = LegalRepresentativesFormPanelProps["onSubmit"];
 
 function renderPanel(
-  mode: "view" | "create" | "edit",
+  mode: "view" | "create" | "edit" | "companies",
   opts?: {
     representativeId?: string | null;
     onSubmit?: SubmitFn;
@@ -162,6 +162,7 @@ function renderPanel(
       onSaved={vi.fn()}
       onError={vi.fn()}
       onSwitchToEdit={vi.fn()}
+      onSwitchToCompanies={vi.fn()}
     />,
   );
 

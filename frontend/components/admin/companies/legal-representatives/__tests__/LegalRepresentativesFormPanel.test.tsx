@@ -1,8 +1,4 @@
-// HU #11178 — Panel unificado de representante legal: tres modos view / create / edit.
-// HU #11179 — Acordeón de compañías con escrituras (AC1-AC5 + AC6 retiro CompanyDeedsSection).
-//
-// Los tests de precarga de compañías (herencia HU #11058) abren el acordeón explícitamente antes de
-// buscar inputs, porque el cuerpo del acordeón solo se renderiza cuando está expandido.
+// Los campos de compañía están visibles en el grid (sin acordeón plegable).
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -126,7 +122,7 @@ type SubmitFn = LegalRepresentativesFormPanelProps["onSubmit"];
 type SavedFn = LegalRepresentativesFormPanelProps["onSaved"];
 
 function renderPanel(
-  mode: "view" | "create" | "edit",
+  mode: "view" | "create" | "edit" | "companies",
   opts?: {
     representativeId?: string | null;
     onSubmit?: SubmitFn;
@@ -157,6 +153,7 @@ function renderPanel(
       onSaved={onSaved}
       onError={vi.fn()}
       onSwitchToEdit={onSwitchToEdit}
+      onSwitchToCompanies={vi.fn()}
     />,
   );
   return {
@@ -190,17 +187,15 @@ describe("LegalRepresentativesFormPanel — modo create (AC4)", () => {
     expect(screen.getByRole("dialog", { name: /registrar representante legal/i })).toBeInTheDocument();
   });
 
-  it("permite agregar empresas y registrar", async () => {
+  it("permite registrar solo la persona (sin NITs ni firma)", async () => {
     const { onSubmit } = renderPanel("create", { representativeId: null });
 
     await userEvent.type(screen.getByLabelText(/^nombres$/i), "Carlos");
     await userEvent.type(screen.getByLabelText(/primer apellido/i), "Pérez");
     await userEvent.type(screen.getByLabelText(/número de documento/i), "123456789");
-    // El primer acordeón empieza abierto en create (UX: el usuario debe rellenar los datos).
-    const nits = screen.getAllByLabelText(/nit de la compañía/i);
-    await userEvent.type(nits[0], "900111222");
-    const names = screen.getAllByLabelText(/razón social/i);
-    await userEvent.type(names[0], "Empresa Test");
+
+    expect(screen.queryByTestId("rl-companies-grid")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /agregar empresa/i })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /registrar representante/i }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
@@ -208,7 +203,29 @@ describe("LegalRepresentativesFormPanel — modo create (AC4)", () => {
       name: "Carlos",
       firstLastName: "Pérez",
       documentNumber: "123456789",
+      companies: [],
     });
+  });
+
+  it("permite agregar empresas y guardar en modo companies", async () => {
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM);
+    const { onSubmit } = renderPanel("companies");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+
+    await userEvent.click(await screen.findByRole("button", { name: /agregar empresa/i }));
+    const nits = screen.getAllByLabelText(/nit de la compañía/i);
+    const last = nits.length - 1;
+    await userEvent.clear(nits[last]);
+    await userEvent.type(nits[last], "900111222");
+    const names = screen.getAllByLabelText(/razón social/i);
+    await userEvent.clear(names[last]);
+    await userEvent.type(names[last], "Empresa Test");
+
+    await userEvent.click(screen.getByRole("button", { name: /guardar empresas/i }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][0].companies.some((c: { nit: string }) => c.nit === "900111222")).toBe(
+      true,
+    );
   });
 
   it("no llama a onSaved si el submit falla", async () => {
@@ -220,10 +237,6 @@ describe("LegalRepresentativesFormPanel — modo create (AC4)", () => {
     await userEvent.type(screen.getByLabelText(/^nombres$/i), "X");
     await userEvent.type(screen.getByLabelText(/primer apellido/i), "Y");
     await userEvent.type(screen.getByLabelText(/número de documento/i), "123");
-    const nits = screen.getAllByLabelText(/nit de la compañía/i);
-    await userEvent.type(nits[0], "900");
-    const names = screen.getAllByLabelText(/razón social/i);
-    await userEvent.type(names[0], "Emp");
 
     await userEvent.click(screen.getByRole("button", { name: /registrar representante/i }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
@@ -266,6 +279,20 @@ describe("LegalRepresentativesFormPanel — modo view (AC1)", () => {
     expect(screen.getByTestId("rl-firma-baul")).toBeInTheDocument();
     expect(screen.getByText(/identidad sin validar/i)).toBeInTheDocument();
     expect(screen.getByText(/sin firma registrada/i)).toBeInTheDocument();
+  });
+
+  it("ordena la ficha: persona → firma → identidad → NITs", async () => {
+    renderPanel("view");
+    await screen.findByTestId("rl-firma-baul");
+
+    const persona = screen.getByRole("region", { name: /datos del representante/i });
+    const firma = screen.getByTestId("rl-firma-baul");
+    const identidad = screen.getByTestId("rl-identidad");
+    const nits = screen.getByRole("region", { name: /empresas representadas/i });
+
+    expect(persona.compareDocumentPosition(firma) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(firma.compareDocumentPosition(identidad) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(identidad.compareDocumentPosition(nits) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("muestra los tipos de trámite como badges", async () => {
@@ -322,31 +349,33 @@ describe("LegalRepresentativesFormPanel — modo edit (AC3)", () => {
     );
   });
 
-  it("el título es «Editar representante legal»", async () => {
+  it("el título es «Editar persona, firma y trámites»", async () => {
     renderPanel("edit");
     await waitFor(() =>
       expect(screen.getByRole("dialog", { name: /editar representante legal/i })).toBeInTheDocument(),
     );
   });
 
-  it("precarga TODAS las compañías desde GET /{id} (AC3, herencia HU #11058)", async () => {
+  it("NO muestra el grid de empresas en modo edit (se asocian aparte)", async () => {
     renderPanel("edit");
-    // Esperar a que el fetch complete, luego expandir los acordeones de las dos compañías.
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-    await userEvent.click(await screen.findByRole("button", { name: /comercializadora xyz/i }));
-    await userEvent.click(screen.getByRole("button", { name: /inversiones abc/i }));
+    expect(screen.queryByTestId("rl-companies-grid")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /agregar empresa/i })).not.toBeInTheDocument();
+  });
 
-    expect(screen.getByDisplayValue("900123456-7")).toBeInTheDocument();
+  it("precarga TODAS las compañías en modo companies", async () => {
+    renderPanel("companies");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+
+    expect(await screen.findByDisplayValue("900123456-7")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Comercializadora XYZ")).toBeInTheDocument();
     expect(screen.getByDisplayValue("901987654-3")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Inversiones ABC")).toBeInTheDocument();
   });
 
-  it("precarga el contacto de cada compañía (AC3, herencia HU #11058)", async () => {
-    renderPanel("edit");
+  it("precarga el contacto de cada compañía en modo companies", async () => {
+    renderPanel("companies");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-    await userEvent.click(await screen.findByRole("button", { name: /comercializadora xyz/i }));
-    await userEvent.click(screen.getByRole("button", { name: /inversiones abc/i }));
 
     for (const valor of [
       "contacto@xyz.co",
@@ -356,7 +385,7 @@ describe("LegalRepresentativesFormPanel — modo edit (AC3)", () => {
       "Avenida 80 #5-15",
       "6017654321",
     ]) {
-      expect(screen.getByDisplayValue(valor)).toBeInTheDocument();
+      expect(await screen.findByDisplayValue(valor)).toBeInTheDocument();
     }
   });
 
@@ -461,83 +490,49 @@ describe("LegalRepresentativeDetailModal eliminado (AC6)", () => {
   });
 });
 
-// ── HU #11179 — Acordeón de compañías con escrituras ─────────────────────────
+// ── Grid de compañías con escrituras ─────────────────────────────────────────
 
-describe("RepresentativeCompaniesAccordion (HU #11179)", () => {
+describe("RepresentativeCompaniesAccordion — grid de compañías", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_WITH_DEEDS);
   });
 
-  // AC1 — cada compañía como sección plegable
-  it("AC1: cada compañía del representante se presenta como sección plegable (aria-expanded)", async () => {
+  it("AC1: cada compañía se muestra como tarjeta en el grid", async () => {
     renderPanel("view");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
 
-    // Los botones de acordeón empiezan colapsados.
-    const accordionBtns = await screen.findAllByRole("button", { name: /comercializadora xyz|inversiones abc/i });
-    expect(accordionBtns.length).toBeGreaterThanOrEqual(1);
-    for (const btn of accordionBtns) {
-      expect(btn).toHaveAttribute("aria-expanded", "false");
-    }
+    expect(await screen.findByTestId("rl-companies-grid")).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: /comercializadora xyz/i })).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: /inversiones abc/i })).toBeInTheDocument();
   });
 
-  it("AC1: al hacer clic el acordeón se expande y aria-expanded cambia a true", async () => {
-    renderPanel("view");
-    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    const btn = await screen.findByRole("button", { name: /comercializadora xyz/i });
-    expect(btn).toHaveAttribute("aria-expanded", "false");
-
-    await userEvent.click(btn);
-    expect(btn).toHaveAttribute("aria-expanded", "true");
-
-    // Segundo clic lo cierra.
-    await userEvent.click(btn);
-    expect(btn).toHaveAttribute("aria-expanded", "false");
-  });
-
-  // AC2 — compañía principal con ícono y aria-label
   it("AC2: la compañía principal tiene el ícono con aria-label «Compañía principal»", async () => {
     renderPanel("view");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    // Esperar a que aparezcan las compañías en el acordeón.
     expect(await screen.findByLabelText("Compañía principal")).toBeInTheDocument();
   });
 
   it("AC2: la compañía secundaria NO tiene el ícono de principal", async () => {
     renderPanel("view");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    // Solo hay un ícono de principal en el listado.
     await screen.findByLabelText("Compañía principal");
-    const principalIcons = screen.getAllByLabelText("Compañía principal");
-    expect(principalIcons).toHaveLength(1);
+    expect(screen.getAllByLabelText("Compañía principal")).toHaveLength(1);
   });
 
-  // AC3 — historial de escrituras con estados
-  it("AC3: al desplegar se muestran las escrituras con su estado de vigencia", async () => {
+  it("AC3: en cada tarjeta se muestran las escrituras con su estado de vigencia", async () => {
     renderPanel("view");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    // Expandir la primera compañía (tiene escrituras).
-    await userEvent.click(await screen.findByRole("button", { name: /comercializadora xyz/i }));
-
-    expect(screen.getByText("Escritura de constitución")).toBeInTheDocument();
+    expect(await screen.findByText("Escritura de constitución")).toBeInTheDocument();
     expect(screen.getByText("Poder notarial vencido")).toBeInTheDocument();
     expect(screen.getByText("Vigente")).toBeInTheDocument();
     expect(screen.getByText("Vencida")).toBeInTheDocument();
   });
 
-  it("AC3: al desplegar se muestran los botones «Ver PDF» para cada escritura", async () => {
+  it("AC3: se muestran los botones «Ver PDF» para cada escritura", async () => {
     renderPanel("view");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    await userEvent.click(await screen.findByRole("button", { name: /comercializadora xyz/i }));
-
-    const verBtns = screen.getAllByRole("button", { name: /ver pdf/i });
-    expect(verBtns).toHaveLength(2);
+    expect(await screen.findAllByRole("button", { name: /ver pdf/i })).toHaveLength(2);
   });
 
   it("AC3: «Ver PDF» llama a fetchDeedDetail y abre la URL", async () => {
@@ -549,9 +544,7 @@ describe("RepresentativeCompaniesAccordion (HU #11179)", () => {
 
     renderPanel("view");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-    await userEvent.click(await screen.findByRole("button", { name: /comercializadora xyz/i }));
-
-    await userEvent.click(screen.getAllByRole("button", { name: /ver pdf/i })[0]);
+    await userEvent.click((await screen.findAllByRole("button", { name: /ver pdf/i }))[0]);
     await waitFor(() => expect(fetchDeedDetail).toHaveBeenCalledWith(TENANT, "deed-1"));
     expect(openSpy).toHaveBeenCalledWith(
       "https://example.com/deed.pdf",
@@ -561,91 +554,110 @@ describe("RepresentativeCompaniesAccordion (HU #11179)", () => {
     openSpy.mockRestore();
   });
 
-  // AC4 — asociar escritura desde el acordeón en modo edición
-  it("AC4: en modo edit aparece el botón «Asociar escritura» dentro del acordeón", async () => {
-    renderPanel("edit");
+  it("AC4: en modo edit aparece el botón «Asociar escritura» en la tarjeta", async () => {
+    renderPanel("companies");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    await userEvent.click(await screen.findByRole("button", { name: /comercializadora xyz/i }));
-
-    expect(
-      screen.getByRole("button", { name: /asociar escritura/i }),
-    ).toBeInTheDocument();
+    const btns = await screen.findAllByRole("button", { name: /asociar escritura/i });
+    expect(btns.length).toBeGreaterThanOrEqual(1);
   });
 
   it("AC4: en modo view NO aparece «Asociar escritura»", async () => {
     renderPanel("view");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-    await userEvent.click(await screen.findByRole("button", { name: /comercializadora xyz/i }));
-
-    expect(
-      screen.queryByRole("button", { name: /asociar escritura/i }),
-    ).not.toBeInTheDocument();
+    await screen.findByTestId("rl-companies-grid");
+    expect(screen.queryByRole("button", { name: /asociar escritura/i })).not.toBeInTheDocument();
   });
 
-  it("AC4: al hacer clic en «Asociar escritura» se abre el formulario de escritura (DeedsFormPanel)", async () => {
-    renderPanel("edit");
+  it("AC4: al hacer clic en «Asociar escritura» se abre DeedsFormPanel", async () => {
+    renderPanel("companies");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalledTimes(1));
-
-    // Abrir acordeón de la primera compañía.
-    await userEvent.click(await screen.findByRole("button", { name: /comercializadora xyz/i }));
-    // Abrir panel de nueva escritura.
-    await userEvent.click(screen.getByRole("button", { name: /asociar escritura/i }));
-
-    // El DeedsFormPanel debe estar visible ahora (dialog anidado con aria-label de registro).
+    const btns = await screen.findAllByRole("button", { name: /asociar escritura/i });
+    await userEvent.click(btns[0]);
     expect(await screen.findByRole("dialog", { name: /registrar escritura/i })).toBeInTheDocument();
   });
 
-  it("AC4: al cerrar el DeedsFormPanel el acordeón sigue visible (sin recarga de página)", async () => {
-    renderPanel("edit");
+  it("AC4: al cerrar DeedsFormPanel el grid sigue visible", async () => {
+    renderPanel("companies");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-
-    await userEvent.click(await screen.findByRole("button", { name: /comercializadora xyz/i }));
-    await userEvent.click(screen.getByRole("button", { name: /asociar escritura/i }));
+    const btns = await screen.findAllByRole("button", { name: /asociar escritura/i });
+    await userEvent.click(btns[0]);
     await screen.findByRole("dialog", { name: /registrar escritura/i });
-
-    // Cerrar el DeedsFormPanel — click en el botón "cerrar" del propio diálogo de escritura.
     const deedsDialog = screen.getByRole("dialog", { name: /registrar escritura/i });
     await userEvent.click(within(deedsDialog).getByRole("button", { name: /cerrar/i }));
-
-    // El acordeón del representante permanece abierto.
-    expect(
-      screen.getByRole("dialog", { name: /editar representante legal/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /asociar empresas y escrituras/i })).toBeInTheDocument();
+    expect(screen.getByTestId("rl-companies-grid")).toBeInTheDocument();
   });
 
-  // AC5 — escrituras no disponibles durante el alta
-  it("AC5: en modo create el bloque de escrituras aparece deshabilitado", async () => {
+  it("AC5: en companies el bloque de escrituras permite asociar (representante ya guardado)", async () => {
+    renderPanel("companies");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+    const btns = await screen.findAllByRole("button", { name: /asociar escritura/i });
+    expect(btns.length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/disponible al guardar/i)).not.toBeInTheDocument();
+  });
+
+  it("AC5b: al asociar escritura en empresa nueva, se guarda automáticamente y abre el panel", async () => {
+    const onSubmit = vi.fn().mockResolvedValue({ id: "rep-1", signals: [] });
+    const ITEM_AFTER_SAVE: LegalRepresentativeItem = {
+      ...ITEM,
+      companies: [
+        ...ITEM.companies,
+        {
+          id: "co-3",
+          nit: "900333333-3",
+          name: "Empresa Tres",
+          isPrimary: false,
+          deeds: [],
+          email: null,
+          address: null,
+          city: null,
+          phone: null,
+        },
+      ],
+    };
+
+    // Primera carga: 2 compañías. Tras auto-guardar: 3.
+    vi.mocked(fetchLegalRepresentative)
+      .mockResolvedValueOnce(ITEM)
+      .mockResolvedValue(ITEM_AFTER_SAVE);
+
+    renderPanel("companies", { onSubmit: onSubmit as unknown as SubmitFn });
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+
+    await userEvent.click(await screen.findByRole("button", { name: /agregar empresa/i }));
+    const nitInputs = await screen.findAllByLabelText(/nit de la compañía/i);
+    const nameInputs = await screen.findAllByLabelText(/razón social/i);
+    const last = nitInputs.length - 1;
+    await userEvent.clear(nitInputs[last]);
+    await userEvent.type(nitInputs[last], "900333333-3");
+    await userEvent.clear(nameInputs[last]);
+    await userEvent.type(nameInputs[last], "Empresa Tres");
+
+    const asociarBtns = await screen.findAllByRole("button", { name: /asociar escritura/i });
+    expect(asociarBtns.length).toBe(3);
+    await userEvent.click(asociarBtns[2]);
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole("dialog", { name: /registrar escritura/i })).toBeInTheDocument();
+    // No cierra el panel de empresas.
+    expect(screen.getByRole("dialog", { name: /asociar empresas y escrituras/i })).toBeInTheDocument();
+  }, 15000);
+
+  it("AC5: en modo create NO aparece el grid de empresas", () => {
     renderPanel("create", { representativeId: null });
-
-    // El primer acordeón abre automáticamente en create.
-    expect(screen.getByText(/disponible al guardar/i)).toBeInTheDocument();
-    expect(screen.getByText(/las escrituras estarán disponibles después de guardar/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /agregar empresa/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /asociar escritura/i })).not.toBeInTheDocument();
   });
 
-  it("AC5: en modo create NO aparece el botón «Asociar escritura»", () => {
-    renderPanel("create", { representativeId: null });
-
-    expect(
-      screen.queryByRole("button", { name: /asociar escritura/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  // AC6 — sección hermana «Escrituras por compañía» eliminada
   it("AC6: CompanyDeedsSection ya no se importa ni renderiza", async () => {
-    // Verificar que el módulo RepresentativesAndVaultTab no importa CompanyDeedsSection
     const tabModule = await import("../RepresentativesAndVaultTab");
     expect(tabModule).toBeDefined();
-    // El archivo CompanyDeedsSection.tsx fue eliminado deliberadamente (decisión de PO D4).
-    // Esta prueba confirma que la importación dinámica del módulo no falla por esa referencia.
   });
 
-  it("AC6: el accordeón en modo edit muestra botón «Editar» para cada escritura", async () => {
-    renderPanel("edit");
+  it("AC6: el grid en modo companies muestra botón «Editar» para cada escritura", async () => {
+    renderPanel("companies");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
-    await userEvent.click(await screen.findByRole("button", { name: /comercializadora xyz/i }));
-
-    const editBtns = screen.getAllByRole("button", { name: /editar escritura/i });
+    const editBtns = await screen.findAllByRole("button", { name: /editar escritura/i });
     expect(editBtns.length).toBeGreaterThanOrEqual(1);
   });
 });

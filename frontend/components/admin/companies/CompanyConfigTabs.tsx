@@ -27,10 +27,9 @@ type TabId =
   | "historial";
 
 /**
- * Navegación al Baúl de Firmas expuesta a la pestaña de representantes (HU #10904, ajustes HU #10929).
- * El Baúl ya no es una pestaña propia: vive como una sección dentro de la pestaña "Representantes
- * legales". `goToBaul` lleva a esa sección (scroll) y `baulVisible` indica si está disponible (depende
- * de `baulFirmasActivo`). El proveedor real lo aporta el contenedor de la pestaña de representantes.
+ * Navegación auxiliar hacia el Baúl de Firmas (legado HU #10929).
+ * La pestaña de representantes ya no muestra un baúl suelto; la firma se asocia
+ * desde la ficha del representante. Se conserva el contexto por compatibilidad.
  */
 export interface CompanyTabsNav {
   goToBaul: () => void;
@@ -60,8 +59,8 @@ const TABS: TabDef[] = [
   // HU #10653 (Feature #10587) — visualización de placas preasignadas por OT (solo si está activa).
   { id: "placas", label: "Placas preasignadas", icon: Hash, isConfig: false },
   // HU #10904 (Feature #10852) — directorio de representantes legales de las compañías representadas.
-  // Ajustes HU #10929: aloja también el Baúl de Firmas como sección interna y es el único punto de
-  // alta/edición de escrituras (por compañía, desde el detalle del representante).
+  // Escrituras y firma/identidad se gestionan desde la ficha de cada representante (no hay baúl
+  // suelto ni sección hermana de escrituras en esta pestaña).
   { id: "representantes", label: "Representantes legales", icon: Users, isConfig: false },
   // HU #11202 (Feature #11190) — los mandatarios los registra la COMPAÑÍA y elige en cuáles de sus
   // organismos aplican. Antes vivían en el perfil de cada organismo de tránsito, que era quien elegía
@@ -84,8 +83,8 @@ export interface CompanyConfigTabsProps {
   /** HU #10653 — visor de placas preasignadas. Solo si la preasignación está activa. */
   platesSlot?: ReactNode;
   /**
-   * HU #10904 (ajustes HU #10929) — pestaña de representantes legales, que además aloja el Baúl de
-   * Firmas como sección interna (según `baulFirmasActivo`).
+   * HU #10904 — pestaña de representantes legales (directorio). Firma e identidad
+   * viven en la ficha de cada persona; las escrituras bajo cada NIT del acordeón.
    */
   legalRepresentativesSlot?: ReactNode;
   /** HU #11202 — mandatarios de la compañía y los organismos donde aplican. */

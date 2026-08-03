@@ -56,7 +56,7 @@ export interface LegalRepresentativeCompanySummary {
 
 export interface LegalRepresentativeItem {
   id: string;
-  representedCompanyId: string;
+  representedCompanyId: string | null;
   /** NIT de la compañía representada (PII). */
   companyDocumentNumber: string;
   companyName: string;

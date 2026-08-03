@@ -49,7 +49,7 @@ public sealed record UpsertRepresentedCompanyData(
 public sealed record SaveLegalRepresentativeData(
     Guid TenantId,
     Guid? Id,
-    Guid RepresentedCompanyId,
+    Guid? RepresentedCompanyId,
     string DocumentType,
     string DocumentNumber,
     string FirstLastName,

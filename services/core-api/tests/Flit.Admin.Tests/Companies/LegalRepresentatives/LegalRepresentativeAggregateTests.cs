@@ -73,10 +73,18 @@ public sealed class LegalRepresentativeAggregateTests
     {
         var act = () => LegalRepresentative.Create(Tenant, CompanyId, "CC", " ", "Perez", "Juan Perez");
         act.Should().Throw<ArgumentException>();
+    }
 
-        var actCompany = () => LegalRepresentative.Create(
+    [Fact]
+    public void LegalRepresentative_Create_AllowsPersonWithoutCompany()
+    {
+        var rep = LegalRepresentative.Create(
+            Tenant, representedCompanyId: null, "CC", "123456789", "Perez", "Juan Perez");
+        rep.RepresentedCompanyId.Should().BeNull();
+
+        var fromEmpty = LegalRepresentative.Create(
             Tenant, Guid.Empty, "CC", "123456789", "Perez", "Juan Perez");
-        actCompany.Should().Throw<ArgumentException>();
+        fromEmpty.RepresentedCompanyId.Should().BeNull();
     }
 
     [Fact]

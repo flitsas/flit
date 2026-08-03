@@ -14,6 +14,7 @@ import {
 } from "@/lib/api/admin-legal-representatives";
 import { identityUi, vigenciaLabel } from "@/lib/admin/identity-vigencia";
 import { formatFecha } from "@/lib/format/date";
+import { RL_COLOR, RL_GRADIENT } from "./rl-flit-styles";
 
 export interface IdentityActionsBlockProps {
   tenantId: string;
@@ -89,7 +90,8 @@ export function IdentityActionsBlock({
   if (!representativeId) {
     return (
       <div
-        className="rounded-xl border border-[#DFE5ED] p-3"
+        className="rounded-xl border p-3"
+        style={{ borderColor: RL_COLOR.border }}
         data-testid="rl-identity-block"
         aria-label="Validación de identidad"
       >
@@ -106,7 +108,8 @@ export function IdentityActionsBlock({
 
   return (
     <div
-      className="rounded-xl border border-[#DFE5ED] p-3 space-y-2"
+      className="rounded-xl border p-3 space-y-2"
+      style={{ borderColor: RL_COLOR.border }}
       data-testid="rl-identity-block"
       aria-label="Validación de identidad"
     >
@@ -140,7 +143,7 @@ export function IdentityActionsBlock({
         <p
           role="alert"
           className="text-[11px] font-medium"
-          style={{ color: result.type === "success" ? "#3f7a15" : "#FF4E00" }}
+          style={{ color: result.type === "success" ? RL_COLOR.successText : RL_COLOR.danger }}
           data-testid={result.type === "success" ? "rl-identity-success" : "rl-identity-error"}
         >
           {result.message}
@@ -237,8 +240,8 @@ function ActionButton({ label, loading, disabled, testId, variant = "primary", o
       className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50"
       style={
         isPrimary
-          ? { background: "#557EFF", color: "#fff" }
-          : { background: "transparent", color: "#557EFF", border: "1px solid #557EFF" }
+          ? { background: RL_GRADIENT.primary, color: "#fff" }
+          : { background: "transparent", color: RL_COLOR.brand, border: `1px solid ${RL_COLOR.brand}` }
       }
     >
       {loading && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}

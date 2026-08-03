@@ -34,6 +34,7 @@ import {
   fetchLegalRepresentative,
   fetchLegalRepresentatives,
   sendLegalRepresentativeIdentity,
+  updateLegalRepresentative,
   type AssignableProcedureType,
 } from "@/lib/api/admin-legal-representatives";
 
@@ -132,8 +133,9 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     expect(screen.queryByText("900123456-7")).not.toBeInTheDocument();
   });
 
-  it("envía el correo de validación de identidad", async () => {
+  it("envía el correo de validación de identidad desde Editar", async () => {
     vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([ITEM]));
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM);
     vi.mocked(sendLegalRepresentativeIdentity).mockResolvedValue({
       id: "val-1",
       status: "PENDING",
@@ -142,7 +144,10 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     renderTab();
     await screen.findByText("Ana Gómez Ruiz");
 
-    await userEvent.click(screen.getByRole("button", { name: /^validar identidad$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /editar persona y firma de ana gómez ruiz/i }));
+    await screen.findByRole("dialog", { name: /editar representante legal/i });
+
+    await userEvent.click(await screen.findByRole("button", { name: /enviar validaci[oó]n/i }));
     await waitFor(() =>
       expect(sendLegalRepresentativeIdentity).toHaveBeenCalledWith(TENANT, "rep-1"),
     );
@@ -188,101 +193,53 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     await waitFor(() => expect(deleteLegalRepresentative).toHaveBeenCalledWith(TENANT, "rep-1"));
   });
 
-  it("permite agregar/quitar empresas y envía companies[] al registrar (HU #10934)", async () => {
-    vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([]));
-    vi.mocked(createLegalRepresentative).mockResolvedValue({ id: "rep-new", signals: [] });
-    // Después del alta el panel pasa a edit → fetchLegalRepresentative se llama con el nuevo id.
-    vi.mocked(fetchLegalRepresentative).mockResolvedValue({ ...ITEM, id: "rep-new" });
+  it("permite agregar/quitar empresas desde el botón Empresas del listado", async () => {
+    vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([ITEM]));
+    vi.mocked(updateLegalRepresentative).mockResolvedValue({ id: "rep-1", signals: [] });
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM);
     renderTab();
-    await screen.findByText(/aún no tiene representantes legales registrados/i);
+    await screen.findByText("Ana Gómez Ruiz");
 
-    await userEvent.click(screen.getByRole("button", { name: /^nuevo representante$/i }));
+    await userEvent.click(screen.getByRole("button", { name: /asociar empresas de ana gómez ruiz/i }));
+    expect(
+      await screen.findByRole("dialog", { name: /asociar empresas y escrituras/i }),
+    ).toBeInTheDocument();
 
-    await userEvent.type(screen.getByLabelText(/^nombres$/i), "Ana");
-    await userEvent.type(screen.getByLabelText(/número de documento/i), "1098765432");
-    await userEvent.type(screen.getByLabelText(/primer apellido/i), "Gómez");
-
-    // En modo create el primer acordeón empieza abierto; los inputs están en el DOM.
-    const nits = await screen.findAllByLabelText(/nit de la compañía/i);
-    const names = await screen.findAllByLabelText(/razón social/i);
-    await userEvent.type(nits[0], "900111111-1");
-    await userEvent.type(names[0], "Empresa Uno");
-
-    // Al agregar empresa, el nuevo acordeón se abre automáticamente vía useEffect.
-    await userEvent.click(screen.getByRole("button", { name: /agregar empresa/i }));
-    await userEvent.click(screen.getByRole("button", { name: /agregar empresa/i }));
-    // Usar findAllByLabelText para esperar a que los nuevos acordeones estén visibles.
+    await userEvent.click(await screen.findByRole("button", { name: /agregar empresa/i }));
     let nitInputs = await screen.findAllByLabelText(/nit de la compañía/i);
     const nameInputs = await screen.findAllByLabelText(/razón social/i);
-    expect(nitInputs).toHaveLength(3);
-    await userEvent.type(nitInputs[1], "900222222-2");
-    await userEvent.type(nameInputs[1], "Empresa Dos");
+    const last = nitInputs.length - 1;
+    await userEvent.clear(nitInputs[last]);
+    await userEvent.type(nitInputs[last], "900333333-3");
+    await userEvent.clear(nameInputs[last]);
+    await userEvent.type(nameInputs[last], "Empresa Tres");
 
-    await userEvent.click(screen.getByRole("button", { name: /quitar empresa 3/i }));
-    nitInputs = await screen.findAllByLabelText(/nit de la compañía/i);
-    expect(nitInputs).toHaveLength(2);
+    await userEvent.click(screen.getByRole("button", { name: /guardar empresas/i }));
+    await waitFor(() => expect(updateLegalRepresentative).toHaveBeenCalled());
+  }, 15000);
 
-    await userEvent.click(screen.getByRole("button", { name: /registrar representante/i }));
+  // ── Panel unificado ──────────────────────────────────────────────────────────
 
-    await waitFor(() => expect(createLegalRepresentative).toHaveBeenCalled());
-    const [, payload] = vi.mocked(createLegalRepresentative).mock.calls[0];
-    expect(payload.companies).toHaveLength(2);
-    // digitsOnly strips hyphens → "900111111-1" → "9001111111", "900222222-2" → "9002222222"
-    expect(payload.companies[0]).toMatchObject({ nit: "9001111111", name: "Empresa Uno" });
-    expect(payload.companies[1]).toMatchObject({ nit: "9002222222", name: "Empresa Dos" });
-    expect(payload.companyNit).toBe("9001111111");
-  }, 15000); // Plazo extendido: el test tipea 65+ caracteres en acordeones auto-expandibles.
-
-  // ── HU #11178: panel unificado ───────────────────────────────────────────────
-
-  it("AC1: «Ver» abre el panel en modo consulta (no un modal separado)", async () => {
+  it("AC1: el grid no muestra el botón «Ver»", async () => {
     vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([ITEM]));
     renderTab();
     await screen.findByText("Ana Gómez Ruiz");
 
-    await userEvent.click(screen.getByRole("button", { name: /ver detalle de ana gómez ruiz/i }));
-
-    await waitFor(() =>
-      expect(fetchLegalRepresentative).toHaveBeenCalledWith(TENANT, "rep-1", expect.anything()),
-    );
-
-    // El panel tiene role=dialog con aria-label "Ver representante legal".
     expect(
-      await screen.findByRole("dialog", { name: /ver representante legal/i }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /ver ficha completa de ana gómez ruiz/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /editar persona y firma de ana gómez ruiz/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /asociar empresas de ana gómez ruiz/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /eliminar ana gómez ruiz/i })).toBeInTheDocument();
   });
 
-  it("AC2: «Editar» dentro del panel de consulta cambia al modo edición sin cerrar", async () => {
+  it("«Editar» desde la tabla abre directamente en modo edición", async () => {
     vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([ITEM]));
     renderTab();
     await screen.findByText("Ana Gómez Ruiz");
 
-    // Abre en consulta.
-    await userEvent.click(screen.getByRole("button", { name: /ver detalle de ana gómez ruiz/i }));
-    await screen.findByRole("dialog", { name: /ver representante legal/i });
-    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalledTimes(1));
+    await userEvent.click(screen.getByRole("button", { name: /editar persona y firma de ana gómez ruiz/i }));
 
-    // Pulsa «Editar» → cambia al panel de edición sin cerrarse.
-    const panelEdit = screen.getByRole("button", { name: /pasar a modo edición/i });
-    await userEvent.click(panelEdit);
-
-    // Ahora el panel es de edición (mismo dialog, aria-label cambia).
-    expect(
-      await screen.findByRole("dialog", { name: /editar representante legal/i }),
-    ).toBeInTheDocument();
-
-    // El panel sigue abierto (no se cerró).
-    expect(screen.queryByRole("button", { name: /ver detalle de ana gómez ruiz/i })).toBeInTheDocument();
-  });
-
-  it("«Editar» desde la tabla abre directamente en modo edición (sin pasar por consulta)", async () => {
-    vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([ITEM]));
-    renderTab();
-    await screen.findByText("Ana Gómez Ruiz");
-
-    await userEvent.click(screen.getByRole("button", { name: /^editar ana gómez ruiz$/i }));
-
-    // El panel abre directamente en modo edición.
     expect(
       await screen.findByRole("dialog", { name: /editar representante legal/i }),
     ).toBeInTheDocument();
@@ -291,51 +248,26 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     );
   });
 
-  it("AC5: después de registrar, el panel permanece abierto en modo edición sobre el recién creado", async () => {
+  it("AC5: después de registrar, el panel se cierra y el listado se refresca", async () => {
     vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([]));
     vi.mocked(createLegalRepresentative).mockResolvedValue({ id: "rep-new", signals: [] });
-    vi.mocked(fetchLegalRepresentative).mockResolvedValue({ ...ITEM, id: "rep-new" });
     renderTab();
     await screen.findByText(/aún no tiene representantes legales registrados/i);
 
     await userEvent.click(screen.getByRole("button", { name: /^nuevo representante$/i }));
 
-    // Rellena el mínimo requerido (acordeón[0] abierto automáticamente en modo create).
     await userEvent.type(screen.getByLabelText(/^nombres$/i), "Pedro");
     await userEvent.type(screen.getByLabelText(/primer apellido/i), "López");
     await userEvent.type(screen.getByLabelText(/número de documento/i), "9876543");
-    const nits = await screen.findAllByLabelText(/nit de la compañía/i);
-    await userEvent.type(nits[0], "900000001");
-    const names = await screen.findAllByLabelText(/razón social/i);
-    await userEvent.type(names[0], "Empresa Alta");
 
-    await userEvent.click(screen.getByRole("button", { name: /registrar representante/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^registrar representante$/i }));
 
-    // Tras el alta el panel pasa a EDICIÓN (no se cierra).
-    expect(
-      await screen.findByRole("dialog", { name: /editar representante legal/i }),
-    ).toBeInTheDocument();
-    // El createLegalRepresentative se llamó con el nuevo representante.
-    expect(createLegalRepresentative).toHaveBeenCalledTimes(1);
-    // El fetchLegalRepresentative se llamó con el ID del recién creado.
+    await waitFor(() => expect(createLegalRepresentative).toHaveBeenCalledTimes(1), {
+      timeout: 10000,
+    });
+    expect(vi.mocked(createLegalRepresentative).mock.calls[0][1].companies).toEqual([]);
     await waitFor(() =>
-      expect(fetchLegalRepresentative).toHaveBeenCalledWith(TENANT, "rep-new", expect.anything()),
+      expect(screen.queryByRole("dialog", { name: /registrar representante legal/i })).not.toBeInTheDocument(),
     );
-  });
-
-  it("AC6: LegalRepresentativeDetailModal ya no se usa (no hay dialog de tipo modal tras Ver)", async () => {
-    vi.mocked(fetchLegalRepresentatives).mockResolvedValue(page([ITEM]));
-    renderTab();
-    await screen.findByText("Ana Gómez Ruiz");
-
-    await userEvent.click(screen.getByRole("button", { name: /ver detalle de ana gómez ruiz/i }));
-    await screen.findByRole("dialog", { name: /ver representante legal/i });
-
-    // No debe haber un role=dialog con título "Detalle del representante" que venga de un Modal
-    // (<dialog> de atom/Modal), solo el <aside role="dialog"> del OtSidePanel.
-    const dialogs = screen.getAllByRole("dialog");
-    // Exactamente un dialog visible: el panel lateral.
-    expect(dialogs).toHaveLength(1);
-    expect(dialogs[0].tagName.toLowerCase()).toBe("aside");
-  });
+  }, 15000);
 });
