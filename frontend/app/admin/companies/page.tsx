@@ -46,7 +46,7 @@ function CompaniesList() {
       setStatus("loading");
       try {
         const data = await fetchCompaniesIndex(
-          { ...filters, page, pageSize: PAGE_SIZE },
+          { ...filters, page, pageSize: PAGE_SIZE, excludeTransitOffices: true },
           signal,
         );
         if (signal?.aborted) {
@@ -136,7 +136,7 @@ function CompaniesList() {
         <UiStateBoundary
           status={status}
           onRetry={() => void load()}
-          emptyMessage="No se encontraron compañías con los filtros aplicados."
+          emptyMessage="No se encontraron compañías B2B con los filtros aplicados."
           errorMessage="No se pudo cargar el listado de compañías."
         >
           {result && (
