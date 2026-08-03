@@ -151,6 +151,14 @@ describe("TransitOfficesList — RF01/RF02/RF03", () => {
     expect(mockPush).toHaveBeenCalledWith(`/admin/transit-offices/${OFFICE_ACTIVO}/client-procedures`);
   });
 
+  it("HU #11225: Administrar también está disponible para OT inactivo", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("Cali — Secretaría de Movilidad");
+    await user.click(screen.getByRole("button", { name: /Administrar Cali/ }));
+    expect(mockPush).toHaveBeenCalledWith(`/admin/transit-offices/${OFFICE_INACTIVO}/client-procedures`);
+  });
+
   it("RF03 desactiva un OT activo con confirmación", async () => {
     const user = userEvent.setup();
     renderList();

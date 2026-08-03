@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
+import { fetchTransitOfficesOperationalStatus } from "@/lib/api/admin-transit-office-tenants";
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { OtTabBar } from "@/components/admin/transit-offices/OtTabBar";
@@ -23,7 +24,7 @@ export interface OtHubLayoutProps {
   children: ReactNode;
 }
 
-/** Layout compartido del hub OT con navegación por pestañas (HU #10236). */
+/** Layout compartido del hub OT con navegación por pestañas (HU #10236 / #11225). */
 export function OtHubLayout({
   transitOfficeId,
   activeTab,
@@ -32,6 +33,7 @@ export function OtHubLayout({
 }: OtHubLayoutProps) {
   const router = useRouter();
   const [officeLabel, setOfficeLabel] = useState<string | undefined>();
+  const [inactiveTenant, setInactiveTenant] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -69,6 +71,24 @@ export function OtHubLayout({
     return () => controller.abort();
   }, [transitOfficeId]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchTransitOfficesOperationalStatus(controller.signal)
+      .then((rows) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        const office = rows.find((o) => o.id === transitOfficeId);
+        setInactiveTenant(Boolean(office?.hasTenant && office.estadoActivo === false));
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setInactiveTenant(false);
+        }
+      });
+    return () => controller.abort();
+  }, [transitOfficeId]);
+
   const subtitle = officeLabel;
 
   return (
@@ -84,6 +104,17 @@ export function OtHubLayout({
       </button>
 
       <ModuleTitle title={moduleTitle} subtitle={subtitle} />
+
+      {inactiveTenant && (
+        <div
+          role="status"
+          data-testid="ot-inactive-banner"
+          className="mt-3 rounded-[10px] border border-[#F5C6C8] bg-[#FDECEC] px-4 py-3 text-sm text-[#8A1C1C] dark:border-red-500/40 dark:bg-red-950/40 dark:text-red-100"
+        >
+          Organismo inactivo — puedes consultar y ajustar la configuración; el tenant permanece
+          desactivado hasta que lo reactives desde el listado.
+        </div>
+      )}
 
       <div className="mt-4 rounded-2xl border bg-card p-4 md:p-6">
         <OtTabBar
