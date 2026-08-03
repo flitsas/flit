@@ -22,6 +22,11 @@ export interface OtSidePanelProps {
    * Superficie del panel. `modal` usa el fondo claro del prototipo FLIT (`#EEF5FF`).
    */
   surface?: "card" | "modal";
+  /**
+   * Scroll vertical del cuerpo. `false` para paneles que maquetan su propio alto (p. ej. la guía
+   * informativa de documentos, que reparte el contenido en una grilla sin desbordar).
+   */
+  scrollable?: boolean;
 }
 
 export function OtSidePanel({
@@ -35,6 +40,7 @@ export function OtSidePanel({
   zClassName = "z-50",
   width = "md",
   surface = "card",
+  scrollable = true,
 }: OtSidePanelProps) {
   if (!open) {
     return null;
@@ -78,7 +84,9 @@ export function OtSidePanel({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4">{children}</div>
+        <div className={`flex-1 p-4 ${scrollable ? "overflow-y-auto" : "min-h-0 overflow-hidden"}`}>
+          {children}
+        </div>
         {footer && (
           <div className="border-t p-4">
             {footer}

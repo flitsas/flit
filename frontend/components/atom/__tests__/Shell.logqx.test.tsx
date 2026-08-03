@@ -1,15 +1,13 @@
-// AC4 (HU #10795): la entrada "LOG QX" del dock solo se renderiza cuando el usuario en sesión
-// puede leer el LOG QX — tiene el permiso `logqx.read` o es SuperAdmin (bypass). Calcado del
-// patrón de "Auditoría" (Shell.auditoria.test.tsx), pero gateado por permiso, no solo por rol.
+// AC4 (HU #10795): "LOG QX" en agrupador Soporte (permiso logqx.read o SuperAdmin).
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { setDevSuperAdminToken } from "@/lib/api/client";
 import { TOKEN_COOKIE, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 import { Shell } from "../Shell";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 
-/** Inyecta un JWT (sin firma) con los claims dados en cookie + localStorage. */
 function setToken(payload: Record<string, unknown>): void {
   const b64 = (o: object) =>
     Buffer.from(JSON.stringify(o))
@@ -39,12 +37,14 @@ describe("Shell — dock LOG QX (HU #10795, AC4)", () => {
   it("muestra 'LOG QX' cuando el usuario tiene el permiso logqx.read (sin ser SuperAdmin)", () => {
     setToken({ sub: "u1", role_code: "Soporte", permissions: ["logqx.read"] });
     renderShell();
+    // Solo un ítem en Soporte → píldora directa.
     expect(screen.getByRole("button", { name: "LOG QX" })).toBeInTheDocument();
   });
 
-  it("muestra 'LOG QX' cuando el usuario es SuperAdmin (bypass)", () => {
+  it("muestra 'LOG QX' en el submenú Soporte cuando el usuario es SuperAdmin", async () => {
     setDevSuperAdminToken();
     renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Soporte" }));
     expect(screen.getByRole("button", { name: "LOG QX" })).toBeInTheDocument();
   });
 
@@ -52,6 +52,7 @@ describe("Shell — dock LOG QX (HU #10795, AC4)", () => {
     setToken({ sub: "u2", role_code: "AdminCompany", permissions: ["tramites.read"] });
     renderShell();
     expect(screen.queryByRole("button", { name: "LOG QX" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Soporte" })).not.toBeInTheDocument();
   });
 
   it("NO muestra 'LOG QX' sin sesión", () => {

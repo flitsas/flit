@@ -32,7 +32,9 @@ describe("HU #10498 — AC1: scroll encuadrado en el Shell", () => {
   it("el área de contenido ya no clipa el scroll (no overflow-hidden en el wrapper de children)", () => {
     const src = read("components/atom/Shell.tsx");
     expect(src).not.toMatch(/absolute inset-0 overflow-hidden">\{children\}/);
-    expect(src).toMatch(/absolute inset-0 overflow-y-auto pb-\d+">\{children\}/);
+    // Contenedor de scroll con colchón del dock; puede llevar ref para condensado.
+    expect(src).toMatch(/absolute inset-0 overflow-y-auto pb-\d+/);
+    expect(src).toMatch(/\{children\}/);
   });
 });
 

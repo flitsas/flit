@@ -539,7 +539,9 @@ public sealed class GenerarFurHandler(
             NumeroMotor: Get(fv, "vehicle_engine_number"),
             NumeroChasis: Get(fv, "vehicle_chassis"),
             NumeroSerie: Get(fv, "vehicle_series"),
-            TipoCarroceria: Get(fv, "vehicle_body_type"),
+            // A4/B4 (HU #10673) — carrocería: igual que color/combustible, el campo del FUR lleva el dato
+            // original del RUNT; la transformación declarada viaja solo en observaciones.
+            TipoCarroceria: RuntOrEffective(fv, "vehicle_body_type_runt", "vehicle_body_type"),
             TipoServicio: Get(fv, "vehicle_service"),
             Capacidad: Get(fv, "vehicle_passengers"),
             PesoBruto: Get(fv, "vehicle_weight"),
@@ -572,7 +574,8 @@ public sealed class GenerarFurHandler(
                 FurTransformationObservations.Compose(
                     Get(fv, "fur_observations"),
                     Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
-                    Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel"))),
+                    Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel"),
+                    Get(fv, "vehicle_body_type_runt"), Get(fv, "vehicle_body_type"))),
             FirmaImagenes: firmaImagenes,
             FirmaBaulMetadatos: firmaBaulMetadatos,
             IdentidadValidada: identidadValidada,

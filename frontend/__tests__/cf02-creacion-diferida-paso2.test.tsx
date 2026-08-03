@@ -58,7 +58,7 @@ const PREVIEW_MATRICULA: WizardState = {
   allowedTransitions: [],
   steps: [
     { index: 1, key: 'consulta_vin', label: 'Consulta VIN', status: 'incomplete', reasons: [] },
-    { index: 2, key: 'documentos', label: 'Documentos', status: 'locked', reasons: [] },
+    { index: 2, key: 'documentos', label: 'Datos y Documentos del Trámite', status: 'locked', reasons: [] },
     { index: 3, key: 'comprador', label: 'Comprador', status: 'locked', reasons: [] },
     { index: 4, key: 'identidad', label: 'Identidad', status: 'locked', reasons: [] },
     { index: 5, key: 'fur', label: 'FUR', status: 'locked', reasons: [] },
@@ -74,6 +74,11 @@ const PREVIEW_RESULT = {
   },
   vehicleFields: [
     { formFieldId: '', fieldKey: 'vehicle_brand', valueText: 'RENAULT', valueJson: null, source: 'consultation' },
+    { formFieldId: '', fieldKey: 'vehicle_class', valueText: 'CAMION', valueJson: null, source: 'consultation' },
+    { formFieldId: '', fieldKey: 'vehicle_body_type', valueText: 'ESTACAS', valueJson: null, source: 'consultation' },
+    { formFieldId: '', fieldKey: 'vehicle_body_type_runt', valueText: 'ESTACAS', valueJson: null, source: 'consultation' },
+    { formFieldId: '', fieldKey: 'vehicle_color', valueText: 'BLANCO', valueJson: null, source: 'consultation' },
+    { formFieldId: '', fieldKey: 'vehicle_fuel', valueText: 'DIESEL', valueJson: null, source: 'consultation' },
   ],
 };
 
@@ -87,9 +92,11 @@ const SECRETARIAS = [
 
 /** Deja el paso 1 listo para consultar: secretaría elegida y VIN escrito. */
 async function prepararConsulta(user: ReturnType<typeof userEvent.setup>) {
-  // El catálogo se carga de forma asíncrona: hay que esperar a que la opción exista.
-  await screen.findByRole('option', { name: /Medellín/ });
-  await user.selectOptions(screen.getByLabelText('Secretaría de tránsito'), SECRETARIA_ID);
+  // TransitOfficeSearchPicker: abrir modal y elegir por nombre (ya no es <select>).
+  await user.click(
+    await screen.findByRole('button', { name: /Seleccionar secretaría de tránsito/i }),
+  );
+  await user.click(await screen.findByRole('button', { name: /Medellín/ }));
   await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
 }
 
@@ -179,10 +186,9 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     expect(routerReplace).toHaveBeenCalledWith('/tramites/inst-1?t=tenant-1');
   });
 
-  // El paso 1 conserva TODOS los controles del flujo anterior (condiciones del trámite,
-  // transformaciones, paz y salvo, riesgo). Lo único que cambia es cuándo se guardan: en vez de un
-  // PATCH inmediato, viajan con la creación al continuar al paso 2.
-  it('las condiciones marcadas en el paso 1 se persisten al crear el trámite', async () => {
+  // El paso 1 conserva los controles (transformaciones, paz y salvo, riesgo). Lo único que cambia
+  // es cuándo se guardan: en vez de un PATCH inmediato, viajan con la creación al continuar.
+  it('las transformaciones marcadas en el paso 1 se persisten al crear el trámite', async () => {
     const user = userEvent.setup();
     renderNuevaMatricula();
 
@@ -190,7 +196,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
 
-    await user.click(screen.getByRole('checkbox', { name: /Cambio de carrocería/ }));
+    await user.click(await screen.findByRole('checkbox', { name: /Cambió la carrocería/ }));
     // Sin trámite todavía: no se persiste nada en este momento.
     expect(mocks.patchFieldValues).not.toHaveBeenCalled();
 
@@ -200,7 +206,9 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await waitFor(() =>
       expect(mocks.patchFieldValues).toHaveBeenCalledWith(
         'inst-1',
-        [expect.objectContaining({ fieldKey: 'cambio_carroceria', valueText: 'true' })],
+        expect.arrayContaining([
+          expect.objectContaining({ fieldKey: 'cambio_carroceria', valueText: 'true' }),
+        ]),
         'tenant-1',
       ),
     );

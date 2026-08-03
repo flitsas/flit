@@ -1,20 +1,20 @@
 'use client';
 
-import { ArrowRight, Fuel, Palette, Wand2 } from 'lucide-react';
+import { ArrowRight, Fuel, Layers, Palette, Wand2 } from 'lucide-react';
 import type { FieldValue } from '@/lib/api/types/procedure-runtime';
 import { cn } from '@/lib/utils';
 import {
   VEHICLE_COLOR_CATALOG,
   VEHICLE_FUEL_CATALOG,
 } from '@/lib/catalogs/vehicle-transformations';
+import { getBodyworksForVehicleClass, normalizeVehicleClass } from '@/lib/catalogs/bodywork-by-class';
 
 /**
- * Tarjeta "Transformaciones del vehículo" (A4/B4 · HU #10674 · ADR-0029).
+ * Tarjeta "Transformaciones del vehículo" (A4/B4 · HU #10674 · ADR-0029 + P2/P3).
  *
- * Permite DECLARAR, durante MI/TR, un cambio de color y/o combustible del vehículo frente al
- * dato del RUNT. El valor RUNT queda como snapshot inmutable (`*_runt`) y el efectivo
- * (`vehicle_color` / `vehicle_fuel`) es el que viaja al FUR; el flag `cambio_*` marca la
- * declaración. Solo color y combustible (pueden ir a la vez); catálogos placeholder.
+ * Permite DECLARAR, durante MI/TR, un cambio de color, combustible o carrocería del vehículo
+ * frente al dato del RUNT. El valor RUNT queda como snapshot inmutable (`*_runt`) y el efectivo
+ * es el que viaja al FUR; el flag `cambio_*` marca la declaración.
  *
  * Cuatro estados de cada fila:
  *  1. RUNT sin cambio (toggle apagado) — se muestra el valor del RUNT en solo lectura.
@@ -47,6 +47,16 @@ export function VehicleTransformationsCard({
   const fuelRunt = byKey('vehicle_fuel_runt') || byKey('vehicle_fuel');
   const fuelEff = byKey('vehicle_fuel');
   const fuelActive = byKey('cambio_combustible') === 'true' || isChanged(fuelRunt, fuelEff);
+
+  // Carrocería (P2/P3): opciones filtradas por clase RUNT del vehículo.
+  const bodyworkRunt = byKey('vehicle_body_type_runt') || byKey('vehicle_body_type');
+  const bodyworkEff = byKey('vehicle_body_type');
+  const bodyworkActive = byKey('cambio_carroceria') === 'true' || isChanged(bodyworkRunt, bodyworkEff);
+  const vehicleClass = normalizeVehicleClass(byKey('vehicle_class'));
+  const bodyworkOptions = getBodyworksForVehicleClass(vehicleClass).map((o) => o.name);
+  const bodyworkEmptyMessage = vehicleClass
+    ? `No hay carrocerías disponibles para la clase ${vehicleClass}`
+    : 'Consulta el RUNT para obtener la clase';
 
   // Antes de consultar el RUNT no hay datos del vehículo → no se renderiza (paridad con VehicleDataCard).
   const hasVehicle = [
@@ -83,13 +93,25 @@ export function VehicleTransformationsCard({
           { fieldKey: 'vehicle_fuel', valueText: fuelRunt },
         ]);
 
-  // El resumen refleja lo que se imprime en el FUR: solo el valor NUEVO (los campos del vehículo del
-  // FUR conservan el original del RUNT; el cambio se declara en observaciones). Sin flecha ni origen.
+  const setBodywork = (on: boolean, value?: string) =>
+    on
+      ? onPatch([
+          { fieldKey: 'cambio_carroceria', valueText: 'true' },
+          { fieldKey: 'vehicle_body_type', valueText: value ?? bodyworkEff ?? bodyworkRunt },
+        ])
+      : onPatch([
+          { fieldKey: 'cambio_carroceria', valueText: 'false' },
+          { fieldKey: 'vehicle_body_type', valueText: bodyworkRunt },
+        ]);
+
+  // El resumen refleja lo que se imprime en el FUR: solo el valor NUEVO.
   const changes: string[] = [];
   if (colorActive && isChanged(colorRunt, colorEff))
     changes.push(`Color: ${up(colorEff)}`);
   if (fuelActive && isChanged(fuelRunt, fuelEff))
     changes.push(`Combustible: ${up(fuelEff)}`);
+  if (bodyworkActive && isChanged(bodyworkRunt, bodyworkEff))
+    changes.push(`Carrocería: ${up(bodyworkEff)}`);
 
   return (
     <section
@@ -109,8 +131,8 @@ export function VehicleTransformationsCard({
         </p>
       </div>
       <p className="text-[11px] opacity-55 -mt-1">
-        Declara un cambio de color o combustible frente al RUNT. Se registrará en el FUR (campos y
-        observaciones). No requiere documentos adicionales.
+        Declara un cambio de color, combustible o carrocería frente al RUNT. Se registrará en el
+        FUR. La carrocería puede requerir factura como documento de soporte.
       </p>
 
       <div role="group" aria-labelledby="veh-transf-title" className="space-y-2.5">
@@ -137,6 +159,21 @@ export function VehicleTransformationsCard({
           disabled={disabled}
           onToggle={(on) => void setFuel(on)}
           onSelect={(v) => void setFuel(true, v)}
+        />
+        <TransformationRow
+          idPrefix="transf-bodywork"
+          icon={Layers}
+          label="Carrocería"
+          toggleLabel="Cambió la carrocería"
+          selectLabel="Nueva carrocería"
+          runtValue={bodyworkRunt}
+          effectiveValue={bodyworkEff}
+          active={bodyworkActive}
+          options={bodyworkOptions}
+          emptyMessage={bodyworkEmptyMessage}
+          disabled={disabled}
+          onToggle={(on) => void setBodywork(on)}
+          onSelect={(v) => void setBodywork(true, v)}
         />
       </div>
 
@@ -166,10 +203,13 @@ function TransformationRow({
   idPrefix,
   icon: Icon,
   label,
+  toggleLabel,
+  selectLabel,
   runtValue,
   effectiveValue,
   active,
   options,
+  emptyMessage,
   disabled,
   onToggle,
   onSelect,
@@ -177,10 +217,16 @@ function TransformationRow({
   idPrefix: string;
   icon: typeof Palette;
   label: string;
+  /** Etiqueta del checkbox de toggle. Por defecto: `"Cambió el ${label.toLowerCase()}"`. */
+  toggleLabel?: string;
+  /** Etiqueta del selector cuando está activo. Por defecto: `"Nuevo ${label.toLowerCase()}"`. */
+  selectLabel?: string;
   runtValue: string;
   effectiveValue: string;
   active: boolean;
   options: readonly string[];
+  /** Mensaje cuando `active && options.length === 0` (clase desconocida o sin clase). */
+  emptyMessage?: string;
   disabled: boolean;
   onToggle: (on: boolean) => void;
   onSelect: (value: string) => void;
@@ -189,6 +235,8 @@ function TransformationRow({
   const selectId = `${idPrefix}-select`;
   const hintId = `${idPrefix}-hint`;
   const changed = active && isChanged(runtValue, effectiveValue);
+  const computedToggleLabel = toggleLabel ?? `Cambió el ${label.toLowerCase()}`;
+  const computedSelectLabel = selectLabel ?? `Nuevo ${label.toLowerCase()}`;
   // El efectivo siempre debe ser una opción válida del selector aunque el catálogo placeholder
   // no lo incluya (p. ej. un color del RUNT fuera de la lista).
   const selectOptions = mergeOption(options, effectiveValue || runtValue);
@@ -211,7 +259,7 @@ function TransformationRow({
             className="flex cursor-pointer items-center gap-1.5 font-semibold"
           >
             <Icon aria-hidden="true" className="h-3.5 w-3.5 opacity-70" />
-            {`Cambió el ${label.toLowerCase()}`}
+            {computedToggleLabel}
           </label>
           <span id={hintId} className="mt-0.5 block opacity-55">
             {`RUNT: ${up(runtValue) || '—'}`}
@@ -221,22 +269,28 @@ function TransformationRow({
 
       {active && (
         <div className="pl-6 space-y-1.5">
-          <label htmlFor={selectId} className="block text-[11px] font-medium opacity-70">
-            {`Nuevo ${label.toLowerCase()}`}
-          </label>
-          <select
-            id={selectId}
-            value={effectiveValue}
-            onChange={(e) => onSelect(e.target.value)}
-            disabled={disabled}
-            className="w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14]"
-          >
-            {selectOptions.map((opt) => (
-              <option key={opt} value={opt}>
+          {options.length === 0 && emptyMessage ? (
+            <p className="text-[11px] opacity-55">{emptyMessage}</p>
+          ) : (
+            <>
+              <label htmlFor={selectId} className="block text-[11px] font-medium opacity-70">
+                {computedSelectLabel}
+              </label>
+              <select
+                id={selectId}
+                value={effectiveValue}
+                onChange={(e) => onSelect(e.target.value)}
+                disabled={disabled}
+                className="w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14]"
+              >
+              {selectOptions.map((opt, i) => (
+              <option key={`${opt}-${i}`} value={opt}>
                 {opt}
               </option>
             ))}
-          </select>
+              </select>
+            </>
+          )}
           {changed && (
             <p className="flex items-center gap-1.5 text-[11px]" style={{ color: '#557EFF' }}>
               <span className="opacity-70">{up(runtValue)}</span>

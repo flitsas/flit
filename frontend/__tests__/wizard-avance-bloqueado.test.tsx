@@ -63,7 +63,7 @@ const TRASPASO_SIMIT_PENDIENTE: WizardState = {
     { index: 2, key: 'vendedor', label: 'Vendedor', status: 'complete', reasons: [] },
     { index: 3, key: 'comprador', label: 'Comprador', status: 'incomplete', reasons: ['simit_pendiente'] },
     { index: 4, key: 'comercial', label: 'Datos comerciales', status: 'locked', reasons: [] },
-    { index: 5, key: 'fur', label: 'Generar FUR', status: 'locked', reasons: [] },
+    { index: 5, key: 'fur', label: 'Resumen del trámite', status: 'locked', reasons: [] },
   ],
 };
 

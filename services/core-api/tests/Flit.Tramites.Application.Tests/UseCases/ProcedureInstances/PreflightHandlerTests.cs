@@ -954,6 +954,77 @@ public sealed class PreflightHandlerTests
         ValueOf(instance, "vehicle_fuel_runt").Should().Be("GASOLINA");
     }
 
+    [Fact]
+    public async Task Preflight_PrimeraConsultaCarroceria_EscribeEfectivoYSnapshotRunt()
+    {
+        // HU #10673 (A4/B4) — primera hidratación de carrocería: efectivo y snapshot quedan iguales al RUNT.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = VehiculoHydratesHandler(new HydratedField("vehicle_body_type", "SEDAN", null));
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        ValueOf(instance, "vehicle_body_type").Should().Be("SEDAN");
+        ValueOf(instance, "vehicle_body_type_runt").Should().Be("SEDAN");
+    }
+
+    [Fact]
+    public async Task Preflight_FlagCambioCarroceriaActivo_NoPisaEfectivo_RefrescaSnapshot()
+    {
+        // HU #10673 (A4/B4) — cambio_carroceria = true: el efectivo se preserva; el snapshot RUNT se refresca.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_body_type", ValueText = "PICKUP", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_body_type_runt", ValueText = "SEDAN", Source = "consultation" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "cambio_carroceria", ValueText = "true", Source = "user" });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = VehiculoHydratesHandler(new HydratedField("vehicle_body_type", "SEDAN", null));
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        ValueOf(instance, "vehicle_body_type").Should().Be("PICKUP");       // cambio declarado intacto
+        ValueOf(instance, "vehicle_body_type_runt").Should().Be("SEDAN");   // snapshot RUNT refrescado
+    }
+
+    [Fact]
+    public async Task Preflight_CambioImplicitoCarroceria_SinFlag_NoPisaEfectivo()
+    {
+        // HU #10673 (A4/B4) — sin flag pero el efectivo ya difiere del snapshot previo → transformación activa.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_body_type", ValueText = "PICKUP", Source = "user" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_body_type_runt", ValueText = "SEDAN", Source = "consultation" });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = VehiculoHydratesHandler(new HydratedField("vehicle_body_type", "SEDAN", null));
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        ValueOf(instance, "vehicle_body_type").Should().Be("PICKUP");
+        ValueOf(instance, "vehicle_body_type_runt").Should().Be("SEDAN");
+    }
+
+    [Fact]
+    public async Task Preflight_SinTransformacionCarroceria_ReconsultaRefrescaAmbos()
+    {
+        // HU #10673 (A4/B4) — re-consulta sin transformación de carrocería: el RUNT nuevo pisa efectivo y snapshot.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("matricula_inicial", actors: Actor("comprador"));
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_body_type", ValueText = "SEDAN", Source = "consultation" });
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "vehicle_body_type_runt", ValueText = "SEDAN", Source = "consultation" });
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+        var handler = VehiculoHydratesHandler(new HydratedField("vehicle_body_type", "MICROBUS", null));
+
+        var (_, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        ValueOf(instance, "vehicle_body_type").Should().Be("MICROBUS");
+        ValueOf(instance, "vehicle_body_type_runt").Should().Be("MICROBUS");
+    }
+
     // ── FEATURE 05 (HU #10758) — fuente de comparendos → proveedor ───────────
 
     /// <summary>Override del tenant con solo la fuente de comparendos (sin cadenas ni timeout).</summary>

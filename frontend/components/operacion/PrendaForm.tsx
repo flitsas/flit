@@ -166,22 +166,27 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
       <fieldset disabled={readOnly} className="contents">
         <div className="grid grid-cols-1 gap-4">
           <div>
-            <label htmlFor="prenda-decision" className="text-xs font-semibold mb-1.5 block">
-              Decisión de prenda
-            </label>
-            <select
-              id="prenda-decision"
-              value={decision}
-              onChange={(e) => setDecision((e.target.value || '') as PrendaDecision | '')}
-              className={INPUT_BASE}
-            >
-              <option value="">Selecciona una opción…</option>
+            <p className="text-xs font-semibold mb-2">Decisión de prenda</p>
+            <div className="space-y-2" role="radiogroup" aria-label="Decisión de prenda">
               {decisions.map((d) => (
-                <option key={d} value={d}>
-                  {PRENDA_DECISION_LABELS[d]}
-                </option>
+                <label
+                  key={d}
+                  className="flex items-start gap-2.5 cursor-pointer rounded-xl border p-3 transition-colors hover:bg-[rgba(85,126,255,0.04)]"
+                  style={decision === d ? { borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' } : undefined}
+                >
+                  <input
+                    type="radio"
+                    name="prenda-decision"
+                    value={d}
+                    checked={decision === d}
+                    onChange={() => setDecision(d)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
+                    disabled={readOnly}
+                  />
+                  <span className="text-xs font-medium">{PRENDA_DECISION_LABELS[d]}</span>
+                </label>
               ))}
-            </select>
+            </div>
           </div>
 
           {capturaAcreedor && (

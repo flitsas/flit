@@ -80,6 +80,7 @@ import type {
   StuckIdentityValidationsResponse,
   WizardModalidad,
   WizardState,
+  DocumentoInformativoPreviewItem,
 } from './types/procedure-runtime';
 
 /**
@@ -1091,6 +1092,19 @@ export const tramitesClient = {
     request<WizardState>(
       `/api/v1/tramites/wizard-preview?modalidad=${encodeURIComponent(modalidad)}`,
     ),
+
+  /** Guía informativa de documentos (paso 1, sin instancia). */
+  fetchDocumentRequirementsPreview: async (
+    modalidad: WizardModalidad,
+    transitOfficeId?: string,
+  ): Promise<DocumentoInformativoPreviewItem[]> => {
+    const qs = new URLSearchParams({ modalidad });
+    if (transitOfficeId) qs.set('transitOfficeId', transitOfficeId);
+    const res = await request<{ items?: DocumentoInformativoPreviewItem[] }>(
+      `/api/v1/tramites/document-requirements/preview?${qs.toString()}`,
+    );
+    return res?.items ?? [];
+  },
 
   // HU #10879/#10883 — autosave del avance del wizard: persiste la `key` del paso donde quedó el
   // operador para retomar ahí al reabrir el borrador (AC2). PATCH /instances/{id}/current-step; el

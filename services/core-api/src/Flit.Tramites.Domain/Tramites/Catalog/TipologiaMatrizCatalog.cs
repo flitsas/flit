@@ -47,7 +47,7 @@ public static class TipologiaMatrizCatalog
                 new PasoTipologia(2, "Comprador", Aplica: true, Nota: "Adquirente único; sin vendedor."),
                 new PasoTipologia(3, "Documentos", Aplica: true, Nota: "Factura + manifiesto/aduana + impronta (obligatorios)."),
                 new PasoTipologia(4, "Identidad", Aplica: true, Nota: "Validación de identidad del comprador."),
-                new PasoTipologia(5, "Generar FUR", Aplica: true, Nota: "FUR de matrícula inicial → envío a tránsito."),
+                new PasoTipologia(5, "Resumen del trámite", Aplica: true, Nota: "Revisión y cierre: FUR/impronta se generan automáticamente; Preparar/Radicar envían a tránsito."),
             ]),
         new TipologiaJourney(
             Codigo: TramiteTipologiaCatalog.CodigoTraspasoStandard,
@@ -64,7 +64,7 @@ public static class TipologiaMatrizCatalog
                 new PasoTipologia(3, "Comprador", Aplica: true, Nota: "Parte entrante; RUNT + SIMIT del comprador."),
                 new PasoTipologia(4, "Documentos", Aplica: true, Nota: "Contrato de compraventa + impronta + SOAT del vehículo."),
                 new PasoTipologia(5, "Datos comerciales", Aplica: true, Nota: "Valor de venta > 0."),
-                new PasoTipologia(6, "Generar FUR", Aplica: true, Nota: "FUR de traspaso → envío a tránsito."),
+                new PasoTipologia(6, "Resumen del trámite", Aplica: true, Nota: "Revisión y cierre: FUR/impronta se generan automáticamente; Preparar/Radicar envían a tránsito."),
             ]),
     ];
 

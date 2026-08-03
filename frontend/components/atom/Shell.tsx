@@ -3,10 +3,13 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { canReadIctLogs, canReadLogQx, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import { useDockScrollCondense } from "./useDockScrollCondense";
+import { buildDockGroups } from "./dock/dockGroups";
+import { DockDesktop } from "./dock/DockDesktop";
 
 const logoWhite = "/assets/logo-flit-white.svg";
 const logoDark = "/assets/logo-flit-dark.svg";
-const iso = "/assets/iso-flit.svg";
+const fabIcon = "/assets/favicon.svg";
 import {
   LayoutGrid,
   FileStack,
@@ -147,6 +150,10 @@ export function Shell({
   // se colapsa a un lanzador que abre una grilla de apps controlada por este estado.
   const [dockOpen, setDockOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const contentScrollRef = useRef<HTMLDivElement>(null);
+  const dockLauncherRef = useRef<HTMLButtonElement>(null);
+  const condensed = useDockScrollCondense(contentScrollRef);
+
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
@@ -154,6 +161,18 @@ export function Shell({
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
+
+  // Menú móvil: Escape cierra y devuelve el foco al lanzador (GUIA-DOCK §9).
+  useEffect(() => {
+    if (!dockOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setDockOpen(false);
+      dockLauncherRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dockOpen]);
 
   // Filtra los módulos del dock según permisos RBAC del JWT cuando visibleModuleCodes
   // está disponible. "Ayuda" es soporte universal (no es un módulo con permiso RBAC),
@@ -279,15 +298,10 @@ export function Shell({
     });
   }
 
-  // Reparto balanceado: mitad a cada lado del FAB (la izquierda toma el extra cuando
-  // el total es impar). Se rellena el lado más corto con un espaciador invisible para
-  // que el FAB quede perfectamente centrado sin importar cuántas entradas haya.
-  const half = Math.ceil(entries.length / 2);
-  const left = entries.slice(0, half);
-  const right = entries.slice(half);
-  const sideLen = Math.max(left.length, right.length);
-  const leftPad = sideLen - left.length;
-  const rightPad = sideLen - right.length;
+  // Agrupadores del dock (menú / submenú). Solo se muestran grupos con al menos
+  // un ítem visible según permisos/rol. FAB de inicio queda centrado entre grupos.
+  const groups = buildDockGroups(entries);
+  const atBottom = condensed;
 
   return (
     <div
@@ -395,132 +409,107 @@ export function Shell({
       <main className="flex-1 min-h-0 overflow-hidden relative">
         {/* AC1 #10498: el scroll ocurre DENTRO del área de contenido (no se clipa) y el
             padding inferior libera el dock flotante para que nada quede oculto tras él. */}
-        <div className="absolute inset-0 overflow-y-auto pb-28">{children}</div>
-
-        {/* Bottom dock — escritorio (lg+): pill horizontal balanceado alrededor del FAB */}
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-5 z-40 hidden lg:block">
-          <div
-            className="flex items-center gap-1 px-3 py-2 rounded-full"
-            style={{
-              background: dark ? "rgba(11,15,20,0.85)" : "rgba(255,255,255,0.92)",
-              boxShadow: "0 10px 40px -10px rgba(22,39,68,0.35), 0 4px 14px rgba(0,0,0,0.08)",
-              backdropFilter: "blur(20px)",
-              border: `1px solid ${dark ? "#1A1F2B" : "#DFE5ED"}`,
-            }}
-          >
-            {Array.from({ length: leftPad }).map((_, i) => (
-              <DockSpacer key={`lp-${i}`} />
-            ))}
-            {left.map((it) => (
-              <DockBtn
-                key={it.key}
-                item={{ label: it.label, icon: it.icon }}
-                active={it.active}
-                onClick={it.onClick}
-                dark={dark}
-              />
-            ))}
-            {/* FAB — siempre centrado en el dock */}
-            <button
-              onClick={() => onNav("dashboard")}
-              className="mx-2 h-14 w-14 rounded-full grid place-items-center transition-transform hover:scale-105"
-              style={{
-                background: "linear-gradient(135deg,#557EFF 0%,#00DBD5 100%)",
-                boxShadow: "0 10px 24px -6px rgba(85,126,255,0.55)",
-              }}
-              aria-label="Inicio FLIT"
-            >
-              <img src={iso} alt="FLIT" className="h-7 w-7 brightness-0 invert" />
-            </button>
-            {right.map((it) => (
-              <DockBtn
-                key={it.key}
-                item={{ label: it.label, icon: it.icon }}
-                active={it.active}
-                onClick={it.onClick}
-                dark={dark}
-              />
-            ))}
-            {Array.from({ length: rightPad }).map((_, i) => (
-              <DockSpacer key={`rp-${i}`} />
-            ))}
-          </div>
+        <div ref={contentScrollRef} className="absolute inset-0 overflow-y-auto pb-28">
+          {children}
         </div>
 
-        {/* Bottom dock — móvil/tablet (<lg): lanzador flotante que abre una grilla de apps.
-            En pantallas angostas el pill horizontal (hasta ~14 entradas para SuperAdmin) se
-            saldría del viewport, por lo que se colapsa a un único botón + hoja "grid de apps". */}
+        <DockDesktop
+          groups={groups}
+          atBottom={atBottom}
+          onHome={() => onNav("dashboard")}
+          homeActive={!onAdminRoute && active === "dashboard"}
+        />
+
+        {/* Bottom dock — móvil/tablet (<lg): lanzador + hoja agrupada. */}
         <div className="lg:hidden">
           <button
+            ref={dockLauncherRef}
             onClick={() => setDockOpen(true)}
-            className="absolute left-1/2 -translate-x-1/2 bottom-5 z-40 h-14 w-14 rounded-full grid place-items-center transition-transform hover:scale-105"
-            style={{
-              background: "linear-gradient(135deg,#557EFF 0%,#00DBD5 100%)",
-              boxShadow: "0 10px 24px -6px rgba(85,126,255,0.55)",
-            }}
+            className="pointer-events-auto absolute left-1/2 -translate-x-1/2 bottom-5 z-40 h-14 w-14 overflow-hidden rounded-full transition-transform duration-[var(--nav-duracion)] ease-[var(--nav-ease)] hover:scale-105 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] focus-visible:ring-offset-2"
+            style={{ boxShadow: "var(--nav-sombra-activo)" }}
             aria-label="Abrir menú de navegación"
             aria-expanded={dockOpen}
+            aria-controls="dock-mobile-sheet"
           >
-            <img src={iso} alt="FLIT" className="h-7 w-7 brightness-0 invert" />
+            <img src={fabIcon} alt="" aria-hidden="true" className="h-full w-full object-cover" />
           </button>
 
           {dockOpen && (
             <div
               className="absolute inset-0 z-50 flex items-end justify-center p-4"
-              style={{ background: "rgba(5,6,10,0.45)", backdropFilter: "blur(4px)" }}
-              onMouseDown={(e) => {
-                if (e.target === e.currentTarget) setDockOpen(false);
+              style={{ background: "rgba(22, 39, 68, 0.45)", backdropFilter: "blur(4px)" }}
+              onPointerDown={(e) => {
+                if (e.target === e.currentTarget) {
+                  setDockOpen(false);
+                  dockLauncherRef.current?.focus();
+                }
               }}
               role="dialog"
               aria-modal="true"
               aria-label="Navegación"
             >
               <div
-                className="w-full max-w-sm max-h-[70vh] overflow-y-auto rounded-2xl p-4"
+                id="dock-mobile-sheet"
+                className="dock-sheet w-full max-w-sm max-h-[min(70vh,32rem)] overflow-y-auto rounded-[var(--nav-radio-panel)] p-4"
                 style={{
-                  background: dark ? "rgba(11,15,20,0.98)" : "rgba(255,255,255,0.98)",
-                  border: `1px solid ${dark ? "#1A1F2B" : "#DFE5ED"}`,
-                  boxShadow: "0 10px 40px -10px rgba(22,39,68,0.35)",
+                  background: "var(--nav-panel-bg)",
+                  border: "1px solid var(--nav-borde)",
+                  boxShadow: "var(--nav-sombra-panel)",
                 }}
               >
                 <div className="mb-3 flex items-center justify-between">
-                  <span className="text-xs font-semibold opacity-70">Navegación</span>
+                  <span className="text-xs font-semibold tracking-wide text-[var(--nav-texto-tenue)] uppercase">
+                    Navegación
+                  </span>
                   <button
-                    onClick={() => setDockOpen(false)}
-                    className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10"
+                    onClick={() => {
+                      setDockOpen(false);
+                      dockLauncherRef.current?.focus();
+                    }}
+                    className="p-1 rounded-md hover:bg-[var(--nav-app-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)]"
                     aria-label="Cerrar menú"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </div>
-                <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
-                  {entries.map((it) => {
-                    const Icon = it.icon;
-                    return (
-                      <button
-                        key={it.key}
-                        onClick={() => {
-                          setDockOpen(false);
-                          it.onClick();
-                        }}
-                        className="flex flex-col items-center gap-1 rounded-xl p-2 text-center transition"
-                        style={{
-                          background: it.active
-                            ? dark
-                              ? "rgba(0,219,213,0.18)"
-                              : "rgba(85,126,255,0.12)"
-                            : "transparent",
-                          color: it.active ? "#557EFF" : dark ? "#FFFFFF" : "#162744",
-                        }}
-                        aria-current={it.active ? "page" : undefined}
-                      >
-                        <Icon className="h-5 w-5" strokeWidth={it.active ? 2.4 : 1.8} />
-                        <span className="text-[10px] font-medium leading-tight line-clamp-2">
-                          {it.label}
-                        </span>
-                      </button>
-                    );
-                  })}
+                <div className="flex flex-col gap-3">
+                  {groups.map((g) => (
+                    <div key={g.id}>
+                      <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--nav-texto-tenue)]">
+                        {g.label}
+                      </p>
+                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                        {g.items.map((it) => {
+                          const Icon = it.icon;
+                          return (
+                            <button
+                              key={it.key}
+                              onClick={() => {
+                                setDockOpen(false);
+                                it.onClick();
+                              }}
+                              className={`dock-pill flex flex-col items-center gap-1 rounded-xl p-2 text-center transition-colors duration-[var(--nav-duracion)] ease-[var(--nav-ease)] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nav-focus)] ${
+                                it.active ? "font-semibold text-white" : "font-medium"
+                              }`}
+                              style={
+                                it.active
+                                  ? {
+                                      background: "var(--nav-activo)",
+                                      boxShadow: "var(--nav-sombra-activo)",
+                                      color: "#ffffff",
+                                    }
+                                  : undefined
+                              }
+                              aria-current={it.active ? "page" : undefined}
+                            >
+                              <Icon className="h-5 w-5" strokeWidth={it.active ? 2.4 : 1.8} aria-hidden="true" />
+                              <span className="text-[10px] leading-tight line-clamp-2">{it.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -561,48 +550,6 @@ function MenuItem({
     >
       <Icon className="h-4 w-4" />
       <span className="font-medium">{label}</span>
-    </button>
-  );
-}
-
-// Espaciador invisible del tamaño de un botón del dock. Rellena el lado más corto
-// cuando el total de entradas es impar, manteniendo el FAB perfectamente centrado.
-function DockSpacer() {
-  return <span aria-hidden="true" className="h-11 w-11 shrink-0" />;
-}
-
-function DockBtn({
-  item,
-  active,
-  onClick,
-  dark,
-}: {
-  item: { label: string; icon: typeof LayoutGrid };
-  active: boolean;
-  onClick: () => void;
-  dark: boolean;
-}) {
-  const Icon = item.icon;
-  return (
-    <button
-      onClick={onClick}
-      className="group relative h-11 w-11 rounded-full grid place-items-center transition"
-      style={{
-        background: active ? (dark ? "rgba(0,219,213,0.18)" : "rgba(85,126,255,0.12)") : "transparent",
-        color: active ? "#557EFF" : dark ? "#FFFFFF" : "#162744",
-      }}
-      aria-label={item.label}
-    >
-      <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 1.8} />
-      {active && (
-        <span className="absolute -bottom-1 h-1 w-1 rounded-full" style={{ background: "#557EFF" }} />
-      )}
-      <span
-        className="pointer-events-none absolute bottom-full mb-2 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition"
-        style={{ background: "#162744", color: "#FFFFFF" }}
-      >
-        {item.label}
-      </span>
     </button>
   );
 }

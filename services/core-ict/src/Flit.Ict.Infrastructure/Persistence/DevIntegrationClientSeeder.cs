@@ -58,13 +58,21 @@ public sealed partial class DevIntegrationClientSeeder(
             // índice plano sobre la columna username, así que "ON CONFLICT (username)" fallaría con 42P10
             // ("no hay restricción única que coincida"), reventando este IHostedService en el arranque y
             // dejando core-ict en crash-loop (502 en todo /api/v1/ict/*). DevUsername ya va en minúsculas.
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
-                INSERT INTO ict.integration_clients (tenant_id, username, password_hash, scopes, is_active)
-                VALUES ({tenantId.Value}, {DevUsername}, {hash},
-                        '["ict.transactions.write","ict.status.read"]'::jsonb, true)
-                ON CONFLICT ((lower(username))) DO NOTHING
-                """, cancellationToken);
-            Log.Seeded(logger, DevUsername);
+            try
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO ict.integration_clients (tenant_id, username, password_hash, scopes, is_active)
+                    VALUES ({tenantId.Value}, {DevUsername}, {hash},
+                            '["ict.transactions.write","ict.status.read"]'::jsonb, true)
+                    ON CONFLICT ((lower(username))) DO NOTHING
+                    """, cancellationToken);
+                Log.Seeded(logger, DevUsername);
+            }
+            catch (Exception ex)
+            {
+                // No tumbar el host: el cliente de prueba es solo DX local.
+                Log.SeedFailed(logger, ex);
+            }
         }
         finally
         {
@@ -92,5 +100,8 @@ public sealed partial class DevIntegrationClientSeeder(
 
         [LoggerMessage(Level = LogLevel.Warning, Message = "ICT dev seed: no hay tenants en identity.tenants; se omite el seed del cliente de prueba.")]
         public static partial void NoTenant(ILogger logger);
+
+        [LoggerMessage(Level = LogLevel.Warning, Message = "ICT dev seed: falló el upsert del cliente de prueba; se continúa sin él.")]
+        public static partial void SeedFailed(ILogger logger, Exception exception);
     }
 }

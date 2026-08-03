@@ -224,7 +224,7 @@ public sealed class MultiRoleUserAssignmentEndpointsTests : IClassFixture<WebApp
             Id = _tenantId,
             Code = $"CO-MULTIROLE-{Guid.NewGuid():N}"[..20],
             LegalName = "Compañía multi-rol de prueba",
-            TaxId = "900555555-5",
+            TaxId = TestNit.Unique(),
             TenantType = "RENTING",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,

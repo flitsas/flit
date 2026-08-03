@@ -290,6 +290,59 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
             cancellationToken);
     }
 
+    public Task<IReadOnlyDictionary<Guid, LegalRepresentativeBrief>> FindBriefByIdsAsync(
+        Guid tenantId,
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken cancellationToken = default)
+    {
+        if (ids.Count == 0)
+        {
+            return Task.FromResult<IReadOnlyDictionary<Guid, LegalRepresentativeBrief>>(
+                new Dictionary<Guid, LegalRepresentativeBrief>());
+        }
+
+        var idSet = ids.Distinct().ToArray();
+
+        return TenantRlsScope.ExecuteAsync(
+            _context,
+            tenantId,
+            async () =>
+            {
+                var rows = await _context.CompanyLegalRepresentatives
+                    .AsNoTracking()
+                    .Where(r => r.TenantId == tenantId && idSet.Contains(r.Id))
+                    .Select(r => new
+                    {
+                        r.Id,
+                        r.Name,
+                        r.FirstLastName,
+                        r.SecondLastName,
+                        r.DocumentType,
+                        r.DocumentNumber,
+                    })
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                IReadOnlyDictionary<Guid, LegalRepresentativeBrief> map = rows.ToDictionary(
+                    r => r.Id,
+                    r => new LegalRepresentativeBrief(
+                        r.Id,
+                        ComposeFullName(r.Name, r.FirstLastName, r.SecondLastName),
+                        r.DocumentType,
+                        r.DocumentNumber));
+                return map;
+            },
+            cancellationToken);
+    }
+
+    private static string ComposeFullName(string name, string firstLastName, string? secondLastName) =>
+        string.Join(
+            ' ',
+            new[] { name, firstLastName, secondLastName }
+                .Select(p => p?.Trim())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Cast<string>());
+
     /// <summary>
     /// Proyecta las filas de representante a su read model resolviendo, en consultas en lote (sin N+1),
     /// la compañía representada y los tipos de trámite del puente. Con <paramref name="includeDeeds"/>

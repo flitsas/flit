@@ -168,6 +168,16 @@ public sealed record RepresentativeDeedSummary(
 }
 
 /// <summary>
+/// Proyección ligera de un representante para enriquecer escrituras en el wizard (nombre + documento).
+/// Sin email/dirección ni historial de escrituras.
+/// </summary>
+public sealed record LegalRepresentativeBrief(
+    Guid Id,
+    string FullName,
+    string DocumentType,
+    string DocumentNumber);
+
+/// <summary>
 /// Read model de una escritura para el listado/detalle admin y el consumo del wizard — HU #10900.
 /// Proyecta las compañías (NITs) a las que aplica.
 /// </summary>

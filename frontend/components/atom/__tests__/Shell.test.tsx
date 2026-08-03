@@ -1,5 +1,4 @@
-// Dock del Shell (artefacto inferior): el FAB de inicio debe quedar SIEMPRE centrado y el
-// botón "Ayuda" (soporte universal) debe verse aunque RBAC filtre los demás módulos.
+// Dock del Shell: FAB centrado, Ayuda universal, agrupadores menú/submenú.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -7,7 +6,6 @@ import { setDevSuperAdminToken } from "@/lib/api/client";
 import { TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 import { Shell } from "../Shell";
 
-// Shell usa usePathname para resaltar la ruta admin activa.
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 
 function makeToken(payload: Record<string, unknown>): string {
@@ -31,16 +29,20 @@ describe("Shell — dock", () => {
   });
 
   it("mantiene el FAB de inicio centrado: mismo nº de elementos a cada lado", () => {
-    // Número impar de entradas para ejercitar el relleno con espaciador.
     renderShell(["dashboard", "reportes", "validaciones"]);
     const fab = screen.getByRole("button", { name: "Inicio FLIT" });
     const dock = fab.parentElement;
     expect(dock).not.toBeNull();
     const children = Array.from(dock!.children);
     const fabIndex = children.indexOf(fab);
-    const before = fabIndex;
-    const after = children.length - fabIndex - 1;
-    expect(before).toBe(after);
+    expect(fabIndex).toBe(children.length - fabIndex - 1);
+  });
+
+  it("usa favicon.svg en el FAB central", () => {
+    renderShell(["dashboard"]);
+    const fab = screen.getByRole("button", { name: "Inicio FLIT" });
+    const img = fab.querySelector("img");
+    expect(img?.getAttribute("src")).toBe("/assets/favicon.svg");
   });
 });
 
@@ -61,7 +63,7 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
     expect(screen.getByRole("button", { name: "Tránsito" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Compañías" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Documental" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "RBAC Admin" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Administradores" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mi Empresa" })).not.toBeInTheDocument();
   });
 });
@@ -83,6 +85,7 @@ describe("Shell — Mi Empresa (HU #10512)", () => {
       </Shell>,
     );
 
+    // Grupo Compañías con un solo ítem visible → píldora directa "Mi Empresa".
     await userEvent.click(screen.getByRole("button", { name: "Mi Empresa" }));
 
     expect(onNav).toHaveBeenCalledWith("usuarios");
@@ -94,14 +97,16 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   });
 
-  it("muestra la entrada 'Improntas' cuando el usuario en sesión es SuperAdmin", () => {
+  it("muestra 'Improntas' dentro del agrupador Compañías cuando es SuperAdmin", async () => {
     setDevSuperAdminToken();
     renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Compañías" }));
     expect(screen.getByRole("button", { name: "Improntas" })).toBeInTheDocument();
   });
 
   it("no muestra la entrada 'Improntas' sin sesión SuperAdmin", () => {
     renderShell();
     expect(screen.queryByRole("button", { name: "Improntas" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Compañías" })).not.toBeInTheDocument();
   });
 });

@@ -1,3 +1,4 @@
+using Flit.Admin.Application.DocumentRequirements.PreviewInformativos;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -37,6 +38,47 @@ internal static class WizardEndpoints
                 ? Results.Problem(statusCode: 400, title: "Bad Request", detail: "Modalidad no válida.")
                 : Results.Ok(preview);
         }).WithName("GetProcedureWizardPreview");
+
+        // Guía informativa de documentos del trámite (paso 1, sin instancia).
+        // modalidad: matricula_inicial | traspaso; transitOfficeId opcional (overrides OT).
+        group.MapGet("/document-requirements/preview", async (
+            string? modalidad,
+            Guid? transitOfficeId,
+            PreviewDocumentosInformativosHandler handler,
+            CancellationToken ct) =>
+        {
+            var result = await handler.HandleAsync(
+                new PreviewDocumentosInformativosQuery
+                {
+                    Modalidad = modalidad ?? string.Empty,
+                    TransitOfficeId = transitOfficeId is null || transitOfficeId == Guid.Empty
+                        ? null
+                        : transitOfficeId,
+                },
+                ct);
+
+            return result.Outcome switch
+            {
+                PreviewDocumentosInformativosOutcome.ModalidadInvalida =>
+                    Results.Problem(statusCode: 400, title: "Bad Request", detail: "Modalidad no válida."),
+                PreviewDocumentosInformativosOutcome.ProcedureTypeNotFound =>
+                    Results.Problem(statusCode: 404, title: "Not Found", detail: "Tipo de trámite no encontrado."),
+                _ => Results.Ok(new
+                {
+                    tipologiaCodigo = result.TipologiaCodigo,
+                    procedureTypeId = result.ProcedureTypeId,
+                    items = result.Items.Select(i => new
+                    {
+                        documentTypeId = i.DocumentTypeId,
+                        codigo = i.Codigo,
+                        nombre = i.Nombre,
+                        obligatorio = i.Obligatorio,
+                        orden = i.Orden,
+                        descripcion = i.Descripcion,
+                    }),
+                }),
+            };
+        }).WithName("GetDocumentRequirementsPreview");
 
         return app;
     }

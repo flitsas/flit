@@ -13,6 +13,11 @@ export interface CompanyListItem {
    * tipos heredados fuera del catálogo (p.ej. `standard`, `transit_office`).
    */
   tenantType: string;
+  /**
+   * `true` si el tenant es Organismo de Tránsito (perfil en `admin.transit_office_profiles`).
+   * No inferir solo desde `tenantType`: los OT también usan RENTING.
+   */
+  isTransitOffice: boolean;
   estadoActivo: boolean;
   fechaCreacion: string;
   /**

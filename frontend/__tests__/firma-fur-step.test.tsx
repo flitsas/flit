@@ -186,7 +186,7 @@ beforeEach(() => {
 describe('FirmaFurStep — firma solo en traspaso', () => {
   it('matrícula NO muestra la sección de firma', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByRole('region', { name: 'Participantes del portal' });
+    await screen.findByRole('region', { name: 'Resumen del trámite' });
     expect(screen.queryByRole('region', { name: 'Firma de la compraventa' })).not.toBeInTheDocument();
   });
 
@@ -222,30 +222,14 @@ describe('FirmaFurStep — solicitar y simular firma', () => {
   });
 });
 
-describe('FirmaFurStep — invitar participante', () => {
-  it('invita y muestra el magic-link absoluto copiable', async () => {
-    const user = userEvent.setup();
+describe('FirmaFurStep — participantes portal ocultos (Feature #11211)', () => {
+  it('no renderiza Participantes del portal en el camino feliz', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Participantes del portal' });
-    await user.type(screen.getByLabelText('Nombre completo'), 'Ana Comprador');
-    await user.type(screen.getByLabelText('Correo electrónico'), 'ana@example.com');
-    await user.click(screen.getByRole('button', { name: 'Invitar participante' }));
-
-    await waitFor(() => expect(mocks.invitarParticipante).toHaveBeenCalledTimes(1));
-    const link = (await screen.findByLabelText(
-      'Enlace de portal del participante',
-    )) as HTMLInputElement;
-    expect(link.value).toContain('/portal/raw-token-xyz');
-  });
-
-  it('reinvitar muestra el error de cooldown 429', async () => {
-    mocks.listParticipantes.mockResolvedValue([PARTICIPANT]);
-    mocks.reinvitarParticipante.mockRejectedValue(new Error('429 Too Many Requests'));
-    const user = userEvent.setup();
-    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByText(/Ana Comprador/);
-    await user.click(screen.getByRole('button', { name: 'Reinvitar' }));
-    expect(await screen.findByText(/Espera 24h antes de reenviar/)).toBeInTheDocument();
+    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    expect(
+      screen.queryByRole('region', { name: 'Participantes del portal' }),
+    ).not.toBeInTheDocument();
+    expect(mocks.listParticipantes).not.toHaveBeenCalled();
   });
 });
 
@@ -503,7 +487,7 @@ describe('FirmaFurStep — descarga de documentos', () => {
 describe('FirmaFurStep — sin envío duplicado en el paso', () => {
   it('NO renderiza la sección de envío a tránsito (el submit vive en Finalizar)', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByRole('region', { name: 'Participantes del portal' });
+    await screen.findByRole('region', { name: 'Resumen del trámite' });
     expect(screen.queryByRole('region', { name: 'Envío a tránsito' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Enviar a tránsito' })).not.toBeInTheDocument();
     expect(mocks.submitInstance).not.toHaveBeenCalled();
@@ -511,21 +495,18 @@ describe('FirmaFurStep — sin envío duplicado en el paso', () => {
 });
 
 describe('FirmaFurStep — resumen / expediente / línea de tiempo', () => {
-  it('muestra el resumen de la matrícula con el estado de la instancia', async () => {
+  it('muestra el resumen del trámite con el estado de la instancia', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    const resumen = await screen.findByRole('region', { name: 'Resumen de la matrícula' });
+    const resumen = await screen.findByRole('region', { name: 'Resumen del trámite' });
     // N 03 — label desde la fuente única lib/tramites/estados.ts.
     expect(within(resumen).getByText('Borrador')).toBeInTheDocument();
   });
 
-  it('en traspaso el resumen se rotula "Resumen del traspaso" (no matrícula)', async () => {
+  it('en traspaso y matrícula el resumen se rotula "Resumen del trámite"', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
     expect(
-      await screen.findByRole('region', { name: 'Resumen del traspaso' }),
+      await screen.findByRole('region', { name: 'Resumen del trámite' }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('region', { name: 'Resumen de la matrícula' }),
-    ).toBeNull();
   });
 
   it('en traspaso el resumen muestra al vendedor; en matrícula no', async () => {
@@ -537,17 +518,20 @@ describe('FirmaFurStep — resumen / expediente / línea de tiempo', () => {
       ],
     });
     const { unmount } = render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    const resumen = await screen.findByRole('region', { name: 'Resumen del traspaso' });
-    expect(within(resumen).getByText('Vendedor')).toBeInTheDocument();
-    expect(within(resumen).getByText('Ana Vendedora')).toBeInTheDocument();
-    expect(within(resumen).getByText('Beto Comprador')).toBeInTheDocument();
-
-    // En matrícula (sin vendedor) no aparece la fila Vendedor.
+    const resumenTraspaso = await screen.findByRole('region', { name: 'Resumen del trámite' });
+    expect(within(resumenTraspaso).getByText(/Ana Vendedora/)).toBeInTheDocument();
     unmount();
-    mocks.getInstance.mockResolvedValue(INSTANCE_DETAIL);
+
+    mocks.getInstance.mockResolvedValue({
+      ...INSTANCE_DETAIL,
+      actors: [
+        { actorType: 'comprador', fullName: 'Beto Comprador', documentType: 'CC', documentNumber: '222' },
+      ],
+    });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    const resumenMat = await screen.findByRole('region', { name: 'Resumen de la matrícula' });
-    expect(within(resumenMat).queryByText('Vendedor')).toBeNull();
+    const resumenMat = await screen.findByRole('region', { name: 'Resumen del trámite' });
+    expect(within(resumenMat).queryByText(/Ana Vendedora/)).toBeNull();
+    expect(within(resumenMat).getByText(/Beto Comprador/)).toBeInTheDocument();
   });
 
   it('el expediente digital alterna entre las pestañas Vehículo / Comprador / Documentos', async () => {

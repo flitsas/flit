@@ -26,23 +26,21 @@ describe('PrendaForm (matrícula, R4)', () => {
     client.putPrenda.mockClear();
   });
 
-  it('ofrece solo las decisiones de matrícula (registrar / sin prenda)', async () => {
+  it('ofrece solo las decisiones de matrícula (registrar / sin prenda) como radios', async () => {
     render(<PrendaForm instanceId="abc" />);
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    expect(screen.getByRole('option', { name: 'Registrar prenda existente' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Sin prenda' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Registrar prenda existente' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Sin prenda' })).toBeInTheDocument();
     // Las decisiones de traspaso no aparecen en la variante matrícula.
-    expect(screen.queryByRole('option', { name: 'Levantar gravamen' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Levantar gravamen' })).not.toBeInTheDocument();
   });
 
   it('con "sin prenda" no exige documento ni datos del acreedor (puede continuar)', async () => {
     render(<PrendaForm instanceId="abc" />);
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    fireEvent.change(screen.getByLabelText('Decisión de prenda'), {
-      target: { value: 'sin_prenda' },
-    });
+    fireEvent.click(screen.getByRole('radio', { name: 'Sin prenda' }));
 
     expect(screen.queryByLabelText('Acreedor (beneficiario)')).not.toBeInTheDocument();
     expect(screen.queryByRole('note')).not.toBeInTheDocument();
@@ -52,15 +50,13 @@ describe('PrendaForm (matrícula, R4)', () => {
     render(<PrendaForm instanceId="abc" />);
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    fireEvent.change(screen.getByLabelText('Decisión de prenda'), {
-      target: { value: 'registrar' },
-    });
+    fireEvent.click(screen.getByRole('radio', { name: 'Registrar prenda existente' }));
 
     expect(screen.getByLabelText('Acreedor (beneficiario)')).toBeInTheDocument();
     expect(screen.getByRole('note')).toHaveTextContent(/documento de prenda/i);
   });
 
-  it('en traspaso ofrece las 4 decisiones de gestión (sin "sin prenda")', async () => {
+  it('en traspaso ofrece las 4 decisiones de gestión (sin "sin prenda") como radios', async () => {
     render(
       <PrendaForm
         instanceId="abc"
@@ -69,19 +65,17 @@ describe('PrendaForm (matrícula, R4)', () => {
     );
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    expect(screen.getByRole('option', { name: 'Solicitar constitución de prenda' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Levantar gravamen' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Continuar sin gestionar (asumo el riesgo)' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Sin prenda' })).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Solicitar constitución de prenda' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Levantar gravamen' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Continuar sin gestionar (asumo el riesgo)' })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Sin prenda' })).not.toBeInTheDocument();
   });
 
   it('guarda la decisión con los datos del acreedor', async () => {
     render(<PrendaForm instanceId="abc" />);
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    fireEvent.change(screen.getByLabelText('Decisión de prenda'), {
-      target: { value: 'registrar' },
-    });
+    fireEvent.click(screen.getByRole('radio', { name: 'Registrar prenda existente' }));
     fireEvent.change(screen.getByLabelText('Acreedor (beneficiario)'), {
       target: { value: 'Banco XYZ' },
     });

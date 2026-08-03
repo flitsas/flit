@@ -539,8 +539,8 @@ export function DocumentChecklist({
   const { checklist, attachments, uploadingTipos, analyzingTipos, deletingId, ocrResults } =
     state;
 
-  // Cargue masivo. Vive junto al cargue campo a campo, no en su lugar: quien ya sabe qué archivo va en
-  // cada casilla sigue usando el checklist de abajo exactamente igual que antes.
+  // Feature #11211 — modos mutuamente excluyentes: individual (checklist) vs batch (masivo).
+  const [uploadMode, setUploadMode] = useState<'individual' | 'batch'>('individual');
   const batch = useProcedureBatchUpload(instanceId, { modalidad });
   const readOnly = useWizardReadOnly();
 
@@ -550,6 +550,7 @@ export function DocumentChecklist({
   }
 
   const items = checklist?.items ?? [];
+  const showModeToggle = !readOnly && !!instanceId && items.length > 0;
 
   // Preview modal state (HU #10703)
   const [previewAttachment, setPreviewAttachment] = useState<ProcedureAttachment | null>(null);
@@ -686,9 +687,42 @@ export function DocumentChecklist({
         </div>
       )}
 
-      {/* Cargue masivo: una sola carga que se reparte sola, con revisión antes de adjuntar. En solo
-          lectura no aparece — el checklist ahí es visualización. */}
-      {!readOnly && instanceId && items.length > 0 && (
+      {/* Feature #11211 — selector de modo (excluyente) + UI correspondiente. */}
+      {showModeToggle && (
+        <div
+          className="mb-3 flex flex-wrap gap-2"
+          role="radiogroup"
+          aria-label="Modo de cargue de documentos"
+        >
+          {(
+            [
+              { value: 'individual' as const, label: 'Uno a uno' },
+              { value: 'batch' as const, label: 'Masivo' },
+            ] as const
+          ).map((opt) => {
+            const selected = uploadMode === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setUploadMode(opt.value)}
+                className="rounded-full px-3 py-1.5 text-[11px] font-semibold border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                style={
+                  selected
+                    ? { borderColor: '#557EFF', background: 'rgba(85,126,255,0.12)', color: '#557EFF' }
+                    : { borderColor: '#DFE5ED', color: '#162744' }
+                }
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {showModeToggle && uploadMode === 'batch' && (
         <div className="mb-3">
           {batch.state.phase === 'reviewing' || batch.state.phase === 'uploading' ? (
             <BatchReviewPanel
@@ -698,7 +732,6 @@ export function DocumentChecklist({
               onCancel={batch.reset}
               onConfirm={() =>
                 void batch.confirm().then((ok) => {
-                  // Aunque falle alguna pieza, las que sí entraron cambian el checklist.
                   void refresh();
                   onChanged?.();
                   return ok;
@@ -743,7 +776,7 @@ export function DocumentChecklist({
             ? 'Cargando documentos requeridos…'
             : 'Este trámite no requiere documentos.'}
         </p>
-      ) : (
+      ) : uploadMode === 'individual' || readOnly || !instanceId ? (
         <ul className="space-y-2" aria-label="Checklist de documentos">
           {items.map((item) => {
             const tipo = item.docTipo ?? item.key;
@@ -784,7 +817,7 @@ export function DocumentChecklist({
             );
           })}
         </ul>
-      )}
+      ) : null}
     </section>
     </>
   );

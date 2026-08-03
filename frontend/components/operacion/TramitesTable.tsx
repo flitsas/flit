@@ -160,18 +160,18 @@ const MODALIDAD_SHORT: Record<WizardModalidad, string> = {
 const STEP_LABELS: Record<WizardModalidad, string[]> = {
   matricula_inicial: [
     'Consulta VIN',
-    'Documentos',
+    'Datos y Documentos del Trámite',
     'Comprador',
     'Identidad',
-    'Generar FUR',
+    'Resumen del trámite',
   ],
   traspaso: [
     'Consulta del vehículo',
-    'Documentos',
+    'Datos y Documentos del Trámite',
     'Vendedor',
     'Comprador',
     'Datos comerciales',
-    'Generar FUR',
+    'Resumen del trámite',
   ],
 };
 

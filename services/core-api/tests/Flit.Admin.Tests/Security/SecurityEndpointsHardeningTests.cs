@@ -206,7 +206,7 @@ public sealed class SecurityEndpointsHardeningTests : IClassFixture<WebApplicati
             Id = _tenantId,
             Code = $"CO-HU10504-{Guid.NewGuid():N}"[..20],
             LegalName = "Compañía hallazgos post-review de prueba",
-            TaxId = "900777777-7",
+            TaxId = TestNit.Unique(),
             TenantType = "RENTING",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
