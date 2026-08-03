@@ -260,6 +260,8 @@ public sealed class ProcedureDeedResolverTests
             throw new NotSupportedException();
         public Task<IReadOnlyList<RepresentedCompanyItem>> ListRepresentedCompaniesAsync(Guid tenantId, CancellationToken ct = default) =>
             throw new NotSupportedException();
+        public Task<IReadOnlyDictionary<Guid, LegalRepresentativeBrief>> FindBriefByIdsAsync(Guid tenantId, IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeStorage(Dictionary<string, byte[]> byPath) : IAttachmentStorage

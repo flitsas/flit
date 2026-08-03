@@ -57,6 +57,17 @@ public sealed class ListActiveDeedsForTenantHandler
             .ConfigureAwait(false);
         var companiesById = companies.ToDictionary(c => c.Id);
 
+        // Batch de RLs asociados a las escrituras (Feature #10929). Escrituras legadas sin
+        // RepresentativeId quedan con campos de RL nulos.
+        var repIds = deeds
+            .Where(d => d.RepresentativeId is not null)
+            .Select(d => d.RepresentativeId!.Value)
+            .Distinct()
+            .ToArray();
+        var repsById = await _representativeReader
+            .FindBriefByIdsAsync(query.TenantId, repIds, cancellationToken)
+            .ConfigureAwait(false);
+
         // Una fila por cada par (escritura × compañía representada): NO se colapsa por NIT, de modo que
         // una compañía con dos escrituras vigentes aparezca DOS veces (Feature #10929). Id/Description
         // de la escritura distinguen las filas del mismo NIT.
@@ -64,6 +75,12 @@ public sealed class ListActiveDeedsForTenantHandler
         foreach (var deed in deeds)
         {
             var diasRestantes = deed.VigenciaHasta.DayNumber - today.DayNumber;
+            LegalRepresentativeBrief? rep = null;
+            if (deed.RepresentativeId is Guid rid)
+            {
+                repsById.TryGetValue(rid, out rep);
+            }
+
             foreach (var companyId in deed.RepresentedCompanyIds)
             {
                 if (!companiesById.TryGetValue(companyId, out var company))
@@ -77,7 +94,11 @@ public sealed class ListActiveDeedsForTenantHandler
                     company.Name,
                     diasRestantes,
                     deed.VigenciaHasta,
-                    deed.Description));
+                    deed.Description,
+                    deed.RepresentativeId,
+                    rep?.FullName,
+                    rep?.DocumentType,
+                    rep?.DocumentNumber));
             }
         }
 

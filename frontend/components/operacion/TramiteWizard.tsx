@@ -29,6 +29,8 @@ import { useWizard } from '@/hooks/useWizard';
 import { useWizardTelemetry } from '@/hooks/useWizardTelemetry'; // Reportes2 HU-A
 import { PreflightPanel } from './PreflightPanel';
 import { ActiveDeedsCollapse } from './ActiveDeedsCollapse';
+import { ProcedureDocsPreviewInformativo } from './ProcedureDocsPreviewInformativo';
+import { TransitOfficeSearchPicker } from './TransitOfficeSearchPicker';
 import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
@@ -165,7 +167,7 @@ const STATUS_BADGE: Record<
 const STEP_SUBTITLE: Record<string, string> = {
   consulta_vin: 'Ingresa el VIN para consultar los datos del vehículo en el RUNT.',
   consulta: 'Ingresa la placa y el propietario para consultar los datos del RUNT.',
-  documentos: 'Adjunta los documentos que exige el trámite (PDF, JPG, PNG o WEBP, máx 20 MB).',
+  documentos: 'Declara la prenda, agrega observaciones y adjunta los documentos del trámite (PDF, JPG, PNG o WEBP, máx 20 MB).',
   comercial: 'Valor de la venta, causal e impuestos del traspaso.',
   fur: 'Revisa el resumen del trámite. El expediente (FUR, certificados y consolidado) se genera al entrar y al Preparar.',
   identidad:
@@ -1459,6 +1461,76 @@ function vehicleStateBlockMessage(vehicleStatus: string): string {
 }
 
 /**
+ * Campo de observaciones del trámite en el paso de documentos (P6).
+ * Lee/escribe `fur_observations` vía field_values — el mismo campo que usa FirmaFurStep.
+ * Se guarda en el blur del textarea (best-effort, igual que FirmaFurStep.guardarCampos).
+ */
+function TramiteObservacionesField({ instanceId }: { instanceId: string | null }) {
+  const readOnly = useWizardReadOnly();
+  const [observaciones, setObservaciones] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!instanceId) return;
+    let active = true;
+    void tramitesClient
+      .getInstance(instanceId)
+      .then((detail) => {
+        if (active) {
+          const val = detail?.fieldValues?.find((f) => f.fieldKey === 'fur_observations')?.valueText ?? '';
+          setObservaciones(val);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [instanceId]);
+
+  const handleBlur = async () => {
+    if (!instanceId || readOnly) return;
+    setSaving(true);
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'fur_observations', valueText: observaciones.trim() || null },
+      ]);
+    } catch {
+      // Best-effort: igual que FirmaFurStep.
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-2">
+      <div>
+        <p className="text-xs font-semibold opacity-80">Observaciones del trámite</p>
+        <p className="text-[11px] opacity-55">
+          Se incluirán en el recuadro de observaciones del FUR. Puedes editarlas también en el paso
+          final antes de preparar el expediente.
+        </p>
+      </div>
+      <textarea
+        id="tramite-observaciones"
+        aria-label="Observaciones del trámite"
+        value={observaciones}
+        onChange={(e) => setObservaciones(e.target.value)}
+        onBlur={() => void handleBlur()}
+        disabled={readOnly || saving}
+        rows={3}
+        placeholder="Ingresa observaciones relevantes para el FUR…"
+        className="w-full resize-none rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14]"
+      />
+      {saving && (
+        <p className="text-[10px] opacity-50" role="status" aria-live="polite">
+          Guardando…
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
  * Paso de consulta inicial. Captura el identificador del vehículo
  * (VIN en matrícula; placa + propietario en traspaso) y, al consultar,
  * PERSISTE los field_values vía PATCH ANTES de correr el preflight, para que
@@ -1882,11 +1954,16 @@ function ConsultaStep({
   };
 
   // Banderas manuales que gatillan documentos condicionales (el backend las lee en
-  // TramiteDocumentContextMapper). Leasing solo aplica en traspaso; carrocería en ambos. Aduana es
-  // obligatorio de base en matrícula (no hay check de importado). La prenda se gestiona aparte con
-  // PrendaForm (Feature #10585).
+  // TramiteDocumentContextMapper). Leasing solo aplica en traspaso. La prenda se gestiona aparte con
+  // PrendaForm (Feature #10585). Carrocería se mueve a VehicleTransformationsCard (P2/P3).
   const esLeasing = fieldValues.find((f) => f.fieldKey === 'es_leasing')?.valueText === 'true';
-  const cambioCarroceria = fieldValues.find((f) => f.fieldKey === 'cambio_carroceria')?.valueText === 'true';
+
+  // Hay datos del vehículo cuando el RUNT ya respondió: permite mostrar condiciones y pre-vuelo.
+  const hasVehicleData = fieldValues.some(
+    (f) =>
+      ['plate', 'vin', 'vehicle_brand', 'vehicle_line', 'vehicle_year'].includes(f.fieldKey) &&
+      (f.valueText ?? '').trim() !== '',
+  );
 
   const saveAtributo = async (fieldKey: string, valueText: string) => {
     if (deferred) {
@@ -1966,34 +2043,28 @@ function ConsultaStep({
       {/* HU #10906 — collapse (contraído, carga perezosa) de las escrituras vigentes de la compañía.
           Tenant-scoped por el header; el NIT del tenant (tenantNitDigits) queda disponible arriba. */}
       <ActiveDeedsCollapse />
-      {/* HU #11199 — la secretaría se decide ANTES de consultar el VIN, no al final del trámite:
-          descubrir en el último paso que no se puede radicar donde se pensaba invalida todo lo hecho. */}
+      {/* HU #11199 — secretaría ANTES de consultar VIN (matrícula). Guía de documentos: enlace
+          discreto → panel lateral (no ocupa el layout del paso 1). */}
       {eligeSecretaria && (
         <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]">
-          <label htmlFor="consulta-secretaria" className="mb-1.5 block text-xs font-semibold">
-            Secretaría de tránsito
-          </label>
-          <select
-            id="consulta-secretaria"
-            value={transitOfficeId}
-            onChange={(e) => {
-              setTransitOfficeId(e.target.value);
-              // Cambiar de secretaría invalida la consulta previa: el trámite se crea con la que
-              // esté en pantalla, así que no puede quedar un preview de otra.
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold">Secretaría de tránsito</p>
+            <ProcedureDocsPreviewInformativo
+              modalidad="matricula_inicial"
+              transitOfficeId={transitOfficeId || undefined}
+            />
+          </div>
+          <TransitOfficeSearchPicker
+            offices={secretarias}
+            valueId={transitOfficeId}
+            onChange={(id) => {
+              setTransitOfficeId(id);
               invalidatePreview();
               setError(null);
             }}
             disabled={readOnly}
-            className={`${inputClass} max-w-xl disabled:opacity-60`}
-            aria-describedby="consulta-secretaria-aviso"
-          >
-            <option value="">Selecciona la secretaría…</option>
-            {secretarias.map((o) => (
-              <option key={o.id} value={o.id}>
-                {[o.name, o.code].filter(Boolean).join(' · ')}
-              </option>
-            ))}
-          </select>
+            describedBy="consulta-secretaria-aviso"
+          />
           <p id="consulta-secretaria-aviso" className="mt-2 text-[11px] leading-tight opacity-70">
             {SECRETARIA_LISTA_AVISO}
           </p>
@@ -2002,6 +2073,11 @@ function ConsultaStep({
               {secretariasError}
             </p>
           )}
+        </div>
+      )}
+      {deferred && deferredModalidad === 'traspaso' && (
+        <div className="flex justify-end">
+          <ProcedureDocsPreviewInformativo modalidad="traspaso" />
         </div>
       )}
       {isVin ? (
@@ -2173,13 +2249,15 @@ function ConsultaStep({
         onPatch={saveTransformacion}
       />
 
-      <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
-        <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
-        <p className="text-[11px] opacity-55 -mt-1.5">
-          Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente.
-        </p>
+      {/* Condiciones: en traspaso el leasing; en matrícula ya no hay flags aquí (carrocería
+          vive en Transformaciones). Solo se pinta el bloque si hay algo que marcar. */}
+      {hasVehicleData && !isVin && (
+        <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
+          <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
+          <p className="text-[11px] opacity-55 -mt-1.5">
+            Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente.
+          </p>
 
-        {!isVin && (
           <label className="flex items-start gap-2.5">
             <input
               type="checkbox"
@@ -2195,22 +2273,8 @@ function ConsultaStep({
               </span>
             </span>
           </label>
-        )}
-
-        <label className="flex items-start gap-2.5">
-          <input
-            type="checkbox"
-            checked={cambioCarroceria}
-            onChange={(e) => void saveAtributo('cambio_carroceria', e.target.checked ? 'true' : 'false')}
-            disabled={readOnly || atributosSaving}
-            className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
-          />
-          <span className="text-xs">
-            <span className="font-semibold">Cambio de carrocería</span>
-            <span className="mt-0.5 block opacity-55">Exige la factura de carrocería.</span>
-          </span>
-        </label>
-      </div>
+        </div>
+      )}
 
       {mostrarPazSalvo && (
         <label
@@ -2234,17 +2298,19 @@ function ConsultaStep({
         </label>
       )}
 
-      <PreflightPanel
-        snapshot={effectivePreflight}
-        loading={loading}
-        onRun={() => void handleRun()}
-        riesgoAceptado={riesgoAceptado}
-        onToggleRiesgo={(v) => void handleRiesgo(v)}
-        saving={riesgoSaving}
-        showRunButton={false}
-        onIniciarTraspaso={isVin ? handleIniciarTraspaso : undefined}
-        esMigrado={esMigrado}
-      />
+      {(hasVehicleData || !!effectivePreflight) && (
+        <PreflightPanel
+          snapshot={effectivePreflight}
+          loading={loading}
+          onRun={() => void handleRun()}
+          riesgoAceptado={riesgoAceptado}
+          onToggleRiesgo={(v) => void handleRiesgo(v)}
+          saving={riesgoSaving}
+          showRunButton={false}
+          onIniciarTraspaso={isVin ? handleIniciarTraspaso : undefined}
+          esMigrado={esMigrado}
+        />
+      )}
     </div>
   );
 }
@@ -2343,12 +2409,21 @@ function StepBody({
         />
       );
 
-    // Paso 2 de ambas modalidades = Documentos (traspaso ya no usa 'validacion':
+    // Paso 2 de ambas modalidades = Datos y Documentos del Trámite (traspaso ya no usa 'validacion':
     // el semáforo del preflight vive en el paso 1). hideHeader: el h2 + subtítulo
     // ya pintan el título del paso.
+    // Orden: Prenda (radios) → Observaciones → Checklist documentos.
     case 'documentos':
       return (
         <div className="space-y-4">
+          {/* R4 (HU #10596) — en matrícula la prenda es declarativa: se registra aquí
+              (informativa, no bloquea la radicación). En traspaso el gate va en el paso
+              comercial (HU #10598), no en documentos. */}
+          {modalidad !== 'traspaso' && (
+            <PrendaForm instanceId={instanceId} onSaved={onRefresh} />
+          )}
+          {/* P6 — observaciones del trámite; escribe `fur_observations` (mismo campo que FirmaFurStep). */}
+          <TramiteObservacionesField instanceId={instanceId} />
           <DocumentChecklist
             instanceId={instanceId}
             onChanged={() => {
@@ -2358,12 +2433,6 @@ function StepBody({
             hideHeader
             modalidad={modalidad}
           />
-          {/* R4 (HU #10596) — en matrícula la prenda es declarativa: se registra aquí
-              (informativa, no bloquea la radicación). En traspaso el gate va en el paso
-              comercial (HU #10598), no en documentos. */}
-          {modalidad !== 'traspaso' && (
-            <PrendaForm instanceId={instanceId} onSaved={onRefresh} />
-          )}
         </div>
       );
 

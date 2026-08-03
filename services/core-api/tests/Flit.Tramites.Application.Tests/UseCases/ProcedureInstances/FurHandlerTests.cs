@@ -477,6 +477,56 @@ public sealed class FurHandlerTests
         capturing.Captured.Observaciones.Should().BeNull(); // sin cambio declarado, sin texto automático
     }
 
+    [Fact]
+    public async Task Generar_ConTransformacionCarroceria_FurUsaRuntEnCamposYNuevoEnObservaciones()
+    {
+        // A4/B4 (HU #10673, ADR-0029): el FUR imprime la carrocería ORIGINAL del RUNT en el campo del
+        // vehículo; la transformación declarada (valor nuevo) va SOLO en observaciones.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        AddFieldValue(instance, "vehicle_body_type_runt", "SEDAN");
+        AddFieldValue(instance, "vehicle_body_type", "PICKUP");
+        AddFieldValue(instance, "cambio_carroceria", "true");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured.Should().NotBeNull();
+        capturing.Captured!.Vehiculo.TipoCarroceria.Should().Be("SEDAN");  // campo del FUR = RUNT original
+        capturing.Captured.Observaciones.Should().Be("Cambio de carrocería: PICKUP.");
+    }
+
+    [Fact]
+    public async Task Generar_SinSnapshotCarroceria_FurCaeAlEfectivo()
+    {
+        // Trámite previo a la feature (sin vehicle_body_type_runt): el campo del FUR cae al valor efectivo.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        AddFieldValue(instance, "vehicle_body_type", "PICKUP");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured!.Vehiculo.TipoCarroceria.Should().Be("PICKUP");
+        capturing.Captured.Observaciones.Should().BeNull();
+    }
+
     private static ProcedureInstanceActor ActorJuridico(ProcedureInstance instance) =>
         new()
         {

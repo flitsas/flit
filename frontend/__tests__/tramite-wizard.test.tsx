@@ -152,7 +152,7 @@ const MATRICULA_WIZARD: WizardState = {
   allowedTransitions: ['anulado', 'preparado'],
   steps: [
     { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
-    { index: 1, key: 'documentos', label: 'Documentos', status: 'incomplete', reasons: ['documentos_incompletos'] },
+        { index: 1, key: 'documentos', label: 'Datos y Documentos del Trámite', status: 'incomplete', reasons: ['documentos_incompletos'] },
     { index: 2, key: 'comprador', label: 'Comprador', status: 'incomplete', reasons: ['runt_comprador'] },
     { index: 3, key: 'identidad', label: 'Identidad', status: 'locked', reasons: [] },
     { index: 4, key: 'fur', label: 'FUR', status: 'locked', reasons: [] },
@@ -169,7 +169,7 @@ const TRASPASO_WIZARD: WizardState = {
   allowedTransitions: ['anulado', 'preparado'],
   steps: [
     { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
-    { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
+    { index: 1, key: 'documentos', label: 'Datos y Documentos del Trámite', status: 'complete', reasons: [] },
     { index: 2, key: 'vendedor', label: 'Vendedor', status: 'complete', reasons: [] },
     { index: 3, key: 'comprador', label: 'Comprador', status: 'complete', reasons: [] },
     { index: 4, key: 'comercial', label: 'Comercial', status: 'complete', reasons: [] },
@@ -189,7 +189,7 @@ const SUBMITTED_WIZARD: WizardState = {
   allowedTransitions: ['aprobado', 'rechazado'],
   steps: [
     { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
-    { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
+    { index: 1, key: 'documentos', label: 'Datos y Documentos del Trámite', status: 'complete', reasons: [] },
     { index: 2, key: 'comprador', label: 'Comprador', status: 'complete', reasons: [] },
     { index: 3, key: 'identidad', label: 'Identidad', status: 'complete', reasons: [] },
     { index: 4, key: 'fur', label: 'FUR', status: 'complete', reasons: [] },
@@ -300,7 +300,7 @@ describe('TramiteWizard — sidebar server-driven por modalidad', () => {
     const stepButtons = await screen.findAllByRole('button', { name: /^Paso \d+:/ });
     expect(stepButtons).toHaveLength(5);
     expect(screen.getByRole('button', { name: /^Paso 1: Consulta VIN/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Paso 2: Documentos/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paso 2: Datos y Documentos/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Paso 3: Comprador/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Paso 4: Identidad/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Paso 5: FUR/ })).toBeInTheDocument();
@@ -311,7 +311,7 @@ describe('TramiteWizard — sidebar server-driven por modalidad', () => {
     renderWizard();
     const stepButtons = await screen.findAllByRole('button', { name: /^Paso \d+:/ });
     expect(stepButtons).toHaveLength(6);
-    expect(screen.getByText('Documentos')).toBeInTheDocument();
+    expect(screen.getByText('Datos y Documentos del Trámite')).toBeInTheDocument();
     expect(screen.getByText('Comercial')).toBeInTheDocument();
   });
 });
@@ -335,9 +335,9 @@ describe('TramiteWizard — instancia existente (Track B)', () => {
     // Al abrir la instancia existente, el cuerpo debe arrancar en Documentos.
     render(<TramiteWizard existingInstanceId="inst-99" onExit={() => {}} />);
 
-    // El título del paso activo (h2 del cuerpo) es "Documentos", no "Consulta VIN".
+    // El título del paso activo (h2 del cuerpo) es "Datos y Documentos del Trámite", no "Consulta VIN".
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Documentos' }),
+      await screen.findByRole('heading', { level: 2, name: 'Datos y Documentos del Trámite' }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('heading', { level: 2, name: 'Consulta VIN' }),
@@ -350,7 +350,7 @@ describe('TramiteWizard — instancia existente (Track B)', () => {
       ...MATRICULA_WIZARD,
       steps: [
         { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'incomplete', reasons: [] },
-        { index: 1, key: 'documentos', label: 'Documentos', status: 'locked', reasons: [] },
+        { index: 1, key: 'documentos', label: 'Datos y Documentos del Trámite', status: 'locked', reasons: [] },
         { index: 2, key: 'comprador', label: 'Comprador', status: 'locked', reasons: [] },
         { index: 3, key: 'identidad', label: 'Identidad', status: 'locked', reasons: [] },
         { index: 4, key: 'fur', label: 'FUR', status: 'locked', reasons: [] },
@@ -470,7 +470,7 @@ describe('TramiteWizard — navegación en cascada (frontera)', () => {
       ...MATRICULA_WIZARD,
       steps: [
         { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
-        { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
+        { index: 1, key: 'documentos', label: 'Datos y Documentos del Trámite', status: 'complete', reasons: [] },
         { index: 2, key: 'comprador', label: 'Comprador', status: 'incomplete', reasons: ['runt_comprador'] },
         { index: 3, key: 'identidad', label: 'Identidad', status: 'incomplete', reasons: ['identidad_pendiente'] },
         { index: 4, key: 'fur', label: 'FUR', status: 'incomplete', reasons: ['fur_pendiente'] },
@@ -497,8 +497,8 @@ describe('TramiteWizard — Continuar', () => {
     const user = userEvent.setup();
     renderWizard();
     await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
-    // Navega al paso "Documentos" (incomplete).
-    await user.click(screen.getByRole('button', { name: /^Paso 2: Documentos/ }));
+    // Navega al paso "Datos y Documentos del Trámite" (incomplete).
+    await user.click(screen.getByRole('button', { name: /^Paso 2: Datos y Documentos/ }));
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
   });
 });
@@ -743,7 +743,7 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
     allowedTransitions: ['anulado', 'preparado'],
     steps: [
       { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
-      { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
+      { index: 1, key: 'documentos', label: 'Datos y Documentos del Trámite', status: 'complete', reasons: [] },
       { index: 2, key: 'comprador', label: 'Comprador', status: 'complete', reasons: [] },
       { index: 3, key: 'identidad', label: 'Identidad', status: 'incomplete', reasons: ['identidad_pendiente', 'pendiente_biometria'] },
       { index: 4, key: 'fur', label: 'FUR', status: 'incomplete', reasons: ['fur_pendiente'] },
@@ -1173,7 +1173,7 @@ describe('TramiteWizard — Guardar y continuar (pasos de actores)', () => {
     allowedTransitions: ['anulado', 'preparado'],
     steps: [
       { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
-      { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
+      { index: 1, key: 'documentos', label: 'Datos y Documentos del Trámite', status: 'complete', reasons: [] },
       { index: 2, key: 'vendedor', label: 'Vendedor', status: 'incomplete', reasons: ['vendedor_incompleto'] },
       { index: 3, key: 'comprador', label: 'Comprador', status: 'locked', reasons: [] },
       { index: 4, key: 'comercial', label: 'Comercial', status: 'locked', reasons: [] },
@@ -1314,7 +1314,7 @@ describe('TramiteWizard — traspaso journey (paso 2 documentos + vendedor split
       {
         index: 1,
         key: 'documentos',
-        label: 'Documentos',
+        label: 'Datos y Documentos del Trámite',
         status: vendedorStatus === 'locked' ? 'incomplete' : 'complete',
         reasons: vendedorStatus === 'locked' ? ['documentos_incompletos'] : [],
       },
@@ -1329,7 +1329,7 @@ describe('TramiteWizard — traspaso journey (paso 2 documentos + vendedor split
     mocks.getWizardState.mockResolvedValue(traspasoSteps('locked'));
     const user = userEvent.setup();
     renderWizard();
-    await user.click(await screen.findByRole('button', { name: /^Paso 2: Documentos/ }));
+    await user.click(await screen.findByRole('button', { name: /^Paso 2: Datos y Documentos/ }));
 
     expect(
       await screen.findByRole('region', { name: 'Documentos del trámite' }),

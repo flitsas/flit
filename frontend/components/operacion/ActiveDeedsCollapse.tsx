@@ -112,6 +112,16 @@ export function ActiveDeedsCollapse({ tenantId }: { tenantId?: string }) {
                       {deed.name}
                     </p>
                     <p className="text-[11px] font-mono opacity-60">NIT {deed.nit}</p>
+                    {deed.representativeName ? (
+                      <p className="truncate text-[11px]" style={{ color: '#162744' }}>
+                        RL: {deed.representativeName}
+                        {deed.representativeDocumentType && deed.representativeDocumentNumber
+                          ? ` · ${deed.representativeDocumentType} ${deed.representativeDocumentNumber}`
+                          : ''}
+                      </p>
+                    ) : (
+                      <p className="truncate text-[11px] opacity-50">Sin RL vinculado</p>
+                    )}
                     {deed.description && (
                       <p className="truncate text-[11px] opacity-70">{deed.description}</p>
                     )}

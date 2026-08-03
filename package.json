@@ -37,8 +37,8 @@
     "dev:gateway":      "dotnet watch --project services/core-api/src/Flit.Gateway run --launch-profile http --urls http://localhost:4002",
     "dev:core-ict":     "dotnet watch --project services/core-ict/src/Flit.Ict.Api run --launch-profile http --urls http://localhost:4020",
     "dev:python":       "uv --directory services/python-ml run uvicorn app.main:app --reload --port 4012 --log-level info",
-    "dev":              "concurrently --kill-others-on-fail -n frontend,core-api,gateway,core-ict -c green,magenta,cyan,yellow \"pnpm run dev:frontend\" \"pnpm run dev:core-api\" \"pnpm run dev:gateway\" \"pnpm run dev:core-ict\"",
-    "dev:with-python":  "concurrently --kill-others-on-fail -n frontend,core-api,gateway,core-ict,python -c green,magenta,cyan,yellow,blue \"pnpm run dev:frontend\" \"pnpm run dev:core-api\" \"pnpm run dev:gateway\" \"pnpm run dev:core-ict\" \"pnpm run dev:python\"",
+    "dev":              "concurrently -n frontend,core-api,gateway,core-ict -c green,magenta,cyan,yellow \"pnpm run dev:frontend\" \"pnpm run dev:core-api\" \"pnpm run dev:gateway\" \"pnpm run dev:core-ict\"",
+    "dev:with-python":  "concurrently -n frontend,core-api,gateway,core-ict,python -c green,magenta,cyan,yellow,blue \"pnpm run dev:frontend\" \"pnpm run dev:core-api\" \"pnpm run dev:gateway\" \"pnpm run dev:core-ict\" \"pnpm run dev:python\"",
 
     "_comment_start": "══════════════════════════════════════════════════",
     "_comment_start_": "  START — MODO PRODUCCIÓN (dist compilado)        ",

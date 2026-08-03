@@ -94,6 +94,7 @@ public sealed class RunPreflightHandler(
         {
             ["vehicle_color"] = "cambio_color",
             ["vehicle_fuel"] = "cambio_combustible",
+            ["vehicle_body_type"] = "cambio_carroceria",
         };
 
     public Task<(PreflightSnapshotDto? Result, string? Error, Guid? ExistingProcedureInstanceId, VehicleStateBlock? VehicleState)> HandleAsync(

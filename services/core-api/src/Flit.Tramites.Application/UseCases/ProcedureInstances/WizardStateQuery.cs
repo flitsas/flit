@@ -350,7 +350,7 @@ public sealed class GetWizardStateHandler(
     private static string SectionLabel(string sectionType) => sectionType switch
     {
         "vehicle_query" => "Consulta del vehículo",
-        "document_checklist" => "Documentos",
+        "document_checklist" => "Datos y Documentos del Trámite",
         "actor_form" => "Actores",
         "commercial" => "Valor comercial",
         "biometric" => "Identidad",

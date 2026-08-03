@@ -519,6 +519,14 @@ export interface ActiveDeed {
   vigenciaHasta: string;
   /** Descripción de la escritura (p. ej. número/notaría), si viene. */
   description?: string | null;
+  /** Id del RL que asoció la escritura; null en escrituras legadas. */
+  representativeId?: string | null;
+  /** Nombre completo del RL. */
+  representativeName?: string | null;
+  /** Tipo de documento del RL (CC, CE, …). */
+  representativeDocumentType?: string | null;
+  /** Número de documento del RL (PII). */
+  representativeDocumentNumber?: string | null;
 }
 
 /** Compañía representada precargada por NIT (razón social + contacto). */
@@ -811,6 +819,16 @@ export interface ChecklistView {
 // pinta lo que el backend decide; no recalcula gates en el cliente.
 
 export type WizardModalidad = 'matricula_inicial' | 'traspaso';
+
+/** Ítem de la guía informativa de documentos (paso 1, sin checklist de carga). */
+export interface DocumentoInformativoPreviewItem {
+  documentTypeId: string;
+  codigo: string;
+  nombre: string;
+  obligatorio: boolean;
+  orden: number;
+  descripcion?: string | null;
+}
 
 export type WizardStepStatus = 'complete' | 'incomplete' | 'locked';
 

@@ -101,6 +101,8 @@ public sealed class FieldValueContractGuardTests
         // `field.FieldKey + RuntSnapshotSuffix`. Es el caso que un grep reportaría como huérfano.
         ["vehicle_color_runt"] = new(Preflight, Modo.Dinamico, "RuntSnapshotSuffix"),
         ["vehicle_fuel_runt"] = new(Preflight, Modo.Dinamico, "RuntSnapshotSuffix"),
+        // HU #10673 (A4/B4) — carrocería se suma al mismo patrón de transformación.
+        ["vehicle_body_type_runt"] = new(Preflight, Modo.Dinamico, "RuntSnapshotSuffix"),
 
         // HU #11136 — fecha de matrícula del vehículo: insumo de la regla de antigüedad de la RTM.
         // OJO: solo la reporta Verifik. Las respuestas capturadas de Kyverum no traen fecha alguna de

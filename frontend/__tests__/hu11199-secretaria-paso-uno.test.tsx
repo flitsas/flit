@@ -96,8 +96,10 @@ function renderNuevo(modalidad: 'matricula_inicial' | 'traspaso' = 'matricula_in
 }
 
 async function elegirSecretaria(user: ReturnType<typeof userEvent.setup>) {
-  await screen.findByRole('option', { name: /Medellín/ });
-  await user.selectOptions(screen.getByLabelText('Secretaría de tránsito'), SECRETARIA_ID);
+  await user.click(
+    await screen.findByRole('button', { name: /Seleccionar secretaría de tránsito/i }),
+  );
+  await user.click(await screen.findByRole('button', { name: /Medellín/ }));
 }
 
 beforeEach(() => {
@@ -122,12 +124,16 @@ beforeEach(() => {
 
 describe('HU #11199 — la secretaría se elige en el primer paso', () => {
   it('AC1: el primer paso de la matrícula ofrece elegir la secretaría', async () => {
+    const user = userEvent.setup();
     renderNuevo();
 
-    const selector = await screen.findByLabelText('Secretaría de tránsito');
-    expect(selector).toBeInTheDocument();
-    expect(await screen.findByRole('option', { name: /Medellín/ })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /Envigado/ })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: /Seleccionar secretaría de tránsito/i }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Seleccionar secretaría de tránsito/i }));
+    expect(await screen.findByRole('dialog', { name: /Seleccionar secretaría/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Medellín/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Envigado/ })).toBeInTheDocument();
   });
 
   it('AC2: sin secretaría la consulta por VIN no se habilita', async () => {
@@ -212,7 +218,8 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
 
     // El trámite se crea con la secretaría que esté en pantalla: no puede quedar un preview de otra.
-    await user.selectOptions(screen.getByLabelText('Secretaría de tránsito'), 'ot-envigado');
+    await user.click(screen.getByRole('button', { name: /Cambiar secretaría de tránsito/i }));
+    await user.click(await screen.findByRole('button', { name: /Envigado/ }));
 
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
   });

@@ -1396,17 +1396,42 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     if (!isJuridical(actor)) return null;
     const rl = actor.representanteLegal ?? {};
     const rlState: LookupState = rlRunt[index] ?? { status: 'idle' };
+    const runtState: LookupState = runt[index] ?? { status: 'idle' };
     const rlErrors = showErrors ? validation.byActor[index] : {};
+    // P5 — si el actor fue precargado desde el directorio, el RL ya está rellenado.
+    const isPreloaded = runtState.status === 'found' && runtState.kind === 'preload';
+
+    // P5 — al editar datos sensibles del RL con preload activo: desvincula firma del baúl
+    // (limpia `mecanismoFirma`) y baja el card de precarga para forzar revalidación.
+    const handleRlSensitiveChange = (patch: Partial<RepresentanteLegal>) => {
+      const touchesSensitive =
+        patch.nombreCompleto !== undefined ||
+        patch.numeroDocumento !== undefined ||
+        patch.email !== undefined;
+      if (isPreloaded && touchesSensitive) {
+        updateRepLegal(index, { ...patch, mecanismoFirma: undefined });
+        setRuntFor(index, { status: 'idle' });
+        return;
+      }
+      updateRepLegal(index, patch);
+    };
+
     return (
       <div className="md:col-span-2 rounded-xl border p-4 space-y-3" style={{ background: 'rgba(85,126,255,0.03)' }}>
         <div>
           <p className="text-xs font-bold" style={{ color: '#162744' }}>
             Representante legal y/o apoderado
           </p>
-          <p className="text-[10px] opacity-60">
-            Persona natural que representa a la empresa. Puedes consultarla en el RUNT o registrarla
-            manualmente.
-          </p>
+          {isPreloaded ? (
+            <p className="text-[10px] mt-0.5" style={{ color: INLINE_ALERT_TONES.info.color }}>
+              Datos precargados desde el directorio / RUES. Puedes editarlos si es necesario.
+            </p>
+          ) : (
+            <p className="text-[10px] opacity-60">
+              Persona natural que representa a la empresa. Puedes consultarla en el RUNT o registrarla
+              manualmente.
+            </p>
+          )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Tipo de documento (natural, sin NIT) */}
@@ -1427,7 +1452,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               ))}
             </select>
           </div>
-          {/* Número + Consultar RUNT */}
+          {/* Número + Consultar RUNT (P5: botón oculto cuando ya precargado desde directorio) */}
           <div>
             <label htmlFor={`${index}-rl-numeroDoc`} className="text-xs font-semibold mb-1.5 block">
               Número de documento
@@ -1437,7 +1462,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 id={`${index}-rl-numeroDoc`}
                 type="text"
                 value={rl.numeroDocumento ?? ''}
-                onChange={(e) => updateRepLegal(index, { numeroDocumento: e.target.value })}
+                onChange={(e) => handleRlSensitiveChange({ numeroDocumento: e.target.value })}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -1446,7 +1471,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 }}
                 className={`${INPUT_BASE} font-mono`}
               />
-              {!readOnly && (
+              {!readOnly && !isPreloaded && (
                 <button
                   type="button"
                   onClick={() => void handleRlLookup(index)}
@@ -1455,6 +1480,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   style={{ borderColor: '#557EFF', color: '#557EFF' }}
                 >
                   {rlState.status === 'loading' ? 'Consultando…' : 'Consultar RUNT'}
+                </button>
+              )}
+              {!readOnly && isPreloaded && (
+                <button
+                  type="button"
+                  onClick={() => void handleRlLookup(index)}
+                  disabled={rlState.status === 'loading' || !(rl.numeroDocumento ?? '').trim() || !instanceId}
+                  className="shrink-0 rounded-xl px-3 py-1.5 text-[11px] font-semibold border disabled:opacity-50 opacity-60"
+                  style={{ borderColor: '#9AA5B1', color: '#9AA5B1' }}
+                  title="Datos ya precargados. Consulta RUNT solo si necesitas actualizar."
+                >
+                  {rlState.status === 'loading' ? 'Consultando…' : 'Actualizar RUNT'}
                 </button>
               )}
             </div>
@@ -1483,7 +1520,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               id={`${index}-rl-nombre`}
               type="text"
               value={rl.nombreCompleto ?? ''}
-              onChange={(e) => updateRepLegal(index, { nombreCompleto: e.target.value })}
+              onChange={(e) => handleRlSensitiveChange({ nombreCompleto: e.target.value })}
               className={INPUT_BASE}
             />
           </div>
@@ -1496,7 +1533,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               id={`${index}-rl-email`}
               type="email"
               value={rl.email ?? ''}
-              onChange={(e) => updateRepLegal(index, { email: e.target.value })}
+              onChange={(e) => handleRlSensitiveChange({ email: e.target.value })}
               placeholder="correo@ejemplo.com"
               className={INPUT_BASE}
               aria-invalid={!!rlErrors.representanteLegal}
@@ -1673,7 +1710,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               )}
             </div>
             {runtResult(0)}
-            {rlSection(0)}
+            {/* P4 — para persona jurídica el RL se mueve DESPUÉS de los datos de la empresa. */}
           </div>
         </section>
 
@@ -1833,6 +1870,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           </div>
         </section>
 
+        {/* Sección C — Representante legal (P4: solo persona jurídica, después de contacto empresa) */}
+        {isJuridical(actor) && (
+          <section className="rounded-2xl border bg-white dark:bg-[#0B0F14] overflow-hidden">
+            <div className={sectionHeader} style={{ background: 'rgba(85,126,255,0.04)' }}>
+              <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#162744' }}>
+                Representante legal
+              </span>
+            </div>
+            <div className="p-4">{rlSection(0)}</div>
+          </section>
+        )}
+
         {footer}
        </fieldset>
       </form>
@@ -1947,9 +1996,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 {runt[index] && runt[index].status !== 'idle' && (
                   <div className="md:col-span-2">{runtResult(index)}</div>
                 )}
-
-                {/* Representante legal (solo persona jurídica). */}
-                {rlSection(index)}
 
                 {/* Nombre completo */}
                 <div className="md:col-span-2">
@@ -2092,6 +2138,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
                 {/* Fecha de expedición del documento (RNMC, solo persona natural) */}
                 {issueDateField(index)}
+
+                {/* P4 — Representante legal DESPUÉS de los datos de contacto de la empresa (persona jurídica). */}
+                {rlSection(index)}
               </div>
             </fieldset>
           );

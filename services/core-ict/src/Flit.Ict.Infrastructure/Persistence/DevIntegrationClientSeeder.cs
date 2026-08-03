@@ -49,13 +49,23 @@ public sealed partial class DevIntegrationClientSeeder(
             }
 
             var hash = hasher.Hash(DevPassword);
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
-                INSERT INTO ict.integration_clients (tenant_id, username, password_hash, scopes, is_active)
-                VALUES ({tenantId.Value}, {DevUsername}, {hash},
-                        '["ict.transactions.write","ict.status.read"]'::jsonb, true)
-                ON CONFLICT (username) DO NOTHING
-                """, cancellationToken);
-            Log.Seeded(logger, DevUsername);
+            // El índice único es funcional: uq_integration_clients_username_lower ON (lower(username)).
+            // ON CONFLICT (username) falla con 42P10; hay que arbitrar por la expresión del índice.
+            try
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO ict.integration_clients (tenant_id, username, password_hash, scopes, is_active)
+                    VALUES ({tenantId.Value}, {DevUsername}, {hash},
+                            '["ict.transactions.write","ict.status.read"]'::jsonb, true)
+                    ON CONFLICT ((lower(username))) DO NOTHING
+                    """, cancellationToken);
+                Log.Seeded(logger, DevUsername);
+            }
+            catch (Exception ex)
+            {
+                // No tumbar el host: el cliente de prueba es solo DX local.
+                Log.SeedFailed(logger, ex);
+            }
         }
         finally
         {
@@ -83,5 +93,8 @@ public sealed partial class DevIntegrationClientSeeder(
 
         [LoggerMessage(Level = LogLevel.Warning, Message = "ICT dev seed: no hay tenants en identity.tenants; se omite el seed del cliente de prueba.")]
         public static partial void NoTenant(ILogger logger);
+
+        [LoggerMessage(Level = LogLevel.Warning, Message = "ICT dev seed: falló el upsert del cliente de prueba; se continúa sin él.")]
+        public static partial void SeedFailed(ILogger logger, Exception exception);
     }
 }

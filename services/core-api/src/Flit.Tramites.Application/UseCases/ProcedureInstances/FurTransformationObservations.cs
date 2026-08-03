@@ -21,13 +21,17 @@ public static class FurTransformationObservations
         string? colorRunt,
         string? colorEfectivo,
         string? fuelRunt,
-        string? fuelEfectivo)
+        string? fuelEfectivo,
+        string? bodyTypeRunt = null,
+        string? bodyTypeEfectivo = null)
     {
-        var segments = new List<string>(2);
+        var segments = new List<string>(3);
         if (HasChanged(colorRunt, colorEfectivo))
             segments.Add($"Cambio de color: {Display(colorEfectivo)}.");
         if (HasChanged(fuelRunt, fuelEfectivo))
             segments.Add($"Cambio de combustible: {Display(fuelEfectivo)}.");
+        if (HasChanged(bodyTypeRunt, bodyTypeEfectivo))
+            segments.Add($"Cambio de carrocería: {Display(bodyTypeEfectivo)}.");
 
         if (segments.Count == 0)
             return manualObservations;

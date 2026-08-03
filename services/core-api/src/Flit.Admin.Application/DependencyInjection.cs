@@ -41,6 +41,7 @@ using Flit.Admin.Application.DocumentRequirementOverrides.SetDocumentRequirement
 using Flit.Admin.Application.DocumentRequirements.CreateProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentRequirements.DeleteProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentRequirements.ListProcedureDocumentRequirements;
+using Flit.Admin.Application.DocumentRequirements.PreviewInformativos;
 using Flit.Admin.Application.DocumentRequirements.UpdateProcedureDocumentRequirement;
 using Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
@@ -243,6 +244,9 @@ public static class DependencyInjection
         // HU #10198 — obligatoriedad documental por OT (3 estados, granular solo para OT).
         services.AddScoped<SetDocumentRequirementOverrideHandler>();
         services.AddScoped<ListDocumentRequirementOverridesHandler>();
+
+        // Preview informativo de documentos (paso 1 wizard, sin instancia).
+        services.AddScoped<PreviewDocumentosInformativosHandler>();
 
         // HU #10521 (RF31) — parámetros documentales por compañía gestora.
         services.AddScoped<CompanyDocumentParams.ListCompanyDocumentParamsHandler>();

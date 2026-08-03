@@ -95,7 +95,7 @@ const MATRICULA_WIZARD: WizardState = {
   allowedTransitions: ['anulado', 'preparado'],
   steps: [
     { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
-    { index: 1, key: 'documentos', label: 'Documentos', status: 'incomplete', reasons: ['documentos_incompletos'] },
+    { index: 1, key: 'documentos', label: 'Datos y Documentos del Trámite', status: 'incomplete', reasons: ['documentos_incompletos'] },
     { index: 2, key: 'comprador', label: 'Comprador', status: 'incomplete', reasons: ['runt_comprador'] },
     { index: 3, key: 'identidad', label: 'Identidad', status: 'locked', reasons: [] },
     { index: 4, key: 'fur', label: 'FUR', status: 'locked', reasons: [] },
@@ -112,7 +112,7 @@ const TRASPASO_VENDEDOR_FRONTIER: WizardState = {
   allowedTransitions: ['anulado', 'preparado'],
   steps: [
     { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
-    { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
+    { index: 1, key: 'documentos', label: 'Datos y Documentos del Trámite', status: 'complete', reasons: [] },
     { index: 2, key: 'vendedor', label: 'Vendedor', status: 'incomplete', reasons: ['vendedor_incompleto'] },
     { index: 3, key: 'comprador', label: 'Comprador', status: 'locked', reasons: [] },
     { index: 4, key: 'comercial', label: 'Comercial', status: 'locked', reasons: [] },
@@ -244,7 +244,7 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
     await user.click(screen.getByRole('button', { name: /^Continuar$/ }));
 
     // El wizard avanza igual (heading del paso 2) y no aparece ningún error visible.
-    expect(await screen.findByRole('heading', { level: 2, name: 'Documentos' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Datos y Documentos del Trámite' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -290,7 +290,7 @@ const MATRICULA_IDENTIDAD_DIFERIDA: WizardState = {
   allowedTransitions: ['anulado', 'preparado'],
   steps: [
     { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
-    { index: 1, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
+    { index: 1, key: 'documentos', label: 'Datos y Documentos del Trámite', status: 'complete', reasons: [] },
     { index: 2, key: 'comprador', label: 'Comprador', status: 'complete', reasons: [] },
     { index: 3, key: 'identidad', label: 'Identidad', status: 'incomplete', reasons: ['identidad_pendiente'] },
     { index: 4, key: 'fur', label: 'FUR', status: 'incomplete', reasons: ['fur_pendiente'] },
@@ -341,7 +341,7 @@ describe('HU #10883 — AC2: reposición en el paso persistido al reabrir', () =
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Documentos' }),
+      await screen.findByRole('heading', { level: 2, name: 'Datos y Documentos del Trámite' }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('heading', { level: 2, name: 'Comprador' }),
@@ -365,7 +365,7 @@ describe('HU #10883 — AC2: reposición en el paso persistido al reabrir', () =
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Documentos' }),
+      await screen.findByRole('heading', { level: 2, name: 'Datos y Documentos del Trámite' }),
     ).toBeInTheDocument();
   });
 
@@ -386,7 +386,7 @@ describe('HU #10883 — AC2: reposición en el paso persistido al reabrir', () =
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Documentos' }),
+      await screen.findByRole('heading', { level: 2, name: 'Datos y Documentos del Trámite' }),
     ).toBeInTheDocument();
   });
 });
