@@ -201,12 +201,21 @@ export async function fetchRepresentedCompanies(
   const reps = await fetchLegalRepresentatives(tenantId, 1, 200, signal);
   const byNit = new Map<string, RepresentedCompany>();
   for (const r of reps.data) {
-    if (!byNit.has(r.companyDocumentNumber)) {
-      byNit.set(r.companyDocumentNumber, {
-        id: r.representedCompanyId,
-        nit: r.companyDocumentNumber,
-        name: r.companyName,
-      });
+    const sources =
+      r.companies && r.companies.length > 0
+        ? r.companies.map((c) => ({ id: c.id, nit: c.nit, name: c.name }))
+        : r.representedCompanyId
+          ? [
+              {
+                id: r.representedCompanyId,
+                nit: r.companyDocumentNumber,
+                name: r.companyName,
+              },
+            ]
+          : [];
+    for (const c of sources) {
+      if (!c.id || !c.nit || byNit.has(c.nit)) continue;
+      byNit.set(c.nit, { id: c.id, nit: c.nit, name: c.name });
     }
   }
   return Array.from(byNit.values());
