@@ -167,7 +167,7 @@ const STEP_SUBTITLE: Record<string, string> = {
   consulta: 'Ingresa la placa y el propietario para consultar los datos del RUNT.',
   documentos: 'Adjunta los documentos que exige el trámite (PDF, JPG, PNG o WEBP, máx 20 MB).',
   comercial: 'Valor de la venta, causal e impuestos del traspaso.',
-  fur: 'Fecha y observaciones del FUR. El expediente (FUR, certificados y consolidado) se genera al Preparar.',
+  fur: 'Revisa el resumen del trámite. El expediente (FUR, certificados y consolidado) se genera al entrar y al Preparar.',
   identidad:
     'Validación de identidad de cada parte. La biométrica real llegará en una iteración futura; por ahora puedes simular la validación de cada parte.',
 };
@@ -634,9 +634,9 @@ export function TramiteWizard(props: Props) {
 
   // N 03 (radicación en dos pasos) — Preparar: borrador→preparado vía POST /transition. El backend
   // valida el gate RF03 (identidad aprobada + documentos); solo se habilita cuando el wizard reporta
-  // canSubmit Y la identidad está aprobada (ver `canRadicar`). El wizard permanece abierto: pasa a
-  // solo lectura y ofrece "Radicar a tránsito".
-  // Feature #11066 — la generación de FUR/paquete corre en segundo plano: NO bloquea la transición.
+  // canSubmit Y la identidad está aprobada (ver `canRadicar`).
+  // Feature #11211 — tras Preparar: toast + salida al listado `/tramites` (onExit). La generación de
+  // FUR/paquete corre en segundo plano (fire-and-forget) y NO bloquea la navegación.
   const handlePreparar = async () => {
     if (!instanceId || !canRadicar) return;
     setSubmitting(true);
@@ -645,28 +645,18 @@ export function TramiteWizard(props: Props) {
       await tramitesClient.transitionInstance(instanceId, 'preparado');
       setInstanceStatus('preparado');
       show(
-        'Trámite preparado. Generando expediente en segundo plano…',
+        'Trámite preparado. El expediente se sigue generando en segundo plano…',
         'success',
       );
-      await refresh();
 
       const id = instanceId;
-      void (async () => {
-        const docsError = await ensureExpedienteDocs(id);
-        if (docsError) {
-          show(
-            `Trámite preparado, pero faltó el expediente tras reintentos: ${docsError} Regenera antes de radicar.`,
-            'error',
-          );
-        } else {
-          show('Expediente listo (FUR y consolidado). Ya puedes radicar.', 'success');
-        }
-      })();
+      void ensureExpedienteDocs(id);
+
+      onExit();
     } catch (err) {
       setSubmitError(
         err instanceof Error ? err.message : 'No se pudo preparar el trámite.',
       );
-    } finally {
       setSubmitting(false);
     }
   };
@@ -2463,10 +2453,10 @@ function StepBody({
       );
     }
 
-    // FUR (matrícula 5 / traspaso 6). Biométrica de las partes (Slice 6) +
-    // firma electrónica, portal de participantes y generación del FUR (Slice 7).
-    // En matrícula la biométrica es del comprador (parte única) y no hay firma.
+    // Resumen del trámite (matrícula 5 / traspaso 6; key `fur`). Feature #11211: no re-montar
+    // BiometricStep si la identidad ya está resuelta (paso Identidad / gates server-driven).
     case 'fur': {
+      const skipBiometricInFur = identityApproved;
       const biometric = (
         <BiometricStep
           instanceId={instanceId}
@@ -2525,13 +2515,12 @@ function StepBody({
               </span>
             </div>
           )}
-          {/* Borrador finalizado (traspaso): la biométrica sigue operable; la firma/FUR no (es
-              automática al aprobarse la identidad), por eso hereda el contexto de solo lectura. */}
-          {identityOperable ? (
-            <WizardReadOnlyProvider readOnly={false}>{biometric}</WizardReadOnlyProvider>
-          ) : (
-            biometric
-          )}
+          {!skipBiometricInFur &&
+            (identityOperable ? (
+              <WizardReadOnlyProvider readOnly={false}>{biometric}</WizardReadOnlyProvider>
+            ) : (
+              biometric
+            ))}
           <FirmaFurStep
             key={`${instanceId ?? 'new'}-${instanceStatus ?? 'borrador'}`}
             instanceId={instanceId}

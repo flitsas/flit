@@ -558,8 +558,6 @@ export function FirmaFurStep({
         soat={{ estado: fv('soat_estado'), vencimiento: fv('soat_vencimiento') }}
       />
 
-      {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
-
       <ExpedienteVisor
         instanceId={instanceId}
         fieldValues={detail?.fieldValues ?? []}
@@ -572,10 +570,16 @@ export function FirmaFurStep({
         orgTransito={{ nombre: organismo.name, ciudad: organismo.city, codigo: organismo.code }}
       />
 
+      {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
+
       {modalidad === 'traspaso' && (
-        <FirmaSection instanceId={instanceId} onRefresh={onRefresh} />
+        <FirmaSection
+          instanceId={instanceId}
+          onRefresh={onRefresh}
+          firmaBaulPartes={firmaBaulPartes}
+        />
       )}
-      <ParticipantesSection instanceId={instanceId} />
+      {/* Feature #11211 — Participantes (portal) fuera del camino feliz; APIs intactas. */}
       <ImprontaSection instanceId={instanceId} reloadToken={docsReloadToken} />
       <FurSection
         instanceId={instanceId}
@@ -1209,9 +1213,12 @@ function OrganismoModal({
 function FirmaSection({
   instanceId,
   onRefresh,
+  firmaBaulPartes = [],
 }: {
   instanceId: string | null;
   onRefresh?: () => void;
+  /** Feature #11211 — partes cubiertas por baúl (oculta Actualizar si todas lo están). */
+  firmaBaulPartes?: string[];
 }) {
   const [signatures, setSignatures] = useState<Signature[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1247,6 +1254,13 @@ function FirmaSection({
 
   // HU #11019 — saliente antes que entrante, igual que el expediente y el dashboard.
   const partes: SignatureParte[] = ['vendedor', 'comprador'];
+  const todasCubiertasPorBaul =
+    partes.every((p) => firmaBaulPartes.includes(p)) ||
+    (signatures != null &&
+      partes.every((p) => {
+        const s = signatures.find((x) => x.parte === p);
+        return Boolean(s?.firmada) || firmaBaulPartes.includes(p);
+      }));
 
   return (
     <section className="space-y-4" aria-label="Firma de la compraventa">
@@ -1263,7 +1277,7 @@ function FirmaSection({
             traspaso.
           </p>
         </div>
-        {!readOnly && (
+        {!readOnly && !todasCubiertasPorBaul && (
           <button
             type="button"
             onClick={() => void refresh()}
@@ -1390,8 +1404,10 @@ function FirmaParteCard({
 }
 
 // ── Participantes (portal) ────────────────────────────────────────────
+// Feature #11211 — fuera del camino feliz del wizard; se exporta para reactivación futura
+// sin eliminar la UI (APIs listParticipantes / invitarParticipante intactas).
 
-function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
+export function ParticipantesSection({ instanceId }: { instanceId: string | null }) {
   const readOnly = useWizardReadOnly();
   const [participants, setParticipants] = useState<Participant[] | null>(null);
   const [error, setError] = useState<string | null>(null);

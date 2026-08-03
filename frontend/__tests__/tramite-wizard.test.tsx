@@ -516,7 +516,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     expect(screen.getByText(/Hay bloqueos críticos en el pre-vuelo/)).toBeInTheDocument();
   });
 
-  it('N 03 dos pasos — con identidad aprobada el botón es "Preparar" (borrador→preparado) y NO sale del wizard', async () => {
+  it('N 03 dos pasos — con identidad aprobada el botón es "Preparar" (borrador→preparado) y sale al listado (Feature #11211)', async () => {
     // Todos los pasos completos (incl. la biométrica → sin pendiente_biometria) ⇒ identidad
     // aprobada ⇒ el botón terminal es "Preparar" (no "Radicar a tránsito" ni "Finalizar").
     const BORRADOR_COMPLETO: WizardState = {
@@ -525,13 +525,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
       blockers: [],
       steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
     };
-    const PREPARADO: WizardState = {
-      ...BORRADOR_COMPLETO,
-      status: 'preparado',
-      allowedTransitions: ['entregado'],
-    };
-    // Carga inicial en borrador; el refresh tras "Preparar" ya devuelve `preparado`.
-    mocks.getWizardState.mockResolvedValueOnce(BORRADOR_COMPLETO).mockResolvedValue(PREPARADO);
+    mocks.getWizardState.mockResolvedValue(BORRADOR_COMPLETO);
     // Organismo presente → al entrar al paso FUR se pre-genera el paquete.
     mocks.getInstance.mockResolvedValue({
       id: 'inst-1',
@@ -568,37 +562,25 @@ describe('TramiteWizard — Finalizar y blockers', () => {
       expect(mocks.generarFur).toHaveBeenCalledWith('inst-1');
       expect(mocks.generarImpronta).toHaveBeenCalledWith('inst-1');
     });
-    // Preparar no espera ni se deshabilita por la generación del paquete.
     const preparar = await waitFor(() => {
       const btn = screen.getByRole('button', { name: /^Preparar$/ });
       expect(btn).toBeEnabled();
       return btn;
     });
-    // Aún no se ofrece "Radicar a tránsito" ni "Finalizar" en borrador con gates OK.
     expect(screen.queryByRole('button', { name: /Radicar a tránsito/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Finalizar$/ })).not.toBeInTheDocument();
-    const furCallsBeforePreparar = mocks.generarFur.mock.calls.length;
     await user.click(preparar);
 
-    // Transición inmediata; expediente en background.
     await waitFor(() =>
       expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'preparado'),
     );
-    await waitFor(() => {
-      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, true);
-    });
-    // Puede reintentar FUR en background; al menos la pre-gen del paso ya corrió.
-    expect(mocks.generarFur.mock.calls.length).toBeGreaterThanOrEqual(furCallsBeforePreparar);
     expect(mocks.submitInstance).not.toHaveBeenCalled();
     expect(mocks.finalizeDraft).not.toHaveBeenCalled();
     expect(toastShow).toHaveBeenCalledWith(
       expect.stringMatching(/preparado.*segundo plano|preparado/i),
       'success',
     );
-    // El wizard permanece abierto mostrando ahora "Radicar a tránsito".
-    expect(onExit).not.toHaveBeenCalled();
-    expect(await screen.findByRole('button', { name: /Radicar a tránsito/ })).toBeEnabled();
-    expect(screen.queryByRole('button', { name: /^Preparar$/ })).not.toBeInTheDocument();
+    await waitFor(() => expect(onExit).toHaveBeenCalled());
   });
 
   it('N 03 — fallo de generación de docs NO bloquea Preparar (transición de negocio sigue)', async () => {
@@ -608,12 +590,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
       blockers: [],
       steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
     };
-    const PREPARADO: WizardState = {
-      ...BORRADOR_COMPLETO,
-      status: 'preparado',
-      allowedTransitions: ['entregado'],
-    };
-    mocks.getWizardState.mockResolvedValueOnce(BORRADOR_COMPLETO).mockResolvedValue(PREPARADO);
+    mocks.getWizardState.mockResolvedValue(BORRADOR_COMPLETO);
     mocks.getInstance.mockResolvedValue({
       id: 'inst-1',
       status: 'borrador',
@@ -633,9 +610,10 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     mocks.generarFur.mockRejectedValue(new Error('fur_unavailable'));
     mocks.generarConsolidado.mockRejectedValue(new Error('fur_unavailable'));
 
+    const onExit = vi.fn();
     const user = userEvent.setup();
     render(
-      <TramiteWizard configuration={CONFIG} procedureTypeId="type-1" onExit={() => {}} />,
+      <TramiteWizard configuration={CONFIG} procedureTypeId="type-1" onExit={onExit} />,
     );
     await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
     await user.click(screen.getByRole('button', { name: /^Paso 6: FUR/ }));
@@ -651,15 +629,8 @@ describe('TramiteWizard — Finalizar y blockers', () => {
       expect.stringMatching(/preparado.*segundo plano|preparado/i),
       'success',
     );
-    await waitFor(() =>
-      expect(toastShow).toHaveBeenCalledWith(
-        expect.stringMatching(/faltó el expediente|fur_unavailable|reintentos/i),
-        'error',
-      ),
-    );
-    // Tres intentos en background (FUR + consolidado por intento).
-    expect(mocks.generarConsolidado.mock.calls.length).toBeGreaterThanOrEqual(3);
-    expect(await screen.findByRole('button', { name: /Radicar a tránsito/ })).toBeEnabled();
+    // Feature #11211 — salida inmediata al listado; errores de expediente no bloquean la UI.
+    await waitFor(() => expect(onExit).toHaveBeenCalled());
   });
 
   it('N 03 dos pasos — en `preparado` el botón "Radicar a tránsito" transiciona a entregado, avisa y sale', async () => {
