@@ -267,6 +267,7 @@ public static class AdminCompaniesEndpoints
         [FromQuery] bool? estadoActivo = null,
         [FromQuery] DateOnly? fechaDesde = null,
         [FromQuery] DateOnly? fechaHasta = null,
+        [FromQuery] bool? excludeTransitOffices = null,
         [FromQuery] int? page = null,
         [FromQuery] int? pageSize = null)
     {
@@ -277,6 +278,7 @@ public static class AdminCompaniesEndpoints
             EstadoActivo = estadoActivo,
             FechaDesde = fechaDesde,
             FechaHasta = fechaHasta,
+            ExcludeTransitOffices = excludeTransitOffices,
             Page = page,
             PageSize = pageSize,
         };

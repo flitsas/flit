@@ -35,6 +35,11 @@ internal sealed class CompanyReadRepository : ICompanyReadRepository
 
         var query = ApplyFilters(_context.Tenants.AsNoTracking(), filter);
 
+        if (filter.ExcludeTransitOffices)
+        {
+            query = query.Where(t => !_context.TransitOfficeProfiles.Any(p => p.TenantId == t.Id));
+        }
+
         var totalCount = await query.LongCountAsync(cancellationToken).ConfigureAwait(false);
 
         if (totalCount == 0)

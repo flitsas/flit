@@ -264,6 +264,13 @@ paths:
           required: false
           schema: { type: string, format: date }
           description: Límite superior inclusivo de fecha de creación (YYYY-MM-DD).
+        - name: excludeTransitOffices
+          in: query
+          required: false
+          schema: { type: boolean, default: true }
+          description: >
+            Si es true (default cuando se omite), excluye tenants con perfil de
+            Organismo de Tránsito. Pasar false para incluir OT en el listado.
         - name: page
           in: query
           required: false
