@@ -68,7 +68,7 @@ describe("AdminTransitOfficesPage — refactor adminOT", () => {
       await screen.findByText("Administración de organismos de tránsito"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Dar de alta Organismo de Tránsito/i }),
+      screen.getByRole("button", { name: /Activar Organismo de Tránsito/i }),
     ).toBeInTheDocument();
     expect(fetchOtProfile).not.toHaveBeenCalled();
   });

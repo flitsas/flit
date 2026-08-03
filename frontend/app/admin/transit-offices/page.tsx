@@ -89,7 +89,7 @@ function AdminTransitOfficesPageInner() {
           subtitle="Selecciona un OT para configurar trámites, integraciones, reglas y documentos."
         />
         <CreateButton
-          label="Dar de alta Organismo de Tránsito"
+          label="Activar Organismo de Tránsito"
           icon={Landmark}
           onClick={() => {
             setCreateOfficeId(undefined);

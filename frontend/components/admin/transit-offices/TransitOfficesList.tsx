@@ -21,34 +21,30 @@ import { TransitOfficeQuipuxDialog } from "@/components/admin/transit-offices/Tr
 
 /**
  * Listado de organismos de tránsito con estado operativo (RF01) + acciones de ciclo de
- * vida para SuperAdmin (RF02 activar, RF03 desactivar). Cada fila muestra si el OT tiene
- * tenant dado de alta y, si lo tiene, si está activo/inactivo. Sin alta → «Dar de alta»
- * (abre CreateTransitOfficeTenantDialog vía `onCreateTenant`); con tenant → «Administrar»
- * + Activar/Desactivar con confirmación.
+ * vida para SuperAdmin (RF02 activar tenant, RF03 desactivar). Cada fila muestra si el OT
+ * tiene tenant activado y, si lo tiene, si está activo/inactivo. Sin activar → «Activar»
+ * (vía `onCreateTenant`); con tenant → «Administrar» + Activar/Desactivar con confirmación.
  *
- * HU #10710 añade la columna «Radicación Quipux» (DIVIPO + banderas de la secretaría
- * DESTINO) con su acción de parametrización y el filtro «Sin DIVIPO», porque el caso
- * mayoritario es justamente el de las secretarías aún sin parametrizar (311 de 317) y el
- * administrador necesita localizarlas de un vistazo. Es un eje distinto del estado del
- * tenant: una secretaría sin alta en FLIT puede (y suele) ser destino de radicación.
+ * HU #10710 / #11223: columnas «CODIGO DIVIPOL» (código catálogo) y «CODIGO INTEGRADOR»
+ * (código DIVIPO de radicación + banderas), con filtro «Sin código integrador».
  *
  * Presentación: patrón canónico card-list (`DataTable` + `StatusBadge`, HU #10844 /
  * flit-design-guardian — misma cáscara que CompanyListTable).
  */
 export interface TransitOfficesListProps {
-  /** Solicita el alta de tenant para una oficina sin alta (la maneja la página). */
+  /** Solicita la activación de tenant para una oficina sin tenant (la maneja la página). */
   onCreateTenant?: (office: TransitOfficeOperationalStatus) => void;
 }
 
 /** Eje «estado del tenant» del filtro. `todos` = sin filtrar. */
-type EstadoFilter = "todos" | "sin-alta" | "activo" | "inactivo";
-/** Eje «radicación Quipux» del filtro. */
+type EstadoFilter = "todos" | "sin-activar" | "activo" | "inactivo";
+/** Eje «código integrador» del filtro. */
 type QuipuxFilter = "todos" | "elegible" | "sin-divipo";
 
 /** ¿Coincide la oficina con el eje de estado seleccionado? */
 function matchesEstado(office: TransitOfficeOperationalStatus, filter: EstadoFilter): boolean {
   switch (filter) {
-    case "sin-alta":
+    case "sin-activar":
       return !office.hasTenant;
     case "activo":
       return office.hasTenant && office.estadoActivo === true;
@@ -159,7 +155,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
         return [
           {
             icon: Landmark,
-            label: `Dar de alta ${office.name}`,
+            label: `Activar ${office.name}`,
             onClick: () => onCreateTenant?.(office),
             tone: "primary",
           },
@@ -191,7 +187,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
     () => [
       {
         key: "code",
-        header: "Código",
+        header: "CODIGO DIVIPOL",
         cellClassName: "font-mono",
         render: (office) => office.code,
       },
@@ -214,7 +210,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
       },
       {
         key: "quipux",
-        header: "Radicación Quipux",
+        header: "CODIGO INTEGRADOR",
         render: (office) => <QuipuxCell office={office} />,
       },
       {
@@ -277,8 +273,8 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
                 <option value="todos" className={FILTER_OPTION_CLS}>
                   Todos
                 </option>
-                <option value="sin-alta" className={FILTER_OPTION_CLS}>
-                  Sin alta
+                <option value="sin-activar" className={FILTER_OPTION_CLS}>
+                  Sin activar
                 </option>
                 <option value="activo" className={FILTER_OPTION_CLS}>
                   Activo
@@ -290,11 +286,11 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
             </label>
 
             <label className="flex flex-col gap-1 text-[11px] font-semibold text-[#59677D] dark:text-white/70">
-              Radicación Quipux
+              Código integrador
               <select
                 value={quipuxFilter}
                 onChange={(e) => setQuipuxFilter(e.target.value as QuipuxFilter)}
-                aria-label="Filtrar por radicación Quipux"
+                aria-label="Filtrar por código integrador"
                 className={FILTER_SELECT_CLS}
               >
                 <option value="todos" className={FILTER_OPTION_CLS}>
@@ -304,7 +300,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
                   Radica (elegible)
                 </option>
                 <option value="sin-divipo" className={FILTER_OPTION_CLS}>
-                  Sin DIVIPO
+                  Sin código integrador
                 </option>
               </select>
             </label>
@@ -377,8 +373,8 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
             );
             show(
               settings.divipoCode
-                ? `Radicación Quipux actualizada para «${quipuxTarget.name}».`
-                : `Radicación Quipux actualizada para «${quipuxTarget.name}». Sigue sin código DIVIPO: no se radicará.`,
+                ? `Código integrador actualizado para «${quipuxTarget.name}».`
+                : `Código integrador actualizado para «${quipuxTarget.name}». Sigue sin código: no se radicará.`,
               "success",
             );
             setQuipuxTarget(null);
@@ -390,8 +386,8 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
 }
 
 /**
- * Celda de radicación Quipux (HU #10710): código DIVIPO + familias de trámite habilitadas.
- * Sin DIVIPO → tone neutral; inconsistencia (banderas sin DIVIPO) → warning.
+ * Celda de código integrador (HU #10710 / #11223): DIVIPO de radicación + familias.
+ * Sin código → tone neutral; inconsistencia (banderas sin código) → warning.
  */
 function QuipuxCell({ office }: { office: TransitOfficeOperationalStatus }) {
   const familias = [
@@ -408,9 +404,9 @@ function QuipuxCell({ office }: { office: TransitOfficeOperationalStatus }) {
         <span className="font-mono text-xs text-[#162744] dark:text-white">{office.divipoCode}</span>
       ) : (
         <StatusBadge
-          label="Sin DIVIPO"
+          label="Sin código integrador"
           tone="neutral"
-          ariaLabel="Aún no se ha cargado el código DIVIPO de esta secretaría"
+          ariaLabel="Aún no se ha cargado el código integrador de esta secretaría"
         />
       )}
 
@@ -418,15 +414,15 @@ function QuipuxCell({ office }: { office: TransitOfficeOperationalStatus }) {
         <span className="text-[11px] text-[#59677D] dark:text-white/70">{familias.join(" · ")}</span>
       )}
 
-      {inconsistente && <StatusBadge label="Sin DIVIPO no se radica" tone="warning" />}
+      {inconsistente && <StatusBadge label="Sin código integrador no se radica" tone="warning" />}
     </div>
   );
 }
 
-/** Badge de estado operativo: Sin alta | Activo | Inactivo (StatusBadge + tones FLIT). */
+/** Badge de estado operativo: Sin activar | Activo | Inactivo (StatusBadge + tones FLIT). */
 function EstadoBadge({ office }: { office: TransitOfficeOperationalStatus }) {
   if (!office.hasTenant) {
-    return <StatusBadge label="Sin alta" tone="neutral" />;
+    return <StatusBadge label="Sin activar" tone="neutral" />;
   }
   if (office.estadoActivo === true) {
     return <StatusBadge label="Activo" tone="success" />;

@@ -29,7 +29,7 @@ export interface CreateTransitOfficeTenantDialogProps {
   open: boolean;
   onClose: () => void;
   onCreated: (tenant: TransitOfficeTenantItem) => void;
-  /** Oficina del catálogo a preseleccionar (p. ej. la fila «Dar de alta» del listado). */
+  /** Oficina del catálogo a preseleccionar (p. ej. la fila «Activar» del listado). */
   initialOfficeId?: string;
 }
 
@@ -177,7 +177,7 @@ export function CreateTransitOfficeTenantDialog({
       onClose={handleClose}
       busy={submitting}
       icon={Landmark}
-      title="Dar de alta Organismo de Tránsito"
+      title="Activar Organismo de Tránsito"
       titleClassName="text-base font-bold text-[#557EFF]"
     >
       <div className="space-y-3.5">
@@ -269,7 +269,7 @@ export function CreateTransitOfficeTenantDialog({
               style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
             >
               {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {submitting ? "Creando…" : "Crear Organismo de Tránsito"}
+              {submitting ? "Activando…" : "Activar Organismo de Tránsito"}
             </button>
           </div>
         </div>
