@@ -260,7 +260,7 @@ public sealed class SuperAdminRoleGovernanceEndpointsTests : IClassFixture<WebAp
             Id = _tenantId,
             Code = $"CO-HU10508-{Guid.NewGuid():N}"[..20],
             LegalName = "Compañía gobernanza roles de prueba",
-            TaxId = "900666666-6",
+            TaxId = TestNit.Unique(),
             TenantType = "RENTING",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
