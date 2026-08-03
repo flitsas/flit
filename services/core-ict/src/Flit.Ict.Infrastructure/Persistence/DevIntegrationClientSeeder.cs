@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Ict.Infrastructure.Persistence;
 
@@ -15,7 +16,7 @@ namespace Flit.Ict.Infrastructure.Persistence;
 /// </summary>
 public sealed partial class DevIntegrationClientSeeder(
     IServiceScopeFactory scopeFactory,
-    IHostEnvironment environment,
+    IOptions<IctDatabaseOptions> databaseOptions,
     ILogger<DevIntegrationClientSeeder> logger) : IHostedService
 {
     private const string DevUsername = "ictdev";
@@ -23,7 +24,10 @@ public sealed partial class DevIntegrationClientSeeder(
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!environment.IsDevelopment())
+        // Gate REAL de los seeders de desarrollo: el flag Database:SeedDevData (default false). NO se usa
+        // IsDevelopment() porque DEV/QA/PDN corren con ASPNETCORE_ENVIRONMENT=Development y sembrarían este
+        // cliente de prueba (contraseña conocida) en producción. El flag solo se activa en el arranque local.
+        if (!databaseOptions.Value.SeedDevData)
         {
             return;
         }
@@ -49,11 +53,16 @@ public sealed partial class DevIntegrationClientSeeder(
             }
 
             var hash = hasher.Hash(DevPassword);
+            // El árbitro del ON CONFLICT DEBE ser el índice único FUNCIONAL sobre lower(username)
+            // (uq_integration_clients_username_lower). Tras quitar la dependencia de citext ya NO existe un
+            // índice plano sobre la columna username, así que "ON CONFLICT (username)" fallaría con 42P10
+            // ("no hay restricción única que coincida"), reventando este IHostedService en el arranque y
+            // dejando core-ict en crash-loop (502 en todo /api/v1/ict/*). DevUsername ya va en minúsculas.
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO ict.integration_clients (tenant_id, username, password_hash, scopes, is_active)
                 VALUES ({tenantId.Value}, {DevUsername}, {hash},
                         '["ict.transactions.write","ict.status.read"]'::jsonb, true)
-                ON CONFLICT (username) DO NOTHING
+                ON CONFLICT ((lower(username))) DO NOTHING
                 """, cancellationToken);
             Log.Seeded(logger, DevUsername);
         }

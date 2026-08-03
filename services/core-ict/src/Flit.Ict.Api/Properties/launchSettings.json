@@ -4,7 +4,8 @@
       "commandName": "Project",
       "applicationUrl": "http://localhost:4020",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Database__SeedDevData": "true"
       }
     }
   }
