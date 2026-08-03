@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Ict.Infrastructure.Persistence;
 
@@ -15,7 +16,7 @@ namespace Flit.Ict.Infrastructure.Persistence;
 /// </summary>
 public sealed partial class DevIntegrationClientSeeder(
     IServiceScopeFactory scopeFactory,
-    IHostEnvironment environment,
+    IOptions<IctDatabaseOptions> databaseOptions,
     ILogger<DevIntegrationClientSeeder> logger) : IHostedService
 {
     private const string DevUsername = "ictdev";
@@ -23,7 +24,10 @@ public sealed partial class DevIntegrationClientSeeder(
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!environment.IsDevelopment())
+        // Gate REAL de los seeders de desarrollo: el flag Database:SeedDevData (default false). NO se usa
+        // IsDevelopment() porque DEV/QA/PDN corren con ASPNETCORE_ENVIRONMENT=Development y sembrarían este
+        // cliente de prueba (contraseña conocida) en producción. El flag solo se activa en el arranque local.
+        if (!databaseOptions.Value.SeedDevData)
         {
             return;
         }

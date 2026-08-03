@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Ict.Infrastructure.Persistence;
 
@@ -14,12 +15,14 @@ namespace Flit.Ict.Infrastructure.Persistence;
 /// </summary>
 public sealed partial class DevMockDataSeeder(
     IServiceScopeFactory scopeFactory,
-    IHostEnvironment environment,
+    IOptions<IctDatabaseOptions> databaseOptions,
     ILogger<DevMockDataSeeder> logger) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!environment.IsDevelopment())
+        // Gate REAL: el flag Database:SeedDevData (default false). NO IsDevelopment() (DEV/QA/PDN corren con
+        // env=Development y meterían logs/pre-trámites mock en producción). Solo se activa en el arranque local.
+        if (!databaseOptions.Value.SeedDevData)
         {
             return;
         }
