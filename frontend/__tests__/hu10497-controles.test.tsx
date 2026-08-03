@@ -150,7 +150,7 @@ describe("HU #10844 — AC6: botones de crear con icono semántico (sin el '+' g
   it("los CTA de creación conservan su etiqueta de texto (nombre accesible intacto)", () => {
     expect(read("app/admin/companies/page.tsx")).toMatch(/Crear compañía/);
     expect(read("app/admin/documents/page.tsx")).toMatch(/Crear documento/);
-    expect(read("app/admin/transit-offices/page.tsx")).toMatch(/Activar Organismo de Tránsito/);
+    expect(read("app/admin/transit-offices/page.tsx")).toMatch(/Activa un organismo desde la fila/);
     expect(read("components/atom/modules/_reportes/scheduling/SchedulesSection.tsx")).toMatch(/Nuevo informe/);
     expect(read("components/atom/modules/_reportes/scheduling/AlertsSection.tsx")).toMatch(/Nueva alerta/);
   });
