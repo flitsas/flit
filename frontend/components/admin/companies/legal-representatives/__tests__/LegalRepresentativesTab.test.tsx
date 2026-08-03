@@ -206,7 +206,7 @@ describe("LegalRepresentativesTab (HU #10904)", () => {
     ).toBeInTheDocument();
 
     await userEvent.click(await screen.findByRole("button", { name: /agregar empresa/i }));
-    let nitInputs = await screen.findAllByLabelText(/nit de la compañía/i);
+    const nitInputs = await screen.findAllByLabelText(/nit de la compañía/i);
     const nameInputs = await screen.findAllByLabelText(/razón social/i);
     const last = nitInputs.length - 1;
     await userEvent.clear(nitInputs[last]);

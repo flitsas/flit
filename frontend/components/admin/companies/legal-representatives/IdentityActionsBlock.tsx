@@ -49,7 +49,6 @@ export function IdentityActionsBlock({
   identityValidUntil,
   firmaBaulVigente,
   firmaBaulVigenteHasta,
-  email,
   onRefresh,
 }: IdentityActionsBlockProps) {
   const [actionLoading, setActionLoading] = useState<string | null>(null);

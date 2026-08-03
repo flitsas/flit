@@ -29,7 +29,7 @@ vi.mock("@/lib/api/admin-deeds", async (importOriginal) => {
 });
 
 import { fetchLegalRepresentative } from "@/lib/api/admin-legal-representatives";
-import { saveDeed, fetchDeedDetail } from "@/lib/api/admin-deeds";
+import { fetchDeedDetail } from "@/lib/api/admin-deeds";
 
 const TENANT = "11111111-1111-1111-1111-111111111111";
 
