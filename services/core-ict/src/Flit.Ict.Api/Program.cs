@@ -39,6 +39,7 @@ app.MapIctStatusEndpoints();
 app.MapIctSecretariesEndpoints();
 app.MapIctLifecycleEndpoints();
 app.MapIctObservabilityEndpoints();
+app.MapIctClientAdminEndpoints();
 
 // Servidor gRPC del callback de estados (core-api -> core-ict). Requiere HTTP/2 (h2c en dev).
 // Protegido con el service-token del canal inverso (aud=core-ict-internal, scope=ict.state): solo
@@ -46,6 +47,7 @@ app.MapIctObservabilityEndpoints();
 app.MapGrpcService<IctStateCallbackService>()
     .RequireAuthorization(Flit.Ict.Api.Authorization.IctSecurityExtensions.CoreApiCallbackPolicy);
 
+// Health del servicio (usado por el compose y el smoke local).
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "core-ict" }));
 
 app.Run();

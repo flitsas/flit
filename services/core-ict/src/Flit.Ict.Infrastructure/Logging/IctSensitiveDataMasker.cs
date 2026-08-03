@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 
 namespace Flit.Ict.Infrastructure.Logging;
@@ -67,6 +68,84 @@ public static class IctSensitiveDataMasker
             return json;
         }
     }
+
+    /// <summary>
+    /// Enmascara el CUERPO (request/response) de un log ICT de forma RECURSIVA: recorre el árbol JSON
+    /// completo y, en cualquier nivel de anidamiento, redacta las claves sensibles (tokens/secretos) y
+    /// enmascara las claves PII (documento/nombre/correo/…) dejando los últimos 4. Es la barrera 1 (al
+    /// capturar): a diferencia de <see cref="MaskJson"/> (plano, para servir) NUNCA devuelve el crudo — si
+    /// el texto no es JSON válido (o llegó truncado) devuelve un placeholder, para no persistir PII/secretos
+    /// sin enmascarar. Se aplica al request del /register (que trae seller/buyer/lessee con documentos).
+    /// </summary>
+    public static string? MaskJsonBody(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream))
+            {
+                WriteMaskedElement(writer, doc.RootElement);
+            }
+
+            return Encoding.UTF8.GetString(stream.ToArray());
+        }
+        catch (JsonException)
+        {
+            return "<cuerpo no capturable (no-JSON o truncado)>";
+        }
+    }
+
+    private static void WriteMaskedElement(Utf8JsonWriter writer, JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (var prop in element.EnumerateObject())
+                {
+                    writer.WritePropertyName(prop.Name);
+                    if (IsSensitive(prop.Name))
+                    {
+                        writer.WriteStringValue(Redacted);
+                    }
+                    else if (IsPii(prop.Name) && IsScalar(prop.Value))
+                    {
+                        writer.WriteStringValue(MaskValue(ScalarToString(prop.Value)));
+                    }
+                    else
+                    {
+                        WriteMaskedElement(writer, prop.Value);
+                    }
+                }
+
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var item in element.EnumerateArray())
+                {
+                    WriteMaskedElement(writer, item);
+                }
+
+                writer.WriteEndArray();
+                break;
+            default:
+                element.WriteTo(writer);
+                break;
+        }
+    }
+
+    private static bool IsScalar(JsonElement el) =>
+        el.ValueKind is JsonValueKind.String or JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False;
+
+    private static string ScalarToString(JsonElement el) =>
+        el.ValueKind == JsonValueKind.String ? el.GetString() ?? string.Empty : el.GetRawText();
 
     private static bool IsSensitive(string key) => SensitiveKeys.Contains(key);
 

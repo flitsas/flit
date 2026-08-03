@@ -88,16 +88,16 @@ public sealed partial class DevMockDataSeeder(
 
     private const string MockSql = """
         INSERT INTO ict.integration_log
-            (tenant_id, log_type, direction, method, path, status_code, headers, correlation_id, duration_ms, usuario, created_at)
+            (tenant_id, log_type, direction, method, path, status_code, headers, request, response, correlation_id, duration_ms, usuario, created_at)
         VALUES
-            (@tenant, 'auth', 'inbound', 'POST', '/api/v1/auth/login', 200, '{"content-type":"application/json","authorization":"***REDACTED***"}'::jsonb, gen_random_uuid(), 58, 'ictdev', now() - interval '25 min'),
-            (@tenant, 'transaction', 'inbound', 'POST', '/api/v1/external-transaction/register', 200, '{"content-type":"application/json","authorization":"***REDACTED***"}'::jsonb, gen_random_uuid(), 143, 'ictdev', now() - interval '22 min'),
-            (@tenant, 'transaction', 'inbound', 'POST', '/api/v1/external-transaction/register', 422, '{"content-type":"application/json"}'::jsonb, gen_random_uuid(), 12, 'ictdev', now() - interval '20 min'),
-            (@tenant, 'transaction', 'inbound', 'GET', '/api/v1/status-process/byId/MOCK-NOV-1', 200, '{"content-type":"application/json"}'::jsonb, gen_random_uuid(), 9, 'ictdev', now() - interval '12 min'),
-            (@tenant, 'external', 'outbound', 'GET', '/runt/vehicle/ABC123', 200, '{"x-source":"runt"}'::jsonb, gen_random_uuid(), 812, NULL, now() - interval '11 min'),
-            (@tenant, 'webhook', 'outbound', 'POST', 'https://gestor.example.com/webhook', 500, '{"content-type":"application/json"}'::jsonb, gen_random_uuid(), 305, NULL, now() - interval '9 min'),
-            (@tenant, 'transaction', 'inbound', 'PATCH', '/api/v1/pretramites', 200, '{"content-type":"application/json"}'::jsonb, gen_random_uuid(), 27, 'ictdev', now() - interval '6 min'),
-            (@tenant, 'auth', 'inbound', 'POST', '/api/v1/auth/login', 401, '{"content-type":"application/json"}'::jsonb, gen_random_uuid(), 33, NULL, now() - interval '3 min');
+            (@tenant, 'auth', 'inbound', 'POST', '/api/v1/auth/login', 200, '{"content-type":"application/json","authorization":"***REDACTED***"}'::jsonb, '{"username":"ictdev","password":"***REDACTED***"}'::jsonb, '{"token":"***REDACTED***","expiresInSeconds":3600}'::jsonb, gen_random_uuid(), 58, 'ictdev', now() - interval '25 min'),
+            (@tenant, 'transaction', 'inbound', 'POST', '/api/v1/external-transaction/register', 200, '{"content-type":"application/json","authorization":"***REDACTED***"}'::jsonb, '{"transaction_type":3,"company_manager_document":"*****8038","seller":[{"document_type":"CC","document_number":"****7262","name":"*******CANON"}]}'::jsonb, '{"TotalRows":1,"TotalRowsProcessed":1,"Detail":[{"Plate":"ABC123","Status":1,"Message":"registrado","TransactionFlit":"1042"}]}'::jsonb, gen_random_uuid(), 143, 'ictdev', now() - interval '22 min'),
+            (@tenant, 'transaction', 'inbound', 'POST', '/api/v1/external-transaction/register', 422, '{"content-type":"application/json"}'::jsonb, '{"rows":21}'::jsonb, '{"error":"batch_limit_exceeded"}'::jsonb, gen_random_uuid(), 12, 'ictdev', now() - interval '20 min'),
+            (@tenant, 'transaction', 'inbound', 'GET', '/api/v1/status-process/byId/MOCK-NOV-1', 200, '{"content-type":"application/json"}'::jsonb, NULL, '{"transactionFlit":"MOCK-NOV-1","statusValidation":4,"statusDescription":"Con Novedades"}'::jsonb, gen_random_uuid(), 9, 'ictdev', now() - interval '12 min'),
+            (@tenant, 'external', 'outbound', 'GET', '/runt/vehicle/ABC123', 200, '{"x-source":"runt"}'::jsonb, NULL, '{"placa":"ABC123","estado":"ACTIVO","soatVigente":true}'::jsonb, gen_random_uuid(), 812, NULL, now() - interval '11 min'),
+            (@tenant, 'webhook', 'outbound', 'POST', 'https://gestor.example.com/webhook', 500, '{"content-type":"application/json"}'::jsonb, '{"managerIdTransaction":"MOCK-NOV-1","ictEstado":"con_novedades","transactionType":3,"message":"CON NOVEDADES (mock)"}'::jsonb, NULL, gen_random_uuid(), 305, NULL, now() - interval '9 min'),
+            (@tenant, 'transaction', 'inbound', 'PATCH', '/api/v1/pretramites', 200, '{"content-type":"application/json"}'::jsonb, '{"deliveryAddress":"Calle 1 # 2-3","rowVersion":3}'::jsonb, '{"updated":true,"rowVersion":4}'::jsonb, gen_random_uuid(), 27, 'ictdev', now() - interval '6 min'),
+            (@tenant, 'auth', 'inbound', 'POST', '/api/v1/auth/login', 401, '{"content-type":"application/json"}'::jsonb, '{"username":"ictdev","password":"***REDACTED***"}'::jsonb, '{"error":"invalid_credentials"}'::jsonb, gen_random_uuid(), 33, NULL, now() - interval '3 min');
 
         INSERT INTO ict.external_integration_master
             (tenant_id, manager_id_transaction, transaction_type, transaction_operation, plate, process_status_id, business_validation, external_validation, created_at)

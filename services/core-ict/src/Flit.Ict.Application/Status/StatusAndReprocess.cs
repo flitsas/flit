@@ -38,7 +38,11 @@ public sealed class ReprocessHandler(IPreTramiteRepository repository, ICurrentT
         master.UpdatedBy = currentTenant.IntegrationClientId;
         await repository.SaveAsync(tenantId.Value, ct);
 
-        var detail = JsonSerializer.Serialize(new { manager_id_transaction = managerIdTransaction });
+        var detail = JsonSerializer.Serialize(new
+        {
+            transaction_number = master.TransactionNumber,
+            manager_id_transaction = master.ManagerIdTransaction,
+        });
         await repository.RecordTimelineEventAsync(master.Id, tenantId.Value, "reprocesado", "ok", detail, ct);
         return (true, null);
     }

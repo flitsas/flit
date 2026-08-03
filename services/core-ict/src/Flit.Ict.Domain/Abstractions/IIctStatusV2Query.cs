@@ -13,11 +13,14 @@ public sealed record IctStatusV2Response(
     string? TramiteStatus,
     string Comments);
 
-/// <summary>Consulta del estado v2 de un pre-trámite por su manager_id_transaction (TransactionFlit).</summary>
+/// <summary>
+/// Consulta del estado v2 de un pre-trámite por su referencia pública: el número secuencial
+/// (transaction_number, paridad v1) o el manager_id_transaction propio del gestor.
+/// </summary>
 public interface IIctStatusV2Query
 {
     Task<IctStatusV2Response?> GetByManagerIdTransactionAsync(
-        string managerIdTransaction,
+        string reference,
         Guid tenantId,
         CancellationToken ct = default);
 }
