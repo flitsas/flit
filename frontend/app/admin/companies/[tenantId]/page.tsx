@@ -126,10 +126,7 @@ function CompanyDetail() {
                 documentosSlot={<CompanyDocumentParamsPanel tenantId={tenantId} />}
                 platesSlot={<PlatePreassignViewer tenantId={tenantId} />}
                 legalRepresentativesSlot={
-                  <RepresentativesAndVaultTab
-                    tenantId={tenantId}
-                    baulVisible={settings.baulFirmasActivo}
-                  />
+                  <RepresentativesAndVaultTab tenantId={tenantId} />
                 }
                 mandatariosSlot={<CompanyMandatariosPanel tenantId={tenantId} />}
               />

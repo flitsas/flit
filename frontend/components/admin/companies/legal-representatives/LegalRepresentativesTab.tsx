@@ -1,7 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, MailCheck, Vault } from "lucide-react";
+import {
+  AlertTriangle,
+  Building2,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  MailCheck,
+  Pencil,
+  Trash2,
+  Vault,
+  type LucideIcon,
+} from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { Modal } from "@/components/atom/Modal";
@@ -20,43 +31,49 @@ import {
   type LegalRepresentativeItem,
   type LegalRepresentativeSaved,
 } from "@/lib/api/admin-legal-representatives";
-import { useCompanyTabsNav } from "../CompanyConfigTabs";
 import {
   LegalRepresentativesFormPanel,
   type PanelMode,
 } from "./LegalRepresentativesFormPanel";
-import { formatDocumentNumber, fullName, procedureTypeLabels, signatureStatus } from "./legalRepresentativesDisplay";
+import {
+  formatDocumentNumber,
+  fullName,
+  procedureTypeLabels,
+  signatureStatus,
+} from "./legalRepresentativesDisplay";
+import {
+  RL_COLOR,
+  rlDangerCtaClass,
+  rlDangerCtaStyle,
+  rlDangerGhostStyle,
+  rlIconActionClass,
+  rlPrimaryCtaClass,
+  rlPrimaryCtaStyle,
+} from "./rl-flit-styles";
 
 const PAGE_SIZE = 20;
 
 /**
- * Pestaña "Representantes legales" (HU #10904, Feature #10852): CRUD paginado del directorio de
- * representantes por compañía. HU #11178: una sola superficie — el panel unificado `view`/`create`/`edit`
- * reemplaza la ventana de detalle separada (`LegalRepresentativeDetailModal`, retirada en esta HU).
- * El número de documento se muestra completo: los últimos cuatro dígitos no bastan para identificar
- * al representante durante la operación (decisión traída de develop al integrar).
+ * Directorio de representantes legales.
+ * Acciones por fila (iconos lineales FLIT): Editar, Empresas, Eliminar.
+ * La ficha completa (modo view) queda disponible en código pero sin entrada en el grid.
  */
 export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
   const { show } = useToast();
-  const nav = useCompanyTabsNav();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [items, setItems] = useState<LegalRepresentativeItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  // Catálogo de tipos de trámite asignables (activos + publicados), cargado del backend con sus IDs
-  // reales; alimenta el multiselect del formulario y las etiquetas de la tabla.
   const [procedureTypes, setProcedureTypes] = useState<AssignableProcedureType[]>([]);
 
-  // HU #11178 — panel unificado: modo + id del representante seleccionado.
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<PanelMode>("create");
   const [panelRepresentativeId, setPanelRepresentativeId] = useState<string | null>(null);
 
   const [toDelete, setToDelete] = useState<LegalRepresentativeItem | null>(null);
   const [deleting, setDeleting] = useState(false);
-  // Id del representante recién guardado sin firma ni identidad (banner con acciones).
-  const [pendingSignatureId, setPendingSignatureId] = useState<string | null>(null);
   const [sendingIdentityId, setSendingIdentityId] = useState<string | null>(null);
+  const [pendingSignatureId, setPendingSignatureId] = useState<string | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -81,7 +98,6 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
     return () => controller.abort();
   }, [load]);
 
-  // Carga del catálogo de tipos de trámite asignables (una vez por tenant).
   useEffect(() => {
     const controller = new AbortController();
     fetchAssignableProcedureTypes(tenantId, controller.signal)
@@ -89,45 +105,41 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
         if (!controller.signal.aborted) setProcedureTypes(types);
       })
       .catch(() => {
-        /* silencioso: el aviso de "sin tipos habilitados" cubre el caso */
+        /* el aviso de "sin tipos habilitados" cubre el caso */
       });
     return () => controller.abort();
   }, [tenantId]);
 
-  // ── Apertura del panel en cada modo ─────────────────────────────────────────
-
-  /** AC4: «Nuevo representante» → panel en alta (formulario en blanco). */
   const openCreate = () => {
     setPanelMode("create");
     setPanelRepresentativeId(null);
     setPanelOpen(true);
   };
 
-  /** AC1: «Ver» → panel en consulta con toda la información del representante. */
-  const openView = (item: LegalRepresentativeItem) => {
-    setPanelMode("view");
-    setPanelRepresentativeId(item.id);
-    setPanelOpen(true);
-  };
-
-  /** «Editar» desde la tabla → panel en edición directamente. */
   const openEdit = (item: LegalRepresentativeItem) => {
     setPanelMode("edit");
     setPanelRepresentativeId(item.id);
     setPanelOpen(true);
   };
 
-  /** AC2: el usuario pulsó «Editar» DENTRO del panel en consulta → cambia modo sin cerrar. */
+  const openCompanies = (item: LegalRepresentativeItem) => {
+    setPanelMode("companies");
+    setPanelRepresentativeId(item.id);
+    setPanelOpen(true);
+  };
+
   const handleSwitchToEdit = () => {
     setPanelMode("edit");
+  };
+
+  const handleSwitchToCompanies = () => {
+    setPanelMode("companies");
   };
 
   const closePanel = () => {
     setPanelOpen(false);
     setPanelRepresentativeId(null);
   };
-
-  // ── Submit / saved ───────────────────────────────────────────────────────────
 
   const handleSubmit = (input: LegalRepresentativeInput): Promise<LegalRepresentativeSaved> =>
     panelMode === "create" || !panelRepresentativeId
@@ -142,17 +154,19 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
     void load();
 
     if (wasCreate) {
-      // AC5: el panel NO se cierra; pasa a modo edición sobre el representante recién creado.
-      show("Representante registrado. Puedes editar sus detalles.", "success");
-      setPanelMode("edit");
-      setPanelRepresentativeId(saved.id);
+      show(
+        "Representante registrado. Usa «Empresas» en el listado para asociar NITs y escrituras.",
+        "success",
+      );
+      closePanel();
+    } else if (panelMode === "companies") {
+      show("Empresas actualizadas.", "success");
+      closePanel();
     } else {
       show("Representante actualizado.", "success");
       closePanel();
     }
   };
-
-  // ── Eliminación ──────────────────────────────────────────────────────────────
 
   const confirmDelete = async () => {
     if (!toDelete) return;
@@ -169,8 +183,6 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
       setDeleting(false);
     }
   };
-
-  // ── Envío de identidad ───────────────────────────────────────────────────────
 
   const handleSendIdentity = async (item: LegalRepresentativeItem) => {
     setSendingIdentityId(item.id);
@@ -193,17 +205,6 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
     }
   };
 
-  const goToVault = () => {
-    if (nav.baulVisible) {
-      nav.goToBaul();
-    } else {
-      show(
-        "Activa el Baúl de Firmas en la configuración de la empresa para registrar firmas.",
-        "error",
-      );
-    }
-  };
-
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const pendingItem = pendingSignatureId
     ? items.find((i) => i.id === pendingSignatureId) ?? null
@@ -212,9 +213,9 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
   const emptyCta = (
     <button
       type="button"
-      className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-      style={{ background: "#557EFF" }}
       onClick={openCreate}
+      className={rlPrimaryCtaClass}
+      style={rlPrimaryCtaStyle}
     >
       Registrar primer representante
     </button>
@@ -223,14 +224,14 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="max-w-xl text-[11px] opacity-60">
+        <p className="max-w-xl text-[11px]" style={{ color: RL_COLOR.secondary }}>
           Gestiona los representantes legales de las compañías que la gestora representa, con sus
           datos, los tipos de trámite que pueden firmar y su estado de firma o validación de identidad.
         </p>
         <button
           type="button"
-          className="shrink-0 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-          style={{ background: "#557EFF" }}
+          className={`shrink-0 ${rlPrimaryCtaClass}`}
+          style={rlPrimaryCtaStyle}
           onClick={openCreate}
         >
           Nuevo representante
@@ -241,9 +242,12 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
         <div
           role="status"
           className="flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-          style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)" }}
+          style={{
+            borderColor: RL_COLOR.pending,
+            background: RL_COLOR.pendingBg,
+          }}
         >
-          <p className="text-[11px] font-medium" style={{ color: "#8a6000" }}>
+          <p className="text-[11px] font-medium" style={{ color: RL_COLOR.pendingText }}>
             <strong>{fullName(pendingItem)}</strong> quedó guardado sin firma ni validación de
             identidad vigente. Vincula una para que pueda firmar sus trámites.
           </p>
@@ -254,7 +258,11 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
               busy={sendingIdentityId === pendingItem.id}
               onClick={() => void handleSendIdentity(pendingItem)}
             />
-            <SignatureAction icon={Vault} label="Registrar en baúl" onClick={goToVault} />
+            <SignatureAction
+              icon={Vault}
+              label="Asociar firma"
+              onClick={() => openEdit(pendingItem)}
+            />
           </div>
         </div>
       )}
@@ -274,28 +282,40 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
               <thead>
                 <tr
                   className="text-left text-[10px] font-semibold uppercase"
-                  style={{ color: "#162744" }}
+                  style={{ color: RL_COLOR.navy }}
                 >
                   <th
                     scope="col"
                     className="rounded-l-xl px-4 py-2.5"
-                    style={{ background: "#DFE5ED" }}
+                    style={{ background: RL_COLOR.tableHeader }}
                   >
                     Representante
                   </th>
-                  <th scope="col" className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                  <th
+                    scope="col"
+                    className="px-4 py-2.5"
+                    style={{ background: RL_COLOR.tableHeader }}
+                  >
                     Documento
                   </th>
-                  <th scope="col" className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                  <th
+                    scope="col"
+                    className="px-4 py-2.5"
+                    style={{ background: RL_COLOR.tableHeader }}
+                  >
                     Trámites
                   </th>
-                  <th scope="col" className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                  <th
+                    scope="col"
+                    className="px-4 py-2.5"
+                    style={{ background: RL_COLOR.tableHeader }}
+                  >
                     Firma / Identidad
                   </th>
                   <th
                     scope="col"
                     className="rounded-r-xl px-4 py-2.5 text-right"
-                    style={{ background: "#DFE5ED" }}
+                    style={{ background: RL_COLOR.tableHeader }}
                   >
                     Acciones
                   </th>
@@ -306,17 +326,23 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
                   const st = signatureStatus(item.hasSignatureOrIdentity);
                   const tramites = procedureTypeLabels(item.procedureTypeIds, procedureTypes);
                   return (
-                    <tr key={item.id} className="bg-white dark:bg-[#0B0F14]">
-                      <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold">
+                    <tr key={item.id} className="bg-white">
+                      <td
+                        className="rounded-l-xl border-y border-l px-4 py-3 font-semibold"
+                        style={{ borderColor: RL_COLOR.border, color: RL_COLOR.navy }}
+                      >
                         {fullName(item)}
                       </td>
-                      <td className="border-y px-4 py-3 font-mono">
+                      <td
+                        className="border-y px-4 py-3 font-mono"
+                        style={{ borderColor: RL_COLOR.border }}
+                      >
                         {item.documentType} {formatDocumentNumber(item.documentNumber)}
                       </td>
-                      <td className="border-y px-4 py-3">
+                      <td className="border-y px-4 py-3" style={{ borderColor: RL_COLOR.border }}>
                         <div className="flex flex-wrap gap-1">
                           {tramites.length === 0 ? (
-                            <span className="opacity-50">—</span>
+                            <span style={{ color: RL_COLOR.muted }}>—</span>
                           ) : (
                             tramites.map((t, i) => (
                               <StatusBadge key={`${item.id}-${i}`} tone="info" label={t} />
@@ -324,32 +350,28 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
                           )}
                         </div>
                       </td>
-                      <td className="border-y px-4 py-3">
+                      <td className="border-y px-4 py-3" style={{ borderColor: RL_COLOR.border }}>
                         <StatusBadge tone={st.tone} label={st.label} />
                       </td>
-                      <td className="rounded-r-xl border-y border-r px-4 py-3 text-right">
+                      <td
+                        className="rounded-r-xl border-y border-r px-4 py-3 text-right"
+                        style={{ borderColor: RL_COLOR.border }}
+                      >
                         <div className="flex flex-wrap justify-end gap-1.5">
-                          {!item.hasSignatureOrIdentity && (
-                            <>
-                              <RowButton
-                                label="Validar identidad"
-                                busy={sendingIdentityId === item.id}
-                                onClick={() => void handleSendIdentity(item)}
-                              />
-                              <RowButton label="Baúl" onClick={goToVault} />
-                            </>
-                          )}
                           <RowButton
-                            label="Ver"
-                            onClick={() => openView(item)}
-                            ariaLabel={`Ver detalle de ${fullName(item)}`}
-                          />
-                          <RowButton
+                            icon={Pencil}
                             label="Editar"
                             onClick={() => openEdit(item)}
-                            ariaLabel={`Editar ${fullName(item)}`}
+                            ariaLabel={`Editar persona y firma de ${fullName(item)}`}
                           />
                           <RowButton
+                            icon={Building2}
+                            label="Empresas"
+                            onClick={() => openCompanies(item)}
+                            ariaLabel={`Asociar empresas de ${fullName(item)}`}
+                          />
+                          <RowButton
+                            icon={Trash2}
                             label="Eliminar"
                             danger
                             onClick={() => setToDelete(item)}
@@ -365,7 +387,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
           </div>
 
           <div className="mt-2 flex items-center justify-between pt-1 text-[11px]">
-            <p className="opacity-60">{totalCount} representantes</p>
+            <p style={{ color: RL_COLOR.secondary }}>{totalCount} representantes</p>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -373,10 +395,11 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium disabled:opacity-40"
+                style={{ borderColor: RL_COLOR.border, color: RL_COLOR.navy }}
               >
                 <ChevronLeft className="h-3.5 w-3.5" /> Anterior
               </button>
-              <span className="font-semibold" style={{ color: "#557EFF" }}>
+              <span className="font-semibold" style={{ color: RL_COLOR.brand }}>
                 {page} / {totalPages}
               </span>
               <button
@@ -385,6 +408,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium disabled:opacity-40"
+                style={{ borderColor: RL_COLOR.border, color: RL_COLOR.navy }}
               >
                 Siguiente <ChevronRight className="h-3.5 w-3.5" />
               </button>
@@ -393,18 +417,18 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
         </div>
       </UiStateBoundary>
 
-      {/* HU #11178 — panel unificado (view / create / edit). Reemplaza LegalRepresentativeDetailModal. */}
       <LegalRepresentativesFormPanel
         open={panelOpen}
         mode={panelMode}
-        representativeId={panelRepresentativeId}
         tenantId={tenantId}
+        representativeId={panelRepresentativeId}
         procedureTypes={procedureTypes}
         onClose={closePanel}
         onSubmit={handleSubmit}
         onSaved={handleSaved}
-        onError={(message) => show(message, "error")}
+        onError={(msg) => show(msg, "error")}
         onSwitchToEdit={handleSwitchToEdit}
+        onSwitchToCompanies={handleSwitchToCompanies}
       />
 
       {toDelete && (
@@ -414,10 +438,10 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
           busy={deleting}
           size="sm"
           icon={AlertTriangle}
-          iconBg="#FF4E00"
+          iconBg={RL_COLOR.danger}
           title="Eliminar representante"
         >
-          <p className="mt-2 text-sm opacity-80">
+          <p className="mt-2 text-sm" style={{ color: RL_COLOR.secondary }}>
             Vas a eliminar a <strong>{fullName(toDelete)}</strong> del directorio de representantes de
             esta compañía. Esta acción no se puede deshacer.
           </p>
@@ -427,6 +451,7 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
               onClick={() => setToDelete(null)}
               disabled={deleting}
               className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60"
+              style={{ borderColor: RL_COLOR.border, color: RL_COLOR.navy }}
             >
               Cancelar
             </button>
@@ -434,8 +459,8 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
               type="button"
               onClick={() => void confirmDelete()}
               disabled={deleting}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-              style={{ background: "#FF4E00" }}
+              className={`flex-1 ${rlDangerCtaClass}`}
+              style={rlDangerCtaStyle}
             >
               {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
               Eliminar
@@ -453,7 +478,7 @@ function SignatureAction({
   busy = false,
   onClick,
 }: {
-  icon: typeof MailCheck;
+  icon: LucideIcon;
   label: string;
   busy?: boolean;
   onClick: () => void;
@@ -463,8 +488,8 @@ function SignatureAction({
       type="button"
       onClick={onClick}
       disabled={busy}
-      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60"
-      style={{ background: "#557EFF" }}
+      className={rlPrimaryCtaClass}
+      style={rlPrimaryCtaStyle}
     >
       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
       {label}
@@ -473,12 +498,14 @@ function SignatureAction({
 }
 
 function RowButton({
+  icon: Icon,
   label,
   onClick,
   ariaLabel,
   danger = false,
   busy = false,
 }: {
+  icon: LucideIcon;
   label: string;
   onClick: () => void;
   ariaLabel?: string;
@@ -491,11 +518,20 @@ function RowButton({
       onClick={onClick}
       disabled={busy}
       aria-label={ariaLabel ?? label}
-      className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-60"
-      style={danger ? { color: "#FF4E00", borderColor: "#f0c38e" } : undefined}
+      title={label}
+      className={rlIconActionClass}
+      style={
+        danger
+          ? rlDangerGhostStyle
+          : { color: RL_COLOR.navy, borderColor: RL_COLOR.border }
+      }
     >
-      {busy && <Loader2 className="h-3 w-3 animate-spin" />}
-      {label}
+      {busy ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+      ) : (
+        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
+      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }

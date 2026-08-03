@@ -27,7 +27,8 @@ internal sealed class CompanyLegalRepresentativeConfiguration
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
 
         builder.Property(x => x.TenantId).IsRequired();
-        builder.Property(x => x.RepresentedCompanyId).IsRequired();
+        // HU #10932: compañía primaria deprecada y nullable (persona puede existir sin NITs aún).
+        builder.Property(x => x.RepresentedCompanyId).IsRequired(false);
         builder.Property(x => x.DocumentType).HasMaxLength(10).IsRequired();
         builder.Property(x => x.DocumentNumber).HasMaxLength(20).IsRequired();
         builder.Property(x => x.FirstLastName).HasMaxLength(120).IsRequired();
@@ -59,6 +60,7 @@ internal sealed class CompanyLegalRepresentativeConfiguration
         builder.HasOne<RepresentedCompanyEntity>()
             .WithMany()
             .HasForeignKey(x => x.RepresentedCompanyId)
+            .IsRequired(false)
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("fk_company_legal_representatives_represented_companies");
 

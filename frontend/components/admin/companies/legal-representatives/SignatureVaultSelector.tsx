@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
+import { RL_COLOR, RL_INPUT_CLS, RL_GRADIENT } from "./rl-flit-styles";
 import { SignatureCapture } from "@/components/admin/companies/signature-vault/SignatureCapture";
 import type { SignatureVaultItem } from "@/lib/api/admin-signature-vault";
 import {
@@ -155,7 +155,7 @@ export function SignatureVaultSelector({
   const bloqueCaptura = (
     <div
       className="mt-2 space-y-2 rounded-xl border px-3 py-3"
-      style={{ borderColor: "var(--flit-border, #DFE5ED)" }}
+      style={{ borderColor: "var(--flit-border, #DDE5F0)" }}
       data-testid="sig-capture-block"
     >
       <p className="text-[11px] opacity-70">
@@ -165,7 +165,7 @@ export function SignatureVaultSelector({
       {items.length > 0 && (
         // HU #11193 (D7) — el backend revoca la activa y crea la nueva. Se avisa antes de capturar:
         // sustituir la firma de una persona no es algo que deba descubrirse después de guardar.
-        <p className="text-[11px] font-semibold" style={{ color: "#F9AC00" }}>
+        <p className="text-[11px] font-semibold" style={{ color: RL_COLOR.warning }}>
           Esta firma sustituirá a la que la persona tiene vigente. La anterior queda revocada, no se
           borra.
         </p>
@@ -174,7 +174,7 @@ export function SignatureVaultSelector({
       <label className="block text-[11px] font-semibold">
         Código hash <span className="font-normal opacity-60">(opcional)</span>
         <input
-          className={`mt-1 ${OT_INPUT_CLS}`}
+          className={`mt-1 ${RL_INPUT_CLS}`}
           value={codigoHash}
           onChange={(e) => setCodigoHash(e.target.value)}
           disabled={saving}
@@ -188,7 +188,7 @@ export function SignatureVaultSelector({
           Vigencia desde
           <input
             type="date"
-            className={`mt-1 ${OT_INPUT_CLS}`}
+            className={`mt-1 ${RL_INPUT_CLS}`}
             value={desde}
             onChange={(e) => setDesde(e.target.value)}
             disabled={saving}
@@ -199,7 +199,7 @@ export function SignatureVaultSelector({
           Vigencia hasta
           <input
             type="date"
-            className={`mt-1 ${OT_INPUT_CLS}`}
+            className={`mt-1 ${RL_INPUT_CLS}`}
             value={hasta}
             onChange={(e) => setHasta(e.target.value)}
             disabled={saving}
@@ -208,7 +208,7 @@ export function SignatureVaultSelector({
         </label>
       </div>
       {saveError && (
-        <p role="alert" className="text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+        <p role="alert" className="text-[11px] font-medium" style={{ color: RL_COLOR.danger }}>
           {saveError}
         </p>
       )}
@@ -224,7 +224,7 @@ export function SignatureVaultSelector({
         <button
           type="button"
           className="rounded-xl px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60"
-          style={{ background: "#557EFF" }}
+          style={{ background: RL_GRADIENT.primary }}
           onClick={() => void guardarFirma()}
           disabled={saving || !artefacto || desde === "" || hasta === ""}
         >
@@ -267,7 +267,7 @@ export function SignatureVaultSelector({
       <p
         role="alert"
         className="text-[11px] font-medium"
-        style={{ color: "#FF4E00" }}
+        style={{ color: RL_COLOR.danger }}
         data-testid="sig-selector-error"
       >
         No se pudo consultar el baúl de firmas. Intenta de nuevo.
@@ -280,14 +280,14 @@ export function SignatureVaultSelector({
   if (fetched && items.length === 0) {
     return (
       <div data-testid="sig-selector-empty" aria-live="polite">
-        <p className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-[11px] opacity-80">
+        <p className="rounded-xl border border-[#DDE5F0] px-3 py-2 text-[11px] opacity-80">
           Esta persona no tiene firmas vigentes en el baúl.
         </p>
         {!readOnly && fullName && !capturing && (
           <button
             type="button"
             className="mt-2 rounded-xl px-3 py-1.5 text-[11px] font-semibold text-white"
-            style={{ background: "#557EFF" }}
+            style={{ background: RL_GRADIENT.primary }}
             onClick={() => setCapturing(true)}
             data-testid="sig-capture-open"
           >
@@ -317,7 +317,7 @@ export function SignatureVaultSelector({
         aria-label="Firma del baúl"
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
-        className={OT_INPUT_CLS}
+        className={RL_INPUT_CLS}
         data-testid="sig-selector-select"
       >
         <option value="">Sin firma seleccionada</option>
@@ -336,7 +336,7 @@ export function SignatureVaultSelector({
         <button
           type="button"
           className="mt-2 rounded-xl border px-3 py-1.5 text-[11px] font-semibold"
-          style={{ color: "#557EFF", borderColor: "#557EFF" }}
+          style={{ color: RL_COLOR.brand, borderColor: RL_COLOR.brand }}
           onClick={() => setCapturing(true)}
           data-testid="sig-capture-replace"
         >

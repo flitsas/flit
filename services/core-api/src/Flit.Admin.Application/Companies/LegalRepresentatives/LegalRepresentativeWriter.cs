@@ -89,6 +89,7 @@ public sealed class LegalRepresentativeWriter
         }
 
         // Upsert de CADA compañía del representante (HU #10932). La primera es la primaria.
+        // Lista vacía = persona sin NITs aún (represented_company_id null).
         var effectiveCompanies = EffectiveCompanies(input);
         var companyIds = new List<Guid>();
         foreach (var company in effectiveCompanies)
@@ -124,7 +125,8 @@ public sealed class LegalRepresentativeWriter
             }
         }
 
-        var primaryNit = effectiveCompanies[0].Nit!.Trim();
+        var primaryCompanyId = companyIds.Count > 0 ? companyIds[0] : (Guid?)null;
+        var primaryNit = effectiveCompanies.Count > 0 ? effectiveCompanies[0].Nit!.Trim() : string.Empty;
         var today = DateOnly.FromDateTime(_timeProvider.GetUtcNow().ToOffset(ColombiaUtcOffset).DateTime);
 
         // AC3/AC5 — Resolución de firma/identidad: explícita (SignatureVaultId) o automática.
@@ -136,7 +138,7 @@ public sealed class LegalRepresentativeWriter
         }
         else
         {
-            // AC5: comportamiento actual intacto — resolutor automático (baúl > identidad).
+            // AC5: resolutor automático por documento (NIT opcional / legado).
             resolution = await _signatureResolver
                 .ResolveAsync(input.TenantId, primaryNit, documentType, documentNumber, today, cancellationToken)
                 .ConfigureAwait(false);
@@ -148,7 +150,7 @@ public sealed class LegalRepresentativeWriter
             new SaveLegalRepresentativeData(
                 input.TenantId,
                 editId,
-                companyIds[0],
+                primaryCompanyId,
                 documentType,
                 documentNumber,
                 input.FirstLastName!.Trim(),
@@ -179,7 +181,8 @@ public sealed class LegalRepresentativeWriter
     {
         var errors = new List<LegalRepresentativeValidationError>();
 
-        // Compañías (HU #10932): lista anidada si viene; si no, la compañía única de los campos Company*.
+        // Compañías (HU #10932): opcionales. Si hay lista, cada fila exige NIT+nombre.
+        // Si la lista viene vacía/null y tampoco hay Company* planos → persona sin NITs (válido).
         if (input.Companies is { Count: > 0 } companies)
         {
             foreach (var company in companies)
@@ -188,7 +191,7 @@ public sealed class LegalRepresentativeWriter
                 Require(errors, "companies", company.Name);
             }
         }
-        else
+        else if (!string.IsNullOrWhiteSpace(input.CompanyNit) || !string.IsNullOrWhiteSpace(input.CompanyName))
         {
             Require(errors, "companyNit", input.CompanyNit);
             Require(errors, "companyName", input.CompanyName);
@@ -297,14 +300,28 @@ public sealed class LegalRepresentativeWriter
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>
-    /// Compañías efectivas del representante (HU #10932): la lista anidada <c>Companies</c> si viene, o la
-    /// compañía única de los campos <c>Company*</c> (compatibilidad con el contrato previo).
+    /// Compañías efectivas del representante (HU #10932): la lista anidada <c>Companies</c> si viene;
+    /// si no, la compañía única de <c>Company*</c> cuando hay NIT/nombre; si no hay ninguna → lista vacía
+    /// (persona sin empresas asociadas todavía).
     /// </summary>
     private static IReadOnlyList<LegalRepresentativeCompanyInput> EffectiveCompanies(
-        LegalRepresentativeWriteInput input) =>
-        input.Companies is { Count: > 0 } companies
-            ? companies
-            : [new LegalRepresentativeCompanyInput(
-                input.CompanyNit, input.CompanyName, input.CompanyEmail,
-                input.CompanyAddress, input.CompanyCity, input.CompanyPhone)];
+        LegalRepresentativeWriteInput input)
+    {
+        if (input.Companies is { Count: > 0 } companies)
+        {
+            return companies;
+        }
+
+        if (!string.IsNullOrWhiteSpace(input.CompanyNit) || !string.IsNullOrWhiteSpace(input.CompanyName))
+        {
+            return
+            [
+                new LegalRepresentativeCompanyInput(
+                    input.CompanyNit, input.CompanyName, input.CompanyEmail,
+                    input.CompanyAddress, input.CompanyCity, input.CompanyPhone)
+            ];
+        }
+
+        return [];
+    }
 }

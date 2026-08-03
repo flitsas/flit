@@ -28,7 +28,7 @@ public sealed class LegalRepresentativeItem
 {
     public Guid Id { get; init; }
     public Guid TenantId { get; init; }
-    public Guid RepresentedCompanyId { get; init; }
+    public Guid? RepresentedCompanyId { get; init; }
 
     /// <summary>NIT de la compañía representada (denormalizado para el listado).</summary>
     public string CompanyDocumentNumber { get; init; } = string.Empty;

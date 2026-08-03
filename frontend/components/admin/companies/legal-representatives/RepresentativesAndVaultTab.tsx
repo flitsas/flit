@@ -1,76 +1,46 @@
 "use client";
 
-import { useMemo, useRef } from "react";
-import { FileSignature, Users } from "lucide-react";
-import { CompanyTabsNavContext, type CompanyTabsNav } from "../CompanyConfigTabs";
-import { SignatureVaultTab } from "../signature-vault/SignatureVaultTab";
+import { Users } from "lucide-react";
 import { LegalRepresentativesTab } from "./LegalRepresentativesTab";
+import { RL_COLOR } from "./rl-flit-styles";
 
 /**
- * Pestaña "Representantes legales". Une en una sola pestaña dos secciones:
- *  - "Representantes legales": el directorio con el acordeón de compañías y sus escrituras (HU #11179).
- *  - "Baúl de firmas": las firmas de apoderados, visible solo si `baulFirmasActivo` está activo.
+ * Pestaña "Representantes legales" (Admin compañías).
  *
- * HU #11179 (D4): la sección "Escrituras por compañía" (HU #11063) se retira. El único punto de
- * gestión de escrituras pasa a ser el acordeón dentro del detalle de cada representante. Esta es
- * una decisión de PO que revierte HU #11063 — no es un descuido técnico.
+ * Solo muestra el directorio de representantes. La firma del baúl y la identidad
+ * se gestionan dentro de la ficha de cada persona (panel view/create/edit), no
+ * como sección hermana en esta pantalla. Las escrituras viven bajo cada NIT
+ * dentro del acordeón del representante.
  *
- * El puente "Registrar en baúl" (`goToBaul`) hace scroll a la sección del Baúl dentro de esta misma
- * pestaña. Este componente es el proveedor del contexto de navegación que la sección de representantes
- * consume.
+ * El componente conserva el nombre histórico `RepresentativesAndVaultTab` para
+ * no romper imports; el baúl suelto ya no forma parte de esta vista.
  */
 export function RepresentativesAndVaultTab({
   tenantId,
-  baulVisible,
 }: {
   tenantId: string;
-  baulVisible: boolean;
+  /** @deprecated Ya no se usa: el baúl no se muestra en esta pantalla. */
+  baulVisible?: boolean;
 }) {
-  const vaultRef = useRef<HTMLElement>(null);
-
-  const nav = useMemo<CompanyTabsNav>(
-    () => ({
-      // Lleva a la sección del Baúl dentro de la misma pestaña (scroll), en vez de cambiar de pestaña.
-      goToBaul: () => vaultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
-      baulVisible,
-    }),
-    [baulVisible],
-  );
-
   return (
-    <CompanyTabsNavContext.Provider value={nav}>
-      <div className="space-y-8">
-        <section aria-labelledby="representantes-heading">
+    <div className="space-y-6">
+      <section
+        aria-labelledby="representantes-heading"
+        className="rounded-2xl border bg-white p-4 shadow-sm sm:p-5"
+        style={{ borderColor: RL_COLOR.border, boxShadow: "0 8px 24px rgba(22, 39, 68, 0.06)" }}
+      >
+        <header className="mb-4">
           <h2
             id="representantes-heading"
-            className="mb-3 flex items-center gap-2 text-sm font-bold"
-            style={{ color: "#162744" }}
+            className="flex items-center gap-2 text-sm font-bold"
+            style={{ color: RL_COLOR.navy }}
           >
-            <Users className="h-4 w-4" style={{ color: "#557EFF" }} />
+            <Users className="h-4 w-4" style={{ color: RL_COLOR.brand }} aria-hidden="true" />
             Representantes legales
           </h2>
-          <LegalRepresentativesTab tenantId={tenantId} />
-        </section>
-
-        {baulVisible && (
-          <section
-            ref={vaultRef}
-            aria-labelledby="baul-heading"
-            className="border-t pt-6"
-            style={{ borderColor: "#DFE5ED" }}
-          >
-            <h2
-              id="baul-heading"
-              className="mb-3 flex items-center gap-2 text-sm font-bold"
-              style={{ color: "#162744" }}
-            >
-              <FileSignature className="h-4 w-4" style={{ color: "#557EFF" }} />
-              Baúl de firmas
-            </h2>
-            <SignatureVaultTab tenantId={tenantId} />
-          </section>
-        )}
-      </div>
-    </CompanyTabsNavContext.Provider>
+        </header>
+        <LegalRepresentativesTab tenantId={tenantId} />
+      </section>
+    </div>
   );
 }

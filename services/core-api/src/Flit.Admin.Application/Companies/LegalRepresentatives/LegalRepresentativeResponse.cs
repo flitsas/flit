@@ -11,7 +11,7 @@ namespace Flit.Admin.Application.Companies.LegalRepresentatives;
 /// </summary>
 public sealed record LegalRepresentativeResponse(
     Guid Id,
-    Guid RepresentedCompanyId,
+    Guid? RepresentedCompanyId,
     string CompanyDocumentNumber,
     string CompanyName,
     string DocumentType,

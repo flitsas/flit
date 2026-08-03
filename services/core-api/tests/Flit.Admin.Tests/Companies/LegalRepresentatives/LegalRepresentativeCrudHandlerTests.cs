@@ -93,8 +93,11 @@ public sealed class LegalRepresentativeCrudHandlerTests
         }, Ct);
 
         result.IsValid.Should().BeFalse();
-        result.Errors.Should().Contain(e => e.Field == "companyNit" && e.Code == "requerido");
+        // Compañía/NIT es opcional en el alta (persona sola). Siguen siendo obligatorios los datos de la persona.
+        result.Errors.Should().NotContain(e => e.Field == "companyNit" && e.Code == "requerido");
+        result.Errors.Should().Contain(e => e.Field == "documentType" && e.Code == "requerido");
         result.Errors.Should().Contain(e => e.Field == "documentNumber" && e.Code == "requerido");
+        result.Errors.Should().Contain(e => e.Field == "firstLastName" && e.Code == "requerido");
         result.Errors.Should().Contain(e => e.Field == "name" && e.Code == "requerido");
     }
 

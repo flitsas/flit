@@ -1,0 +1,44 @@
+---
+description: Roles obligatorios (UX/UI, Dev, Test, QA) en cada pedido para calidad de entrega
+alwaysApply: true
+---
+
+# Roles de calidad — obligatorios en cada pedido
+
+Cada vez que el usuario pida desarrollar, ajustar, corregir o entregar algo, el agente principal (y el orquestador) **debe** tener en cuenta estos roles antes de implementar y al reportar el resultado. No improvisar un “solo código”.
+
+## Roles y responsables FLIT
+
+| Rol | Agente / skill | Responsabilidad |
+|-----|----------------|-----------------|
+| **UX / UI** | `frontend-agent` + skill `flit-design-guardian` (y, si hay decisión de flujo, `architecture-agent`) | Navegación, jerarquía de pantallas, estados vacíos/carga/error/lleno, accesibilidad WCAG 2.1 AA, fidelidad al design system |
+| **Dev (frontend)** | `frontend-agent` | Implementación UI según UX acordada |
+| **Dev (backend)** | `backend-agent` (+ `database-agent` si hay schema/migración) | APIs, dominio, persistencia; sin romper contratos salvo diseño explícito |
+| **Test (unitario / técnico)** | skill `dev-tester` (encadenada al cerrar HU) | Tests unitarios desde AC Gherkin + evidencias en ADO |
+| **QA** | `qa-agent` (+ `flit-test-case-generator`, `playwright-runner`, `bug-reporter`) | TCs, E2E, bugs, certificación; no sustituye al PO al cerrar Features |
+| **Validación formal de PR** | `code-review-agent` (+ `security-agent` si aplica) | Convenciones, AC→tests, seguridad inline; puede bloquear merge |
+| **Coordinación** | `orchestrator-agent` | Elige workflow, delega por rol, respeta gates humanos; **no** escribe código |
+
+## Checklist mínimo antes de dar por “listo” un cambio
+
+1. **UX/UI:** ¿El flujo es claro? ¿Hay estados vacío/carga/error/lleno? ¿No se rompe la jerarquía de navegación pedida?
+2. **Dev:** ¿Implementó el especialista correcto (front/back/db)? ¿Alcance sin tocar lo fuera de requerimiento?
+3. **Test:** ¿Hay/actualizaron unitarios del cambio? Si hay HU, ¿`dev-tester` en la misma sesión?
+4. **QA:** ¿Corresponde generar/ejecutar TCs o al menos dejar explícito el gap de QA si el usuario pidió avance sin HU?
+
+## Cómo reportar al usuario
+
+Al cerrar un bloque de trabajo, incluir brevemente:
+
+- Qué hizo **UX/UI**
+- Qué hizo **Dev** (front/back)
+- Qué cubrió **Test**
+- Qué falta o hizo **QA** / validación formal
+
+Si el usuario autoriza avanzar **sin HU**, documentar el gap (sin Active ADO, sin QA certificado, sin code-review formal) y no fingir que esos roles ya validaron.
+
+## Reglas de oro
+
+- No dar por validado en producción/QA un cambio solo porque “compila” o pasan unitarios locales.
+- No saltar gates de activación de HU ni de merge aunque pidan “hazlo rápido”.
+- Ante duda de rol: invocar al agente correcto vía orquestador; no asumir el trabajo del especialista.

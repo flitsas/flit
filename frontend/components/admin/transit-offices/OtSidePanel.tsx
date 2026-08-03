@@ -15,9 +15,13 @@ export interface OtSidePanelProps {
   /** Clase de z-index del overlay (p. ej. cuando hay otro modal encima). */
   zClassName?: string;
   /**
-   * Ancho del drawer. `lg` para paneles de detalle densos (trámites clientes).
+   * Ancho del drawer. `lg` para paneles densos; `xl` / `2xl` para fichas con grid (p. ej. RL).
    */
-  width?: "md" | "lg";
+  width?: "md" | "lg" | "xl" | "2xl";
+  /**
+   * Superficie del panel. `modal` usa el fondo claro del prototipo FLIT (`#EEF5FF`).
+   */
+  surface?: "card" | "modal";
 }
 
 export function OtSidePanel({
@@ -30,12 +34,23 @@ export function OtSidePanel({
   disabled = false,
   zClassName = "z-50",
   width = "md",
+  surface = "card",
 }: OtSidePanelProps) {
   if (!open) {
     return null;
   }
 
-  const maxW = width === "lg" ? "max-w-lg" : "max-w-md";
+  const maxW =
+    width === "2xl"
+      ? "max-w-4xl"
+      : width === "xl"
+        ? "max-w-3xl"
+        : width === "lg"
+          ? "max-w-lg"
+          : "max-w-md";
+
+  const surfaceStyle =
+    surface === "modal" ? { background: "#EEF5FF" } : undefined;
 
   return (
     <div className={`fixed inset-0 ${zClassName} flex justify-end`}>
@@ -47,7 +62,8 @@ export function OtSidePanel({
         disabled={disabled}
       />
       <aside
-        className={`relative flex h-full w-full ${maxW} flex-col border-l bg-card shadow-2xl`}
+        className={`relative flex h-full w-full ${maxW} flex-col border-l shadow-2xl ${surface === "card" ? "bg-card" : ""}`}
+        style={surfaceStyle}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
