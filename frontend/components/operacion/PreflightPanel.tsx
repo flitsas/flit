@@ -44,13 +44,69 @@ interface Props {
   esMigrado?: boolean;
 }
 
-const STATUS_STYLE: Record<PreflightCheckStatus, { dot: string; text: string }> = {
-  ok: { dot: '#8CC63F', text: '#8CC63F' },
-  warn: { dot: '#F9AC00', text: '#F9AC00' },
-  fail: { dot: '#FF4E00', text: '#FF4E00' },
-  unknown: { dot: '#9AA5B1', text: '#9AA5B1' },
-  error: { dot: '#FF4E00', text: '#FF4E00' },
+const STATUS_PILL_BG: Record<PreflightCheckStatus, string> = {
+  ok: '#8CC63F',
+  warn: '#F9AC00',
+  fail: '#FF4E00',
+  unknown: '#F9AC00',
+  error: '#FF4E00',
 };
+
+/** Palabra visible en la pastilla (UNKNOWN → NO ENCONTRADO). */
+export function statusPillWord(status: PreflightCheckStatus): string {
+  switch (status) {
+    case 'ok':
+      return 'OK';
+    case 'warn':
+      return 'ADVERTENCIA';
+    case 'fail':
+      return 'FALLA';
+    case 'error':
+      return 'ERROR';
+    case 'unknown':
+      return 'NO ENCONTRADO';
+  }
+}
+
+/** Detalle del unknown: alude a que no existe / no se encontró en la fuente. */
+function unknownPillDetail(message: string, sourceLabelText: string): string {
+  if (/sin informaci[oó]n/i.test(message)) return 'No existe en la fuente';
+  if (/sin documento/i.test(message)) return 'No existe';
+  if (message && message.length <= 42) return message;
+  if (sourceLabelText) return `Sin dato en ${sourceLabelText}`;
+  return 'No encontrado';
+}
+
+/**
+ * Texto de la pastilla: `OK (RUNT)` / `NO ENCONTRADO (No existe en la fuente)`.
+ * Conserva status + fuente o mensaje (misma información, formato compacto).
+ */
+export function checkPillLabel(check: {
+  status: PreflightCheckStatus;
+  source?: string | null;
+  message?: string | null;
+}): string {
+  const word = statusPillWord(check.status);
+  const src = sourceLabel(check.source);
+  const msg = check.message?.trim() ?? '';
+  if (check.status === 'unknown') {
+    return `${word} (${unknownPillDetail(msg, src)})`;
+  }
+  if (check.status === 'ok' && src) return `${word} (${src})`;
+  // Mensajes cortos van en la pastilla; los largos quedan debajo.
+  if (msg && msg.length <= 42 && check.status !== 'ok') return `${word} (${msg})`;
+  if (src) return `${word} (${src})`;
+  if (msg) {
+    const short = msg.length > 42 ? `${msg.slice(0, 39)}…` : msg;
+    return `${word} (${short})`;
+  }
+  return word;
+}
+
+function checkPillBg(check: { status: PreflightCheckStatus; message?: string | null }): string {
+  return STATUS_PILL_BG[check.status];
+}
+
 
 const OVERALL: Record<string, { label: string; bg: string; color: string }> = {
   green: { label: 'Pre-vuelo en verde', bg: 'rgba(140,198,63,0.15)', color: '#8CC63F' },
@@ -275,48 +331,48 @@ export function PreflightPanel({
       )}
 
       {hasResult && (
-        <ul className="space-y-1.5" aria-label="Resultados del pre-vuelo">
+        <ul
+          className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"
+          aria-label="Resultados del pre-vuelo"
+        >
           {visibleChecks.map((c) => {
-            const s = STATUS_STYLE[c.status];
+            const pill = checkPillLabel(c);
+            const pillBg = checkPillBg(c);
+            const msg = c.message?.trim() ?? '';
+            // Si el mensaje ya está en la pastilla, no lo repetimos debajo.
+            const msgInPill =
+              !!msg &&
+              (pill.includes(`(${msg}`) || (msg.length > 42 && pill.includes('…')));
+            const showMessage = !!msg && !msgInPill;
             return (
               <li
                 key={c.key}
-                className="flex items-start gap-2.5 rounded-xl border p-2.5"
+                className="flex flex-col gap-1.5 rounded-2xl border bg-white px-3 py-2.5 dark:bg-[#0B0F14]"
               >
-                <span
-                  className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ background: s.dot }}
-                  aria-hidden="true"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-xs font-semibold">
-                      {c.label}
-                      {checkRoleSuffix(c.key)}
-                    </span>
-                    <span
-                      className="text-[10px] uppercase font-bold"
-                      style={{ color: s.text }}
-                    >
-                      {c.status}
-                    </span>
-                    <span
-                      className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
-                      style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
-                    >
-                      {sourceLabel(c.source)}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-[11px] opacity-70">{c.message}</p>
-                  {c.action && (
-                    <span
-                      className="mt-1 inline-block text-[11px] font-semibold"
-                      style={{ color: '#557EFF' }}
-                    >
-                      {c.action.label} →
-                    </span>
-                  )}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 text-xs font-semibold leading-snug">
+                    {c.label}
+                    {checkRoleSuffix(c.key)}
+                  </span>
+                  <span
+                    className="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-white"
+                    style={{ background: pillBg }}
+                    title={msg || undefined}
+                  >
+                    {pill}
+                  </span>
                 </div>
+                {showMessage && (
+                  <p className="text-[11px] opacity-70">{c.message}</p>
+                )}
+                {c.action && (
+                  <span
+                    className="text-[11px] font-semibold"
+                    style={{ color: '#557EFF' }}
+                  >
+                    {c.action.label} →
+                  </span>
+                )}
               </li>
             );
           })}

@@ -49,7 +49,7 @@ export function PrendaModificar({ instanceId }: { instanceId: string }) {
 
   return (
     <section
-      className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14] mt-4"
+      className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
       aria-label="Prenda del trámite"
     >
       <div className="flex items-center justify-between gap-3">

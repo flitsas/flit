@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -12,6 +13,12 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 public static class KyverumRuntVehicleResultMapper
 {
     private const string Provider = "kyverum_runt";
+
+    private static readonly JsonSerializerOptions GravamenJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
 
     private const string Ok = "ok";
     private const string Warn = "warn";
@@ -102,8 +109,16 @@ public static class KyverumRuntVehicleResultMapper
         if (sinGravamenes && sinPrendas)
             return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Ok, Provider, null);
 
-        return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Warn, Provider, "El vehículo tiene gravámenes o prendas");
+        return new ConsultationCheck(
+            "gravamenes",
+            "Gravámenes y limitaciones",
+            Warn,
+            Provider,
+            $"El vehículo tiene gravámenes o prendas (gravámenes: {NormSiNo(vehiculo.Gravamenes)} · prendas: {NormSiNo(vehiculo.Prendas)})");
     }
+
+    private static string NormSiNo(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "—" : value.Trim().ToUpperInvariant();
 
     private static bool IsSi(string? value) =>
         string.Equals(value, "SI", StringComparison.OrdinalIgnoreCase);
@@ -141,6 +156,25 @@ public static class KyverumRuntVehicleResultMapper
         Add(fields, "vehicle_weight", v.PesoBruto ?? data?.DatosTecnicos?.PesoBrutoVehicular);
         Add(fields, "vehicle_axles", v.NumeroEjes ?? data?.DatosTecnicos?.NoEjes);
 
+        // Señal RUNT de prenda/gravamen para el paso Prenda (desplegable junto a la alerta).
+        Add(fields, "runt_tiene_gravamenes", v.Gravamenes);
+        Add(fields, "runt_tiene_prendas", v.Prendas);
+
+        // Detalle de acreedores: Kyverum lo trae en data.garantias (+ garantiasPrendas). Sin esto
+        // el wizard solo veía SI/NO aunque el RUNT ya devolvía Bancolombia, NIT y fecha.
+        var detallePrenda = NormalizeGarantias(data?.Garantias, data?.GarantiasPrendas);
+        if (detallePrenda.Count > 0)
+        {
+            var primerAcreedor = detallePrenda
+                .Select(d => d.NombreAcreedor)
+                .FirstOrDefault(n => !string.IsNullOrWhiteSpace(n));
+            Add(fields, "runt_nombre_acreedor", primerAcreedor);
+            fields.Add(new HydratedField(
+                "runt_gravamenes",
+                null,
+                JsonSerializer.Serialize(detallePrenda, GravamenJsonOptions)));
+        }
+
         // SOAT: preferir vigente; si no, el primero disponible.
         var soat = data?.Soat?.FirstOrDefault(s =>
             string.Equals(s?.Estado, "VIGENTE", StringComparison.OrdinalIgnoreCase))
@@ -169,6 +203,50 @@ public static class KyverumRuntVehicleResultMapper
         if (!string.IsNullOrWhiteSpace(value))
             fields.Add(new HydratedField(key, value, null));
     }
+
+    /// <summary>
+    /// Une <c>garantias</c> + <c>garantiasPrendas</c> y normaliza al shape Intempo
+    /// (<c>nombreAcreedor</c>, etc.) para que el frontend parseé un solo contrato.
+    /// </summary>
+    private static List<NormalizedRuntGravamen> NormalizeGarantias(
+        List<KyverumRuntGarantia>? garantias,
+        List<KyverumRuntGarantia>? garantiasPrendas)
+    {
+        var result = new List<NormalizedRuntGravamen>();
+        foreach (var g in (garantias ?? []).Concat(garantiasPrendas ?? []))
+        {
+            if (g is null) continue;
+            var nombre = FirstNonEmpty(g.Acreedor, g.NombreAcreedor);
+            if (string.IsNullOrWhiteSpace(nombre)
+                && string.IsNullOrWhiteSpace(g.NumeroDocumentoAcreedor)
+                && g.IdPrenda is null
+                && string.IsNullOrWhiteSpace(g.FechaInscripcion))
+            {
+                continue;
+            }
+
+            result.Add(new NormalizedRuntGravamen(
+                g.IdPrenda,
+                g.TipoDocumentoAcreedor,
+                g.NumeroDocumentoAcreedor,
+                nombre,
+                g.FechaInscripcion,
+                g.EstadoPrenda));
+        }
+
+        return result;
+    }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();
+
+    private sealed record NormalizedRuntGravamen(
+        long? IdPrenda,
+        string? TipoDocumentoAcreedor,
+        string? NumeroDocumentoAcreedor,
+        string? NombreAcreedor,
+        string? FechaInscripcion,
+        string? EstadoPrenda);
 
     // Inverso de KyverumRuntDocType.Normalize: código RUNT del propietario → tipo de documento FLIT
     // (ActorDocumentType: CC/CE/NIT/PAS/TI). 'Y' u otros sin equivalente FLIT ⇒ null (no se siembra).

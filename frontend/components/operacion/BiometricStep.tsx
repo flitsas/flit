@@ -35,6 +35,16 @@ interface Props {
    */
   hideIntro?: boolean;
   /**
+   * Si se indica, solo renderiza las tarjetas de esas partes (p. ej. embeber
+   * Comprador o Vendedor dentro del resumen del trámite).
+   */
+  onlyPartes?: BiometricParte[];
+  /**
+   * Paso Identidad: título + subtítulo dentro del mismo panel blanco que la captura.
+   */
+  heading?: string;
+  headingSubtitle?: string;
+  /**
    * HU #10646 — partes (NIT/jurídicas) cuya identidad quedó cubierta por la firma electrónica del baúl,
    * capturadas del outcome `firma_baul` de ensureIdentity durante el registro.
    *
@@ -108,9 +118,14 @@ export function BiometricStep({
   modalidad,
   onRefresh,
   hideIntro = false,
+  onlyPartes,
+  heading,
+  headingSubtitle,
   vaultCoveredPartes = [],
 }: Props) {
-  const partes = partesFor(modalidad);
+  const partes = onlyPartes?.length
+    ? partesFor(modalidad).filter((p) => onlyPartes.includes(p))
+    : partesFor(modalidad);
   // Solo lectura (Track C): sin iniciar/simular validación.
   const readOnly = useWizardReadOnly();
 
@@ -196,36 +211,110 @@ export function BiometricStep({
   const showRefreshHeader =
     !readOnly && !todasCoveredByVault && (validations === null || algunaPendienteBiometria);
 
+  // Paso Identidad: un solo panel blanco con título + subtítulo + Actualizar + tarjetas.
+  const pagePanel = Boolean(heading);
+
+  const refreshButton = showRefreshHeader ? (
+    <button
+      type="button"
+      onClick={() => void handleRefresh()}
+      disabled={loading || !instanceId}
+      className="flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+      style={{ borderColor: '#557EFF', color: '#557EFF' }}
+      aria-label="Actualizar estado biométrico"
+    >
+      <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} aria-hidden />
+      Actualizar
+    </button>
+  ) : null;
+
+  const partesContent = initialLoading ? (
+    <BiometricSkeleton partes={partes} nested={pagePanel} />
+  ) : (
+    <div className="space-y-4">
+      {partes.map((parte) => {
+        const matches = (validations ?? []).filter((v) =>
+          modalidad === 'traspaso'
+            ? v.partyRole === parte
+            : v.partyRole === null || v.partyRole === 'comprador',
+        );
+        const validation = matches.length > 0 ? matches[matches.length - 1] : null;
+        return (
+          <ParteCard
+            key={parte}
+            parte={parte}
+            instanceId={instanceId}
+            provider={provider}
+            validation={validation}
+            historial={matches}
+            vaultCovered={
+              firmaBaulServidor.includes(parte) || vaultCoveredPartes.includes(parte)
+            }
+            onChanged={() => void handleRefresh()}
+            nested={pagePanel}
+          />
+        );
+      })}
+    </div>
+  );
+
+  if (pagePanel) {
+    return (
+      <div
+        className="rounded-2xl border bg-white p-5 dark:bg-[#0B0F14]"
+        style={{ borderColor: '#DFE5ED' }}
+      >
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-base font-bold" style={{ color: '#162744' }}>
+              {heading}
+            </h2>
+            {headingSubtitle ? (
+              <p className="mt-1 text-xs opacity-60">{headingSubtitle}</p>
+            ) : null}
+          </div>
+          {refreshButton}
+        </div>
+
+        {error && (
+          <div
+            className="mb-4 rounded-xl border p-3 text-xs"
+            style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+            role="alert"
+            aria-live="polite"
+          >
+            {error}
+          </div>
+        )}
+
+        {partesContent}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        {hideIntro ? (
-          <span />
-        ) : (
-          <p className="text-xs opacity-70">
-            Validación de identidad de cada parte. Al iniciarla, el cliente recibe el enlace de captura
-            por correo; el resultado se actualiza automáticamente.
-          </p>
-        )}
-        {showRefreshHeader && (
-          <button
-            type="button"
-            onClick={() => void handleRefresh()}
-            disabled={loading || !instanceId}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{ borderColor: '#557EFF', color: '#557EFF' }}
-            aria-label="Actualizar estado biométrico"
-          >
-            <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} aria-hidden />
-            Actualizar
-          </button>
-        )}
-      </div>
+      {(showRefreshHeader || !hideIntro) && (
+        <div
+          className="flex items-start justify-between gap-3 rounded-2xl border bg-white px-4 py-3 dark:bg-[#0B0F14]"
+          style={{ borderColor: '#DFE5ED' }}
+        >
+          {hideIntro ? (
+            <span />
+          ) : (
+            <p className="text-xs opacity-70">
+              Validación de identidad de cada parte. Al iniciarla, el cliente recibe el enlace de captura
+              por correo; el resultado se actualiza automáticamente.
+            </p>
+          )}
+          {refreshButton}
+        </div>
+      )}
 
       {error && (
         <div
-          className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          className="rounded-xl border bg-white p-3 text-xs dark:bg-[#0B0F14]"
+          style={{ borderColor: '#FF4E00', color: '#FF4E00' }}
           role="alert"
           aria-live="polite"
         >
@@ -233,39 +322,7 @@ export function BiometricStep({
         </div>
       )}
 
-      {initialLoading ? (
-        <BiometricSkeleton partes={partes} />
-      ) : (
-        <div className="space-y-4">
-          {partes.map((parte) => {
-            // Más reciente para la parte (el backend ordena por created_at asc): refleja el estado actual
-            // tras posibles reintentos (rechazado → nueva validación).
-            const matches = (validations ?? []).filter((v) =>
-              modalidad === 'traspaso'
-                ? v.partyRole === parte
-                : v.partyRole === null || v.partyRole === 'comprador',
-            );
-            const validation = matches.length > 0 ? matches[matches.length - 1] : null;
-            return (
-              <ParteCard
-                key={parte}
-                parte={parte}
-                instanceId={instanceId}
-                provider={provider}
-                validation={validation}
-                // CF-08 (Feature #11004, HU #11009) — TODAS las validaciones de la parte (orden
-                // cronológico), no solo la vigente: la tarjeta de acción sigue mostrando solo esta
-                // última, pero el historial completo queda visible debajo.
-                historial={matches}
-                vaultCovered={
-                  firmaBaulServidor.includes(parte) || vaultCoveredPartes.includes(parte)
-                }
-                onChanged={() => void handleRefresh()}
-              />
-            );
-          })}
-        </div>
-      )}
+      {partesContent}
     </div>
   );
 }
@@ -274,14 +331,25 @@ export function BiometricStep({
  * Estado de carga (AC8): placeholder accesible mientras llega la primera respuesta de
  * `getBiometricState`. Anuncia la carga a lectores de pantalla (role="status" + aria-live).
  */
-function BiometricSkeleton({ partes }: { partes: BiometricParte[] }) {
+function BiometricSkeleton({
+  partes,
+  nested = false,
+}: {
+  partes: BiometricParte[];
+  nested?: boolean;
+}) {
   return (
     <div className="space-y-4" role="status" aria-live="polite" aria-busy="true">
       <span className="sr-only">Cargando validaciones de identidad…</span>
       {partes.map((parte) => (
         <div
           key={parte}
-          className="rounded-xl border p-4"
+          className={
+            nested
+              ? 'rounded-xl border p-4'
+              : 'rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]'
+          }
+          style={{ borderColor: '#DFE5ED' }}
           aria-hidden="true"
         >
           <div className="mb-3 h-3 w-24 animate-pulse rounded bg-black/10 dark:bg-white/10" />
@@ -301,6 +369,7 @@ function ParteCard({
   historial,
   vaultCovered,
   onChanged,
+  nested = false,
 }: {
   parte: BiometricParte;
   instanceId: string | null;
@@ -310,14 +379,26 @@ function ParteCard({
   historial: BiometricValidation[];
   vaultCovered: boolean;
   onChanged: () => void;
+  /** Dentro del panel blanco del paso Identidad: sin segundo fondo blanco. */
+  nested?: boolean;
 }) {
   const estado = validation?.status;
   return (
     <fieldset
-      className="rounded-xl border p-4"
+      className={
+        nested
+          ? 'rounded-xl border p-4'
+          : 'rounded-2xl border bg-white p-5 dark:bg-[#0B0F14]'
+      }
+      style={{ borderColor: '#DFE5ED' }}
       aria-label={`Biométrica ${PARTE_LABEL[parte]}`}
     >
-      <legend className="px-1 text-xs font-bold">{PARTE_LABEL[parte]}</legend>
+      <legend
+        className="px-2 text-xs font-bold"
+        style={{ color: '#162744' }}
+      >
+        {PARTE_LABEL[parte]}
+      </legend>
 
       {/* HU #10646 — actor jurídico (NIT) cubierto por la firma del baúl: la identidad ya está
           satisfecha server-side; se presenta como firma electrónica y se omite toda la biométrica. */}

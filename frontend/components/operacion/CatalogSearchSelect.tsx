@@ -1,0 +1,123 @@
+'use client';
+
+import { useMemo, useRef, useState } from 'react';
+import { ChevronDown, Search } from 'lucide-react';
+
+/**
+ * Selector de catálogo con buscador (dropdown list filtrable).
+ * Reemplaza &lt;select&gt; nativos en transformaciones del vehículo.
+ */
+export function CatalogSearchSelect({
+  id,
+  label,
+  value,
+  options,
+  disabled = false,
+  placeholder = 'Buscar…',
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  options: readonly string[];
+  disabled?: boolean;
+  placeholder?: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((o) => o.toLowerCase().includes(q));
+  }, [options, query]);
+
+  const display = value || '';
+
+  const pick = (opt: string) => {
+    onChange(opt);
+    setOpen(false);
+    setQuery('');
+  };
+
+  return (
+    <div className="relative">
+      <label htmlFor={id} className="block text-[11px] font-medium opacity-70 mb-1">
+        {label}
+      </label>
+      <button
+        type="button"
+        id={id}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={label}
+        onClick={() => {
+          if (disabled) return;
+          setOpen((v) => !v);
+          setTimeout(() => inputRef.current?.focus(), 0);
+        }}
+        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14]"
+      >
+        <span className={display ? 'font-medium' : 'opacity-50'}>
+          {display || 'Selecciona…'}
+        </span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden />
+      </button>
+
+      {open && !disabled && (
+        <div
+          className="absolute z-30 mt-1 w-full rounded-xl border bg-white p-2 shadow-lg dark:bg-[#0B0F14]"
+          role="listbox"
+          aria-label={label}
+        >
+          <div className="relative mb-2">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40"
+              aria-hidden
+            />
+            <input
+              ref={inputRef}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={placeholder}
+              className="w-full rounded-lg border bg-transparent py-1.5 pl-8 pr-2 text-xs outline-none focus:border-[#557EFF]"
+              aria-label={`Buscar en ${label}`}
+              autoComplete="off"
+            />
+          </div>
+          <ul className="max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <li className="px-2 py-2 text-[11px] opacity-55">Sin coincidencias</li>
+            ) : (
+              filtered.map((opt) => {
+                const selected = opt.toUpperCase() === display.toUpperCase();
+                return (
+                  <li key={opt}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      onClick={() => pick(opt)}
+                      className="w-full rounded-lg px-2 py-1.5 text-left text-xs hover:bg-[rgba(85,126,255,0.08)]"
+                      style={
+                        selected
+                          ? { background: 'rgba(85,126,255,0.12)', color: '#557EFF', fontWeight: 600 }
+                          : undefined
+                      }
+                    >
+                      {opt}
+                    </button>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}

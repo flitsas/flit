@@ -418,8 +418,13 @@ export function Shell({
       {/* Main */}
       <main className="flex-1 min-h-0 overflow-hidden relative">
         {/* AC1 #10498: el scroll ocurre DENTRO del área de contenido (no se clipa) y el
-            padding inferior libera el dock flotante para que nada quede oculto tras él. */}
-        <div ref={contentScrollRef} className="absolute inset-0 overflow-y-auto pb-28">
+            padding inferior libera el dock flotante para que nada quede oculto tras él.
+            `data-shell-scroll` lo usa el wizard (tracker sticky al tope de este contenedor). */}
+        <div
+          ref={contentScrollRef}
+          className="absolute inset-0 overflow-y-auto pb-28"
+          data-shell-scroll
+        >
           {children}
         </div>
 

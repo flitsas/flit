@@ -3,7 +3,7 @@
 
 const DOCUMENT_LABELS: Record<string, string> = {
   fur: 'FUR',
-  consolidado: 'Expediente consolidado',
+  consolidado: 'Consolidado',
   compraventa: 'Formato de compraventa',
   tramite_virtual: 'Solicitud de trámite virtual',
   mandato: 'Contrato de mandato',
@@ -17,7 +17,7 @@ const DOCUMENT_LABELS: Record<string, string> = {
   licencia_transito: 'Licencia de tránsito',
   factura: 'Factura',
   aduana: 'Declaración de importación',
-  impronta: 'Impronta',
+  impronta: 'Improntas',
   soat: 'SOAT',
   paz_salvo_rnmc: 'Paz y salvo RNMC',
 };

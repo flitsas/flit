@@ -80,7 +80,7 @@ describe('DocumentChecklist — render guiado por checklist', () => {
     expect(await screen.findByText('Cédula del comprador')).toBeInTheDocument();
     expect(screen.getByText('SOAT vigente')).toBeInTheDocument();
     expect(screen.getByText('Obligatorio')).toBeInTheDocument();
-    expect(screen.getByText('(opcional)')).toBeInTheDocument();
+    expect(screen.getByText('Opcional')).toBeInTheDocument();
   });
 
   it('muestra el resumen "faltan N obligatorios" cuando no está completo', async () => {

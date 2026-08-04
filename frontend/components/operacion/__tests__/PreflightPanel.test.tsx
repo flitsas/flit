@@ -128,7 +128,7 @@ describe('PreflightPanel — fuentes de los proveedores de FEATURE 05 (HU #10763
         {...baseProps}
       />,
     );
-    expect(screen.getByText('SIMIT')).toBeInTheDocument();
+    expect(screen.getByText(/OK \(SIMIT\)/)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/KYVERUM/i);
   });
 
@@ -147,7 +147,7 @@ describe('PreflightPanel — fuentes de los proveedores de FEATURE 05 (HU #10763
         {...baseProps}
       />,
     );
-    expect(screen.getByText('Comparendos FLIT')).toBeInTheDocument();
+    expect(screen.getByText(/OK \(Comparendos FLIT\)/)).toBeInTheDocument();
   });
 
   it('una consulta omitida por configuración del OT se pinta con su mensaje y fuente FLIT', () => {
@@ -168,8 +168,8 @@ describe('PreflightPanel — fuentes de los proveedores de FEATURE 05 (HU #10763
     expect(
       screen.getByText('El organismo de tránsito no exige esta consulta.'),
     ).toBeInTheDocument();
-    expect(screen.getByText('FLIT')).toBeInTheDocument();
-    expect(screen.getByText('unknown')).toBeInTheDocument();
+    expect(screen.getByText(/NO ENCONTRADO/)).toBeInTheDocument();
+    expect(screen.getByText(/FLIT/)).toBeInTheDocument();
   });
 });
 
