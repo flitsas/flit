@@ -19,6 +19,10 @@ export interface TenantUser {
   isSuspended: boolean;
   tenantId?: string | null;
   tenantName?: string | null;
+  /** Tipo del tenant al que pertenece la asignación (`COMPANY` | `TRANSIT_OFFICE`). */
+  tenantType?: string | null;
+  /** Perfil funcional resuelto por el SERVIDOR: `FLIT` | `OT` | `GESTOR`. Ver lib/users/profiles. */
+  profile?: string | null;
   /** HU #10621: versión de concurrencia optimista, obligatoria al editar (PATCH). */
   rowVersion: number;
   /** HU #10623/#10624: fecha de soft-delete. `null`/ausente en el listado normal;

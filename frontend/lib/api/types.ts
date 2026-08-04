@@ -307,6 +307,16 @@ export interface AdminAuditLogEntry {
   targetEntityId?: string | null;
   clientIp?: string | null;
   changedAt: string;
+  /** Nombre del actor ya resuelto por el backend (antes solo llegaba el uuid `changedBy`). */
+  changedByName?: string | null;
+  changedByEmail?: string | null;
+  /** Nombre de la entidad afectada (usuario o rol) ya resuelto. */
+  targetName?: string | null;
+  /** Campo modificado; en operaciones administrativas repite la operación. */
+  fieldName?: string | null;
+  /** Detalle del cambio serializado como JSON, cuando la operación lo registró. */
+  oldValue?: string | null;
+  newValue?: string | null;
 }
 
 export interface AdminAuditLogPageResponse {

@@ -190,32 +190,56 @@ public static class DevelopmentAuthSeeder
 
         await EnsureUserCredentialsAsync(db, user.Id, DemoRadicadorPassword, passwordHasher, cancellationToken);
 
-        // 4. Asignación de rol (respeta la constraint UNIQUE(user_id, tenant_id): reusa/realinea).
-        var existing = await db.UserRoleAssignments
-            .FirstOrDefaultAsync(a => a.UserId == user.Id && a.TenantId == empresaTenant.Id, cancellationToken);
-        if (existing is null)
+        // 4. Asignación de rol: rol único por usuario/tenant (uq_ura_active_user_tenant).
+        await EnsureSingleRoleAssignmentAsync(db, user.Id, empresaTenant.Id, role.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Deja al usuario con EXACTAMENTE una asignación activa, la del rol indicado.
+    ///
+    /// <para>Reusa la fila que ya exista en vez de crear otra, y cierra cualquier asignación
+    /// activa sobrante: la tabla guarda histórico en soft-delete, así que un usuario puede
+    /// arrastrar varias filas —incluidas las que dejó el modelo aditivo de la HU #10506— y
+    /// reabrir una a ciegas viola <c>uq_ura_active_user_tenant</c> y tumba el arranque.</para>
+    /// </summary>
+    private static async Task EnsureSingleRoleAssignmentAsync(
+        FlitDbContext db, Guid userId, Guid tenantId, Guid roleId, CancellationToken cancellationToken)
+    {
+        var assignments = await db.UserRoleAssignments
+            .Where(a => a.UserId == userId && a.TenantId == tenantId)
+            .OrderByDescending(a => a.AssignedAt)
+            .ToListAsync(cancellationToken);
+
+        var now = DateTimeOffset.UtcNow;
+
+        // Se prefiere una fila activa; si no hay, se reutiliza la más reciente del histórico.
+        var target = assignments.Find(a => a.DeletedAt is null) ?? assignments.FirstOrDefault();
+
+        if (target is null)
         {
-            var now = DateTimeOffset.UtcNow;
             db.UserRoleAssignments.Add(new UserRoleAssignment
             {
                 Id = Guid.CreateVersion7(),
-                TenantId = empresaTenant.Id,
-                UserId = user.Id,
-                RoleId = role.Id,
+                TenantId = tenantId,
+                UserId = userId,
+                RoleId = roleId,
                 AssignedAt = now,
                 CreatedAt = now,
                 RowVersion = 0,
             });
             await db.SaveChangesAsync(cancellationToken);
+            return;
         }
-        else if (existing.DeletedAt is not null || existing.RoleId != role.Id)
-        {
-            existing.DeletedAt = null;
-            existing.DeletedBy = null;
-            existing.RoleId = role.Id;
-            existing.AssignedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(cancellationToken);
-        }
+
+        foreach (var other in assignments.Where(a => a != target && a.DeletedAt is null))
+            other.DeletedAt = now;
+
+        target.DeletedAt = null;
+        target.DeletedBy = null;
+        target.RoleId = roleId;
+        target.AssignedAt = now;
+
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static async Task SeedSuperAdminAsync(
@@ -842,39 +866,7 @@ public static class DevelopmentAuthSeeder
             .FirstOrDefaultAsync(r => r.Code == "AdminCompany" && r.TargetEntityType == "COMPANY" && r.DeletedAt == null, ct);
         if (adminCompanyRole is null) return;
 
-        // La constraint uq_user_role_assignments_user_id_tenant_id es UNIQUE(user_id, tenant_id)
-        // SIN filtrar por deleted_at: solo puede existir UNA fila por (usuario, tenant). Por eso hay
-        // que buscar también las soft-deleted; si filtramos por DeletedAt == null, una fila borrada
-        // lógicamente queda invisible y el INSERT choca con la constraint (23505) en cada arranque.
-        var existing = await db.UserRoleAssignments
-            .FirstOrDefaultAsync(a => a.UserId == userId && a.TenantId == empresaTenant.Id, ct);
-
-        if (existing is not null)
-        {
-            // Reactiva/realinea la fila existente en lugar de insertar (idempotente).
-            if (existing.DeletedAt is not null || existing.RoleId != adminCompanyRole.Id)
-            {
-                existing.DeletedAt = null;
-                existing.DeletedBy = null;
-                existing.RoleId = adminCompanyRole.Id;
-                existing.AssignedAt = DateTimeOffset.UtcNow;
-                await db.SaveChangesAsync(ct);
-            }
-            return;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        db.UserRoleAssignments.Add(new UserRoleAssignment
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = empresaTenant.Id,
-            UserId = userId,
-            RoleId = adminCompanyRole.Id,
-            AssignedAt = now,
-            CreatedAt = now,
-            RowVersion = 0,
-        });
-        await db.SaveChangesAsync(ct);
+        await EnsureSingleRoleAssignmentAsync(db, userId, empresaTenant.Id, adminCompanyRole.Id, ct);
     }
 
     private static async Task SeedBaseModulesAsync(

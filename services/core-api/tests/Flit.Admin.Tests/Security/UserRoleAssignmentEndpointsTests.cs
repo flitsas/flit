@@ -19,13 +19,18 @@ using Xunit;
 namespace Flit.Admin.Tests.Security;
 
 /// <summary>
-/// HU #10506 — soporte multi-rol por usuario (modelo aditivo): cubre los 5 AC contra una BD
-/// real (WebApplicationFactory + FlitDbContext real, mismo patrón que
+/// Rol ÚNICO por usuario contra una BD real (WebApplicationFactory + FlitDbContext real, mismo
+/// patrón que
 /// <see cref="Flit.Admin.Tests.OtProfile.AdminOtUsersEndpointsTests"/>): seeda su propio tenant,
 /// dos roles COMPANY distintos y usuarios con GUIDs aleatorios por ejecución, y limpia lo
 /// creado al finalizar.
+///
+/// <para>Revierte el modelo aditivo de la HU #10506: lo que define lo que un usuario puede hacer
+/// son los PERMISOS de su rol, no acumular roles. Asignar reemplaza, e invitar admite un solo
+/// rol; la invariante la garantiza en BD <c>uq_ura_active_user_tenant</c> (migración
+/// RolUnicoPorUsuario).</para>
 /// </summary>
-public sealed class MultiRoleUserAssignmentEndpointsTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public sealed class UserRoleAssignmentEndpointsTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
     private static readonly SymmetricSecurityKey DummyKey =
         new(Encoding.UTF8.GetBytes(new string('k', 64)));
@@ -40,7 +45,7 @@ public sealed class MultiRoleUserAssignmentEndpointsTests : IClassFixture<WebApp
     private Guid _roleAId;
     private Guid _roleBId;
 
-    public MultiRoleUserAssignmentEndpointsTests(WebApplicationFactory<Program> factory)
+    public UserRoleAssignmentEndpointsTests(WebApplicationFactory<Program> factory)
     {
         _factory = factory;
         _client = factory.CreateClient();
@@ -50,9 +55,10 @@ public sealed class MultiRoleUserAssignmentEndpointsTests : IClassFixture<WebApp
         SeedAsync().GetAwaiter().GetResult();
     }
 
-    // AC1 — asignar un segundo rol a un usuario que ya tiene uno → queda con AMBOS roles activos.
+    // Asignar otro rol REEMPLAZA el que tenía: el usuario nunca queda con dos. Este es el caso
+    // que aparecía en la UI como el usuario duplicado en el listado.
     [Fact]
-    public async Task AssignRole_SecondDistinctRole_UserEndsWithBothRolesActive()
+    public async Task AssignRole_ReplacesPreviousRole_UserEndsWithExactlyOne()
     {
         var response = await _client.PutAsJsonAsync(
             $"/api/v1/security/users/{_targetUserId}/role",
@@ -67,10 +73,11 @@ public sealed class MultiRoleUserAssignmentEndpointsTests : IClassFixture<WebApp
             .Select(a => a.RoleId)
             .ToListAsync(TestContext.Current.CancellationToken);
 
-        activeRoleIds.Should().BeEquivalentTo([_roleAId, _roleBId]);
+        activeRoleIds.Should().BeEquivalentTo([_roleBId]);
     }
 
-    // AC2 — asignar el MISMO rol ya activo → rechazo claro, sin duplicar fila.
+    // Asignar el MISMO rol que ya tiene no es un cambio: se rechaza sin cerrar nada, para no
+    // dejarlo sin rol si algo fallara al recrearlo.
     [Fact]
     public async Task AssignRole_SameRoleAlreadyActive_RejectsWithoutDuplicating()
     {
@@ -91,16 +98,11 @@ public sealed class MultiRoleUserAssignmentEndpointsTests : IClassFixture<WebApp
         activeCount.Should().Be(1);
     }
 
-    // AC3 — quitar un rol puntual sin afectar los demás roles del usuario.
+    // Quitar el rol deja al usuario SIN rol: es un estado soportado (queda sin permisos hasta
+    // que se le asigne otro), no un error.
     [Fact]
-    public async Task RemoveRole_OneOfTwoActiveRoles_LeavesTheOtherUntouched()
+    public async Task RemoveRole_LeavesUserWithoutAnyActiveRole()
     {
-        // Deja al usuario objetivo con DOS roles activos (mismo camino que AC1) antes de quitar uno.
-        await _client.PutAsJsonAsync(
-            $"/api/v1/security/users/{_targetUserId}/role",
-            new { roleId = _roleBId },
-            TestContext.Current.CancellationToken);
-
         var response = await _client.DeleteAsync(
             $"/api/v1/security/users/{_targetUserId}/roles/{_roleAId}",
             TestContext.Current.CancellationToken);
@@ -113,7 +115,7 @@ public sealed class MultiRoleUserAssignmentEndpointsTests : IClassFixture<WebApp
             .Select(a => a.RoleId)
             .ToListAsync(TestContext.Current.CancellationToken);
 
-        activeRoleIds.Should().BeEquivalentTo([_roleBId]);
+        activeRoleIds.Should().BeEmpty();
     }
 
     // Sin asignación activa de ese rol puntual → 404, sin afectar el rol que sí tiene.
@@ -127,10 +129,9 @@ public sealed class MultiRoleUserAssignmentEndpointsTests : IClassFixture<WebApp
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
-    // AC4 — invitar con varios roles simultáneos → la invitación queda con AMBAS asignaciones
-    // (invitation_roles) y, al activar la cuenta, se crean AMBOS UserRoleAssignment.
+    // Invitar con VARIOS roles se rechaza: un usuario tiene uno solo.
     [Fact]
-    public async Task InviteAndActivate_WithMultipleRoles_CreatesBothAssignmentsOnActivation()
+    public async Task Invite_WithMoreThanOneRole_Returns400()
     {
         var email = $"multi-role-invite-{Guid.NewGuid():N}@flit.local";
 
@@ -139,27 +140,22 @@ public sealed class MultiRoleUserAssignmentEndpointsTests : IClassFixture<WebApp
             new { email, fullName = "Multi Rol", roleIds = new[] { _roleAId, _roleBId } },
             TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
+            .Should().Contain("SINGLE_ROLE_ONLY");
 
-        Guid invitationId;
-        await using (var db = CreateDbContext())
-        {
-            var invitation = await db.UserInvitations.AsNoTracking()
-                .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
-            invitationId = invitation.Id;
+        await using var db = CreateDbContext();
+        (await db.UserInvitations.AsNoTracking()
+            .AnyAsync(i => i.Email == email, TestContext.Current.CancellationToken))
+            .Should().BeFalse("la invitación no debe llegar a crearse");
+    }
 
-            var bridgeRoleIds = await db.InvitationRoles.AsNoTracking()
-                .Where(r => r.InvitationId == invitationId)
-                .Select(r => r.RoleId)
-                .ToListAsync(TestContext.Current.CancellationToken);
-
-            bridgeRoleIds.Should().BeEquivalentTo([_roleAId, _roleBId]);
-        }
-
-        // Activación: el token crudo de la invitación creada por HTTP no es recuperable desde la
-        // respuesta (solo se persiste su hash) -- se crea una SEGUNDA invitación equivalente con
-        // un token conocido (vía los mismos repositorios/handler de DI) para validar el efecto de
-        // la activación: N asignaciones UserRoleAssignment, una por cada rol de la invitación.
+    // Al activar la cuenta se crea UNA asignación, la del rol de la invitación.
+    [Fact]
+    public async Task Activate_CreatesExactlyOneAssignment()
+    {
+        // El token crudo de una invitación creada por HTTP no es recuperable desde la respuesta
+        // (solo se persiste su hash), así que se crea con los mismos repositorios/handler de DI.
         using var scope = _factory.Services.CreateScope();
         var invitationRepo = scope.ServiceProvider.GetRequiredService<IInvitationRepository>();
         var tokenGenerator = scope.ServiceProvider.GetRequiredService<ISecureTokenGenerator>();
@@ -168,35 +164,33 @@ public sealed class MultiRoleUserAssignmentEndpointsTests : IClassFixture<WebApp
         var activationEmail = $"activate-{Guid.NewGuid():N}@flit.local";
         var token = tokenGenerator.Generate();
         await invitationRepo.CreateAsync(
-            new UserInvitationData(_tenantId, activationEmail, "Activar Multi Rol", [_roleAId, _roleBId], token.TokenHash, _callerId),
+            new UserInvitationData(_tenantId, activationEmail, "Activar Rol", [_roleAId], token.TokenHash, _callerId),
             TestContext.Current.CancellationToken);
 
         await activateHandler.HandleAsync(
             new ActivateAccountCommand(token.RawToken, "FlitPass1!"),
             TestContext.Current.CancellationToken);
 
-        await using (var db = CreateDbContext())
-        {
-            var user = await db.Users.AsNoTracking()
-                .SingleAsync(u => u.Email == activationEmail, TestContext.Current.CancellationToken);
+        await using var db = CreateDbContext();
+        var user = await db.Users.AsNoTracking()
+            .SingleAsync(u => u.Email == activationEmail, TestContext.Current.CancellationToken);
 
-            var assignedRoleIds = await db.UserRoleAssignments.AsNoTracking()
-                .Where(a => a.UserId == user.Id && a.DeletedAt == null)
-                .Select(a => a.RoleId)
-                .ToListAsync(TestContext.Current.CancellationToken);
+        var assignedRoleIds = await db.UserRoleAssignments.AsNoTracking()
+            .Where(a => a.UserId == user.Id && a.DeletedAt == null)
+            .Select(a => a.RoleId)
+            .ToListAsync(TestContext.Current.CancellationToken);
 
-            assignedRoleIds.Should().BeEquivalentTo([_roleAId, _roleBId]);
+        assignedRoleIds.Should().BeEquivalentTo([_roleAId]);
 
-            // Limpieza del usuario activado por este test (fuera del alcance del Dispose estándar,
-            // que solo limpia por tenant_id/roleId de invitaciones/asignaciones, no por email de usuario).
-            db.UserRoleAssignments.RemoveRange(db.UserRoleAssignments.Where(a => a.UserId == user.Id));
-            db.UserCredentials.RemoveRange(db.UserCredentials.Where(c => c.UserId == user.Id));
-            db.Users.RemoveRange(db.Users.Where(u => u.Id == user.Id));
-            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
-        }
+        // Limpieza del usuario activado por este test (fuera del alcance del Dispose estándar,
+        // que solo limpia por tenant_id/roleId de invitaciones/asignaciones, no por email).
+        db.UserRoleAssignments.RemoveRange(db.UserRoleAssignments.Where(a => a.UserId == user.Id));
+        db.UserCredentials.RemoveRange(db.UserCredentials.Where(c => c.UserId == user.Id));
+        db.Users.RemoveRange(db.Users.Where(u => u.Id == user.Id));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    // AC5 — invitar sin ningún rol seleccionado → 400, ya no se permite "sin rol asignado".
+    // Invitar sin ningún rol → 400: no se permite crear una cuenta "sin rol asignado".
     [Fact]
     public async Task Invite_WithoutAnyRole_Returns400()
     {

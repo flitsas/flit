@@ -66,7 +66,13 @@ public sealed class GetAdminAuditLogHandler
                 e.TargetEntityType,
                 e.TargetEntityId,
                 e.ClientIp,
-                e.ChangedAt)),
+                e.ChangedAt,
+                e.ChangedByName,
+                e.ChangedByEmail,
+                e.TargetName,
+                e.FieldName,
+                e.OldValue,
+                e.NewValue)),
         ];
 
         return new GetAdminAuditLogResult(data, result.TotalCount, page, pageSize);

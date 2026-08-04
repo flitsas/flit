@@ -65,24 +65,54 @@ vi.mock("@/lib/api/admin-transit-office-tenants", () => ({
   }),
 }));
 
-describe("Usuarios — invitar usuario (SuperAdmin, selector compañía/OT)", () => {
-  it("muestra compañías y organismos de tránsito agrupados, y resuelve el rol según el destino elegido", async () => {
+// El alta de usuario dejó de tener un único selector "empresa u organismo destino" con el rol
+// forzado por el backend: ahora se elige primero el PERFIL (context/usuarios-contex.md) y el
+// destino que se pide depende de él — el perfil FLIT no lleva compañía ni organismo.
+describe("Usuarios — invitar usuario (SuperAdmin, selector de perfil)", () => {
+  it("pide compañía destino para el perfil Gestor", async () => {
     const user = userEvent.setup();
     render(<Usuarios />);
 
     await user.click(await screen.findByRole("button", { name: /invitar usuario/i }));
+    await user.click(await screen.findByRole("radio", { name: /Gestor/i }));
 
-    const tenantSelect = await screen.findByLabelText(/empresa u organismo destino/i);
+    const tenantSelect = await screen.findByLabelText(/compañía destino/i);
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /Compañía Demo/i })).toBeInTheDocument();
-      expect(screen.getByRole("option", { name: /Secretaría de Movilidad Demo/i })).toBeInTheDocument();
     });
+    expect(
+      screen.queryByRole("option", { name: /Secretaría de Movilidad Demo/i }),
+    ).not.toBeInTheDocument();
 
     await user.selectOptions(tenantSelect, "company-1");
-    expect(await screen.findByText(/Administrador de Compañía/)).toBeInTheDocument();
+    expect((tenantSelect as HTMLSelectElement).value).toBe("company-1");
+  });
 
-    await user.selectOptions(tenantSelect, "ot-tenant-1");
-    expect(await screen.findByText(/Administrador OT/)).toBeInTheDocument();
-    expect(screen.queryByText(/Administrador de Compañía/)).not.toBeInTheDocument();
+  it("pide organismo de tránsito destino para el perfil OT", async () => {
+    const user = userEvent.setup();
+    render(<Usuarios />);
+
+    await user.click(await screen.findByRole("button", { name: /invitar usuario/i }));
+    await user.click(await screen.findByRole("radio", { name: /Organismo de Tránsito/i }));
+
+    await screen.findByLabelText(/organismo de tránsito destino/i);
+    await waitFor(() => {
+      expect(
+        screen.getByRole("option", { name: /Secretaría de Movilidad Demo/i }),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("option", { name: /Compañía Demo/i })).not.toBeInTheDocument();
+  });
+
+  it("no exige compañía ni organismo para el perfil FLIT", async () => {
+    const user = userEvent.setup();
+    render(<Usuarios />);
+
+    await user.click(await screen.findByRole("button", { name: /invitar usuario/i }));
+    await user.click(await screen.findByRole("radio", { name: /^FLIT/i }));
+
+    expect(screen.queryByLabelText(/compañía destino/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/organismo de tránsito destino/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/se creará con el rol de sistema/i)).toBeInTheDocument();
   });
 });
