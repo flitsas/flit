@@ -29,7 +29,8 @@ public static class AdminCompanyMandateSignersEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/companies/{tenantId:guid}/mandate-signers")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithTags("Admin · Mandatarios de la compañía");
 
         group.MapGet("", ListAsync)

@@ -31,6 +31,31 @@ vi.mock("@/lib/api/admin-ot", () => ({
   }),
 }));
 
+import {
+  fetchTransitOfficesOperationalStatus,
+} from "@/lib/api/admin-transit-office-tenants";
+
+const ACTIVE_STATUS = [
+  {
+    id: "ot-1",
+    code: "11001",
+    name: "Bogotá",
+    departmentCode: "11",
+    hasTenant: true,
+    tenantId: "t-1",
+    estadoActivo: true,
+    operationMode: "dashboard" as const,
+    divipoCode: null,
+    quipuxRegistration: false,
+    quipuxTransfer: false,
+    quipuxOther: false,
+  },
+];
+
+vi.mock("@/lib/api/admin-transit-office-tenants", () => ({
+  fetchTransitOfficesOperationalStatus: vi.fn(),
+}));
+
 vi.mock("@/lib/api/client", () => ({
   getToken: vi.fn().mockReturnValue(null),
 }));
@@ -43,6 +68,7 @@ vi.mock("@/lib/auth/jwt", () => ({
 describe("OtHubLayout — HU #10236", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fetchTransitOfficesOperationalStatus).mockResolvedValue(ACTIVE_STATUS);
   });
 
   it("AC2 renderiza pestañas de módulos OT", () => {
@@ -85,5 +111,34 @@ describe("OtHubLayout — HU #10236", () => {
       </OtHubLayout>,
     );
     expect(screen.getByRole("tablist", { name: "Módulos de administración OT" })).toBeInTheDocument();
+  });
+
+  it("HU #11225: muestra banner cuando el tenant OT está inactivo", async () => {
+    vi.mocked(fetchTransitOfficesOperationalStatus).mockResolvedValue([
+      {
+        id: "ot-1",
+        code: "11001",
+        name: "Bogotá",
+        departmentCode: "11",
+        hasTenant: true,
+        tenantId: "t-1",
+        estadoActivo: false,
+        operationMode: "dashboard",
+        divipoCode: null,
+        quipuxRegistration: false,
+        quipuxTransfer: false,
+        quipuxOther: false,
+      },
+    ]);
+
+    render(
+      <OtHubLayout transitOfficeId="ot-1" activeTab="client-procedures" moduleTitle="Test OT">
+        <p>Config visible</p>
+      </OtHubLayout>,
+    );
+
+    expect(await screen.findByTestId("ot-inactive-banner")).toHaveTextContent(/Organismo inactivo/i);
+    expect(screen.getByText("Config visible")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Reglas" })).toBeInTheDocument();
   });
 });

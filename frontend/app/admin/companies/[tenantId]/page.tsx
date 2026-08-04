@@ -16,6 +16,7 @@ import { RepresentativesAndVaultTab } from "@/components/admin/companies/legal-r
 import { CompanyMandatariosPanel } from "@/components/admin/companies/mandate-signers/CompanyMandatariosPanel";
 import { fetchCompany, fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
 import type { CompanyListItem, TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // Consola admin — detalle de compañía (HU #10194, AC2–AC5/AC7). Carga la
 // configuración y orquesta las pestañas con guardado atómico + slots de whitelist,
@@ -32,6 +33,7 @@ function CompanyDetail() {
   const router = useRouter();
   const params = useParams<{ tenantId: string }>();
   const tenantId = params.tenantId;
+  const { isAdminCompany, isSuperAdmin, tenantId: callerTenantId } = usePermissions();
 
   const [status, setStatus] = useState<UiStatus>("loading");
   const [settings, setSettings] = useState<TenantSettings | null>(null);
@@ -40,6 +42,13 @@ function CompanyDetail() {
   // de configuración devuelve 404 en una compañía sin parametrizar, que es justo cuando más importa
   // saber sobre qué compañía se está escribiendo.
   const [company, setCompany] = useState<CompanyListItem | null>(null);
+
+  // HU #11228 — AdminCompany no puede abrir la ficha de otro tenant.
+  useEffect(() => {
+    if (isAdminCompany && !isSuperAdmin && callerTenantId && tenantId !== callerTenantId) {
+      router.replace(`/admin/companies/${callerTenantId}`);
+    }
+  }, [isAdminCompany, isSuperAdmin, callerTenantId, tenantId, router]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -86,11 +95,12 @@ function CompanyDetail() {
     <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">
       <button
         type="button"
-        onClick={() => router.push("/admin/companies")}
+        onClick={() => router.push(isAdminCompany && !isSuperAdmin ? "/" : "/admin/companies")}
         className="flex w-fit items-center gap-1.5 text-xs font-semibold"
         style={{ color: "#557EFF" }}
       >
-        <ArrowLeft className="h-3.5 w-3.5" /> Volver al listado
+        <ArrowLeft className="h-3.5 w-3.5" />{" "}
+        {isAdminCompany && !isSuperAdmin ? "Volver al inicio" : "Volver al listado"}
       </button>
 
       <ModuleTitle

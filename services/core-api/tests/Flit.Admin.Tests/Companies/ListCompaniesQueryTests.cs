@@ -173,6 +173,60 @@ public sealed class ListCompaniesQueryTests
         result.TotalCount.Should().Be(2);
     }
 
+    // ---------- AC excludeTransitOffices (HU #11221) ----------
+
+    [Fact]
+    public async Task ExcludeTransitOffices_DefaultTrue_OmitsOtTenants()
+    {
+        await using var ctx = NewContext();
+        var b2b = Company("900500001", "B2B SAS", active: true, created: "2026-01-01");
+        var ot = Company("OT-001", "OT Medellín", active: true, created: "2026-01-02");
+        Seed(ctx, b2b, ot);
+        SeedOtProfile(ctx, ot.Id);
+
+        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery(), TestContext.Current.CancellationToken);
+
+        result.TotalCount.Should().Be(1);
+        result.Data.Should().ContainSingle().Which.Nit.Should().Be("900500001");
+        result.Data[0].IsTransitOffice.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ExcludeTransitOffices_False_IncludesOtTenants()
+    {
+        await using var ctx = NewContext();
+        var b2b = Company("900500011", "B2B SAS", active: true, created: "2026-01-01");
+        var ot = Company("OT-002", "OT Bogotá", active: true, created: "2026-01-02");
+        Seed(ctx, b2b, ot);
+        SeedOtProfile(ctx, ot.Id);
+
+        var result = await Handler(ctx).HandleAsync(
+            new ListCompaniesQuery { ExcludeTransitOffices = false },
+            TestContext.Current.CancellationToken);
+
+        result.TotalCount.Should().Be(2);
+        result.Data.Should().Contain(c => c.IsTransitOffice);
+        result.Data.Should().Contain(c => !c.IsTransitOffice);
+    }
+
+    [Fact]
+    public async Task ExcludeTransitOffices_True_CombinesWithNitFilter()
+    {
+        await using var ctx = NewContext();
+        var b2bMatch = Company("900611111", "Match SAS", active: true, created: "2026-01-01");
+        var b2bOther = Company("800622222", "Other SAS", active: true, created: "2026-01-02");
+        var otMatch = Company("900633333", "OT Match", active: true, created: "2026-01-03");
+        Seed(ctx, b2bMatch, b2bOther, otMatch);
+        SeedOtProfile(ctx, otMatch.Id);
+
+        var result = await Handler(ctx).HandleAsync(
+            new ListCompaniesQuery { Nit = "900", ExcludeTransitOffices = true },
+            TestContext.Current.CancellationToken);
+
+        result.TotalCount.Should().Be(1);
+        result.Data.Should().ContainSingle().Which.Nit.Should().Be("900611111");
+    }
+
     // ---------- Helpers ----------
 
     private static FlitDbContext NewContext() =>
@@ -186,6 +240,20 @@ public sealed class ListCompaniesQueryTests
     private static void Seed(FlitDbContext ctx, params Tenant[] tenants)
     {
         ctx.Tenants.AddRange(tenants);
+        ctx.SaveChanges();
+    }
+
+    private static void SeedOtProfile(FlitDbContext ctx, Guid tenantId)
+    {
+        ctx.TransitOfficeProfiles.Add(new Flit.Infrastructure.Persistence.Entities.Admin.TransitOfficeProfile
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            TransitOfficeId = Guid.NewGuid(),
+            OperationMode = "dashboard",
+            CreatedAt = DateTimeOffset.UtcNow,
+            RowVersion = 0,
+        });
         ctx.SaveChanges();
     }
 

@@ -262,15 +262,25 @@ export function Shell({
   }
 
   if (currentUser?.isAdminCompany) {
-    entries.push({
-      key: "mi-empresa",
-      label: "Mi Empresa",
-      icon: Briefcase,
-      // HU #10512 — navegación interna al módulo de Usuarios del Shell (antes salía de
-      // la SPA hacia /empresa/usuarios, ya deprecado).
-      active: !onAdminRoute && active === "usuarios",
-      onClick: () => onNav("usuarios"),
-    });
+    entries.push(
+      {
+        key: "admin-companies",
+        label: "Compañías",
+        icon: Building2,
+        // AdminCompany: /admin/companies redirige al configurador de su tenant (HU #11228).
+        active: pathname.startsWith("/admin/companies"),
+        onClick: () => window.location.assign("/admin/companies"),
+      },
+      {
+        key: "mi-empresa",
+        label: "Usuarios",
+        icon: Briefcase,
+        // HU #10512 — navegación interna al módulo de Usuarios del Shell (antes salía de
+        // la SPA hacia /empresa/usuarios, ya deprecado).
+        active: !onAdminRoute && active === "usuarios",
+        onClick: () => onNav("usuarios"),
+      },
+    );
   }
 
   // LOG QX (HU #10795): trazabilidad Quipux para soporte/administración. Bloque propio

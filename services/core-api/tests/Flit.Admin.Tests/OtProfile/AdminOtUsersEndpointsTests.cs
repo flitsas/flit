@@ -98,6 +98,28 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
     }
 
     [Fact]
+    public async Task Invite_AsOtAdmin_WithForeignTransitOfficeId_IgnoresSpoof_UsesJwtTenant()
+    {
+        // HU #11229 — ot_admin no puede escalar tenant vía query; el backend ignora transitOfficeId.
+        var foreignOfficeId = Guid.NewGuid();
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var email = $"ot-spoof-invite-{Guid.NewGuid():N}@flit.local";
+        var response = await _client.PostAsJsonAsync(
+            $"/api/v1/admin/ot/users/invite?transitOfficeId={foreignOfficeId}",
+            new { email, fullName = "Colaborador propio" },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        await using var db = CreateDbContext();
+        var invitation = await db.UserInvitations.AsNoTracking()
+            .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+        invitation.TenantId.Should().Be(_otTenantId);
+    }
+
+    [Fact]
     public async Task Invite_AsSuperAdmin_WithoutTransitOfficeId_Returns400()
     {
         var token = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);

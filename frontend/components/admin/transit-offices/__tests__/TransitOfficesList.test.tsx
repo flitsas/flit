@@ -107,11 +107,11 @@ describe("TransitOfficesList — RF01/RF02/RF03", () => {
     });
   });
 
-  it("RF01 muestra el estado operativo por OT (Sin alta | Activo | Inactivo)", async () => {
+  it("RF01 muestra el estado operativo por OT (Sin activar | Activo | Inactivo)", async () => {
     renderList();
     await screen.findByText("Secretaría de Movilidad Bogotá");
 
-    expect(within(rowFor("Secretaría de Movilidad Bogotá")).getByText("Sin alta")).toBeInTheDocument();
+    expect(within(rowFor("Secretaría de Movilidad Bogotá")).getByText("Sin activar")).toBeInTheDocument();
     expect(within(rowFor("Medellín — Secretaría de Movilidad")).getByText("Activo")).toBeInTheDocument();
     expect(within(rowFor("Cali — Secretaría de Movilidad")).getByText("Inactivo")).toBeInTheDocument();
   });
@@ -127,17 +127,17 @@ describe("TransitOfficesList — RF01/RF02/RF03", () => {
     });
   });
 
-  it("sin alta ofrece «Dar de alta» y llama onCreateTenant con la oficina", async () => {
+  it("sin activar ofrece «Activar» y llama onCreateTenant con la oficina", async () => {
     const onCreateTenant = vi.fn();
     const user = userEvent.setup();
     renderList({ onCreateTenant });
     await screen.findByText("Secretaría de Movilidad Bogotá");
 
-    await user.click(screen.getByRole("button", { name: /Dar de alta Secretaría de Movilidad Bogotá/ }));
+    await user.click(screen.getByRole("button", { name: /Activar Secretaría de Movilidad Bogotá/ }));
     expect(onCreateTenant).toHaveBeenCalledWith(
       expect.objectContaining({ id: OFFICE_SIN_ALTA, hasTenant: false }),
     );
-    // Una oficina sin alta no puede administrarse.
+    // Una oficina sin activar no puede administrarse.
     expect(
       screen.queryByRole("button", { name: /Administrar Secretaría de Movilidad Bogotá/ }),
     ).not.toBeInTheDocument();
@@ -149,6 +149,14 @@ describe("TransitOfficesList — RF01/RF02/RF03", () => {
     await screen.findByText("Medellín — Secretaría de Movilidad");
     await user.click(screen.getByRole("button", { name: /Administrar Medellín/ }));
     expect(mockPush).toHaveBeenCalledWith(`/admin/transit-offices/${OFFICE_ACTIVO}/client-procedures`);
+  });
+
+  it("HU #11225: Administrar también está disponible para OT inactivo", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("Cali — Secretaría de Movilidad");
+    await user.click(screen.getByRole("button", { name: /Administrar Cali/ }));
+    expect(mockPush).toHaveBeenCalledWith(`/admin/transit-offices/${OFFICE_INACTIVO}/client-procedures`);
   });
 
   it("RF03 desactiva un OT activo con confirmación", async () => {
@@ -231,7 +239,7 @@ describe("TransitOfficesList — RF01/RF02/RF03", () => {
     await screen.findByText("Secretaría de Movilidad Bogotá");
 
     // Solo Bogotá tiene DIVIPO + bandera activa → elegible.
-    await user.selectOptions(screen.getByLabelText("Filtrar por radicación Quipux"), "elegible");
+    await user.selectOptions(screen.getByLabelText("Filtrar por código integrador"), "elegible");
     await waitFor(() => {
       expect(screen.getByText("Secretaría de Movilidad Bogotá")).toBeInTheDocument();
       expect(screen.queryByText("Medellín — Secretaría de Movilidad")).not.toBeInTheDocument();
@@ -273,11 +281,11 @@ describe("TransitOfficesList — radicación Quipux (HU #10710)", () => {
     expect(row.getByText(/Matrículas/)).toBeInTheDocument();
   });
 
-  it("marca «Sin DIVIPO» como estado neutro, no como error", async () => {
+  it("marca «Sin código integrador» como estado neutro, no como error", async () => {
     renderList();
     await screen.findByText("Medellín — Secretaría de Movilidad");
 
-    const badge = within(rowFor("Medellín — Secretaría de Movilidad")).getByText("Sin DIVIPO");
+    const badge = within(rowFor("Medellín — Secretaría de Movilidad")).getByText("Sin código integrador");
     expect(badge).toBeInTheDocument();
     // Un DIVIPO vacío es el estado normal: StatusBadge tone=neutral (no alert / no danger).
     expect(badge).not.toHaveAttribute("role", "alert");
@@ -290,9 +298,9 @@ describe("TransitOfficesList — radicación Quipux (HU #10710)", () => {
     await screen.findByText("Cali — Secretaría de Movilidad");
 
     const row = within(rowFor("Cali — Secretaría de Movilidad"));
-    expect(row.getByText("Sin DIVIPO")).toBeInTheDocument();
+    expect(row.getByText("Sin código integrador")).toBeInTheDocument();
     expect(row.getByText(/Traspasos/)).toBeInTheDocument();
-    expect(row.getByText(/Sin DIVIPO no se radica/i)).toBeInTheDocument();
+    expect(row.getByText(/Sin código integrador no se radica/i)).toBeInTheDocument();
   });
 
   it("resume cuántas secretarías faltan por parametrizar", async () => {
@@ -309,7 +317,7 @@ describe("TransitOfficesList — radicación Quipux (HU #10710)", () => {
     await screen.findByText("Secretaría de Movilidad Bogotá");
 
     await user.selectOptions(
-      screen.getByLabelText("Filtrar por radicación Quipux"),
+      screen.getByLabelText("Filtrar por código integrador"),
       "sin-divipo",
     );
 

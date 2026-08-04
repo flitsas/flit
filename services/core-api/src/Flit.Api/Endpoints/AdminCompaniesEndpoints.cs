@@ -26,8 +26,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace Flit.Api.Endpoints;
 
 /// <summary>
-/// Endpoints del Administrador de Compañías (HU #10189, #10190, #10191, #10192).
-/// Todo el grupo exige rol SuperAdmin (RF01 / AC5).
+/// Endpoints del Administrador de Compañías (HU #10189, #10190, #10191, #10192, #11228).
+/// Grupo: AdminCompany o SuperAdmin. Index/alta/edición/status: solo SuperAdmin.
+/// Rutas por tenantId: AdminCompany acotado a su tenant (CompanyOwnTenantFilter).
 /// </summary>
 public static class AdminCompaniesEndpoints
 {
@@ -37,11 +38,12 @@ public static class AdminCompaniesEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/companies")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
             .WithTags("Admin · Compañías");
 
         // GET /api/v1/admin/companies/index — listado paginado con filtros (#10189 AC1, AC2).
         group.MapGet("/index", ListCompaniesAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminCompaniesIndex")
             .WithSummary("Lista compañías paginadas")
             .WithDescription("Listado paginado de compañías con filtros opcionales por NIT, razón social, "
@@ -53,6 +55,7 @@ public static class AdminCompaniesEndpoints
         // GET /api/v1/admin/companies/{tenantId} — identidad de la compañía (#11062). Alimenta el
         // encabezado de la consola de configuración: razón social + NIT visibles en toda la pantalla.
         group.MapGet("/{tenantId:guid}", GetCompanyAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanyGet")
             .WithSummary("Obtiene una compañía por id")
             .WithDescription("Retorna la identidad de la compañía (razón social, NIT, código, tipo y "
@@ -64,6 +67,7 @@ public static class AdminCompaniesEndpoints
 
         // POST /api/v1/admin/companies — alta de compañía (botón "Crear compañía", #10118).
         group.MapPost("", CreateCompanyAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminCompanyCreate")
             .WithSummary("Crea una compañía")
             .WithDescription("Da de alta una compañía B2B (tenant). 422 con detalle por campo si la validación "
@@ -75,6 +79,7 @@ public static class AdminCompaniesEndpoints
 
         // PUT /api/v1/admin/companies/{tenantId} — edición de datos de la compañía (#10118).
         group.MapPut("/{tenantId:guid}", UpdateCompanyAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminCompanyUpdate")
             .WithSummary("Edita una compañía")
             .WithDescription("Actualiza razón social, NIT, tipo y estado de la compañía. El código es "
@@ -89,6 +94,7 @@ public static class AdminCompaniesEndpoints
 
         // PUT /api/v1/admin/companies/{tenantId}/status — activa/desactiva la compañía (#10118).
         group.MapPut("/{tenantId:guid}/status", SetStatusAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminCompanySetStatus")
             .WithSummary("Activa o desactiva una compañía")
             .WithDescription("Cambia el estado activo/inactivo de la compañía "
@@ -100,6 +106,7 @@ public static class AdminCompaniesEndpoints
 
         // GET /api/v1/admin/companies/{tenantId}/settings — configuración actual (#10190 AC3).
         group.MapGet("/{tenantId:guid}/settings", GetSettingsAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanyGetSettings")
             .WithSummary("Obtiene la configuración operativa del tenant")
             .WithDescription("Retorna la configuración operativa de la compañía. 404 si el tenant no tiene "
@@ -111,6 +118,7 @@ public static class AdminCompaniesEndpoints
 
         // PUT /api/v1/admin/companies/{tenantId}/settings — guardado atómico + audit (#10190 AC1/AC2).
         group.MapPut("/{tenantId:guid}/settings", UpdateSettingsAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanyUpdateSettings")
             .WithSummary("Actualiza la configuración operativa del tenant")
             .WithDescription("Guardado atómico de la configuración operativa con registro de auditoría. "
@@ -122,6 +130,7 @@ public static class AdminCompaniesEndpoints
 
         // POST /api/v1/admin/companies/{tenantId}/whitelist — alta masiva + audit (#10191 AC4/AC5).
         group.MapPost("/{tenantId:guid}/whitelist", AddWhitelistAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanyAddWhitelist")
             .WithSummary("Agrega correos a la whitelist del tenant")
             .WithDescription("Alta masiva de correos exentos; devuelve los insertados y los omitidos "
@@ -133,6 +142,7 @@ public static class AdminCompaniesEndpoints
 
         // GET /api/v1/admin/companies/{tenantId}/whitelist — lista de correos exentos (#10191 AC6).
         group.MapGet("/{tenantId:guid}/whitelist", GetWhitelistAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanyGetWhitelist")
             .WithSummary("Lista los correos de la whitelist del tenant")
             .WithDescription("Retorna los correos exentos configurados para la compañía. Requiere SuperAdmin.")
@@ -142,6 +152,7 @@ public static class AdminCompaniesEndpoints
 
         // POST /api/v1/admin/companies/{tenantId}/transit-grants — habilita OT + audit (#10192 AC2).
         group.MapPost("/{tenantId:guid}/transit-grants", AddTransitGrantAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanyAddTransitGrant")
             .WithSummary("Habilita un Organismo de Tránsito para el tenant")
             .WithDescription("Concede acceso de la compañía a un OT (idempotente: 201 tanto en alta nueva "
@@ -153,6 +164,7 @@ public static class AdminCompaniesEndpoints
 
         // DELETE /api/v1/admin/companies/{tenantId}/transit-grants/{transitOfficeId} — deshabilita OT (#10192 AC3).
         group.MapDelete("/{tenantId:guid}/transit-grants/{transitOfficeId:guid}", RemoveTransitGrantAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanyRemoveTransitGrant")
             .WithSummary("Deshabilita un Organismo de Tránsito del tenant")
             .WithDescription("Revoca el acceso de la compañía a un OT. 204 si se eliminó, 404 si el grant "
@@ -164,6 +176,7 @@ public static class AdminCompaniesEndpoints
 
         // GET /api/v1/admin/companies/{tenantId}/transit-grants — OT habilitados del tenant (#10192 AC5).
         group.MapGet("/{tenantId:guid}/transit-grants", GetTransitGrantsAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanyGetTransitGrants")
             .WithSummary("Lista los OT habilitados del tenant")
             .WithDescription("Retorna los Organismos de Tránsito habilitados para la compañía. Requiere SuperAdmin.")
@@ -173,6 +186,7 @@ public static class AdminCompaniesEndpoints
 
         // PUT /api/v1/admin/companies/{tenantId}/transit-agreements/{transitOfficeId} — convenio comercial.
         group.MapPut("/{tenantId:guid}/transit-agreements/{transitOfficeId:guid}", SetTransitAgreementAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanySetTransitAgreement")
             .WithSummary("Marca o desmarca el convenio de la compañía con un Organismo de Tránsito")
             .WithDescription("El convenio NO es el permiso para radicar (eso son los transit-grants): es un "
@@ -184,6 +198,7 @@ public static class AdminCompaniesEndpoints
 
         // GET /api/v1/admin/companies/{tenantId}/transit-agreements — OT con convenio activo.
         group.MapGet("/{tenantId:guid}/transit-agreements", GetTransitAgreementsAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanyGetTransitAgreements")
             .WithSummary("Lista los OT con los que la compañía tiene convenio")
             .Produces(StatusCodes.Status200OK)
@@ -192,6 +207,7 @@ public static class AdminCompaniesEndpoints
 
         // GET /api/v1/admin/companies/{tenantId}/audit-log — historial de gobernanza paginado (#10192 AC4).
         group.MapGet("/{tenantId:guid}/audit-log", GetAuditLogAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanyGetAuditLog")
             .WithSummary("Lista el historial de auditoría del tenant")
             .WithDescription("Historial de gobernanza (cambios de settings, whitelist y grants) paginado. "
@@ -203,6 +219,7 @@ public static class AdminCompaniesEndpoints
         // GET /api/v1/admin/companies/{tenantId}/ot-consultation-restrictions — restricciones
         // de consulta (RNMC, comparendos) por OT de la compañía (HU #10759 AC1/AC5).
         group.MapGet("/{tenantId:guid}/ot-consultation-restrictions", GetOtConsultationRestrictionsAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanyGetOtConsultationRestrictions")
             .WithSummary("Lista las restricciones de consulta por OT del tenant")
             .WithDescription("Retorna las filas de restricción configuradas explícitamente (tabla dispersa: "
@@ -217,6 +234,7 @@ public static class AdminCompaniesEndpoints
         group.MapPut(
                 "/{tenantId:guid}/ot-consultation-restrictions/{transitOfficeId:guid}/{consultationKind}",
                 SetOtConsultationRestrictionAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanySetOtConsultationRestriction")
             .WithSummary("Fija el estado de una restricción de consulta por OT")
             .WithDescription("Habilita o inhabilita una consulta (rnmc|fines) para un Organismo de Tránsito "
@@ -231,6 +249,7 @@ public static class AdminCompaniesEndpoints
         // GET /api/v1/admin/companies/{tenantId}/ot-blocking-policies — políticas de bloqueo de
         // preflight (soat/rtm/estado_vehiculo/fines/rnmc) por OT de la compañía (FEATURE 05).
         group.MapGet("/{tenantId:guid}/ot-blocking-policies", GetOtBlockingPoliciesAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanyGetOtBlockingPolicies")
             .WithSummary("Lista las políticas de bloqueo de preflight por OT del tenant")
             .WithDescription("Retorna las filas de política configuradas explícitamente (tabla dispersa: "
@@ -245,6 +264,7 @@ public static class AdminCompaniesEndpoints
         group.MapPut(
                 "/{tenantId:guid}/ot-blocking-policies/{transitOfficeId:guid}/{criterion}",
                 SetOtBlockingPolicyAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithName("AdminCompanySetOtBlockingPolicy")
             .WithSummary("Fija el carácter bloqueante de un criterio del preflight por OT")
             .WithDescription("Marca un criterio (soat|rtm|estado_vehiculo|fines|rnmc) como bloqueante o "
@@ -260,6 +280,7 @@ public static class AdminCompaniesEndpoints
     }
 
     private static async Task<IResult> ListCompaniesAsync(
+        HttpContext httpContext,
         [FromServices] ListCompaniesHandler handler,
         CancellationToken cancellationToken,
         [FromQuery] string? nit = null,
@@ -267,9 +288,15 @@ public static class AdminCompaniesEndpoints
         [FromQuery] bool? estadoActivo = null,
         [FromQuery] DateOnly? fechaDesde = null,
         [FromQuery] DateOnly? fechaHasta = null,
+        [FromQuery] bool? excludeTransitOffices = null,
         [FromQuery] int? page = null,
         [FromQuery] int? pageSize = null)
     {
+        // HU #11226: solo SuperAdmin puede pedir include OT; cualquier otro rol fuerza exclusión.
+        var excludeOt = CompanyTenantAccess.ResolveExcludeTransitOffices(
+            httpContext.User,
+            excludeTransitOffices);
+
         var query = new ListCompaniesQuery
         {
             Nit = nit,
@@ -277,6 +304,7 @@ public static class AdminCompaniesEndpoints
             EstadoActivo = estadoActivo,
             FechaDesde = fechaDesde,
             FechaHasta = fechaHasta,
+            ExcludeTransitOffices = excludeOt,
             Page = page,
             PageSize = pageSize,
         };

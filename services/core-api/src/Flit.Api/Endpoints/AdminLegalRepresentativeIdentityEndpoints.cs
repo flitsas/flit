@@ -23,7 +23,8 @@ public static class AdminLegalRepresentativeIdentityEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/companies/{tenantId:guid}/legal-representatives/{id:guid}/identity")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithTags("Admin · Identidad de Representantes");
 
         // POST /send — inicia la validación (el proveedor notifica el enlace de captura por correo).

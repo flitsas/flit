@@ -40,6 +40,8 @@ export interface CompaniesIndexParams {
   estadoActivo?: boolean;
   fechaDesde?: string;
   fechaHasta?: string;
+  /** Default API true: excluye Organismos de Tránsito del listado B2B. */
+  excludeTransitOffices?: boolean;
   page?: number;
   pageSize?: number;
 }

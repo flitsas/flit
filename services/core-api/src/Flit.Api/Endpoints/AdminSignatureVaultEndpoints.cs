@@ -24,7 +24,8 @@ public static class AdminSignatureVaultEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/companies/{tenantId:guid}/signature-vault")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithTags("Admin · Baúl de Firmas");
 
         // GET — firmas del baúl del tenant (activas y revocadas), sin material de firma.
