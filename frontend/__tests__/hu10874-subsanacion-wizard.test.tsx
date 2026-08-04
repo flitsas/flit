@@ -171,7 +171,7 @@ describe('TramiteWizard — subsanación (HU #10874, AC1)', () => {
     render(<TramiteWizard existingInstanceId="inst-sub" onExit={() => {}} />);
 
     await screen.findByText('Trámite en subsanación');
-    expect(screen.queryByRole('button', { name: 'Preparar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Radicar trámite' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Finalizar' })).not.toBeInTheDocument();
   });
 });

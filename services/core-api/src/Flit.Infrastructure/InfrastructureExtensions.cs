@@ -110,6 +110,8 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonRepository, PersonRepository>();
         // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IDocumentTypeCatalog, DocumentTypeCatalog>();
+        // Catálogo RUNT de colores de vehículo (transformaciones FUR) — búsqueda paginada.
+        services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IVehicleColorCatalog, DbVehicleColorCatalog>();
         // HU #10521 (RF31) — puente de parámetros documentales por gestora hacia el checklist condicional.
         services.AddScoped<Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider, ChecklistCompanyParamsProvider>();
         // HU #10522 (RF17/RF22) — puente de la matriz documental resuelta del gestor hacia el checklist (matriz viva).

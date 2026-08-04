@@ -23,6 +23,12 @@ vi.mock('@/lib/api/tramites-client', () => ({
       acreedorDocumento: null,
       createdAt: '2026-07-07T00:00:00Z',
     }),
+    getChecklist: vi.fn().mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true }),
+    getAttachments: vi.fn().mockResolvedValue([]),
+    uploadAttachment: vi.fn(),
+    deleteAttachment: vi.fn(),
+    fetchAttachmentPreviewUrl: vi.fn(),
+    downloadAttachment: vi.fn(),
   },
 }));
 
@@ -33,6 +39,8 @@ describe('PrendaForm (matrícula, R4)', () => {
     client.getPrenda.mockClear();
     client.getInstance.mockClear();
     client.putPrenda.mockClear();
+    client.getChecklist.mockClear();
+    client.getAttachments.mockClear();
     client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
   });
 
@@ -52,17 +60,22 @@ describe('PrendaForm (matrícula, R4)', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Sin prenda' }));
 
     expect(screen.queryByLabelText('Acreedor (beneficiario)')).not.toBeInTheDocument();
-    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Documento de soporte de prenda')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Adjuntar/i })).not.toBeInTheDocument();
   });
 
-  it('con "registrar" pide acreedor y recuerda el documento', async () => {
+  it('con "registrar" pide acreedor y muestra el contenedor de carga del certificado', async () => {
     render(<PrendaForm instanceId="abc" />);
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
     fireEvent.click(screen.getByRole('radio', { name: 'Registrar prenda' }));
 
     expect(screen.getByLabelText('Acreedor (beneficiario)')).toBeInTheDocument();
-    expect(screen.getByRole('note')).toHaveTextContent(/documento de prenda/i);
+    expect(screen.getByLabelText('Documento de soporte de prenda')).toBeInTheDocument();
+    expect(screen.getByText('Certificado / registro de prenda')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Adjuntar' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Subir Certificado/i)).toBeInTheDocument();
+    await waitFor(() => expect(client.getAttachments).toHaveBeenCalled());
   });
 
   it('en traspaso ofrece las 4 decisiones de gestión (sin "sin prenda") como radios', async () => {
@@ -78,6 +91,22 @@ describe('PrendaForm (matrícula, R4)', () => {
     expect(screen.getByRole('radio', { name: 'Levantar gravamen' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Continuar sin gestionar (asumo el riesgo)' })).toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: 'Sin prenda' })).not.toBeInTheDocument();
+  });
+
+  it('con "omitir" no muestra el contenedor de carga', async () => {
+    render(
+      <PrendaForm
+        instanceId="abc"
+        decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    fireEvent.click(
+      screen.getByRole('radio', { name: 'Continuar sin gestionar (asumo el riesgo)' }),
+    );
+
+    expect(screen.queryByLabelText('Documento de soporte de prenda')).not.toBeInTheDocument();
   });
 
   it('embeddedInWizard oculta el botón de guardado; save() vía ref persiste', async () => {

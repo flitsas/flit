@@ -95,10 +95,17 @@ describe('MatriculaResumen — certificado de identidad (HU #10861)', () => {
 
   it('con firma del baúl no ofrece certificado', () => {
     renderResumen(bio('aprobado'), true);
-    expect(screen.getByText(/Firmado desde el baúl/i)).toBeInTheDocument();
+    expect(screen.getByText(/Firma electrónica \(baúl\)/i)).toBeInTheDocument();
     expect(screen.getByTestId('identidad-firma-baul')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Certificado ID · Comprador/i })).not.toBeInTheDocument();
     expect(tramitesClient.downloadBiometricCertificado).not.toHaveBeenCalled();
+  });
+
+  it('con identidad aprobada muestra el banner de verificada en el actor', () => {
+    renderResumen(bio('aprobado'));
+    expect(screen.getByTestId('identidad-verificada')).toBeInTheDocument();
+    expect(screen.getByText(/Identidad verificada — 95\/100/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Certificado ID · Comprador/i })).toBeInTheDocument();
   });
 
   it('sin validación propia embebe la biométrica del comprador y muestra el correo del actor', async () => {

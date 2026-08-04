@@ -1,9 +1,16 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Check, Lock } from 'lucide-react';
 import type { WizardStep, WizardStepStatus } from '@/lib/api/types/procedure-runtime';
 import { reasonCopy } from './wizard-copy';
 import { canNavigateToStep } from './wizard-navigation';
+import {
+  coalesceTraspasoActorSteps,
+  displayIndexForActive,
+  sourceIndexForDisplayClick,
+  type DisplayWizardStep,
+} from './wizard-actores-coalesce';
 
 /** Icono/marcador por status del paso (✓ / número activo / outline / 🔒). */
 function StepMarker({
@@ -65,6 +72,11 @@ export type WizardStepTrackerProps = {
   onGoToStep: (index: number) => void;
   /** Solo lectura / vista: misma cascada de navegación que el wizard. */
   viewOnly?: boolean;
+  /**
+   * Traspaso: fusiona vendedor+comprador en un solo ítem visual "Actores".
+   * Matrícula no aplica (queda 1:1).
+   */
+  coalesceActores?: boolean;
 };
 
 /**
@@ -77,16 +89,23 @@ export function WizardStepTracker({
   activeIndex,
   onGoToStep,
   viewOnly = false,
+  coalesceActores = false,
 }: WizardStepTrackerProps) {
-  if (steps.length === 0) return null;
+  const displaySteps: DisplayWizardStep[] = useMemo(
+    () => (coalesceActores ? coalesceTraspasoActorSteps(steps) : steps.map((s, i) => ({ ...s, sourceIndexes: [i] }))),
+    [steps, coalesceActores],
+  );
+  const displayActive = displayIndexForActive(displaySteps, activeIndex);
+
+  if (displaySteps.length === 0) return null;
 
   return (
     <nav aria-label="Asistente de seguimiento" className="w-full py-1">
       <ol className="flex w-full min-w-0 items-start gap-0">
-        {steps.map((s, i) => {
-          const isActive = i === activeIndex;
-          const clickable = canNavigateToStep(steps, i, viewOnly);
-          const prevComplete = i > 0 && steps[i - 1]?.status === 'complete';
+        {displaySteps.map((s, i) => {
+          const isActive = i === displayActive;
+          const clickable = s.sourceIndexes.some((idx) => canNavigateToStep(steps, idx, viewOnly));
+          const prevComplete = i > 0 && displaySteps[i - 1]?.status === 'complete';
           const lineAfterGreen = s.status === 'complete';
           return (
             <li
@@ -101,7 +120,7 @@ export function WizardStepTracker({
                   aria-hidden="true"
                 />
               )}
-              {i < steps.length - 1 && (
+              {i < displaySteps.length - 1 && (
                 <span
                   className="pointer-events-none absolute left-1/2 right-0 top-4 h-0.5 -translate-y-1/2"
                   style={{ background: lineAfterGreen ? '#8CC63F' : '#DFE5ED' }}
@@ -110,7 +129,7 @@ export function WizardStepTracker({
               )}
               <button
                 type="button"
-                onClick={() => onGoToStep(i)}
+                onClick={() => onGoToStep(sourceIndexForDisplayClick(s))}
                 disabled={!clickable}
                 className="relative z-10 flex w-full flex-col items-center gap-2 px-1 text-center outline-none disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-[#557EFF]/focus-visible:ring-offset-2"
                 aria-label={`Paso ${i + 1}: ${s.label} (${s.status})`}

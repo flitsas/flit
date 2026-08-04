@@ -342,6 +342,36 @@ function isJuridical(actor: ProcedureActor): boolean {
   return actor.personType === 'juridical' || actor.tipoDocumento === 'NIT';
 }
 
+/** Normaliza NIT para comparar locks de razón social (solo dígitos). */
+function normalizeNitKey(nit: string): string {
+  return nit.replace(/\D/g, '');
+}
+
+function ruesRazonLockStorageKey(instanceId: string): string {
+  return `flit:rues-razon-locked:${instanceId}`;
+}
+
+function readRuesRazonLocks(instanceId: string | null): Set<string> {
+  if (!instanceId || typeof sessionStorage === 'undefined') return new Set();
+  try {
+    const raw = sessionStorage.getItem(ruesRazonLockStorageKey(instanceId));
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? new Set(parsed.filter((x) => typeof x === 'string')) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function writeRuesRazonLocks(instanceId: string | null, locks: Set<string>) {
+  if (!instanceId || typeof sessionStorage === 'undefined') return;
+  try {
+    sessionStorage.setItem(ruesRazonLockStorageKey(instanceId), JSON.stringify([...locks]));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
 /**
  * HU #11014 — deriva el tipo de persona del DOCUMENTO. El paso 1 siembra el documento del propietario
  * (que en una empresa es un NIT) pero el actor nacía siempre 'natural', así que el paso del vendedor no
@@ -398,7 +428,7 @@ interface EmailChangeConfirmInfo {
  *  - SPLIT (un solo comprador / `layout='split'`): 2 secciones — Identificación
  *    (documento + Consultar RUNT + resultado) y Datos de contacto (incluye
  *    ciudad con autocomplete y dirección). Refleja el mockup de matrícula.
- *  - MULTI (traspaso): un fieldset por actor (vendedor + comprador).
+ *  - MULTI (traspaso): una tarjeta blanca por actor (vendedor + comprador), lado a lado.
  *
  * Expone `save()` vía ref para el patrón "Guardar y continuar" del wizard.
  */
@@ -434,6 +464,45 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const [showErrors, setShowErrors] = useState(false);
   // Estado de la consulta de identidad por índice de actor (RUNT o RUES, autopoblado).
   const [runt, setRunt] = useState<Record<number, LookupState>>({});
+  // NITs cuya razón social vino de RUES (o precarga directorio): no editable mientras aplique.
+  const [ruesRazonLockedNits, setRuesRazonLockedNits] = useState<Set<string>>(() =>
+    readRuesRazonLocks(instanceId),
+  );
+  useEffect(() => {
+    setRuesRazonLockedNits(readRuesRazonLocks(instanceId));
+  }, [instanceId]);
+  const lockRuesRazonSocial = (nit: string) => {
+    const key = normalizeNitKey(nit);
+    if (!key) return;
+    setRuesRazonLockedNits((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      writeRuesRazonLocks(instanceId, next);
+      return next;
+    });
+  };
+  const unlockRuesRazonSocial = (nit: string) => {
+    const key = normalizeNitKey(nit);
+    if (!key) return;
+    setRuesRazonLockedNits((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      writeRuesRazonLocks(instanceId, next);
+      return next;
+    });
+  };
+  const isRazonSocialLocked = (actor: ProcedureActor, index: number): boolean => {
+    if (!isJuridical(actor) || !actor.nombreCompleto.trim()) return false;
+    const nitKey = normalizeNitKey(actor.numeroDocumento);
+    if (nitKey && ruesRazonLockedNits.has(nitKey)) return true;
+    const state = runt[index];
+    if (state?.status !== 'found') return false;
+    if (state.kind === 'rues') return !!state.result.razonSocial?.trim();
+    if (state.kind === 'preload') return !!state.result.company.razonSocial?.trim();
+    return false;
+  };
   // Estado de la consulta RUNT del representante legal por índice de actor jurídico.
   const [rlRunt, setRlRunt] = useState<Record<number, LookupState>>({});
   // HU #10937 — representante ELEGIDO (índice en la lista precargada) por índice de actor jurídico,
@@ -644,10 +713,22 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     patch: Partial<ProcedureActor>,
     opts?: { preserveConsultation?: boolean },
   ) => {
+    const prevActor = actors[index];
     const identityChanged =
       patch.numeroDocumento !== undefined ||
       patch.tipoDocumento !== undefined ||
       patch.personType !== undefined;
+    // No permitir editar razón social traída por RUES / precarga directorio.
+    if (
+      patch.nombreCompleto !== undefined &&
+      prevActor &&
+      isRazonSocialLocked(prevActor, index) &&
+      !opts?.preserveConsultation
+    ) {
+      const { nombreCompleto: _ignored, ...rest } = patch;
+      patch = rest;
+      if (Object.keys(patch).length === 0 && !identityChanged) return;
+    }
     setActors((prev) =>
       prev.map((a, i) => {
         if (i !== index) return a;
@@ -667,6 +748,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     // Cambio MANUAL de identidad invalida la consulta. El autopoblado post-RUNT/RUES
     // usa preserveConsultation para no disparar un segundo lookup ni perder el `found`.
     if (identityChanged && !opts?.preserveConsultation) {
+      if (prevActor?.numeroDocumento) unlockRuesRazonSocial(prevActor.numeroDocumento);
       setRuntFor(index, { status: 'idle' });
       autoLookupTriggeredRef.current = null;
     }
@@ -749,6 +831,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           setSelectedRepIdx((prev) => ({ ...prev, [index]: 0 }));
           if (reps[0]) applySelectedRep(index, reps[0]);
           setRuntFor(index, { status: 'found', kind: 'preload', result: preload });
+          lockRuesRazonSocial(nit);
           // HU #10956 (AC2) — identidad resuelta (match del directorio): precarga el contacto conocido.
           void runContactLookup(index, 'NIT', nit);
           return;
@@ -769,6 +852,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             { preserveConsultation: true },
           );
           setRuntFor(index, { status: 'found', kind: 'rues', result });
+          if (result.razonSocial?.trim()) lockRuesRazonSocial(nit);
           // HU #10956 (AC2) — identidad resuelta en RUES: precarga el contacto conocido.
           void runContactLookup(index, 'NIT', nit);
         } else {
@@ -843,30 +927,36 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
   // Paso vendedor: dispara la consulta en cuanto el documento está disponible (sembrado desde el
   // paso 1 o rehidratado del backend), sin clic manual. HU #10906 — el cortocircuito de precarga por
-  // NIT vive dentro de handleIdentityLookup (rama jurídica): al delegar aquí, un vendedor con NIT en
-  // el directorio del tenant se precarga SIN consultar RUES/RUNT; uno natural cae a RUNT como antes.
+  // NIT vive dentro de handleIdentityLookup (rama jurídica).
+  // Split (un vendedor) o MULTI unificado (índice del rol vendedor).
+  const vendedorIndex = actors.findIndex((a) => a.rol === 'vendedor');
+  const vendedorDoc = vendedorIndex >= 0 ? actors[vendedorIndex]?.numeroDocumento : undefined;
+  const vendedorTipo = vendedorIndex >= 0 ? actors[vendedorIndex]?.tipoDocumento : undefined;
+  const vendedorRuntStatus = vendedorIndex >= 0 ? runt[vendedorIndex]?.status : undefined;
+
   useEffect(() => {
-    if (!autoConsultRunt || !instanceId || readOnly || !isSplit || actors.length !== 1) {
-      return;
-    }
-    const actor = actors[0];
-    const documentNumber = actor.numeroDocumento.trim();
+    if (!autoConsultRunt || !instanceId || readOnly) return;
+    if (vendedorIndex < 0) return;
+    if (isSplit && (actors.length !== 1 || actors[0]?.rol !== 'vendedor')) return;
+
+    const documentNumber = (vendedorDoc ?? '').trim();
     if (!documentNumber) return;
-    const runtState = runt[0] ?? { status: 'idle' };
-    if (runtState.status !== 'idle') return;
-    const lookupKey = `${actor.tipoDocumento}:${documentNumber}`;
+    if ((vendedorRuntStatus ?? 'idle') !== 'idle') return;
+    const lookupKey = `${vendedorTipo}:${documentNumber}`;
     if (autoLookupTriggeredRef.current === lookupKey) return;
     autoLookupTriggeredRef.current = lookupKey;
-    void handleIdentityLookup(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleIdentityLookup lee actors[0] actual
+    void handleIdentityLookup(vendedorIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleIdentityLookup lee actors actuales
   }, [
     autoConsultRunt,
     instanceId,
     readOnly,
     isSplit,
-    actors[0]?.numeroDocumento,
-    actors[0]?.tipoDocumento,
-    runt[0]?.status,
+    actors.length,
+    vendedorIndex,
+    vendedorDoc,
+    vendedorTipo,
+    vendedorRuntStatus,
   ]);
 
   // ── HU #10886 (AC1) — aviso de reenvío al cambiar el correo del sujeto de identidad ────────────
@@ -1401,16 +1491,16 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     // P5 — si el actor fue precargado desde el directorio, el RL ya está rellenado.
     const isPreloaded = runtState.status === 'found' && runtState.kind === 'preload';
 
-    // P5 — al editar datos sensibles del RL con preload activo: desvincula firma del baúl
-    // (limpia `mecanismoFirma`) y baja el card de precarga para forzar revalidación.
-    const handleRlSensitiveChange = (patch: Partial<RepresentanteLegal>) => {
-      const touchesSensitive =
-        patch.nombreCompleto !== undefined ||
-        patch.numeroDocumento !== undefined ||
-        patch.email !== undefined;
-      if (isPreloaded && touchesSensitive) {
+    // Solo el cambio de documento (número/tipo) del RL invalida la consulta RUES/directorio
+    // y pide volver a consultar. Nombre, correo, teléfono y demás datos básicos se pueden
+    // editar sin perder la consulta vigente.
+    const handleRlIdentityDocChange = (patch: Partial<RepresentanteLegal>) => {
+      const identityDocChanged =
+        patch.numeroDocumento !== undefined || patch.tipoDocumento !== undefined;
+      if (isPreloaded && identityDocChanged) {
         updateRepLegal(index, { ...patch, mecanismoFirma: undefined });
         setRuntFor(index, { status: 'idle' });
+        setRlRuntFor(index, { status: 'idle' });
         return;
       }
       updateRepLegal(index, patch);
@@ -1442,7 +1532,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <select
               id={`${index}-rl-tipoDoc`}
               value={rl.tipoDocumento ?? 'CC'}
-              onChange={(e) => updateRepLegal(index, { tipoDocumento: e.target.value as ActorDocumentType })}
+              onChange={(e) =>
+                handleRlIdentityDocChange({ tipoDocumento: e.target.value as ActorDocumentType })
+              }
               className={INPUT_BASE}
             >
               {RL_DOC_OPTIONS.map((o) => (
@@ -1462,7 +1554,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 id={`${index}-rl-numeroDoc`}
                 type="text"
                 value={rl.numeroDocumento ?? ''}
-                onChange={(e) => handleRlSensitiveChange({ numeroDocumento: e.target.value })}
+                onChange={(e) => handleRlIdentityDocChange({ numeroDocumento: e.target.value })}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -1520,7 +1612,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               id={`${index}-rl-nombre`}
               type="text"
               value={rl.nombreCompleto ?? ''}
-              onChange={(e) => handleRlSensitiveChange({ nombreCompleto: e.target.value })}
+              onChange={(e) => updateRepLegal(index, { nombreCompleto: e.target.value })}
               className={INPUT_BASE}
             />
           </div>
@@ -1533,7 +1625,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               id={`${index}-rl-email`}
               type="email"
               value={rl.email ?? ''}
-              onChange={(e) => handleRlSensitiveChange({ email: e.target.value })}
+              onChange={(e) => updateRepLegal(index, { email: e.target.value })}
               placeholder="correo@ejemplo.com"
               className={INPUT_BASE}
               aria-invalid={!!rlErrors.representanteLegal}
@@ -1640,6 +1732,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const errors = showErrors ? validation.byActor[0] : {};
     const runtState: LookupState = runt[0] ?? { status: 'idle' };
     const docLocked = autoConsultRunt && !!actor.numeroDocumento.trim();
+    const razonLocked = isRazonSocialLocked(actor, 0);
     const ciudades = filterCiudades(actor.ciudad ?? '');
     const showCiudades = !!ciudadOpen[0] && ciudades.length > 0;
     const sectionHeader = 'border-b px-4 py-3 flex items-center gap-2';
@@ -1715,7 +1808,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         </section>
 
         {/* Sección B — Datos de contacto */}
-        <section className="rounded-2xl border bg-white dark:bg-[#0B0F14] overflow-hidden">
+        <section className="rounded-2xl border bg-white dark:bg-[#0B0F14]">
           <div className="border-b px-4 py-3 flex flex-col gap-1" style={{ background: 'rgba(85,126,255,0.04)' }}>
             <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#162744' }}>
               Datos de contacto
@@ -1723,10 +1816,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             {contactLookupHint(0)}
           </div>
           <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Nombre completo */}
+            {/* Nombre / razón social */}
             <div className="lg:col-span-2">
               <label htmlFor="comprador-nombre" className="text-xs font-semibold mb-1.5 flex items-center gap-1.5">
-                Nombre completo
+                {isJuridical(actor) ? 'Razón social' : 'Nombre completo'}
                 <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
               </label>
               <input
@@ -1734,9 +1827,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 type="text"
                 value={actor.nombreCompleto}
                 onChange={(e) => updateActor(0, { nombreCompleto: e.target.value })}
+                readOnly={razonLocked}
                 aria-invalid={!!errors.nombreCompleto}
                 aria-describedby={errors.nombreCompleto ? 'comprador-nombre-err' : undefined}
-                className={INPUT_BASE}
+                className={`${INPUT_BASE}${razonLocked ? ' opacity-80' : ''}`}
+                style={razonLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
               />
               {errors.nombreCompleto && (
                 <p id="comprador-nombre-err" className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
@@ -1806,7 +1901,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             {/* Fecha de expedición del documento (RNMC, solo persona natural) */}
             {issueDateField(0)}
             {/* Ciudad (autocomplete) */}
-            <div className="relative">
+            <div className={`relative ${showCiudades ? 'z-40' : ''}`}>
               <label htmlFor="comprador-ciudad" className="text-xs font-semibold mb-1.5 block">
                 Ciudad
               </label>
@@ -1829,7 +1924,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               />
               {showCiudades && (
                 <ul
-                  className="absolute top-full left-0 right-0 mt-1 z-50 max-h-48 overflow-auto rounded-xl border bg-white dark:bg-[#0B0F14]"
+                  className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-white shadow-lg dark:bg-[#0B0F14]"
+                  style={{ borderColor: '#DFE5ED' }}
                   aria-label="Sugerencias de ciudad"
                 >
                   {ciudades.map((c) => (
@@ -1896,12 +1992,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     );
   }
 
-  // ── Layout MULTI (traspaso): un fieldset por actor ────────────────────────
+  // ── Layout MULTI (traspaso): una tarjeta blanca por actor, lado a lado ────
   return (
     <>
     <form
       onSubmit={handleSubmit}
-      className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14] mt-4"
+      className="mt-4"
       aria-label="Captura de actores del trámite"
       noValidate
     >
@@ -1921,18 +2017,36 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
       {errorBanner}
 
-      <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {actors.map((actor, index) => {
           const errors = showErrors ? validation.byActor[index] : {};
           const prefix = `actor-${actor.rol}`;
           const runtState: LookupState = runt[index] ?? { status: 'idle' };
+          const razonLocked = isRazonSocialLocked(actor, index);
+          const docLocked =
+            autoConsultRunt &&
+            actor.rol === 'vendedor' &&
+            !!actor.numeroDocumento.trim();
           // HU #10956 — ciudad con autocomplete, misma lógica que el layout SPLIT pero por índice.
           const ciudadesSuggestions = filterCiudades(actor.ciudad ?? '');
           const showCiudadSuggestions = !!ciudadOpen[index] && ciudadesSuggestions.length > 0;
           return (
-            <fieldset key={actor.rol} className="rounded-xl border p-4">
-              <legend className="px-1 text-xs font-bold">{ROL_LABEL[actor.rol]}</legend>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <fieldset
+              key={actor.rol}
+              className="rounded-2xl border bg-white dark:bg-[#0B0F14]"
+              style={{ borderColor: '#DFE5ED' }}
+              aria-label={ROL_LABEL[actor.rol]}
+            >
+              <legend className="sr-only">{ROL_LABEL[actor.rol]}</legend>
+              <div
+                className="border-b px-4 py-3"
+                style={{ borderColor: '#DFE5ED', background: 'rgba(85,126,255,0.04)' }}
+              >
+                <p className="text-xs font-bold" style={{ color: '#557EFF' }}>
+                  {ROL_LABEL[actor.rol]}
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
                 {/* Tipo de persona (HU #10543) */}
                 <div className="md:col-span-2">{personTypeSelector(index)}</div>
                 {/* Tipo de documento */}
@@ -1944,6 +2058,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     id={`${prefix}-tipoDoc`}
                     value={actor.tipoDocumento}
                     onChange={(e) => updateActor(index, { tipoDocumento: e.target.value as ActorDocumentType })}
+                    disabled={docLocked}
                     className={INPUT_BASE}
                   >
                     {DOC_OPTIONS.map((o) => (
@@ -1965,9 +2080,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     type="text"
                     value={actor.numeroDocumento}
                     onChange={(e) => updateActor(index, { numeroDocumento: e.target.value })}
+                    readOnly={docLocked}
                     aria-invalid={!!errors.numeroDocumento}
                     aria-describedby={errors.numeroDocumento ? `${prefix}-numeroDoc-err` : undefined}
-                    className={INPUT_BASE}
+                    className={`${INPUT_BASE}${docLocked ? ' opacity-80' : ''}`}
+                    style={docLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
                   />
                   {errors.numeroDocumento && (
                     <p id={`${prefix}-numeroDoc-err`} className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
@@ -1975,7 +2092,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     </p>
                   )}
                   {/* Consultar identidad: RUES (jurídica) o RUNT (natural). Autopobla el actor. */}
-                  {!readOnly && (
+                  {!readOnly && !docLocked && (
                     <button
                       type="button"
                       onClick={() => void handleIdentityLookup(index)}
@@ -1997,10 +2114,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   <div className="md:col-span-2">{runtResult(index)}</div>
                 )}
 
-                {/* Nombre completo */}
+                {/* Nombre / razón social */}
                 <div className="md:col-span-2">
                   <label htmlFor={`${prefix}-nombre`} className="text-xs font-semibold mb-1.5 flex items-center gap-1.5">
-                    Nombre completo
+                    {isJuridical(actor) ? 'Razón social' : 'Nombre completo'}
                     <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
                   </label>
                   <input
@@ -2008,9 +2125,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     type="text"
                     value={actor.nombreCompleto}
                     onChange={(e) => updateActor(index, { nombreCompleto: e.target.value })}
+                    readOnly={razonLocked}
                     aria-invalid={!!errors.nombreCompleto}
                     aria-describedby={errors.nombreCompleto ? `${prefix}-nombre-err` : undefined}
-                    className={INPUT_BASE}
+                    className={`${INPUT_BASE}${razonLocked ? ' opacity-80' : ''}`}
+                    style={razonLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
                   />
                   {errors.nombreCompleto && (
                     <p id={`${prefix}-nombre-err`} className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
@@ -2065,7 +2184,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 </div>
 
                 {/* Ciudad (autocomplete) — HU #10956, precargable desde el contacto ya conocido. */}
-                <div className="relative">
+                <div className={`relative ${showCiudadSuggestions ? 'z-40' : ''}`}>
                   <label htmlFor={`${prefix}-ciudad`} className="text-xs font-semibold mb-1.5 block">
                     Ciudad
                   </label>
@@ -2090,7 +2209,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   />
                   {showCiudadSuggestions && (
                     <ul
-                      className="absolute top-full left-0 right-0 mt-1 z-50 max-h-48 overflow-auto rounded-xl border bg-white dark:bg-[#0B0F14]"
+                      className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-white shadow-lg dark:bg-[#0B0F14]"
+                      style={{ borderColor: '#DFE5ED' }}
                       aria-label="Sugerencias de ciudad"
                     >
                       {ciudadesSuggestions.map((c) => (

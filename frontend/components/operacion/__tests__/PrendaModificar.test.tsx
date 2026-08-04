@@ -8,6 +8,13 @@ vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
     getPrenda: vi.fn(),
     putPrenda: vi.fn().mockResolvedValue({}),
+    getInstance: vi.fn().mockResolvedValue({ fieldValues: [] }),
+    getChecklist: vi.fn().mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true }),
+    getAttachments: vi.fn().mockResolvedValue([]),
+    uploadAttachment: vi.fn(),
+    deleteAttachment: vi.fn(),
+    fetchAttachmentPreviewUrl: vi.fn(),
+    downloadAttachment: vi.fn(),
   },
 }));
 
@@ -17,6 +24,7 @@ describe('PrendaModificar (R17)', () => {
   beforeEach(() => {
     client.getPrenda.mockReset();
     client.putPrenda.mockClear();
+    client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
   });
 
   it('no se muestra si el trámite no tiene prenda vigente', async () => {
@@ -38,7 +46,7 @@ describe('PrendaModificar (R17)', () => {
     render(<PrendaModificar instanceId="abc" />);
 
     await waitFor(() =>
-      expect(screen.getByText(/Registrar prenda existente/)).toBeInTheDocument(),
+      expect(screen.getByText(/Registrar prenda/)).toBeInTheDocument(),
     );
     expect(screen.getByText(/Banco XYZ/)).toBeInTheDocument();
     expect(
@@ -65,5 +73,8 @@ describe('PrendaModificar (R17)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Modificar elección de prenda' }));
 
     expect(screen.getByLabelText('Decisión de prenda')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Documento de soporte de prenda')).toBeInTheDocument(),
+    );
   });
 });

@@ -82,6 +82,7 @@ public sealed class GenerarConsolidadoMaestroHandler(
             : matrizPrecedencia is { Count: > 0 }
                 ? GenericConsolidadoOrdering.SelectByResolvedMatrix(fuentes, matrizPrecedencia)
                 : ConsolidadoOrderingResolver.Select(fuentes, instance.ModalidadEntrada);
+        ordered = GenerarConsolidadoHandler.SanitizeConsolidadoParts(ordered);
         if (ordered.Count == 0)
             return (null, "sin_adjuntos");
 

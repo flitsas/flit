@@ -294,19 +294,17 @@ export function BiometricStep({
 
   return (
     <div className="space-y-4">
-      {(showRefreshHeader || !hideIntro) && (
+      {/* En resumen (hideIntro) no se muestra la franja vacía con solo "Actualizar":
+          el polling / "Actualizar estado" por tarjeta bastan. */}
+      {!hideIntro && (
         <div
           className="flex items-start justify-between gap-3 rounded-2xl border bg-white px-4 py-3 dark:bg-[#0B0F14]"
           style={{ borderColor: '#DFE5ED' }}
         >
-          {hideIntro ? (
-            <span />
-          ) : (
-            <p className="text-xs opacity-70">
-              Validación de identidad de cada parte. Al iniciarla, el cliente recibe el enlace de captura
-              por correo; el resultado se actualiza automáticamente.
-            </p>
-          )}
+          <p className="text-xs opacity-70">
+            Validación de identidad de cada parte. Al iniciarla, el cliente recibe el enlace de captura
+            por correo; el resultado se actualiza automáticamente.
+          </p>
           {refreshButton}
         </div>
       )}
