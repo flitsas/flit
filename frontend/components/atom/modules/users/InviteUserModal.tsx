@@ -145,12 +145,6 @@ export function InviteUserModal({
   // significa "el de siempre" y el backend asigna el rol de sistema del tipo de tenant.
   const rolesRequiredAndMissing = !isSuperAdmin && selectedRoleIds.length === 0;
 
-  function toggleRole(roleId: string) {
-    setSelectedRoleIds((prev) =>
-      prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId],
-    );
-  }
-
   function changeProfile(next: UserProfileKind) {
     setProfile(next);
     setSelectedRoleIds([]);
@@ -373,15 +367,18 @@ export function InviteUserModal({
               ) : availableRoles.length > 0 ? (
                 <fieldset>
                   <legend className="mb-1 block text-xs font-semibold">
-                    Roles {isSuperAdmin ? "" : "*"}
+                    Rol {isSuperAdmin ? "" : "*"}
                   </legend>
+                  {/* Selección ÚNICA: un usuario tiene un solo rol y lo que define lo que puede
+                      hacer son los permisos de ese rol. */}
                   <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 rounded-xl border px-3 py-2.5 sm:grid-cols-2">
                     {availableRoles.map((r) => (
                       <label key={r.id} className="flex cursor-pointer items-center gap-2 text-xs">
                         <input
-                          type="checkbox"
-                          checked={selectedRoleIds.includes(r.id)}
-                          onChange={() => toggleRole(r.id)}
+                          type="radio"
+                          name="invite-role"
+                          checked={selectedRoleIds[0] === r.id}
+                          onChange={() => setSelectedRoleIds([r.id])}
                           className="h-3.5 w-3.5 accent-[#557EFF]"
                         />
                         <span>{r.name}</span>
@@ -396,10 +393,10 @@ export function InviteUserModal({
                     }}
                   >
                     {rolesRequiredAndMissing
-                      ? "Selecciona al menos un rol."
+                      ? "Selecciona un rol."
                       : isSuperAdmin
-                        ? "Puedes marcar varios roles. Sin selección se asigna el rol de administrador."
-                        : "Puedes marcar varios roles."}
+                        ? "Un usuario tiene un solo rol. Sin selección se asigna el de administrador."
+                        : "Un usuario tiene un solo rol; los permisos se ajustan sobre el rol."}
                   </p>
                 </fieldset>
               ) : (

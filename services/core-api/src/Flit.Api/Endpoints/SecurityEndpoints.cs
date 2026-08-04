@@ -58,6 +58,16 @@ public static class SecurityEndpoints
             Guid targetTenantId;
             IReadOnlyList<Guid> roleIds;
 
+            // Un usuario tiene UN rol: lo que define lo que puede hacer son los permisos de ese
+            // rol, no acumular roles. RoleIds sigue siendo lista por compatibilidad con la API
+            // de la HU #10506, pero solo se admite un elemento.
+            if ((request.RoleIds ?? []).Distinct().Count() > 1)
+                return Results.Json(
+                    new ErrorResponse(
+                        "SINGLE_ROLE_ONLY",
+                        "Un usuario solo puede tener un rol. Selecciona uno."),
+                    statusCode: StatusCodes.Status400BadRequest);
+
             if (isSuperAdmin)
             {
                 var requestedRoleIds = (request.RoleIds ?? []).Distinct().ToList();
@@ -79,15 +89,6 @@ public static class SecurityEndpoints
 
                 if (isFlitInvite)
                 {
-                    // El perfil FLIT es un único rol de sistema: no se combina con roles de
-                    // compañía ni de organismo, que pertenecen a otro tenant.
-                    if (requestedRoleIds.Count > 1)
-                        return Results.Json(
-                            new ErrorResponse(
-                                "FLIT_PROFILE_SINGLE_ROLE",
-                                "El perfil FLIT (Super Administrador) no admite roles adicionales."),
-                            statusCode: StatusCodes.Status400BadRequest);
-
                     if (request.TargetTenantId is { } explicitTenant && explicitTenant != callerTenantId)
                         return Results.Json(
                             new ErrorResponse(
@@ -687,6 +688,9 @@ public static class SecurityEndpoints
                     join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
                     join t in db.Tenants.AsNoTracking() on a.TenantId equals t.Id
                     where a.DeletedAt == null && u.DeletedAt != null
+                    // Más reciente primero: si quedaran datos multi-rol previos a la migración,
+                    // el colapso de WithProfile se queda con el último rol asignado.
+                    orderby a.AssignedAt descending
                     select new TenantUserDto(
                         u.Id.ToString(),
                         u.DisplayName,
@@ -745,6 +749,7 @@ public static class SecurityEndpoints
                     join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
                     join t in db.Tenants.AsNoTracking() on a.TenantId equals t.Id
                     where a.TenantId != callerTenantId && a.DeletedAt == null && u.DeletedAt == null
+                    orderby a.AssignedAt descending
                     select new TenantUserDto(
                         u.Id.ToString(),
                         u.DisplayName,
@@ -893,6 +898,7 @@ public static class SecurityEndpoints
                 join u in db.Users.AsNoTracking() on a.UserId equals u.Id
                 join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
                 where a.TenantId == tenantId && a.DeletedAt == null && u.DeletedAt == null
+                orderby a.AssignedAt descending
                 select new TenantUserDto(
                     u.Id.ToString(),
                     u.DisplayName,
@@ -1162,8 +1168,20 @@ public static class SecurityEndpoints
                 ? UserProfiles.TransitOffice
                 : UserProfiles.Manager;
 
+    /// <summary>
+    /// Resuelve el perfil de cada fila y deja UNA fila por (usuario, tenant).
+    ///
+    /// El listado se arma desde <c>user_role_assignments</c>, así que un usuario con dos
+    /// asignaciones activas salía duplicado. Con el rol único eso ya no debería pasar —lo
+    /// garantiza <c>uq_ura_active_user_tenant</c>—, pero el colapso se queda como red: los datos
+    /// anteriores a la migración siguen existiendo en entornos que aún no la corrieron. La clave
+    /// incluye el tenant porque un usuario sí puede pertenecer a más de uno, con un rol en cada.
+    /// </summary>
     private static List<TenantUserDto> WithProfile(IEnumerable<TenantUserDto> rows) =>
-        rows.Select(r => r with { Profile = ResolveProfile(r.RoleCode, r.TenantType) }).ToList();
+        rows.Select(r => r with { Profile = ResolveProfile(r.RoleCode, r.TenantType) })
+            .GroupBy(r => (r.Id, r.TenantId))
+            .Select(g => g.First())
+            .ToList();
 
     /// <summary>
     /// ¿Alguno de estos roles es el SuperAdmin? Se consulta por Code y no por un id cacheado

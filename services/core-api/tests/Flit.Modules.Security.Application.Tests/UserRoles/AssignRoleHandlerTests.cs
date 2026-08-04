@@ -32,21 +32,23 @@ public sealed class AssignRoleHandlerTests
         _repo.GetActiveRoleAsync(RoleId, Arg.Any<CancellationToken>())
             .Returns(new RoleForAssignmentSnapshot(RoleId, "COMPANY"));
         _repo.GetTenantTargetEntityTypeAsync(TenantId, Arg.Any<CancellationToken>()).Returns("COMPANY");
-        _repo.GetActiveAssignmentAsync(UserId, TenantId, RoleId, Arg.Any<CancellationToken>()).Returns(existing);
+        _repo.GetActiveAssignmentsAsync(UserId, TenantId, Arg.Any<CancellationToken>())
+            .Returns(existing is null ? [] : new List<UserRoleAssignmentSnapshot> { existing });
     }
 
-    // AC1 — usuario ya tiene otro rol activo, se le asigna un segundo rol distinto → queda con
-    // AMBOS roles activos (modelo aditivo, no reemplaza ni toca el existente).
+    // Un usuario tiene UN rol: asignar uno nuevo CIERRA el anterior. Lo que define lo que puede
+    // hacer son los permisos de ese rol, no acumular roles (revierte el aditivo de HU #10506).
     [Fact]
-    public async Task HandleAsync_AssignsSecondRole_AdditivelyWithoutTouchingExisting()
+    public async Task HandleAsync_ReplacesPreviousRoleInsteadOfAddingASecondOne()
     {
-        SetupHappyPath(existing: null);
+        var previous = new UserRoleAssignmentSnapshot(Guid.NewGuid(), UserId, Guid.NewGuid());
+        SetupHappyPath(existing: previous);
 
         await _handler.Invoking(h => h.HandleAsync(MakeCommand(), CancellationToken.None))
             .Should().NotThrowAsync();
 
-        await _repo.DidNotReceiveWithAnyArgs().SoftDeleteAssignmentAsync(
-            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _repo.Received(1).SoftDeleteAssignmentAsync(
+            previous.Id, CallerId, Arg.Any<CancellationToken>());
         await _repo.Received(1).CreateAssignmentAsync(
             Arg.Is<AssignRoleData>(d =>
                 d.TenantId == TenantId &&
@@ -56,8 +58,42 @@ public sealed class AssignRoleHandlerTests
             Arg.Any<CancellationToken>());
     }
 
-    // AC2 — el mismo rol ya está activamente asignado → RoleAlreadyAssignedException, sin
-    // duplicar fila ni tocar la existente.
+    // Datos anteriores al rol único: si el usuario arrastra varios roles activos, se cierran todos.
+    [Fact]
+    public async Task HandleAsync_ClosesEveryPreviousRole_WhenLegacyMultiRoleDataExists()
+    {
+        var first = new UserRoleAssignmentSnapshot(Guid.NewGuid(), UserId, Guid.NewGuid());
+        var second = new UserRoleAssignmentSnapshot(Guid.NewGuid(), UserId, Guid.NewGuid());
+        SetupHappyPath(existing: null);
+        _repo.GetActiveAssignmentsAsync(UserId, TenantId, Arg.Any<CancellationToken>())
+            .Returns(new List<UserRoleAssignmentSnapshot> { first, second });
+
+        await _handler.Invoking(h => h.HandleAsync(MakeCommand(), CancellationToken.None))
+            .Should().NotThrowAsync();
+
+        await _repo.Received(1).SoftDeleteAssignmentAsync(first.Id, CallerId, Arg.Any<CancellationToken>());
+        await _repo.Received(1).SoftDeleteAssignmentAsync(second.Id, CallerId, Arg.Any<CancellationToken>());
+        await _repo.Received(1).CreateAssignmentAsync(
+            Arg.Any<AssignRoleData>(), Arg.Any<CancellationToken>());
+    }
+
+    // Sin rol previo: no hay nada que cerrar.
+    [Fact]
+    public async Task HandleAsync_WhenUserHasNoRole_AssignsWithoutClosingAnything()
+    {
+        SetupHappyPath(existing: null);
+
+        await _handler.Invoking(h => h.HandleAsync(MakeCommand(), CancellationToken.None))
+            .Should().NotThrowAsync();
+
+        await _repo.DidNotReceiveWithAnyArgs().SoftDeleteAssignmentAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _repo.Received(1).CreateAssignmentAsync(
+            Arg.Any<AssignRoleData>(), Arg.Any<CancellationToken>());
+    }
+
+    // Pedir el rol que el usuario YA tiene no es un cambio: se rechaza antes de cerrar nada,
+    // para no dejarlo sin rol si algo fallara al recrearlo.
     [Fact]
     public async Task HandleAsync_WhenRoleAlreadyActivelyAssigned_ThrowsRoleAlreadyAssigned()
     {
@@ -100,8 +136,8 @@ public sealed class AssignRoleHandlerTests
             .Invoking(h => h.HandleAsync(MakeCommand(), CancellationToken.None))
             .Should().ThrowAsync<RoleForAssignmentNotFoundException>();
 
-        await _repo.DidNotReceiveWithAnyArgs().GetActiveAssignmentAsync(
-            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceiveWithAnyArgs().GetActiveAssignmentsAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
         await _repo.DidNotReceiveWithAnyArgs().CreateAssignmentAsync(
             Arg.Any<AssignRoleData>(), Arg.Any<CancellationToken>());
     }
@@ -119,8 +155,8 @@ public sealed class AssignRoleHandlerTests
             .Invoking(h => h.HandleAsync(MakeCommand(), CancellationToken.None))
             .Should().ThrowAsync<RoleTargetEntityTypeMismatchException>();
 
-        await _repo.DidNotReceiveWithAnyArgs().GetActiveAssignmentAsync(
-            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceiveWithAnyArgs().GetActiveAssignmentsAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
         await _repo.DidNotReceiveWithAnyArgs().CreateAssignmentAsync(
             Arg.Any<AssignRoleData>(), Arg.Any<CancellationToken>());
     }

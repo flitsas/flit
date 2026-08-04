@@ -606,12 +606,6 @@ function OtInviteUserDialog({
     };
   }, [isSuperAdmin]);
 
-  function toggleRole(roleId: string) {
-    setSelectedRoleIds((prev) =>
-      prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId],
-    );
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -661,14 +655,17 @@ function OtInviteUserDialog({
             <p className="text-xs opacity-60">Cargando roles…</p>
           ) : roles.length > 0 ? (
             <fieldset>
-              <legend className="block text-xs font-medium mb-1 text-foreground">Roles</legend>
+              <legend className="block text-xs font-medium mb-1 text-foreground">Rol</legend>
+              {/* Selección ÚNICA: un usuario tiene un solo rol y lo que define lo que puede
+                  hacer son los permisos de ese rol. */}
               <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 rounded-lg border px-3 py-2.5 sm:grid-cols-2">
                 {roles.map((r) => (
                   <label key={r.id} className="flex cursor-pointer items-center gap-2 text-xs">
                     <input
-                      type="checkbox"
-                      checked={selectedRoleIds.includes(r.id)}
-                      onChange={() => toggleRole(r.id)}
+                      type="radio"
+                      name="ot-invite-role"
+                      checked={selectedRoleIds[0] === r.id}
+                      onChange={() => setSelectedRoleIds([r.id])}
                       className="h-3.5 w-3.5 accent-[#557EFF]"
                     />
                     <span>{r.name}</span>
@@ -676,7 +673,7 @@ function OtInviteUserDialog({
                 ))}
               </div>
               <p className="mt-1 text-[10px] opacity-60">
-                Sin selección se asigna el rol de Administrador OT.
+                Un usuario tiene un solo rol. Sin selección se asigna Administrador OT.
               </p>
             </fieldset>
           ) : (

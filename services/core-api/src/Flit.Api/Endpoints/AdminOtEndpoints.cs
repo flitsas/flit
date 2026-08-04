@@ -1616,6 +1616,14 @@ public static class AdminOtEndpoints
         var requestedRoleIds = (request.RoleIds ?? []).Distinct().ToList();
         List<Guid> roleIds;
 
+        // Un usuario tiene UN rol: lo que define lo que puede hacer son los permisos de ese rol.
+        if (requestedRoleIds.Count > 1)
+        {
+            return Results.Json(
+                new { error = "SINGLE_ROLE_ONLY", message = "Un usuario solo puede tener un rol. Selecciona uno." },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
         if (requestedRoleIds.Count == 0)
         {
             var role = await db.Roles.AsNoTracking()

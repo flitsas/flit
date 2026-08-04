@@ -3,10 +3,14 @@ using Flit.Modules.Security.Domain.UserRoles;
 namespace Flit.Modules.Security.Application.UserRoles;
 
 /// <summary>
-/// Asigna un rol a un usuario en un tenant. HU #10506: modelo ADITIVO — un usuario puede tener
-/// varios roles activos simultáneos (permisos = unión); asignar un segundo rol NO reemplaza ni
-/// toca las asignaciones activas existentes. Solo se rechaza la asignación EXACTA duplicada
-/// (mismo usuario + tenant + rol ya activo).
+/// Asigna EL rol de un usuario en un tenant: un usuario tiene un único rol activo, y lo que
+/// define lo que puede hacer son los permisos de ese rol. Asignar reemplaza — se cierran las
+/// asignaciones activas anteriores en el mismo tenant y se crea la nueva.
+///
+/// Esto revierte el modelo aditivo de la HU #10506 (varios roles activos, permisos = unión) por
+/// decisión del responsable funcional: si un rol necesita hacer algo más, se le agrega el
+/// permiso, no un segundo rol. El índice único de BD que garantiza la invariante volvió a ser
+/// (user_id, tenant_id) — ver la migración RolUnicoPorUsuario.
 /// </summary>
 public sealed class AssignRoleHandler(IUserRoleAssignmentRepository repo)
 {
@@ -38,13 +42,17 @@ public sealed class AssignRoleHandler(IUserRoleAssignmentRepository repo)
         if (!string.Equals(role.TargetEntityType, tenantTargetEntityType, StringComparison.Ordinal))
             throw new RoleTargetEntityTypeMismatchException();
 
-        // AC2 — rechazo de asignación duplicada del mismo rol ya activo, sin duplicar fila.
-        var existing = await repo.GetActiveAssignmentAsync(cmd.UserId, tenantId, cmd.RoleId, ct);
-        if (existing is not null)
+        // Pedir el rol que el usuario ya tiene no es un cambio: se rechaza antes de cerrar nada,
+        // para no dejarlo sin rol si algo fallara al recrearlo.
+        var current = await repo.GetActiveAssignmentsAsync(cmd.UserId, tenantId, ct);
+        if (current.Any(a => a.RoleId == cmd.RoleId))
             throw new RoleAlreadyAssignedException();
 
-        // AC1 — modelo aditivo: crea la nueva asignación SIN tocar las demás asignaciones
-        // activas del usuario (a diferencia del reemplazo de HU #10164).
+        // Reemplazo: se cierran TODAS las asignaciones activas anteriores del usuario en este
+        // tenant. Normalmente es una sola; el bucle cubre los datos previos al rol único.
+        foreach (var assignment in current)
+            await repo.SoftDeleteAssignmentAsync(assignment.Id, cmd.AssignedBy, ct);
+
         await repo.CreateAssignmentAsync(
             new AssignRoleData(tenantId, cmd.UserId, cmd.RoleId, cmd.AssignedBy),
             ct);

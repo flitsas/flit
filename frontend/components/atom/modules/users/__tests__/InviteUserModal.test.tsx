@@ -84,7 +84,7 @@ describe("InviteUserModal — SuperAdmin", () => {
     await user.click(await screen.findByRole("radio", { name: /Gestor/i }));
     await user.selectOptions(await screen.findByLabelText(/compañía destino/i), "company-1");
     await fillIdentity(user);
-    await user.click(await screen.findByRole("checkbox", { name: "Radicador" }));
+    await user.click(await screen.findByRole("radio", { name: "Radicador" }));
     await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
 
     await waitFor(() =>
@@ -103,8 +103,8 @@ describe("InviteUserModal — SuperAdmin", () => {
 
     await user.click(await screen.findByRole("radio", { name: /Gestor/i }));
 
-    expect(await screen.findByRole("checkbox", { name: "Radicador" })).toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "Super Administrador" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("radio", { name: "Radicador" })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "Super Administrador" })).not.toBeInTheDocument();
   });
 
   it("ofrece los roles del organismo cuando el perfil es OT", async () => {
@@ -113,8 +113,8 @@ describe("InviteUserModal — SuperAdmin", () => {
 
     await user.click(await screen.findByRole("radio", { name: /Organismo de Tránsito/i }));
 
-    expect(await screen.findByRole("checkbox", { name: "Revisor documental" })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Administrador OT" })).toBeInTheDocument();
+    expect(await screen.findByRole("radio", { name: "Revisor documental" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Administrador OT" })).toBeInTheDocument();
     expect(listRoles).toHaveBeenCalledWith("TRANSIT_OFFICE");
   });
 
@@ -142,7 +142,7 @@ describe("InviteUserModal — SuperAdmin", () => {
     renderModal({ fixedTarget: { tenantId: "company-1", profile: "GESTOR" } });
 
     expect(screen.queryByLabelText(/compañía destino/i)).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("checkbox", { name: "Radicador" }));
+    await user.click(await screen.findByRole("radio", { name: "Radicador" }));
     await fillIdentity(user);
     await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
 
@@ -169,7 +169,7 @@ describe("InviteUserModal — SuperAdmin", () => {
     await user.click(await screen.findByRole("radio", { name: /Gestor/i }));
     await user.selectOptions(await screen.findByLabelText(/compañía destino/i), "company-1");
     await fillIdentity(user);
-    await user.click(await screen.findByRole("checkbox", { name: "Radicador" }));
+    await user.click(await screen.findByRole("radio", { name: "Radicador" }));
     await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
 
     expect(await screen.findByText(/no aplica al destino elegido/i)).toBeInTheDocument();
@@ -199,7 +199,7 @@ describe("InviteUserModal — AdminCompany", () => {
     expect(screen.getByRole("button", { name: /enviar instrucciones/i })).toBeDisabled();
 
     await fillIdentity(user);
-    await user.click(screen.getByRole("checkbox", { name: "Radicador" }));
+    await user.click(screen.getByRole("radio", { name: "Radicador" }));
     await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
 
     await waitFor(() =>

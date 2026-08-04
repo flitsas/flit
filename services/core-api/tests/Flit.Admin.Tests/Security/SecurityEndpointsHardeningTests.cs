@@ -20,7 +20,7 @@ namespace Flit.Admin.Tests.Security;
 /// <summary>
 /// Fix post-review #10504 — hallazgos de seguridad/correctness sobre el refactor de
 /// Roles/Permisos SuperAdmin+multi-rol (HU #10505/#10506/#10508), cubiertos contra una BD
-/// real (mismo patrón que <see cref="MultiRoleUserAssignmentEndpointsTests"/>):
+/// real (mismo patrón que <see cref="UserRoleAssignmentEndpointsTests"/>):
 /// <list type="bullet">
 ///   <item>Fix 1 — <c>GET /api/v1/security/roles</c> ya no expone roles inactivos ni el rol de
 ///   sistema SuperAdmin al checklist de invitación de AdminCompany/OtAdmin.</item>
