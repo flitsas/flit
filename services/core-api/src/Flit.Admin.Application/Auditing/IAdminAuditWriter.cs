@@ -21,6 +21,8 @@ namespace Flit.Admin.Application.Auditing;
 /// <param name="TargetEntityId">Id de la entidad afectada (el usuario/rol objetivo de la operación).</param>
 /// <param name="ClientIp">IP de origen ya normalizada, o <c>null</c>.</param>
 /// <param name="UserAgent">User-Agent del cliente, o <c>null</c>.</param>
+/// <param name="OldValue">Detalle opcional del cambio: valor anterior serializado como JSON.</param>
+/// <param name="NewValue">Detalle opcional del cambio: valor nuevo serializado como JSON.</param>
 public sealed record AdminAuditEntry(
     Guid? TenantId,
     string? TenantType,
@@ -33,7 +35,9 @@ public sealed record AdminAuditEntry(
     string? TargetEntityType,
     Guid? TargetEntityId,
     string? ClientIp,
-    string? UserAgent);
+    string? UserAgent,
+    string? OldValue = null,
+    string? NewValue = null);
 
 /// <summary>
 /// Escribe filas en el rastro de auditoría administrativo/seguridad unificado (HU #10678,
