@@ -1,6 +1,6 @@
 // Dock del Shell: FAB centrado, Ayuda universal, agrupadores menú/submenú.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setDevSuperAdminToken } from "@/lib/api/client";
 import { TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
@@ -116,17 +116,12 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     expect(screen.getByRole("button", { name: "Improntas" })).toBeInTheDocument();
   });
 
-  it("agrupa las opciones del hub OT en el submenú OT", async () => {
+  it("muestra la píldora 'Tránsito' hacia el listado de OT (sin submenú de hub)", () => {
     setDevSuperAdminToken();
     renderShell();
-    await userEvent.click(screen.getByRole("button", { name: "OT" }));
-    const otPanel = screen.getByRole("region", { name: "OT" });
-    expect(within(otPanel).getByRole("button", { name: "Organismos" })).toBeInTheDocument();
-    expect(within(otPanel).getByRole("button", { name: "Trámites" })).toBeInTheDocument();
-    expect(within(otPanel).getByRole("button", { name: "Reglas" })).toBeInTheDocument();
-    expect(within(otPanel).getByRole("button", { name: "Preasignación" })).toBeInTheDocument();
-    expect(within(otPanel).getByRole("button", { name: "Usuarios OT" })).toBeInTheDocument();
-    expect(within(otPanel).getByRole("button", { name: "Reportes OT" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tránsito" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "OT" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Organismos" })).not.toBeInTheDocument();
   });
 
   it("no muestra la entrada 'Improntas' sin sesión SuperAdmin", () => {

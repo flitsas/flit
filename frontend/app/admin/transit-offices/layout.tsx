@@ -11,7 +11,7 @@ import { useAuthGate } from '@/hooks/useAuthGate';
  * de la SPA (auth real por JWT + Shell con dock) para que el dock NO desaparezca al entrar
  * a la consola de organismos de tránsito ni a sus subpantallas. El dock navega de vuelta
  * a la SPA (/?m=…) o a /tramites. Admin OT navega el hub desde el dock; SuperAdmin
- * agrupa las opciones OT en el submenú «OT».
+ * conserva la píldora «Tránsito» hacia el listado de organismos.
  */
 export default function AdminTransitOfficesLayout({ children }: { children: ReactNode }) {
   const router = useRouter();

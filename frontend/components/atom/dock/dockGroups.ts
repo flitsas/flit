@@ -12,7 +12,7 @@ import {
   FolderCog,
   Tag,
 } from "lucide-react";
-import { OT_ADM_DOCK, OT_SA_DOCK } from "@/components/admin/transit-offices/ot-nav";
+import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
 
 /**
  * Agrupadores del dock — orden estable de las píldoras.
@@ -22,10 +22,10 @@ import { OT_ADM_DOCK, OT_SA_DOCK } from "@/components/admin/transit-offices/ot-n
  */
 export const DOCK_GROUP_ORDER = [
   "tramites",
+  "preasignacion",
   "identidad",
   "reportes",
   "usuarios",
-  "preasignacion",
   "administracion",
   "companias",
   "ot",
@@ -97,14 +97,6 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   [OT_ADM_DOCK.preasignacion]: "preasignacion",
   [OT_ADM_DOCK.usuarios]: "usuarios",
   [OT_ADM_DOCK.reportes]: "reportes",
-  // SuperAdmin — todas las opciones OT en un solo submenú
-  [OT_SA_DOCK.tramites]: "ot",
-  [OT_SA_DOCK.rules]: "ot",
-  [OT_SA_DOCK.documents]: "ot",
-  [OT_SA_DOCK.requirements]: "ot",
-  [OT_SA_DOCK.preasignacion]: "ot",
-  [OT_SA_DOCK.usuarios]: "ot",
-  [OT_SA_DOCK.reportes]: "ot",
   rbac: "administradores",
   auditoria: "administradores",
   "log-qx": "soporte",

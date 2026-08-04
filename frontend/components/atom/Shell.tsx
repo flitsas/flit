@@ -7,7 +7,6 @@ import { fetchOtProfile } from "@/lib/api/admin-ot";
 import {
   isOtHubSegmentActive,
   OT_ADM_DOCK,
-  OT_SA_DOCK,
   otHubListPath,
   resolveOtHubHref,
   type OtHubTabId,
@@ -203,8 +202,8 @@ export function Shell({
   const pathname = usePathname() ?? "";
   const onAdminRoute = pathname.startsWith("/admin") || pathname.startsWith("/empresa");
 
-  const goOtHub = (tab: OtHubTabId, mode: "ot_admin" | "superadmin") => {
-    void resolveOtHubHref(tab, pathname, mode, async () => {
+  const goOtHub = (tab: OtHubTabId) => {
+    void resolveOtHubHref(tab, pathname, "ot_admin", async () => {
       const profile = await fetchOtProfile();
       return profile.transitOfficeId;
     }).then((href) => {
@@ -229,64 +228,12 @@ export function Shell({
         active: pathname.startsWith("/admin/companies"),
         onClick: () => window.location.assign("/admin/companies"),
       },
-      // Submenú OT: listado + todas las opciones del hub en un solo agrupador.
       {
         key: "admin-transit",
-        label: "Organismos",
+        label: "Tránsito",
         icon: Landmark,
-        active:
-          pathname === otHubListPath() ||
-          pathname === `${otHubListPath()}/`,
+        active: pathname.startsWith("/admin/transit-offices"),
         onClick: () => window.location.assign(otHubListPath()),
-      },
-      {
-        key: OT_SA_DOCK.tramites,
-        label: "Trámites",
-        icon: FileStack,
-        active: isOtHubSegmentActive(pathname, "client-procedures"),
-        onClick: () => goOtHub("client-procedures", "superadmin"),
-      },
-      {
-        key: OT_SA_DOCK.rules,
-        label: "Reglas",
-        icon: Scale,
-        active: isOtHubSegmentActive(pathname, "rules"),
-        onClick: () => goOtHub("rules", "superadmin"),
-      },
-      {
-        key: OT_SA_DOCK.documents,
-        label: "Documentos",
-        icon: FileText,
-        active: isOtHubSegmentActive(pathname, "documents"),
-        onClick: () => goOtHub("documents", "superadmin"),
-      },
-      {
-        key: OT_SA_DOCK.requirements,
-        label: "Requisitos",
-        icon: ClipboardList,
-        active: isOtHubSegmentActive(pathname, "requirements"),
-        onClick: () => goOtHub("requirements", "superadmin"),
-      },
-      {
-        key: OT_SA_DOCK.preasignacion,
-        label: "Preasignación",
-        icon: Tag,
-        active: isOtHubSegmentActive(pathname, "plate-ranges"),
-        onClick: () => goOtHub("plate-ranges", "superadmin"),
-      },
-      {
-        key: OT_SA_DOCK.usuarios,
-        label: "Usuarios OT",
-        icon: Users,
-        active: isOtHubSegmentActive(pathname, "usuarios"),
-        onClick: () => goOtHub("usuarios", "superadmin"),
-      },
-      {
-        key: OT_SA_DOCK.reportes,
-        label: "Reportes OT",
-        icon: BarChart3,
-        active: isOtHubSegmentActive(pathname, "reportes"),
-        onClick: () => goOtHub("reportes", "superadmin"),
       },
       {
         key: "admin-documents",
@@ -335,49 +282,49 @@ export function Shell({
         label: "Trámites",
         icon: FileStack,
         active: isOtHubSegmentActive(pathname, "client-procedures"),
-        onClick: () => goOtHub("client-procedures", "ot_admin"),
+        onClick: () => goOtHub("client-procedures"),
       },
       {
         key: OT_ADM_DOCK.rules,
         label: "Reglas",
         icon: Scale,
         active: isOtHubSegmentActive(pathname, "rules"),
-        onClick: () => goOtHub("rules", "ot_admin"),
+        onClick: () => goOtHub("rules"),
       },
       {
         key: OT_ADM_DOCK.documents,
         label: "Documentos",
         icon: FileText,
         active: isOtHubSegmentActive(pathname, "documents"),
-        onClick: () => goOtHub("documents", "ot_admin"),
+        onClick: () => goOtHub("documents"),
       },
       {
         key: OT_ADM_DOCK.requirements,
         label: "Requisitos",
         icon: ClipboardList,
         active: isOtHubSegmentActive(pathname, "requirements"),
-        onClick: () => goOtHub("requirements", "ot_admin"),
+        onClick: () => goOtHub("requirements"),
       },
       {
         key: OT_ADM_DOCK.preasignacion,
         label: "Preasignación",
         icon: Tag,
         active: isOtHubSegmentActive(pathname, "plate-ranges"),
-        onClick: () => goOtHub("plate-ranges", "ot_admin"),
+        onClick: () => goOtHub("plate-ranges"),
       },
       {
         key: OT_ADM_DOCK.usuarios,
         label: "Usuarios",
         icon: Users,
         active: isOtHubSegmentActive(pathname, "usuarios"),
-        onClick: () => goOtHub("usuarios", "ot_admin"),
+        onClick: () => goOtHub("usuarios"),
       },
       {
         key: OT_ADM_DOCK.reportes,
         label: "Reportes",
         icon: BarChart3,
         active: isOtHubSegmentActive(pathname, "reportes"),
-        onClick: () => goOtHub("reportes", "ot_admin"),
+        onClick: () => goOtHub("reportes"),
       },
     );
   }

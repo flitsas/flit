@@ -45,17 +45,6 @@ export const OT_ADM_DOCK = {
   reportes: "ot-adm-reportes",
 } as const;
 
-/** Keys del dock SuperAdmin dentro del submenú OT. */
-export const OT_SA_DOCK = {
-  tramites: "ot-sa-tramites",
-  rules: "ot-sa-rules",
-  documents: "ot-sa-documents",
-  requirements: "ot-sa-requirements",
-  preasignacion: "ot-sa-preasignacion",
-  usuarios: "ot-sa-usuarios",
-  reportes: "ot-sa-reportes",
-} as const;
-
 const OT_PROFILE_ID_KEY = "flit-ot-transit-office-id";
 
 export function otHubModulePath(transitOfficeId: string, tab: OtHubTabId): string {
