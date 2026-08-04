@@ -42,6 +42,49 @@ public sealed class KyverumRuntVehicleData
 
     [JsonPropertyName("rtm")]
     public List<KyverumRuntRtm>? Rtm { get; set; }
+
+    /// <summary>
+    /// Detalle de garantías/prendas del RUNT (acreedor, documento, fecha). Cuando
+    /// <c>vehiculo.prendas</c> es <c>SI</c> suele traer al menos un ítem; vacío si no hay.
+    /// </summary>
+    [JsonPropertyName("garantias")]
+    public List<KyverumRuntGarantia>? Garantias { get; set; }
+
+    /// <summary>
+    /// Variante adicional de prendas que Kyverum a veces envía aparte de <see cref="Garantias"/>.
+    /// Misma forma de ítem; el mapper las une al hidratar <c>runt_gravamenes</c>.
+    /// </summary>
+    [JsonPropertyName("garantiasPrendas")]
+    public List<KyverumRuntGarantia>? GarantiasPrendas { get; set; }
+}
+
+/// <summary>
+/// Ítem de garantía/prenda en la respuesta Kyverum RUNT. El nombre del acreedor llega como
+/// <c>acreedor</c> (no <c>nombreAcreedor</c> como en Intempo); el mapper normaliza al contrato
+/// común de <c>runt_gravamenes</c>.
+/// </summary>
+public sealed class KyverumRuntGarantia
+{
+    [JsonPropertyName("tipoDocumentoAcreedor")]
+    public string? TipoDocumentoAcreedor { get; set; }
+
+    [JsonPropertyName("numeroDocumentoAcreedor")]
+    public string? NumeroDocumentoAcreedor { get; set; }
+
+    [JsonPropertyName("acreedor")]
+    public string? Acreedor { get; set; }
+
+    [JsonPropertyName("nombreAcreedor")]
+    public string? NombreAcreedor { get; set; }
+
+    [JsonPropertyName("fechaInscripcion")]
+    public string? FechaInscripcion { get; set; }
+
+    [JsonPropertyName("idPrenda")]
+    public long? IdPrenda { get; set; }
+
+    [JsonPropertyName("estadoPrenda")]
+    public string? EstadoPrenda { get; set; }
 }
 
 public sealed class KyverumRuntVehiculo

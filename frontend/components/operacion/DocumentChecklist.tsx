@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Eye } from 'lucide-react';
+import { Eye, FileText } from 'lucide-react';
 import {
   resumirVins,
   useProcedureDocuments,
@@ -383,62 +383,76 @@ function DocumentSlot({
 
   return (
     <li
-      className="rounded-xl border p-3"
-      style={{ borderColor: done ? '#8CC63F' : 'var(--color-border)' }}
+      className="flex h-full flex-col rounded-2xl border bg-white p-3 dark:bg-[#0B0F14]"
+      style={{
+        borderColor: done
+          ? 'rgba(140,198,63,0.45)'
+          : item.obligatorio
+            ? 'rgba(255,78,0,0.35)'
+            : '#DFE5ED',
+        boxShadow: item.obligatorio && !done ? 'inset 3px 0 0 #FF4E00' : undefined,
+      }}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex min-w-0 items-start gap-2.5">
+        <FileText
+          className="mt-0.5 h-4 w-4 shrink-0"
+          style={{ color: done ? '#8CC63F' : '#9AA5B1' }}
+          aria-hidden="true"
+        />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {done && (
-              <span style={{ color: '#8CC63F' }} aria-hidden="true">
-                ✓
-              </span>
-            )}
-            <span className="text-xs font-semibold">{item.label}</span>
-            {item.obligatorio ? (
-              <span
-                className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase"
-                style={{ background: 'rgba(255,78,0,0.10)', color: '#FF4E00' }}
-              >
-                Obligatorio
-              </span>
-            ) : (
-              <span className="text-[10px] opacity-50 font-normal">
-                (opcional)
-              </span>
-            )}
-          </div>
+          <p className="text-xs font-bold leading-snug">{item.label}</p>
+          {item.obligatorio ? (
+            <span
+              className="mt-0.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+              style={{
+                background: 'rgba(255,78,0,0.14)',
+                color: '#FF4E00',
+                border: '1px solid rgba(255,78,0,0.40)',
+              }}
+            >
+              <span aria-hidden="true">●</span>
+              Obligatorio
+            </span>
+          ) : (
+            <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide opacity-50">
+              Opcional
+            </p>
+          )}
           {attachment && (
-            <p className="mt-1 text-[11px] opacity-70 truncate">
+            <p className="mt-1 truncate text-[11px] opacity-70">
               {attachment.filename} · {formatSize(attachment.sizeBytes)}
             </p>
           )}
         </div>
+      </div>
+
+      <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
+        <span
+          className="rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
+          style={{ background: done ? '#8CC63F' : '#9AA5B1' }}
+        >
+          {done ? 'Adjunto' : 'Sin adjuntar'}
+        </span>
 
         {readOnly ? (
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="text-[11px] font-semibold opacity-60">
-              {done ? 'Adjunto' : 'Sin adjuntar'}
-            </span>
-            {attachment && onPreview && (
-              <button
-                type="button"
-                onClick={() => onPreview(attachment)}
-                className="rounded-lg border p-1.5 disabled:opacity-60"
-                style={{ color: '#557EFF' }}
-                aria-label={`Previsualizar ${item.label}`}
-              >
-                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            )}
-          </div>
+          attachment && onPreview ? (
+            <button
+              type="button"
+              onClick={() => onPreview(attachment)}
+              className="text-[11px] font-semibold"
+              style={{ color: '#557EFF' }}
+              aria-label={`Previsualizar ${item.label}`}
+            >
+              Ver
+            </button>
+          ) : null
         ) : (
-          <div className="flex shrink-0 items-center gap-2">
+          <>
             {attachment && onPreview && (
               <button
                 type="button"
                 onClick={() => onPreview(attachment)}
-                className="rounded-lg border p-1.5 disabled:opacity-60"
+                className="rounded-lg border p-1 disabled:opacity-60"
                 style={{ color: '#557EFF' }}
                 aria-label={`Previsualizar ${item.label}`}
               >
@@ -457,8 +471,8 @@ function DocumentSlot({
               type="button"
               onClick={() => inputRef.current?.click()}
               disabled={busy}
-              className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-              style={{ borderColor: '#557EFF', color: '#557EFF' }}
+              className="text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ color: '#557EFF' }}
             >
               {analyzing
                 ? 'Analizando…'
@@ -466,21 +480,21 @@ function DocumentSlot({
                   ? 'Subiendo…'
                   : attachment
                     ? 'Reemplazar'
-                    : 'Subir'}
+                    : 'Adjuntar'}
             </button>
             {attachment && (
               <button
                 type="button"
                 onClick={() => onRemove(attachment.id)}
                 disabled={busy}
-                className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-                style={{ borderColor: '#FF4E00', color: '#FF4E00' }}
+                className="text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                style={{ color: '#FF4E00' }}
                 aria-label={`Borrar ${item.label}`}
               >
                 {deleting ? 'Borrando…' : 'Borrar'}
               </button>
             )}
-          </div>
+          </>
         )}
       </div>
 
@@ -687,38 +701,45 @@ export function DocumentChecklist({
         </div>
       )}
 
-      {/* Feature #11211 — selector de modo (excluyente) + UI correspondiente. */}
+      {/* Feature #11211 — selector de modo (excluyente) + UI correspondiente. Default: uno a uno. */}
       {showModeToggle && (
-        <div
-          className="mb-3 flex flex-wrap gap-2"
-          role="radiogroup"
-          aria-label="Modo de cargue de documentos"
-        >
-          {(
-            [
-              { value: 'individual' as const, label: 'Uno a uno' },
-              { value: 'batch' as const, label: 'Masivo' },
-            ] as const
-          ).map((opt) => {
-            const selected = uploadMode === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => setUploadMode(opt.value)}
-                className="rounded-full px-3 py-1.5 text-[11px] font-semibold border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                style={
-                  selected
-                    ? { borderColor: '#557EFF', background: 'rgba(85,126,255,0.12)', color: '#557EFF' }
-                    : { borderColor: '#DFE5ED', color: '#162744' }
-                }
-              >
-                {opt.label}
-              </button>
-            );
-          })}
+        <div className="mb-3 space-y-2">
+          <div
+            className="flex flex-wrap gap-2"
+            role="radiogroup"
+            aria-label="Modo de cargue de documentos"
+          >
+            {(
+              [
+                { value: 'individual' as const, label: 'Uno a uno' },
+                { value: 'batch' as const, label: 'Masivo' },
+              ] as const
+            ).map((opt) => {
+              const selected = uploadMode === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setUploadMode(opt.value)}
+                  className="rounded-full px-3 py-1.5 text-[11px] font-semibold border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  style={
+                    selected
+                      ? { borderColor: '#557EFF', background: 'rgba(85,126,255,0.12)', color: '#557EFF' }
+                      : { borderColor: '#DFE5ED', color: '#162744' }
+                  }
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] opacity-60" role="note">
+            {uploadMode === 'individual'
+              ? 'Puedes cargar cada documento en su casilla, uno a uno. También puedes cambiar a Masivo para subir varios archivos juntos.'
+              : 'Carga varios archivos a la vez: el sistema los clasifica y tú confirmas. Las casillas de abajo siguen disponibles por si falta alguno.'}
+          </p>
         </div>
       )}
 
@@ -776,9 +797,23 @@ export function DocumentChecklist({
             ? 'Cargando documentos requeridos…'
             : 'Este trámite no requiere documentos.'}
         </p>
-      ) : uploadMode === 'individual' || readOnly || !instanceId ? (
-        <ul className="space-y-2" aria-label="Checklist de documentos">
-          {items.map((item) => {
+      ) : (
+        <ul
+          className={`grid gap-3 ${
+            items.length === 1
+              ? 'grid-cols-1'
+              : items.length === 2
+                ? 'grid-cols-1 sm:grid-cols-2'
+                : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+          }`}
+          aria-label="Checklist de documentos"
+        >
+          {[...items]
+            .sort((a, b) => {
+              if (a.obligatorio !== b.obligatorio) return a.obligatorio ? -1 : 1;
+              return a.label.localeCompare(b.label, 'es', { sensitivity: 'base' });
+            })
+            .map((item) => {
             const tipo = item.docTipo ?? item.key;
             const attachment = attachmentByTipo.get(tipo);
             return (
@@ -817,7 +852,7 @@ export function DocumentChecklist({
             );
           })}
         </ul>
-      ) : null}
+      )}
     </section>
     </>
   );

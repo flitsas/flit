@@ -9,6 +9,7 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import { documentLabel } from '@/lib/tramites/document-labels';
 import { formatFecha } from '@/lib/format/date';
 import type { ProcedureAttachment } from '@/lib/api/types/procedure-runtime';
+import { findConsolidadoAttachment } from './ExpedienteVisor';
 
 /**
  * HU #11054 / HU #11055 — consulta de los documentos de un trámite DESDE EL LISTADO, sin entrar al
@@ -235,45 +236,66 @@ export function TramiteDocumentosModal({
         )}
 
         {!loading && !error && docs.length > 0 && (
-          <ul className="space-y-2" aria-label="Documentos del trámite">
-            {docs.map((d) => (
-              <li
-                key={d.id}
-                className="flex items-center gap-3 rounded-xl border p-3"
-                style={{ borderColor: BORDER }}
-              >
-                <FileText className="h-4 w-4 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-[#162744] dark:text-white">
-                    {documentLabel(d.tipo)}
-                  </p>
-                  <p className="truncate text-[10px] opacity-60">
-                    {d.filename} · {formatFecha(d.uploadedAt)}
-                  </p>
-                </div>
-                {/* Mismo par de botones de icono que el módulo de OT (`OtDocumentosTab`): ojo para
-                    previsualizar en azul de marca, flecha para descargar en color de texto. */}
+          <>
+            <ul className="space-y-2" aria-label="Documentos del trámite">
+              {docs.map((d) => (
+                <li
+                  key={d.id}
+                  className="flex items-center gap-3 rounded-xl border p-3"
+                  style={{ borderColor: BORDER }}
+                >
+                  <FileText className="h-4 w-4 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-[#162744] dark:text-white">
+                      {documentLabel(d.tipo)}
+                    </p>
+                    <p className="truncate text-[10px] opacity-60">
+                      {d.filename} · {formatFecha(d.uploadedAt)}
+                    </p>
+                  </div>
+                  {/* Mismo par de botones de icono que el módulo de OT (`OtDocumentosTab`): ojo para
+                      previsualizar en azul de marca, flecha para descargar en color de texto. */}
+                  <button
+                    type="button"
+                    onClick={() => void preview.open(d)}
+                    className={`${ICON_BUTTON_HIT_AREA} shrink-0 rounded-lg border border-border p-1.5 text-[#557EFF] transition hover:bg-[#557EFF]/10`}
+                    aria-label={`Previsualizar ${documentLabel(d.tipo)}`}
+                    title="Previsualizar"
+                  >
+                    <Eye className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void preview.download(d)}
+                    className={`${ICON_BUTTON_HIT_AREA} shrink-0 rounded-lg border border-border p-1.5 text-foreground transition hover:bg-[#557EFF]/10`}
+                    aria-label={`Descargar ${documentLabel(d.tipo)}`}
+                    title="Descargar"
+                  >
+                    <Download className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {(() => {
+              const consolidado = findConsolidadoAttachment(docs);
+              if (!consolidado) return null;
+              return (
                 <button
                   type="button"
-                  onClick={() => void preview.open(d)}
-                  className={`${ICON_BUTTON_HIT_AREA} shrink-0 rounded-lg border border-border p-1.5 text-[#557EFF] transition hover:bg-[#557EFF]/10`}
-                  aria-label={`Previsualizar ${documentLabel(d.tipo)}`}
-                  title="Previsualizar"
+                  className="mt-4 inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-xs font-semibold text-white transition hover:opacity-95"
+                  style={{
+                    background: 'linear-gradient(135deg,#557EFF 0%,#00DBD5 100%)',
+                    boxShadow: '0 10px 24px -6px rgba(85,126,255,0.45)',
+                  }}
+                  onClick={() => void preview.download(consolidado)}
+                  aria-label="Descargar todo · Expediente consolidado (PDF)"
                 >
-                  <Eye className="h-4 w-4" aria-hidden="true" />
+                  <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                  Descargar todo · Expediente consolidado (PDF)
                 </button>
-                <button
-                  type="button"
-                  onClick={() => void preview.download(d)}
-                  className={`${ICON_BUTTON_HIT_AREA} shrink-0 rounded-lg border border-border p-1.5 text-foreground transition hover:bg-[#557EFF]/10`}
-                  aria-label={`Descargar ${documentLabel(d.tipo)}`}
-                  title="Descargar"
-                >
-                  <Download className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </li>
-            ))}
-          </ul>
+              );
+            })()}
+          </>
         )}
 
         {/* Fallo de una descarga directa: el visor no está abierto, así que el aviso va aquí. */}

@@ -11,7 +11,8 @@ describe('documentLabel', () => {
     expect(documentLabel('certificado_identidad')).toBe('Certificado de identidad');
     expect(documentLabel('certificado_identidad_vendedor')).toBe('Certificado de identidad (vendedor)');
     expect(documentLabel('certificado_rues')).toBe('Certificado RUES');
-    expect(documentLabel('consolidado')).toBe('Expediente consolidado');
+    expect(documentLabel('consolidado')).toBe('Consolidado');
+    expect(documentLabel('impronta')).toBe('Improntas');
   });
 
   it('humaniza un tipo desconocido (capitalize por palabra)', () => {

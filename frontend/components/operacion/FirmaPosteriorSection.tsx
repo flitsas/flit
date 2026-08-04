@@ -16,6 +16,8 @@ const PARTES = [
   { rol: 'mandatario', label: 'Mandatario' },
 ] as const;
 
+export type FirmaPosteriorRol = (typeof PARTES)[number]['rol'];
+
 const AVISO_METODO =
   'Se firmará con la validación de identidad del representante legal. La firma se aplicará sola ' +
   'cuando él la complete, sin que tengas que volver a este trámite.';
@@ -37,25 +39,40 @@ const AVISO_MANDATARIO =
  *
  * La opción NO se ofrece si el representante tiene firma o identidad vigente (AC2): diferir un trámite
  * que puede cerrarse hoy solo lo retrasaría.
+ *
+ * `onlyRoles` limita las partes (p. ej. embeber solo Comprador/Vendedor en el resumen; Mandatario
+ * sigue junto a MandatarioSection).
  */
 export function FirmaPosteriorSection({
   instanceId,
   tenantId,
   readOnly = false,
   onChanged,
+  onlyRoles,
 }: {
   instanceId: string;
   tenantId?: string;
   readOnly?: boolean;
   onChanged?: () => void;
+  onlyRoles?: FirmaPosteriorRol[];
 }) {
+  const rolesKey = onlyRoles?.slice().sort().join(',') ?? '';
+  const partes =
+    onlyRoles && onlyRoles.length > 0
+      ? PARTES.filter((p) => onlyRoles.includes(p.rol))
+      : PARTES;
+
   const [estados, setEstados] = useState<Record<string, FirmaPosteriorEstado>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    const roles =
+      rolesKey === ''
+        ? PARTES
+        : PARTES.filter((p) => rolesKey.split(',').includes(p.rol));
     const pares = await Promise.all(
-      PARTES.map(async ({ rol }): Promise<[string, FirmaPosteriorEstado | null]> => {
+      roles.map(async ({ rol }): Promise<[string, FirmaPosteriorEstado | null]> => {
         try {
           return [rol, await tramitesClient.getFirmaPosterior(instanceId, rol, tenantId)];
         } catch {
@@ -69,7 +86,7 @@ export function FirmaPosteriorSection({
       if (valor) resueltos[rol] = valor;
     }
     setEstados(resueltos);
-  }, [instanceId, tenantId]);
+  }, [instanceId, tenantId, rolesKey]);
 
   useEffect(() => {
     // Carga async al montar, como el resto de las secciones del paso.
@@ -93,7 +110,7 @@ export function FirmaPosteriorSection({
 
   // Solo se pintan las partes donde la opción aplica o donde ya se marcó (AC1/AC2/AC4). Si ninguna,
   // la sección no existe: una sección vacía solo añade ruido al paso.
-  const visibles = PARTES.filter(({ rol }) => estados[rol]?.aplica || estados[rol]?.marcado);
+  const visibles = partes.filter(({ rol }) => estados[rol]?.aplica || estados[rol]?.marcado);
   if (visibles.length === 0) return null;
 
   return (

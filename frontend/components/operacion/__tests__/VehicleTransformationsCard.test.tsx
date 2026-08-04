@@ -1,6 +1,6 @@
 // A4/B4 (HU #10674 · ADR-0029) — tarjeta de transformaciones color/combustible/carrocería.
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { VehicleTransformationsCard } from '../VehicleTransformationsCard';
 import type { FieldValue } from '@/lib/api/types/procedure-runtime';
@@ -67,8 +67,7 @@ describe('VehicleTransformationsCard', () => {
       fv('cambio_color', 'true'),
     ]);
 
-    const select = screen.getByLabelText('Nuevo color') as HTMLSelectElement;
-    expect(select.value).toBe('NEGRO');
+    expect(screen.getByLabelText('Nuevo color')).toHaveTextContent('NEGRO');
     // El resumen para el FUR muestra solo el valor NUEVO (sin flecha ni origen RUNT).
     expect(screen.getByText(/Se registrará en el FUR — Color: NEGRO/)).toBeInTheDocument();
     expect(screen.queryByText(/Se registrará en el FUR — Color: PLATA/)).not.toBeInTheDocument();
@@ -81,7 +80,8 @@ describe('VehicleTransformationsCard', () => {
       fv('cambio_combustible', 'true'),
     ]);
 
-    await user.selectOptions(screen.getByLabelText('Nuevo combustible'), 'ELECTRICO');
+    await user.click(screen.getByLabelText('Nuevo combustible'));
+    await user.click(screen.getByRole('option', { name: 'ELECTRICO' }));
 
     expect(onPatch).toHaveBeenCalledWith([
       { fieldKey: 'cambio_combustible', valueText: 'true' },
@@ -105,7 +105,8 @@ describe('VehicleTransformationsCard', () => {
     ]);
   });
 
-  it('un color RUNT fuera del catálogo placeholder sigue siendo opción válida del selector', () => {
+  it('un color RUNT fuera del catálogo placeholder sigue siendo opción válida del selector', async () => {
+    const user = userEvent.setup();
     renderCard([
       fv('plate', 'ABC123'),
       fv('vehicle_color', 'FUCSIA'),
@@ -113,9 +114,9 @@ describe('VehicleTransformationsCard', () => {
       fv('cambio_color', 'true'),
     ]);
 
-    const select = screen.getByLabelText('Nuevo color') as HTMLSelectElement;
-    expect(select.value).toBe('FUCSIA');
-    expect(within(select).getByRole('option', { name: 'FUCSIA' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Nuevo color')).toHaveTextContent('FUCSIA');
+    await user.click(screen.getByLabelText('Nuevo color'));
+    expect(screen.getByRole('option', { name: 'FUCSIA' })).toBeInTheDocument();
   });
 
   it('en modo readOnly los controles quedan deshabilitados', () => {
@@ -160,7 +161,8 @@ describe('VehicleTransformationsCard — carrocería (P2/P3)', () => {
     );
   });
 
-  it('con cambio_carroceria activo y clase CAMION muestra selector filtrado', () => {
+  it('con cambio_carroceria activo y clase CAMION muestra selector filtrado', async () => {
+    const user = userEvent.setup();
     render(
       <VehicleTransformationsCard
         fieldValues={[...runtConClase, fv('cambio_carroceria', 'true')]}
@@ -169,10 +171,9 @@ describe('VehicleTransformationsCard — carrocería (P2/P3)', () => {
         onPatch={vi.fn()}
       />,
     );
-    // El selector de carrocería es visible y tiene opciones de la clase CAMION
-    const select = screen.getByLabelText('Nueva carrocería') as HTMLSelectElement;
-    expect(select).toBeInTheDocument();
-    expect(within(select).getByRole('option', { name: 'ESTACAS' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Nueva carrocería')).toBeInTheDocument();
+    await user.click(screen.getByLabelText('Nueva carrocería'));
+    expect(screen.getByRole('option', { name: 'ESTACAS' })).toBeInTheDocument();
   });
 
   it('muestra mensaje si la clase es desconocida y no hay opciones', () => {

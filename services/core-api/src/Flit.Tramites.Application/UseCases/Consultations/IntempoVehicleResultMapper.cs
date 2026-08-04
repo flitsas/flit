@@ -38,7 +38,7 @@ public static class IntempoVehicleResultMapper
         {
             MapEstadoVehiculo(response.EstadoDelVehiculo),
             MapSoat(response.SoatNacionales),
-            MapGravamenes(response.TieneGravamenes, response.Prendas, response.LimitacionesPropiedad),
+            MapGravamenes(response.TieneGravamenes, response.Prendas, response.LimitacionesPropiedad, response.Gravamenes),
         };
 
         var hydrated = MapHydratedFields(response);
@@ -78,13 +78,15 @@ public static class IntempoVehicleResultMapper
     private static ConsultationCheck MapGravamenes(
         string? tieneGravamenes,
         string? prendas,
-        List<object>? limitaciones)
+        List<object>? limitaciones,
+        List<IntempoGravamen>? gravamenesDetalle)
     {
         var sinGravamenes = IsNo(tieneGravamenes);
         var sinPrendas = IsNo(prendas);
         var sinLimitaciones = limitaciones is null || limitaciones.Count == 0;
+        var sinDetalle = gravamenesDetalle is null || gravamenesDetalle.Count == 0;
 
-        if (sinGravamenes && sinPrendas && sinLimitaciones)
+        if (sinGravamenes && sinPrendas && sinLimitaciones && sinDetalle)
             return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Ok, Provider, null);
 
         return new ConsultationCheck(
@@ -92,8 +94,11 @@ public static class IntempoVehicleResultMapper
             "Gravámenes y limitaciones",
             Warn,
             Provider,
-            "El vehículo tiene gravámenes, prendas o limitaciones");
+            $"El vehículo tiene gravámenes, prendas o limitaciones (gravámenes: {NormSiNo(tieneGravamenes)} · prendas: {NormSiNo(prendas)})");
     }
+
+    private static string NormSiNo(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "—" : value.Trim().ToUpperInvariant();
 
     private static bool IsNo(string? value) =>
         string.Equals(value, "NO", StringComparison.OrdinalIgnoreCase);
@@ -149,6 +154,19 @@ public static class IntempoVehicleResultMapper
         // Insumo de la regla de antigüedad de la RTM (HU #11136).
         if (!string.IsNullOrWhiteSpace(r.FechaMatricula))
             fields.Add(new HydratedField("vehicle_registration_date", r.FechaMatricula, null));
+
+        // Señal RUNT de prenda/gravamen (+ detalle de acreedores cuando Intempo lo trae).
+        Add(fields, "runt_tiene_gravamenes", r.TieneGravamenes);
+        Add(fields, "runt_tiene_prendas", r.Prendas);
+        Add(fields, "runt_prendario", r.Prendario);
+        Add(fields, "runt_nombre_acreedor", r.NombreAcreedor);
+        if (r.Gravamenes is { Count: > 0 } detalle)
+        {
+            fields.Add(new HydratedField(
+                "runt_gravamenes",
+                null,
+                System.Text.Json.JsonSerializer.Serialize(detalle)));
+        }
 
         // HU #11137 — SOAT. Este mapper producía una verificación de estado y NINGÚN campo, así que un
         // trámite consultado por Intempo emitía la tabla certificadora del SOAT entera en blanco. El
