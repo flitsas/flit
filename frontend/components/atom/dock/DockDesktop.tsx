@@ -144,6 +144,7 @@ function DockGroupPill({
         className={base}
         style={litStyle}
         aria-label={pillLabel}
+        title={!showLabels ? pillLabel : undefined}
         aria-current={sole.active ? "page" : undefined}
       >
         <Icon
@@ -166,6 +167,7 @@ function DockGroupPill({
         className={base}
         style={litStyle}
         aria-label={pillLabel}
+        title={!showLabels ? pillLabel : undefined}
         aria-expanded={open}
         aria-controls={panelId}
       >

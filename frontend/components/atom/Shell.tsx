@@ -28,7 +28,6 @@ import {
   LogOut,
   FolderCog,
   Lock,
-  Briefcase,
   Landmark,
   Fingerprint,
   Send,
@@ -52,12 +51,12 @@ export type ModuleId =
   | "ict-logs";
 
 const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
+  // Dashboard no va en el dock: el FAB central (Inicio FLIT) abre el mismo módulo.
   { id: "tramites", label: "Trámites", icon: FileStack },
   { id: "reportes", label: "Reportes", icon: BarChart3 },
   { id: "reportes-detallados", label: "Reportes Detallados", icon: FileSpreadsheet },
-  { id: "validaciones", label: "Validaciones", icon: ShieldCheck },
-  { id: "usuarios", label: "Usuarios y Permisos", icon: Users },
+  { id: "validaciones", label: "Identidad", icon: ShieldCheck },
+  { id: "usuarios", label: "Usuarios", icon: Users },
   { id: "ayuda", label: "Ayuda", icon: HelpCircle },
 ];
 
@@ -262,25 +261,17 @@ export function Shell({
   }
 
   if (currentUser?.isAdminCompany) {
-    entries.push(
-      {
-        key: "admin-companies",
-        label: "Compañías",
-        icon: Building2,
-        // AdminCompany: /admin/companies redirige al configurador de su tenant (HU #11228).
-        active: pathname.startsWith("/admin/companies"),
-        onClick: () => window.location.assign("/admin/companies"),
-      },
-      {
-        key: "mi-empresa",
-        label: "Usuarios",
-        icon: Briefcase,
-        // HU #10512 — navegación interna al módulo de Usuarios del Shell (antes salía de
-        // la SPA hacia /empresa/usuarios, ya deprecado).
-        active: !onAdminRoute && active === "usuarios",
-        onClick: () => onNav("usuarios"),
-      },
-    );
+    // Gestor: una sola entrada "Administración" → consola de su compañía (RL, baúl, escrituras…).
+    // No se empuja "Usuarios" en este menú (req. menú admin gestor); el módulo Usuarios sigue
+    // disponible vía dock RBAC `usuarios` si el rol lo tiene concedido.
+    entries.push({
+      key: "admin-companies",
+      label: "Administración",
+      icon: Building2,
+      // AdminCompany: /admin/companies redirige al configurador de su tenant (HU #11228).
+      active: pathname.startsWith("/admin/companies"),
+      onClick: () => window.location.assign("/admin/companies"),
+    });
   }
 
   // LOG QX (HU #10795): trazabilidad Quipux para soporte/administración. Bloque propio

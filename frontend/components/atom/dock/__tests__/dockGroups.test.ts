@@ -7,15 +7,25 @@ function entry(key: string, label: string): DockEntryLike {
 }
 
 describe("buildDockGroups", () => {
-  it("agrupa según el mapa de menú/submenú y omite vacíos", () => {
+  it("expone Trámites e Identidad como píldoras planas (sin submenú Operación)", () => {
     const groups = buildDockGroups([
-      entry("dashboard", "Dashboard"),
       entry("tramites", "Trámites"),
-      entry("validaciones", "Validaciones"),
+      entry("validaciones", "Identidad"),
       entry("reportes", "Reportes"),
       entry("ayuda", "Ayuda"),
     ]);
-    expect(groups.map((g) => g.label)).toEqual(["Operación", "Reportes", "Ayuda"]);
-    expect(groups[0].items.map((i) => i.label)).toEqual(["Dashboard", "Trámites", "Validaciones"]);
+    expect(groups.map((g) => g.label)).toEqual(["Trámites", "Identidad", "Reportes", "Ayuda"]);
+    expect(groups[0].items).toHaveLength(1);
+    expect(groups[1].items).toHaveLength(1);
+    expect(groups[0].items[0].label).toBe("Trámites");
+    expect(groups[1].items[0].label).toBe("Identidad");
+  });
+
+  it("no agrupa dashboard (retirado del dock; FAB = Inicio)", () => {
+    const groups = buildDockGroups([
+      entry("dashboard", "Dashboard"),
+      entry("tramites", "Trámites"),
+    ]);
+    expect(groups.map((g) => g.label)).toEqual(["Trámites"]);
   });
 });

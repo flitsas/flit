@@ -1,6 +1,7 @@
 import type { ComponentType, CSSProperties } from "react";
 import {
-  LayoutGrid,
+  FileStack,
+  ShieldCheck,
   BarChart3,
   Users,
   Building2,
@@ -10,9 +11,14 @@ import {
   HelpCircle,
 } from "lucide-react";
 
-/** Agrupadores del dock — orden estable de las píldoras. */
+/**
+ * Agrupadores del dock — orden estable de las píldoras.
+ * Trámites e Identidad son grupos de un solo ítem → píldora directa (no submenú).
+ * Dashboard no se lista: el FAB central abre Inicio.
+ */
 export const DOCK_GROUP_ORDER = [
-  "operacion",
+  "tramites",
+  "identidad",
   "reportes",
   "usuarios",
   "companias",
@@ -25,7 +31,8 @@ export const DOCK_GROUP_ORDER = [
 export type DockGroupId = (typeof DOCK_GROUP_ORDER)[number];
 
 export const DOCK_GROUP_LABEL: Record<DockGroupId, string> = {
-  operacion: "Operación",
+  tramites: "Trámites",
+  identidad: "Identidad",
   reportes: "Reportes",
   usuarios: "Usuarios",
   companias: "Compañías",
@@ -47,7 +54,8 @@ export type DockIconComponent = ComponentType<{
 }>;
 
 export const DOCK_GROUP_ICON: Record<DockGroupId, DockIconComponent> = {
-  operacion: LayoutGrid,
+  tramites: FileStack,
+  identidad: ShieldCheck,
   reportes: BarChart3,
   usuarios: Users,
   companias: Building2,
@@ -59,9 +67,9 @@ export const DOCK_GROUP_ICON: Record<DockGroupId, DockIconComponent> = {
 
 /** Mapeo entrada del dock → agrupador (por key estable). */
 export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
-  dashboard: "operacion",
-  tramites: "operacion",
-  validaciones: "operacion",
+  tramites: "tramites",
+  // Módulo id sigue siendo `validaciones` en la SPA; el label visible es "Identidad".
+  validaciones: "identidad",
   reportes: "reportes",
   "reportes-detallados": "reportes",
   usuarios: "usuarios",

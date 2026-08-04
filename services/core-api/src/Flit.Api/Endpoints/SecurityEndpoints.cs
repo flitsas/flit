@@ -727,9 +727,9 @@ public static class SecurityEndpoints
             return Results.Ok(activeUsers.Concat(usersWithoutRole).Concat(pending).ToList());
         });
 
-        // POST /security/users/{userId}/suspend — SuperAdmin suspende (temporal, con
-        // EndsAt) o desactiva indefinidamente (sin EndsAt) a un usuario (HU #10619).
-        // Bloquear/desactivar es EXCLUSIVO de SuperAdmin: AdminCompany/ot_admin no pueden.
+        // POST /security/users/{userId}/suspend — suspende (temporal, con EndsAt) o desactiva
+        // indefinidamente (sin EndsAt). AdminCompany solo su tenant; SuperAdmin cualquiera
+        // (handler AC3). Antes era SuperAdmin-only; se reabre a AdminCompanyPolicy (auth-parity).
         group.MapPost("/users/{userId:guid}/suspend", async (
             Guid userId,
             [FromBody] SuspendUserRequest request,
@@ -778,12 +778,12 @@ public static class SecurityEndpoints
                 return Results.Conflict(new ErrorResponse(
                     "LAST_ACTIVE_ADMIN", "No es posible suspender/desactivar al último administrador activo."));
             }
-        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
           .AddEndpointFilter(new AdminAuditFilter(
               AuditVocabulary.Modules.Users, AuditVocabulary.Operations.Suspend, "user", "USER", "userId"));
 
         // DELETE /security/users/{userId}/suspend — levanta la suspensión/desactivación activa.
-        // Reactivar es EXCLUSIVO de SuperAdmin (contraparte de suspender).
+        // Misma policy que suspender (AdminCompany su tenant / SuperAdmin).
         group.MapDelete("/users/{userId:guid}/suspend", async (
             Guid userId,
             ClaimsPrincipal caller,
@@ -824,14 +824,13 @@ public static class SecurityEndpoints
             {
                 return Results.NotFound(new ErrorResponse("NO_ACTIVE_SUSPENSION", "El usuario no tiene una suspensión activa."));
             }
-        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
           .AddEndpointFilter(new AdminAuditFilter(
               AuditVocabulary.Modules.Users, AuditVocabulary.Operations.Unsuspend, "user", "USER", "userId"));
 
         // DELETE /security/users/{userId} — elimina (soft-delete reversible) a un usuario.
-        // Eliminar es EXCLUSIVO de SuperAdmin (AdminCompany/ot_admin no pueden). rowVersion
-        // obligatorio (concurrencia optimista, igual que PATCH /users/{userId}). Restaurar
-        // también es EXCLUSIVO de SuperAdmin — ver POST /api/v1/superadmin/users/{userId}/restore.
+        // AdminCompany solo su tenant; SuperAdmin cualquiera. Restaurar sigue EXCLUSIVO de
+        // SuperAdmin — ver POST /api/v1/superadmin/users/{userId}/restore. rowVersion obligatorio.
         group.MapDelete("/users/{userId:guid}", async (
             Guid userId,
             [FromBody] DeleteUserRequest request,
@@ -886,7 +885,7 @@ public static class SecurityEndpoints
                     new ErrorResponse("CONCURRENCY_CONFLICT", ex.Message),
                     statusCode: StatusCodes.Status409Conflict);
             }
-        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
           .AddEndpointFilter(new AdminAuditFilter(
               AuditVocabulary.Modules.Users, AuditVocabulary.Operations.DeleteUser, "user", "USER", "userId"));
 

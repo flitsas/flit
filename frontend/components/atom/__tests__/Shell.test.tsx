@@ -68,27 +68,28 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
   });
 });
 
-describe("Shell — Mi Empresa (HU #10512)", () => {
+describe("Shell — Administración gestora (AdminCompany)", () => {
   afterEach(() => {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   });
 
-  it("AC1 — navega internamente al módulo de Usuarios en vez de salir de la SPA", async () => {
+  it("muestra 'Administración' y no empuja Usuarios en el menú compañías", () => {
     window.localStorage.setItem(
       TOKEN_STORAGE_KEY,
       makeToken({ sub: "u1", role: "AdminCompany", email: "admin@empresa.local" }),
     );
-    const onNav = vi.fn();
     render(
-      <Shell active="dashboard" onNav={onNav}>
+      <Shell active="dashboard" onNav={vi.fn()}>
         <div>contenido</div>
       </Shell>,
     );
 
-    // Grupo Compañías con un solo ítem visible → píldora directa "Mi Empresa".
-    await userEvent.click(screen.getByRole("button", { name: "Mi Empresa" }));
-
-    expect(onNav).toHaveBeenCalledWith("usuarios");
+    expect(screen.getByRole("button", { name: "Administración" })).toBeInTheDocument();
+    // El módulo RBAC `usuarios` puede aparecer aparte; no debe haber ítem extra "Usuarios"
+    // empujado junto a Administración (antes "mi-empresa"). Con solo Administración en el
+    // grupo companias, no hay submenú con Usuarios.
+    expect(screen.queryByRole("button", { name: "Mi Empresa" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Compañías" })).not.toBeInTheDocument();
   });
 });
 

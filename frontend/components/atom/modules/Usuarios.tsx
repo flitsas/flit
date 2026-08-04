@@ -68,8 +68,11 @@ export function Usuarios() {
   const { isSuperAdmin, isAdminCompany, userId: currentUserId, permissions, tenantId } = usePermissions();
   // Clientes ICT: SuperAdmin (bypass por rol) o quien tenga el permiso ict.clients.manage.
   const canManageIctClients = isSuperAdmin || permissions.includes(ICT_CLIENTS_MANAGE_PERMISSION);
-  // Reset admin: SuperAdmin o AdminCompany (API acota al tenant). Suspender/eliminar siguen SuperAdmin-only.
+  // Reset admin: SuperAdmin o AdminCompany (API acota al tenant).
   const canResetPassword = isSuperAdmin || isAdminCompany;
+  // Suspender / desactivar / eliminar: misma paridad AdminCompany en su empresa (API scoped).
+  // Ver eliminados / restaurar siguen exclusivos de SuperAdmin.
+  const canManageUserLifecycle = isSuperAdmin || isAdminCompany;
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("usuarios");
   const [users, setUsers] = useState<TenantUser[]>([]);
@@ -191,7 +194,7 @@ export function Usuarios() {
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle
-        title="Administración de usuarios y permisos"
+        title="Usuarios"
         subtitle="Gestiona el acceso de tu equipo a la plataforma."
         action={
           tab === "usuarios" ? (
@@ -324,9 +327,9 @@ export function Usuarios() {
                           <KeyRound className="h-4 w-4" />
                         </button>
                       )}
-                      {/* Bloquear/desactivar/reactivar es EXCLUSIVO de SuperAdmin.
-                          AdminCompany y ot_admin no pueden suspender ni reactivar. */}
-                      {u.status !== "pending" && isSuperAdmin && (
+                      {/* Bloquear/desactivar/reactivar: SuperAdmin (cualquier tenant) o
+                          AdminCompany (solo su empresa — el API rechaza fuera de ámbito). */}
+                      {u.status !== "pending" && canManageUserLifecycle && (
                         u.isSuspended ? (
                           <button
                             title="Desbloquear usuario"
@@ -360,10 +363,8 @@ export function Usuarios() {
                           </>
                         )
                       )}
-                      {/* Eliminar es EXCLUSIVO de SuperAdmin (AdminCompany/ot_admin no pueden).
-                          AC2 (HU #10623): sin botón "Eliminar" sobre la propia fila —
-                          nunca puede auto-eliminarse. */}
-                      {u.status !== "pending" && isSuperAdmin && u.id !== currentUserId && (
+                      {/* Eliminar: SuperAdmin o AdminCompany (su tenant). Restaurar solo SuperAdmin. */}
+                      {u.status !== "pending" && canManageUserLifecycle && u.id !== currentUserId && (
                         <button
                           title="Eliminar usuario"
                           aria-label={`Eliminar usuario ${u.fullName}`}
