@@ -10,6 +10,7 @@ import { DeleteUserDialog } from "./users/DeleteUserDialog";
 import { RestoreUserDialog } from "./users/RestoreUserDialog";
 import { ResendInvitationButton } from "./users/ResendInvitationButton";
 import { CancelInvitationDialog } from "./users/CancelInvitationDialog";
+import { ResetPasswordDialog } from "./users/ResetPasswordDialog";
 import { ModuleTitle } from "./ModuleTitle";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
@@ -64,9 +65,11 @@ function formatDateTime(iso: string | null | undefined): string {
 }
 
 export function Usuarios() {
-  const { isSuperAdmin, userId: currentUserId, permissions, tenantId } = usePermissions();
+  const { isSuperAdmin, isAdminCompany, userId: currentUserId, permissions, tenantId } = usePermissions();
   // Clientes ICT: SuperAdmin (bypass por rol) o quien tenga el permiso ict.clients.manage.
   const canManageIctClients = isSuperAdmin || permissions.includes(ICT_CLIENTS_MANAGE_PERMISSION);
+  // Reset admin: SuperAdmin o AdminCompany (API acota al tenant). Suspender/eliminar siguen SuperAdmin-only.
+  const canResetPassword = isSuperAdmin || isAdminCompany;
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("usuarios");
   const [users, setUsers] = useState<TenantUser[]>([]);
@@ -77,6 +80,7 @@ export function Usuarios() {
   const [suspendTarget, setSuspendTarget] = useState<{ user: TenantUser; mode: SuspendMode } | null>(null);
   const [editTarget, setEditTarget] = useState<TenantUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TenantUser | null>(null);
+  const [resetPasswordTarget, setResetPasswordTarget] = useState<TenantUser | null>(null);
   // HU #10624 — pestaña "Eliminados": usuarios de CUALQUIER tenant con deletedAt != null.
   const [deletedUsers, setDeletedUsers] = useState<TenantUser[]>([]);
   const [deletedLoading, setDeletedLoading] = useState(false);
@@ -305,6 +309,19 @@ export function Usuarios() {
                           style={{ color: "#557EFF" }}
                         >
                           <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
+                      {/* Restablecer contraseña: SuperAdmin o AdminCompany (HU-B auth-parity). */}
+                      {u.status !== "pending" && canResetPassword && (
+                        <button
+                          type="button"
+                          title="Restablecer contraseña"
+                          aria-label={`Restablecer contraseña de ${u.fullName}`}
+                          onClick={() => setResetPasswordTarget(u)}
+                          className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                          style={{ color: "#00DBD5" }}
+                        >
+                          <KeyRound className="h-4 w-4" />
                         </button>
                       )}
                       {/* Bloquear/desactivar/reactivar es EXCLUSIVO de SuperAdmin.
@@ -551,6 +568,18 @@ export function Usuarios() {
             loadUsers();
           }}
           onUpdate={updateUser}
+        />
+      )}
+      {resetPasswordTarget && (
+        <ResetPasswordDialog
+          user={{
+            fullName: resetPasswordTarget.fullName,
+            email: resetPasswordTarget.email,
+          }}
+          onClose={() => setResetPasswordTarget(null)}
+          onDone={() => {
+            /* El listado no cambia; el usuario solo debe re-autenticarse con la temporal. */
+          }}
         />
       )}
       {deleteTarget && (

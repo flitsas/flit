@@ -24,6 +24,10 @@ public sealed class AdminResetPasswordHandler(
 
     /// <summary>Permiso/rol que concede ámbito global (cualquier tenant).</summary>
     public const string SuperAdminRole = "SuperAdmin";
+
+    /// <summary>Rol de administrador de compañía gestora (mismo tenant).</summary>
+    public const string AdminCompanyRole = "AdminCompany";
+
     public const string GlobalResetPermission = "security.users.reset_password.all";
 
     public async Task HandleAsync(AdminResetPasswordCommand command, CancellationToken cancellationToken)
@@ -105,10 +109,16 @@ public sealed class AdminResetPasswordHandler(
         if (isSuperAdmin)
             return;
 
-        var hasPermission = command.CallerPermissions.Contains(ResetPermission);
         var sameTenant = command.CallerTenantId is not null && target.TenantId == command.CallerTenantId;
+        if (!sameTenant)
+            throw new AdminScopeException();
 
-        if (!hasPermission || !sameTenant)
+        // AdminCompany del mismo tenant (paridad de producto) o permiso explícito en el JWT.
+        var isAdminCompany = string.Equals(
+            command.CallerRoleCode, AdminCompanyRole, StringComparison.OrdinalIgnoreCase);
+        var hasPermission = command.CallerPermissions.Contains(ResetPermission);
+
+        if (!isAdminCompany && !hasPermission)
             throw new AdminScopeException();
     }
 
