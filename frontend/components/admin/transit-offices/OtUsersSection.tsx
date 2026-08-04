@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Ban, Clock, MailX, Pencil, RotateCcw, ShieldOff, Trash2, UserCheck, UserX } from "lucide-react";
+import { Ban, Clock, History, MailX, Pencil, RotateCcw, ShieldOff, Trash2 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -25,8 +25,12 @@ import { DeleteUserDialog } from "@/components/atom/modules/users/DeleteUserDial
 import { RestoreUserDialog } from "@/components/atom/modules/users/RestoreUserDialog";
 import { ResendInvitationButton } from "@/components/atom/modules/users/ResendInvitationButton";
 import { CancelInvitationDialog } from "@/components/atom/modules/users/CancelInvitationDialog";
+import { UsersTable, toUserRow } from "@/components/atom/modules/users/UsersTable";
+import { UserAuditHistoryDrawer } from "@/components/atom/modules/users/UserAuditHistoryDrawer";
 // HU19 — misma area clickeable minima que la columna de acciones unificada (RowActions).
-import { ICON_BUTTON_HIT_AREA } from "@/components/atom/RowActions";
+import { ICON_BUTTON_HIT_AREA, type RowAction } from "@/components/atom/RowActions";
+import { assignRole, getRoles, type TenantRole } from "@/lib/api/security";
+import { superadminClient } from "@/lib/api/superadmin-client";
 import { formatOtDate } from "./ot-utils";
 import {
   SuspendOrDeactivateModal,
@@ -38,10 +42,10 @@ export interface OtUsersSectionProps {
 }
 
 /**
- * Pestaña "Usuarios" del hub OT (refactor adminOT). Self-service: listar, invitar
- * (solo email + nombre — un tenant OT tiene un único rol posible, ot_admin, sin
- * selector de rol) y suspender/reactivar. 4 estados de UI vía UiStateBoundary,
- * mismo patrón que app/empresa/roles/page.tsx.
+ * Pestaña "Usuarios" del hub OT. Self-service: listar, invitar eligiendo rol del catálogo
+ * TRANSIT_OFFICE, editar (incluido el rol) y suspender/reactivar. Usa la misma UsersTable que
+ * el módulo Usuarios y la ficha de compañía, para que las tres pantallas se vean y se
+ * comporten igual; el listado de eliminados conserva su propia tabla y UiStateBoundary.
  */
 export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   const { show } = useToast();
@@ -61,6 +65,10 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   const [restoreTarget, setRestoreTarget] = useState<OtUserItem | null>(null);
   // HU #10628 — objetivo del diálogo de confirmación "Cancelar invitación" (filas "Pendiente").
   const [cancelTarget, setCancelTarget] = useState<OtUserItem | null>(null);
+  const [auditTarget, setAuditTarget] = useState<OtUserItem | null>(null);
+  // Roles asignables al editar: catálogo TRANSIT_OFFICE (SuperAdmin) o los del propio tenant.
+  const [editRoles, setEditRoles] = useState<TenantRole[]>([]);
+  const [editRolesLoading, setEditRolesLoading] = useState(false);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -116,9 +124,126 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     return () => controller.abort();
   }, [showDeleted, isSuperAdmin, loadDeleted]);
 
-  async function handleInvite(email: string, fullName: string) {
+  useEffect(() => {
+    if (!editTarget || editTarget.status === "pending") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEditRoles([]);
+      return;
+    }
+    let cancelled = false;
+    setEditRolesLoading(true);
+    const load = isSuperAdmin
+      ? superadminClient.listRoles("TRANSIT_OFFICE").then((list) =>
+          list
+            .filter((r) => r.isActive)
+            .map((r) => ({
+              id: r.id,
+              code: r.code,
+              name: r.name,
+              description: r.description,
+              isSystem: r.isSystem,
+              permissionCount: r.permissionCount,
+              createdAt: r.createdAt,
+            })),
+        )
+      : getRoles();
+
+    void load
+      .then((list) => {
+        if (!cancelled) setEditRoles(list);
+      })
+      .catch(() => {
+        if (!cancelled) setEditRoles([]);
+      })
+      .finally(() => {
+        if (!cancelled) setEditRolesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editTarget, isSuperAdmin]);
+
+  // Acciones de la fila como datos: UsersTable las renderiza con RowActions, que ya trae el
+  // área de clic de 40x40 (HU19).
+  function actionsForUser(userId: string): RowAction[] {
+    const u = users.find((x) => x.id === userId);
+    if (!u) return [];
+
+    const actions: RowAction[] = [];
+
+    if (u.status !== "pending" && isSuperAdmin) {
+      actions.push({
+        icon: History,
+        label: `Ver historial de ${u.fullName}`,
+        tone: "primary",
+        onClick: () => setAuditTarget(u),
+      });
+    }
+
+    // AC4 (HU #10622): sin "Editar" para pendientes — no hay cuenta real que editar.
+    if (u.status !== "pending") {
+      actions.push({
+        icon: Pencil,
+        label: `Editar usuario ${u.fullName}`,
+        tone: "primary",
+        onClick: () => setEditTarget(u),
+      });
+    }
+
+    // Bloquear/desactivar/reactivar es EXCLUSIVO de SuperAdmin.
+    if (u.status !== "pending" && isSuperAdmin) {
+      if (u.isSuspended) {
+        actions.push({
+          icon: ShieldOff,
+          label: `Reactivar usuario ${u.fullName}`,
+          onClick: () => void handleUnsuspend(u.id),
+        });
+      } else {
+        actions.push({
+          icon: Clock,
+          label: `Suspender temporalmente a ${u.fullName}`,
+          tone: "danger",
+          onClick: () => setSuspendTarget({ user: u, mode: "temporary" }),
+        });
+        actions.push({
+          icon: Ban,
+          label: `Desactivar indefinidamente a ${u.fullName}`,
+          tone: "primary",
+          onClick: () => setSuspendTarget({ user: u, mode: "indefinite" }),
+        });
+      }
+    }
+
+    // AC2 (HU #10623): eliminar es exclusivo de SuperAdmin y nunca sobre la propia fila.
+    if (u.status !== "pending" && isSuperAdmin && u.id !== currentUserId) {
+      actions.push({
+        icon: Trash2,
+        label: `Eliminar usuario ${u.fullName}`,
+        tone: "danger",
+        onClick: () => setDeleteTarget(u),
+      });
+    }
+
+    // AC2 (HU #10628): "Cancelar invitación" SOLO en filas pendientes.
+    if (u.status === "pending") {
+      actions.push({
+        icon: MailX,
+        label: `Cancelar invitación a ${u.fullName}`,
+        tone: "danger",
+        onClick: () => setCancelTarget(u),
+      });
+    }
+
+    return actions;
+  }
+
+  async function handleInvite(email: string, fullName: string, roleIds: string[]) {
     try {
-      await inviteOtUser({ email, fullName: fullName || undefined }, { transitOfficeId });
+      await inviteOtUser(
+        { email, fullName: fullName || undefined, roleIds: roleIds.length > 0 ? roleIds : undefined },
+        { transitOfficeId },
+      );
       show(`Invitación enviada a ${email}.`, "success");
       setInviteOpen(false);
       void load();
@@ -281,166 +406,45 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
       )}
 
       {!showDeleted && (
-      <UiStateBoundary
-        status={status}
-        emptyMessage="No hay usuarios en este organismo de tránsito todavía."
-        emptyCta={
-          <button
-            type="button"
-            onClick={() => setInviteOpen(true)}
-            className="mt-3 flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white"
-            style={{ background: "#557EFF" }}
-          >
-            Invitar usuario
-          </button>
-        }
-        errorMessage="No se pudo cargar el listado de usuarios."
-        onRetry={() => void load()}
-      >
-        <div
-          className="rounded-xl border overflow-hidden bg-card"
-        >
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted">
-                <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "#557EFF" }}>
-                  Usuario
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "#557EFF" }}>
-                  Estado
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold" style={{ color: "#557EFF" }}>
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr
-                  key={u.id}
-                  className="transition hover:bg-blue-50/40 dark:hover:bg-white/5 border-b"
-                >
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-sm">{u.fullName}</div>
-                    <div className="text-xs" style={{ color: "#557EFF" }}>
-                      {u.email}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <OtUserStatusBadge status={u.status} isSuspended={u.isSuspended} />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {/* AC4 (HU #10622): sin botón "Editar" para usuarios pendientes — todavía
-                          no hay una cuenta real que editar. */}
-                      {u.status !== "pending" && (
-                        <button
-                          type="button"
-                          title="Editar usuario"
-                          aria-label={`Editar usuario ${u.fullName}`}
-                          onClick={() => setEditTarget(u)}
-                          className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-blue-50`}
-                          style={{ color: "#557EFF" }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                      )}
-                      {/* Bloquear/desactivar/reactivar es EXCLUSIVO de SuperAdmin.
-                          El ot_admin no puede suspender ni reactivar usuarios de su OT. */}
-                      {u.status !== "pending" && isSuperAdmin &&
-                        (u.isSuspended ? (
-                          <button
-                            type="button"
-                            title="Reactivar usuario"
-                            aria-label={`Reactivar usuario ${u.fullName}`}
-                            onClick={() => void handleUnsuspend(u.id)}
-                            className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-green-50`}
-                            style={{ color: "#00DBD5" }}
-                          >
-                            <ShieldOff className="h-4 w-4" />
-                          </button>
-                        ) : (
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              title="Suspender temporalmente"
-                              aria-label={`Suspender temporalmente a ${u.fullName}`}
-                              onClick={() => setSuspendTarget({ user: u, mode: "temporary" })}
-                              className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-orange-50`}
-                              style={{ color: "#FF4E00" }}
-                            >
-                              <Clock className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Desactivar indefinidamente"
-                              aria-label={`Desactivar indefinidamente a ${u.fullName}`}
-                              onClick={() => setSuspendTarget({ user: u, mode: "indefinite" })}
-                              className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-red-50`}
-                              style={{ color: "#557EFF" }}
-                            >
-                              <Ban className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ))}
-                      {/* Eliminar es EXCLUSIVO de SuperAdmin (el ot_admin no puede).
-                          AC2 (HU #10623): sin botón "Eliminar" sobre la propia fila — nunca
-                          puede auto-eliminarse. */}
-                      {u.status !== "pending" && isSuperAdmin && u.id !== currentUserId && (
-                        <button
-                          type="button"
-                          title="Eliminar usuario"
-                          aria-label={`Eliminar usuario ${u.fullName}`}
-                          onClick={() => setDeleteTarget(u)}
-                          className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-red-50`}
-                          style={{ color: "#FF4E00" }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                      {/* AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el
-                          invitationId. */}
-                      {u.status === "pending" && (
-                        <ResendInvitationButton
-                          invitationId={u.id}
-                          fullName={u.fullName}
-                          resend={handleResendInvitation}
-                          onResent={(outcome) =>
-                            show(
-                              outcome.emailSent
-                                ? `Invitación reenviada a ${outcome.email}.`
-                                : "Invitación reenviada, pero el correo no pudo entregarse.",
-                              "success",
-                            )
-                          }
-                        />
-                      )}
-                      {/* AC2 (HU #10628): "Cancelar invitación" SOLO en filas "Pendiente" —
-                          mutuamente excluyente con "Eliminar usuario" (arriba, solo status !== "pending"). */}
-                      {u.status === "pending" && (
-                        <button
-                          type="button"
-                          title="Cancelar invitación"
-                          aria-label={`Cancelar invitación a ${u.fullName}`}
-                          onClick={() => setCancelTarget(u)}
-                          className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-red-50`}
-                          style={{ color: "#FF4E00" }}
-                        >
-                          <MailX className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </UiStateBoundary>
+        // Misma tabla, mismos filtros y mismas acciones que el módulo Usuarios y que la ficha
+        // de compañía: antes esta sección tenía su propia <table>, sin filtros y con chips de
+        // estado distintos, y por eso "no se parecía a las otras".
+        <UsersTable
+          rows={users.map((u) =>
+            toUserRow(u, { profile: "OT", tenantType: "TRANSIT_OFFICE" }),
+          )}
+          loading={status === "loading"}
+          error={status === "error" ? "No se pudo cargar el listado de usuarios." : null}
+          onRetry={() => void load()}
+          emptyMessage="No hay usuarios en este organismo de tránsito todavía."
+          actionsFor={(row) => actionsForUser(row.id)}
+          extraActionsFor={(row) =>
+            // AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el invitationId.
+            row.status === "pending" ? (
+              <ResendInvitationButton
+                invitationId={row.id}
+                fullName={row.fullName}
+                resend={handleResendInvitation}
+                onResent={(outcome) =>
+                  show(
+                    outcome.emailSent
+                      ? `Invitación reenviada a ${outcome.email}.`
+                      : "Invitación reenviada, pero el correo no pudo entregarse.",
+                    "success",
+                  )
+                }
+              />
+            ) : null
+          }
+        />
       )}
 
       {inviteOpen && (
-        <OtInviteUserDialog onConfirm={handleInvite} onClose={() => setInviteOpen(false)} />
+        <OtInviteUserDialog
+          onConfirm={handleInvite}
+          onClose={() => setInviteOpen(false)}
+          isSuperAdmin={isSuperAdmin}
+        />
       )}
       {suspendTarget && (
         <SuspendOrDeactivateModal
@@ -465,6 +469,24 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
             void load();
           }}
           onUpdate={handleUpdateUser}
+          roleSection={{
+            currentRoleName: editTarget.role,
+            currentRoleId: editTarget.roleId,
+            roles: editRoles,
+            rolesLoading: editRolesLoading,
+            onAssignRole: async (roleId) => {
+              await assignRole(editTarget.id, roleId);
+              show("Rol actualizado correctamente.", "success");
+              await load();
+            },
+          }}
+        />
+      )}
+      {auditTarget && isSuperAdmin && (
+        <UserAuditHistoryDrawer
+          userId={auditTarget.id}
+          userLabel={auditTarget.fullName}
+          onClose={() => setAuditTarget(null)}
         />
       )}
       {deleteTarget && (
@@ -524,61 +546,74 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   );
 }
 
-function OtUserStatusBadge({
-  status,
-  isSuspended,
-}: {
-  status: OtUserItem["status"];
-  isSuspended: boolean;
-}) {
-  if (status === "pending") {
-    return (
-      <span
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-        style={{ background: "rgba(85,126,255,0.12)", color: "#557EFF" }}
-      >
-        <Clock className="h-3 w-3" aria-hidden="true" />
-        Pendiente
-      </span>
-    );
-  }
-  if (isSuspended || status === "inactive") {
-    return (
-      <span
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-        style={{ background: "rgba(255,78,0,0.10)", color: "#FF4E00" }}
-      >
-        <UserX className="h-3 w-3" aria-hidden="true" />
-        Suspendido
-      </span>
-    );
-  }
-  return (
-    <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-      style={{ background: "rgba(0,219,213,0.12)", color: "#00948F" }}
-    >
-      <UserCheck className="h-3 w-3" aria-hidden="true" />
-      Activo
-    </span>
-  );
-}
 
+/**
+ * Alta de usuario del organismo. Ya no fuerza `ot_admin` a ciegas: ofrece los roles del
+ * catálogo TRANSIT_OFFICE y, si no se marca ninguno, el backend asigna el rol de sistema
+ * (comportamiento previo).
+ */
 function OtInviteUserDialog({
   onConfirm,
   onClose,
+  isSuperAdmin,
 }: {
-  onConfirm: (email: string, fullName: string) => Promise<void>;
+  onConfirm: (email: string, fullName: string, roleIds: string[]) => Promise<void>;
   onClose: () => void;
+  isSuperAdmin: boolean;
 }) {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [roles, setRoles] = useState<TenantRole[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
+
+  // El SuperAdmin lee el catálogo global; el ot_admin usa /security/roles, que ya resuelve
+  // TRANSIT_OFFICE por su propio tenant.
+  useEffect(() => {
+    let cancelled = false;
+    const load = isSuperAdmin
+      ? superadminClient.listRoles("TRANSIT_OFFICE").then((list) =>
+          list
+            .filter((r) => r.isActive)
+            .map((r) => ({
+              id: r.id,
+              code: r.code,
+              name: r.name,
+              description: r.description,
+              isSystem: r.isSystem,
+              permissionCount: r.permissionCount,
+              createdAt: r.createdAt,
+            })),
+        )
+      : getRoles();
+
+    void load
+      .then((list) => {
+        if (!cancelled) setRoles(list);
+      })
+      .catch(() => {
+        if (!cancelled) setRoles([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRolesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSuperAdmin]);
+
+  function toggleRole(roleId: string) {
+    setSelectedRoleIds((prev) =>
+      prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId],
+    );
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    await onConfirm(email.trim(), fullName.trim());
+    await onConfirm(email.trim(), fullName.trim(), selectedRoleIds);
     setBusy(false);
   }
 
@@ -595,7 +630,8 @@ function OtInviteUserDialog({
           Invitar usuario
         </h2>
         <p className="text-xs mb-4 text-muted-foreground">
-          El usuario invitado tendrá el mismo acceso operativo que un Admin OT.
+          Perfil <strong>Organismo de Tránsito</strong>. Elige los roles con los que entra el
+          usuario.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <OtField label="Nombre completo" htmlFor="ot-invite-name">
@@ -619,6 +655,33 @@ function OtInviteUserDialog({
               className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
             />
           </OtField>
+          {rolesLoading ? (
+            <p className="text-xs opacity-60">Cargando roles…</p>
+          ) : roles.length > 0 ? (
+            <fieldset>
+              <legend className="block text-xs font-medium mb-1 text-foreground">Roles</legend>
+              <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 rounded-lg border px-3 py-2.5 sm:grid-cols-2">
+                {roles.map((r) => (
+                  <label key={r.id} className="flex cursor-pointer items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={selectedRoleIds.includes(r.id)}
+                      onChange={() => toggleRole(r.id)}
+                      className="h-3.5 w-3.5 accent-[#557EFF]"
+                    />
+                    <span>{r.name}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-[10px] opacity-60">
+                Sin selección se asigna el rol de Administrador OT.
+              </p>
+            </fieldset>
+          ) : (
+            <p className="text-xs opacity-60">
+              No hay roles configurados para organismos de tránsito. Se asignará Administrador OT.
+            </p>
+          )}
           <div className="flex gap-3 pt-2">
             <button
               type="button"

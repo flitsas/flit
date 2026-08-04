@@ -31,6 +31,11 @@ export interface OtUserListResponse {
 export interface InviteOtUserRequest {
   email: string;
   fullName?: string;
+  /**
+   * Roles del catálogo TRANSIT_OFFICE con los que entra el usuario. Si se omite, el backend
+   * conserva el comportamiento histórico y asigna el rol de sistema `ot_admin`.
+   */
+  roleIds?: string[];
 }
 
 export interface InviteOtUserResponse {

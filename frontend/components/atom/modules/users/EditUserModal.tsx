@@ -5,6 +5,7 @@ import { Loader2, UserCog } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ApiError } from "@/lib/api/types";
 import { sanitizeName, validateReadableName } from "@/lib/validation/fieldRules";
+import type { TenantRole } from "@/lib/api/security";
 
 // HU #10621 — Modal "Editar usuario" del listado de la tabla de usuarios (módulo
 // Compañía "Usuarios y Permisos" y pestaña "Usuarios" del hub OT). Formulario
@@ -25,6 +26,14 @@ export interface UpdateUserPayload {
   rowVersion: number;
 }
 
+export interface EditUserRoleSection {
+  currentRoleName: string | null;
+  currentRoleId: string | null;
+  roles: TenantRole[];
+  rolesLoading: boolean;
+  onAssignRole: (roleId: string) => Promise<void>;
+}
+
 export interface EditUserModalProps {
   user: EditUserModalTarget;
   onClose: () => void;
@@ -33,11 +42,13 @@ export interface EditUserModalProps {
    *  (updateUser, tenant de Compañía) y OtUsersSection.tsx (updateOtUser, con scope OT) —
    *  mismo patrón de inyección que EditCompanyDialog.onUpdate. */
   onUpdate: (userId: string, payload: UpdateUserPayload) => Promise<void>;
+  /** Cambio de rol en el mismo modal (fuente única). Ausente = no mostrar sección (p. ej. OT). */
+  roleSection?: EditUserRoleSection;
 }
 
 const GENERIC_ERROR = "No se pudieron guardar los cambios. Inténtalo de nuevo.";
 
-export function EditUserModal({ user, onClose, onSaved, onUpdate }: EditUserModalProps) {
+export function EditUserModal({ user, onClose, onSaved, onUpdate, roleSection }: EditUserModalProps) {
   const [displayName, setDisplayName] = useState(user.fullName);
   const [email, setEmail] = useState(user.email);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -45,6 +56,9 @@ export function EditUserModal({ user, onClose, onSaved, onUpdate }: EditUserModa
   // o conflicto de concurrencia (AC2/AC3).
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [roleBusy, setRoleBusy] = useState(false);
+  const [roleError, setRoleError] = useState<string | null>(null);
+  const [roleNotice, setRoleNotice] = useState<string | null>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
 
   // Foco inicial en el primer campo al montar (el modal solo se monta cuando hay
@@ -54,9 +68,26 @@ export function EditUserModal({ user, onClose, onSaved, onUpdate }: EditUserModa
   }, []);
 
   const handleClose = () => {
-    if (busy) return;
+    if (busy || roleBusy) return;
     onClose();
   };
+
+  async function handleRoleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    if (!roleSection) return;
+    const roleId = e.target.value;
+    if (!roleId || roleId === roleSection.currentRoleId) return;
+    setRoleBusy(true);
+    setRoleError(null);
+    setRoleNotice(null);
+    try {
+      await roleSection.onAssignRole(roleId);
+      setRoleNotice("Rol actualizado.");
+    } catch {
+      setRoleError("No se pudo cambiar el rol. Inténtalo de nuevo.");
+    } finally {
+      setRoleBusy(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -115,7 +146,7 @@ export function EditUserModal({ user, onClose, onSaved, onUpdate }: EditUserModa
     <Modal
       open
       onClose={handleClose}
-      busy={busy}
+      busy={busy || roleBusy}
       icon={UserCog}
       title="Editar usuario"
       description={user.email}
@@ -147,6 +178,47 @@ export function EditUserModal({ user, onClose, onSaved, onUpdate }: EditUserModa
           />
         </Field>
 
+        {roleSection && (
+          <Field label="Rol" htmlFor="eu-role" error={roleError}>
+            <select
+              id="eu-role"
+              aria-label="Cambiar rol del usuario"
+              value={roleSection.currentRoleId ?? ""}
+              onChange={handleRoleChange}
+              disabled={roleBusy || roleSection.rolesLoading || roleSection.roles.length === 0}
+              className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 disabled:opacity-60"
+              style={{ borderColor: "#DFE5ED" }}
+            >
+              {roleSection.rolesLoading ? (
+                <option value="">Cargando roles…</option>
+              ) : roleSection.roles.length === 0 ? (
+                <option value="">No hay roles disponibles</option>
+              ) : (
+                <>
+                  {!roleSection.currentRoleId && (
+                    <option value="" disabled>
+                      {roleSection.currentRoleName ?? "Sin rol"}
+                    </option>
+                  )}
+                  {roleSection.roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </>
+              )}
+            </select>
+            {roleNotice && (
+              <p className="mt-1 text-[10px] font-medium" style={{ color: "#00DBD5" }}>
+                {roleNotice}
+              </p>
+            )}
+            <p className="mt-1 text-[10px] opacity-60">
+              El cambio de rol se aplica de inmediato; no requiere Guardar.
+            </p>
+          </Field>
+        )}
+
         {formError && (
           <p
             role="alert"
@@ -161,14 +233,14 @@ export function EditUserModal({ user, onClose, onSaved, onUpdate }: EditUserModa
           <button
             type="button"
             onClick={handleClose}
-            disabled={busy}
+            disabled={busy || roleBusy}
             className="rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || roleBusy}
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
             style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
           >
