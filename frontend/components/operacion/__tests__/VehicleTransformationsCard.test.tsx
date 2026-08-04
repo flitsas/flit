@@ -1,9 +1,18 @@
-// A4/B4 (HU #10674 · ADR-0029) — tarjeta de transformaciones color/combustible/carrocería.
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { VehicleTransformationsCard } from '../VehicleTransformationsCard';
 import type { FieldValue } from '@/lib/api/types/procedure-runtime';
+
+vi.mock('@/lib/api/tramites-client', () => ({
+  tramitesClient: {
+    searchVehicleColors: vi.fn().mockResolvedValue([
+      { id: '1', code: '1', name: 'NEGRO' },
+      { id: '2', code: '2', name: 'BLANCO' },
+      { id: '3', code: '3', name: 'ROJO' },
+    ]),
+  },
+}));
 
 function fv(fieldKey: string, valueText: string | null): FieldValue {
   return { formFieldId: '', fieldKey, valueText, valueJson: null, source: 'consultation' };
@@ -105,7 +114,7 @@ describe('VehicleTransformationsCard', () => {
     ]);
   });
 
-  it('un color RUNT fuera del catálogo placeholder sigue siendo opción válida del selector', async () => {
+  it('un color RUNT fuera del catálogo API sigue siendo opción válida del selector', async () => {
     const user = userEvent.setup();
     renderCard([
       fv('plate', 'ABC123'),
@@ -116,7 +125,7 @@ describe('VehicleTransformationsCard', () => {
 
     expect(screen.getByLabelText('Nuevo color')).toHaveTextContent('FUCSIA');
     await user.click(screen.getByLabelText('Nuevo color'));
-    expect(screen.getByRole('option', { name: 'FUCSIA' })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'FUCSIA' })).toBeInTheDocument();
   });
 
   it('en modo readOnly los controles quedan deshabilitados', () => {

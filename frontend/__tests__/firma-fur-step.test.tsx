@@ -243,36 +243,33 @@ describe('FirmaFurStep — firma solo en traspaso', () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
     await screen.findByRole('region', { name: 'Resumen del trámite' });
     expect(screen.queryByRole('region', { name: 'Firma de la compraventa' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /Firma compraventa/i })).not.toBeInTheDocument();
   });
 
-  it('traspaso muestra firma de comprador y vendedor', async () => {
+  it('traspaso tampoco muestra firma de compraventa en el resumen', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    expect(await screen.findByRole('group', { name: 'Firma compraventa Comprador' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Firma compraventa Vendedor' })).toBeInTheDocument();
+    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    expect(screen.queryByRole('group', { name: 'Firma compraventa Comprador' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Firma compraventa Vendedor' })).not.toBeInTheDocument();
   });
 });
 
 describe('FirmaFurStep — solicitar y simular firma', () => {
-  // HU #11019 — el botón de solicitar la firma se retiró: el gate ya no la exige (ADR-0028) y pedirla
-  // solo añadía un paso que no desbloquea nada. La tarjeta sigue mostrando el estado de la firma.
-  it('no ofrece solicitar la firma de la compraventa', async () => {
+  // La UI de firma de compraventa se retiró del resumen (ambos actores).
+  it('no muestra tarjeta de firma de compraventa en el resumen', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    const card = await screen.findByRole('group', { name: 'Firma compraventa Comprador' });
-
-    expect(within(card).queryByRole('button', { name: 'Solicitar firma' })).toBeNull();
-    expect(within(card).getByText('Firma no solicitada.')).toBeInTheDocument();
+    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    expect(screen.queryByRole('group', { name: /Firma compraventa/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Solicitar firma' })).toBeNull();
     expect(mocks.solicitarFirma).not.toHaveBeenCalled();
   });
 
-  it('muestra signUrl y permite simular cuando la firma está enviada', async () => {
+  it('no ofrece simular firma de compraventa desde el resumen', async () => {
     mocks.listFirmas.mockResolvedValue([FIRMA_ENVIADA]);
-    const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    const card = await screen.findByRole('group', { name: 'Firma compraventa Comprador' });
-    const link = await within(card).findByLabelText('Enlace de firma Comprador');
-    expect((link as HTMLInputElement).value).toContain('https://mock/sign/sig-1');
-    await user.click(within(card).getByRole('button', { name: 'Simular firma (DEV)' }));
-    await waitFor(() => expect(mocks.simularFirma).toHaveBeenCalledWith(INSTANCE, 'sig-1'));
+    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    expect(screen.queryByRole('button', { name: 'Simular firma (DEV)' })).toBeNull();
+    expect(mocks.simularFirma).not.toHaveBeenCalled();
   });
 });
 
@@ -316,7 +313,7 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     expect(screen.queryByRole('button', { name: /Generar FUR/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Re-generar FUR/i })).not.toBeInTheDocument();
     expect(
-      await screen.findByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }),
+      await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' }),
     ).toBeInTheDocument();
 
     await waitFor(() => {
@@ -335,7 +332,7 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     expect(mocks.generarFur).not.toHaveBeenCalled();
   });
 
-  it('precarga Fecha del trámite en el resumen con la fecha local de hoy si no hay valor guardado', async () => {
+  it('muestra Fecha del trámite al inicio del resumen como hoy y no editable', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
     const resumen = await screen.findByRole('region', { name: 'Resumen del trámite' });
@@ -347,6 +344,13 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
     expect(fecha.value).toBe(`${yyyy}-${mm}-${dd}`);
+    expect(fecha).toBeDisabled();
+    expect(fecha).toHaveAttribute('readonly');
+    // Debe ir antes del bloque Vehículo (visible al inicio).
+    const vehiculoBtn = within(resumen).getByRole('button', { name: /Vehículo/i });
+    expect(
+      fecha.compareDocumentPosition(vehiculoBtn) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     await waitFor(() =>
       expect(mocks.patchFieldValues).toHaveBeenCalledWith(
         INSTANCE,
@@ -361,12 +365,14 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     mocks.getAttachments.mockResolvedValue([]);
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' });
+    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
 
-    await user.click(screen.getByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }));
+    await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
 
     await waitFor(() => expect(mocks.patchFieldValues).toHaveBeenCalled());
-    await waitFor(() => expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE));
+    await waitFor(() =>
+      expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE, undefined, true),
+    );
     const ordenGuardado = mocks.patchFieldValues.mock.invocationCallOrder[0]!;
     const ordenGenerado = mocks.generarConsolidado.mock.invocationCallOrder[0]!;
     expect(ordenGuardado).toBeLessThan(ordenGenerado);
@@ -379,9 +385,9 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     );
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' });
+    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
 
-    await user.click(screen.getByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }));
+    await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
 
     expect(
       await screen.findByText(/su documentación es definitiva y no se regenera/i),
@@ -402,9 +408,9 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     });
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' });
+    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
 
-    await user.click(screen.getByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }));
+    await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
 
     const aviso = await screen.findByRole('alert');
     expect(aviso).toHaveTextContent(/Expediente consolidado generado/i);
@@ -617,7 +623,11 @@ describe('FirmaFurStep — resumen / expediente', () => {
     expect(within(transformaciones).getByText('Combustible')).toBeInTheDocument();
     expect(within(transformaciones).getByText('DIESEL')).toBeInTheDocument();
     expect(within(resumen).getByLabelText('Prenda o gravamen')).toBeInTheDocument();
-    expect(within(resumen).getByText(/Registrar prenda · Banco Demo/)).toBeInTheDocument();
+    expect(within(resumen).getByText('Registrar prenda')).toBeInTheDocument();
+    expect(within(resumen).getByText('Banco Demo')).toBeInTheDocument();
+    expect(within(resumen).getByText('900111222')).toBeInTheDocument();
+    expect(within(resumen).getByText('Certificado / registro de prenda')).toBeInTheDocument();
+    expect(within(resumen).getByText('Sin documento cargado')).toBeInTheDocument();
   });
 
   it('sin transformaciones ni prenda el resumen no muestra esos bloques', async () => {
@@ -749,21 +759,14 @@ describe('FirmaFurStep — la secretaría elegida en el paso 1 (HU #11199, AC4)'
 });
 
 describe('FirmaFurStep — firma no bloqueante en traspaso (B12, HU #10661)', () => {
-  it('traspaso: la firma vive en Comprador/Vendedor y aclara que no bloquea', async () => {
+  it('traspaso: el resumen no muestra firma de compraventa en Comprador/Vendedor', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
     const vendedor = await screen.findByRole('region', { name: 'Vendedor' });
     const comprador = await screen.findByRole('region', { name: 'Comprador' });
-    expect(within(vendedor).getByRole('group', { name: 'Firma compraventa Vendedor' })).toBeInTheDocument();
-    expect(within(comprador).getByRole('group', { name: 'Firma compraventa Comprador' })).toBeInTheDocument();
+    expect(within(vendedor).queryByRole('group', { name: 'Firma compraventa Vendedor' })).toBeNull();
+    expect(within(comprador).queryByRole('group', { name: 'Firma compraventa Comprador' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Firma de la compraventa' })).not.toBeInTheDocument();
-    expect(within(comprador).getByText(/no bloquea/)).toBeInTheDocument();
-    expect(
-      within(comprador).getByRole('group', { name: 'Firma compraventa Comprador' }),
-    ).toHaveTextContent(/validación de identidad/);
-    expect(
-      within(comprador).getByRole('group', { name: 'Firma compraventa Comprador' }),
-    ).toHaveTextContent(/firma del baúl/);
   });
 
   it('traspaso: muestra teléfono, dirección y ciudad del actor', async () => {
@@ -774,20 +777,12 @@ describe('FirmaFurStep — firma no bloqueante en traspaso (B12, HU #10661)', ()
     expect(within(vendedor).getByText('Medellín')).toBeInTheDocument();
   });
 
-  it('traspaso: la firma es informativa y ya no se solicita desde el paso (HU #11019)', async () => {
-    // AC5 de ADR-0028 sigue vigente en el MODELO (endpoints y estado intactos), pero la UI ya no
-    // ofrece la acción: la firma de compraventa no bloquea y pedirla no aportaba nada al gestor.
+  it('traspaso: no solicita firma de compraventa desde el resumen', async () => {
     mocks.listFirmas.mockResolvedValue([FIRMA_ENVIADA]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    const card = await screen.findByRole('group', { name: 'Firma compraventa Comprador' });
-
-    // El estado de una firma ya existente se sigue mostrando…
-    expect(await within(card).findByLabelText('Enlace de firma Comprador')).toBeInTheDocument();
-    expect(
-      (within(card).getByLabelText('Enlace de firma Comprador') as HTMLInputElement).value,
-    ).toContain('https://mock/sign/sig-1');
-    // …pero no hay forma de solicitar una nueva.
-    expect(within(card).queryByRole('button', { name: 'Solicitar firma' })).toBeNull();
+    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    expect(screen.queryByRole('button', { name: 'Solicitar firma' })).toBeNull();
+    expect(screen.queryByLabelText('Enlace de firma Comprador')).toBeNull();
   });
 });
 

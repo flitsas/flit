@@ -519,6 +519,23 @@ export const tramitesClient = {
     return res?.items ?? [];
   },
 
+  /** Catálogo RUNT de colores (BD). Búsqueda server-side; no descarga el catálogo completo. */
+  searchVehicleColors: async (
+    search?: string,
+    limit = 50,
+    signal?: AbortSignal,
+  ): Promise<{ id: string; code: string; name: string }[]> => {
+    const params = new URLSearchParams();
+    if (search?.trim()) params.set('search', search.trim());
+    params.set('limit', String(limit));
+    const qs = params.toString();
+    const res = await request<{ items: { id: string; code: string; name: string }[] }>(
+      `/api/v1/tramites/vehicle-colors${qs ? `?${qs}` : ''}`,
+      { signal },
+    );
+    return res?.items ?? [];
+  },
+
   // HU #11203 — mandatarios que pueden firmar el mandato de este trámite (los habilitados para su
   // organismo en la compañía), con la vigencia de su identidad y cuál está elegido.
   listMandateSigners: (id: string, tenantId?: string) =>

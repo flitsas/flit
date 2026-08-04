@@ -347,11 +347,43 @@ public sealed class GenerarConsolidadoHandler(
         }
 
         if (configurado.Count == 0)
-            return ConsolidadoOrderingResolver.Select(instance.Attachments, instance.ModalidadEntrada);
+            return SanitizeConsolidadoParts(
+                ConsolidadoOrderingResolver.Select(instance.Attachments, instance.ModalidadEntrada));
 
-        return GenericConsolidadoOrdering.SelectByPrecedence(
-            instance.Attachments,
-            ConsolidadoDocumentCodeMap.ToPrecedence(configurado));
+        return SanitizeConsolidadoParts(
+            GenericConsolidadoOrdering.SelectByPrecedence(
+                instance.Attachments,
+                ConsolidadoDocumentCodeMap.ToPrecedence(configurado)));
+    }
+
+    /// <summary>
+    /// Evita el bug de expediente duplicado: ningún PDF cuyo tipo contenga "consolidado" puede
+    /// ser PARTE del merge (anidaría el paquete completo otra vez). Además, si hay varias filas
+    /// del mismo tipo (reemplazos / doble carga), solo se conserva la más reciente.
+    /// </summary>
+    internal static IReadOnlyList<ProcedureInstanceAttachment> SanitizeConsolidadoParts(
+        IReadOnlyList<ProcedureInstanceAttachment> ordered)
+    {
+        var latestByTipo = ordered
+            .Where(a => a.Tipo.Contains("consolidado", StringComparison.OrdinalIgnoreCase) is false)
+            .GroupBy(a => a.Tipo, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(x => x.UploadedAt).First(),
+                StringComparer.OrdinalIgnoreCase);
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<ProcedureInstanceAttachment>(latestByTipo.Count);
+        foreach (var a in ordered)
+        {
+            if (a.Tipo.Contains("consolidado", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!seen.Add(a.Tipo))
+                continue;
+            result.Add(latestByTipo[a.Tipo]);
+        }
+
+        return result;
     }
 
     private static bool TieneFur(ProcedureInstance instance) =>

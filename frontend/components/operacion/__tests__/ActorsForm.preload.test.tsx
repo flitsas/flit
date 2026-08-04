@@ -238,5 +238,8 @@ describe('ActorsForm — precarga por NIT desde el directorio del tenant (HU #10
     expect(
       screen.queryByText('Precargado desde el directorio de la compañía'),
     ).toBeNull();
+    const razon = await screen.findByLabelText(/razón social/i);
+    expect(razon).toHaveValue('Empresa Externa SAS');
+    expect(razon).toHaveAttribute('readonly');
   });
 });

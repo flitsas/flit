@@ -267,6 +267,7 @@ app.MapTramitesCommercialEndpoints();
 app.MapTramitesPreflightEndpoints();
 app.MapTramitesRnmcEndpoints();
 app.MapTramitesWizardEndpoints();
+app.MapTramitesVehicleColorsEndpoints();
 app.MapTramitesStatusHistoryEndpoints();
 app.MapLegalRepresentativeConsumptionEndpoints();
 

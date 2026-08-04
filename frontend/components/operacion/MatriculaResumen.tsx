@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, FileText } from 'lucide-react';
+import { Check, ChevronDown, Download, FileSignature, FileText } from 'lucide-react';
 import type {
   BiometricParte,
   BiometricValidation,
@@ -12,9 +12,8 @@ import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { formatDateOnly } from '@/lib/format/date-only';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { BiometricStep } from './BiometricStep';
-import { CompraventaFirmaStatus } from './CompraventaFirmaStatus';
-import { FirmaPosteriorSection } from './FirmaPosteriorSection';
-import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
+import { openAttachmentInNewTab } from './ExpedienteVisor';
+import { WizardReadOnlyProvider } from './WizardReadOnlyContext';
 
 // Feature #11211 — resumen del trámite (summary-first). Especificaciones del vehículo y
 // validación de identidad por actor viven aquí; el expediente debajo es solo documentos.
@@ -23,6 +22,16 @@ export type ResumenPrenda = {
   /** Etiqueta legible de la decisión (p. ej. "Registrar prenda"). */
   decisionLabel: string;
   acreedorNombre?: string | null;
+  acreedorDocumento?: string | null;
+  /** Etiqueta del tipo de documento de prenda exigido. */
+  documentoLabel?: string | null;
+  /** Adjunto de soporte para abrir en pestaña (mismo flujo que Documentos). */
+  documento?: {
+    id: string;
+    tipo: string;
+    filename: string;
+    mimetype: string;
+  } | null;
 };
 
 export type ResumenEspecificaciones = {
@@ -64,10 +73,8 @@ interface Props {
   soat?: { estado?: string | null; vencimiento?: string | null };
   transformaciones?: string[];
   prenda?: ResumenPrenda | null;
+  /** Fecha del trámite (YYYY-MM-DD). Solo lectura en UI; siempre la del día. */
   fechaTramite?: string;
-  onFechaTramiteChange?: (value: string) => void;
-  onFechaTramiteBlur?: () => void;
-  fechaTramiteDisabled?: boolean;
   instanceId?: string | null;
   compradorBio?: BiometricValidation | null;
   vendedorBio?: BiometricValidation | null;
@@ -144,14 +151,119 @@ function Field({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-function validacionTexto(bio: BiometricValidation | null | undefined, firmaBaul: boolean): string {
-  if (firmaBaul) return 'Firmado desde el baúl';
-  if (bio?.status === 'aprobado') {
-    return bio.score != null ? `Verificada · ${bio.score}/100` : 'Verificada';
+function PrendaDocumentoVerButton({
+  instanceId,
+  documento,
+  label,
+}: {
+  instanceId: string | null | undefined;
+  documento: NonNullable<ResumenPrenda['documento']>;
+  label: string;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] opacity-60">{label}</p>
+      <div className="mt-1.5 flex flex-col gap-1">
+        <button
+          type="button"
+          disabled={!instanceId || busy}
+          className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full px-4 py-2 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ background: BLUE }}
+          aria-label={`Ver ${documento.filename || label}`}
+          onClick={() => {
+            if (!instanceId) return;
+            setBusy(true);
+            setError(null);
+            void openAttachmentInNewTab(instanceId, documento)
+              .catch((e: unknown) => {
+                setError(e instanceof Error ? e.message : 'No se pudo abrir el documento.');
+              })
+              .finally(() => setBusy(false));
+          }}
+        >
+          <Download className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          {busy ? 'Abriendo…' : 'Ver'}
+        </button>
+        {error ? (
+          <span className="text-[10px]" style={{ color: '#FF4E00' }} role="alert">
+            {error}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Estado de identidad resuelto (misma presentación que BiometricStep):
+ * baúl del representante / identidad verificada. Se muestra en cada actor del resumen
+ * cuando ya no hace falta embeber la captura.
+ */
+function IdentidadStatusBanner({
+  bio,
+  firmaBaul,
+}: {
+  bio: BiometricValidation | null | undefined;
+  firmaBaul: boolean;
+}) {
+  if (firmaBaul) {
+    return (
+      <div
+        className="flex items-center gap-3 rounded-xl p-3"
+        style={{ background: 'rgba(85,126,255,0.10)', border: '1px solid rgba(85,126,255,0.35)' }}
+        role="status"
+        aria-live="polite"
+        data-testid="identidad-firma-baul"
+      >
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+          style={{ background: '#557EFF', color: 'white' }}
+          aria-hidden
+        >
+          <FileSignature className="h-5 w-5" />
+        </span>
+        <div className="space-y-0.5">
+          <p className="text-xs font-bold" style={{ color: '#557EFF' }}>
+            Firma electrónica (baúl)
+          </p>
+          <p className="text-[11px] opacity-70">
+            Identidad cubierta por la firma electrónica del baúl. No requiere validación biométrica.
+          </p>
+        </div>
+      </div>
+    );
   }
-  if (bio?.status === 'rechazado') return 'Rechazada';
-  if (bio) return 'Pendiente';
-  return 'Sin validación';
+
+  if (bio?.status === 'aprobado') {
+    return (
+      <div
+        className="flex items-center gap-3 rounded-xl p-3"
+        style={{ background: 'rgba(140,198,63,0.12)', border: '1px solid rgba(140,198,63,0.4)' }}
+        role="status"
+        aria-live="polite"
+        data-testid="identidad-verificada"
+      >
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+          style={{ background: '#5B8A1F', color: 'white' }}
+          aria-hidden
+        >
+          <Check className="h-5 w-5" />
+        </span>
+        <div className="space-y-0.5">
+          <p className="text-xs font-bold" style={{ color: '#5B8A1F' }}>
+            Identidad verificada — {bio.score ?? 95}/100
+          </p>
+          {bio.name ? <p className="text-[11px] opacity-70">{bio.name}</p> : null}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function CertificadoIdButton({
@@ -197,12 +309,12 @@ function CertificadoIdButton({
   if (firmaBaul) return null;
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex w-fit max-w-full flex-col gap-1">
       <button
         type="button"
         onClick={() => void handleOpen()}
         disabled={!aprobado || busy || !instanceId}
-        className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex w-fit max-w-full items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
         style={{ borderColor: BLUE, color: BLUE }}
         aria-label={label}
         title={
@@ -211,7 +323,7 @@ function CertificadoIdButton({
             : 'Disponible cuando la validación esté aprobada'
         }
       >
-        <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+        <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         {busy ? 'Abriendo…' : label}
       </button>
       {!aprobado && (
@@ -260,16 +372,7 @@ function ActorBlock({
         <Field label="Teléfono" value={actor.telefono} />
         <Field label="Dirección" value={actor.direccion} />
         <Field label="Ciudad" value={actor.ciudad} />
-        {!hideValidacion ? (
-          <Field label="Validación" value={validacionTexto(bio, firmaBaul)} />
-        ) : null}
       </div>
-      {firmaBaul && (
-        <p className="text-[11px] opacity-70" data-testid="identidad-firma-baul">
-          La identidad de esta parte se acredita con su firma del baúl; no requiere biométrica ni
-          certificado de identidad.
-        </p>
-      )}
       {showRepresentante && bio && (
         <div>
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] opacity-50">
@@ -284,7 +387,11 @@ function ActorBlock({
         </div>
       )}
       {!hideValidacion ? (
-        <div className="flex flex-wrap gap-2 border-t pt-3" style={{ borderColor: BORDER }}>
+        <div className="space-y-3 border-t pt-3" style={{ borderColor: BORDER }}>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] opacity-60">
+            Validación de identidad
+          </p>
+          <IdentidadStatusBanner bio={bio} firmaBaul={firmaBaul} />
           <CertificadoIdButton
             label={certLabel}
             bio={bio}
@@ -320,9 +427,6 @@ export default function MatriculaResumen({
   transformaciones = [],
   prenda = null,
   fechaTramite,
-  onFechaTramiteChange,
-  onFechaTramiteBlur,
-  fechaTramiteDisabled = false,
   firmaBaulPartes = [],
   instanceId = null,
   compradorBio = null,
@@ -332,7 +436,6 @@ export default function MatriculaResumen({
   biometricForceEditable = false,
 }: Props) {
   const tone = estadoChipStyle(status).color;
-  const firmaPosteriorReadOnly = useWizardReadOnly();
   const soatEstado = (soat?.estado ?? '').toLowerCase();
   const soatLabel =
     soatEstado === 'vigente'
@@ -347,7 +450,7 @@ export default function MatriculaResumen({
   const resumenTitulo = 'Resumen del trámite';
   const partesTxt = [vendedor?.nombre, comprador?.nombre].filter(Boolean).join(' · ');
   const hasExtras = transformaciones.length > 0 || !!prenda;
-  const showFecha = typeof fechaTramite === 'string' && typeof onFechaTramiteChange === 'function';
+  const showFecha = typeof fechaTramite === 'string' && fechaTramite.length > 0;
   const soatLine = `SOAT: ${soatLabel}${
     soatEstado === 'vigente' && soat?.vencimiento
       ? ` · vence ${formatDateOnly(soat.vencimiento)}`
@@ -419,12 +522,34 @@ export default function MatriculaResumen({
             {resumenTitulo}
           </h4>
         </div>
-        <span
-          className="rounded-full px-3 py-1 text-[11px] font-semibold"
-          style={{ background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}
-        >
-          {estadoLabel(status)}
-        </span>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {showFecha ? (
+            <div className="text-right">
+              <label
+                htmlFor="fur-fecha-tramite"
+                className="mb-0.5 block text-[10px] font-semibold uppercase tracking-[0.2em] opacity-60"
+              >
+                Fecha del trámite
+              </label>
+              <input
+                id="fur-fecha-tramite"
+                type="date"
+                value={fechaTramite}
+                readOnly
+                disabled
+                aria-readonly="true"
+                className="cursor-default rounded-lg border bg-transparent px-2.5 py-1 text-xs font-medium opacity-100 disabled:opacity-100"
+                style={{ borderColor: BORDER, color: '#162744' }}
+              />
+            </div>
+          ) : null}
+          <span
+            className="rounded-full px-3 py-1 text-[11px] font-semibold"
+            style={{ background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}
+          >
+            {estadoLabel(status)}
+          </span>
+        </div>
       </div>
 
       <ResumenDisclosure title="Vehículo">
@@ -476,21 +601,6 @@ export default function MatriculaResumen({
               hideValidacion={showBioVendedor}
             />
             {showBioVendedor ? embedBiometric('vendedor') : null}
-            {modalidad === 'traspaso' && instanceId ? (
-              <CompraventaFirmaStatus
-                instanceId={instanceId}
-                parte="vendedor"
-                onChanged={onBiometricRefresh}
-              />
-            ) : null}
-            {instanceId ? (
-              <FirmaPosteriorSection
-                instanceId={instanceId}
-                onlyRoles={['vendedor']}
-                readOnly={firmaPosteriorReadOnly}
-                onChanged={onBiometricRefresh}
-              />
-            ) : null}
           </div>
         </ResumenDisclosure>
       ) : null}
@@ -510,21 +620,6 @@ export default function MatriculaResumen({
                 hideValidacion={showBioComprador}
               />
               {showBioComprador ? embedBiometric('comprador') : null}
-              {modalidad === 'traspaso' && instanceId ? (
-                <CompraventaFirmaStatus
-                  instanceId={instanceId}
-                  parte="comprador"
-                  onChanged={onBiometricRefresh}
-                />
-              ) : null}
-              {instanceId ? (
-                <FirmaPosteriorSection
-                  instanceId={instanceId}
-                  onlyRoles={['comprador']}
-                  readOnly={firmaPosteriorReadOnly}
-                  onChanged={onBiometricRefresh}
-                />
-              ) : null}
             </div>
           ) : (
             <p className="text-xs opacity-70">
@@ -532,27 +627,6 @@ export default function MatriculaResumen({
               {partesTxt}
             </p>
           )}
-        </ResumenDisclosure>
-      ) : null}
-
-      {showFecha ? (
-        <ResumenDisclosure title="Fecha del trámite">
-          <label htmlFor="fur-fecha-tramite" className="mb-1.5 block text-xs font-semibold">
-            Fecha del trámite
-          </label>
-          <input
-            id="fur-fecha-tramite"
-            type="date"
-            value={fechaTramite}
-            onChange={(e) => onFechaTramiteChange(e.target.value)}
-            onBlur={() => onFechaTramiteBlur?.()}
-            disabled={fechaTramiteDisabled}
-            className="rounded-lg border px-3 py-2 text-xs"
-            style={{ borderColor: BORDER }}
-          />
-          <p className="mt-1 text-[10px] opacity-60">
-            Se estampa en el FUR y en el resto de documentos. Por defecto es hoy.
-          </p>
         </ResumenDisclosure>
       ) : null}
 
@@ -591,11 +665,28 @@ export default function MatriculaResumen({
           ) : null}
           {prenda ? (
             <ResumenDisclosure title="Prenda / gravamen">
-              <div aria-label="Prenda o gravamen">
-                <p className="text-xs font-medium" style={{ color: '#162744' }}>
-                  {prenda.decisionLabel}
-                  {prenda.acreedorNombre ? ` · ${prenda.acreedorNombre}` : ''}
-                </p>
+              <div
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                aria-label="Prenda o gravamen"
+              >
+                <Field label="Decisión" value={prenda.decisionLabel} />
+                {prenda.acreedorNombre || prenda.acreedorDocumento ? (
+                  <>
+                    <Field label="Acreedor (beneficiario)" value={prenda.acreedorNombre} />
+                    <Field label="NIT / documento del acreedor" value={prenda.acreedorDocumento} />
+                  </>
+                ) : null}
+                {prenda.documentoLabel ? (
+                  prenda.documento && instanceId ? (
+                    <PrendaDocumentoVerButton
+                      instanceId={instanceId}
+                      documento={prenda.documento}
+                      label={prenda.documentoLabel}
+                    />
+                  ) : (
+                    <Field label={prenda.documentoLabel} value="Sin documento cargado" />
+                  )
+                ) : null}
               </div>
             </ResumenDisclosure>
           ) : null}

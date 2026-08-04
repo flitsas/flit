@@ -60,7 +60,7 @@ function PieceRow({
   const marcada = decision === 'accept';
   const recortada = piece.paginas.length > 0 && piece.paginas.length < piece.totalPaginasOrigen;
 
-  // Se reusa la tarjeta del cargue campo a campo tal cual: mismo estado, mismos campos, mismo color.
+  // Mismo indicador OCR del cargue individual (icono + tooltip/modal).
   const ocr: OcrUiResult = {
     status: piece.data ? (evaluation.rechazado ? 'rejected' : 'verified') : 'skipped',
     motivo: evaluation.motivo,
@@ -99,6 +99,8 @@ function PieceRow({
             <p className="mt-0.5 text-[10px] opacity-50">{piece.motivo}</p>
           )}
         </div>
+
+        <OcrStatusPanel tipo={piece.tipo} ocr={ocr} />
       </label>
 
       {/* Avisos que explican por qué la pieza llegó desmarcada. */}
@@ -125,8 +127,6 @@ function PieceRow({
           </span>
         </p>
       )}
-
-      <OcrStatusPanel tipo={piece.tipo} ocr={ocr} />
     </li>
   );
 }

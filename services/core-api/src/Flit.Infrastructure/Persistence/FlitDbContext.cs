@@ -117,6 +117,8 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<TransitOffice> TransitOffices => Set<TransitOffice>();
 
+    public DbSet<VehicleColor> VehicleColors => Set<VehicleColor>();
+
     // ── Admin OT — perfil y feature flags (HU #10152 DDL, HU #10215 API) ───────
     public DbSet<TransitOfficeProfile> TransitOfficeProfiles => Set<TransitOfficeProfile>();
 

@@ -4,11 +4,11 @@ import { ArrowRight, Fuel, Layers, Palette, Wand2 } from 'lucide-react';
 import type { FieldValue } from '@/lib/api/types/procedure-runtime';
 import { cn } from '@/lib/utils';
 import {
-  VEHICLE_COLOR_CATALOG,
   VEHICLE_FUEL_CATALOG,
 } from '@/lib/catalogs/vehicle-transformations';
 import { getBodyworksForVehicleClass, normalizeVehicleClass } from '@/lib/catalogs/bodywork-by-class';
 import { CatalogSearchSelect } from './CatalogSearchSelect';
+import { VehicleColorSearchSelect } from './VehicleColorSearchSelect';
 
 /**
  * Tarjeta "Transformaciones del vehículo" (A4/B4 · HU #10674 · ADR-0029 + P2/P3).
@@ -138,7 +138,7 @@ export function VehicleTransformationsCard({
           runtValue={colorRunt}
           effectiveValue={colorEff}
           active={colorActive}
-          options={VEHICLE_COLOR_CATALOG}
+          colorCatalog
           disabled={disabled}
           onToggle={(on) => void setColor(on)}
           onSelect={(v) => void setColor(true, v)}
@@ -203,7 +203,8 @@ function TransformationRow({
   runtValue,
   effectiveValue,
   active,
-  options,
+  options = [],
+  colorCatalog = false,
   emptyMessage,
   disabled,
   onToggle,
@@ -219,7 +220,9 @@ function TransformationRow({
   runtValue: string;
   effectiveValue: string;
   active: boolean;
-  options: readonly string[];
+  options?: readonly string[];
+  /** Usa el catálogo persistido de colores (API) en lugar de `options` locales. */
+  colorCatalog?: boolean;
   /** Mensaje cuando `active && options.length === 0` (clase desconocida o sin clase). */
   emptyMessage?: string;
   disabled: boolean;
@@ -264,7 +267,16 @@ function TransformationRow({
 
       {active && (
         <div className="pl-6 space-y-1.5">
-          {options.length === 0 && emptyMessage ? (
+          {colorCatalog ? (
+            <VehicleColorSearchSelect
+              id={selectId}
+              label={computedSelectLabel}
+              value={effectiveValue}
+              disabled={disabled}
+              placeholder={`Buscar ${label.toLowerCase()}…`}
+              onChange={onSelect}
+            />
+          ) : options.length === 0 && emptyMessage ? (
             <p className="text-[11px] opacity-55">{emptyMessage}</p>
           ) : (
             <CatalogSearchSelect

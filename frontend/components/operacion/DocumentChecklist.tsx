@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Eye, FileText } from 'lucide-react';
+import { Eye, FileText, Info } from 'lucide-react';
 import {
   resumirVins,
   useProcedureDocuments,
@@ -11,6 +11,7 @@ import { useProcedureBatchUpload } from '@/hooks/useProcedureBatchUpload';
 import { BatchDropzone } from './BatchDropzone';
 import { BatchReviewPanel } from './BatchReviewPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { isPrendaManagedChecklistTipo } from './prenda-document-tipos';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import type {
@@ -208,18 +209,34 @@ function recorteLabel(data: Record<string, unknown> | null): string | null {
 }
 
 /**
- * Tarjeta de estado OCR de un documento: encabezado (verificado/rechazado/no analizado) + chip del
- * tipo, motivo cuando aplica, y una grilla legible de pares etiqueta/valor (set ampliado por tipo).
- * Exportada para que la revisión del cargue masivo muestre exactamente el mismo resumen que el cargue
- * campo a campo — si divergieran, el operador tendría que aprender a leer dos tarjetas distintas.
+ * Indicador OCR compacto: icono con color por estado + tooltip al pasar el mouse.
+ * El detalle (campos, motivo) vive en tooltip/modal — no agranda el contenedor de upload.
+ * Exportada para cargue individual y revisión masiva.
  */
 export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }) {
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [tipOpen, setTipOpen] = useState(false);
   const palette =
     ocr.status === 'verified'
-      ? { color: '#3B8A00', border: '#8CC63F', bg: 'rgba(140,198,63,0.08)', icon: '✓', label: 'Verificado' }
+      ? {
+          color: '#3B8A00',
+          border: '#8CC63F',
+          bg: 'rgba(140,198,63,0.12)',
+          label: 'Verificado',
+        }
       : ocr.status === 'rejected'
-        ? { color: '#FF4E00', border: '#FF4E00', bg: 'rgba(255,78,0,0.06)', icon: '✗', label: 'Rechazado' }
-        : { color: '#B77900', border: '#F9AC00', bg: 'rgba(249,172,0,0.08)', icon: '!', label: 'No analizado' };
+        ? {
+            color: '#FF4E00',
+            border: '#FF4E00',
+            bg: 'rgba(255,78,0,0.10)',
+            label: 'Rechazado',
+          }
+        : {
+            color: '#B77900',
+            border: '#F9AC00',
+            bg: 'rgba(249,172,0,0.14)',
+            label: 'No analizado',
+          };
 
   const data = ocr.data;
   const nombre = TIPO_LABEL[tipo] ?? tipo;
@@ -227,8 +244,6 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
   const recorte = recorteLabel(data);
   const rechazoPorVin = ocr.status === 'rejected' && !!ocr.motivo && /VIN/i.test(ocr.motivo);
 
-  // Los campos VIN se resumen: una declaración de importación ampara el lote entero del contenedor y
-  // llega con decenas de VIN, que sin recortar ocupan media pantalla.
   const fields = data
     ? (OCR_RESUMEN_FIELDS[tipo] ?? [])
         .map((field) => {
@@ -238,69 +253,135 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
         .filter((x) => x.value !== '')
     : [];
 
-  return (
-    <div
-      className="mt-2 rounded-lg border p-2.5"
-      style={{ background: palette.bg, borderColor: palette.border }}
-      role="status"
-      aria-live="polite"
-    >
-      {/* Encabezado: estado + chip del tipo + chip de recorte */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-bold" style={{ color: palette.color }}>
-          <span aria-hidden="true">{palette.icon}</span> {nombre} — {palette.label}
-        </span>
-        {tipoDocumento && (
-          <span
-            className="rounded px-1.5 py-0.5 text-[9px] font-semibold"
-            style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
-          >
-            {tipoDocumento}
-          </span>
-        )}
-        {recorte && (
-          <span
-            className="rounded px-1.5 py-0.5 text-[9px] font-semibold"
-            style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
-          >
-            {recorte}
-          </span>
-        )}
-      </div>
+  const tipId = `ocr-tip-${tipo}`;
 
-      {/* Motivo (rechazado / no analizado) */}
-      {ocr.motivo && (
-        <p className="mt-1 text-[10px] font-medium" style={{ color: palette.color }}>
-          {ocr.motivo}
-        </p>
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-full"
+        style={{ background: palette.color, color: '#FFFFFF', boxShadow: '0 1px 2px rgba(0,0,0,0.18)' }}
+        aria-label={`OCR ${nombre}: ${palette.label}. Ver detalle`}
+        aria-describedby={tipOpen ? tipId : undefined}
+        aria-expanded={detailOpen}
+        onMouseEnter={() => setTipOpen(true)}
+        onMouseLeave={() => setTipOpen(false)}
+        onFocus={() => setTipOpen(true)}
+        onBlur={() => setTipOpen(false)}
+        onClick={() => setDetailOpen(true)}
+      >
+        <Info className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+      </button>
+
+      {tipOpen && !detailOpen && (
+        <div
+          id={tipId}
+          role="tooltip"
+          className="absolute right-0 z-40 mt-1.5 w-56 rounded-xl border bg-white p-2.5 text-left shadow-lg dark:bg-[#0B0F14]"
+          style={{ borderColor: palette.border }}
+        >
+          <p className="text-[11px] font-bold" style={{ color: palette.color }}>
+            OCR — {palette.label}
+          </p>
+          {ocr.motivo && (
+            <p className="mt-1 text-[10px] leading-snug opacity-80">{ocr.motivo}</p>
+          )}
+          {(tipoDocumento || recorte) && (
+            <p className="mt-1 text-[10px] opacity-60">
+              {[tipoDocumento, recorte].filter(Boolean).join(' · ')}
+            </p>
+          )}
+          {fields.length > 0 && (
+            <p className="mt-1.5 text-[10px] font-medium" style={{ color: '#557EFF' }}>
+              Clic para ver {fields.length} campo{fields.length === 1 ? '' : 's'}
+            </p>
+          )}
+        </div>
       )}
 
-      {/* Grilla de campos: 2 columnas, etiqueta mutada + valor con buen contraste */}
-      {fields.length > 0 && (
-        <dl className="mt-1.5 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
-          {fields.map(({ field, value }) => (
-            <div key={field.label} className="flex items-baseline gap-1.5 text-[11px]">
-              <dt className="shrink-0 opacity-60">{field.label}:</dt>
-              {field.kind === 'state' ? (
-                <dd>
-                  <span
-                    className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                    style={stateChipStyle(value)}
-                  >
-                    {value.replace(/_/g, ' ')}
-                  </span>
-                </dd>
-              ) : (
-                <dd
-                  className={`min-w-0 wrap-break-word ${field.strong ? 'font-bold' : ''}`}
-                  style={field.vin && rechazoPorVin ? { color: '#FF4E00', fontWeight: 700 } : undefined}
+      {detailOpen && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={`ocr-detail-title-${tipo}`}
+          onClick={() => setDetailOpen(false)}
+        >
+          <div
+            className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-white p-4 shadow-xl dark:bg-[#0B0F14]"
+            style={{ borderColor: palette.border }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full"
+                  style={{ background: palette.color, color: '#FFFFFF' }}
+                  aria-hidden
                 >
-                  {value}
-                </dd>
-              )}
+                  <Info className="h-4 w-4" strokeWidth={2.5} />
+                </span>
+                <h3
+                  id={`ocr-detail-title-${tipo}`}
+                  className="text-sm font-semibold"
+                  style={{ color: '#162744' }}
+                >
+                  OCR — {nombre}
+                  <span className="mt-0.5 block text-[11px] font-bold" style={{ color: palette.color }}>
+                    {palette.label}
+                  </span>
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailOpen(false)}
+                className="rounded-lg px-2 py-1 text-[11px] font-medium opacity-70 hover:opacity-100"
+              >
+                Cerrar
+              </button>
             </div>
-          ))}
-        </dl>
+            {ocr.motivo && (
+              <p className="mb-2 text-[11px] font-medium" style={{ color: palette.color }}>
+                {ocr.motivo}
+              </p>
+            )}
+            {(tipoDocumento || recorte) && (
+              <p className="mb-2 text-[10px] opacity-60">
+                {[tipoDocumento, recorte].filter(Boolean).join(' · ')}
+              </p>
+            )}
+            {fields.length === 0 ? (
+              <p className="text-[11px] opacity-55">Sin campos adicionales detectados.</p>
+            ) : (
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+                {fields.map(({ field, value }) => (
+                  <div key={field.label} className="flex items-baseline gap-1.5 text-[11px]">
+                    <dt className="shrink-0 opacity-60">{field.label}:</dt>
+                    {field.kind === 'state' ? (
+                      <dd>
+                        <span
+                          className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                          style={stateChipStyle(value)}
+                        >
+                          {value.replace(/_/g, ' ')}
+                        </span>
+                      </dd>
+                    ) : (
+                      <dd
+                        className={`min-w-0 wrap-break-word ${field.strong ? 'font-bold' : ''}`}
+                        style={
+                          field.vin && rechazoPorVin ? { color: '#FF4E00', fontWeight: 700 } : undefined
+                        }
+                      >
+                        {value}
+                      </dd>
+                    )}
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -309,8 +390,9 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
 /**
  * Caja de subida por ítem del checklist. Presentacional + un input de archivo
  * oculto; valida cliente-side antes de delegar la subida al hook.
+ * Exportada para reutilizar el mismo diseño en la sección Prenda.
  */
-function DocumentSlot({
+export function DocumentSlot({
   item,
   attachment,
   uploading,
@@ -424,6 +506,7 @@ function DocumentSlot({
             </p>
           )}
         </div>
+        {ocr ? <OcrStatusPanel tipo={tipo} ocr={ocr} /> : null}
       </div>
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
@@ -528,8 +611,6 @@ function DocumentSlot({
           {localError}
         </p>
       )}
-
-      {ocr && <OcrStatusPanel tipo={tipo} ocr={ocr} />}
     </li>
   );
 }
@@ -563,7 +644,11 @@ export function DocumentChecklist({
     if (!attachmentByTipo.has(a.tipo)) attachmentByTipo.set(a.tipo, a);
   }
 
-  const items = checklist?.items ?? [];
+  // Prenda se carga en PrendaForm (`prenda_*` / `inscripcion_prenda`); no duplicar aquí.
+  const items = (checklist?.items ?? []).filter((item) => {
+    const tipo = item.docTipo ?? item.key;
+    return !isPrendaManagedChecklistTipo(tipo);
+  });
   const showModeToggle = !readOnly && !!instanceId && items.length > 0;
 
   // Preview modal state (HU #10703)

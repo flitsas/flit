@@ -7,8 +7,10 @@ import { digitsOnly } from '@/lib/format/currency';
 import { formatDateOnly } from '@/lib/format/date-only';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { PrendaDocumentUpload } from './PrendaDocumentUpload';
+import { prendaDocTipoFor } from './prenda-document-tipos';
 import type { WizardStepFormHandle } from './wizard-step-form';
-import type { FieldValue, PrendaDecision } from '@/lib/api/types/procedure-runtime';
+import type { FieldValue, PrendaDecision, WizardModalidad } from '@/lib/api/types/procedure-runtime';
 
 /** Handle imperativo: la shell del wizard dispara guardar+validar. */
 export type PrendaFormHandle = WizardStepFormHandle;
@@ -22,7 +24,7 @@ export const PRENDA_DECISION_LABELS: Record<PrendaDecision, string> = {
   sin_prenda: 'Sin prenda',
 };
 
-/** Decisiones que exigen el documento de soporte (se carga en el paso de documentos). */
+/** Decisiones que exigen el documento de soporte (se adjunta en esta sección). */
 const REQUIERE_DOCUMENTO: ReadonlySet<PrendaDecision> = new Set<PrendaDecision>([
   'solicitar',
   'registrar',
@@ -76,6 +78,8 @@ interface Props {
   runtHasGravamen?: boolean;
   /** Mensaje opcional del check RUNT (detalle). */
   runtGravamenMessage?: string | null;
+  /** Modalidad del trámite (OCR / documentos). Default matrícula. */
+  modalidad?: WizardModalidad;
 }
 
 const INPUT_BASE =
@@ -161,9 +165,9 @@ function RuntField({ label, value }: { label: string; value: string | null | und
 
 /**
  * Captura de la decisión de prenda (gravamen) del trámite. En matrícula (R4) es declarativa e
- * informativa (no bloquea la radicación); en traspaso (R10) el gate lo aplica el backend. El
- * documento de soporte se carga en el paso de documentos; aquí solo se registra la decisión y,
- * cuando aplica, los datos del acreedor que se reflejarán en el FUR.
+ * informativa (no bloquea la radicación); en traspaso (R10) el gate lo aplica el backend.
+ * Cuando la decisión exige soporte, el certificado se adjunta aquí (mismos tipos `prenda_*`
+ * que consume el gate) con el mismo diseño de tarjetas del checklist de documentos.
  */
 export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaForm(
   {
@@ -174,6 +178,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     embeddedInWizard = false,
     runtHasGravamen = false,
     runtGravamenMessage = null,
+    modalidad = 'matricula_inicial',
   },
   ref,
 ) {
@@ -270,8 +275,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
         <div className="mb-3">
           <h4 className="text-sm font-bold">Prenda / gravamen</h4>
           <p className="text-[11px] opacity-60">
-            Declara si el vehículo tiene prenda. El documento de soporte se carga en el paso de
-            documentos.
+            Declara si el vehículo tiene prenda. Si registras, solicitas o levantas, adjunta el
+            certificado en esta sección.
           </p>
         </div>
       )}
@@ -448,10 +453,14 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
             </div>
           )}
 
-          {requiereDocumento && (
-            <p className="text-[11px] opacity-60" role="note">
-              Recuerda cargar el documento de prenda en el paso de documentos.
-            </p>
+          {requiereDocumento && decision && prendaDocTipoFor(decision) && (
+            <PrendaDocumentUpload
+              instanceId={instanceId}
+              decision={decision}
+              docTipo={prendaDocTipoFor(decision)!}
+              modalidad={modalidad}
+              onChanged={onSaved}
+            />
           )}
         </div>
       </fieldset>

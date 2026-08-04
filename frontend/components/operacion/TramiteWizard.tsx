@@ -43,6 +43,10 @@ import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyConte
 import { VehicleTransformationsCard } from './VehicleTransformationsCard';
 import { EstadoAcciones } from './EstadoAcciones';
 import { WizardStepTracker } from './WizardStepTracker';
+import {
+  isTraspasoActorStepKey,
+  nextIndexAfterUnifiedActores,
+} from './wizard-actores-coalesce';
 import { useToast } from '@/components/admin/Toast';
 import { formatDateOnly } from '@/lib/format/date-only';
 import {
@@ -165,6 +169,12 @@ const STEP_SUBTITLE: Record<string, string> = {
     'Valor de la venta, causal, impuestos del traspaso y decisión de prenda / gravamen.',
   identidad:
     'Validación de identidad de cada parte. La biométrica real llegará en una iteración futura; por ahora puedes simular la validación de cada parte.',
+  actores:
+    'Registra los datos del vendedor y del comprador. Cada parte en su tarjeta; consulta RUNT/RUES antes de continuar.',
+  vendedor:
+    'Registra los datos del vendedor y del comprador. Cada parte en su tarjeta; consulta RUNT/RUES antes de continuar.',
+  comprador:
+    'Registra los datos del vendedor y del comprador. Cada parte en su tarjeta; consulta RUNT/RUES antes de continuar.',
 };
 
 /** Subtítulo del paso Documentos en matrícula (incluye prenda declarativa, HU #10596). */
@@ -401,7 +411,7 @@ export function TramiteWizard(props: Props) {
   //  • Borrador finalizado (`borrador` + draftFinalizedAt): datos en solo lectura, pero el paso de
   //    Identidad sigue operable (el cliente valida async). "Preparar" solo cuando el wizard
   //    reporte canSubmit + identidad aprobada.
-  //  • Preparado: solo lectura, con la acción "Radicar a tránsito" (preparado→entregado) en el
+  //  • Preparado: solo lectura, con la acción "Radicar trámite" (preparado→entregado) en el
   //    paso de decisión.
   //  • Solo visualización (Track C): estados posteriores (entregado, aprobado, rechazado, anulado).
   // Subsanación: flag sobre rechazado (o legado status `subsanacion`) reabre la edición COMPLETA.
@@ -418,7 +428,7 @@ export function TramiteWizard(props: Props) {
   // Navegación: en visualización pura solo se recorren los pasos completos; en borrador finalizado
   // se respeta la regla de frontera (para poder llegar al paso de Identidad, que es la frontera).
   const navViewOnly = fullReadOnly;
-  // N 03 — "Radicar a tránsito" disponible solo en `preparado` y si la máquina lo permite
+  // N 03 — "Radicar trámite" disponible en `preparado` (o desde borrador encadenando) si la máquina lo permite
   // (el backend manda vía allowedTransitions).
   const canEntregar =
     estadoTramite === 'preparado' &&
@@ -668,45 +678,24 @@ export function TramiteWizard(props: Props) {
     return lastError ?? 'No se pudieron generar los documentos del expediente.';
   }, []);
 
-  // N 03 (radicación en dos pasos) — Preparar: borrador→preparado vía POST /transition. El backend
-  // valida el gate RF03 (identidad aprobada + documentos); solo se habilita cuando el wizard reporta
-  // canSubmit Y la identidad está aprobada (ver `canRadicar`).
-  // Feature #11211 — tras Preparar: toast + salida al listado `/tramites` (onExit). La generación de
-  // FUR/paquete corre en segundo plano (fire-and-forget) y NO bloquea la navegación.
-  const handlePreparar = async () => {
-    if (!instanceId || !canRadicar) return;
+  // N 03 — Radicar trámite (un solo click): encadena APIs existentes sin cambiar backend.
+  // En borrador: borrador→preparado y luego preparado→entregado.
+  // En preparado: solo preparado→entregado (misma validación de consolidado).
+  const handleRadicarTramite = async () => {
+    if (!instanceId) return;
+    const status = (instanceStatus ?? wizard?.status) as InstanceStatus | null;
+    const fromBorrador = canRadicar && status === 'borrador';
+    const fromPreparado = canEntregar;
+    if (!fromBorrador && !fromPreparado) return;
+
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await tramitesClient.transitionInstance(instanceId, 'preparado');
-      setInstanceStatus('preparado');
-      show(
-        'Trámite preparado. El expediente se sigue generando en segundo plano…',
-        'success',
-      );
+      if (fromBorrador) {
+        await tramitesClient.transitionInstance(instanceId, 'preparado');
+        setInstanceStatus('preparado');
+      }
 
-      const id = instanceId;
-      void ensureExpedienteDocs(id);
-
-      onExit();
-    } catch (err) {
-      setSubmitError(
-        err instanceof Error ? err.message : 'No se pudo preparar el trámite.',
-      );
-      setSubmitting(false);
-    }
-  };
-
-  // N 03 (radicación en dos pasos) — Radicar a tránsito: preparado→entregado vía POST /transition
-  // (los gates OT —organismo habilitado, reglas— los valida el backend en esta transición).
-  // Feature #11066 — gate estricto de expediente: exige consolidado completo antes de entregar.
-  // Sin pantalla intermedia: toast de éxito + volver al listado de inmediato (onExit redirige a
-  // /tramites; el ToastProvider del layout no se desmonta).
-  const handleRadicar = async () => {
-    if (!instanceId || !canEntregar) return;
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
       const docsError = await ensureExpedienteDocs(instanceId);
       if (docsError) {
         setSubmitError(`No se puede radicar: ${docsError}`);
@@ -715,7 +704,6 @@ export function TramiteWizard(props: Props) {
       }
 
       await tramitesClient.transitionInstance(instanceId, 'entregado');
-      // Reportes2 HU-A — trámite radicado desde el wizard: wizard_complete con duración total.
       telemetry.trackComplete();
       show(
         modalidad === 'traspaso'
@@ -900,58 +888,73 @@ export function TramiteWizard(props: Props) {
       }
 
       // HU #10350 — al guardar la parte (comprador/vendedor), asegura su identidad sin esperar el clic
-      // en "Validar identidad": el backend reutiliza una validación VIGENTE (≤30 días) de la persona;
-      // si no hay vigente, se dispara la validación automáticamente (provider-aware: Kyverum envía el
-      // enlace de captura; en mock se simula). No bloquea el avance si algo falla.
-      const parteIdentidad: BiometricParte | null =
-        activeStep?.key === 'comprador'
-          ? 'comprador'
-          : activeStep?.key === 'vendedor'
-            ? 'vendedor'
-            : null;
-      if (parteIdentidad && instanceId) {
-        try {
-          const ensured = await tramitesClient.ensureIdentity(instanceId, parteIdentidad);
-          // HU #10646 — actor jurídico (NIT) cubierto por la firma del baúl: NO se lanza biométrica.
-          // El backend ya deja el paso de identidad completo y la parte aprobada; aquí solo registramos
-          // la cobertura por baúl para que BiometricStep muestre el estado "cubierto por el baúl".
-          if (ensured.outcome === 'firma_baul') {
-            setVaultCoveredPartes((prev) =>
-              prev.includes(parteIdentidad) ? prev : [...prev, parteIdentidad],
-            );
-          } else {
-            // Si la parte deja de estar cubierta (p.ej. se reemplazó el NIT por una persona natural),
-            // se limpia la marca para no arrastrar el estado del baúl de un guardado anterior.
-            setVaultCoveredPartes((prev) => prev.filter((p) => p !== parteIdentidad));
-            if (ensured.outcome === 'requiere_validacion') {
-              const { provider } = await tramitesClient.getBiometricState(instanceId);
-              if (provider === 'kyverum') {
-                await tramitesClient.iniciarBiometric(instanceId, { parte: parteIdentidad });
-              } else {
-                await tramitesClient.simulateBiometric(instanceId, { parte: parteIdentidad });
+      // en "Validar identidad". En traspaso unificado se asegura ambas partes en el mismo Continuar.
+      const partesIdentidad: BiometricParte[] =
+        modalidad === 'traspaso' && isTraspasoActorStepKey(activeStep?.key)
+          ? ['vendedor', 'comprador']
+          : activeStep?.key === 'comprador'
+            ? ['comprador']
+            : activeStep?.key === 'vendedor'
+              ? ['vendedor']
+              : [];
+      if (partesIdentidad.length > 0 && instanceId) {
+        for (const parteIdentidad of partesIdentidad) {
+          try {
+            const ensured = await tramitesClient.ensureIdentity(instanceId, parteIdentidad);
+            // HU #10646 — actor jurídico (NIT) cubierto por la firma del baúl: NO se lanza biométrica.
+            // El backend ya deja el paso de identidad completo y la parte aprobada; aquí solo registramos
+            // la cobertura por baúl para que BiometricStep muestre el estado "cubierto por el baúl".
+            if (ensured.outcome === 'firma_baul') {
+              setVaultCoveredPartes((prev) =>
+                prev.includes(parteIdentidad) ? prev : [...prev, parteIdentidad],
+              );
+            } else {
+              // Si la parte deja de estar cubierta (p.ej. se reemplazó el NIT por una persona natural),
+              // se limpia la marca para no arrastrar el estado del baúl de un guardado anterior.
+              setVaultCoveredPartes((prev) => prev.filter((p) => p !== parteIdentidad));
+              if (ensured.outcome === 'requiere_validacion') {
+                const { provider } = await tramitesClient.getBiometricState(instanceId);
+                if (provider === 'kyverum') {
+                  await tramitesClient.iniciarBiometric(instanceId, { parte: parteIdentidad });
+                } else {
+                  await tramitesClient.simulateBiometric(instanceId, { parte: parteIdentidad });
+                }
               }
             }
+          } catch (ensureErr) {
+            // No se traga en silencio (HU #10350): asegurar/iniciar la identidad falló. No bloquea el
+            // avance —el gestor puede iniciarla manualmente en el paso de Identidad— pero SÍ se avisa para
+            // que no continúe creyendo que la identidad quedó encaminada, y se deja traza para observabilidad.
+            console.warn('[tramite-wizard] ensureIdentity falló', {
+              instanceId,
+              parte: parteIdentidad,
+              error: ensureErr,
+            });
+            show(
+              'No se pudo iniciar automáticamente la validación de identidad. Continúa y, si es necesario, iníciala en el paso de Identidad.',
+              'error',
+            );
           }
-        } catch (ensureErr) {
-          // No se traga en silencio (HU #10350): asegurar/iniciar la identidad falló. No bloquea el
-          // avance —el gestor puede iniciarla manualmente en el paso de Identidad— pero SÍ se avisa para
-          // que no continúe creyendo que la identidad quedó encaminada, y se deja traza para observabilidad.
-          console.warn('[tramite-wizard] ensureIdentity falló', { instanceId, parte: parteIdentidad, error: ensureErr });
-          show(
-            'No se pudo iniciar automáticamente la validación de identidad. Continúa y, si es necesario, iníciala en el paso de Identidad.',
-            'error',
-          );
         }
       }
 
       const fresh = await refresh();
-      if (fresh?.steps?.[activeIndex]?.status === 'complete') {
+      const freshSteps = fresh?.steps ?? steps;
+      const currentComplete = freshSteps[activeIndex]?.status === 'complete';
+      // Traspaso unificado: también avanzar si ambos actores quedaron complete aunque
+      // el índice activo sea el del vendedor (el comprador server-side se completa en el mismo save).
+      const actoresBothComplete =
+        modalidad === 'traspaso' &&
+        isTraspasoActorStepKey(activeStep?.key) &&
+        freshSteps.find((s) => s.key === 'vendedor')?.status === 'complete' &&
+        freshSteps.find((s) => s.key === 'comprador')?.status === 'complete';
+      if (currentComplete || actoresBothComplete) {
         // Reportes2 HU-A — guardado + avance con éxito = wizard_step_complete.
         telemetry.trackStepComplete();
-        const nextIndex = Math.min(activeIndex + 1, steps.length - 1);
+        const nextIndex = nextIndexAfterUnifiedActores(freshSteps, activeIndex);
         // AC1 (HU #10883) — mismo autosave de `goToStep`, pero este avance mueve `activeIndex`
         // directamente (no pasa por `goToStep`) porque primero guarda el formulario embebido.
-        if (nextIndex > activeIndex && steps[nextIndex]) persistCurrentStep(steps[nextIndex].key);
+        if (nextIndex > activeIndex && freshSteps[nextIndex]) persistCurrentStep(freshSteps[nextIndex].key);
         setActiveIndex(nextIndex);
       }
       setHasUnsavedChanges(false);
@@ -1012,6 +1015,7 @@ export function TramiteWizard(props: Props) {
             activeIndex={activeIndex}
             onGoToStep={goToStep}
             viewOnly={navViewOnly}
+            coalesceActores={modalidad === 'traspaso'}
           />
         )}
       </div>
@@ -1093,7 +1097,11 @@ export function TramiteWizard(props: Props) {
             <div className="space-y-6">
               {activeStep.key !== 'fur' && activeStep.key !== 'identidad' && (
                 <div>
-                  <h2 className="text-base font-bold">{activeStep.label}</h2>
+                  <h2 className="text-base font-bold">
+                    {modalidad === 'traspaso' && isTraspasoActorStepKey(activeStep.key)
+                      ? 'Actores'
+                      : activeStep.label}
+                  </h2>
                   {(activeStep.key === 'documentos' && modalidad !== 'traspaso'
                     ? DOCUMENTOS_SUBTITLE_MATRICULA
                     : STEP_SUBTITLE[activeStep.key]) && (
@@ -1177,25 +1185,22 @@ export function TramiteWizard(props: Props) {
             </div>
 
             <div className="flex justify-end">
-            {/* Acción derecha del footer según el modo (HU #10350 + N 03 dos pasos):
-                · Preparado: "Radicar a tránsito" (preparado→entregado) en el paso de decisión.
+            {/* Acción derecha del footer:
+                · Preparado o borrador con identidad OK: "Radicar trámite" (encadena preparado→entregado).
                 · Solo visualización (otros estados no editables): sin acciones, solo se recorre.
-                · Paso de decisión (identidad/FUR) en borrador: "Preparar" (borrador→preparado) si la
-                  identidad ya está aprobada (canRadicar); si no, "Finalizar" (finalize-draft) cuando
-                  los datos están completos. En borrador ya finalizado solo se ofrece "Preparar"
-                  (deshabilitado hasta que el cliente valide su identidad).
-                · Pasos de datos: editable usa "Guardar y continuar" (sin Guardar aparte), igual
-                  en borrador y en subsanación. */}
+                · Paso de decisión en borrador sin identidad: "Finalizar" (finalize-draft).
+                · En borrador ya finalizado: "Radicar trámite" deshabilitado hasta identidad.
+                · Pasos de datos: "Guardar y continuar". */}
             {fullReadOnly ? (
               isDecisionStep && canEntregar ? (
                 <button
-                  onClick={() => void handleRadicar()}
+                  onClick={() => void handleRadicarTramite()}
                   disabled={submitting}
                   className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
                   title="Entrega el trámite al organismo de tránsito"
                 >
-                  {submitting ? 'Radicando…' : 'Radicar a tránsito'}
+                  {submitting ? 'Radicando…' : 'Radicar trámite'}
                 </button>
               ) : null
             ) : isDecisionStep ? (
@@ -1236,23 +1241,23 @@ export function TramiteWizard(props: Props) {
                 </button>
               ) : canRadicar ? (
                 <button
-                  onClick={() => void handlePreparar()}
+                  onClick={() => void handleRadicarTramite()}
                   disabled={submitting}
                   className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-                  title="Deja el trámite validado y listo para radicar (la generación de documentos no bloquea)"
+                  title="Prepara y radica el trámite en un solo paso (queda en entregado)"
                 >
-                  {submitting ? 'Preparando…' : 'Preparar'}
+                  {submitting ? 'Radicando…' : 'Radicar trámite'}
                 </button>
               ) : draftFinalized ? (
                 <button
-                  onClick={() => void handlePreparar()}
+                  onClick={() => void handleRadicarTramite()}
                   disabled
                   className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
                   title="Disponible cuando el cliente valide su identidad"
                 >
-                  Preparar
+                  Radicar trámite
                 </button>
               ) : (
                 <button
@@ -2481,6 +2486,7 @@ function StepBody({
                 instanceId={instanceId}
                 onSaved={onRefresh}
                 embeddedInWizard
+                modalidad="matricula_inicial"
                 runtHasGravamen={gravamen?.status === 'warn'}
                 runtGravamenMessage={gravamen?.message}
               />
@@ -2500,17 +2506,34 @@ function StepBody({
         </div>
       );
 
-    // key={step.key}: comprador y vendedor renderizan <ActorsForm> en la misma
-    // posición del árbol; sin key, React reusa la instancia al cambiar de paso y
-    // arrastra el estado (actores hidratados) del paso anterior. La key fuerza
-    // el remontaje y la rehidratación limpia por paso.
+    // Traspaso: vendedor y comprador se unifican en un solo formulario (2 tarjetas).
+    // Matrícula sigue con comprador en layout split. key estable `actores` evita remontar
+    // al pasar del índice server vendedor↔comprador.
     case 'comprador':
+    case 'vendedor': {
+      if (modalidad === 'traspaso') {
+        return (
+          <ActorsForm
+            key="actores-unificados"
+            ref={stepFormRef}
+            instanceId={instanceId}
+            modalidad="traspaso"
+            roles={['vendedor', 'comprador']}
+            onSaved={onRefresh}
+            embeddedInWizard
+            seedDocumentoFromOwner
+            autoConsultRunt
+            rnmcEnabled={rnmcEnabled}
+            onConsultationGateChange={onActorsConsultationGateChange}
+          />
+        );
+      }
       return (
         <ActorsForm
           key={step.key}
           ref={stepFormRef}
           instanceId={instanceId}
-          modalidad={modalidad === 'traspaso' ? 'traspaso' : 'matricula_inicial'}
+          modalidad="matricula_inicial"
           roles={['comprador']}
           onSaved={onRefresh}
           embeddedInWizard
@@ -2519,26 +2542,7 @@ function StepBody({
           onConsultationGateChange={onActorsConsultationGateChange}
         />
       );
-
-    case 'vendedor':
-      return (
-        <ActorsForm
-          key={step.key}
-          ref={stepFormRef}
-          instanceId={instanceId}
-          modalidad="traspaso"
-          roles={['vendedor']}
-          onSaved={onRefresh}
-          embeddedInWizard
-          layout="split"
-          // El vendedor es el propietario registrado validado en el paso 1:
-          // siembra su documento desde owner_document_* y consulta RUNT al llegar.
-          seedDocumentoFromOwner
-          autoConsultRunt
-          rnmcEnabled={rnmcEnabled}
-          onConsultationGateChange={onActorsConsultationGateChange}
-        />
-      );
+    }
 
     case 'comercial':
       // hideHeader: el h2 + subtítulo ya cubren el título del paso. El guardado
@@ -2562,6 +2566,7 @@ function StepBody({
             decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
             onSaved={onRefresh}
             embeddedInWizard
+            modalidad="traspaso"
             runtHasGravamen={
               preflight?.checks?.find((c) => c.key === 'gravamenes')?.status === 'warn'
             }
@@ -2622,7 +2627,7 @@ function StepBody({
               ) : (
                 <span>
                   No se pudieron generar los documentos del expediente (tras reintentos). Puedes
-                  Preparar igual y regenerarlos al Radicar.
+                  Radicar igual y regenerarlos al entregar.
                 </span>
               )}
             </div>

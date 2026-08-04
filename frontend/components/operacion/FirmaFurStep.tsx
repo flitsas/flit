@@ -20,8 +20,8 @@ import ExpedienteVisor from './ExpedienteVisor';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { MandatarioSection } from './MandatarioSection';
-import { FirmaPosteriorSection } from './FirmaPosteriorSection';
 import { PRENDA_DECISION_LABELS } from './PrendaForm';
+import { prendaDocLabelFor, prendaDocTipoFor } from './prenda-document-tipos';
 import { summarizeDeclaredTransformations } from './VehicleTransformationsCard';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import type {
@@ -246,19 +246,15 @@ export function FirmaFurStep({
       });
       setActorsContact(actors);
       setPrenda(p);
-      const fechaGuardada =
-        d.fieldValues?.find((f) => f.fieldKey === 'fur_processing_date')?.valueText?.slice(0, 10) ??
-        '';
-      const fecha = fechaGuardada || todayIsoDate();
+      // Siempre la fecha del día (no editable en el resumen).
+      const fecha = todayIsoDate();
       setFechaTramite(fecha);
-      if (!fechaGuardada) {
-        try {
-          await tramitesClient.patchFieldValues(instanceId, [
-            { formFieldId: null, fieldKey: 'fur_processing_date', valueText: fecha },
-          ]);
-        } catch {
-          // Best-effort: el input ya muestra hoy.
-        }
+      try {
+        await tramitesClient.patchFieldValues(instanceId, [
+          { formFieldId: null, fieldKey: 'fur_processing_date', valueText: fecha },
+        ]);
+      } catch {
+        // Best-effort: el resumen ya muestra hoy.
       }
     } catch {
       // El detalle es secundario para el resto del paso; los subbloques
@@ -536,16 +532,29 @@ export function FirmaFurStep({
         transformaciones={summarizeDeclaredTransformations(detail?.fieldValues ?? [])}
         prenda={
           prenda
-            ? {
-                decisionLabel: PRENDA_DECISION_LABELS[prenda.decision],
-                acreedorNombre: prenda.acreedorNombre,
-              }
+            ? (() => {
+                const docTipo = prendaDocTipoFor(prenda.decision);
+                const docAdj = docTipo
+                  ? attachments.find((a) => a.tipo === docTipo)
+                  : undefined;
+                return {
+                  decisionLabel: PRENDA_DECISION_LABELS[prenda.decision],
+                  acreedorNombre: prenda.acreedorNombre,
+                  acreedorDocumento: prenda.acreedorDocumento,
+                  documentoLabel: docTipo ? prendaDocLabelFor(prenda.decision) : null,
+                  documento: docAdj
+                    ? {
+                        id: docAdj.id,
+                        tipo: docAdj.tipo,
+                        filename: docAdj.filename,
+                        mimetype: docAdj.mimetype,
+                      }
+                    : null,
+                };
+              })()
             : null
         }
         fechaTramite={fechaTramite}
-        onFechaTramiteChange={setFechaTramite}
-        onFechaTramiteBlur={() => void guardarFechaTramite()}
-        fechaTramiteDisabled={!instanceId || readOnly}
         instanceId={instanceId}
         compradorBio={
           biometric.find((b) => b.partyRole === 'comprador') ??
@@ -567,19 +576,6 @@ export function FirmaFurStep({
       {instanceId && organismoSelected && (
         <MandatarioSection
           instanceId={instanceId}
-          onChanged={() => {
-            void loadDetail();
-            onRefresh?.();
-          }}
-        />
-      )}
-
-      {/* HU #11197 — firma a posteriori del mandatario (comprador/vendedor viven en el resumen). */}
-      {instanceId && (
-        <FirmaPosteriorSection
-          instanceId={instanceId}
-          onlyRoles={['mandatario']}
-          readOnly={readOnly}
           onChanged={() => {
             void loadDetail();
             onRefresh?.();
@@ -617,8 +613,6 @@ export function FirmaFurStep({
       />
 
       {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
-
-      {/* Firma de compraventa: embebida en Comprador/Vendedor del MatriculaResumen (traspaso). */}
 
       <PlateFlowCompleteSection instanceId={instanceId} onRefresh={onRefresh} />
 
