@@ -1,496 +1,362 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Car, Check, Download, FileText, ShieldCheck, User } from 'lucide-react';
+import { useId, useState, type ReactNode } from 'react';
+import { ChevronDown, Download, FileText } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { documentLabel } from '@/lib/tramites/document-labels';
 import type {
-  Actor,
-  BiometricValidation,
-  FieldValue,
+  InstanceStatus,
   ProcedureAttachment,
+  WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
-// Expediente digital tabulado (Vehículo · Comprador · Documentos). Adaptado del
-// ExpedienteVisor de Johan a la capa de datos de FLIT. SIN pdfjs ni fotos de
-// identidad (mock hasta acuerdo con proveedor): la previsualización se reduce a
-// descarga de adjuntos y la identidad se muestra como estado (listBiometric).
+// Expediente digital: documentos del trámite. Vehículo, actores y validación
+// viven en MatriculaResumen. El organismo de tránsito no se muestra aquí
+// (se elige en el paso 1 o lo fija el RUNT en traspaso).
 
 interface Props {
   instanceId: string | null;
-  fieldValues: FieldValue[];
-  comprador: Actor | null;
-  /** Parte saliente. Solo en traspaso; en matrícula es `null` (sin pestaña Vendedor). */
-  vendedor?: Actor | null;
-  vin: string;
   attachments: ProcedureAttachment[];
-  biometric: BiometricValidation[];
-  /**
-   * HU #11014 — partes cuya identidad queda cubierta por la firma del baúl (ADR-0025 §4). Se rotulan
-   * como «firmado desde el baúl»: no hay validación biométrica ni certificado que mostrar.
-   */
-  firmaBaulPartes?: string[];
-  orgTransito: { nombre?: string; ciudad?: string; codigo?: string };
+  modalidad?: WizardModalidad;
+  status?: InstanceStatus;
+  onBeforeGenerateConsolidado?: () => Promise<void>;
+  onAttachmentsChange?: () => void;
 }
-
-type MainTab = 'vehiculo' | 'vendedor' | 'comprador' | 'documentos';
 
 const BLUE = '#557EFF';
 const BORDER = '#DFE5ED';
 
-function D({ label, value }: { label: string; value?: string | null }) {
+/** Adjunto del expediente consolidado (wizard o variantes de nombre/tipo). */
+export function findConsolidadoAttachment(
+  attachments: ProcedureAttachment[],
+): ProcedureAttachment | undefined {
+  const exact = attachments.find((a) => (a.tipo ?? '').toLowerCase() === 'consolidado');
+  if (exact) return exact;
+  return attachments.find((a) => {
+    const tipo = (a.tipo ?? '').toLowerCase();
+    const name = (a.filename ?? '').toLowerCase();
+    return tipo.includes('consolidado') || name.includes('consolidado');
+  });
+}
+
+function ExpedienteDisclosure({
+  title,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const panelId = useId();
+
   return (
-    <div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] opacity-60">{label}</p>
-      <p className="text-xs font-medium break-words">{value || '—'}</p>
+    <div
+      className="overflow-hidden rounded-xl border bg-white dark:bg-[#0B0F14]"
+      style={{ borderColor: BORDER }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+        aria-expanded={open}
+        aria-controls={panelId}
+      >
+        <span className="flex items-center gap-2">
+          <span className="h-4 w-1 rounded-full" style={{ background: BLUE }} aria-hidden="true" />
+          <span className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: BLUE }}>
+            {title}
+          </span>
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          style={{ color: '#9AA5B1' }}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div
+          id={panelId}
+          className="border-t px-4 py-4"
+          style={{ borderColor: BORDER }}
+          role="region"
+          aria-label={title}
+        >
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-/**
- * Una parte es persona jurídica cuando su documento es NIT (HU #10856): valida el representante legal.
- * HU #11014 — mismo criterio que el wizard (`isJuridical` de ActorsForm), que además admite el tipo de
- * persona explícito; aquí el detalle solo expone el documento, así que el NIT manda.
- */
-function esPersonaJuridica(actor: Actor | null | undefined): boolean {
-  return actor?.documentType === 'NIT';
-}
-
-function SectionTitle({ children }: { children: string }) {
-  return (
-    <div className="flex items-center gap-2 mb-2">
-      <span className="w-1 h-4 rounded-full" style={{ background: BLUE }} aria-hidden="true" />
-      <h5 className="text-xs font-bold uppercase tracking-[0.2em]">{children}</h5>
-    </div>
-  );
+function openBlobInNewTab(blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!win) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'documento.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export default function ExpedienteVisor({
   instanceId,
-  fieldValues,
-  comprador,
-  vendedor,
-  vin,
   attachments,
-  biometric,
-  firmaBaulPartes = [],
-  orgTransito,
+  modalidad = 'matricula_inicial',
+  status = 'borrador',
+  onBeforeGenerateConsolidado,
+  onAttachmentsChange,
 }: Props) {
-  const [mainTab, setMainTab] = useState<MainTab>('vehiculo');
-
-  // Caché del certificado de identidad por validación (HU #10861): se descarga una vez por parte y
-  // se conserva al cambiar de pestaña; los objectURL se liberan al desmontar el visor.
-  const certCache = useRef<Map<string, string>>(new Map());
-  useEffect(() => {
-    const cache = certCache.current;
-    return () => {
-      for (const url of cache.values()) URL.revokeObjectURL(url);
-      cache.clear();
-    };
-  }, []);
-
-  const fv = useMemo(
-    () => (key: string) => fieldValues.find((f) => f.fieldKey === key)?.valueText ?? '',
-    [fieldValues],
-  );
-
-  const placa = fv('plate');
-
-  // Validación del comprador: matrícula => parte null; traspaso => parte 'comprador'.
-  const compradorBio = useMemo(
-    () =>
-      biometric.find((b) => b.partyRole === 'comprador') ??
-      biometric.find((b) => b.partyRole === null) ??
-      null,
-    [biometric],
-  );
-  // Validación del vendedor (solo traspaso): parte 'vendedor'.
-  const vendedorBio = useMemo(
-    () => biometric.find((b) => b.partyRole === 'vendedor') ?? null,
-    [biometric],
-  );
-
-  // Pestañas: el Vendedor solo aplica en traspaso (parte saliente). Se inserta
-  // antes del Comprador (saliente → entrante), espejo del resumen.
-  const tabs = useMemo<{ key: MainTab; label: string; Icon: typeof Car }[]>(
-    () => [
-      { key: 'vehiculo', label: 'Vehículo', Icon: Car },
-      ...(vendedor ? [{ key: 'vendedor' as const, label: 'Vendedor', Icon: User }] : []),
-      { key: 'comprador', label: 'Comprador', Icon: User },
-      { key: 'documentos', label: 'Documentos', Icon: FileText },
-    ],
-    [vendedor],
-  );
-
-  const furDoc = attachments.find((a) => a.tipo === 'fur') ?? null;
-
   return (
-    <section aria-label="Expediente digital" className="rounded-xl border" style={{ borderColor: BORDER }}>
-      {/* Tabs principales */}
-      <div className="flex border-b" style={{ borderColor: BORDER }} role="tablist">
-        {tabs.map(({ key, label, Icon }) => {
-          const active = mainTab === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setMainTab(key)}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-3 text-xs font-semibold border-b-2 transition-colors"
-              style={{
-                borderColor: active ? BLUE : 'transparent',
-                color: active ? BLUE : undefined,
-                opacity: active ? 1 : 0.6,
-              }}
-            >
-              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="p-4 space-y-4">
-        {mainTab === 'vehiculo' && (
-          <>
-            {/* Card placa estilo matrícula */}
-            <div className="rounded-xl border p-3 flex items-center gap-4" style={{ borderColor: BORDER }}>
-              <div
-                className="rounded-xl px-4 py-2 text-center shrink-0 border-2"
-                style={{ borderColor: '#0B0F14' }}
-              >
-                <p className="text-[7px] font-semibold tracking-[0.3em] opacity-70">REPÚBLICA DE COLOMBIA</p>
-                <p className="text-2xl font-bold font-mono tracking-[0.18em]">{placa || 'NUEVA'}</p>
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.3em] opacity-60">
-                  {fv('vehicle_brand') || '—'}
-                </p>
-                <p className="text-base font-bold truncate">{fv('vehicle_line') || '—'}</p>
-                <p className="text-xs opacity-80">
-                  Modelo {fv('vehicle_year') || '—'} · {fv('vehicle_color') || '—'}
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <SectionTitle>Especificaciones técnicas</SectionTitle>
-              <div
-                className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-xl border"
-                style={{ borderColor: BORDER }}
-              >
-                <D label="Clase" value={fv('vehicle_class')} />
-                <D label="Servicio" value={fv('vehicle_service')} />
-                <D
-                  label="Cilindraje"
-                  value={fv('vehicle_engine_displacement') ? `${fv('vehicle_engine_displacement')} cc` : ''}
-                />
-                <D label="Combustible" value={fv('vehicle_fuel')} />
-                <D label="Carrocería" value={fv('vehicle_body_type')} />
-                <D label="Capacidad" value={fv('vehicle_passengers')} />
-                <D label="Ejes" value={fv('vehicle_axles')} />
-                <D label="Estado" value={fv('vehicle_state')} />
-              </div>
-            </div>
-
-            <div>
-              <SectionTitle>Identificación interna</SectionTitle>
-              <div
-                className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl border"
-                style={{ borderColor: BORDER }}
-              >
-                <D label="VIN" value={vin} />
-                <D label="N. Motor" value={fv('vehicle_engine_number')} />
-                <D label="N. Chasis" value={fv('vehicle_chassis')} />
-                <D label="N. Serie" value={fv('vehicle_series')} />
-              </div>
-            </div>
-          </>
-        )}
-
-        {mainTab === 'vendedor' && vendedor && (
-          <>
-            <div>
-              <SectionTitle>Datos del vendedor</SectionTitle>
-              <div
-                className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl border"
-                style={{ borderColor: BORDER }}
-              >
-                <D label="Nombre" value={vendedor?.fullName} />
-                <D label="Tipo doc" value={vendedor?.documentType || 'CC'} />
-                <D label="Número" value={vendedor?.documentNumber} />
-                <D label="Email" value={vendedorBio?.email || vendedor?.email || undefined} />
-              </div>
-            </div>
-
-            {esPersonaJuridica(vendedor) && <RepresentanteLegalBlock bio={vendedorBio} />}
-
-            <div>
-              <SectionTitle>Validación de identidad</SectionTitle>
-              <IdentidadBlock
-                bio={vendedorBio}
-                firmaBaul={firmaBaulPartes.includes('vendedor')}
-                instanceId={instanceId}
-                certCache={certCache}
-              />
-            </div>
-          </>
-        )}
-
-        {mainTab === 'comprador' && (
-          <>
-            <div>
-              <SectionTitle>Datos del comprador</SectionTitle>
-              <div
-                className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl border"
-                style={{ borderColor: BORDER }}
-              >
-                <D label="Nombre" value={comprador?.fullName} />
-                <D label="Tipo doc" value={comprador?.documentType || 'CC'} />
-                <D label="Número" value={comprador?.documentNumber} />
-                <D label="Email" value={compradorBio?.email || comprador?.email || undefined} />
-              </div>
-            </div>
-
-            {esPersonaJuridica(comprador) && <RepresentanteLegalBlock bio={compradorBio} />}
-
-            <div>
-              <SectionTitle>Validación de identidad</SectionTitle>
-              <IdentidadBlock
-                bio={compradorBio}
-                firmaBaul={firmaBaulPartes.includes('comprador')}
-                instanceId={instanceId}
-                certCache={certCache}
-              />
-            </div>
-
-            {(orgTransito?.nombre || orgTransito?.codigo) && (
-              <div>
-                <SectionTitle>Organismo de tránsito</SectionTitle>
-                <div
-                  className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl border"
-                  style={{ borderColor: BORDER }}
-                >
-                  <D label="Nombre" value={orgTransito.nombre} />
-                  <D label="Ciudad" value={orgTransito.ciudad} />
-                  <D label="Código" value={orgTransito.codigo} />
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        {mainTab === 'documentos' && (
-          <DocumentosTab instanceId={instanceId} attachments={attachments} furDoc={furDoc} />
-        )}
-      </div>
-
-      <p className="px-4 pb-3 text-[10px] opacity-50">Expediente digital · FLIT Operaciones</p>
+    <section aria-label="Expediente digital" className="space-y-3">
+      <DocumentosSection
+        instanceId={instanceId}
+        attachments={attachments}
+        modalidad={modalidad}
+        status={status}
+        onBeforeGenerateConsolidado={onBeforeGenerateConsolidado}
+        onAttachmentsChange={onAttachmentsChange}
+      />
     </section>
   );
 }
 
-/**
- * Datos del representante legal de una persona jurídica (HU #10856): cuando la parte es jurídica (NIT),
- * la validación de identidad la realiza el representante legal, así que se muestran sus datos (tomados de
- * la validación biométrica) junto al certificado de validación (que aparece en el bloque de identidad).
- */
-function RepresentanteLegalBlock({ bio }: { bio: BiometricValidation | null }) {
-  return (
-    <div>
-      <SectionTitle>Representante legal</SectionTitle>
-      <div
-        className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl border"
-        style={{ borderColor: BORDER }}
-      >
-        <D label="Nombre" value={bio?.name} />
-        <D label="Tipo doc" value={bio?.documentType} />
-        <D label="Número" value={bio?.documentNumber} />
-        <D label="Email" value={bio?.email} />
-      </div>
-      <p className="text-[10px] opacity-60 mt-1">
-        La validación de identidad y su certificado corresponden al representante legal.
-      </p>
-    </div>
-  );
+function consolidadoAvisoLabel(aviso: string): string {
+  const [documento, motivo = ''] = aviso.split(':').map((s) => s.trim());
+  const nombre =
+    documento === 'documentos_del_expediente'
+      ? 'algunos documentos del expediente'
+      : documentLabel(documento);
+  const causa =
+    motivo.includes('organismo_requerido')
+      ? ' (falta el organismo de tránsito)'
+      : motivo.includes('provider_unavailable')
+        ? ' (el proveedor no está disponible; vuelve a generar el expediente en unos minutos)'
+        : motivo.includes('provider_validation')
+          ? ' (el proveedor rechazó los datos del trámite)'
+          : motivo
+            ? ` (${motivo})`
+            : '';
+  return `${nombre}${causa}`;
 }
 
-/**
- * Bloque de estado de identidad (HU #10861): además del estado, muestra el certificado de validación
- * de identidad del proveedor en un visor embebido, cargado de forma perezosa al abrir la pestaña. Si la
- * validación no está aprobada, se muestra solo el estado (sin visor).
- */
-function IdentidadBlock({
-  bio,
-  firmaBaul = false,
-  instanceId,
-  certCache,
-}: {
-  bio: BiometricValidation | null;
-  /** HU #11014 — la identidad de la parte está cubierta por su firma del baúl (ADR-0025 §4). */
-  firmaBaul?: boolean;
-  instanceId: string | null;
-  certCache: React.RefObject<Map<string, string>>;
-}) {
-  const estado = bio?.status;
-  const aprobado = !firmaBaul && estado === 'aprobado';
-  const rechazado = !firmaBaul && estado === 'rechazado';
-  const pendiente = !firmaBaul && (estado === 'enviado' || estado === 'en_proceso');
-
-  const { label, color } = firmaBaul
-    ? { label: 'Firmado desde el baúl de firmas', color: '#5B8A1F' }
-    : aprobado
-    ? { label: 'Validada', color: '#5B8A1F' }
-    : rechazado
-      ? { label: 'Rechazada', color: '#FF4E00' }
-      : pendiente
-        ? { label: 'Pendiente', color: '#F9AC00' }
-        : { label: 'Sin validación', color: '#9AA5B1' };
-
-  // HU #11014 — con firma del baúl NO hay validación biométrica ni certificado: se rotula como firmada
-  // desde el baúl y no se intenta descargar nada (antes hablaba de un certificado inexistente).
-  const validationId = firmaBaul ? null : (bio?.id ?? null);
-  const [certUrl, setCertUrl] = useState<string | null>(
-    () => (validationId ? (certCache.current.get(validationId) ?? null) : null),
-  );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!aprobado || !validationId || !instanceId) return;
-
-    // Ya en caché (lo tomó el inicializador de useState al montar): no volver a descargar.
-    if (certCache.current.has(validationId)) return;
-
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const { blob } = await tramitesClient.downloadBiometricCertificado(instanceId, validationId);
-        if (cancelled) return;
-        const objectUrl = URL.createObjectURL(blob);
-        certCache.current.set(validationId, objectUrl);
-        setCertUrl(objectUrl);
-      } catch (e: unknown) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'No se pudo cargar el certificado.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [aprobado, validationId, instanceId, certCache]);
-
-  return (
-    <div className="p-3 rounded-xl border space-y-3" style={{ borderColor: BORDER }}>
-      <div className="flex items-center gap-3">
-        <span
-          className="h-8 w-8 rounded-full grid place-items-center shrink-0"
-          style={{ background: `color-mix(in srgb, ${color} 16%, transparent)`, color }}
-          aria-hidden="true"
-        >
-          {aprobado || firmaBaul ? <Check className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
-        </span>
-        <div>
-          <p className="text-xs font-semibold" style={{ color }}>
-            {label}
-          </p>
-          {aprobado && bio?.score != null && (
-            <p className="text-[10px] opacity-60">Score: {bio.score}/100</p>
-          )}
-        </div>
-      </div>
-
-      {/* HU #11014 — con firma del baúl no hay certificado del proveedor: se explica la fuente de la firma. */}
-      {firmaBaul && (
-        <p className="text-[11px] opacity-70" data-testid="identidad-firma-baul">
-          La identidad de esta parte se acredita con su firma registrada en el baúl de firmas; no
-          requiere validación biométrica ni certificado de identidad.
-        </p>
-      )}
-
-      {/* Certificado de validación de identidad (visor perezoso). Solo cuando la validación está aprobada. */}
-      {aprobado ? (
-        <div className="rounded-xl border overflow-hidden" style={{ borderColor: BORDER }}>
-          {loading && (
-            <div
-              className="h-[420px] grid place-items-center text-[11px] opacity-60 animate-pulse bg-[#F4F7FC] dark:bg-white/5"
-              data-testid="cert-loading"
-            >
-              Cargando certificado de identidad…
-            </div>
-          )}
-          {!loading && error && (
-            <div className="p-3 text-[11px]" style={{ color: '#FF4E00' }} role="alert">
-              {error}
-            </div>
-          )}
-          {!loading && !error && certUrl && (
-            <iframe
-              src={certUrl}
-              title="Certificado de validación de identidad"
-              className="w-full h-[420px]"
-              data-testid="cert-iframe"
-            />
-          )}
-        </div>
-      ) : (
-        <p className="text-[11px] opacity-60">
-          El certificado de identidad estará disponible cuando la validación sea aprobada.
-        </p>
-      )}
-    </div>
-  );
-}
-
-/** Pestaña Documentos: chips por tipo + descarga (sin previsualización, MVP). */
-function DocumentosTab({
+function DocumentosSection({
   instanceId,
   attachments,
-  furDoc,
+  modalidad,
+  status,
+  onBeforeGenerateConsolidado,
+  onAttachmentsChange,
 }: {
   instanceId: string | null;
   attachments: ProcedureAttachment[];
-  furDoc: ProcedureAttachment | null;
+  modalidad: WizardModalidad;
+  status: InstanceStatus;
+  onBeforeGenerateConsolidado?: () => Promise<void>;
+  onAttachmentsChange?: () => void;
 }) {
-  return (
-    <div className="space-y-4">
-      <div>
-        <SectionTitle>Documentos del expediente</SectionTitle>
-        {attachments.length > 0 ? (
-          <ul className="space-y-2" aria-label="Documentos del expediente (visor)">
-            {attachments.map((a) => (
-              <DocRow key={a.id} instanceId={instanceId} attachment={a} />
-            ))}
-          </ul>
-        ) : (
-          <p className="text-[11px] opacity-60">No se han cargado documentos.</p>
-        )}
-      </div>
+  const consolidado = findConsolidadoAttachment(attachments);
+  const [generating, setGenerating] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const estadoFinal = status === 'aprobado' || status === 'anulado';
+  const busy = generating || downloading;
 
-      <div>
-        <SectionTitle>FUR</SectionTitle>
-        {furDoc ? (
-          <ul className="space-y-2" aria-label="FUR del expediente">
-            <DocRow instanceId={instanceId} attachment={furDoc} />
-          </ul>
-        ) : (
-          <p className="text-[11px] opacity-60">
-            Aún no se ha generado el FUR. Genéralo en la sección «FUR / contrato de compraventa» de
-            arriba.
+  const applyAvisos = (generado: Awaited<ReturnType<typeof tramitesClient.generarConsolidado>>) => {
+    const avisos: string[] = [];
+    if (generado?.incompleto) {
+      const faltantes = (generado.documentosFaltantes ?? []).map(documentLabel).join(', ');
+      avisos.push(
+        faltantes
+          ? `Faltan documentos obligatorios: ${faltantes}.`
+          : 'Faltan documentos obligatorios.',
+      );
+    }
+    for (const aviso of generado?.avisosCascada ?? []) {
+      avisos.push(`No se pudo generar ${consolidadoAvisoLabel(aviso)}.`);
+    }
+    if (avisos.length > 0) {
+      setError(`Expediente consolidado generado. ${avisos.join(' ')}`);
+    }
+  };
+
+  const consolidadoIdFromResult = (
+    generado: Awaited<ReturnType<typeof tramitesClient.generarConsolidado>>,
+  ): { id: string; filename: string } | null => {
+    const nested = generado?.document;
+    if (nested?.attachmentId) {
+      return { id: nested.attachmentId, filename: nested.filename || 'consolidado.pdf' };
+    }
+    // Compat con respuestas planas (mocks / clientes antiguos).
+    const flat = generado as { attachmentId?: string; filename?: string } | null | undefined;
+    if (flat?.attachmentId) {
+      return { id: flat.attachmentId, filename: flat.filename || 'consolidado.pdf' };
+    }
+    return null;
+  };
+
+  const handleGenerate = async () => {
+    if (!instanceId) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      await onBeforeGenerateConsolidado?.();
+      const generado = await tramitesClient.generarConsolidado(instanceId);
+      applyAvisos(generado);
+      onAttachmentsChange?.();
+    } catch (err) {
+      const msg = (err instanceof Error ? err.message : '').trim();
+      setError(
+        msg.includes('generacion_bloqueada_estado_final')
+          ? 'El trámite ya está aprobado o anulado: su documentación es definitiva y no se regenera.'
+          : msg ||
+              'No se pudo generar el consolidado. Revisa la conexión e inténtalo de nuevo.',
+      );
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  /** Si ya hay consolidado: abre PDF. Si no: genera, refresca adjuntos y abre en otra pestaña. */
+  const handleDescargarTodo = async () => {
+    if (!instanceId) return;
+    setDownloading(true);
+    setError(null);
+    try {
+      if (consolidado) {
+        await openAttachmentInNewTab(instanceId, consolidado);
+        return;
+      }
+      await onBeforeGenerateConsolidado?.();
+      const generado = await tramitesClient.generarConsolidado(instanceId);
+      applyAvisos(generado);
+      const doc = consolidadoIdFromResult(generado);
+      if (doc) {
+        await openAttachmentInNewTab(instanceId, {
+          id: doc.id,
+          tipo: 'consolidado',
+          filename: doc.filename,
+          mimetype: 'application/pdf',
+          sizeBytes: 0,
+          sha256: '',
+          source: 'system',
+          uploadedAt: new Date().toISOString(),
+        });
+      }
+      onAttachmentsChange?.();
+    } catch (err) {
+      const msg = (err instanceof Error ? err.message : '').trim();
+      setError(
+        msg.includes('generacion_bloqueada_estado_final')
+          ? 'El trámite ya está aprobado o anulado: su documentación es definitiva y no se regenera.'
+          : msg ||
+              'No se pudo generar el consolidado. Revisa la conexión e inténtalo de nuevo.',
+      );
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const gradientBtnClass =
+    'inline-flex items-center justify-center rounded-full px-6 py-2.5 text-xs font-semibold text-white transition hover:opacity-95 disabled:opacity-50';
+  const gradientBtnStyle = { background: 'linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)' };
+
+  return (
+    <ExpedienteDisclosure title="Documentos">
+      {attachments.length > 0 ? (
+        <ul className="space-y-2.5" aria-label="Documentos del expediente (visor)">
+          {attachments.map((a) => (
+            <DocRow key={a.id} instanceId={instanceId} attachment={a} />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[11px] opacity-60">No se han cargado documentos.</p>
+      )}
+
+      <div className="mt-4 space-y-3 border-t pt-4" style={{ borderColor: BORDER }}>
+        <div>
+          <h5 className="text-xs font-bold" style={{ color: '#162744' }}>
+            Expediente consolidado
+          </h5>
+          <p className="mt-1 text-[11px] opacity-70">
+            Un solo PDF con el FUR, el certificado de identidad, la impronta y los documentos
+            cargados en el trámite
+            {modalidad === 'traspaso' ? ' (incluye el contrato de compraventa)' : ''}. Al generarlo se
+            producen también los documentos que falten.
           </p>
+        </div>
+
+        {error && (
+          <div
+            className="rounded-xl border p-3 text-xs"
+            style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+            role="alert"
+            aria-live="polite"
+          >
+            {error}
+          </div>
         )}
+
+        {estadoFinal ? (
+          <p className="text-[11px] font-medium" style={{ color: '#557EFF' }} role="status">
+            El trámite ya está {status === 'aprobado' ? 'aprobado' : 'anulado'}: su documentación es
+            definitiva. Puedes consultarla y descargarla.
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2">
+          {!estadoFinal && consolidado ? (
+            <button
+              type="button"
+              onClick={() => void handleGenerate()}
+              disabled={busy || !instanceId}
+              className="rounded-full px-5 py-2.5 text-xs font-semibold text-white disabled:opacity-50"
+              style={{ background: '#162744' }}
+            >
+              {generating ? 'Generando expediente…' : 'Re-generar expediente consolidado'}
+            </button>
+          ) : null}
+
+          {instanceId && (!estadoFinal || consolidado) ? (
+            <button
+              type="button"
+              className={gradientBtnClass}
+              style={gradientBtnStyle}
+              disabled={busy}
+              onClick={() => void handleDescargarTodo()}
+              aria-label="Descargar todo · Expediente consolidado (PDF)"
+            >
+              {downloading && !consolidado
+                ? 'Generando expediente…'
+                : downloading
+                  ? 'Descargando…'
+                  : 'Descargar todo · Expediente consolidado (PDF)'}
+            </button>
+          ) : null}
+        </div>
       </div>
-    </div>
+    </ExpedienteDisclosure>
   );
 }
 
-/** Fila de adjunto con descarga (blob → objectURL → anchor). */
+async function openAttachmentInNewTab(
+  instanceId: string,
+  attachment: ProcedureAttachment,
+) {
+  const { blob } = await tramitesClient.downloadAttachment(
+    instanceId,
+    attachment.id,
+    undefined,
+    attachment.filename,
+  );
+  openBlobInNewTab(blob);
+}
+
 function DocRow({
   instanceId,
   attachment: d,
@@ -499,55 +365,48 @@ function DocRow({
   attachment: ProcedureAttachment;
 }) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
-
-  const handleDownload = async () => {
-    if (!instanceId) return;
-    setBusy(true);
-    setError(false);
-    try {
-      const { blob, filename } = await tramitesClient.downloadAttachment(
-        instanceId,
-        d.id,
-        undefined,
-        d.filename,
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch {
-      setError(true);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const label = documentLabel(d.tipo) || d.filename || d.tipo || 'Documento';
+  const filename = d.filename?.trim() || '';
 
   return (
-    <li className="rounded-xl border p-3 flex items-center gap-3" style={{ borderColor: BORDER }}>
-      <FileText className="h-4 w-4 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
+    <li
+      className="flex items-center gap-3 rounded-2xl border bg-white px-4 py-3 dark:bg-[#0B0F14]"
+      style={{ borderColor: BORDER }}
+    >
+      <FileText className="h-5 w-5 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold">
-          {documentLabel(d.tipo)} <span className="opacity-50 font-normal">· {d.filename}</span>
+        <p className="truncate text-xs">
+          <span className="font-semibold" style={{ color: '#162744' }}>
+            {label}
+          </span>
+          {filename ? (
+            <span className="font-normal opacity-55"> · {filename}</span>
+          ) : null}
         </p>
-        <p className="text-[10px] opacity-60 truncate" title={d.sha256}>
-          SHA-256: {d.sha256}
-        </p>
+        {d.sha256 ? (
+          <p className="mt-0.5 truncate font-mono text-[10px] opacity-45" title={d.sha256}>
+            SHA-256 {d.sha256}
+          </p>
+        ) : null}
       </div>
       <button
         type="button"
-        onClick={() => void handleDownload()}
-        disabled={busy || !instanceId}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 disabled:opacity-50"
-        style={{ borderColor: error ? '#FF4E00' : BLUE, color: error ? '#FF4E00' : BLUE }}
-        aria-label={`Descargar ${d.filename}`}
+        disabled={!instanceId || busy}
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-[11px] font-semibold text-white disabled:opacity-50"
+        style={{ background: BLUE }}
+        aria-label={`Descargar ${filename || label}`}
+        onClick={async () => {
+          if (!instanceId) return;
+          setBusy(true);
+          try {
+            await openAttachmentInNewTab(instanceId, d);
+          } finally {
+            setBusy(false);
+          }
+        }}
       >
-        <Download className="h-3 w-3" />
-        {busy ? 'Descargando…' : error ? 'Reintentar' : 'Descargar'}
+        <Download className="h-3.5 w-3.5" aria-hidden="true" />
+        {busy ? 'Descargando…' : 'Descargar'}
       </button>
     </li>
   );

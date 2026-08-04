@@ -55,6 +55,15 @@ public sealed class KyverumRuntVehicleResultMapperTests
 
         // tipoDocPropietario "C" del RUNT → siembra owner_document_type en código FLIT (CC).
         Field(result, "owner_document_type").Should().Be("CC");
+
+        // Prendas SI + data.garantias → detalle hidratado (antes solo se persistían los flags SI/NO).
+        Field(result, "runt_tiene_prendas").Should().Be("SI");
+        Field(result, "runt_tiene_gravamenes").Should().Be("NO");
+        Field(result, "runt_nombre_acreedor").Should().Be("BANCOLOMBIA S.A.");
+        var gravamenesJson = result.HydratedFields.First(f => f.FieldKey == "runt_gravamenes").ValueJson;
+        gravamenesJson.Should().Contain("BANCOLOMBIA S.A.");
+        gravamenesJson.Should().Contain("890903938");
+        gravamenesJson.Should().Contain("13/06/2026");
     }
 
     // ── Placa Yamaha JNH38H — traspaso, SOAT múltiple (1 VIGENTE + 1 NO VIGENTE), sin gravámenes ─

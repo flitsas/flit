@@ -105,8 +105,16 @@ public static class VerifikResultMapper
         if (sinGravamenes && sinPrendas)
             return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Ok, Provider, null);
 
-        return new ConsultationCheck("gravamenes", "Gravámenes y limitaciones", Warn, Provider, "El vehículo tiene gravámenes o prendas");
+        return new ConsultationCheck(
+            "gravamenes",
+            "Gravámenes y limitaciones",
+            Warn,
+            Provider,
+            $"El vehículo tiene gravámenes o prendas (gravámenes: {NormSiNo(info.TieneGravamenes)} · prendas: {NormSiNo(info.Prendas)})");
     }
+
+    private static string NormSiNo(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "—" : value.Trim().ToUpperInvariant();
 
     private static bool IsSi(string? value) =>
         string.Equals(value, "SI", StringComparison.OrdinalIgnoreCase);
@@ -178,6 +186,17 @@ public static class VerifikResultMapper
 
         if (!string.IsNullOrWhiteSpace(info.FechaMatricula))
             fields.Add(new HydratedField("vehicle_registration_date", info.FechaMatricula, null));
+
+        // Señal RUNT de prenda/gravamen para el paso Prenda (desplegable junto a la alerta).
+        AddSiHay(fields, "runt_tiene_gravamenes", info.TieneGravamenes);
+        AddSiHay(fields, "runt_tiene_prendas", info.Prendas);
+        if (data?.GarantiasMobiliarias is { Count: > 0 } garantias)
+        {
+            fields.Add(new HydratedField(
+                "runt_gravamenes",
+                null,
+                JsonSerializer.Serialize(garantias)));
+        }
 
         // SOAT: tomar el vigente; si no, el primero disponible.
         var soat = data?.Soat?.FirstOrDefault(s =>

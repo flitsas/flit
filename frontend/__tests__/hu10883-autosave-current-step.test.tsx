@@ -37,6 +37,8 @@ const mocks = vi.hoisted(() => ({
   // Dependencias de los componentes embebidos por paso (documentos/actores/biométrica/FUR).
   getActors: vi.fn(),
   saveActors: vi.fn(),
+  runtPersonLookup: vi.fn(),
+  ruesPersonLookup: vi.fn(),
   getChecklist: vi.fn(),
   getAttachments: vi.fn(),
   uploadAttachment: vi.fn(),
@@ -159,6 +161,23 @@ beforeEach(() => {
   mocks.finalizeDraft.mockResolvedValue({ id: 'inst-1', status: 'borrador', draftFinalizedAt: '2026-06-24T12:00:00Z' });
   mocks.getActors.mockResolvedValue([]);
   mocks.saveActors.mockResolvedValue(undefined);
+  mocks.runtPersonLookup.mockResolvedValue({
+    found: true,
+    fullName: 'Pedro Vendedor',
+    firstName: 'Pedro',
+    lastName: 'Vendedor',
+    documentType: 'CC',
+    documentNumber: '999',
+    source: 'RUNT',
+    mode: 'mock',
+  });
+  mocks.ruesPersonLookup.mockResolvedValue({
+    found: true,
+    razonSocial: 'Empresa SAS',
+    documentNumber: '900',
+    source: 'RUES',
+    mode: 'mock',
+  });
   mocks.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true });
   mocks.getAttachments.mockResolvedValue([]);
   mocks.listTransitOffices.mockResolvedValue([]);
@@ -264,6 +283,8 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
 
     await user.click(screen.getByRole('button', { name: /^Paso 3: Vendedor/ }));
     await screen.findByDisplayValue('Pedro Vendedor');
+    // Sin consulta RUNT lista el footer queda deshabilitado (actorsConsultationReady).
+    await screen.findByText(/Persona encontrada en RUNT/i);
 
     await user.click(screen.getByRole('button', { name: /Guardar y continuar/ }));
 

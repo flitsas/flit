@@ -8,6 +8,7 @@ import {
   VEHICLE_FUEL_CATALOG,
 } from '@/lib/catalogs/vehicle-transformations';
 import { getBodyworksForVehicleClass, normalizeVehicleClass } from '@/lib/catalogs/bodywork-by-class';
+import { CatalogSearchSelect } from './CatalogSearchSelect';
 
 /**
  * Tarjeta "Transformaciones del vehículo" (A4/B4 · HU #10674 · ADR-0029 + P2/P3).
@@ -105,13 +106,7 @@ export function VehicleTransformationsCard({
         ]);
 
   // El resumen refleja lo que se imprime en el FUR: solo el valor NUEVO.
-  const changes: string[] = [];
-  if (colorActive && isChanged(colorRunt, colorEff))
-    changes.push(`Color: ${up(colorEff)}`);
-  if (fuelActive && isChanged(fuelRunt, fuelEff))
-    changes.push(`Combustible: ${up(fuelEff)}`);
-  if (bodyworkActive && isChanged(bodyworkRunt, bodyworkEff))
-    changes.push(`Carrocería: ${up(bodyworkEff)}`);
+  const changes = summarizeDeclaredTransformations(fieldValues);
 
   return (
     <section
@@ -272,24 +267,15 @@ function TransformationRow({
           {options.length === 0 && emptyMessage ? (
             <p className="text-[11px] opacity-55">{emptyMessage}</p>
           ) : (
-            <>
-              <label htmlFor={selectId} className="block text-[11px] font-medium opacity-70">
-                {computedSelectLabel}
-              </label>
-              <select
-                id={selectId}
-                value={effectiveValue}
-                onChange={(e) => onSelect(e.target.value)}
-                disabled={disabled}
-                className="w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14]"
-              >
-              {selectOptions.map((opt, i) => (
-              <option key={`${opt}-${i}`} value={opt}>
-                {opt}
-              </option>
-            ))}
-              </select>
-            </>
+            <CatalogSearchSelect
+              id={selectId}
+              label={computedSelectLabel}
+              value={effectiveValue}
+              options={selectOptions}
+              disabled={disabled}
+              placeholder={`Buscar ${label.toLowerCase()}…`}
+              onChange={onSelect}
+            />
           )}
           {changed && (
             <p className="flex items-center gap-1.5 text-[11px]" style={{ color: '#557EFF' }}>
@@ -314,6 +300,36 @@ function isChanged(a: string, b: string): boolean {
 
 function up(value: string): string {
   return value.trim().toUpperCase();
+}
+
+/**
+ * Transformaciones declaradas (color / combustible / carrocería) listas para el FUR
+ * y el resumen del trámite. Vacío si no hay cambios frente al RUNT.
+ */
+export function summarizeDeclaredTransformations(fieldValues: FieldValue[]): string[] {
+  const byKey = (key: string) =>
+    fieldValues.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
+
+  const colorRunt = byKey('vehicle_color_runt') || byKey('vehicle_color');
+  const colorEff = byKey('vehicle_color');
+  const colorActive = byKey('cambio_color') === 'true' || isChanged(colorRunt, colorEff);
+
+  const fuelRunt = byKey('vehicle_fuel_runt') || byKey('vehicle_fuel');
+  const fuelEff = byKey('vehicle_fuel');
+  const fuelActive = byKey('cambio_combustible') === 'true' || isChanged(fuelRunt, fuelEff);
+
+  const bodyworkRunt = byKey('vehicle_body_type_runt') || byKey('vehicle_body_type');
+  const bodyworkEff = byKey('vehicle_body_type');
+  const bodyworkActive =
+    byKey('cambio_carroceria') === 'true' || isChanged(bodyworkRunt, bodyworkEff);
+
+  const changes: string[] = [];
+  if (colorActive && isChanged(colorRunt, colorEff)) changes.push(`Color: ${up(colorEff)}`);
+  if (fuelActive && isChanged(fuelRunt, fuelEff))
+    changes.push(`Combustible: ${up(fuelEff)}`);
+  if (bodyworkActive && isChanged(bodyworkRunt, bodyworkEff))
+    changes.push(`Carrocería: ${up(bodyworkEff)}`);
+  return changes;
 }
 
 /** Garantiza que `current` esté en la lista de opciones (al inicio) sin duplicar. */

@@ -7,7 +7,6 @@ import {
   Building2,
   Calendar,
   Car,
-  Check,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -15,7 +14,6 @@ import {
   Gauge,
   Hash,
   Layers,
-  Lock,
   Palette,
   RefreshCw,
   Search,
@@ -39,11 +37,14 @@ import { SubsanacionPanel } from './SubsanacionPanel';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
-import { reasonCopy, blockerCopy } from './wizard-copy';
+import { blockerCopy } from './wizard-copy';
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
 import { VehicleTransformationsCard } from './VehicleTransformationsCard';
+import { EstadoAcciones } from './EstadoAcciones';
+import { WizardStepTracker } from './WizardStepTracker';
 import { useToast } from '@/components/admin/Toast';
+import { formatDateOnly } from '@/lib/format/date-only';
 import {
   tramitesClient,
   getDuplicateActiveProcedureId,
@@ -79,7 +80,6 @@ import type {
   TransitOfficeOption,
   WizardModalidad,
   WizardStep,
-  WizardStepStatus,
 } from '@/lib/api/types/procedure-runtime';
 
 /**
@@ -148,31 +148,28 @@ const SECRETARIA_REQUERIDA = 'Selecciona la secretaría de tránsito antes de co
 const ORGANISMO_NO_DISPONIBLE =
   'No puedes radicar en este organismo de tránsito. El vehículo está matriculado en un organismo que no está activo en FLIT o no está habilitado para tu compañía. Solicita al administrador que lo active y lo habilite para tu compañía antes de continuar con el trámite.';
 
-const STATUS_BADGE: Record<
-  WizardStepStatus,
-  { bg: string; color: string }
-> = {
-  complete: { bg: '#8CC63F', color: '#fff' },
-  incomplete: { bg: '#DFE5ED', color: '#162744' },
-  locked: { bg: '#EEF1F5', color: '#9AA5B1' },
-};
-
 /**
  * Subtítulo descriptivo por paso, mostrado UNA sola vez bajo el `h2` (título
  * canónico del paso = `activeStep.label`). Centraliza aquí el copy de ayuda que
  * antes vivía duplicado en los `h4` internos de cada hijo; al subirlo evitamos
  * el doble título (uno en la shell, otro en el box). Keys sin entrada no pintan
- * subtítulo. El paso `fur` conserva su intro propia (actúa como subsección).
+ * subtítulo. El paso `fur` no pinta título/subtítulo aquí (el resumen tiene su propio encabezado).
  */
 const STEP_SUBTITLE: Record<string, string> = {
   consulta_vin: 'Ingresa el VIN para consultar los datos del vehículo en el RUNT.',
   consulta: 'Ingresa la placa y el propietario para consultar los datos del RUNT.',
-  documentos: 'Declara la prenda, agrega observaciones y adjunta los documentos del trámite (PDF, JPG, PNG o WEBP, máx 20 MB).',
-  comercial: 'Valor de la venta, causal e impuestos del traspaso.',
-  fur: 'Revisa el resumen del trámite. El expediente (FUR, certificados y consolidado) se genera al entrar y al Preparar.',
+  // En traspaso la prenda va en Comercial (HU #10598); aquí solo observaciones + adjuntos.
+  documentos:
+    'Agrega observaciones y adjunta los documentos del trámite (PDF, JPG, PNG o WEBP, máx 20 MB).',
+  comercial:
+    'Valor de la venta, causal, impuestos del traspaso y decisión de prenda / gravamen.',
   identidad:
     'Validación de identidad de cada parte. La biométrica real llegará en una iteración futura; por ahora puedes simular la validación de cada parte.',
 };
+
+/** Subtítulo del paso Documentos en matrícula (incluye prenda declarativa, HU #10596). */
+const DOCUMENTOS_SUBTITLE_MATRICULA =
+  'Declara la prenda, agrega observaciones y adjunta los documentos del trámite (PDF, JPG, PNG o WEBP, máx 20 MB).';
 
 /**
  * ¿La validación de identidad está aprobada? (HU #10350) Se deriva del estado server-driven de los
@@ -266,32 +263,14 @@ function ReadOnlyStateNotice({ estado }: { estado: InstanceStatus | null }) {
   );
 }
 
-/** Icono/marcador por status del paso (✓ / • / 🔒). */
-function StepMarker({ status, index }: { status: WizardStepStatus; index: number }) {
-  const s = STATUS_BADGE[status];
-  return (
-    <span
-      className="h-8 w-8 rounded-full grid place-items-center text-[11px] font-bold shrink-0"
-      style={{ background: s.bg, color: s.color }}
-      aria-hidden="true"
-    >
-      {status === 'complete' ? (
-        <Check className="h-4 w-4" />
-      ) : status === 'locked' ? (
-        <Lock className="h-3.5 w-3.5" />
-      ) : (
-        index + 1
-      )}
-    </span>
-  );
-}
+/** Icono/marcador por status del paso — ver WizardStepTracker. */
 
 /**
  * Shell del wizard diferenciado, server-driven por GET /wizard. El backend
- * decide modalidad, pasos, status, razones y blockers; la shell pinta el
- * sidebar y renderiza el cuerpo del paso activo según modalidad+key. Tras cada
- * acción que mueva gates (actor, documento, preflight, comercial) se llama
- * `refresh()` para re-consultar el estado autoritativo.
+ * decide modalidad, pasos, status, razones y blockers; la shell renderiza el
+ * cuerpo del paso activo según modalidad+key. Tras cada acción que mueva gates
+ * (actor, documento, preflight, comercial) se llama `refresh()` para re-consultar
+ * el estado autoritativo.
  */
 export function TramiteWizard(props: Props) {
   const {
@@ -341,6 +320,16 @@ export function TramiteWizard(props: Props) {
   // síncrona dentro del efecto (react-hooks/set-state-in-effect).
   const [instanceDetailLoading, setInstanceDetailLoading] = useState(!!existingInstanceId);
   const [instanceDetailError, setInstanceDetailError] = useState<string | null>(null);
+  const [referenceNumber, setReferenceNumber] = useState<string | null>(
+    () => state.detail?.referenceNumber ?? null,
+  );
+  useEffect(() => {
+    const fromDetail = state.detail?.referenceNumber;
+    if (!fromDetail) return;
+    // Sincroniza referencia cuando el detalle del reducer llega después del mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setReferenceNumber(fromDetail);
+  }, [state.detail?.referenceNumber]);
   useEffect(() => {
     if (!existingInstanceId) return;
     let active = true;
@@ -351,6 +340,7 @@ export function TramiteWizard(props: Props) {
         setInstanceStatus(d.status ?? null);
         setDraftFinalizedAt(d.draftFinalizedAt ?? null);
         setStatusHistory(d.statusHistory ?? []);
+        setReferenceNumber(d.referenceNumber ?? null);
         setInstanceDetailError(null);
       })
       .catch((err) => {
@@ -455,6 +445,8 @@ export function TramiteWizard(props: Props) {
   // Guardar+continuar de los pasos con form embebido (actores y comercial): la
   // shell dispara save() vía ref desde el footer "Guardar y continuar".
   const stepFormRef = useRef<WizardStepFormHandle>(null);
+  /** Prenda embebida en documentos (matrícula) o comercial (traspaso): save implícito al Continuar. */
+  const prendaFormRef = useRef<WizardStepFormHandle>(null);
   const [continuing, setContinuing] = useState(false);
   /**
    * Pasos comprador/vendedor: Continuar solo si la consulta RUNT/RUES del actor fue exitosa.
@@ -487,12 +479,17 @@ export function TramiteWizard(props: Props) {
   const identityApproved = isIdentityApproved(steps, modalidad);
   const canRadicar = canSubmit && identityApproved;
 
-  // Header: por modalidad usamos `title`; legacy usa configuration.name; con
-  // instancia existente derivamos la etiqueta de la modalidad server-driven.
-  const headerTitle =
-    title ??
-    configuration?.name ??
-    (modalidad === 'traspaso' ? 'Traspaso estándar' : 'Matrícula inicial');
+  // Header: tarjeta blanca FLIT — "Nuevo Trámite · {modalidad}" + referencia.
+  const modalidadLabel =
+    modalidad === 'traspaso' ? 'Traspaso Estándar' : 'Matrícula Inicial';
+  const displayTitle = editLocked
+    ? `Trámite · ${modalidadLabel}`
+    : `Nuevo Trámite · ${modalidadLabel}`;
+  const refLabel =
+    referenceNumber ?? state.detail?.referenceNumber ?? null;
+  const displaySubtitle = refLabel
+    ? `${refLabel} · Gestión integral de trámites`
+    : 'Gestión integral de trámites';
 
   // AC1 (HU #10883) — autosave del paso: al AVANZAR (no al retroceder) persiste la `key` del paso
   // destino vía PATCH /instances/{id}/current-step (HU #10879), para retomar ahí al reabrir el
@@ -511,6 +508,43 @@ export function TramiteWizard(props: Props) {
 
   // Navegación en cascada: solo a pasos completos o a la frontera (primer
   // incompleto). No basta con que el paso no esté 'locked'.
+  const scrollWizardToTop = useCallback(() => {
+    const scrollEl = (el: HTMLElement | null) => {
+      if (!el) return;
+      try {
+        if (typeof el.scrollTo === 'function') {
+          el.scrollTo({ top: 0, behavior: 'auto' });
+        } else {
+          el.scrollTop = 0;
+        }
+      } catch {
+        el.scrollTop = 0;
+      }
+    };
+    const run = () => {
+      // Scroll completo en `main` ([data-shell-scroll]); el tracker queda sticky al tope.
+      scrollEl(document.querySelector<HTMLElement>('[data-shell-scroll]'));
+      try {
+        window.scrollTo({ top: 0, behavior: 'auto' });
+      } catch {
+        /* jsdom stub */
+      }
+      const root = document.getElementById('tramite-wizard-root');
+      try {
+        root?.scrollIntoView({ block: 'start', behavior: 'auto' });
+      } catch {
+        /* jsdom stub */
+      }
+    };
+    // Doble rAF: espera a que el cuerpo del nuevo paso pinte (layout puede crecer/encoger).
+    requestAnimationFrame(() => requestAnimationFrame(run));
+  }, []);
+
+  // Al cambiar de paso, si el usuario estaba abajo, volver al tope del Shell.
+  useEffect(() => {
+    scrollWizardToTop();
+  }, [activeIndex, scrollWizardToTop]);
+
   const goToStep = (index: number) => {
     if (!canNavigateToStep(steps, index, navViewOnly)) return;
     // Reportes2 HU-A — retroceso o salto de paso = wizard_step_exit con duración
@@ -810,6 +844,28 @@ export function TramiteWizard(props: Props) {
     }
 
     if (!isSavableStep) {
+      // Matrícula: la prenda vive en el paso documentos; se persiste al Continuar (sin botón aparte).
+      if (activeStep?.key === 'documentos' && modalidad !== 'traspaso') {
+        setContinuing(true);
+        setSubmitError(null);
+        try {
+          const okPrenda = await prendaFormRef.current?.save();
+          if (okPrenda === false) {
+            setSubmitError('No se pudo guardar la decisión de prenda. Por favor, reintenta.');
+            return;
+          }
+          if (canNavigateToStep(steps, activeIndex + 1, navViewOnly)) telemetry.trackStepComplete();
+          goToStep(activeIndex + 1);
+          if (inSubsanacion) {
+            setHasUnsavedChanges(false);
+            setSubsanacionSavedEdits(true);
+            show('Cambios guardados. Ya puedes re-radicar cuando termines.', 'success');
+          }
+        } finally {
+          setContinuing(false);
+        }
+        return;
+      }
       // Reportes2 HU-A — avance con éxito desde un paso sin form embebido.
       if (canNavigateToStep(steps, activeIndex + 1, navViewOnly)) telemetry.trackStepComplete();
       goToStep(activeIndex + 1);
@@ -832,6 +888,15 @@ export function TramiteWizard(props: Props) {
             : 'No se pudo guardar. Por favor, reintenta.',
         );
         return;
+      }
+
+      // Traspaso: la prenda va en el paso comercial — mismo Continuar, sin botón dedicado.
+      if (activeStep?.key === 'comercial') {
+        const okPrenda = await prendaFormRef.current?.save();
+        if (okPrenda === false) {
+          setSubmitError('No se pudo guardar la decisión de prenda. Por favor, reintenta.');
+          return;
+        }
       }
 
       // HU #10350 — al guardar la parte (comprador/vendedor), asegura su identidad sin esperar el clic
@@ -907,43 +972,64 @@ export function TramiteWizard(props: Props) {
 
   return (
    <WizardReadOnlyProvider readOnly={editLocked}>
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between shrink-0">
-        <div>
-          <h1 className="text-xl font-bold">{headerTitle}</h1>
-          {wizard && (
-            <p className="text-[11px] opacity-60 mt-0.5">
-              {modalidad === 'traspaso' ? 'Traspaso' : 'Matrícula inicial'} ·{' '}
-              {steps.length} pasos
-            </p>
-          )}
-        </div>
-        <button
-          onClick={() => {
-            // Reportes2 HU-A — salida explícita sin radicar = wizard_abandon
-            // (en solo visualización el trámite ya se radicó: no es abandono).
-            if (!fullReadOnly) telemetry.trackAbandon();
-            onExit();
-          }}
-          className="text-xs opacity-70 hover:opacity-100"
-          aria-label={editLocked ? 'Volver al listado' : 'Cancelar y volver al selector'}
+    <div id="tramite-wizard-root" className="flex w-full flex-col gap-3 pb-2">
+      {/* Título + seguimiento fijos al scroll de main; fondo sólido app-bg (no transparente). */}
+      <div className="sticky top-0 z-30 -mx-1 space-y-3 bg-[#eef5ff] px-1 pb-3 pt-1 dark:bg-[#0a1428]">
+        <div
+          className="flex items-center justify-between gap-3 rounded-2xl border border-[#DFE5ED] bg-white px-5 py-4 dark:border-[#1A1F2B] dark:bg-[#0B0F14]"
+          style={{ boxShadow: '0 8px 24px rgba(22, 39, 68, 0.08)' }}
         >
-          {editLocked ? '← Volver al listado' : '← Cancelar'}
-        </button>
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-bold sm:text-xl" style={{ color: '#557EFF' }}>
+              {displayTitle}
+            </h1>
+            <p className="mt-0.5 truncate text-[11px]" style={{ color: '#9AA5B1' }}>
+              {displaySubtitle}
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              // Reportes2 HU-A — salida explícita sin radicar = wizard_abandon
+              // (en solo visualización el trámite ya se radicó: no es abandono).
+              if (!fullReadOnly) telemetry.trackAbandon();
+              onExit();
+            }}
+            className="shrink-0 text-xs font-medium hover:opacity-100"
+            style={{ color: '#9AA5B1' }}
+            aria-label={editLocked ? 'Volver al listado' : 'Cancelar y volver al selector'}
+          >
+            {editLocked ? '← Volver al listado' : '← Cancelar'}
+          </button>
+        </div>
+
+        {steps.length === 0 ? (
+          <p className="text-[11px] opacity-60">
+            {wizardLoading ? 'Cargando pasos…' : 'Sin pasos disponibles.'}
+          </p>
+        ) : (
+          <WizardStepTracker
+            steps={steps}
+            activeIndex={activeIndex}
+            onGoToStep={goToStep}
+            viewOnly={navViewOnly}
+          />
+        )}
       </div>
 
       {fullReadOnly && (
-        <ReadOnlyStateNotice estado={estadoTramite} />
+        <div>
+          <ReadOnlyStateNotice estado={estadoTramite} />
+        </div>
       )}
 
       {draftFinalized && (
         <div
-          className="rounded-xl p-3 text-xs border shrink-0 flex items-start gap-2"
+          className="flex items-start gap-2 rounded-xl border p-3 text-xs"
           style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)', color: '#162744' }}
           role="status"
           aria-live="polite"
         >
-          <Shield className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#F9AC00' }} aria-hidden="true" />
+          <Shield className="mt-0.5 h-4 w-4 shrink-0" style={{ color: '#F9AC00' }} aria-hidden="true" />
           <span>
             <span className="font-semibold" style={{ color: '#B45309' }}>
               Borrador finalizado — esperando validación del cliente.
@@ -958,6 +1044,7 @@ export function TramiteWizard(props: Props) {
       {/* HU #10874 (AC1/AC2) — panel de subsanación: motivo + checklist de ítems a subsanar y la
           acción "Re-radicar". El trámite sigue editable (campos/documentos) mientras se muestra. */}
       {inSubsanacion && (
+        <div>
         <SubsanacionPanel
           instanceId={instanceId}
           statusHistory={statusHistory}
@@ -981,11 +1068,12 @@ export function TramiteWizard(props: Props) {
             onExit();
           }}
         />
+        </div>
       )}
 
       {(wizardError || submitError || state.error) && (
         <div
-          className="rounded-xl p-3 text-xs border shrink-0"
+          className="rounded-xl border p-3 text-xs"
           style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
           role="alert"
           aria-live="polite"
@@ -994,81 +1082,29 @@ export function TramiteWizard(props: Props) {
         </div>
       )}
 
-      {/* AC2 #10498: columnas niveladas (items-stretch) y scroll SOLO en la lista de
-          pasos cuando excede el alto disponible; ambos contenedores quedan a la par abajo. */}
-      <div className="grid grid-cols-12 gap-4 items-start md:items-stretch">
-        {/* Sidebar de pasos server-driven. */}
-        <aside
-          className="col-span-12 md:col-span-3 rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border flex flex-col min-h-0 md:max-h-[calc(100vh-120px)]"
-        >
-          <p className="text-[10px] font-semibold uppercase opacity-60 mb-3 shrink-0">
-            Asistente de seguimiento
-          </p>
-          {steps.length === 0 ? (
-            <p className="text-[11px] opacity-60">
-              {wizardLoading ? 'Cargando pasos…' : 'Sin pasos disponibles.'}
-            </p>
-          ) : (
-            <ol className="space-y-3 flex-1 min-h-0 overflow-y-auto">
-              {steps.map((s, i) => {
-                const isActive = i === activeIndex;
-                const clickable = canNavigateToStep(steps, i, navViewOnly);
-                return (
-                  <li key={s.key} aria-current={isActive ? 'step' : undefined}>
-                    <button
-                      type="button"
-                      onClick={() => goToStep(i)}
-                      disabled={!clickable}
-                      className="w-full flex items-start gap-3 text-left disabled:cursor-not-allowed"
-                      aria-label={`Paso ${i + 1}: ${s.label} (${s.status})`}
-                    >
-                      <StepMarker status={s.status} index={i} />
-                      <span className="min-w-0 flex-1">
-                        <span
-                          className={`block text-xs ${isActive ? 'font-bold' : s.status === 'locked' ? 'opacity-50' : 'opacity-80'}`}
-                        >
-                          {s.label}
-                        </span>
-                        {s.status === 'incomplete' && s.reasons.length > 0 && (
-                          <span className="mt-1 block space-y-0.5">
-                            {s.reasons.map((r) => (
-                              <span
-                                key={r}
-                                className="block text-[10px]"
-                                style={{ color: '#F9AC00' }}
-                              >
-                                • {reasonCopy(r)}
-                              </span>
-                            ))}
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-        </aside>
-
-        {/* Cuerpo del paso activo. */}
-        <section
-          className="col-span-12 md:col-span-9 rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border"
-        >
+      {/* Cuerpo del paso: sin tarjeta blanca envolvente; el fondo es el app-bg del layout. */}
+      <section id="tramite-wizard-scroll">
+        <div className="py-1">
           {!activeStep ? (
             <p className="text-xs opacity-60">
               {wizardLoading ? 'Cargando el asistente…' : 'Este flujo no tiene pasos.'}
             </p>
           ) : (
             <div className="space-y-6">
-              <div>
-                <h2 className="text-base font-bold">{activeStep.label}</h2>
-                {STEP_SUBTITLE[activeStep.key] && (
-                  <p className="mt-1 text-xs opacity-60">
-                    {STEP_SUBTITLE[activeStep.key]}
-                  </p>
-                )}
-              </div>
+              {activeStep.key !== 'fur' && activeStep.key !== 'identidad' && (
+                <div>
+                  <h2 className="text-base font-bold">{activeStep.label}</h2>
+                  {(activeStep.key === 'documentos' && modalidad !== 'traspaso'
+                    ? DOCUMENTOS_SUBTITLE_MATRICULA
+                    : STEP_SUBTITLE[activeStep.key]) && (
+                    <p className="mt-1 text-xs opacity-60">
+                      {activeStep.key === 'documentos' && modalidad !== 'traspaso'
+                        ? DOCUMENTOS_SUBTITLE_MATRICULA
+                        : STEP_SUBTITLE[activeStep.key]}
+                    </p>
+                  )}
+                </div>
+              )}
               <StepBody
                 step={activeStep}
                 modalidad={modalidad}
@@ -1079,6 +1115,7 @@ export function TramiteWizard(props: Props) {
                 onRunPreflight={runPreflight}
                 onRefresh={() => void refresh()}
                 stepFormRef={stepFormRef}
+                prendaFormRef={prendaFormRef}
                 onActorsConsultationGateChange={setActorsConsultationReady}
                 identityOperable={draftFinalized}
                 identityApproved={identityApproved}
@@ -1100,12 +1137,12 @@ export function TramiteWizard(props: Props) {
           {/* Bloqueos de envío traducidos (en el paso de decisión). */}
           {isDecisionStep && blockers.length > 0 && (
             <div
-              className="mt-6 rounded-xl p-3 border text-xs"
+              className="mt-6 rounded-xl border p-3 text-xs"
               style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)' }}
               role="status"
               aria-live="polite"
             >
-              <p className="font-semibold mb-1" style={{ color: '#F9AC00' }}>
+              <p className="mb-1 font-semibold" style={{ color: '#F9AC00' }}>
                 Antes de enviar, resuelve:
               </p>
               <ul className="space-y-0.5" aria-label="Bloqueos de envío">
@@ -1117,18 +1154,29 @@ export function TramiteWizard(props: Props) {
               </ul>
             </div>
           )}
+        </div>
 
-          <div
-            className="flex flex-wrap gap-2 items-center justify-between mt-6 pt-4 border-t"
-          >
+          <div className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-t px-2 py-3 sm:px-5">
             <button
               onClick={() => goToStep(Math.max(0, activeIndex - 1))}
               disabled={activeIndex === 0}
-              className="flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-medium border disabled:opacity-30"
+              className="flex items-center gap-1 rounded-xl border px-4 py-2 text-xs font-medium disabled:opacity-30"
               style={{ borderColor: '#162744', color: '#162744' }}
             >
               <ChevronLeft className="h-3 w-3" /> Anterior
             </button>
+
+            <div className="flex min-w-0 justify-center">
+              {instanceId ? (
+                <EstadoAcciones
+                  instanceId={instanceId}
+                  onChanged={() => void refresh()}
+                  embedded
+                />
+              ) : null}
+            </div>
+
+            <div className="flex justify-end">
             {/* Acción derecha del footer según el modo (HU #10350 + N 03 dos pasos):
                 · Preparado: "Radicar a tránsito" (preparado→entregado) en el paso de decisión.
                 · Solo visualización (otros estados no editables): sin acciones, solo se recorre.
@@ -1241,9 +1289,9 @@ export function TramiteWizard(props: Props) {
                 <ChevronRight className="h-3 w-3" />
               </button>
             )}
+            </div>
           </div>
         </section>
-      </div>
     </div>
    </WizardReadOnlyProvider>
   );
@@ -1370,10 +1418,10 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
         </div>
       </div>
 
-      {/* Grilla de atributos */}
+      {/* Grilla de atributos — 4 columnas */}
       {details.length > 0 && (
         <div
-          className="grid gap-px border-t sm:grid-cols-2"
+          className="grid gap-px border-t sm:grid-cols-2 lg:grid-cols-4"
           style={{ background: '#DFE5ED' }}
         >
           {details.map((d) => {
@@ -1413,7 +1461,9 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
                     SOAT
                   </p>
                   {soatVencimiento && (
-                    <p className="text-[11px] font-semibold">Vence: {soatVencimiento}</p>
+                    <p className="text-[11px] font-semibold">
+                      Vence: {formatDateOnly(soatVencimiento)}
+                    </p>
                   )}
                   {soatAseguradora && (
                     <p className="truncate text-[10px] opacity-60">{soatAseguradora}</p>
@@ -1430,7 +1480,9 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
                   <p className="text-[10px] font-bold uppercase" style={{ color: '#8CC63F' }}>
                     Tecno-mecánica
                   </p>
-                  <p className="text-[11px] font-semibold">Vence: {rtmVencimiento}</p>
+                  <p className="text-[11px] font-semibold">
+                    Vence: {formatDateOnly(rtmVencimiento)}
+                  </p>
                 </div>
               </div>
             )}
@@ -2329,6 +2381,7 @@ function StepBody({
   onRunPreflight,
   onRefresh,
   stepFormRef,
+  prendaFormRef,
   onActorsConsultationGateChange,
   identityOperable = false,
   identityApproved = false,
@@ -2362,6 +2415,7 @@ function StepBody({
   onRunPreflight: () => Promise<void>;
   onRefresh: () => void;
   stepFormRef: RefObject<WizardStepFormHandle | null>;
+  prendaFormRef: RefObject<WizardStepFormHandle | null>;
   /** Gate Continuar en pasos de actores (consulta RUNT/RUES exitosa). */
   onActorsConsultationGateChange?: (ready: boolean) => void;
   /** FEATURE 05 — el RNMC aplica al trámite: los actores muestran la fecha de expedición. */
@@ -2418,10 +2472,20 @@ function StepBody({
         <div className="space-y-4">
           {/* R4 (HU #10596) — en matrícula la prenda es declarativa: se registra aquí
               (informativa, no bloquea la radicación). En traspaso el gate va en el paso
-              comercial (HU #10598), no en documentos. */}
-          {modalidad !== 'traspaso' && (
-            <PrendaForm instanceId={instanceId} onSaved={onRefresh} />
-          )}
+              comercial (HU #10598), no en documentos. Persistencia vía Continuar (embedded). */}
+          {modalidad !== 'traspaso' && (() => {
+            const gravamen = preflight?.checks?.find((c) => c.key === 'gravamenes');
+            return (
+              <PrendaForm
+                ref={prendaFormRef}
+                instanceId={instanceId}
+                onSaved={onRefresh}
+                embeddedInWizard
+                runtHasGravamen={gravamen?.status === 'warn'}
+                runtGravamenMessage={gravamen?.message}
+              />
+            );
+          })()}
           {/* P6 — observaciones del trámite; escribe `fur_observations` (mismo campo que FirmaFurStep). */}
           <TramiteObservacionesField instanceId={instanceId} />
           <DocumentChecklist
@@ -2493,16 +2557,23 @@ function StepBody({
               comercial. Con gravámenes en warn, el backend bloquea la preparación/radicación sin
               decisión vigente (o sin su documento). "Omitir" es la vía "asumo el riesgo". */}
           <PrendaForm
+            ref={prendaFormRef}
             instanceId={instanceId}
             decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
             onSaved={onRefresh}
+            embeddedInWizard
+            runtHasGravamen={
+              preflight?.checks?.find((c) => c.key === 'gravamenes')?.status === 'warn'
+            }
+            runtGravamenMessage={
+              preflight?.checks?.find((c) => c.key === 'gravamenes')?.message
+            }
           />
         </div>
       );
 
     // Matrícula paso 4 = Identidad (biométrica del comprador, parte única).
-    // hideIntro: el h2 + subtítulo ya describen el paso (en `fur` la intro se
-    // conserva porque ahí la biométrica es una subsección, no el título).
+    // Título + subtítulo van dentro del panel blanco de BiometricStep.
     case 'identidad': {
       const biometric = (
         <BiometricStep
@@ -2510,6 +2581,8 @@ function StepBody({
           modalidad={modalidad}
           onRefresh={onRefresh}
           hideIntro
+          heading="Identidad"
+          headingSubtitle={STEP_SUBTITLE.identidad}
           vaultCoveredPartes={vaultCoveredPartes}
         />
       );
@@ -2522,18 +2595,9 @@ function StepBody({
       );
     }
 
-    // Resumen del trámite (matrícula 5 / traspaso 6; key `fur`). Feature #11211: no re-montar
-    // BiometricStep si la identidad ya está resuelta (paso Identidad / gates server-driven).
+    // Resumen del trámite (matrícula 5 / traspaso 6; key `fur`). Feature #11211: la biométrica
+    // pendiente se embebe en Comprador/Vendedor del MatriculaResumen (sin bloque suelto arriba).
     case 'fur': {
-      const skipBiometricInFur = identityApproved;
-      const biometric = (
-        <BiometricStep
-          instanceId={instanceId}
-          modalidad={modalidad}
-          onRefresh={onRefresh}
-          vaultCoveredPartes={vaultCoveredPartes}
-        />
-      );
       return (
         <div className="space-y-6">
           {/* Feature #11066 — banner de pre-gen primero, antes de identidad y el resto del paso. */}
@@ -2584,12 +2648,6 @@ function StepBody({
               </span>
             </div>
           )}
-          {!skipBiometricInFur &&
-            (identityOperable ? (
-              <WizardReadOnlyProvider readOnly={false}>{biometric}</WizardReadOnlyProvider>
-            ) : (
-              biometric
-            ))}
           <FirmaFurStep
             key={`${instanceId ?? 'new'}-${instanceStatus ?? 'borrador'}`}
             instanceId={instanceId}
@@ -2597,6 +2655,8 @@ function StepBody({
             onRefresh={onRefresh}
             rnmcEnabled={rnmcEnabled}
             onPaqueteStatusChange={onPaqueteStatusChange}
+            vaultCoveredPartes={vaultCoveredPartes}
+            biometricForceEditable={identityOperable}
           />
         </div>
       );

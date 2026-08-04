@@ -1,12 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  Building2,
   Check,
+  ChevronDown,
   Copy,
-  Download,
-  FileText,
   RefreshCw,
   Search,
   X,
@@ -19,24 +17,25 @@ import {
 } from '@/lib/api/admin-plate-ranges';
 import MatriculaResumen from './MatriculaResumen';
 import ExpedienteVisor from './ExpedienteVisor';
-import ExpedienteTimeline from './ExpedienteTimeline';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { MandatarioSection } from './MandatarioSection';
 import { FirmaPosteriorSection } from './FirmaPosteriorSection';
-import { documentLabel } from '@/lib/tramites/document-labels';
+import { PRENDA_DECISION_LABELS } from './PrendaForm';
+import { summarizeDeclaredTransformations } from './VehicleTransformationsCard';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import type {
   Actor,
+  BiometricParte,
   BiometricValidation,
   FieldValue,
   InstanceStatus,
   Participant,
   ParticipantRol,
   PreflightCheck,
+  ProcedureActor,
   ProcedureAttachment,
-  Signature,
-  SignatureParte,
+  PrendaData,
   StatusHistory,
   TransitOfficeOption,
   WizardModalidad,
@@ -57,12 +56,11 @@ interface Props {
    * al paso. La generación NO bloquea Preparar ni Guardar; Radicar sí exige consolidado completo.
    */
   onPaqueteStatusChange?: (status: PaqueteDocsStatus) => void;
+  /** HU #10646 — partes con firma del baúl (biométrica embebida en resumen). */
+  vaultCoveredPartes?: BiometricParte[];
+  /** Borrador finalizado: biométrica editable aunque el wizard esté read-only. */
+  biometricForceEditable?: boolean;
 }
-
-const PARTE_LABEL: Record<SignatureParte, string> = {
-  comprador: 'Comprador',
-  vendedor: 'Vendedor',
-};
 
 // FEATURE 05 — colores por estado del check RNMC (mismo semáforo del pre-vuelo: ok verde, warn ámbar).
 const RNMC_STATUS_STYLE: Record<string, { dot: string; text: string }> = {
@@ -139,25 +137,6 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const INPUT_BASE =
   'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]';
 
-/** Badge de color por estado de la firma. */
-function FirmaBadge({ estado }: { estado: string }) {
-  const map: Record<string, { label: string; bg: string; color: string }> = {
-    pendiente_envio: { label: 'Pendiente', bg: '#EEF1F5', color: '#9AA5B1' },
-    enviada: { label: 'Enviada', bg: 'rgba(85,126,255,0.12)', color: '#557EFF' },
-    firmada: { label: 'Firmada', bg: 'rgba(140,198,63,0.15)', color: '#5B8A1F' },
-    rechazada: { label: 'Rechazada', bg: 'rgba(255,78,0,0.10)', color: '#FF4E00' },
-  };
-  const s = map[estado] ?? { label: estado, bg: '#EEF1F5', color: '#9AA5B1' };
-  return (
-    <span
-      className="px-2.5 py-1 rounded-full text-[10px] font-bold"
-      style={{ background: s.bg, color: s.color }}
-    >
-      {s.label}
-    </span>
-  );
-}
-
 /** Construye el magic-link absoluto a partir del path relativo del backend. */
 function absoluteLink(path: string): string {
   if (typeof window === 'undefined') return path;
@@ -201,10 +180,11 @@ function CopyLink({ link, label }: { link: string; label: string }) {
 
 /**
  * Paso de organismo + expediente + firma + FUR + envío a tránsito (matrícula
- * paso 5 / traspaso paso 6, mock). Render BAJO el BiometricStep en el paso FUR.
- * Todo el gating es server-driven: este paso refleja el estado, refresca el
- * wizard tras cada acción y delega la verificación autoritativa al backend
- * (submit hard-gate). La firma de compraventa solo aplica a traspaso.
+ * paso 5 / traspaso paso 6, mock). La biométrica pendiente vive dentro del
+ * resumen (Comprador/Vendedor). Todo el gating es server-driven: este paso
+ * refleja el estado, refresca el wizard tras cada acción y delega la
+ * verificación autoritativa al backend (submit hard-gate). La firma de
+ * compraventa solo aplica a traspaso.
  */
 export function FirmaFurStep({
   instanceId,
@@ -212,6 +192,8 @@ export function FirmaFurStep({
   onRefresh,
   rnmcEnabled = false,
   onPaqueteStatusChange,
+  vaultCoveredPartes = [],
+  biometricForceEditable = false,
 }: Props) {
   // Solo lectura (Track C): sin acciones (organismo, firma, participantes, FUR);
   // se conserva la visualización (resumen, expediente, timeline, descargas).
@@ -224,12 +206,18 @@ export function FirmaFurStep({
     status: InstanceStatus;
     statusHistory: StatusHistory[];
   } | null>(null);
+  /** Contacto completo (teléfono/dirección/ciudad) desde GET actors — el detalle de instancia no lo trae. */
+  const [actorsContact, setActorsContact] = useState<ProcedureActor[]>([]);
   // Adjuntos + biométrica del expediente (alimentan MatriculaResumen y ExpedienteVisor).
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
   const [biometric, setBiometric] = useState<BiometricValidation[]>([]);
   // HU #11014 — partes cubiertas por la firma del baúl: el expediente las rotula como firmadas desde
   // el baúl en vez de hablar del certificado de validación de identidad.
   const [firmaBaulPartes, setFirmaBaulPartes] = useState<string[]>([]);
+  // Decisión de prenda/gravamen (si el gestor ya eligió una opción en el paso previo).
+  const [prenda, setPrenda] = useState<PrendaData | null>(null);
+  // HU #10988 — fecha del trámite en el resumen (estampa FUR y documentos).
+  const [fechaTramite, setFechaTramite] = useState(todayIsoDate);
   // FEATURE 05 — resultado RNMC por actor (medidas correctivas). Se consulta al entrar a este paso
   // (cuando ya se capturó la fecha de expedición de cada actor), no en el pre-vuelo.
   const [rnmcChecks, setRnmcChecks] = useState<PreflightCheck[]>([]);
@@ -245,18 +233,49 @@ export function FirmaFurStep({
   const loadDetail = useCallback(async () => {
     if (!instanceId) return;
     try {
-      const d = await tramitesClient.getInstance(instanceId);
+      const [d, p, actors] = await Promise.all([
+        tramitesClient.getInstance(instanceId),
+        tramitesClient.getPrenda(instanceId).catch(() => null),
+        tramitesClient.getActors(instanceId).catch(() => [] as ProcedureActor[]),
+      ]);
       setDetail({
         fieldValues: d.fieldValues ?? [],
         actors: d.actors ?? [],
         status: d.status,
         statusHistory: d.statusHistory ?? [],
       });
+      setActorsContact(actors);
+      setPrenda(p);
+      const fechaGuardada =
+        d.fieldValues?.find((f) => f.fieldKey === 'fur_processing_date')?.valueText?.slice(0, 10) ??
+        '';
+      const fecha = fechaGuardada || todayIsoDate();
+      setFechaTramite(fecha);
+      if (!fechaGuardada) {
+        try {
+          await tramitesClient.patchFieldValues(instanceId, [
+            { formFieldId: null, fieldKey: 'fur_processing_date', valueText: fecha },
+          ]);
+        } catch {
+          // Best-effort: el input ya muestra hoy.
+        }
+      }
     } catch {
       // El detalle es secundario para el resto del paso; los subbloques
       // muestran sus propios errores. No bloquea el render.
     }
   }, [instanceId]);
+
+  const guardarFechaTramite = useCallback(async () => {
+    if (!instanceId) return;
+    try {
+      await tramitesClient.patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'fur_processing_date', valueText: fechaTramite || null },
+      ]);
+    } catch {
+      // Best-effort fuera de borrador.
+    }
+  }, [instanceId, fechaTramite]);
 
   const loadExpediente = useCallback(async () => {
     if (!instanceId) return;
@@ -316,6 +335,28 @@ export function FirmaFurStep({
     () => detail?.actors.find((a) => a.actorType === 'vendedor') ?? null,
     [detail],
   );
+  const compradorContact = useMemo(
+    () => actorsContact.find((a) => a.rol === 'comprador') ?? null,
+    [actorsContact],
+  );
+  const vendedorContact = useMemo(
+    () => actorsContact.find((a) => a.rol === 'vendedor') ?? null,
+    [actorsContact],
+  );
+
+  const toResumenActor = (a: Actor | null, contact: ProcedureActor | null) =>
+    a
+      ? {
+          nombre: a.fullName,
+          documento: a.documentNumber,
+          tipoDoc: a.documentType,
+          email: a.email ?? contact?.email ?? null,
+          telefono: contact?.telefono ?? null,
+          direccion: contact?.direccion ?? null,
+          ciudad: contact?.ciudad ?? null,
+        }
+      : null;
+
   // Identidad aprobada si CUALQUIER validación está en estado 'aprobado'.
   const identidadAprobada = useMemo(
     () => biometric.some((b) => b.status === 'aprobado'),
@@ -361,14 +402,6 @@ export function FirmaFurStep({
 
   // Tras generar la impronta o el FUR, refresca adjuntos para que el resumen y el
   // visor reflejen el nuevo documento sin remontar el paso.
-  const handleDocumentGenerated = useCallback(() => {
-    onRefresh?.();
-    void loadExpediente();
-  }, [onRefresh, loadExpediente]);
-  // Feature #11066 — token para que Fur/Impronta re-listen adjuntos tras la pre-gen (sin
-  // refrescar el wizard: eso remonta el paso y puede adelantar el estado de negocio).
-  const [docsReloadToken, setDocsReloadToken] = useState(0);
-
   /**
    * Bug #11145 — <b>el aviso se decide por el expediente, no solo por la petición.</b>
    *
@@ -463,7 +496,6 @@ export function FirmaFurStep({
         setPaqueteStatus('ready');
         // Solo adjuntos locales — no onRefresh del wizard (evita remount / cambio de estado).
         void loadExpediente();
-        setDocsReloadToken((t) => t + 1);
       } catch {
         if (!montadoRef.current) return;
         paqueteKickoffRef.current = false;
@@ -474,12 +506,60 @@ export function FirmaFurStep({
 
   return (
     <div className="space-y-8">
-      <OrganismoSection
-        organismo={organismo}
-        organismoSelected={organismoSelected}
+      <MatriculaResumen
         modalidad={modalidad}
-        elegidoEnPasoUno={organismoElegidoEnPasoUno}
-        onOpenModal={() => setOrganismoModalOpen(true)}
+        status={detail?.status ?? 'borrador'}
+        placa={fv('plate')}
+        vehiculo={[fv('vehicle_brand'), fv('vehicle_line'), fv('vehicle_year')]
+          .filter(Boolean)
+          .join(' ')}
+        vin={fv('vin')}
+        especificaciones={{
+          clase: fv('vehicle_class'),
+          servicio: fv('vehicle_service'),
+          cilindraje: fv('vehicle_engine_displacement'),
+          combustible: fv('vehicle_fuel'),
+          carroceria: fv('vehicle_body_type'),
+          capacidad: fv('vehicle_passengers'),
+          ejes: fv('vehicle_axles'),
+          estado: fv('vehicle_state'),
+          motor: fv('vehicle_engine_number'),
+          chasis: fv('vehicle_chassis'),
+          serie: fv('vehicle_series'),
+        }}
+        vendedor={toResumenActor(vendedor, vendedorContact)}
+        comprador={toResumenActor(comprador, compradorContact)}
+        archivosCount={attachments.length}
+        identidadAprobada={identidadAprobada}
+        firmaBaulPartes={firmaBaulPartes}
+        soat={{ estado: fv('soat_estado'), vencimiento: fv('soat_vencimiento') }}
+        transformaciones={summarizeDeclaredTransformations(detail?.fieldValues ?? [])}
+        prenda={
+          prenda
+            ? {
+                decisionLabel: PRENDA_DECISION_LABELS[prenda.decision],
+                acreedorNombre: prenda.acreedorNombre,
+              }
+            : null
+        }
+        fechaTramite={fechaTramite}
+        onFechaTramiteChange={setFechaTramite}
+        onFechaTramiteBlur={() => void guardarFechaTramite()}
+        fechaTramiteDisabled={!instanceId || readOnly}
+        instanceId={instanceId}
+        compradorBio={
+          biometric.find((b) => b.partyRole === 'comprador') ??
+          biometric.find((b) => b.partyRole === null) ??
+          null
+        }
+        vendedorBio={biometric.find((b) => b.partyRole === 'vendedor') ?? null}
+        onBiometricRefresh={() => {
+          void loadDetail();
+          void loadExpediente();
+          onRefresh?.();
+        }}
+        vaultCoveredPartes={vaultCoveredPartes}
+        biometricForceEditable={biometricForceEditable}
       />
 
       {/* HU #11203 — quién firma el mandato se elige aquí, con el organismo ya resuelto, en vez de
@@ -494,12 +574,11 @@ export function FirmaFurStep({
         />
       )}
 
-      {/* HU #11197 — si el representante legal no tiene firma ni identidad vigentes, el trámite puede
-          dejarse marcado para firmarse cuando él valide, en vez de dejar al gestor sin salida. La
-          sección se pinta sola: no existe si no aplica a ninguna parte. */}
+      {/* HU #11197 — firma a posteriori del mandatario (comprador/vendedor viven en el resumen). */}
       {instanceId && (
         <FirmaPosteriorSection
           instanceId={instanceId}
+          onlyRoles={['mandatario']}
           readOnly={readOnly}
           onChanged={() => {
             void loadDetail();
@@ -525,71 +604,23 @@ export function FirmaFurStep({
         />
       )}
 
-      <MatriculaResumen
-        modalidad={modalidad}
-        status={detail?.status ?? 'borrador'}
-        placa={fv('plate')}
-        vehiculo={[fv('vehicle_brand'), fv('vehicle_line'), fv('vehicle_year')]
-          .filter(Boolean)
-          .join(' ')}
-        vin={fv('vin')}
-        vendedor={
-          vendedor
-            ? {
-                nombre: vendedor.fullName,
-                documento: vendedor.documentNumber,
-                tipoDoc: vendedor.documentType,
-              }
-            : null
-        }
-        comprador={
-          comprador
-            ? {
-                nombre: comprador.fullName,
-                documento: comprador.documentNumber,
-                tipoDoc: comprador.documentType,
-              }
-            : null
-        }
-        archivosCount={attachments.length}
-        identidadAprobada={identidadAprobada}
-        firmaBaulPartes={firmaBaulPartes}
-        orgTransito={{ nombre: organismo.name, ciudad: organismo.city }}
-        soat={{ estado: fv('soat_estado'), vencimiento: fv('soat_vencimiento') }}
-      />
-
       <ExpedienteVisor
         instanceId={instanceId}
-        fieldValues={detail?.fieldValues ?? []}
-        comprador={comprador}
-        vendedor={vendedor}
-        vin={fv('vin')}
         attachments={attachments}
-        biometric={biometric}
-        firmaBaulPartes={firmaBaulPartes}
-        orgTransito={{ nombre: organismo.name, ciudad: organismo.city, codigo: organismo.code }}
+        modalidad={modalidad}
+        status={detail?.status ?? 'borrador'}
+        onBeforeGenerateConsolidado={guardarFechaTramite}
+        onAttachmentsChange={() => {
+          void loadExpediente();
+          onRefresh?.();
+        }}
       />
 
       {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
 
-      {modalidad === 'traspaso' && (
-        <FirmaSection
-          instanceId={instanceId}
-          onRefresh={onRefresh}
-          firmaBaulPartes={firmaBaulPartes}
-        />
-      )}
-      {/* Feature #11211 — Participantes (portal) fuera del camino feliz; APIs intactas. */}
-      <ImprontaSection instanceId={instanceId} reloadToken={docsReloadToken} />
-      <FurSection
-        instanceId={instanceId}
-        modalidad={modalidad}
-        status={detail?.status ?? 'borrador'}
-        onRefresh={handleDocumentGenerated}
-        reloadToken={docsReloadToken}
-      />
+      {/* Firma de compraventa: embebida en Comprador/Vendedor del MatriculaResumen (traspaso). */}
 
-      <ExpedienteTimeline statusHistory={detail?.statusHistory ?? []} />
+      <PlateFlowCompleteSection instanceId={instanceId} onRefresh={onRefresh} />
 
       {organismoModalOpen && instanceId && modalidad !== 'traspaso' && (
         <OrganismoModal
@@ -639,6 +670,9 @@ export function PlacaPreasignadaSection({
   const [savingDigit, setSavingDigit] = useState(false);
   // HU #10806 (AC3) — ¿la ruta de preasignación está activa para esta compañía/OT? null = cargando.
   const [preassignEnabled, setPreassignEnabled] = useState<boolean | null>(null);
+  // Mismo patrón de desplegable que MatriculaResumen (Vehículo, Comprador, …).
+  const [open, setOpen] = useState(true);
+  const panelId = useId();
 
   const placa = plateValue.trim();
   // AC2 — el VIN ya tiene placa del RUNT (no la eligió el usuario): no aplica la preasignación.
@@ -750,10 +784,48 @@ export function PlacaPreasignadaSection({
     : plates;
 
   const shell = (children: ReactNode) => (
-    <section className="rounded-2xl border border-[#DFE5ED] p-5 dark:border-white/10">
-      <h3 className="text-sm font-bold">Placa preasignada</h3>
-      {children}
-    </section>
+    <div
+      className="overflow-hidden rounded-xl border bg-white dark:bg-[#0B0F14]"
+      style={{ borderColor: '#DFE5ED' }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+        aria-expanded={open}
+        aria-controls={panelId}
+      >
+        <span className="flex items-center gap-2">
+          <span
+            className="h-4 w-1 rounded-full"
+            style={{ background: '#557EFF' }}
+            aria-hidden="true"
+          />
+          <span
+            className="text-xs font-bold uppercase tracking-[0.2em]"
+            style={{ color: '#557EFF' }}
+          >
+            Placa preasignada
+          </span>
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          style={{ color: '#9AA5B1' }}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div
+          id={panelId}
+          className="border-t px-4 py-3"
+          style={{ borderColor: '#DFE5ED' }}
+          role="region"
+          aria-label="Placa preasignada"
+        >
+          {children}
+        </div>
+      ) : null}
+    </div>
   );
 
   if (vinTienePlacaRunt) {
@@ -889,151 +961,7 @@ export function PlacaPreasignadaSection({
   );
 }
 
-// ── Organismo de tránsito ─────────────────────────────────────────────
-
-function OrganismoSection({
-  organismo,
-  organismoSelected,
-  modalidad,
-  elegidoEnPasoUno,
-  onOpenModal,
-}: {
-  organismo: { id: string; code: string; name: string; city: string };
-  organismoSelected: boolean;
-  modalidad: WizardModalidad;
-  /** HU #11199 (AC4) — la secretaría se eligió en el primer paso: aquí solo se muestra. */
-  elegidoEnPasoUno: boolean;
-  onOpenModal: () => void;
-}) {
-  const readOnly = useWizardReadOnly();
-
-  // HU #11199 (AC4) — en las matrículas creadas eligiendo la secretaría en el paso 1, este paso ya no
-  // la pide: la muestra como dato en firme. Los borradores anteriores al cambio no traen la marca
-  // `transit_office_origen` y conservan el selector de siempre (convivencia, D8).
-  if (elegidoEnPasoUno) {
-    return (
-      <section className="space-y-3" aria-label="Organismo de tránsito">
-        <div>
-          <h4 className="text-sm font-bold">Organismo de tránsito</h4>
-          <p className="text-xs opacity-70">
-            Lo elegiste al comenzar el trámite, en el primer paso.
-          </p>
-        </div>
-        <div
-          className="rounded-xl border p-3 flex items-center gap-3"
-          style={{ borderColor: '#8CC63F' }}
-        >
-          <Building2 className="h-4 w-4 shrink-0" style={{ color: '#5B8A1F' }} aria-hidden="true" />
-          <div className="min-w-0">
-            <p className="text-xs font-semibold">{organismo.name || 'Organismo seleccionado'}</p>
-            <p className="text-[11px] opacity-70">
-              {[organismo.city, organismo.code].filter(Boolean).join(' · ')}
-            </p>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  // B11 (HU #10659) — en TRASPASO el organismo lo fija el RUNT (auto-bind en el preflight): solo
-  // lectura, sin "Seleccionar"/"Cambiar". Si el nombre RUNT no está habilitado para la empresa
-  // (hay nombre pero no id resuelto) se avisa, sin ofrecer selector.
-  if (modalidad === 'traspaso') {
-    const hasId = organismo.id.trim() !== '';
-    const hasName = organismo.name.trim() !== '';
-    return (
-      <section className="space-y-3" aria-label="Organismo de tránsito">
-        <div>
-          <h4 className="text-sm font-bold">Organismo de tránsito</h4>
-          <p className="text-xs opacity-70">
-            El organismo proviene del RUNT y no puede modificarse en un traspaso.
-          </p>
-        </div>
-
-        {hasId ? (
-          <div
-            className="rounded-xl border p-3 flex items-center gap-3"
-            style={{ borderColor: '#8CC63F' }}
-          >
-            <Building2 className="h-4 w-4 shrink-0" style={{ color: '#5B8A1F' }} aria-hidden="true" />
-            <div className="min-w-0">
-              <p className="text-xs font-semibold">{organismo.name || 'Organismo del RUNT'}</p>
-              <p className="text-[11px] opacity-70">
-                {[organismo.city, organismo.code].filter(Boolean).join(' · ')}
-              </p>
-            </div>
-          </div>
-        ) : hasName ? (
-          <div
-            className="rounded-xl border p-3 text-xs"
-            style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)', color: '#F9AC00' }}
-            role="status"
-          >
-            El organismo registrado en el RUNT ({organismo.name}) no está habilitado para tu empresa.
-            Contacta al administrador para habilitarlo; no es posible cambiarlo manualmente en un
-            traspaso.
-          </div>
-        ) : (
-          <div
-            className="rounded-xl border p-3 text-xs"
-            style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)', color: '#F9AC00' }}
-            role="status"
-          >
-            El organismo de tránsito se tomará del RUNT al ejecutar las validaciones del trámite.
-          </div>
-        )}
-      </section>
-    );
-  }
-
-  return (
-    <section className="space-y-3" aria-label="Organismo de tránsito">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h4 className="text-sm font-bold">Organismo de tránsito</h4>
-          <p className="text-xs opacity-70">
-            El organismo donde se radicará el trámite. Es necesario para generar
-            el FUR, pero no bloquea guardar ni enviar el trámite.
-          </p>
-        </div>
-        {!readOnly || !organismoSelected ? (
-          <button
-            type="button"
-            onClick={onOpenModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0"
-            style={{ borderColor: '#557EFF', color: '#557EFF' }}
-          >
-            <Building2 className="h-3 w-3" />
-            {organismoSelected ? 'Cambiar' : 'Seleccionar'}
-          </button>
-        ) : null}
-      </div>
-
-      {organismoSelected ? (
-        <div
-          className="rounded-xl border p-3 flex items-center gap-3"
-          style={{ borderColor: '#8CC63F' }}
-        >
-          <Building2 className="h-4 w-4 shrink-0" style={{ color: '#5B8A1F' }} aria-hidden="true" />
-          <div className="min-w-0">
-            <p className="text-xs font-semibold">{organismo.name || 'Organismo seleccionado'}</p>
-            <p className="text-[11px] opacity-70">
-              {[organismo.city, organismo.code].filter(Boolean).join(' · ')}
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div
-          className="rounded-xl border p-3 text-xs"
-          style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)', color: '#F9AC00' }}
-          role="status"
-        >
-          Aún no has seleccionado el organismo de tránsito.
-        </div>
-      )}
-    </section>
-  );
-}
+// ── Organismo de tránsito (modal de selección; no se muestra en el resumen) ─
 
 function OrganismoModal({
   instanceId,
@@ -1205,201 +1133,6 @@ function OrganismoModal({
         </ul>
       </div>
     </div>
-  );
-}
-
-// ── Firma (traspaso) ─────────────────────────────────────────────────
-
-function FirmaSection({
-  instanceId,
-  onRefresh,
-  firmaBaulPartes = [],
-}: {
-  instanceId: string | null;
-  onRefresh?: () => void;
-  /** Feature #11211 — partes cubiertas por baúl (oculta Actualizar si todas lo están). */
-  firmaBaulPartes?: string[];
-}) {
-  const [signatures, setSignatures] = useState<Signature[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const readOnly = useWizardReadOnly();
-
-  const load = useCallback(async () => {
-    if (!instanceId) return;
-    try {
-      const list = await tramitesClient.listFirmas(instanceId);
-      setSignatures(list);
-      setError(() => null);
-    } catch (err) {
-      setError(() =>
-        err instanceof Error ? err.message : 'Error al cargar las firmas.',
-      );
-    }
-  }, [instanceId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const refresh = async () => {
-    setLoading(true);
-    try {
-      await load();
-    } finally {
-      setLoading(false);
-    }
-    onRefresh?.();
-  };
-
-  // HU #11019 — saliente antes que entrante, igual que el expediente y el dashboard.
-  const partes: SignatureParte[] = ['vendedor', 'comprador'];
-  const todasCubiertasPorBaul =
-    partes.every((p) => firmaBaulPartes.includes(p)) ||
-    (signatures != null &&
-      partes.every((p) => {
-        const s = signatures.find((x) => x.parte === p);
-        return Boolean(s?.firmada) || firmaBaulPartes.includes(p);
-      }));
-
-  return (
-    <section className="space-y-4" aria-label="Firma de la compraventa">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h4 className="text-sm font-bold">Firma de la compraventa</h4>
-          {/* La firma del documento NO se captura aquí: se apalanca de lo que la parte ya acreditó.
-              Decirlo evita que el gestor busque un paso de firma que no existe. */}
-          <p className="text-xs opacity-70">
-            La firma de cada parte se apalanca de su{' '}
-            <strong>validación de identidad</strong> o de su{' '}
-            <strong>firma del baúl</strong>, según el mecanismo seleccionado al registrar el trámite.
-            El estado que ves aquí es informativo y <strong>no bloquea</strong> preparar ni radicar el
-            traspaso.
-          </p>
-        </div>
-        {!readOnly && !todasCubiertasPorBaul && (
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            disabled={loading || !instanceId}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 disabled:opacity-50"
-            style={{ borderColor: '#557EFF', color: '#557EFF' }}
-            aria-label="Actualizar estado de firmas"
-          >
-            <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </button>
-        )}
-      </div>
-
-      {error && (
-        <div
-          className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
-          role="alert"
-          aria-live="polite"
-        >
-          {error}
-        </div>
-      )}
-
-      <div className="space-y-4">
-        {partes.map((parte) => {
-          const signature = (signatures ?? []).find(
-            (s) => s.parte === parte,
-          );
-          return (
-            <FirmaParteCard
-              key={parte}
-              parte={parte}
-              instanceId={instanceId}
-              signature={signature ?? null}
-              onChanged={() => void refresh()}
-            />
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function FirmaParteCard({
-  parte,
-  instanceId,
-  signature,
-  onChanged,
-}: {
-  parte: SignatureParte;
-  instanceId: string | null;
-  signature: Signature | null;
-  onChanged: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const readOnly = useWizardReadOnly();
-
-  const handleSimular = async () => {
-    if (!instanceId || !signature) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await tramitesClient.simularFirma(instanceId, signature.id);
-      onChanged();
-    } catch {
-      setError('No se pudo simular la firma.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <fieldset
-      className="rounded-xl border p-4"
-      aria-label={`Firma ${PARTE_LABEL[parte]}`}
-    >
-      <legend className="px-1 text-xs font-bold flex items-center gap-2">
-        {PARTE_LABEL[parte]}
-        {signature && <FirmaBadge estado={signature.estado} />}
-      </legend>
-
-      {signature ? (
-        <div className="space-y-2 text-xs">
-          {signature.signUrl && signature.estado !== 'firmada' && (
-            <CopyLink
-              link={signature.signUrl}
-              label={`Enlace de firma ${PARTE_LABEL[parte]}`}
-            />
-          )}
-          {signature.estado === 'firmada' && (
-            <p className="flex items-center gap-1.5 font-semibold" style={{ color: '#5B8A1F' }}>
-              <Check className="h-3.5 w-3.5" /> Compraventa firmada
-            </p>
-          )}
-          {signature.estado === 'enviada' && !readOnly && (
-            <button
-              type="button"
-              onClick={() => void handleSimular()}
-              disabled={busy || !instanceId}
-              className="px-4 py-1.5 rounded-xl text-[11px] font-semibold border disabled:opacity-50"
-              style={{ borderColor: '#557EFF', color: '#557EFF' }}
-            >
-              {busy ? 'Simulando…' : 'Simular firma (DEV)'}
-            </button>
-          )}
-        </div>
-      ) : (
-        // HU #11019 — se retira el botón de solicitar la firma de la compraventa. El gate ya no la exige
-        // desde ADR-0028 (B12/HU #10661), así que pedirla solo añadía un paso que no desbloquea nada.
-        // El estado de una firma ya solicitada se sigue mostrando arriba.
-        <p className="text-[11px] opacity-60">Firma no solicitada.</p>
-      )}
-
-      {error && (
-        <p className="text-[11px] font-medium mt-2" style={{ color: '#FF4E00' }} role="alert">
-          {error}
-        </p>
-      )}
-    </fieldset>
   );
 }
 
@@ -1724,74 +1457,6 @@ function StatusChip({
   );
 }
 
-// ── Impronta integrada al trámite ────────────────────────────────────
-
-/**
- * Impronta en el paso FUR: Feature #11066 la pre-genera al entrar al paso (best-effort).
- * Aquí solo se informa / descarga; sin botón manual de generación.
- */
-function ImprontaSection({
-  instanceId,
-  reloadToken = 0,
-}: {
-  instanceId: string | null;
-  /** Feature #11066 — se incrementa tras la pre-gen para reconsultar adjuntos. */
-  reloadToken?: number;
-}) {
-  const [attachment, setAttachment] = useState<ProcedureAttachment | null | undefined>(undefined);
-
-  const load = useCallback(async () => {
-    if (!instanceId) return;
-    try {
-      const list = await tramitesClient.getAttachments(instanceId);
-      setAttachment(list.find((a) => a.tipo === 'impronta') ?? null);
-    } catch {
-      // Informativo; no bloquea el render del paso.
-    }
-  }, [instanceId]);
-
-  useEffect(() => {
-    // load solo hace setState DESPUÉS del await (no es cascada síncrona).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load, reloadToken]);
-
-  // Aún no se sabe si existe (carga inicial): no se muestra nada para evitar parpadeo.
-  if (attachment === undefined) return null;
-  // Ya hay impronta: descarga. Sin impronta: copy (pre-gen / consolidado la intentarán).
-  return (
-    <section className="space-y-3" aria-label="Impronta de motor y chasis">
-      <div>
-        <h4 className="text-sm font-bold">Impronta de motor y chasis</h4>
-        <p className="text-xs opacity-70">
-          {attachment
-            ? 'Certificado de Improntas Digitales adjunto al expediente.'
-            : 'Se genera automáticamente al entrar a este paso (Kyverum RUNT) y al Preparar/consolidar. Si ya tienes una impronta propia, súbela en Documentos. No bloquea Preparar ni Guardar.'}
-        </p>
-      </div>
-      {attachment && (
-        <div
-          className="rounded-xl border p-3 flex items-center gap-3"
-          style={{ borderColor: '#8CC63F' }}
-        >
-          <FileText className="h-4 w-4 shrink-0" style={{ color: '#5B8A1F' }} aria-hidden="true" />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold">
-              Impronta <span className="opacity-50 font-normal">· {attachment.filename}</span>
-            </p>
-          </div>
-          <DownloadButton instanceId={instanceId} attachment={attachment} />
-        </div>
-      )}
-    </section>
-  );
-}
-
-// ── FUR / compraventa ─────────────────────────────────────────────────
-
-/** Tipos de documento generados por el FUR. */
-const FUR_TIPOS = new Set(['fur', 'compraventa', 'certificado_identidad', 'certificado_identidad_vendedor', 'certificado_rnmc']);
-
 /** Feature #11066 — fecha local YYYY-MM-DD para precargar "Fecha del trámite". */
 function todayIsoDate(): string {
   const d = new Date();
@@ -1799,356 +1464,6 @@ function todayIsoDate(): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
-}
-
-/**
- * HU #10987 — tope de las observaciones manuales. El recuadro OBSERVACIONES del FUR es un campo
- * `multiline` de alto fijo en el manifest: un texto más largo se desbordaría del formulario. El
- * límite es de presentación, no de negocio.
- */
-const FUR_OBSERVACIONES_MAX = 300;
-
-/**
- * HU #11050 (AC3) — traduce un aviso de la cascada (`"impronta: provider_unavailable"`) a algo que el
- * gestor entienda. El backend manda `documento: motivo`; aquí se nombra el documento con su etiqueta
- * conocida y se explica el motivo cuando es uno de los previsibles.
- */
-function consolidadoAvisoLabel(aviso: string): string {
-  const [documento, motivo = ''] = aviso.split(':').map((s) => s.trim());
-  const nombre =
-    documento === 'documentos_del_expediente'
-      ? 'algunos documentos del expediente'
-      : documentLabel(documento);
-  const causa =
-    motivo.includes('organismo_requerido')
-      ? ' (falta el organismo de tránsito)'
-      : motivo.includes('provider_unavailable')
-        ? ' (el proveedor no está disponible; vuelve a generar el expediente en unos minutos)'
-        : motivo.includes('provider_validation')
-          ? ' (el proveedor rechazó los datos del trámite)'
-          : motivo
-            ? ` (${motivo})`
-            : '';
-  return `${nombre}${causa}`;
-}
-
-function FurSection({
-  instanceId,
-  modalidad,
-  status,
-  onRefresh,
-  reloadToken = 0,
-}: {
-  instanceId: string | null;
-  modalidad: WizardModalidad;
-  /** Estado de negocio del trámite: en estado final no se ofrece generar (HU #11052/#11051). */
-  status: InstanceStatus;
-  onRefresh?: () => void;
-  /** Feature #11066 — se incrementa tras la pre-gen para reconsultar adjuntos. */
-  reloadToken?: number;
-}) {
-  const [docs, setDocs] = useState<ProcedureAttachment[] | null>(null);
-  const [consolidado, setConsolidado] = useState<ProcedureAttachment | null>(null);
-  const [generatingConsolidado, setGeneratingConsolidado] = useState(false);
-  const [consolidadoError, setConsolidadoError] = useState<string | null>(null);
-  // HU #10924 — plantilla de FUR que aplica según la clasificación del vehículo (backend = fuente de verdad).
-  const [furFormat, setFurFormat] = useState<string | null>(null);
-  // HU #10987 / #10988 (Feature #10972) — el recuadro OBSERVACIONES y la fecha del trámite del FUR
-  // leían `fur_observations` y `fur_processing_date`, dos llaves que NADIE escribía: el gestor no
-  // podía aportar observaciones y la fecha era la de generación, impuesta por un fallback silencioso.
-  // Feature #11066 — por defecto hoy; si el trámite ya tiene `fur_processing_date`, load() la respeta.
-  const [observaciones, setObservaciones] = useState('');
-  const [fechaTramite, setFechaTramite] = useState(todayIsoDate);
-  const [savingCampos, setSavingCampos] = useState(false);
-
-  const load = useCallback(async () => {
-    if (!instanceId) return;
-    try {
-      const list = await tramitesClient.getAttachments(instanceId);
-      setDocs(list.filter((a) => FUR_TIPOS.has(a.tipo)));
-      setConsolidado(list.find((a) => a.tipo === 'consolidado') ?? null);
-      const fmt = await tramitesClient.getFurTemplateFormat(instanceId);
-      setFurFormat(fmt.format);
-      const detail = await tramitesClient.getInstance(instanceId);
-      const valor = (key: string) =>
-        detail?.fieldValues?.find((f) => f.fieldKey === key)?.valueText ?? '';
-      setObservaciones(valor('fur_observations'));
-      const fechaGuardada = valor('fur_processing_date').slice(0, 10);
-      const fecha = fechaGuardada || todayIsoDate();
-      setFechaTramite(fecha);
-      // Si no había fecha persistida, guardamos la de hoy para que el paquete/FUR la usen.
-      if (!fechaGuardada) {
-        try {
-          await tramitesClient.patchFieldValues(instanceId, [
-            { formFieldId: null, fieldKey: 'fur_processing_date', valueText: fecha },
-          ]);
-        } catch {
-          // Best-effort: el input ya muestra hoy; el backend puede caer al fallback.
-        }
-      }
-    } catch {
-      // El listado de adjuntos y el formato son secundarios; el error de generar se muestra abajo.
-    }
-  }, [instanceId]);
-
-  /**
-   * Persiste observaciones y fecha del trámite. Se dispara al perder el foco y ANTES de generar, para
-   * que el PDF salga con lo que el gestor tiene en pantalla y no con lo último guardado.
-   * Best-effort: fuera de borrador/subsanación el backend responde `not_draft` y el campo queda de
-   * solo lectura de hecho — no tiene sentido bloquear la generación por eso.
-   */
-  const guardarCampos = useCallback(async () => {
-    if (!instanceId) return;
-    setSavingCampos(true);
-    try {
-      await tramitesClient.patchFieldValues(instanceId, [
-        { formFieldId: null, fieldKey: 'fur_observations', valueText: observaciones.trim() || null },
-        { formFieldId: null, fieldKey: 'fur_processing_date', valueText: fechaTramite || null },
-      ]);
-    } catch {
-      // Silencio intencionado: ver comentario de arriba.
-    } finally {
-      setSavingCampos(false);
-    }
-  }, [instanceId, observaciones, fechaTramite]);
-
-  useEffect(() => {
-    // load solo hace setState DESPUÉS del await (no es cascada síncrona).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load, reloadToken]);
-
-  const handleGenerateConsolidado = async () => {
-    if (!instanceId) return;
-    setGeneratingConsolidado(true);
-    setConsolidadoError(null);
-    try {
-      // HU #11052 — el consolidado es el ÚNICO disparador de generación, así que hereda el guardado
-      // previo que hacía el botón del FUR (HU #10987/#10988): si el gestor escribe la fecha o las
-      // observaciones y pulsa generar sin que el campo pierda el foco, el PDF saldría sin ese texto.
-      await guardarCampos();
-      // HU #11017 — el consolidado se genera aunque falten documentos obligatorios: si vuelve marcado
-      // como incompleto se avisa qué falta, en vez de dejar al gestor con un expediente que el
-      // organismo rechazará sin explicación.
-      const generado = await tramitesClient.generarConsolidado(instanceId);
-      const avisos: string[] = [];
-      if (generado?.incompleto) {
-        const faltantes = (generado.documentosFaltantes ?? []).map(documentLabel).join(', ');
-        avisos.push(
-          faltantes
-            ? `Faltan documentos obligatorios: ${faltantes}.`
-            : 'Faltan documentos obligatorios.',
-        );
-      }
-      // HU #11050 (AC3) — documentos que la cascada no pudo generar. Importa desde que el gestor ya no
-      // tiene botones para generarlos a mano (HU #11052): sin este aviso, el documento simplemente no
-      // aparecería en el expediente y no habría forma de saber por qué.
-      for (const aviso of generado?.avisosCascada ?? []) {
-        avisos.push(`No se pudo generar ${consolidadoAvisoLabel(aviso)}.`);
-      }
-      if (avisos.length > 0) {
-        setConsolidadoError(`Expediente consolidado generado. ${avisos.join(' ')}`);
-      }
-      await load();
-      onRefresh?.();
-    } catch (err) {
-      const msg = (err instanceof Error ? err.message : '').trim();
-      setConsolidadoError(
-        // HU #11051 — el trámite aprobado/anulado ya no admite regeneración del gestor.
-        msg.includes('generacion_bloqueada_estado_final')
-          ? 'El trámite ya está aprobado o anulado: su documentación es definitiva y no se regenera.'
-          : msg.includes('organismo_requerido')
-            ? 'El organismo de tránsito del trámite no está seleccionado o no está activo en el sistema. Verifícalo antes de generar el expediente.'
-            : msg.includes('fur_requerido')
-              ? 'No se pudo generar el FUR del expediente: revisa los datos del trámite e inténtalo de nuevo.'
-              : msg.includes('documentos_incompletos')
-                ? 'Sube los documentos obligatorios antes de generar el consolidado.'
-                : msg.includes('modalidad_no_soportada')
-                  ? 'El consolidado no está disponible para esta modalidad.'
-                  // El cliente ya trae el `detail` del ProblemDetails: se muestra en vez de un genérico
-                  // que descarta justo el motivo. Sin mensaje (fallo de red) sí cae al genérico.
-                  : msg || 'No se pudo generar el consolidado. Revisa la conexión e inténtalo de nuevo.',
-      );
-    } finally {
-      setGeneratingConsolidado(false);
-    }
-  };
-
-  const generated = (docs ?? []).length > 0;
-  const consolidadoGenerated = consolidado !== null;
-  // HU #11052 (AC3) / HU #11051 — en estado final la documentación es definitiva: solo descarga.
-  const estadoFinal = status === 'aprobado' || status === 'anulado';
-
-  return (
-    <section className="space-y-4" aria-label="Generación del FUR">
-      <div>
-        <div className="flex items-center gap-2">
-          <h4 className="text-sm font-bold">FUR / contrato de compraventa</h4>
-          {furFormat && (
-            <span
-              className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-              style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
-              title="Plantilla de FUR determinada por la clasificación del vehículo"
-            >
-              Plantilla: {furFormat}
-            </span>
-          )}
-        </div>
-        {/* Feature #11066 — al entrar al paso se pre-generan FUR (+ paquete) e impronta.
-            El botón de consolidado (HU #11052) fusiona el expediente ya persistido; no es cascada
-            caliente del paquete. Preparar/Guardar no esperan la pre-gen; Radicar sí exige consolidado. */}
-        <p className="text-xs opacity-70">
-          Al entrar a este paso se generan automáticamente el FUR
-          {modalidad === 'traspaso' ? ', el contrato de compraventa' : ''}, la solicitud de trámite
-          virtual, el mandato (si aplica) y los certificados. Aquí configuras fecha y observaciones;
-          cuando existan, puedes descargarlos abajo. Preparar no espera esta generación: si falla,
-          puedes regenerar el expediente consolidado después.
-        </p>
-      </div>
-
-      {/* HU #10987 / #10988 — datos del FUR que aporta el gestor. Antes de esta HU el recuadro
-          OBSERVACIONES del formulario oficial era de solo-lectura automática y la fecha era la de
-          generación del PDF. */}
-      <div className="rounded-xl border p-3 space-y-3" style={{ borderColor: '#DFE5ED' }}>
-        <div>
-          <label htmlFor="fur-fecha-tramite" className="text-xs font-semibold mb-1.5 block">
-            Fecha del trámite
-          </label>
-          <input
-            id="fur-fecha-tramite"
-            type="date"
-            value={fechaTramite}
-            onChange={(e) => setFechaTramite(e.target.value)}
-            onBlur={() => void guardarCampos()}
-            disabled={!instanceId}
-            className="rounded-lg border px-3 py-2 text-xs"
-            style={{ borderColor: '#DFE5ED' }}
-          />
-          <p className="text-[10px] opacity-60 mt-1">
-            Se estampa en el FUR y en el resto de documentos del trámite. Por defecto es hoy; puedes
-            cambiarla si el trámite corresponde a otra fecha.
-          </p>
-        </div>
-
-        <div>
-          <label htmlFor="fur-observaciones" className="text-xs font-semibold mb-1.5 block">
-            Observaciones
-          </label>
-          <textarea
-            id="fur-observaciones"
-            value={observaciones}
-            onChange={(e) => setObservaciones(e.target.value)}
-            onBlur={() => void guardarCampos()}
-            disabled={!instanceId}
-            rows={3}
-            maxLength={FUR_OBSERVACIONES_MAX}
-            placeholder="Particularidades del vehículo o del negocio que el formulario no contempla."
-            className="w-full rounded-lg border px-3 py-2 text-xs"
-            style={{ borderColor: '#DFE5ED' }}
-          />
-          <p className="text-[10px] opacity-60 mt-1">
-            {observaciones.length}/{FUR_OBSERVACIONES_MAX} · Se imprimen en el recuadro OBSERVACIONES
-            del FUR, junto a las transformaciones declaradas y, si aplica, el gravamen.
-            {savingCampos && ' · Guardando…'}
-          </p>
-        </div>
-      </div>
-
-      {generated && (
-        <ul className="space-y-2" aria-label="Documentos generados">
-          {(docs ?? []).map((d) => (
-            <li
-              key={d.id}
-              className="rounded-xl border p-3 flex items-center gap-3"
-              style={{ borderColor: '#8CC63F' }}
-            >
-              <FileText className="h-4 w-4 shrink-0" style={{ color: '#5B8A1F' }} aria-hidden="true" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold">
-                  {documentLabel(d.tipo)} <span className="opacity-50 font-normal">· {d.filename}</span>
-                </p>
-                <p className="text-[10px] opacity-60 truncate" title={d.sha256}>
-                  SHA-256: {d.sha256}
-                </p>
-              </div>
-              <DownloadButton instanceId={instanceId} attachment={d} />
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {(modalidad === 'matricula_inicial' || modalidad === 'traspaso') && (
-        <div className="space-y-3 pt-2 border-t">
-          <div>
-            <h5 className="text-xs font-bold">Expediente consolidado</h5>
-            <p className="text-[11px] opacity-70">
-              Un solo PDF con el FUR, el certificado de identidad, la impronta y los documentos
-              cargados en el trámite
-              {modalidad === 'traspaso' ? ' (incluye el contrato de compraventa)' : ''}. Al generarlo se
-              producen también los documentos que falten.
-            </p>
-          </div>
-
-          {consolidadoError && (
-            <div
-              className="rounded-xl p-3 text-xs border"
-              style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
-              role="alert"
-              aria-live="polite"
-            >
-              {consolidadoError}
-            </div>
-          )}
-
-          {/* HU #11052 (AC3) / HU #11051 — en estado final la documentación es definitiva: no se
-              ofrece generar, solo consultar y descargar lo que ya existe. */}
-          {estadoFinal ? (
-            <p className="text-[11px] font-medium" style={{ color: '#557EFF' }} role="status">
-              El trámite ya está {status === 'aprobado' ? 'aprobado' : 'anulado'}: su documentación es
-              definitiva. Puedes consultarla y descargarla.
-            </p>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void handleGenerateConsolidado()}
-              disabled={generatingConsolidado || !instanceId}
-              className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-              style={{ background: '#162744' }}
-            >
-              {generatingConsolidado
-                ? 'Generando expediente…'
-                : consolidadoGenerated
-                  ? 'Re-generar expediente consolidado'
-                  : 'Generar expediente consolidado'}
-            </button>
-          )}
-
-          {consolidadoGenerated && consolidado && (
-            <div
-              className="rounded-xl border p-3 flex items-center gap-3"
-              style={{ borderColor: '#557EFF' }}
-            >
-              <FileText className="h-4 w-4 shrink-0" style={{ color: '#557EFF' }} aria-hidden="true" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold">
-                  consolidado · {consolidado.filename}
-                </p>
-                <p className="text-[10px] opacity-60 truncate" title={consolidado.sha256}>
-                  SHA-256: {consolidado.sha256}
-                </p>
-              </div>
-              <DownloadButton instanceId={instanceId} attachment={consolidado} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* HU #10611 (Feature #10587) — asignación de SOAT de la ruta de placa, ubicada bajo el
-          Expediente consolidado (movida desde EstadoAcciones). Se auto-oculta salvo sub-estado
-          de placa 'asignado' (el OT ya asignó la placa). */}
-      <PlateFlowCompleteSection instanceId={instanceId} onRefresh={onRefresh} />
-    </section>
-  );
 }
 
 /**
@@ -2270,55 +1585,5 @@ function PlateFlowCompleteSection({
         </p>
       ) : null}
     </div>
-  );
-}
-
-/** Botón de descarga reutilizable (blob → objectURL → anchor). */
-function DownloadButton({
-  instanceId,
-  attachment: d,
-}: {
-  instanceId: string | null;
-  attachment: ProcedureAttachment;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
-
-  const handleDownload = async () => {
-    if (!instanceId) return;
-    setBusy(true);
-    setError(false);
-    try {
-      const { blob, filename } = await tramitesClient.downloadAttachment(
-        instanceId,
-        d.id,
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename || d.filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch {
-      setError(true);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={() => void handleDownload()}
-      disabled={busy || !instanceId}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border shrink-0 disabled:opacity-50"
-      style={{ borderColor: error ? '#FF4E00' : '#5B8A1F', color: error ? '#FF4E00' : '#5B8A1F' }}
-      aria-label={`Descargar ${d.filename}`}
-    >
-      <Download className="h-3 w-3" />
-      {busy ? 'Descargando…' : error ? 'Reintentar' : 'Descargar'}
-    </button>
   );
 }

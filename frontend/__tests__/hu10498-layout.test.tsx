@@ -6,7 +6,7 @@ import { Shell } from "@/components/atom/Shell";
 
 /**
  * HU #10498 — Layout: scroll encuadrado en el área de contenido sin quedar oculto
- * tras el dock (AC1) y wizard nivelado con scroll interno en el stepper (AC2).
+ * tras el dock (AC1) y wizard con scroll en main + tracker sticky (AC2).
  */
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
@@ -32,13 +32,14 @@ describe("HU #10498 — AC1: scroll encuadrado en el Shell", () => {
   it("el área de contenido ya no clipa el scroll (no overflow-hidden en el wrapper de children)", () => {
     const src = read("components/atom/Shell.tsx");
     expect(src).not.toMatch(/absolute inset-0 overflow-hidden">\{children\}/);
-    // Contenedor de scroll con colchón del dock; puede llevar ref para condensado.
+    // Contenedor de scroll con colchón del dock; ref para condensado + data-shell-scroll del wizard.
     expect(src).toMatch(/absolute inset-0 overflow-y-auto pb-\d+/);
     expect(src).toMatch(/\{children\}/);
+    expect(src).toMatch(/data-shell-scroll/);
   });
 });
 
-describe("HU #10498 — AC2: wizard nivelado con scroll interno en el stepper", () => {
+describe("HU #10498 — AC2: wizard con scroll en main y tracker de seguimiento", () => {
   it("StepperForm: columnas niveladas (items-stretch), sin self-start/sticky y lista con scroll propio", () => {
     const src = read("components/atom/StepperForm.tsx");
     expect(src).toMatch(/lg:items-stretch/);
@@ -48,11 +49,25 @@ describe("HU #10498 — AC2: wizard nivelado con scroll interno en el stepper", 
     expect(src).toMatch(/<ol className="[^"]*overflow-y-auto[^"]*">/);
   });
 
-  it("TramiteWizard (wizard real): stepper nivelado con la misma técnica", () => {
-    const src = read("components/operacion/TramiteWizard.tsx");
-    expect(src).toMatch(/md:items-stretch/);
-    expect(src).not.toMatch(/md:self-start/);
-    expect(src).not.toMatch(/md:sticky/);
-    expect(src).toMatch(/<ol className="[^"]*overflow-y-auto[^"]*">/);
+  it("TramiteWizard: scroll en main; chrome sticky (título + tracker)", () => {
+    const wizard = read("components/operacion/TramiteWizard.tsx");
+    const tracker = read("components/operacion/WizardStepTracker.tsx");
+    expect(wizard).toMatch(/WizardStepTracker/);
+    expect(wizard).toMatch(/tramite-wizard-scroll/);
+    expect(wizard).not.toMatch(/overflow-y-auto overscroll-contain/);
+    expect(wizard).toMatch(/Nuevo Trámite/);
+    expect(wizard).toMatch(/sticky top-0/);
+    expect(tracker).toMatch(/aria-label="Asistente de seguimiento"/);
+    expect(tracker).not.toMatch(/sticky top/);
+    expect(tracker).toMatch(/ol className="flex w-full min-w-0 items-start/);
+    // Etiquetas siempre visibles (sin colapso hover).
+    expect(tracker).not.toMatch(/grid-rows-\[0fr\]/);
+    expect(tracker).not.toMatch(/group\/tracker/);
+  });
+
+  it("layout trámites inmersivo no clipa el scroll del Shell", () => {
+    const src = read("app/tramites/layout.tsx");
+    expect(src).not.toMatch(/absolute inset-0[\s\S]*overflow-hidden/);
+    expect(src).toMatch(/min-h-full flex-col gap-3/);
   });
 });

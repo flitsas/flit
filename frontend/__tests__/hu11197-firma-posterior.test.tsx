@@ -133,4 +133,17 @@ describe('HU #11197 — firma a posteriori en el registro', () => {
     expect(await screen.findByText(/al entregar el trámite al organismo/i)).toBeInTheDocument();
     expect(screen.queryByText(/se aplicará sola cuando él la complete/i)).not.toBeInTheDocument();
   });
+
+  it('onlyRoles limita la consulta y la tarjeta a esa parte', async () => {
+    backend({
+      comprador: estado({ aplica: true, representanteNombre: 'Ana' }),
+      vendedor: estado({ aplica: true, representanteNombre: 'Luis' }),
+    });
+    render(<FirmaPosteriorSection instanceId="i-1" onlyRoles={['comprador']} />);
+
+    expect(await screen.findByText(/Ana/)).toBeInTheDocument();
+    expect(screen.queryByText(/Luis/)).not.toBeInTheDocument();
+    await waitFor(() => expect(getFirmaPosterior).toHaveBeenCalled());
+    expect(getFirmaPosterior.mock.calls.every((c) => c[1] === 'comprador')).toBe(true);
+  });
 });
