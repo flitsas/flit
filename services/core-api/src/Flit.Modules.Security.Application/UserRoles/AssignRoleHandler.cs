@@ -15,8 +15,16 @@ public sealed class AssignRoleHandler(IUserRoleAssignmentRepository repo)
         if (cmd.UserId == cmd.AssignedBy)
             throw new SelfRoleAssignmentException();
 
-        // El usuario destino debe pertenecer al tenant del caller (vía HomeTenantId).
-        if (!await repo.UserBelongsToTenantAsync(cmd.UserId, cmd.TenantId, ct))
+        // Alcance: el SuperAdmin administra usuarios de CUALQUIER tenant, así que el rol se
+        // asigna en el tenant del usuario destino y no en el suyo (el interno de FLIT, que nunca
+        // coincide). Para AdminCompany/ot_admin sigue mandando el tenant del caller, que es lo
+        // que acota lo que pueden tocar.
+        var tenantId = cmd.CallerIsSuperAdmin
+            ? await repo.GetUserTenantAsync(cmd.UserId, ct) ?? throw new UserOutOfScopeException()
+            : cmd.TenantId;
+
+        // El usuario destino debe pertenecer a ese tenant.
+        if (!await repo.UserBelongsToTenantAsync(cmd.UserId, tenantId, ct))
             throw new UserOutOfScopeException();
 
         // El rol debe existir y estar activo en el catálogo global (HU #10505).
@@ -26,19 +34,19 @@ public sealed class AssignRoleHandler(IUserRoleAssignmentRepository repo)
 
         // HU #10506: el rol solo puede asignarse en un tenant del mismo TargetEntityType
         // (COMPANY | TRANSIT_OFFICE) para el que fue definido.
-        var tenantTargetEntityType = await repo.GetTenantTargetEntityTypeAsync(cmd.TenantId, ct);
+        var tenantTargetEntityType = await repo.GetTenantTargetEntityTypeAsync(tenantId, ct);
         if (!string.Equals(role.TargetEntityType, tenantTargetEntityType, StringComparison.Ordinal))
             throw new RoleTargetEntityTypeMismatchException();
 
         // AC2 — rechazo de asignación duplicada del mismo rol ya activo, sin duplicar fila.
-        var existing = await repo.GetActiveAssignmentAsync(cmd.UserId, cmd.TenantId, cmd.RoleId, ct);
+        var existing = await repo.GetActiveAssignmentAsync(cmd.UserId, tenantId, cmd.RoleId, ct);
         if (existing is not null)
             throw new RoleAlreadyAssignedException();
 
         // AC1 — modelo aditivo: crea la nueva asignación SIN tocar las demás asignaciones
         // activas del usuario (a diferencia del reemplazo de HU #10164).
         await repo.CreateAssignmentAsync(
-            new AssignRoleData(cmd.TenantId, cmd.UserId, cmd.RoleId, cmd.AssignedBy),
+            new AssignRoleData(tenantId, cmd.UserId, cmd.RoleId, cmd.AssignedBy),
             ct);
     }
 }

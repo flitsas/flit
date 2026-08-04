@@ -66,7 +66,6 @@ export function EditUserModal({
   profile,
 }: EditUserModalProps) {
   const [displayName, setDisplayName] = useState(user.fullName);
-  const [email, setEmail] = useState(user.email);
   const [nameError, setNameError] = useState<string | null>(null);
   // Error a nivel de formulario (no asociado a un campo): correo en uso, cuenta eliminada
   // o conflicto de concurrencia (AC2/AC3).
@@ -121,7 +120,6 @@ export function EditUserModal({
     e.preventDefault();
 
     const trimmedName = displayName.trim();
-    const trimmedEmail = email.trim();
 
     if (!trimmedName) {
       setNameError("El nombre es obligatorio.");
@@ -137,9 +135,10 @@ export function EditUserModal({
     setFormError(null);
     setBusy(true);
     try {
+      // El correo NO se envía: es el identificador de acceso del usuario y no se cambia desde
+      // aquí (el input se muestra en solo lectura).
       await onUpdate(user.id, {
         displayName: trimmedName,
-        email: trimmedEmail,
         rowVersion: user.rowVersion,
       });
       onSaved();
@@ -215,12 +214,14 @@ export function EditUserModal({
           <input
             id="eu-email"
             type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            maxLength={255}
-            className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+            readOnly
+            value={user.email}
+            className="w-full cursor-not-allowed rounded-xl border px-3 py-2 text-xs opacity-70 outline-none"
+            style={{ borderColor: "#DFE5ED", background: "rgba(223,229,237,0.25)" }}
           />
+          <p className="mt-1 text-[10px] opacity-60">
+            El correo es la credencial de acceso del usuario y no se puede cambiar desde aquí.
+          </p>
         </Field>
 
         {roleSection && (

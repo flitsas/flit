@@ -138,4 +138,36 @@ public sealed class AssignRoleHandlerTests
         await _repo.DidNotReceiveWithAnyArgs().UserBelongsToTenantAsync(
             Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
+
+    // El SuperAdmin administra usuarios de cualquier tenant y el suyo es el interno de FLIT, que
+    // nunca coincide con el del usuario destino: el alcance debe salir del USUARIO. Antes esto
+    // devolvía OUT_OF_SCOPE en cuanto un SuperAdmin cambiaba el rol de un usuario de una empresa.
+    [Fact]
+    public async Task HandleAsync_AsSuperAdmin_UsesTargetUserTenantInsteadOfCallerTenant()
+    {
+        var flitTenantId = Guid.NewGuid();
+        _repo.GetUserTenantAsync(UserId, Arg.Any<CancellationToken>()).Returns(TenantId);
+        SetupHappyPath(existing: null);
+
+        var command = new AssignRoleCommand(flitTenantId, UserId, RoleId, CallerId, CallerIsSuperAdmin: true);
+
+        await _handler.Invoking(h => h.HandleAsync(command, CancellationToken.None))
+            .Should().NotThrowAsync();
+
+        await _repo.Received(1).CreateAssignmentAsync(
+            Arg.Is<AssignRoleData>(d => d.TenantId == TenantId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_AsSuperAdmin_WhenTargetUserHasNoTenant_ThrowsOutOfScope()
+    {
+        _repo.GetUserTenantAsync(UserId, Arg.Any<CancellationToken>()).Returns((Guid?)null);
+
+        var command = new AssignRoleCommand(Guid.NewGuid(), UserId, RoleId, CallerId, CallerIsSuperAdmin: true);
+
+        await _handler
+            .Invoking(h => h.HandleAsync(command, CancellationToken.None))
+            .Should().ThrowAsync<UserOutOfScopeException>();
+    }
 }

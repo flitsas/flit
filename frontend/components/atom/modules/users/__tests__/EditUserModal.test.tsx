@@ -23,7 +23,7 @@ describe("EditUserModal (#10622)", () => {
     expect(nameInput).toHaveFocus();
   });
 
-  it("envía displayName/email recortados y rowVersion, y notifica onSaved en éxito", async () => {
+  it("envía displayName recortado y rowVersion, y notifica onSaved en éxito", async () => {
     const ue = userEvent.setup();
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const onSaved = vi.fn();
@@ -37,11 +37,30 @@ describe("EditUserModal (#10622)", () => {
     await waitFor(() =>
       expect(onUpdate).toHaveBeenCalledWith("user-1", {
         displayName: "Laura García Ruiz",
-        email: "laura@flit.local",
         rowVersion: 3,
       }),
     );
     expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  // El correo es la credencial de acceso: se muestra pero no se edita, y no viaja en el PATCH.
+  it("muestra el correo en solo lectura y no lo envía al guardar", async () => {
+    const ue = userEvent.setup();
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+    render(<EditUserModal user={user} onClose={vi.fn()} onSaved={vi.fn()} onUpdate={onUpdate} />);
+
+    const emailInput = screen.getByLabelText(/correo electrónico/i);
+    expect(emailInput).toHaveValue("laura@flit.local");
+    expect(emailInput).toHaveAttribute("readonly");
+
+    await ue.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() =>
+      expect(onUpdate).toHaveBeenCalledWith("user-1", {
+        displayName: "Laura García",
+        rowVersion: 3,
+      }),
+    );
   });
 
   it("AC2: mapea el 409 USER_ALREADY_EXISTS sin perder lo escrito en el formulario", async () => {
@@ -52,14 +71,14 @@ describe("EditUserModal (#10622)", () => {
     const onSaved = vi.fn();
     render(<EditUserModal user={user} onClose={vi.fn()} onSaved={onSaved} onUpdate={onUpdate} />);
 
-    const emailInput = screen.getByLabelText(/correo electrónico/i);
-    await ue.clear(emailInput);
-    await ue.type(emailInput, "otro@flit.local");
+    const nameInput = screen.getByLabelText(/nombre completo/i);
+    await ue.clear(nameInput);
+    await ue.type(nameInput, "Laura G.");
     await ue.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/ese correo ya está en uso/i);
     // No se pierde lo escrito.
-    expect(screen.getByLabelText(/correo electrónico/i)).toHaveValue("otro@flit.local");
+    expect(screen.getByLabelText(/nombre completo/i)).toHaveValue("Laura G.");
     expect(onSaved).not.toHaveBeenCalled();
   });
 

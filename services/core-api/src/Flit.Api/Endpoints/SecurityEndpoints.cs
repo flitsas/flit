@@ -438,14 +438,16 @@ public static class SecurityEndpoints
             var rolesBefore = await (
                 from a in db.UserRoleAssignments.AsNoTracking()
                 join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
-                where a.UserId == userId && a.TenantId == tenantId && a.DeletedAt == null
+                // Sin filtrar por tenant: el SuperAdmin opera desde el tenant interno de FLIT, así
+                // que filtrar por el suyo dejaría el rastro sin el "antes" en el caso más común.
+                where a.UserId == userId && a.DeletedAt == null
                 select r.Name
             ).ToListAsync(cancellationToken);
 
             try
             {
                 await handler.HandleAsync(
-                    new AssignRoleCommand(tenantId, userId, request.RoleId, callerId),
+                    new AssignRoleCommand(tenantId, userId, request.RoleId, callerId, callerIsSuperAdmin),
                     cancellationToken);
 
                 var assignedRoleName = await db.Roles
@@ -630,9 +632,14 @@ public static class SecurityEndpoints
             if (!Guid.TryParse(subClaim, out var callerId))
                 return Results.Unauthorized();
 
+            var callerIsSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+
             try
             {
-                await handler.HandleAsync(userId, tenantId, roleId, callerId, cancellationToken);
+                await handler.HandleAsync(
+                    userId, tenantId, roleId, callerId, cancellationToken, callerIsSuperAdmin);
                 return Results.NoContent();
             }
             catch (RoleAssignmentNotFoundException)

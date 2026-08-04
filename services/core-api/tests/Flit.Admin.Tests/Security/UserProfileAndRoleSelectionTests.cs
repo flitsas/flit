@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -52,6 +53,15 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
 
     private readonly Guid _customOtRoleId = Guid.NewGuid();
     private readonly string _customOtRoleCode = $"tso_{Guid.NewGuid():N}"[..16];
+
+    // Segundo rol de compañía: el destino del cambio de rol (el usuario ya tiene el primero).
+    private readonly Guid _secondCompanyRoleId = Guid.NewGuid();
+    private readonly string _secondCompanyRoleCode = $"tst_{Guid.NewGuid():N}"[..16];
+
+    // Usuario SIN home_tenant_id, con una asignación de rol activa en la compañía: la forma en
+    // que existen varios usuarios reales del sistema.
+    private readonly Guid _userWithoutHomeTenantId = Guid.NewGuid();
+    private readonly Guid _assignmentWithoutHomeTenantId = Guid.NewGuid();
 
     public UserProfileAndRoleSelectionTests(WebApplicationFactory<Program> factory)
     {
@@ -364,6 +374,59 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
             .Should().Contain("SUPERADMIN_ROLE_NOT_ASSIGNABLE");
     }
 
+    // ── Alcance sobre usuarios sin home_tenant_id ─────────────────────────────────────
+    // home_tenant_id es opcional en BD: hay usuarios legítimos que solo tienen asignaciones de
+    // rol (los del seeder de desarrollo, entre otros). Mirar solo esa columna hacía que editarlos
+    // devolviera 404 y que cambiarles el rol devolviera OUT_OF_SCOPE.
+
+    [Fact]
+    public async Task UpdateUser_WithoutHomeTenant_ResolvesTenantFromRoleAssignment()
+    {
+        var rowVersion = await GetRowVersionAsync(_userWithoutHomeTenantId);
+
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/v1/security/users/{_userWithoutHomeTenantId}",
+            new { displayName = "Nombre editado sin home tenant", rowVersion },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var db = CreateDbContext();
+        var name = await db.Users.AsNoTracking()
+            .Where(u => u.Id == _userWithoutHomeTenantId)
+            .Select(u => u.DisplayName)
+            .SingleAsync(TestContext.Current.CancellationToken);
+        name.Should().Be("Nombre editado sin home tenant");
+    }
+
+    [Fact]
+    public async Task AssignRole_AsSuperAdmin_AppliesInTargetUserTenantNotInCallerTenant()
+    {
+        var response = await _client.PutAsJsonAsync(
+            $"/api/v1/security/users/{_userWithoutHomeTenantId}/role",
+            new { roleId = _secondCompanyRoleId },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK,
+            "el SuperAdmin opera en el tenant del usuario destino, no en su tenant interno de FLIT");
+
+        await using var db = CreateDbContext();
+        var assignment = await db.UserRoleAssignments.AsNoTracking()
+            .SingleAsync(
+                a => a.UserId == _userWithoutHomeTenantId && a.RoleId == _secondCompanyRoleId && a.DeletedAt == null,
+                TestContext.Current.CancellationToken);
+        assignment.TenantId.Should().Be(_companyTenantId);
+    }
+
+    private async Task<long> GetRowVersionAsync(Guid userId)
+    {
+        await using var db = CreateDbContext();
+        return await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => u.RowVersion)
+            .SingleAsync(TestContext.Current.CancellationToken);
+    }
+
     // ── Auditoría legible ─────────────────────────────────────────────────────────────
 
     [Fact]
@@ -476,6 +539,17 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
 
         db.Roles.Add(new Role
         {
+            Id = _secondCompanyRoleId,
+            Code = _secondCompanyRoleCode,
+            Name = "Segundo rol de prueba",
+            TargetEntityType = "COMPANY",
+            IsSystem = false,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+        db.Roles.Add(new Role
+        {
             Id = _customOtRoleId,
             Code = _customOtRoleCode,
             Name = "Revisor documental de prueba",
@@ -483,6 +557,27 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
             IsSystem = false,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+        // Usuario deliberadamente SIN HomeTenantId: su único vínculo con la compañía es la
+        // asignación de rol, igual que varios usuarios reales del sistema.
+        db.Users.Add(new User
+        {
+            Id = _userWithoutHomeTenantId,
+            Email = $"sin-home-{_userWithoutHomeTenantId:N}@flit.local",
+            DisplayName = "Usuario sin home tenant",
+            Status = "active",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+        db.UserRoleAssignments.Add(new UserRoleAssignment
+        {
+            Id = _assignmentWithoutHomeTenantId,
+            TenantId = _companyTenantId,
+            UserId = _userWithoutHomeTenantId,
+            RoleId = _customCompanyRoleId,
+            AssignedBy = _superAdminUserId,
+            AssignedAt = DateTimeOffset.UtcNow,
         });
 
         db.TransitOfficeProfiles.Add(new TransitOfficeProfile
@@ -568,47 +663,65 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
     {
         using var db = CreateDbContext();
 
-        TryDelete(db, () =>
-        {
-            db.UserInvitations.RemoveRange(db.UserInvitations.Where(
-                i => i.TenantId == _companyTenantId || i.TenantId == _otTenantId || i.TenantId == _flitTenantId));
-            db.TransitOfficeProfiles.RemoveRange(db.TransitOfficeProfiles.Where(p => p.TenantId == _otTenantId));
-        });
+        TryDelete(() => db.UserInvitations
+            .Where(i => i.TenantId == _companyTenantId || i.TenantId == _otTenantId || i.TenantId == _flitTenantId)
+            .ExecuteDelete());
+        TryDelete(() => db.TransitOfficeProfiles.Where(p => p.TenantId == _otTenantId).ExecuteDelete());
 
-        // Cada invitación deja una fila de auditoría con changed_by = SuperAdmin
-        // (tenant_config_audit_logs_changed_by_fkey), que bloquea el borrado del usuario.
-        TryDelete(db, () => db.TenantConfigAuditLogs.RemoveRange(
-            db.TenantConfigAuditLogs.Where(a => a.ChangedBy == _superAdminUserId)));
+        // Antes que los roles: las asignaciones los referencian.
+        TryDelete(() => db.UserRoleAssignments
+            .Where(a => a.UserId == _userWithoutHomeTenantId)
+            .ExecuteDelete());
 
         // Los roles van en su PROPIA etapa: son lo único que queda visible en la UI si sobrevive.
-        TryDelete(db, () => db.Roles.RemoveRange(db.Roles.Where(
-            r => r.Id == _customCompanyRoleId || r.Id == _customOtRoleId)));
+        TryDelete(() => db.Roles
+            .Where(r => r.Id == _customCompanyRoleId || r.Id == _customOtRoleId || r.Id == _secondCompanyRoleId)
+            .ExecuteDelete());
 
-        TryDelete(db, () => db.Users.RemoveRange(db.Users.Where(u => u.Id == _superAdminUserId)));
-
-        TryDelete(db, () =>
+        // Cada invitación deja una fila de auditoría con changed_by = SuperAdmin
+        // (tenant_config_audit_logs_changed_by_fkey), que bloquea el borrado del usuario. Va
+        // pegado al borrado del usuario y en el mismo reintento: la traza se escribe en su
+        // propio scope/transacción (AdminAuditWriter), así que una fila puede confirmarse justo
+        // después de este DELETE y dejar al usuario sin poder borrarse en la BD compartida.
+        TryDelete(() =>
         {
-            db.Tenants.RemoveRange(db.Tenants.Where(
-                t => t.Id == _companyTenantId || t.Id == _otTenantId || t.Id == _flitTenantId));
-            db.TransitOffices.RemoveRange(db.TransitOffices.Where(o => o.Id == _transitOfficeId));
+            db.TenantConfigAuditLogs
+                .Where(a => a.ChangedBy == _superAdminUserId || a.TargetEntityId == _userWithoutHomeTenantId)
+                .ExecuteDelete();
+            db.Users
+                .Where(u => u.Id == _superAdminUserId || u.Id == _userWithoutHomeTenantId)
+                .ExecuteDelete();
         });
+
+        TryDelete(() => db.Tenants
+            .Where(t => t.Id == _companyTenantId || t.Id == _otTenantId || t.Id == _flitTenantId)
+            .ExecuteDelete());
+        TryDelete(() => db.TransitOffices.Where(o => o.Id == _transitOfficeId).ExecuteDelete());
     }
 
     /// <summary>
-    /// Ejecuta una etapa de limpieza sin dejar que su fallo aborte las siguientes ni haga
-    /// fallar el test (el test ya pasó: esto es housekeeping). Descarta el change tracker para
-    /// que las entidades de una etapa fallida no se reintenten en la siguiente.
+    /// Ejecuta una etapa de limpieza sin dejar que su fallo aborte las siguientes ni haga fallar
+    /// el test (el test ya pasó: esto es housekeeping). Se reintenta una vez porque la BD de
+    /// desarrollo es COMPARTIDA y una escritura concurrente puede volver a bloquear el borrado.
+    /// Se usa <c>ExecuteDelete</c> (SQL directo) para no arrastrar entidades entre etapas.
     /// </summary>
-    private static void TryDelete(FlitDbContext db, Action stage)
+    private static void TryDelete(Action stage)
     {
-        try
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            stage();
-            db.SaveChanges();
-        }
-        catch (DbUpdateException)
-        {
-            db.ChangeTracker.Clear();
+            try
+            {
+                stage();
+                return;
+            }
+            catch (DbUpdateException)
+            {
+                // Reintento: la etapa siguiente debe correr igual aunque esta no lo consiga.
+            }
+            catch (DbException)
+            {
+                // ExecuteDelete no envuelve el error del proveedor (p. ej. violación de FK).
+            }
         }
     }
 }
