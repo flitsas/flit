@@ -3,6 +3,15 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { canReadIctLogs, canReadLogQx, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import { fetchOtProfile } from "@/lib/api/admin-ot";
+import {
+  isOtHubSegmentActive,
+  OT_ADM_DOCK,
+  OT_SA_DOCK,
+  otHubListPath,
+  resolveOtHubHref,
+  type OtHubTabId,
+} from "@/components/admin/transit-offices/ot-nav";
 import { useDockScrollCondense } from "./useDockScrollCondense";
 import { buildDockGroups } from "./dock/dockGroups";
 import { DockDesktop } from "./dock/DockDesktop";
@@ -35,6 +44,10 @@ import {
   Radar,
   Network,
   X,
+  Scale,
+  FileText,
+  ClipboardList,
+  Tag,
 } from "lucide-react";
 
 export type ModuleId =
@@ -176,15 +189,28 @@ export function Shell({
   // Filtra los módulos del dock según permisos RBAC del JWT cuando visibleModuleCodes
   // está disponible. "Ayuda" es soporte universal (no es un módulo con permiso RBAC),
   // por lo que se muestra siempre, en todas las pantallas del dock.
-  const visibleDock = visibleModuleCodes
+  // Admin OT: las pestañas del hub viven en el dock (Trámites / Usuarios / Reportes / …);
+  // se omiten los módulos SPA homónimos para no duplicar píldoras.
+  const otAdminSpaOmit = new Set(["tramites", "reportes", "reportes-detallados", "usuarios"]);
+  const visibleDock = (visibleModuleCodes
     ? DOCK.filter((it) => it.id === "ayuda" || visibleModuleCodes.includes(it.id))
-    : DOCK;
+    : DOCK
+  ).filter((it) => !(currentUser?.isOtAdmin && otAdminSpaOmit.has(it.id)));
 
   // Una sola lista con TODAS las entradas del dock (módulos + botones admin/empresa
   // según rol). El FAB de inicio va siempre en el centro y las entradas se reparten
   // de forma balanceada a izquierda/derecha; si se agregan más, se redistribuyen solas.
   const pathname = usePathname() ?? "";
   const onAdminRoute = pathname.startsWith("/admin") || pathname.startsWith("/empresa");
+
+  const goOtHub = (tab: OtHubTabId, mode: "ot_admin" | "superadmin") => {
+    void resolveOtHubHref(tab, pathname, mode, async () => {
+      const profile = await fetchOtProfile();
+      return profile.transitOfficeId;
+    }).then((href) => {
+      window.location.assign(href);
+    });
+  };
 
   const entries: DockEntry[] = visibleDock.map((it) => ({
     key: it.id,
@@ -203,12 +229,64 @@ export function Shell({
         active: pathname.startsWith("/admin/companies"),
         onClick: () => window.location.assign("/admin/companies"),
       },
+      // Submenú OT: listado + todas las opciones del hub en un solo agrupador.
       {
         key: "admin-transit",
-        label: "Tránsito",
+        label: "Organismos",
         icon: Landmark,
-        active: pathname.startsWith("/admin/transit-offices"),
-        onClick: () => window.location.assign("/admin/transit-offices"),
+        active:
+          pathname === otHubListPath() ||
+          pathname === `${otHubListPath()}/`,
+        onClick: () => window.location.assign(otHubListPath()),
+      },
+      {
+        key: OT_SA_DOCK.tramites,
+        label: "Trámites",
+        icon: FileStack,
+        active: isOtHubSegmentActive(pathname, "client-procedures"),
+        onClick: () => goOtHub("client-procedures", "superadmin"),
+      },
+      {
+        key: OT_SA_DOCK.rules,
+        label: "Reglas",
+        icon: Scale,
+        active: isOtHubSegmentActive(pathname, "rules"),
+        onClick: () => goOtHub("rules", "superadmin"),
+      },
+      {
+        key: OT_SA_DOCK.documents,
+        label: "Documentos",
+        icon: FileText,
+        active: isOtHubSegmentActive(pathname, "documents"),
+        onClick: () => goOtHub("documents", "superadmin"),
+      },
+      {
+        key: OT_SA_DOCK.requirements,
+        label: "Requisitos",
+        icon: ClipboardList,
+        active: isOtHubSegmentActive(pathname, "requirements"),
+        onClick: () => goOtHub("requirements", "superadmin"),
+      },
+      {
+        key: OT_SA_DOCK.preasignacion,
+        label: "Preasignación",
+        icon: Tag,
+        active: isOtHubSegmentActive(pathname, "plate-ranges"),
+        onClick: () => goOtHub("plate-ranges", "superadmin"),
+      },
+      {
+        key: OT_SA_DOCK.usuarios,
+        label: "Usuarios OT",
+        icon: Users,
+        active: isOtHubSegmentActive(pathname, "usuarios"),
+        onClick: () => goOtHub("usuarios", "superadmin"),
+      },
+      {
+        key: OT_SA_DOCK.reportes,
+        label: "Reportes OT",
+        icon: BarChart3,
+        active: isOtHubSegmentActive(pathname, "reportes"),
+        onClick: () => goOtHub("reportes", "superadmin"),
       },
       {
         key: "admin-documents",
@@ -248,16 +326,60 @@ export function Shell({
     );
   }
 
-  // Bloque independiente del de SuperAdmin: ot_admin solo ve "Tránsito" (su propio
-  // hub OT), nunca "Compañías"/"Documental"/"RBAC Admin" (HU #10218 refactor adminOT).
+  // Admin OT: pestañas del hub trasladadas al dock (Administración = Reglas/Docs/Requisitos;
+  // Trámites, Preasignación, Usuarios y Reportes como ítems del dock). Sin Compañías/RBAC.
   if (currentUser?.isOtAdmin) {
-    entries.push({
-      key: "admin-transit",
-      label: "Tránsito",
-      icon: Landmark,
-      active: pathname.startsWith("/admin/transit-offices"),
-      onClick: () => window.location.assign("/admin/transit-offices"),
-    });
+    entries.push(
+      {
+        key: OT_ADM_DOCK.tramites,
+        label: "Trámites",
+        icon: FileStack,
+        active: isOtHubSegmentActive(pathname, "client-procedures"),
+        onClick: () => goOtHub("client-procedures", "ot_admin"),
+      },
+      {
+        key: OT_ADM_DOCK.rules,
+        label: "Reglas",
+        icon: Scale,
+        active: isOtHubSegmentActive(pathname, "rules"),
+        onClick: () => goOtHub("rules", "ot_admin"),
+      },
+      {
+        key: OT_ADM_DOCK.documents,
+        label: "Documentos",
+        icon: FileText,
+        active: isOtHubSegmentActive(pathname, "documents"),
+        onClick: () => goOtHub("documents", "ot_admin"),
+      },
+      {
+        key: OT_ADM_DOCK.requirements,
+        label: "Requisitos",
+        icon: ClipboardList,
+        active: isOtHubSegmentActive(pathname, "requirements"),
+        onClick: () => goOtHub("requirements", "ot_admin"),
+      },
+      {
+        key: OT_ADM_DOCK.preasignacion,
+        label: "Preasignación",
+        icon: Tag,
+        active: isOtHubSegmentActive(pathname, "plate-ranges"),
+        onClick: () => goOtHub("plate-ranges", "ot_admin"),
+      },
+      {
+        key: OT_ADM_DOCK.usuarios,
+        label: "Usuarios",
+        icon: Users,
+        active: isOtHubSegmentActive(pathname, "usuarios"),
+        onClick: () => goOtHub("usuarios", "ot_admin"),
+      },
+      {
+        key: OT_ADM_DOCK.reportes,
+        label: "Reportes",
+        icon: BarChart3,
+        active: isOtHubSegmentActive(pathname, "reportes"),
+        onClick: () => goOtHub("reportes", "ot_admin"),
+      },
+    );
   }
 
   if (currentUser?.isAdminCompany) {

@@ -1,6 +1,6 @@
 // Dock del Shell: FAB centrado, Ayuda universal, agrupadores menú/submenú.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setDevSuperAdminToken } from "@/lib/api/client";
 import { TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
@@ -51,7 +51,7 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   });
 
-  it("muestra el roleLabel 'Admin OT' y el botón 'Tránsito', sin botones de SuperAdmin/AdminCompany", () => {
+  it("muestra Admin OT con dock de hub (sin Compañías / Documental / Tránsito único)", async () => {
     window.localStorage.setItem(
       TOKEN_STORAGE_KEY,
       makeToken({ sub: "u1", role: "ot_admin", email: "ot@transito.gov.co" }),
@@ -60,11 +60,22 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
     renderShell();
 
     expect(screen.getByText("Admin OT")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Tránsito" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tránsito" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Compañías" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Documental" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Administradores" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Mi Empresa" })).not.toBeInTheDocument();
+
+    // Ítems directos del dock Admin OT
+    expect(screen.getByRole("button", { name: "Trámites" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preasignación" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Usuarios" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reportes" })).toBeInTheDocument();
+
+    // Administración = submenú Reglas / Documentos / Requisitos
+    await userEvent.click(screen.getByRole("button", { name: "Administración" }));
+    expect(screen.getByRole("button", { name: "Reglas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Documentos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Requisitos" })).toBeInTheDocument();
   });
 });
 
@@ -103,6 +114,19 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     renderShell();
     await userEvent.click(screen.getByRole("button", { name: "Compañías" }));
     expect(screen.getByRole("button", { name: "Improntas" })).toBeInTheDocument();
+  });
+
+  it("agrupa las opciones del hub OT en el submenú OT", async () => {
+    setDevSuperAdminToken();
+    renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "OT" }));
+    const otPanel = screen.getByRole("region", { name: "OT" });
+    expect(within(otPanel).getByRole("button", { name: "Organismos" })).toBeInTheDocument();
+    expect(within(otPanel).getByRole("button", { name: "Trámites" })).toBeInTheDocument();
+    expect(within(otPanel).getByRole("button", { name: "Reglas" })).toBeInTheDocument();
+    expect(within(otPanel).getByRole("button", { name: "Preasignación" })).toBeInTheDocument();
+    expect(within(otPanel).getByRole("button", { name: "Usuarios OT" })).toBeInTheDocument();
+    expect(within(otPanel).getByRole("button", { name: "Reportes OT" })).toBeInTheDocument();
   });
 
   it("no muestra la entrada 'Improntas' sin sesión SuperAdmin", () => {

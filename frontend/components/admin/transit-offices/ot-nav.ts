@@ -7,7 +7,8 @@ export type OtHubTabId =
   | "documents"
   | "requirements"
   | "plate-ranges"
-  | "usuarios";
+  | "usuarios"
+  | "reportes";
 
 export interface OtHubTab {
   id: OtHubTabId;
@@ -16,20 +17,46 @@ export interface OtHubTab {
 }
 
 /**
- * Pestañas visibles del hub. "Trámites" y "Webhooks" quedaron fuera de la navegación: sus rutas
- * siguen respondiendo si se entra por URL, pero no se ofrecen en la consola. Al retirarse "Trámites"
- * el hub pasa a abrir en "Trámites clientes" (ver la página índice del hub).
+ * Pestañas del hub (navegación interna). Visibles en OtTabBar solo para SuperAdmin;
+ * Admin OT las consume desde el dock (sin barra de pestañas).
+ *
+ * Labels alineados al dock Admin OT: Trámites (ex "Trámites clientes"), Preasignación.
+ * "Trámites"/"Webhooks" (ids legacy) siguen fuera de la oferta; rutas por URL siguen vivas.
  */
 export const OT_HUB_TABS: OtHubTab[] = [
-  { id: "client-procedures", label: "Trámites clientes", segment: "client-procedures" },
+  { id: "client-procedures", label: "Trámites", segment: "client-procedures" },
   { id: "rules", label: "Reglas", segment: "rules" },
   { id: "documents", label: "Documentos", segment: "documents" },
   { id: "requirements", label: "Requisitos", segment: "requirements" },
-  { id: "plate-ranges", label: "Preasignación de placa", segment: "plate-ranges" },
+  { id: "plate-ranges", label: "Preasignación", segment: "plate-ranges" },
   { id: "usuarios", label: "Usuarios", segment: "usuarios" },
-  // HU #11202 (AC4) — la gestión de mandatarios salió del perfil del organismo: ahora la hace la
-  // COMPAÑÍA desde su configurador, eligiendo en cuáles de sus organismos aplica cada mandatario.
+  { id: "reportes", label: "Reportes", segment: "reportes" },
+  // HU #11202 (AC4) — mandatarios salieron del perfil OT: los gestiona la compañía.
 ];
+
+/** Keys del dock Admin OT (agrupación distinta a SuperAdmin). */
+export const OT_ADM_DOCK = {
+  rules: "ot-adm-rules",
+  documents: "ot-adm-documents",
+  requirements: "ot-adm-requirements",
+  tramites: "ot-adm-tramites",
+  preasignacion: "ot-adm-preasignacion",
+  usuarios: "ot-adm-usuarios",
+  reportes: "ot-adm-reportes",
+} as const;
+
+/** Keys del dock SuperAdmin dentro del submenú OT. */
+export const OT_SA_DOCK = {
+  tramites: "ot-sa-tramites",
+  rules: "ot-sa-rules",
+  documents: "ot-sa-documents",
+  requirements: "ot-sa-requirements",
+  preasignacion: "ot-sa-preasignacion",
+  usuarios: "ot-sa-usuarios",
+  reportes: "ot-sa-reportes",
+} as const;
+
+const OT_PROFILE_ID_KEY = "flit-ot-transit-office-id";
 
 export function otHubModulePath(transitOfficeId: string, tab: OtHubTabId): string {
   return `/admin/transit-offices/${transitOfficeId}/${tab}`;
@@ -37,6 +64,67 @@ export function otHubModulePath(transitOfficeId: string, tab: OtHubTabId): strin
 
 export function otHubListPath(): string {
   return "/admin/transit-offices";
+}
+
+/** Extrae el id de OT desde `/admin/transit-offices/{id}/…`. */
+export function extractTransitOfficeIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/admin\/transit-offices\/([^/?#]+)/);
+  const id = match?.[1];
+  if (!id) return null;
+  return id;
+}
+
+export function rememberOtTransitOfficeId(id: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(OT_PROFILE_ID_KEY, id);
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+function readCachedOtTransitOfficeId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(OT_PROFILE_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resuelve la URL de un módulo del hub OT.
+ * - Si la ruta ya tiene `{id}`, navega ahí.
+ * - Admin OT: usa perfil (con caché de sesión).
+ * - SuperAdmin sin OT en ruta: vuelve al listado.
+ */
+export async function resolveOtHubHref(
+  tab: OtHubTabId,
+  pathname: string,
+  mode: "ot_admin" | "superadmin",
+  fetchProfileId: () => Promise<string>,
+): Promise<string> {
+  const fromPath = extractTransitOfficeIdFromPath(pathname);
+  if (fromPath) {
+    rememberOtTransitOfficeId(fromPath);
+    return otHubModulePath(fromPath, tab);
+  }
+
+  if (mode === "ot_admin") {
+    const cached = readCachedOtTransitOfficeId();
+    if (cached) return otHubModulePath(cached, tab);
+    const id = await fetchProfileId();
+    rememberOtTransitOfficeId(id);
+    return otHubModulePath(id, tab);
+  }
+
+  return otHubListPath();
+}
+
+export function isOtHubSegmentActive(pathname: string, segment: OtHubTabId): boolean {
+  const id = extractTransitOfficeIdFromPath(pathname);
+  if (!id) return false;
+  return pathname.includes(`/admin/transit-offices/${id}/${segment}`);
 }
 
 /** Búsqueda insensible a mayúsculas y tildes (patrón OTMatrix). */

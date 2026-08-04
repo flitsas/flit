@@ -9,18 +9,24 @@ import {
   Lock,
   Radar,
   HelpCircle,
+  FolderCog,
+  Tag,
 } from "lucide-react";
+import { OT_ADM_DOCK, OT_SA_DOCK } from "@/components/admin/transit-offices/ot-nav";
 
 /**
  * Agrupadores del dock — orden estable de las píldoras.
  * Trámites e Identidad son grupos de un solo ítem → píldora directa (no submenú).
  * Dashboard no se lista: el FAB central abre Inicio.
+ * `administracion` / `preasignacion`: Admin OT (pestañas hub → dock).
  */
 export const DOCK_GROUP_ORDER = [
   "tramites",
   "identidad",
   "reportes",
   "usuarios",
+  "preasignacion",
+  "administracion",
   "companias",
   "ot",
   "administradores",
@@ -35,6 +41,8 @@ export const DOCK_GROUP_LABEL: Record<DockGroupId, string> = {
   identidad: "Identidad",
   reportes: "Reportes",
   usuarios: "Usuarios",
+  preasignacion: "Preasignación",
+  administracion: "Administración",
   companias: "Compañías",
   ot: "OT",
   administradores: "Administradores",
@@ -58,6 +66,8 @@ export const DOCK_GROUP_ICON: Record<DockGroupId, DockIconComponent> = {
   identidad: ShieldCheck,
   reportes: BarChart3,
   usuarios: Users,
+  preasignacion: Tag,
+  administracion: FolderCog,
   companias: Building2,
   ot: Landmark,
   administradores: Lock,
@@ -79,6 +89,22 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   "admin-improntas": "companias",
   "admin-quipux": "companias",
   "admin-transit": "ot",
+  // Admin OT — pestañas hub en el dock
+  [OT_ADM_DOCK.tramites]: "tramites",
+  [OT_ADM_DOCK.rules]: "administracion",
+  [OT_ADM_DOCK.documents]: "administracion",
+  [OT_ADM_DOCK.requirements]: "administracion",
+  [OT_ADM_DOCK.preasignacion]: "preasignacion",
+  [OT_ADM_DOCK.usuarios]: "usuarios",
+  [OT_ADM_DOCK.reportes]: "reportes",
+  // SuperAdmin — todas las opciones OT en un solo submenú
+  [OT_SA_DOCK.tramites]: "ot",
+  [OT_SA_DOCK.rules]: "ot",
+  [OT_SA_DOCK.documents]: "ot",
+  [OT_SA_DOCK.requirements]: "ot",
+  [OT_SA_DOCK.preasignacion]: "ot",
+  [OT_SA_DOCK.usuarios]: "ot",
+  [OT_SA_DOCK.reportes]: "ot",
   rbac: "administradores",
   auditoria: "administradores",
   "log-qx": "soporte",

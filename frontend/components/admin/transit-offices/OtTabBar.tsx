@@ -29,7 +29,7 @@ export function OtTabBar({ tabs, activeId, onChange, ariaLabel }: OtTabBarProps)
             role="tab"
             aria-selected={active}
             onClick={() => onChange(tab.id)}
-            className="relative shrink-0 px-4 py-2.5 text-xs font-semibold text-foreground transition"
+            className="relative shrink-0 px-4 py-2.5 text-xs font-semibold text-foreground transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 rounded-t-md"
             style={{ color: active ? "#557EFF" : undefined, opacity: active ? 1 : 0.65 }}
           >
             {tab.label}
