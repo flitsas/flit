@@ -308,6 +308,62 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
             "las invitaciones al tenant interno deben aparecer y clasificarse como perfil FLIT");
     }
 
+    // ── El rol SuperAdmin no sale del perfil FLIT ─────────────────────────────────────
+    // Su TargetEntityType es COMPANY (el CHECK de BD no admite un valor propio), así que las
+    // validaciones de coherencia lo dan por bueno dentro de cualquier compañía: sin guarda
+    // explícita un AdminCompany podría crearse un SuperAdmin en su propia empresa.
+
+    [Fact]
+    public async Task Invite_AsCompanyAdmin_WithSuperAdminRole_IsRejected()
+    {
+        using var client = CreateClientAs("AdminCompany", _companyTenantId, Guid.NewGuid());
+        var email = $"escalada-{Guid.NewGuid():N}@flit.local";
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email, fullName = "Escalada", roleIds = new[] { _superAdminRoleId } },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
+            .Should().Contain("SUPERADMIN_ROLE_NOT_ASSIGNABLE");
+
+        await using var db = CreateDbContext();
+        (await db.UserInvitations.AsNoTracking()
+            .AnyAsync(i => i.Email == email, TestContext.Current.CancellationToken))
+            .Should().BeFalse("la invitación no debe llegar a crearse");
+    }
+
+    [Fact]
+    public async Task AssignRole_AsCompanyAdmin_WithSuperAdminRole_IsRejected()
+    {
+        using var client = CreateClientAs("AdminCompany", _companyTenantId, Guid.NewGuid());
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/v1/security/users/{Guid.NewGuid()}/role",
+            new { roleId = _superAdminRoleId },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
+            .Should().Contain("SUPERADMIN_ROLE_NOT_ASSIGNABLE");
+    }
+
+    [Fact]
+    public async Task AssignRole_AsOtAdmin_WithSuperAdminRole_IsRejected()
+    {
+        using var client = CreateClientAs("ot_admin", _otTenantId, Guid.NewGuid());
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/v1/security/users/{Guid.NewGuid()}/role",
+            new { roleId = _superAdminRoleId },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
+            .Should().Contain("SUPERADMIN_ROLE_NOT_ASSIGNABLE");
+    }
+
     // ── Auditoría legible ─────────────────────────────────────────────────────────────
 
     [Fact]
@@ -439,6 +495,15 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
         });
 
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Cliente autenticado con otro rol/tenant que el SuperAdmin del fixture.</summary>
+    private HttpClient CreateClientAs(string role, Guid tenantId, Guid userId)
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", MintToken(role, tenantId, userId));
+        return client;
     }
 
     private FlitDbContext CreateDbContext() =>

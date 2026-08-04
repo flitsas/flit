@@ -39,6 +39,30 @@ export function targetEntityTypeForProfile(profile: UserProfileKind): RoleTarget
   return profile === "OT" ? "TRANSIT_OFFICE" : "COMPANY";
 }
 
+/** El rol de sistema que define el perfil FLIT (`security.roles.code`). */
+export const SUPER_ADMIN_ROLE_CODE = "superadmin";
+
+export function isSuperAdminRole(roleCode: string | null | undefined): boolean {
+  return (roleCode ?? "").trim().toLowerCase() === SUPER_ADMIN_ROLE_CODE;
+}
+
+/**
+ * Roles que se le pueden ofrecer a un usuario de este perfil.
+ *
+ * El catálogo COMPANY incluye el rol SuperAdmin —no tiene un `target_entity_type` propio porque
+ * el CHECK de BD solo admite COMPANY | TRANSIT_OFFICE—, así que sin este filtro aparecía como
+ * opción al editar a un Gestor. El backend también lo rechaza (SUPERADMIN_ROLE_NOT_ASSIGNABLE);
+ * esto es para no llegar a ofrecerlo.
+ */
+export function selectableRolesForProfile<T extends { code: string }>(
+  roles: readonly T[],
+  profile: UserProfileKind,
+): T[] {
+  return roles.filter((role) =>
+    profile === "FLIT" ? isSuperAdminRole(role.code) : !isSuperAdminRole(role.code),
+  );
+}
+
 function isProfileKind(value: string): value is UserProfileKind {
   return value === "FLIT" || value === "GESTOR" || value === "OT";
 }

@@ -14,7 +14,7 @@ import { InviteUserModal } from "@/components/atom/modules/users/InviteUserModal
 import { UsersTable, toUserRow } from "@/components/atom/modules/users/UsersTable";
 import { UserAuditHistoryDrawer } from "@/components/atom/modules/users/UserAuditHistoryDrawer";
 import type { RowAction } from "@/components/atom/RowActions";
-import { resolveProfile } from "@/lib/users/profiles";
+import { isSuperAdminRole, resolveProfile } from "@/lib/users/profiles";
 import { superadminClient } from "@/lib/api/superadmin-client";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -76,7 +76,7 @@ export function CompanyUsersPanel({ tenantId }: CompanyUsersPanelProps) {
           list
             // El rol de sistema SuperAdmin es el perfil FLIT: nunca se asigna desde la ficha
             // de una compañía.
-            .filter((r) => r.isActive && r.code.toLowerCase() !== "superadmin")
+            .filter((r) => r.isActive && !isSuperAdminRole(r.code))
             .map((r) => ({
               id: r.id,
               code: r.code,
@@ -183,6 +183,7 @@ export function CompanyUsersPanel({ tenantId }: CompanyUsersPanelProps) {
             void load();
           }}
           onUpdate={updateUser}
+          profile={resolveProfile(editTarget)}
           roleSection={{
             currentRoleName: editTarget.role,
             currentRoleId: editTarget.roleId,

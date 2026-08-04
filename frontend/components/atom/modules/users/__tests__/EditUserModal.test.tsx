@@ -119,3 +119,84 @@ describe("EditUserModal (#10622)", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+// Al editar hay que ver a qué perfil pertenece el usuario (para saber en qué relación se está
+// parado) y el selector de rol debe ofrecer solo los roles de ese perfil.
+describe("EditUserModal — perfil y roles del perfil", () => {
+  const catalogo = [
+    { id: "r-super", code: "SuperAdmin", name: "Super Administrador", description: null, isSystem: true, permissionCount: 0, createdAt: "" },
+    { id: "r-admin", code: "AdminCompany", name: "Administrador de Compañía", description: null, isSystem: true, permissionCount: 0, createdAt: "" },
+    { id: "r-radicador", code: "Radicador", name: "Radicador", description: null, isSystem: false, permissionCount: 0, createdAt: "" },
+  ];
+
+  function renderWithRoles(profile: "FLIT" | "GESTOR" | "OT", over = {}) {
+    const onAssignRole = vi.fn().mockResolvedValue(undefined);
+    render(
+      <EditUserModal
+        user={user}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        onUpdate={vi.fn()}
+        profile={profile}
+        roleSection={{
+          currentRoleName: "Radicador",
+          currentRoleId: "r-radicador",
+          roles: catalogo,
+          rolesLoading: false,
+          onAssignRole,
+          ...over,
+        }}
+      />,
+    );
+    return { onAssignRole };
+  }
+
+  it("muestra el perfil del usuario que se está editando", () => {
+    renderWithRoles("GESTOR");
+    expect(screen.getByText("Perfil")).toBeInTheDocument();
+    expect(screen.getByText("Gestor")).toBeInTheDocument();
+    expect(screen.getByText(/empresa cliente que radica trámites/i)).toBeInTheDocument();
+  });
+
+  it("muestra el perfil aunque no haya sección de rol", () => {
+    render(
+      <EditUserModal user={user} onClose={vi.fn()} onSaved={vi.fn()} onUpdate={vi.fn()} profile="FLIT" />,
+    );
+    expect(screen.getByText("Perfil")).toBeInTheDocument();
+    expect(screen.getByText("FLIT")).toBeInTheDocument();
+  });
+
+  it("no ofrece el rol Super Administrador al editar un Gestor", () => {
+    renderWithRoles("GESTOR");
+    const select = screen.getByLabelText(/cambiar rol del usuario/i);
+    const opciones = Array.from(select.querySelectorAll("option")).map((o) => o.textContent);
+    expect(opciones).toContain("Radicador");
+    expect(opciones).toContain("Administrador de Compañía");
+    expect(opciones).not.toContain("Super Administrador");
+  });
+
+  it("tampoco lo ofrece al editar un usuario de un organismo", () => {
+    renderWithRoles("OT");
+    const select = screen.getByLabelText(/cambiar rol del usuario/i);
+    const opciones = Array.from(select.querySelectorAll("option")).map((o) => o.textContent);
+    expect(opciones).not.toContain("Super Administrador");
+  });
+
+  it("mantiene visible el rol vigente aunque quede fuera del catálogo del perfil", () => {
+    renderWithRoles("GESTOR", { currentRoleId: "r-super", currentRoleName: "Super Administrador" });
+    const select = screen.getByLabelText(/cambiar rol del usuario/i) as HTMLSelectElement;
+    // Se ve como opción deshabilitada —no en blanco— pero no se puede volver a elegir.
+    const actual = Array.from(select.querySelectorAll("option")).find(
+      (o) => o.textContent === "Super Administrador",
+    );
+    expect(actual).toBeDefined();
+    expect(actual).toBeDisabled();
+    expect(select.value).toBe("");
+  });
+
+  it("avisa cuando el perfil no tiene roles disponibles", () => {
+    renderWithRoles("GESTOR", { roles: [catalogo[0]] });
+    expect(screen.getByText(/no hay roles disponibles para este perfil/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/cambiar rol del usuario/i)).toBeDisabled();
+  });
+});

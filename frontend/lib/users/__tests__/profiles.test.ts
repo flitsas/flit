@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   inferProfile,
+  isSuperAdminRole,
+  selectableRolesForProfile,
   profileShortLabel,
   resolveProfile,
   targetEntityTypeForProfile,
@@ -55,5 +57,37 @@ describe("profileShortLabel", () => {
   it("acorta el label de organismo de tránsito", () => {
     expect(profileShortLabel("OT")).toBe("OT");
     expect(profileShortLabel("GESTOR")).toBe("Gestor");
+  });
+});
+
+describe("selectableRolesForProfile", () => {
+  // El catálogo COMPANY incluye el rol SuperAdmin porque no tiene un target_entity_type propio;
+  // sin filtro aparecía como opción al editar a un Gestor.
+  const catalogo = [
+    { id: "r1", code: "SuperAdmin" },
+    { id: "r2", code: "AdminCompany" },
+    { id: "r3", code: "Radicador" },
+  ];
+
+  it("nunca ofrece SuperAdmin a un Gestor ni a un usuario de OT", () => {
+    expect(selectableRolesForProfile(catalogo, "GESTOR").map((r) => r.code)).toEqual([
+      "AdminCompany",
+      "Radicador",
+    ]);
+    expect(selectableRolesForProfile(catalogo, "OT").map((r) => r.code)).toEqual([
+      "AdminCompany",
+      "Radicador",
+    ]);
+  });
+
+  it("en el perfil FLIT deja únicamente el rol SuperAdmin", () => {
+    expect(selectableRolesForProfile(catalogo, "FLIT").map((r) => r.code)).toEqual(["SuperAdmin"]);
+  });
+
+  it("reconoce el código sin importar mayúsculas ni espacios", () => {
+    expect(isSuperAdminRole(" superadmin ")).toBe(true);
+    expect(isSuperAdminRole("SUPERADMIN")).toBe(true);
+    expect(isSuperAdminRole("AdminCompany")).toBe(false);
+    expect(isSuperAdminRole(null)).toBe(false);
   });
 });

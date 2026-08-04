@@ -469,6 +469,8 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
             void load();
           }}
           onUpdate={handleUpdateUser}
+          // Toda esta sección vive dentro de un organismo: el perfil no depende de la fila.
+          profile="OT"
           roleSection={{
             currentRoleName: editTarget.role,
             currentRoleId: editTarget.roleId,

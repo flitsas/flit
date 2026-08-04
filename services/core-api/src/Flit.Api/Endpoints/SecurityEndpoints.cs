@@ -179,6 +179,13 @@ public static class SecurityEndpoints
                 // HU #10506 AC4/AC5: roleIds reemplaza el RoleId? nullable — seleccionar al
                 // menos un rol es OBLIGATORIO (validado por el handler → NoRolesSelectedException).
                 roleIds = request.RoleIds ?? [];
+
+                // El rol SuperAdmin pertenece solo al perfil FLIT. Su TargetEntityType es COMPANY
+                // (el CHECK de BD no admite un valor propio), así que ninguna de las validaciones
+                // de coherencia lo descarta: sin esto un AdminCompany podría mandarlo en roleIds
+                // y crear un SuperAdmin dentro de su propia compañía.
+                if (await ContainsSuperAdminRoleAsync(db, roleIds, cancellationToken))
+                    return SuperAdminRoleNotAssignable();
             }
 
             try
@@ -415,6 +422,16 @@ public static class SecurityEndpoints
                 ?? caller.FindFirstValue("sub");
             if (!Guid.TryParse(subClaim, out var callerId))
                 return Results.Unauthorized();
+
+            // Solo el perfil FLIT lleva el rol SuperAdmin, y solo un SuperAdmin lo reparte (en su
+            // propio tenant interno). Para cualquier otro caller —AdminCompany, ot_admin— esto
+            // sería escalada de privilegios: el rol es de TargetEntityType COMPANY, así que
+            // AssignRoleHandler lo aceptaría sin más dentro de una compañía.
+            var callerIsSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+            if (!callerIsSuperAdmin && await ContainsSuperAdminRoleAsync(db, [request.RoleId], cancellationToken))
+                return SuperAdminRoleNotAssignable();
 
             // Roles vigentes ANTES del cambio, para que el rastro diga qué rol tenía y cuál
             // quedó — un "assign_role" a secas no le sirve a quien audita.
@@ -1140,6 +1157,24 @@ public static class SecurityEndpoints
 
     private static List<TenantUserDto> WithProfile(IEnumerable<TenantUserDto> rows) =>
         rows.Select(r => r with { Profile = ResolveProfile(r.RoleCode, r.TenantType) }).ToList();
+
+    /// <summary>
+    /// ¿Alguno de estos roles es el SuperAdmin? Se consulta por Code y no por un id cacheado
+    /// porque <c>security.roles</c> es un catálogo global y el id no está fijado en configuración.
+    /// </summary>
+    private static async Task<bool> ContainsSuperAdminRoleAsync(
+        FlitDbContext db, IReadOnlyList<Guid> roleIds, CancellationToken ct) =>
+        roleIds.Count > 0
+        && await db.Roles
+            .AsNoTracking()
+            .AnyAsync(r => roleIds.Contains(r.Id) && r.Code == AdminAuthorization.SuperAdminRole, ct);
+
+    private static IResult SuperAdminRoleNotAssignable() =>
+        Results.Json(
+            new ErrorResponse(
+                "SUPERADMIN_ROLE_NOT_ASSIGNABLE",
+                "El rol Super Administrador pertenece al perfil FLIT y no puede asignarse desde una compañía ni desde un organismo de tránsito."),
+            statusCode: StatusCodes.Status403Forbidden);
 
     private sealed record ErrorResponse(string Code, string Message);
 

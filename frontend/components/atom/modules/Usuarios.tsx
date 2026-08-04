@@ -521,6 +521,7 @@ export function Usuarios() {
             loadUsers();
           }}
           onUpdate={updateUser}
+          profile={resolveProfile(editTarget)}
           roleSection={
             resolveProfile(editTarget) === "FLIT"
               ? undefined

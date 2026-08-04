@@ -6,6 +6,12 @@ import { Modal } from "@/components/atom/Modal";
 import { ApiError } from "@/lib/api/types";
 import { sanitizeName, validateReadableName } from "@/lib/validation/fieldRules";
 import type { TenantRole } from "@/lib/api/security";
+import {
+  selectableRolesForProfile,
+  USER_PROFILE_DESCRIPTION,
+  type UserProfileKind,
+} from "@/lib/users/profiles";
+import { ProfileBadge } from "./ProfileRoleCell";
 
 // HU #10621 — Modal "Editar usuario" del listado de la tabla de usuarios (módulo
 // Compañía "Usuarios y Permisos" y pestaña "Usuarios" del hub OT). Formulario
@@ -44,11 +50,21 @@ export interface EditUserModalProps {
   onUpdate: (userId: string, payload: UpdateUserPayload) => Promise<void>;
   /** Cambio de rol en el mismo modal (fuente única). Ausente = no mostrar sección (p. ej. OT). */
   roleSection?: EditUserRoleSection;
+  /** Perfil del usuario que se edita. Se muestra siempre —también cuando no hay sección de
+   *  rol— para que quede claro en qué relación está parado quien edita. */
+  profile?: UserProfileKind;
 }
 
 const GENERIC_ERROR = "No se pudieron guardar los cambios. Inténtalo de nuevo.";
 
-export function EditUserModal({ user, onClose, onSaved, onUpdate, roleSection }: EditUserModalProps) {
+export function EditUserModal({
+  user,
+  onClose,
+  onSaved,
+  onUpdate,
+  roleSection,
+  profile,
+}: EditUserModalProps) {
   const [displayName, setDisplayName] = useState(user.fullName);
   const [email, setEmail] = useState(user.email);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -71,6 +87,18 @@ export function EditUserModal({ user, onClose, onSaved, onUpdate, roleSection }:
     if (busy || roleBusy) return;
     onClose();
   };
+
+  // Roles ofrecibles: los del catálogo que corresponden al perfil del usuario. El catálogo
+  // COMPANY incluye el rol SuperAdmin, que no puede darse a un Gestor ni a un funcionario de OT
+  // por ningún motivo (el backend responde SUPERADMIN_ROLE_NOT_ASSIGNABLE); aquí ni se ofrece.
+  const selectableRoles = roleSection
+    ? selectableRolesForProfile(roleSection.roles, profile ?? "GESTOR")
+    : [];
+  // El rol vigente puede quedar fuera de la lista (rol de otro perfil, inactivo o filtrado):
+  // se muestra igual como opción deshabilitada para que el select no aparezca en blanco.
+  const currentRoleMissing =
+    !!roleSection &&
+    (!roleSection.currentRoleId || !selectableRoles.some((r) => r.id === roleSection.currentRoleId));
 
   async function handleRoleChange(e: React.ChangeEvent<HTMLSelectElement>) {
     if (!roleSection) return;
@@ -152,6 +180,23 @@ export function EditUserModal({ user, onClose, onSaved, onUpdate, roleSection }:
       description={user.email}
     >
       <form onSubmit={handleSubmit} className="space-y-3.5">
+        {profile && (
+          // Solo informativo: el perfil lo determina el tenant al que pertenece el usuario, no
+          // se cambia desde aquí. Está para que quien edita sepa en qué relación está parado.
+          <div
+            className="flex items-start gap-2 rounded-xl border px-3 py-2"
+            style={{ borderColor: "#DFE5ED", background: "rgba(223,229,237,0.18)" }}
+          >
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wide opacity-60">Perfil</p>
+              <div className="mt-1">
+                <ProfileBadge profile={profile} full />
+              </div>
+              <p className="mt-1 text-[10px] opacity-60">{USER_PROFILE_DESCRIPTION[profile]}</p>
+            </div>
+          </div>
+        )}
+
         <Field label="Nombre completo" htmlFor="eu-name" error={nameError}>
           <input
             ref={firstFieldRef}
@@ -183,24 +228,24 @@ export function EditUserModal({ user, onClose, onSaved, onUpdate, roleSection }:
             <select
               id="eu-role"
               aria-label="Cambiar rol del usuario"
-              value={roleSection.currentRoleId ?? ""}
+              value={currentRoleMissing ? "" : roleSection.currentRoleId ?? ""}
               onChange={handleRoleChange}
-              disabled={roleBusy || roleSection.rolesLoading || roleSection.roles.length === 0}
+              disabled={roleBusy || roleSection.rolesLoading || selectableRoles.length === 0}
               className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 disabled:opacity-60"
               style={{ borderColor: "#DFE5ED" }}
             >
               {roleSection.rolesLoading ? (
                 <option value="">Cargando roles…</option>
-              ) : roleSection.roles.length === 0 ? (
-                <option value="">No hay roles disponibles</option>
+              ) : selectableRoles.length === 0 ? (
+                <option value="">No hay roles disponibles para este perfil</option>
               ) : (
                 <>
-                  {!roleSection.currentRoleId && (
+                  {currentRoleMissing && (
                     <option value="" disabled>
                       {roleSection.currentRoleName ?? "Sin rol"}
                     </option>
                   )}
-                  {roleSection.roles.map((r) => (
+                  {selectableRoles.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name}
                     </option>
