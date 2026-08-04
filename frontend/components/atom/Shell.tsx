@@ -3,6 +3,14 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { canReadIctLogs, canReadLogQx, decodeJwtPayload, isAdminCompany, isOtAdmin, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import { fetchOtProfile } from "@/lib/api/admin-ot";
+import {
+  isOtHubSegmentActive,
+  OT_ADM_DOCK,
+  otHubListPath,
+  resolveOtHubHref,
+  type OtHubTabId,
+} from "@/components/admin/transit-offices/ot-nav";
 import { useDockScrollCondense } from "./useDockScrollCondense";
 import { buildDockGroups } from "./dock/dockGroups";
 import { DockDesktop } from "./dock/DockDesktop";
@@ -28,7 +36,6 @@ import {
   LogOut,
   FolderCog,
   Lock,
-  Briefcase,
   Landmark,
   Fingerprint,
   Send,
@@ -36,6 +43,10 @@ import {
   Radar,
   Network,
   X,
+  Scale,
+  FileText,
+  ClipboardList,
+  Tag,
 } from "lucide-react";
 
 export type ModuleId =
@@ -52,12 +63,12 @@ export type ModuleId =
   | "ict-logs";
 
 const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
+  // Dashboard no va en el dock: el FAB central (Inicio FLIT) abre el mismo módulo.
   { id: "tramites", label: "Trámites", icon: FileStack },
   { id: "reportes", label: "Reportes", icon: BarChart3 },
   { id: "reportes-detallados", label: "Reportes Detallados", icon: FileSpreadsheet },
-  { id: "validaciones", label: "Validaciones", icon: ShieldCheck },
-  { id: "usuarios", label: "Usuarios y Permisos", icon: Users },
+  { id: "validaciones", label: "Identidad", icon: ShieldCheck },
+  { id: "usuarios", label: "Usuarios", icon: Users },
   { id: "ayuda", label: "Ayuda", icon: HelpCircle },
 ];
 
@@ -177,15 +188,28 @@ export function Shell({
   // Filtra los módulos del dock según permisos RBAC del JWT cuando visibleModuleCodes
   // está disponible. "Ayuda" es soporte universal (no es un módulo con permiso RBAC),
   // por lo que se muestra siempre, en todas las pantallas del dock.
-  const visibleDock = visibleModuleCodes
+  // Admin OT: las pestañas del hub viven en el dock (Trámites / Usuarios / Reportes / …);
+  // se omiten los módulos SPA homónimos para no duplicar píldoras.
+  const otAdminSpaOmit = new Set(["tramites", "reportes", "reportes-detallados", "usuarios"]);
+  const visibleDock = (visibleModuleCodes
     ? DOCK.filter((it) => it.id === "ayuda" || visibleModuleCodes.includes(it.id))
-    : DOCK;
+    : DOCK
+  ).filter((it) => !(currentUser?.isOtAdmin && otAdminSpaOmit.has(it.id)));
 
   // Una sola lista con TODAS las entradas del dock (módulos + botones admin/empresa
   // según rol). El FAB de inicio va siempre en el centro y las entradas se reparten
   // de forma balanceada a izquierda/derecha; si se agregan más, se redistribuyen solas.
   const pathname = usePathname() ?? "";
   const onAdminRoute = pathname.startsWith("/admin") || pathname.startsWith("/empresa");
+
+  const goOtHub = (tab: OtHubTabId) => {
+    void resolveOtHubHref(tab, pathname, "ot_admin", async () => {
+      const profile = await fetchOtProfile();
+      return profile.transitOfficeId;
+    }).then((href) => {
+      window.location.assign(href);
+    });
+  };
 
   const entries: DockEntry[] = visibleDock.map((it) => ({
     key: it.id,
@@ -209,7 +233,7 @@ export function Shell({
         label: "Tránsito",
         icon: Landmark,
         active: pathname.startsWith("/admin/transit-offices"),
-        onClick: () => window.location.assign("/admin/transit-offices"),
+        onClick: () => window.location.assign(otHubListPath()),
       },
       {
         key: "admin-documents",
@@ -249,38 +273,74 @@ export function Shell({
     );
   }
 
-  // Bloque independiente del de SuperAdmin: ot_admin solo ve "Tránsito" (su propio
-  // hub OT), nunca "Compañías"/"Documental"/"RBAC Admin" (HU #10218 refactor adminOT).
+  // Admin OT: pestañas del hub trasladadas al dock (Administración = Reglas/Docs/Requisitos;
+  // Trámites, Preasignación, Usuarios y Reportes como ítems del dock). Sin Compañías/RBAC.
   if (currentUser?.isOtAdmin) {
-    entries.push({
-      key: "admin-transit",
-      label: "Tránsito",
-      icon: Landmark,
-      active: pathname.startsWith("/admin/transit-offices"),
-      onClick: () => window.location.assign("/admin/transit-offices"),
-    });
+    entries.push(
+      {
+        key: OT_ADM_DOCK.tramites,
+        label: "Trámites",
+        icon: FileStack,
+        active: isOtHubSegmentActive(pathname, "client-procedures"),
+        onClick: () => goOtHub("client-procedures"),
+      },
+      {
+        key: OT_ADM_DOCK.rules,
+        label: "Reglas",
+        icon: Scale,
+        active: isOtHubSegmentActive(pathname, "rules"),
+        onClick: () => goOtHub("rules"),
+      },
+      {
+        key: OT_ADM_DOCK.documents,
+        label: "Documentos",
+        icon: FileText,
+        active: isOtHubSegmentActive(pathname, "documents"),
+        onClick: () => goOtHub("documents"),
+      },
+      {
+        key: OT_ADM_DOCK.requirements,
+        label: "Requisitos",
+        icon: ClipboardList,
+        active: isOtHubSegmentActive(pathname, "requirements"),
+        onClick: () => goOtHub("requirements"),
+      },
+      {
+        key: OT_ADM_DOCK.preasignacion,
+        label: "Preasignación",
+        icon: Tag,
+        active: isOtHubSegmentActive(pathname, "plate-ranges"),
+        onClick: () => goOtHub("plate-ranges"),
+      },
+      {
+        key: OT_ADM_DOCK.usuarios,
+        label: "Usuarios",
+        icon: Users,
+        active: isOtHubSegmentActive(pathname, "usuarios"),
+        onClick: () => goOtHub("usuarios"),
+      },
+      {
+        key: OT_ADM_DOCK.reportes,
+        label: "Reportes",
+        icon: BarChart3,
+        active: isOtHubSegmentActive(pathname, "reportes"),
+        onClick: () => goOtHub("reportes"),
+      },
+    );
   }
 
   if (currentUser?.isAdminCompany) {
-    entries.push(
-      {
-        key: "admin-companies",
-        label: "Compañías",
-        icon: Building2,
-        // AdminCompany: /admin/companies redirige al configurador de su tenant (HU #11228).
-        active: pathname.startsWith("/admin/companies"),
-        onClick: () => window.location.assign("/admin/companies"),
-      },
-      {
-        key: "mi-empresa",
-        label: "Usuarios",
-        icon: Briefcase,
-        // HU #10512 — navegación interna al módulo de Usuarios del Shell (antes salía de
-        // la SPA hacia /empresa/usuarios, ya deprecado).
-        active: !onAdminRoute && active === "usuarios",
-        onClick: () => onNav("usuarios"),
-      },
-    );
+    // Gestor: una sola entrada "Administración" → consola de su compañía (RL, baúl, escrituras…).
+    // No se empuja "Usuarios" en este menú (req. menú admin gestor); el módulo Usuarios sigue
+    // disponible vía dock RBAC `usuarios` si el rol lo tiene concedido.
+    entries.push({
+      key: "admin-companies",
+      label: "Administración",
+      icon: Building2,
+      // AdminCompany: /admin/companies redirige al configurador de su tenant (HU #11228).
+      active: pathname.startsWith("/admin/companies"),
+      onClick: () => window.location.assign("/admin/companies"),
+    });
   }
 
   // LOG QX (HU #10795): trazabilidad Quipux para soporte/administración. Bloque propio

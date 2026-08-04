@@ -12,10 +12,12 @@ namespace Flit.Api.Endpoints;
 
 /// <summary>
 /// Endpoints de gestión de escrituras (PDF) por compañía (HU #10902, ADR-0033). Módulo Admin
-/// Compañías: solo SuperAdmin (<see cref="AdminAuthorization.SuperAdminPolicy"/>). El PDF viaja DIRECTO
-/// a S3 vía presigned URLs (nunca por el request del API ni en BD); las respuestas exponen solo
-/// metadatos + la referencia al artefacto, y el PDF se ve con una presigned URL de vida corta. Las
-/// validaciones responden 422 con el sobre <c>{ errors: [{ field, code, message }] }</c>.
+/// Compañías: <see cref="AdminAuthorization.AdminCompanyPolicy"/> +
+/// <see cref="CompanyOwnTenantFilter"/> (paridad HU #11228 con RL/baúl; AdminCompany solo su
+/// tenant, SuperAdmin bypass). El PDF viaja DIRECTO a S3 vía presigned URLs (nunca por el request
+/// del API ni en BD); las respuestas exponen solo metadatos + la referencia al artefacto, y el PDF
+/// se ve con una presigned URL de vida corta. Las validaciones responden 422 con el sobre
+/// <c>{ errors: [{ field, code, message }] }</c>.
 /// </summary>
 public static class AdminDeedsEndpoints
 {
@@ -25,7 +27,8 @@ public static class AdminDeedsEndpoints
 
         var group = app
             .MapGroup("/api/v1/admin/companies/{tenantId:guid}/deeds")
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+            .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
             .WithTags("Admin · Escrituras");
 
         // GET — listado paginado de escrituras del tenant (envelope { data, totalCount, page, pageSize }).

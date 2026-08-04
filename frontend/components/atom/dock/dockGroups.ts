@@ -1,6 +1,7 @@
 import type { ComponentType, CSSProperties } from "react";
 import {
-  LayoutGrid,
+  FileStack,
+  ShieldCheck,
   BarChart3,
   Users,
   Building2,
@@ -8,13 +9,24 @@ import {
   Lock,
   Radar,
   HelpCircle,
+  FolderCog,
+  Tag,
 } from "lucide-react";
+import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
 
-/** Agrupadores del dock — orden estable de las píldoras. */
+/**
+ * Agrupadores del dock — orden estable de las píldoras.
+ * Trámites e Identidad son grupos de un solo ítem → píldora directa (no submenú).
+ * Dashboard no se lista: el FAB central abre Inicio.
+ * `administracion` / `preasignacion`: Admin OT (pestañas hub → dock).
+ */
 export const DOCK_GROUP_ORDER = [
-  "operacion",
+  "tramites",
+  "preasignacion",
+  "identidad",
   "reportes",
   "usuarios",
+  "administracion",
   "companias",
   "ot",
   "administradores",
@@ -25,9 +37,12 @@ export const DOCK_GROUP_ORDER = [
 export type DockGroupId = (typeof DOCK_GROUP_ORDER)[number];
 
 export const DOCK_GROUP_LABEL: Record<DockGroupId, string> = {
-  operacion: "Operación",
+  tramites: "Trámites",
+  identidad: "Identidad",
   reportes: "Reportes",
   usuarios: "Usuarios",
+  preasignacion: "Preasignación",
+  administracion: "Administración",
   companias: "Compañías",
   ot: "OT",
   administradores: "Administradores",
@@ -47,9 +62,12 @@ export type DockIconComponent = ComponentType<{
 }>;
 
 export const DOCK_GROUP_ICON: Record<DockGroupId, DockIconComponent> = {
-  operacion: LayoutGrid,
+  tramites: FileStack,
+  identidad: ShieldCheck,
   reportes: BarChart3,
   usuarios: Users,
+  preasignacion: Tag,
+  administracion: FolderCog,
   companias: Building2,
   ot: Landmark,
   administradores: Lock,
@@ -59,9 +77,9 @@ export const DOCK_GROUP_ICON: Record<DockGroupId, DockIconComponent> = {
 
 /** Mapeo entrada del dock → agrupador (por key estable). */
 export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
-  dashboard: "operacion",
-  tramites: "operacion",
-  validaciones: "operacion",
+  tramites: "tramites",
+  // Módulo id sigue siendo `validaciones` en la SPA; el label visible es "Identidad".
+  validaciones: "identidad",
   reportes: "reportes",
   "reportes-detallados": "reportes",
   usuarios: "usuarios",
@@ -71,6 +89,14 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   "admin-improntas": "companias",
   "admin-quipux": "companias",
   "admin-transit": "ot",
+  // Admin OT — pestañas hub en el dock
+  [OT_ADM_DOCK.tramites]: "tramites",
+  [OT_ADM_DOCK.rules]: "administracion",
+  [OT_ADM_DOCK.documents]: "administracion",
+  [OT_ADM_DOCK.requirements]: "administracion",
+  [OT_ADM_DOCK.preasignacion]: "preasignacion",
+  [OT_ADM_DOCK.usuarios]: "usuarios",
+  [OT_ADM_DOCK.reportes]: "reportes",
   rbac: "administradores",
   auditoria: "administradores",
   "log-qx": "soporte",

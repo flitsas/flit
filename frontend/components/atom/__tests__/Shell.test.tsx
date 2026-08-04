@@ -51,7 +51,7 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   });
 
-  it("muestra el roleLabel 'Admin OT' y el botón 'Tránsito', sin botones de SuperAdmin/AdminCompany", () => {
+  it("muestra Admin OT con dock de hub (sin Compañías / Documental / Tránsito único)", async () => {
     window.localStorage.setItem(
       TOKEN_STORAGE_KEY,
       makeToken({ sub: "u1", role: "ot_admin", email: "ot@transito.gov.co" }),
@@ -60,35 +60,47 @@ describe("Shell — ot_admin (refactor adminOT)", () => {
     renderShell();
 
     expect(screen.getByText("Admin OT")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Tránsito" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tránsito" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Compañías" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Documental" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Administradores" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Mi Empresa" })).not.toBeInTheDocument();
+
+    // Ítems directos del dock Admin OT
+    expect(screen.getByRole("button", { name: "Trámites" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preasignación" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Usuarios" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reportes" })).toBeInTheDocument();
+
+    // Administración = submenú Reglas / Documentos / Requisitos
+    await userEvent.click(screen.getByRole("button", { name: "Administración" }));
+    expect(screen.getByRole("button", { name: "Reglas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Documentos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Requisitos" })).toBeInTheDocument();
   });
 });
 
-describe("Shell — Mi Empresa (HU #10512)", () => {
+describe("Shell — Administración gestora (AdminCompany)", () => {
   afterEach(() => {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   });
 
-  it("AC1 — navega internamente al módulo de Usuarios en vez de salir de la SPA", async () => {
+  it("muestra 'Administración' y no empuja Usuarios en el menú compañías", () => {
     window.localStorage.setItem(
       TOKEN_STORAGE_KEY,
       makeToken({ sub: "u1", role: "AdminCompany", email: "admin@empresa.local" }),
     );
-    const onNav = vi.fn();
     render(
-      <Shell active="dashboard" onNav={onNav}>
+      <Shell active="dashboard" onNav={vi.fn()}>
         <div>contenido</div>
       </Shell>,
     );
 
-    // Grupo Compañías con un solo ítem visible → píldora directa "Mi Empresa".
-    await userEvent.click(screen.getByRole("button", { name: "Mi Empresa" }));
-
-    expect(onNav).toHaveBeenCalledWith("usuarios");
+    expect(screen.getByRole("button", { name: "Administración" })).toBeInTheDocument();
+    // El módulo RBAC `usuarios` puede aparecer aparte; no debe haber ítem extra "Usuarios"
+    // empujado junto a Administración (antes "mi-empresa"). Con solo Administración en el
+    // grupo companias, no hay submenú con Usuarios.
+    expect(screen.queryByRole("button", { name: "Mi Empresa" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Compañías" })).not.toBeInTheDocument();
   });
 });
 
@@ -102,6 +114,14 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     renderShell();
     await userEvent.click(screen.getByRole("button", { name: "Compañías" }));
     expect(screen.getByRole("button", { name: "Improntas" })).toBeInTheDocument();
+  });
+
+  it("muestra la píldora 'Tránsito' hacia el listado de OT (sin submenú de hub)", () => {
+    setDevSuperAdminToken();
+    renderShell();
+    expect(screen.getByRole("button", { name: "Tránsito" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "OT" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Organismos" })).not.toBeInTheDocument();
   });
 
   it("no muestra la entrada 'Improntas' sin sesión SuperAdmin", () => {

@@ -59,6 +59,31 @@ public sealed class AdminResetPasswordHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_AdminCompanyRoleSameTenant_ResetsWithoutPermissionClaim()
+    {
+        var tenant = Guid.NewGuid();
+        var target = ArrangeTarget(tenant);
+        var command = new AdminResetPasswordCommand(
+            tenant, AdminResetPasswordHandler.AdminCompanyRole, [], "user@flit.local");
+
+        await _handler.HandleAsync(command, CancellationToken.None);
+
+        await _repo.Received(1).UpdatePasswordHashAsync(
+            target.UserId, "hashed-temp", Arg.Any<DateTimeOffset>(), true, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_AdminCompanyRoleDifferentTenant_ThrowsScope()
+    {
+        ArrangeTarget(Guid.NewGuid());
+        var command = new AdminResetPasswordCommand(
+            Guid.NewGuid(), AdminResetPasswordHandler.AdminCompanyRole, [], "user@flit.local");
+
+        await _handler.Invoking(h => h.HandleAsync(command, CancellationToken.None))
+            .Should().ThrowAsync<AdminScopeException>();
+    }
+
+    [Fact]
     public async Task HandleAsync_PermissionButDifferentTenant_ThrowsScope()
     {
         ArrangeTarget(Guid.NewGuid());

@@ -20,7 +20,7 @@ function OtPlateRangesPageInner() {
     <OtHubLayout
       transitOfficeId={params.id}
       activeTab="plate-ranges"
-      moduleTitle="Administración OT — Preasignación de placa"
+      moduleTitle="Administración OT — Preasignación"
     >
       <PlateRangesConsole transitOfficeId={params.id} />
     </OtHubLayout>
