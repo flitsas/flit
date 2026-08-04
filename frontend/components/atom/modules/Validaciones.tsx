@@ -359,7 +359,7 @@ export function Validaciones() {
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle
-        title="Validaciones de Identidad"
+        title="Identidad"
         subtitle="Validación biométrica, OCR IA y cotejo RUNT en tiempo real."
         right={
           <div className="flex items-center gap-3">

@@ -12,6 +12,7 @@ import { CancelInvitationDialog } from "./users/CancelInvitationDialog";
 import { InviteUserModal } from "./users/InviteUserModal";
 import { UsersTable, toUserRow } from "./users/UsersTable";
 import { UserAuditHistoryDrawer } from "./users/UserAuditHistoryDrawer";
+import { ResetPasswordDialog } from "./users/ResetPasswordDialog";
 import { ModuleTitle } from "./ModuleTitle";
 import { ICON_BUTTON_HIT_AREA, type RowAction } from "@/components/atom/RowActions";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -48,9 +49,14 @@ function formatDateTime(iso: string | null | undefined): string {
 }
 
 export function Usuarios() {
-  const { isSuperAdmin, userId: currentUserId, permissions, tenantId } = usePermissions();
+  const { isSuperAdmin, isAdminCompany, userId: currentUserId, permissions, tenantId } = usePermissions();
   // Clientes ICT: SuperAdmin (bypass por rol) o quien tenga el permiso ict.clients.manage.
   const canManageIctClients = isSuperAdmin || permissions.includes(ICT_CLIENTS_MANAGE_PERMISSION);
+  // Reset admin: SuperAdmin o AdminCompany (API acota al tenant).
+  const canResetPassword = isSuperAdmin || isAdminCompany;
+  // Suspender / desactivar / eliminar: misma paridad AdminCompany en su empresa (API scoped).
+  // Ver eliminados / restaurar siguen exclusivos de SuperAdmin.
+  const canManageUserLifecycle = isSuperAdmin || isAdminCompany;
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("usuarios");
   const [users, setUsers] = useState<TenantUser[]>([]);
@@ -61,6 +67,7 @@ export function Usuarios() {
   const [suspendTarget, setSuspendTarget] = useState<{ user: TenantUser; mode: SuspendMode } | null>(null);
   const [editTarget, setEditTarget] = useState<TenantUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TenantUser | null>(null);
+  const [resetPasswordTarget, setResetPasswordTarget] = useState<TenantUser | null>(null);
   // HU #10624 — pestaña "Eliminados": usuarios de CUALQUIER tenant con deletedAt != null.
   const [deletedUsers, setDeletedUsers] = useState<TenantUser[]>([]);
   const [deletedLoading, setDeletedLoading] = useState(false);
@@ -220,8 +227,18 @@ export function Usuarios() {
       });
     }
 
-    // Bloquear/desactivar/reactivar es EXCLUSIVO de SuperAdmin.
-    if (u.status !== "pending" && isSuperAdmin) {
+    // Restablecer contraseña: SuperAdmin o AdminCompany (HU-B auth-parity; el API acota al tenant).
+    if (u.status !== "pending" && canResetPassword) {
+      actions.push({
+        icon: KeyRound,
+        label: `Restablecer contraseña de ${u.fullName}`,
+        onClick: () => setResetPasswordTarget(u),
+      });
+    }
+
+    // Bloquear/desactivar/reactivar: SuperAdmin (cualquier tenant) o AdminCompany (solo su
+    // empresa — el API rechaza fuera de ámbito).
+    if (u.status !== "pending" && canManageUserLifecycle) {
       if (u.isSuspended) {
         actions.push({
           icon: ShieldOff,
@@ -244,8 +261,9 @@ export function Usuarios() {
       }
     }
 
-    // AC2 (HU #10623): eliminar es exclusivo de SuperAdmin y nunca sobre la propia fila.
-    if (u.status !== "pending" && isSuperAdmin && u.id !== currentUserId) {
+    // AC2 (HU #10623): eliminar lo puede hacer SuperAdmin o AdminCompany en su tenant, y nunca
+    // sobre la propia fila. Restaurar sigue siendo exclusivo de SuperAdmin.
+    if (u.status !== "pending" && canManageUserLifecycle && u.id !== currentUserId) {
       actions.push({
         icon: Trash2,
         label: `Eliminar usuario ${u.fullName}`,
@@ -301,7 +319,7 @@ export function Usuarios() {
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle
-        title="Administración de usuarios y permisos"
+        title="Usuarios"
         subtitle="Gestiona el acceso de tu equipo a la plataforma."
         action={
           tab === "usuarios" ? (
@@ -553,6 +571,18 @@ export function Usuarios() {
           userId={auditTarget.id}
           userLabel={auditTarget.fullName}
           onClose={() => setAuditTarget(null)}
+        />
+      )}
+      {resetPasswordTarget && (
+        <ResetPasswordDialog
+          user={{
+            fullName: resetPasswordTarget.fullName,
+            email: resetPasswordTarget.email,
+          }}
+          onClose={() => setResetPasswordTarget(null)}
+          onDone={() => {
+            /* El listado no cambia; el usuario solo debe re-autenticarse con la temporal. */
+          }}
         />
       )}
       {deleteTarget && (

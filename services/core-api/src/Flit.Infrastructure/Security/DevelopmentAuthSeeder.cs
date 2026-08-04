@@ -102,6 +102,7 @@ public static class DevelopmentAuthSeeder
         await SeedLogQxPermissionsAsync(db, cancellationToken);
         await SeedIctLogsPermissionsAsync(db, cancellationToken);
         await SeedIctClientsPermissionsAsync(db, cancellationToken);
+        await SeedResetPasswordPermissionsAsync(db, cancellationToken);
         await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
     }
 
@@ -1318,6 +1319,64 @@ public static class DevelopmentAuthSeeder
                     PermissionId = action.Id,
                     CreatedAt = now,
                 });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Reset administrativo de contraseña (HU #10170 + AdminCompany auth-parity): permiso
+    /// <c>security.users.reset_password</c> en el módulo <c>usuarios</c>, concedido a
+    /// AdminCompany (mismo tenant en runtime) y SuperAdmin (catálogo / bypass por rol).
+    /// Idempotente; separado de <see cref="SeedBaseModulesAsync"/> porque ese método hace
+    /// early-return si el módulo dashboard ya existe.
+    /// </summary>
+    private static async Task SeedResetPasswordPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        const string slug = "security.users.reset_password";
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "usuarios" && m.DeletedAt == null, ct);
+        if (module is null)
+            return;
+
+        var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == slug, ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = slug,
+                Name = "Restablecer contraseña de usuarios del tenant",
+                HttpMethod = "POST",
+                RoutePattern = "/api/v1/auth/admin/reset-password",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        {
+            var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
+            foreach (var role in roles)
+            {
+                var alreadyGranted = await db.RoleGrants
+                    .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+                if (!alreadyGranted)
+                {
+                    db.RoleGrants.Add(new RoleGrant
+                    {
+                        Id = Guid.CreateVersion7(),
+                        RoleId = role.Id,
+                        PermissionId = action.Id,
+                        CreatedAt = now,
+                    });
+                }
             }
         }
 
