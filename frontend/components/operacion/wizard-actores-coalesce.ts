@@ -26,6 +26,7 @@ export function coalesceTraspasoActorSteps(steps: WizardStep[]): DisplayWizardSt
     if (step.key === 'vendedor' && steps[i + 1]?.key === 'comprador') {
       const next = steps[i + 1];
       out.push({
+        index: step.index,
         key: 'actores',
         label: 'Actores',
         status: mergeStatus(step.status, next.status),

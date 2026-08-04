@@ -65,16 +65,14 @@ export function VehicleColorSearchSelect({
       });
   };
 
+  // Cleanup on unmount only — la carga inicial va en el click de apertura
+  // (no en effect) para no disparar react-hooks/set-state-in-effect.
   useEffect(() => {
-    if (!open) return;
-    load(query);
     return () => {
       abortRef.current?.abort();
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-    // Solo al abrir: la búsqueda tipada usa debounce abajo.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- open gate
-  }, [open]);
+  }, []);
 
   const onQueryChange = (next: string) => {
     setQuery(next);
@@ -86,6 +84,19 @@ export function VehicleColorSearchSelect({
     onChange(opt.name);
     setOpen(false);
     setQuery('');
+  };
+
+  const toggleOpen = () => {
+    if (disabled) return;
+    const next = !open;
+    setOpen(next);
+    if (next) {
+      load(query);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    } else {
+      abortRef.current?.abort();
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    }
   };
 
   return (
@@ -100,11 +111,7 @@ export function VehicleColorSearchSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={label}
-        onClick={() => {
-          if (disabled) return;
-          setOpen((v) => !v);
-          setTimeout(() => inputRef.current?.focus(), 0);
-        }}
+        onClick={toggleOpen}
         className="flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14]"
       >
         <span className={display ? 'font-medium' : 'opacity-50'}>

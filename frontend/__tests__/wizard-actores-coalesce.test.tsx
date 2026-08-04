@@ -6,8 +6,12 @@ import {
   nextIndexAfterUnifiedActores,
 } from '@/components/operacion/wizard-actores-coalesce';
 
-function step(key: string, status: WizardStep['status'] = 'incomplete'): WizardStep {
-  return { key, label: key, status, reasons: [] };
+function step(
+  key: string,
+  status: WizardStep['status'] = 'incomplete',
+  index = 0,
+): WizardStep {
+  return { index, key, label: key, status, reasons: [] };
 }
 
 describe('wizard-actores-coalesce', () => {

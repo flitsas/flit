@@ -461,10 +461,6 @@ function DocumentosSection({
           tipo: 'consolidado',
           filename: doc.filename,
           mimetype: 'application/pdf',
-          sizeBytes: 0,
-          sha256: '',
-          source: 'system',
-          uploadedAt: new Date().toISOString(),
         });
       }
       onAttachmentsChange?.();

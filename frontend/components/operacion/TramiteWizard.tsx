@@ -2486,7 +2486,7 @@ function StepBody({
                 instanceId={instanceId}
                 onSaved={onRefresh}
                 embeddedInWizard
-                modalidad={modalidad === 'traspaso' ? 'traspaso' : 'matricula_inicial'}
+                modalidad="matricula_inicial"
                 runtHasGravamen={gravamen?.status === 'warn'}
                 runtGravamenMessage={gravamen?.message}
               />
