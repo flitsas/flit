@@ -18,4 +18,11 @@ public sealed record AdminAuditLogEntryResponse(
     string? TargetEntityType,
     Guid? TargetEntityId,
     string? ClientIp,
-    DateTimeOffset ChangedAt);
+    DateTimeOffset ChangedAt,
+    // Resueltos por el repositorio para que el consumidor no tenga que mostrar UUIDs.
+    string? ChangedByName = null,
+    string? ChangedByEmail = null,
+    string? TargetName = null,
+    string? FieldName = null,
+    string? OldValue = null,
+    string? NewValue = null);

@@ -1608,28 +1608,72 @@ public static class AdminOtEndpoints
             return Results.Unauthorized();
         }
 
-        // El rol destino se resuelve automáticamente: en un tenant OT solo existe el
-        // rol de sistema ot_admin (sin roles personalizados — decisión de alcance v1).
+        // El alta OT ya no fuerza siempre ot_admin: acepta los roles que el administrador
+        // seleccione del catálogo TRANSIT_OFFICE. Sin selección explícita se conserva el
+        // comportamiento histórico (ot_admin), para no romper a los clientes existentes.
         // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id), así que
         // se resuelve por Code únicamente (una sola fila ot_admin en todo el sistema).
-        var role = await db.Roles.AsNoTracking()
-            .FirstOrDefaultAsync(
-                r => r.Code == TransitOfficeTenantWriteRepositoryRoleCode && r.IsActive && r.DeletedAt == null,
-                cancellationToken)
-            .ConfigureAwait(false);
+        var requestedRoleIds = (request.RoleIds ?? []).Distinct().ToList();
+        List<Guid> roleIds;
 
-        if (role is null)
+        // Un usuario tiene UN rol: lo que define lo que puede hacer son los permisos de ese rol.
+        if (requestedRoleIds.Count > 1)
         {
             return Results.Json(
-                new { error = "ROLE_NOT_FOUND", message = "El tenant OT no tiene configurado el rol ot_admin." },
-                statusCode: StatusCodes.Status409Conflict);
+                new { error = "SINGLE_ROLE_ONLY", message = "Un usuario solo puede tener un rol. Selecciona uno." },
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        if (requestedRoleIds.Count == 0)
+        {
+            var role = await db.Roles.AsNoTracking()
+                .FirstOrDefaultAsync(
+                    r => r.Code == TransitOfficeTenantWriteRepositoryRoleCode && r.IsActive && r.DeletedAt == null,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (role is null)
+            {
+                return Results.Json(
+                    new { error = "ROLE_NOT_FOUND", message = "El tenant OT no tiene configurado el rol ot_admin." },
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            roleIds = [role.Id];
+        }
+        else
+        {
+            var selectedRoles = await db.Roles.AsNoTracking()
+                .Where(r => requestedRoleIds.Contains(r.Id) && r.IsActive && r.DeletedAt == null)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            if (selectedRoles.Count != requestedRoleIds.Count)
+            {
+                return Results.Json(
+                    new { error = "ROLE_NOT_FOUND", message = "Alguno de los roles seleccionados no existe o está inactivo." },
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+
+            if (selectedRoles.Exists(r => r.TargetEntityType != TenantTypes.TransitOffice))
+            {
+                return Results.Json(
+                    new
+                    {
+                        error = "ROLE_TARGET_ENTITY_TYPE_MISMATCH",
+                        message = "Alguno de los roles seleccionados no aplica a un organismo de tránsito.",
+                    },
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+
+            roleIds = requestedRoleIds;
         }
 
         try
         {
             var result = await handler.HandleAsync(
                 new CreateInvitationCommand(
-                    tenantId, request.Email, request.FullName ?? string.Empty, [role.Id], invitedBy.Value),
+                    tenantId, request.Email, request.FullName ?? string.Empty, roleIds, invitedBy.Value),
                 cancellationToken).ConfigureAwait(false);
 
             return Results.Created(
@@ -1780,8 +1824,19 @@ public static class AdminOtEndpoints
             .AsNoTracking()
             .Where(x => x.TenantId == tenantId && x.Status == "pending")
             .OrderByDescending(x => x.CreatedAt)
+            // El rol de la invitación pendiente ya está decidido: se muestra para que la columna
+            // Perfil / Rol no quede en "—" hasta que el usuario active su cuenta.
             .Select(x => new OtUserDto(
-                x.Id.ToString(), x.FullName, x.Email, null, null, null, "pending", x.CreatedAt, false, 0L))
+                x.Id.ToString(),
+                x.FullName,
+                x.Email,
+                db.Roles.Where(r => r.Id == x.RoleId).Select(r => r.Name).FirstOrDefault(),
+                db.Roles.Where(r => r.Id == x.RoleId).Select(r => r.Code).FirstOrDefault(),
+                x.RoleId,
+                "pending",
+                x.CreatedAt,
+                false,
+                0L))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
         return Results.Ok(new { data = activeUsers.Concat(usersWithoutRole).Concat(pending).ToList() });
@@ -2154,7 +2209,9 @@ public static class AdminOtEndpoints
         return (targetTenantId, null);
     }
 
-    private sealed record InviteOtUserRequest(string Email, string? FullName);
+    // RoleIds opcional: si viene vacío se conserva el comportamiento histórico (ot_admin
+    // forzado); si trae roles, deben pertenecer al catálogo TRANSIT_OFFICE.
+    private sealed record InviteOtUserRequest(string Email, string? FullName, Guid[]? RoleIds = null);
 
     // HU #10621 — DisplayName/Email opcionales ("no tocar ese campo"); RowVersion obligatorio
     // (concurrencia optimista, AC4 — el valor que el frontend leyó de OtUserDto.RowVersion).

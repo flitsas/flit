@@ -414,7 +414,7 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("phone");
 
-                    b.Property<Guid>("RepresentedCompanyId")
+                    b.Property<Guid?>("RepresentedCompanyId")
                         .HasColumnType("uuid")
                         .HasColumnName("represented_company_id");
 
@@ -7124,7 +7124,6 @@ namespace Flit.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("RepresentedCompanyId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
                         .HasConstraintName("fk_company_legal_representatives_represented_companies");
 
                     b.HasOne("Flit.Infrastructure.Persistence.Entities.Admin.SignatureVaultEntity", null)

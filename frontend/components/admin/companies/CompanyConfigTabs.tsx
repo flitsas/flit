@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { Building2, FileClock, FileText, Hash, Save, Shuffle, Stamp, UserCheck, Users } from "lucide-react";
+import { Building2, FileClock, FileText, Hash, Save, Shuffle, Stamp, UserCheck, UserCog, Users } from "lucide-react";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
 import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
@@ -24,6 +24,7 @@ type TabId =
   | "placas"
   | "representantes"
   | "mandatarios"
+  | "usuarios"
   | "historial";
 
 /**
@@ -66,6 +67,8 @@ const TABS: TabDef[] = [
   // organismos aplican. Antes vivían en el perfil de cada organismo de tránsito, que era quien elegía
   // compañías: el mandatario es de la empresa, no del organismo.
   { id: "mandatarios", label: "Mandatarios", icon: UserCheck, isConfig: false },
+  // Gestión de usuarios del tenant compañía (SuperAdmin); invite force AdminCompany.
+  { id: "usuarios", label: "Usuarios", icon: UserCog, isConfig: false },
   { id: "historial", label: "Historial de Cambios", icon: FileClock, isConfig: false },
 ];
 
@@ -89,6 +92,8 @@ export interface CompanyConfigTabsProps {
   legalRepresentativesSlot?: ReactNode;
   /** HU #11202 — mandatarios de la compañía y los organismos donde aplican. */
   mandatariosSlot?: ReactNode;
+  /** Tab Usuarios scoped al tenant de la ficha (SuperAdmin). */
+  usuariosSlot?: ReactNode;
   /**
    * HU #11062 — compañía que se está configurando. Se rotula por ENCIMA de la barra de pestañas para
    * que sobreviva al cambio de pestaña, y se repite en la confirmación de guardado. `null` mientras
@@ -107,13 +112,20 @@ export function CompanyConfigTabs({
   platesSlot,
   legalRepresentativesSlot,
   mandatariosSlot,
+  usuariosSlot,
   company,
 }: CompanyConfigTabsProps) {
   const [tab, setTab] = useState<TabId>("matricula");
   // La pestaña de placas solo aparece si la preasignación está activa.
+  // Usuarios solo si el consumidor inyecta el slot (SuperAdmin en ficha compañía).
   const visibleTabs = useMemo(
-    () => TABS.filter((t) => t.id !== "placas" || settings.preasignacionPlacaActiva),
-    [settings.preasignacionPlacaActiva],
+    () =>
+      TABS.filter(
+        (t) =>
+          (t.id !== "placas" || settings.preasignacionPlacaActiva) &&
+          (t.id !== "usuarios" || Boolean(usuariosSlot)),
+      ),
+    [settings.preasignacionPlacaActiva, usuariosSlot],
   );
   const [form, setForm] = useState<SettingsForm>(() => formFromSettings(settings));
   // Línea base (última configuración guardada) para detectar cambios; se actualiza al guardar.
@@ -233,6 +245,7 @@ export function CompanyConfigTabs({
         {activeTabId === "placas" && platesSlot}
         {activeTabId === "representantes" && legalRepresentativesSlot}
         {activeTabId === "mandatarios" && mandatariosSlot}
+        {activeTabId === "usuarios" && usuariosSlot}
         {activeTabId === "historial" && auditSlot}
       </div>
 

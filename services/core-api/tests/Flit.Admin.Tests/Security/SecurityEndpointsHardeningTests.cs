@@ -20,7 +20,7 @@ namespace Flit.Admin.Tests.Security;
 /// <summary>
 /// Fix post-review #10504 — hallazgos de seguridad/correctness sobre el refactor de
 /// Roles/Permisos SuperAdmin+multi-rol (HU #10505/#10506/#10508), cubiertos contra una BD
-/// real (mismo patrón que <see cref="MultiRoleUserAssignmentEndpointsTests"/>):
+/// real (mismo patrón que <see cref="UserRoleAssignmentEndpointsTests"/>):
 /// <list type="bullet">
 ///   <item>Fix 1 — <c>GET /api/v1/security/roles</c> ya no expone roles inactivos ni el rol de
 ///   sistema SuperAdmin al checklist de invitación de AdminCompany/OtAdmin.</item>
@@ -123,12 +123,41 @@ public sealed class SecurityEndpointsHardeningTests : IClassFixture<WebApplicati
         response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
     }
 
-    // ── Bloquear/desactivar y eliminar usuarios son EXCLUSIVOS de SuperAdmin ─────
-    // (contexto: AdminCompany/ot_admin dejaron de poder suspender/eliminar en el
-    // repo — solo conservan editar, invitar y reenviar/cancelar invitación).
+    // ── Bloquear/desactivar y eliminar: AdminCompany (su tenant) + SuperAdmin ─────
+    // Feature #11233 — se reabre a AdminCompanyPolicy (antes exclusivos de SuperAdmin).
 
     [Fact]
-    public async Task SuspendUser_CallerWithoutSuperAdmin_Returns403()
+    public async Task SuspendUser_CallerWithoutAdminCompanyPolicy_Returns403()
+    {
+        UseToken(_radicadorUserId, "Radicador");
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/v1/security/users/{_targetUserId}/suspend",
+            new { reason = "x", endsAt = (DateTimeOffset?)null },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "un usuario sin rol AdminCompany/SuperAdmin no debe poder suspender usuarios");
+    }
+
+    [Fact]
+    public async Task DeleteUser_CallerWithoutAdminCompanyPolicy_Returns403()
+    {
+        UseToken(_radicadorUserId, "Radicador");
+
+        var response = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/security/users/{_targetUserId}")
+            {
+                Content = JsonContent.Create(new { rowVersion = 1 }),
+            },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "un usuario sin rol AdminCompany/SuperAdmin no debe poder eliminar usuarios");
+    }
+
+    [Fact]
+    public async Task SuspendUser_AsAdminCompany_IsAuthorized()
     {
         UseToken(_adminUserId, "AdminCompany");
 
@@ -137,12 +166,12 @@ public sealed class SecurityEndpointsHardeningTests : IClassFixture<WebApplicati
             new { reason = "x", endsAt = (DateTimeOffset?)null },
             TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
-            "bloquear/desactivar usuarios es exclusivo de SuperAdmin; AdminCompany ya no puede");
+        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
-    public async Task DeleteUser_CallerWithoutSuperAdmin_Returns403()
+    public async Task DeleteUser_AsAdminCompany_IsAuthorized()
     {
         UseToken(_adminUserId, "AdminCompany");
 
@@ -153,8 +182,9 @@ public sealed class SecurityEndpointsHardeningTests : IClassFixture<WebApplicati
             },
             TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
-            "eliminar usuarios es exclusivo de SuperAdmin; AdminCompany ya no puede");
+        // Policy satisfecha: no 401/403. El 409 por rowVersion/concurrencia no es el foco.
+        response.StatusCode.Should().NotBe(HttpStatusCode.Forbidden);
+        response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized);
     }
 
     [Fact]

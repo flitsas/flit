@@ -9,8 +9,15 @@ namespace Flit.Modules.Security.Application.UserRoles;
 /// </summary>
 public sealed class RemoveRoleAssignmentHandler(IUserRoleAssignmentRepository repo)
 {
-    public async Task HandleAsync(Guid userId, Guid tenantId, Guid roleId, Guid removedBy, CancellationToken ct)
+    public async Task HandleAsync(
+        Guid userId, Guid tenantId, Guid roleId, Guid removedBy, CancellationToken ct,
+        bool callerIsSuperAdmin = false)
     {
+        // Mismo alcance que AssignRoleHandler: el SuperAdmin opera sobre el tenant del usuario
+        // destino, no sobre el suyo (el interno de FLIT).
+        if (callerIsSuperAdmin)
+            tenantId = await repo.GetUserTenantAsync(userId, ct) ?? tenantId;
+
         var existing = await repo.GetActiveAssignmentAsync(userId, tenantId, roleId, ct);
         if (existing is null)
             throw new RoleAssignmentNotFoundException();

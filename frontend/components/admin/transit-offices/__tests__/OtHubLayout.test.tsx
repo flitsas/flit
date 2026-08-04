@@ -1,4 +1,4 @@
-// HU #10236 — Layout hub con pestañas de navegación.
+// HU #10236 — Layout hub: pestañas solo SuperAdmin; Admin OT navega por dock.
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -57,40 +57,60 @@ vi.mock("@/lib/api/admin-transit-office-tenants", () => ({
 }));
 
 vi.mock("@/lib/api/client", () => ({
-  getToken: vi.fn().mockReturnValue(null),
+  getToken: vi.fn().mockReturnValue("token"),
 }));
 
-vi.mock("@/lib/auth/jwt", () => ({
-  decodeJwtPayload: vi.fn().mockReturnValue(null),
-  isSuperAdmin: vi.fn().mockReturnValue(false),
+const jwtMocks = vi.hoisted(() => ({
+  decodeJwtPayload: vi.fn().mockReturnValue({}),
+  isSuperAdmin: vi.fn().mockReturnValue(true),
+  isOtAdmin: vi.fn().mockReturnValue(false),
 }));
+
+vi.mock("@/lib/auth/jwt", () => jwtMocks);
 
 describe("OtHubLayout — HU #10236", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    jwtMocks.isSuperAdmin.mockReturnValue(true);
+    jwtMocks.isOtAdmin.mockReturnValue(false);
     vi.mocked(fetchTransitOfficesOperationalStatus).mockResolvedValue(ACTIVE_STATUS);
   });
 
-  it("AC2 renderiza pestañas de módulos OT", () => {
+  it("AC2 renderiza pestañas de módulos OT (SuperAdmin)", () => {
     render(
       <OtHubLayout transitOfficeId="ot-1" activeTab="client-procedures" moduleTitle="Test OT">
         <p>Contenido módulo</p>
       </OtHubLayout>,
     );
-    expect(screen.getByRole("tab", { name: "Trámites clientes" }))
-      .toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Trámites" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Reglas" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Preasignación" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Reportes" })).toBeInTheDocument();
     expect(screen.getByText("Contenido módulo")).toBeInTheDocument();
   });
 
-  it("no ofrece las pestañas retiradas de la consola", () => {
+  it("Admin OT: no muestra pestañas ni volver al listado (navegación en dock)", () => {
+    jwtMocks.isSuperAdmin.mockReturnValue(false);
+    jwtMocks.isOtAdmin.mockReturnValue(true);
     render(
       <OtHubLayout transitOfficeId="ot-1" activeTab="client-procedures" moduleTitle="Test OT">
         <p>Contenido módulo</p>
       </OtHubLayout>,
     );
-    expect(screen.queryByRole("tab", { name: "Trámites" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Volver al listado/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Contenido módulo")).toBeInTheDocument();
+  });
+
+  it("no ofrece las pestañas legacy retiradas (ids tramites/webhooks)", () => {
+    render(
+      <OtHubLayout transitOfficeId="ot-1" activeTab="client-procedures" moduleTitle="Test OT">
+        <p>Contenido módulo</p>
+      </OtHubLayout>,
+    );
     expect(screen.queryByRole("tab", { name: "Webhooks" })).not.toBeInTheDocument();
+    // "Trámites" sí existe: es el label de client-procedures (ex "Trámites clientes").
+    expect(screen.getByRole("tab", { name: "Trámites" })).toBeInTheDocument();
   });
 
   it("AC2 cambia de módulo al seleccionar pestaña", async () => {

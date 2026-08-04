@@ -14,6 +14,7 @@ import { PlatePreassignViewer } from "@/components/admin/companies/panels/PlateP
 import { CompanyDocumentParamsPanel } from "@/components/admin/documents/CompanyDocumentParamsPanel";
 import { RepresentativesAndVaultTab } from "@/components/admin/companies/legal-representatives/RepresentativesAndVaultTab";
 import { CompanyMandatariosPanel } from "@/components/admin/companies/mandate-signers/CompanyMandatariosPanel";
+import { CompanyUsersPanel } from "@/components/admin/companies/panels/CompanyUsersPanel";
 import { fetchCompany, fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
 import type { CompanyListItem, TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -139,6 +140,9 @@ function CompanyDetail() {
                   <RepresentativesAndVaultTab tenantId={tenantId} />
                 }
                 mandatariosSlot={<CompanyMandatariosPanel tenantId={tenantId} />}
+                usuariosSlot={
+                  isSuperAdmin ? <CompanyUsersPanel tenantId={tenantId} /> : undefined
+                }
               />
             </>
           )}

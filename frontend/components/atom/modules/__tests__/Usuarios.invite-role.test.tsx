@@ -1,8 +1,8 @@
-// HU #10510 — Selección múltiple de roles al invitar usuarios. AdminCompany/OtAdmin ahora
-// pueden marcar VARIOS roles (checklist, no <select> single-value) al invitar. AC1: se pueden
-// marcar varios roles disponibles, incluidos los de sistema. AC2: el payload enviado a
-// createInvitation trae `roleIds: string[]` con todos los marcados. AC3: sin ningún rol
-// marcado, el envío queda bloqueado y se muestra un mensaje de ayuda.
+// Selección de rol al invitar. La HU #10510 había introducido un checklist para marcar VARIOS
+// roles; el responsable funcional decidió después que un usuario tiene UN rol y que lo que
+// define lo que puede hacer son los permisos de ese rol, así que la lista pasó a selección
+// única. AC1: un radio por cada rol disponible, incluidos los de sistema. AC2: el payload lleva
+// `roleIds` con un solo id. AC3: sin rol marcado, el envío queda bloqueado con un mensaje.
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -79,39 +79,40 @@ async function openInviteModal() {
   return user;
 }
 
-describe("Usuarios — InviteModal — selección múltiple de roles (HU #10510)", () => {
-  it("AC1: muestra un checkbox por cada rol disponible, incluyendo roles de sistema, y permite marcar varios", async () => {
+describe("Usuarios — InviteModal — selección de rol", () => {
+  it("AC1: ofrece un rol por opción, incluidos los de sistema, y marcar uno desmarca el anterior", async () => {
     const user = await openInviteModal();
 
-    const supervisorCheckbox = await screen.findByRole("checkbox", { name: /supervisor/i });
-    const adminCompanyCheckbox = await screen.findByRole("checkbox", { name: /administrador de compañía/i });
+    const supervisor = await screen.findByRole("radio", { name: /supervisor/i });
+    const adminCompany = await screen.findByRole("radio", { name: /administrador de compañía/i });
 
-    expect(supervisorCheckbox).not.toBeChecked();
-    expect(adminCompanyCheckbox).not.toBeChecked();
+    expect(supervisor).not.toBeChecked();
+    expect(adminCompany).not.toBeChecked();
 
-    await user.click(supervisorCheckbox);
-    await user.click(adminCompanyCheckbox);
+    await user.click(supervisor);
+    expect(supervisor).toBeChecked();
 
-    expect(supervisorCheckbox).toBeChecked();
-    expect(adminCompanyCheckbox).toBeChecked();
+    // Un usuario tiene un solo rol: elegir otro sustituye al primero, no lo acumula.
+    await user.click(adminCompany);
+    expect(adminCompany).toBeChecked();
+    expect(supervisor).not.toBeChecked();
   });
 
-  it("AC3: sin ningún rol marcado, el botón de enviar está deshabilitado y se muestra un mensaje de ayuda", async () => {
+  it("AC3: sin rol marcado, el botón de enviar está deshabilitado y se muestra un mensaje de ayuda", async () => {
     await openInviteModal();
 
-    expect(screen.getByText(/selecciona al menos un rol/i)).toBeInTheDocument();
+    expect(screen.getByText(/selecciona un rol/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /enviar instrucciones/i })).toBeDisabled();
     expect(createInvitation).not.toHaveBeenCalled();
   });
 
-  it("AC2: al enviar con 2 roles marcados, llama a createInvitation con roleIds: string[] con ambos ids", async () => {
+  it("AC2: al enviar, llama a createInvitation con roleIds de un solo id", async () => {
     const user = await openInviteModal();
 
     await user.type(await screen.findByLabelText(/nombre completo/i), "Laura García");
     await user.type(screen.getByLabelText(/correo electrónico/i), "laura@empresa.com");
 
-    await user.click(await screen.findByRole("checkbox", { name: /supervisor/i }));
-    await user.click(screen.getByRole("checkbox", { name: /administrador de compañía/i }));
+    await user.click(await screen.findByRole("radio", { name: /supervisor/i }));
 
     const submitButton = screen.getByRole("button", { name: /enviar instrucciones/i });
     expect(submitButton).toBeEnabled();
@@ -120,11 +121,9 @@ describe("Usuarios — InviteModal — selección múltiple de roles (HU #10510)
     expect(createInvitation).toHaveBeenCalledWith(
       "laura@empresa.com",
       "Laura García",
-      expect.arrayContaining(["role-supervisor", "role-admin-company"]),
+      ["role-supervisor"],
       undefined,
     );
-    const roleIdsArg = vi.mocked(createInvitation).mock.calls[0][2];
-    expect(roleIdsArg).toHaveLength(2);
 
     expect(await screen.findByText(/se enviaron instrucciones de activación/i)).toBeInTheDocument();
   });

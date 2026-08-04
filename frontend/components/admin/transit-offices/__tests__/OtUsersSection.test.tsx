@@ -1,7 +1,9 @@
-// Refactor adminOT — pestaña "Usuarios" del hub OT: 4 estados de UI + invitar +
-// suspender/reactivar (self-service, sin selector de rol).
+// Pestaña "Usuarios" del hub OT: 4 estados de UI + invitar (con selector de rol) +
+// suspender/reactivar. Desde la unificación de tablas comparte UsersTable con el módulo
+// Usuarios y la ficha de compañía, así que el vocabulario de estados es el común
+// ("Bloqueado", no "Suspendido") y la barra de filtros repite esos labels en un <select>.
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
 import { OtUsersSection } from "../OtUsersSection";
@@ -106,13 +108,15 @@ describe("OtUsersSection — refactor adminOT", () => {
   it("estado lleno: lista usuarios con su estado", async () => {
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser, suspendedUser] });
     renderSection();
-    expect(await screen.findByText("Laura García")).toBeInTheDocument();
-    expect(screen.getByText("Carlos Pérez")).toBeInTheDocument();
-    expect(screen.getByText("Activo")).toBeInTheDocument();
-    expect(screen.getByText("Suspendido")).toBeInTheDocument();
+    // El chip se busca DENTRO de la fila: los mismos labels existen también como opciones
+    // del filtro de estado de la barra superior.
+    const activa = (await screen.findByText("Laura García")).closest("div.grid") as HTMLElement;
+    const bloqueada = screen.getByText("Carlos Pérez").closest("div.grid") as HTMLElement;
+    expect(within(activa).getByText("Activo")).toBeInTheDocument();
+    expect(within(bloqueada).getByText("Bloqueado")).toBeInTheDocument();
   });
 
-  it("invita a un usuario nuevo (solo email + nombre, sin selector de rol)", async () => {
+  it("invita a un usuario nuevo sin marcar rol: el backend asigna ot_admin", async () => {
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
     vi.mocked(inviteOtUser).mockResolvedValue({
       invitationId: "inv-1",
@@ -124,7 +128,6 @@ describe("OtUsersSection — refactor adminOT", () => {
     await screen.findByText("Laura García");
 
     await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
-    expect(screen.queryByRole("combobox", { name: /rol/i })).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
     await user.type(screen.getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
@@ -132,7 +135,8 @@ describe("OtUsersSection — refactor adminOT", () => {
 
     await waitFor(() =>
       expect(inviteOtUser).toHaveBeenCalledWith(
-        { email: "nuevo@transito.gov.co", fullName: "Nuevo Colaborador" },
+        // roleIds ausente = sin selección explícita: el backend conserva ot_admin.
+        { email: "nuevo@transito.gov.co", fullName: "Nuevo Colaborador", roleIds: undefined },
         { transitOfficeId: "ot-1" },
       ),
     );

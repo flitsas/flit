@@ -2,19 +2,19 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, X, Users, Shield, Ban, Clock, ShieldOff, Landmark, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound } from "lucide-react";
-import { createInvitation, getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, TenantUser, TenantRole } from "@/lib/api/security";
-import { ApiError } from "@/lib/api/types";
+import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History } from "lucide-react";
+import { getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, TenantUser, TenantRole } from "@/lib/api/security";
 import { EditUserModal } from "./users/EditUserModal";
 import { DeleteUserDialog } from "./users/DeleteUserDialog";
 import { RestoreUserDialog } from "./users/RestoreUserDialog";
 import { ResendInvitationButton } from "./users/ResendInvitationButton";
 import { CancelInvitationDialog } from "./users/CancelInvitationDialog";
+import { InviteUserModal } from "./users/InviteUserModal";
+import { UsersTable, toUserRow } from "./users/UsersTable";
+import { UserAuditHistoryDrawer } from "./users/UserAuditHistoryDrawer";
+import { ResetPasswordDialog } from "./users/ResetPasswordDialog";
 import { ModuleTitle } from "./ModuleTitle";
-import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
-import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
-import { fetchTransitOfficeTenants, type TransitOfficeTenantItem } from "@/lib/api/admin-transit-office-tenants";
-import type { CompanyListItem } from "@/lib/api/types";
+import { ICON_BUTTON_HIT_AREA, type RowAction } from "@/components/atom/RowActions";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ICT_CLIENTS_MANAGE_PERMISSION } from "@/lib/auth/jwt";
 import { IctClientsPanel } from "./users/IctClientsPanel";
@@ -22,6 +22,8 @@ import {
   SuspendOrDeactivateModal,
   type SuspendMode,
 } from "./users/SuspendOrDeactivateModal";
+import { resolveProfile, targetEntityTypeForProfile } from "@/lib/users/profiles";
+import { superadminClient } from "@/lib/api/superadmin-client";
 
 // HU #10623 (AC3/AC4): "Eliminados" solo se ofrece a SuperAdmin — AdminCompany/OtAdmin ven
 // "Eliminar" (AC1) pero nunca la vista de restauración, exclusiva de SuperAdmin.
@@ -34,25 +36,8 @@ const ALL_TABS = [
 
 type TabId = (typeof ALL_TABS)[number]["id"];
 
-// Chips tintados (HU #10494 · decisión D1, tones HU #10844). Mismo vocabulario
-// (Activo/Inactivo/Pendiente); el color lo resuelve el `tone` semántico desde globals.css.
-const STATUS_BADGE: Record<
-  TenantUser["status"],
-  { label: string; tone: StatusTone }
-> = {
-  active: { label: "Activo", tone: "success" },
-  inactive: { label: "Inactivo", tone: "danger" },
-  pending: { label: "Pendiente", tone: "warning" },
-};
-
-// Ajuste QA (flujo completo HU #10619-#10628): un usuario suspendido/desactivado seguía
-// mostrando el chip "Activo" — solo cambiaba el ícono de acción (Ban → ShieldOff), sin
-// ninguna señal visible al escanear la tabla. Prevalece sobre STATUS_BADGE[status].
-const SUSPENDED_BADGE: { label: string; tone: StatusTone } = { label: "Bloqueado", tone: "danger" };
-
-function userBadge(u: TenantUser) {
-  return u.isSuspended ? SUSPENDED_BADGE : STATUS_BADGE[u.status];
-}
+// Los chips de estado y la columna Perfil / Rol viven ahora en UsersTable, compartida por el
+// módulo Usuarios, la ficha de compañía y el hub OT.
 
 // Ajuste QA: la columna "Fecha" mostraba el ISO crudo (con microsegundos) de invitaciones
 // pendientes y de "Eliminado el" en vez de una fecha legible.
@@ -64,9 +49,14 @@ function formatDateTime(iso: string | null | undefined): string {
 }
 
 export function Usuarios() {
-  const { isSuperAdmin, userId: currentUserId, permissions, tenantId } = usePermissions();
+  const { isSuperAdmin, isAdminCompany, userId: currentUserId, permissions, tenantId } = usePermissions();
   // Clientes ICT: SuperAdmin (bypass por rol) o quien tenga el permiso ict.clients.manage.
   const canManageIctClients = isSuperAdmin || permissions.includes(ICT_CLIENTS_MANAGE_PERMISSION);
+  // Reset admin: SuperAdmin o AdminCompany (API acota al tenant).
+  const canResetPassword = isSuperAdmin || isAdminCompany;
+  // Suspender / desactivar / eliminar: misma paridad AdminCompany en su empresa (API scoped).
+  // Ver eliminados / restaurar siguen exclusivos de SuperAdmin.
+  const canManageUserLifecycle = isSuperAdmin || isAdminCompany;
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("usuarios");
   const [users, setUsers] = useState<TenantUser[]>([]);
@@ -77,6 +67,7 @@ export function Usuarios() {
   const [suspendTarget, setSuspendTarget] = useState<{ user: TenantUser; mode: SuspendMode } | null>(null);
   const [editTarget, setEditTarget] = useState<TenantUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TenantUser | null>(null);
+  const [resetPasswordTarget, setResetPasswordTarget] = useState<TenantUser | null>(null);
   // HU #10624 — pestaña "Eliminados": usuarios de CUALQUIER tenant con deletedAt != null.
   const [deletedUsers, setDeletedUsers] = useState<TenantUser[]>([]);
   const [deletedLoading, setDeletedLoading] = useState(false);
@@ -84,6 +75,9 @@ export function Usuarios() {
   const [restoreTarget, setRestoreTarget] = useState<TenantUser | null>(null);
   // HU #10628 — objetivo del diálogo de confirmación "Cancelar invitación" (filas "Pendiente").
   const [cancelTarget, setCancelTarget] = useState<TenantUser | null>(null);
+  const [auditTarget, setAuditTarget] = useState<TenantUser | null>(null);
+  const [editRoles, setEditRoles] = useState<TenantRole[]>([]);
+  const [editRolesLoading, setEditRolesLoading] = useState(false);
 
   // AC4 (HU #10623): "Eliminados" es exclusivo de SuperAdmin. "Clientes ICT" requiere ict.clients.manage.
   const tabs = ALL_TABS.filter(
@@ -153,6 +147,144 @@ export function Usuarios() {
     }
   }, [tab, isSuperAdmin]);
 
+  // Roles para EditUserModal: AdminCompany usa getRoles(); SuperAdmin carga catálogo
+  // COMPANY/OT según perfil del usuario objetivo (nunca FLIT/SuperAdmin).
+  useEffect(() => {
+    if (!editTarget || editTarget.status === "pending") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEditRoles([]);
+      setEditRolesLoading(false);
+      return;
+    }
+    const profile = resolveProfile(editTarget);
+    if (profile === "FLIT") {
+      setEditRoles([]);
+      setEditRolesLoading(false);
+      return;
+    }
+    if (!isSuperAdmin) {
+      setEditRoles(roles);
+      setEditRolesLoading(rolesLoading);
+      return;
+    }
+    let cancelled = false;
+    setEditRolesLoading(true);
+    void superadminClient
+      .listRoles(targetEntityTypeForProfile(profile))
+      .then((list) => {
+        if (cancelled) return;
+        setEditRoles(
+          list
+            .filter((r) => r.isActive)
+            .map((r) => ({
+              id: r.id,
+              code: r.code,
+              name: r.name,
+              description: r.description,
+              isSystem: r.isSystem,
+              permissionCount: r.permissionCount,
+              createdAt: r.createdAt,
+            })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setEditRoles([]);
+      })
+      .finally(() => {
+        if (!cancelled) setEditRolesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editTarget, isSuperAdmin, roles, rolesLoading]);
+
+  // Acciones de cada fila. Se declaran como datos (RowAction[]) para que UsersTable las
+  // renderice con el área de clic de 40x40 de RowActions — el tamaño anterior (28px) quedaba
+  // por debajo del desfase del cursor SVG de FLIT y muchos clics caían fuera del botón.
+  function actionsForUser(userId: string): RowAction[] {
+    const u = users.find((x) => x.id === userId);
+    if (!u) return [];
+
+    const actions: RowAction[] = [];
+
+    if (u.status !== "pending" && isSuperAdmin) {
+      actions.push({
+        icon: History,
+        label: `Ver historial de ${u.fullName}`,
+        tone: "primary",
+        onClick: () => setAuditTarget(u),
+      });
+    }
+
+    // Editar información (nombre/correo/rol): SuperAdmin, AdminCompany y ot_admin.
+    // AC4 (HU #10622): sin botón para usuarios pendientes — no hay cuenta real que editar.
+    if (u.status !== "pending") {
+      actions.push({
+        icon: Pencil,
+        label: `Editar usuario ${u.fullName}`,
+        tone: "primary",
+        onClick: () => setEditTarget(u),
+      });
+    }
+
+    // Restablecer contraseña: SuperAdmin o AdminCompany (HU-B auth-parity; el API acota al tenant).
+    if (u.status !== "pending" && canResetPassword) {
+      actions.push({
+        icon: KeyRound,
+        label: `Restablecer contraseña de ${u.fullName}`,
+        onClick: () => setResetPasswordTarget(u),
+      });
+    }
+
+    // Bloquear/desactivar/reactivar: SuperAdmin (cualquier tenant) o AdminCompany (solo su
+    // empresa — el API rechaza fuera de ámbito).
+    if (u.status !== "pending" && canManageUserLifecycle) {
+      if (u.isSuspended) {
+        actions.push({
+          icon: ShieldOff,
+          label: `Desbloquear usuario ${u.fullName}`,
+          onClick: () => void handleUnsuspend(u.id),
+        });
+      } else {
+        actions.push({
+          icon: Clock,
+          label: `Suspender temporalmente a ${u.fullName}`,
+          tone: "danger",
+          onClick: () => setSuspendTarget({ user: u, mode: "temporary" }),
+        });
+        actions.push({
+          icon: Ban,
+          label: `Desactivar indefinidamente a ${u.fullName}`,
+          tone: "primary",
+          onClick: () => setSuspendTarget({ user: u, mode: "indefinite" }),
+        });
+      }
+    }
+
+    // AC2 (HU #10623): eliminar lo puede hacer SuperAdmin o AdminCompany en su tenant, y nunca
+    // sobre la propia fila. Restaurar sigue siendo exclusivo de SuperAdmin.
+    if (u.status !== "pending" && canManageUserLifecycle && u.id !== currentUserId) {
+      actions.push({
+        icon: Trash2,
+        label: `Eliminar usuario ${u.fullName}`,
+        tone: "danger",
+        onClick: () => setDeleteTarget(u),
+      });
+    }
+
+    // AC2 (HU #10628): "Cancelar invitación" SOLO en filas pendientes.
+    if (u.status === "pending") {
+      actions.push({
+        icon: MailX,
+        label: `Cancelar invitación a ${u.fullName}`,
+        tone: "danger",
+        onClick: () => setCancelTarget(u),
+      });
+    }
+
+    return actions;
+  }
+
   function handleInviteSuccess() {
     loadUsers();
   }
@@ -187,7 +319,7 @@ export function Usuarios() {
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
       <ModuleTitle
-        title="Administración de usuarios y permisos"
+        title="Usuarios"
         subtitle="Gestiona el acceso de tu equipo a la plataforma."
         action={
           tab === "usuarios" ? (
@@ -215,185 +347,33 @@ export function Usuarios() {
             </button>
           );
         })}
-        {tab === "usuarios" && (
-          <div className="ml-auto mb-1.5 flex w-full max-w-xs shrink-0 items-center gap-2 rounded-xl border bg-white px-3 py-1.5 dark:bg-[#0B0F14]">
-            <Search className="h-4 w-4 opacity-60" />
-            <input placeholder="Buscar por nombre o correo..." className="flex-1 bg-transparent outline-none text-xs" />
-          </div>
-        )}
       </div>
 
       {tab === "usuarios" && (
-        <>
-          <div className="flex flex-col overflow-x-auto">
-            <div
-              className="grid min-w-[720px] px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
-              style={{
-                gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 40px",
-                background: "#DFE5ED",
-                color: "#162744",
-              }}
-            >
-              <div>Usuario</div>
-              {isSuperAdmin && <div>Empresa</div>}
-              <div>Rol</div>
-              <div>Estado</div>
-              <div>Fecha</div>
-              <div />
-            </div>
-
-            <div className="space-y-2 pt-2">
-              {loading && (
-                <div className="py-12 text-center text-sm opacity-60">Cargando usuarios…</div>
-              )}
-              {!loading && error && (
-                <div role="alert" className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>{error}</div>
-              )}
-              {!loading && !error && users.length === 0 && (
-                <div className="py-12 text-center text-sm opacity-60">
-                  {isSuperAdmin ? "No hay usuarios en ninguna compañía." : "No hay usuarios en este tenant. Invita al primero."}
-                </div>
-              )}
-              {!loading && !error && users.map((u) => {
-                const badge = userBadge(u);
-                return (
-                  <div
-                    // GET /api/v1/security/users hace JOIN vía UserRoleAssignments: un usuario
-                    // con N roles activos produce N filas con el mismo u.id (una por asignación
-                    // de rol). u.id solo no es único — se compone con u.roleId para evitar el
-                    // warning de React "two children with the same key".
-                    key={`${u.id}-${u.roleId ?? "sin-rol"}`}
-                    className="grid min-w-[720px] items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
-                    style={{
-                      gridTemplateColumns: isSuperAdmin ? "3fr 2fr 2fr 1.5fr 1.5fr 40px" : "4fr 2fr 2fr 3fr 40px",
-                      }}
-                  >
-                    <div>
-                      <p className="font-semibold">{u.fullName}</p>
-                      <p className="text-[10px] opacity-60">{u.email}</p>
-                    </div>
-                    {isSuperAdmin && (
-                      <div className="opacity-70 truncate">{u.tenantName ?? "—"}</div>
-                    )}
-                    <div>
-                      {u.status !== "pending" && !isSuperAdmin ? (
-                        <RoleDropdown
-                          userId={u.id}
-                          currentRoleName={u.role}
-                          roles={roles}
-                          rolesLoading={rolesLoading}
-                          onAssigned={loadUsers}
-                        />
-                      ) : (
-                        <span className="opacity-70">{u.role ?? "—"}</span>
-                      )}
-                    </div>
-                    <div>
-                      <StatusBadge label={badge.label} tone={badge.tone} />
-                    </div>
-                    <div className="opacity-70">{formatDateTime(u.createdAt)}</div>
-                    <div className="flex items-center justify-end gap-1">
-                      {/* Editar información (nombre/correo): disponible para SuperAdmin,
-                          AdminCompany y ot_admin. AC4 (HU #10622): sin botón para usuarios
-                          pendientes — todavía no hay una cuenta real que editar. */}
-                      {u.status !== "pending" && (
-                        <button
-                          title="Editar usuario"
-                          aria-label={`Editar usuario ${u.fullName}`}
-                          onClick={() => setEditTarget(u)}
-                          className="p-1.5 rounded-lg transition hover:bg-blue-50"
-                          style={{ color: "#557EFF" }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                      )}
-                      {/* Bloquear/desactivar/reactivar es EXCLUSIVO de SuperAdmin.
-                          AdminCompany y ot_admin no pueden suspender ni reactivar. */}
-                      {u.status !== "pending" && isSuperAdmin && (
-                        u.isSuspended ? (
-                          <button
-                            title="Desbloquear usuario"
-                            aria-label={`Desbloquear usuario ${u.fullName}`}
-                            onClick={() => handleUnsuspend(u.id)}
-                            className="p-1.5 rounded-lg transition hover:bg-green-50"
-                            style={{ color: "#00DBD5" }}
-                          >
-                            <ShieldOff className="h-4 w-4" />
-                          </button>
-                        ) : (
-                          <>
-                            <button
-                              title="Suspender temporalmente"
-                              aria-label={`Suspender temporalmente a ${u.fullName}`}
-                              onClick={() => setSuspendTarget({ user: u, mode: "temporary" })}
-                              className="p-1.5 rounded-lg transition hover:bg-orange-50"
-                              style={{ color: "#FF4E00" }}
-                            >
-                              <Clock className="h-4 w-4" />
-                            </button>
-                            <button
-                              title="Desactivar indefinidamente"
-                              aria-label={`Desactivar indefinidamente a ${u.fullName}`}
-                              onClick={() => setSuspendTarget({ user: u, mode: "indefinite" })}
-                              className="p-1.5 rounded-lg transition hover:bg-red-50"
-                              style={{ color: "#557EFF" }}
-                            >
-                              <Ban className="h-4 w-4" />
-                            </button>
-                          </>
-                        )
-                      )}
-                      {/* Eliminar es EXCLUSIVO de SuperAdmin (AdminCompany/ot_admin no pueden).
-                          AC2 (HU #10623): sin botón "Eliminar" sobre la propia fila —
-                          nunca puede auto-eliminarse. */}
-                      {u.status !== "pending" && isSuperAdmin && u.id !== currentUserId && (
-                        <button
-                          title="Eliminar usuario"
-                          aria-label={`Eliminar usuario ${u.fullName}`}
-                          onClick={() => setDeleteTarget(u)}
-                          className="p-1.5 rounded-lg transition hover:bg-red-50"
-                          style={{ color: "#FF4E00" }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                      {/* AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el
-                          invitationId. Gestión de invitaciones disponible para todos los
-                          administradores (parte del flujo de invitar). */}
-                      {u.status === "pending" && (
-                        <ResendInvitationButton
-                          invitationId={u.id}
-                          fullName={u.fullName}
-                          resend={resendInvitation}
-                        />
-                      )}
-                      {/* AC2 (HU #10628): "Cancelar invitación" SOLO en filas "Pendiente" —
-                          mutuamente excluyente con "Eliminar usuario" (arriba, solo status !== "pending").
-                          Disponible para todos los administradores (gestión de invitaciones). */}
-                      {u.status === "pending" && (
-                        <button
-                          type="button"
-                          title="Cancelar invitación"
-                          aria-label={`Cancelar invitación a ${u.fullName}`}
-                          onClick={() => setCancelTarget(u)}
-                          className="p-1.5 rounded-lg transition hover:bg-red-50"
-                          style={{ color: "#FF4E00" }}
-                        >
-                          <MailX className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {!loading && !error && users.length > 0 && (
-              <p className="text-[10px] opacity-60 text-right pt-2 shrink-0">
-                Mostrando {users.length} usuario{users.length !== 1 ? "s" : ""}
-              </p>
-            )}
-          </div>
-        </>
+        <UsersTable
+          rows={users.map((u) => toUserRow(u))}
+          loading={loading}
+          error={error}
+          onRetry={loadUsers}
+          showTenantColumn={isSuperAdmin}
+          emptyMessage={
+            isSuperAdmin
+              ? "No hay usuarios en ninguna compañía."
+              : "No hay usuarios en este tenant. Invita al primero."
+          }
+          actionsFor={(row) => actionsForUser(row.id)}
+          extraActionsFor={(row) =>
+            // AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el
+            // invitationId. Vive fuera de RowActions porque lleva cooldown y mensaje inline.
+            row.status === "pending" ? (
+              <ResendInvitationButton
+                invitationId={row.id}
+                fullName={row.fullName}
+                resend={resendInvitation}
+              />
+            ) : null
+          }
+        />
       )}
 
       {tab === "clientes-ict" && canManageIctClients && (
@@ -448,7 +428,7 @@ export function Usuarios() {
                     title="Restaurar usuario"
                     aria-label={`Restaurar usuario ${u.fullName}`}
                     onClick={() => setRestoreTarget(u)}
-                    className="p-1.5 rounded-lg transition hover:bg-blue-50"
+                    className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-blue-50`}
                     style={{ color: "#557EFF" }}
                   >
                     <RotateCcw className="h-4 w-4" />
@@ -525,7 +505,15 @@ export function Usuarios() {
         </div>
       )}
 
-      {open && <InviteModal onClose={() => setOpen(false)} onSuccess={handleInviteSuccess} roles={roles} rolesLoading={rolesLoading} isSuperAdmin={isSuperAdmin} />}
+      {open && (
+        <InviteUserModal
+          onClose={() => setOpen(false)}
+          onSuccess={handleInviteSuccess}
+          roles={roles}
+          rolesLoading={rolesLoading}
+          isSuperAdmin={isSuperAdmin}
+        />
+      )}
       {suspendTarget && (
         <SuspendOrDeactivateModal
           user={suspendTarget.user}
@@ -551,6 +539,50 @@ export function Usuarios() {
             loadUsers();
           }}
           onUpdate={updateUser}
+          profile={resolveProfile(editTarget)}
+          roleSection={
+            resolveProfile(editTarget) === "FLIT"
+              ? undefined
+              : {
+                  currentRoleName: editTarget.role,
+                  currentRoleId: editTarget.roleId,
+                  roles: editRoles,
+                  rolesLoading: editRolesLoading,
+                  onAssignRole: async (roleId) => {
+                    await assignRole(editTarget.id, roleId);
+                    await loadUsers();
+                    setEditTarget((prev) => {
+                      if (!prev || prev.id !== editTarget.id) return prev;
+                      const match = editRoles.find((r) => r.id === roleId);
+                      return {
+                        ...prev,
+                        roleId,
+                        role: match?.name ?? prev.role,
+                        roleCode: match?.code ?? prev.roleCode,
+                      };
+                    });
+                  },
+                }
+          }
+        />
+      )}
+      {auditTarget && isSuperAdmin && (
+        <UserAuditHistoryDrawer
+          userId={auditTarget.id}
+          userLabel={auditTarget.fullName}
+          onClose={() => setAuditTarget(null)}
+        />
+      )}
+      {resetPasswordTarget && (
+        <ResetPasswordDialog
+          user={{
+            fullName: resetPasswordTarget.fullName,
+            email: resetPasswordTarget.email,
+          }}
+          onClose={() => setResetPasswordTarget(null)}
+          onDone={() => {
+            /* El listado no cambia; el usuario solo debe re-autenticarse con la temporal. */
+          }}
         />
       )}
       {deleteTarget && (
@@ -607,309 +639,4 @@ export function Usuarios() {
   );
 }
 
-function RoleDropdown({
-  userId, currentRoleName, roles, rolesLoading, onAssigned,
-}: {
-  userId: string;
-  currentRoleName: string | null;
-  roles: TenantRole[];
-  rolesLoading: boolean;
-  onAssigned: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
 
-  async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const roleId = e.target.value;
-    if (!roleId) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      await assignRole(userId, roleId);
-      onAssigned();
-    } catch {
-      setErr("Error al asignar.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-0.5">
-      <select
-        aria-label="Asignar rol"
-        value=""
-        onChange={handleChange}
-        disabled={busy || rolesLoading || roles.length === 0}
-        className="text-[11px] rounded-lg border px-2 py-1 bg-transparent outline-none"
-        style={{ minWidth: 100 }}
-      >
-        <option value="" disabled>
-          {busy ? "Asignando…" : (currentRoleName ?? "Sin rol ▾")}
-        </option>
-        {roles.map((r) => (
-          <option key={r.id} value={r.id}>{r.name}</option>
-        ))}
-      </select>
-      {err && <span className="text-[10px]" style={{ color: "#FF4E00" }} role="alert">{err}</span>}
-    </div>
-  );
-}
-
-function InviteModal({
-  onClose, onSuccess, roles, rolesLoading, isSuperAdmin,
-}: {
-  onClose: () => void;
-  onSuccess: () => void;
-  roles: TenantRole[];
-  rolesLoading: boolean;
-  isSuperAdmin: boolean;
-}) {
-  const [email, setEmail] = useState("");
-  const [fullName, setFullName] = useState("");
-  // HU #10510 AC1/AC3: selección MÚLTIPLE de roles (antes single-value opcional). Al menos
-  // 1 rol es obligatorio para AdminCompany/OtAdmin — el SuperAdmin no usa este set (el rol de
-  // sistema lo fuerza el backend según el tenant destino).
-  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
-  const [selectedTenantId, setSelectedTenantId] = useState("");
-  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
-  const [transitOfficeTenants, setTransitOfficeTenants] = useState<TransitOfficeTenantItem[]>([]);
-  const [tenantsLoading, setTenantsLoading] = useState(false);
-  const [status, setStatus] = useState<"idle" | "loading" | "done" | "done_no_email">("idle");
-  const [error, setError] = useState<string | null>(null);
-  const [invitedEmail, setInvitedEmail] = useState("");
-
-  // El rol de sistema a asignar ya no se limita a AdminCompany: el backend lo resuelve
-  // según el tipo de tenant destino (ot_admin para organismos de tránsito).
-  const isSelectedTenantOt = transitOfficeTenants.some((t) => t.id === selectedTenantId);
-
-  useEffect(() => {
-    if (!isSuperAdmin) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTenantsLoading(true);
-    Promise.all([
-      fetchCompaniesIndex({ pageSize: 200 }),
-      fetchTransitOfficeTenants({ pageSize: 200 }),
-    ])
-      .then(([companiesResult, otResult]) => {
-        setCompanies(companiesResult.data.map((c: CompanyListItem) => ({ id: c.id, name: c.razonSocial })));
-        setTransitOfficeTenants(otResult.data);
-      })
-      .catch(() => { /* silencioso */ })
-      .finally(() => setTenantsLoading(false));
-  }, [isSuperAdmin]);
-
-  const isDone = status === "done" || status === "done_no_email";
-
-  function toggleRole(roleId: string) {
-    setSelectedRoleIds((prev) =>
-      prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId],
-    );
-  }
-
-  // AC3 — al menos un rol es obligatorio para AdminCompany/OtAdmin (el SuperAdmin no
-  // selecciona rol: el backend lo fuerza según el tenant destino).
-  const rolesRequiredAndMissing = !isSuperAdmin && selectedRoleIds.length === 0;
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-
-    if (isSuperAdmin && !selectedTenantId) {
-      setError("Debes seleccionar la empresa destino.");
-      return;
-    }
-
-    if (rolesRequiredAndMissing) {
-      setError("Selecciona al menos un rol para el usuario invitado.");
-      return;
-    }
-
-    setStatus("loading");
-    try {
-      const result = await createInvitation(
-        email.trim(),
-        fullName.trim(),
-        isSuperAdmin ? [] : selectedRoleIds,
-        isSuperAdmin ? selectedTenantId : undefined,
-      );
-      setInvitedEmail(result.email);
-      setStatus(result.emailSent ? "done" : "done_no_email");
-      onSuccess();
-    } catch (err) {
-      const apiErr = err as ApiError;
-      const s = apiErr.status;
-      const code = (apiErr.body as { code?: string } | undefined)?.code;
-      setError(
-        code === "NO_ROLES_SELECTED"
-          ? "Selecciona al menos un rol para el usuario invitado."
-          : s === 409
-            ? "Ya existe una invitación pendiente para este correo."
-            : s === 404
-              ? "El rol especificado no existe en el tenant."
-              : s === 400
-                ? "Debes seleccionar una empresa destino válida."
-                : "No se pudo enviar la invitación. Inténtalo de nuevo."
-      );
-      setStatus("idle");
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/40 backdrop-blur-sm px-4 py-6">
-      <div className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-md max-h-[90dvh] overflow-y-auto border">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-bold">Invitar usuario</h3>
-            <p className="text-xs opacity-70 mt-0.5">Asigna el acceso para colaborar dentro de FLIT.</p>
-          </div>
-          <button onClick={onClose} aria-label="Cerrar"><X className="h-5 w-5" /></button>
-        </div>
-
-        {isDone ? (
-          <div className="space-y-3">
-            <div className="rounded-xl p-3 border" style={{ borderColor: "#00DBD5", background: "rgba(0,219,213,0.06)" }}>
-              <p className="text-sm font-semibold" style={{ color: "#00DBD5" }}>Invitación enviada</p>
-              <p className="text-xs opacity-70 mt-0.5">Se enviaron instrucciones de activación a <strong>{invitedEmail}</strong>.</p>
-              {status === "done_no_email" && (
-                <p className="text-xs mt-1.5 font-medium" style={{ color: "#F9AC00" }}>
-                  El correo no pudo entregarse. El administrador puede reintentar más tarde.
-                </p>
-              )}
-            </div>
-            <div className="rounded-xl p-3 border bg-[rgba(0,219,213,0.06)]">
-              <p className="text-[10px] font-semibold uppercase opacity-60 mb-2">Onboarding</p>
-              <div className="flex items-center gap-2 text-xs">
-                {["Invitación enviada", "Activación", "Primer acceso"].map((step, i) => (
-                  <span key={step} className="flex items-center gap-1">
-                    <span className="h-5 w-5 rounded-full grid place-items-center text-[9px] font-bold" style={{ background: i === 0 ? "#00DBD5" : "#DFE5ED", color: i === 0 ? "#fff" : "#162744" }}>{i + 1}</span>
-                    <span className={i === 0 ? "font-semibold" : "opacity-60"}>{step}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-            <button onClick={onClose} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>Cerrar</button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-3">
-            {isSuperAdmin && (
-              <div>
-                <label htmlFor="invite-tenant" className="text-xs font-semibold block mb-1">Empresa u organismo destino *</label>
-                <select
-                  id="invite-tenant"
-                  required
-                  value={selectedTenantId}
-                  onChange={(e) => { setSelectedTenantId(e.target.value); setSelectedRoleIds([]); }}
-                  disabled={tenantsLoading}
-                  className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-                >
-                  <option value="">{tenantsLoading ? "Cargando…" : "Seleccionar destino…"}</option>
-                  {companies.length > 0 && (
-                    <optgroup label="Compañías">
-                      {companies.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {transitOfficeTenants.length > 0 && (
-                    <optgroup label="Organismos de Tránsito">
-                      {transitOfficeTenants.map((t) => (
-                        <option key={t.id} value={t.id}>{t.legalName} ({t.transitOfficeCode})</option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-              </div>
-            )}
-            <div>
-              <label htmlFor="invite-name" className="text-xs font-semibold block mb-1">Nombre completo *</label>
-              <input
-                id="invite-name"
-                type="text"
-                required
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Juan Pérez"
-                className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-              />
-            </div>
-            <div>
-              <label htmlFor="invite-email" className="text-xs font-semibold block mb-1">Correo electrónico *</label>
-              <input
-                id="invite-email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="correo@empresa.com"
-                className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-              />
-            </div>
-            {isSuperAdmin ? (
-              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs" style={{ borderColor: "#00DBD5", background: "rgba(0,219,213,0.06)" }}>
-                {isSelectedTenantOt
-                  ? <Landmark className="h-3.5 w-3.5 shrink-0" style={{ color: "#00DBD5" }} />
-                  : <Shield className="h-3.5 w-3.5 shrink-0" style={{ color: "#00DBD5" }} />}
-                <span>
-                  Se creará como{" "}
-                  <strong>{isSelectedTenantOt ? "Administrador OT" : "Administrador de Compañía"}</strong>
-                </span>
-              </div>
-            ) : rolesLoading ? (
-              <p className="text-xs opacity-60">Cargando roles…</p>
-            ) : roles.length > 0 ? (
-              // HU #10510 AC1/AC3: selección MÚLTIPLE de roles (checklist, mismo patrón visual
-              // de checkboxes que RbacAdmin.tsx). Al menos un rol es obligatorio — el botón de
-              // enviar se deshabilita y se muestra un mensaje de ayuda mientras no haya ninguno.
-              <fieldset>
-                <legend className="text-xs font-semibold block mb-1">Roles *</legend>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl border px-3 py-2.5">
-                  {roles.map((r) => (
-                    <label key={r.id} className="flex items-center gap-2 cursor-pointer text-xs">
-                      <input
-                        type="checkbox"
-                        checked={selectedRoleIds.includes(r.id)}
-                        onChange={() => toggleRole(r.id)}
-                        className="h-3.5 w-3.5 accent-[#557EFF]"
-                      />
-                      <span>{r.name}</span>
-                    </label>
-                  ))}
-                </div>
-                <p className="text-[10px] mt-1" style={{ color: rolesRequiredAndMissing ? "#FF4E00" : undefined, opacity: rolesRequiredAndMissing ? 1 : 0.6 }}>
-                  {rolesRequiredAndMissing ? "Selecciona al menos un rol." : "Puedes marcar varios roles."}
-                </p>
-              </fieldset>
-            ) : (
-              <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>
-                No hay roles configurados para tu empresa. Contacta al Super Admin.
-              </p>
-            )}
-            {error && (
-              <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>
-            )}
-            <div className="rounded-xl p-3 border bg-[rgba(0,219,213,0.06)]">
-              <p className="text-[10px] font-semibold uppercase opacity-60 mb-2">Onboarding</p>
-              <div className="flex items-center gap-2 text-xs">
-                {["Invitación enviada", "Activación", "Primer acceso"].map((step, i) => (
-                  <span key={step} className="flex items-center gap-1">
-                    <span className="h-5 w-5 rounded-full grid place-items-center text-[9px] font-bold" style={{ background: i === 0 ? "#00DBD5" : "#DFE5ED", color: i === 0 ? "#fff" : "#162744" }}>{i + 1}</span>
-                    <span className={i === 0 ? "font-semibold" : "opacity-60"}>{step}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-            <button
-              type="submit"
-              disabled={status === "loading" || (isSuperAdmin && !selectedTenantId) || rolesRequiredAndMissing}
-              className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60 transition"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-            >
-              {status === "loading" ? "Enviando…" : "Enviar Instrucciones"}
-            </button>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}

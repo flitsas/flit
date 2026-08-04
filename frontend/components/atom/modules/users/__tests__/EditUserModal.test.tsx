@@ -23,7 +23,7 @@ describe("EditUserModal (#10622)", () => {
     expect(nameInput).toHaveFocus();
   });
 
-  it("envía displayName/email recortados y rowVersion, y notifica onSaved en éxito", async () => {
+  it("envía displayName recortado y rowVersion, y notifica onSaved en éxito", async () => {
     const ue = userEvent.setup();
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const onSaved = vi.fn();
@@ -37,11 +37,30 @@ describe("EditUserModal (#10622)", () => {
     await waitFor(() =>
       expect(onUpdate).toHaveBeenCalledWith("user-1", {
         displayName: "Laura García Ruiz",
-        email: "laura@flit.local",
         rowVersion: 3,
       }),
     );
     expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  // El correo es la credencial de acceso: se muestra pero no se edita, y no viaja en el PATCH.
+  it("muestra el correo en solo lectura y no lo envía al guardar", async () => {
+    const ue = userEvent.setup();
+    const onUpdate = vi.fn().mockResolvedValue(undefined);
+    render(<EditUserModal user={user} onClose={vi.fn()} onSaved={vi.fn()} onUpdate={onUpdate} />);
+
+    const emailInput = screen.getByLabelText(/correo electrónico/i);
+    expect(emailInput).toHaveValue("laura@flit.local");
+    expect(emailInput).toHaveAttribute("readonly");
+
+    await ue.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    await waitFor(() =>
+      expect(onUpdate).toHaveBeenCalledWith("user-1", {
+        displayName: "Laura García",
+        rowVersion: 3,
+      }),
+    );
   });
 
   it("AC2: mapea el 409 USER_ALREADY_EXISTS sin perder lo escrito en el formulario", async () => {
@@ -52,14 +71,14 @@ describe("EditUserModal (#10622)", () => {
     const onSaved = vi.fn();
     render(<EditUserModal user={user} onClose={vi.fn()} onSaved={onSaved} onUpdate={onUpdate} />);
 
-    const emailInput = screen.getByLabelText(/correo electrónico/i);
-    await ue.clear(emailInput);
-    await ue.type(emailInput, "otro@flit.local");
+    const nameInput = screen.getByLabelText(/nombre completo/i);
+    await ue.clear(nameInput);
+    await ue.type(nameInput, "Laura G.");
     await ue.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/ese correo ya está en uso/i);
     // No se pierde lo escrito.
-    expect(screen.getByLabelText(/correo electrónico/i)).toHaveValue("otro@flit.local");
+    expect(screen.getByLabelText(/nombre completo/i)).toHaveValue("Laura G.");
     expect(onSaved).not.toHaveBeenCalled();
   });
 
@@ -117,5 +136,86 @@ describe("EditUserModal (#10622)", () => {
 
     await ue.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Al editar hay que ver a qué perfil pertenece el usuario (para saber en qué relación se está
+// parado) y el selector de rol debe ofrecer solo los roles de ese perfil.
+describe("EditUserModal — perfil y roles del perfil", () => {
+  const catalogo = [
+    { id: "r-super", code: "SuperAdmin", name: "Super Administrador", description: null, isSystem: true, permissionCount: 0, createdAt: "" },
+    { id: "r-admin", code: "AdminCompany", name: "Administrador de Compañía", description: null, isSystem: true, permissionCount: 0, createdAt: "" },
+    { id: "r-radicador", code: "Radicador", name: "Radicador", description: null, isSystem: false, permissionCount: 0, createdAt: "" },
+  ];
+
+  function renderWithRoles(profile: "FLIT" | "GESTOR" | "OT", over = {}) {
+    const onAssignRole = vi.fn().mockResolvedValue(undefined);
+    render(
+      <EditUserModal
+        user={user}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        onUpdate={vi.fn()}
+        profile={profile}
+        roleSection={{
+          currentRoleName: "Radicador",
+          currentRoleId: "r-radicador",
+          roles: catalogo,
+          rolesLoading: false,
+          onAssignRole,
+          ...over,
+        }}
+      />,
+    );
+    return { onAssignRole };
+  }
+
+  it("muestra el perfil del usuario que se está editando", () => {
+    renderWithRoles("GESTOR");
+    expect(screen.getByText("Perfil")).toBeInTheDocument();
+    expect(screen.getByText("Gestor")).toBeInTheDocument();
+    expect(screen.getByText(/empresa cliente que radica trámites/i)).toBeInTheDocument();
+  });
+
+  it("muestra el perfil aunque no haya sección de rol", () => {
+    render(
+      <EditUserModal user={user} onClose={vi.fn()} onSaved={vi.fn()} onUpdate={vi.fn()} profile="FLIT" />,
+    );
+    expect(screen.getByText("Perfil")).toBeInTheDocument();
+    expect(screen.getByText("FLIT")).toBeInTheDocument();
+  });
+
+  it("no ofrece el rol Super Administrador al editar un Gestor", () => {
+    renderWithRoles("GESTOR");
+    const select = screen.getByLabelText(/cambiar rol del usuario/i);
+    const opciones = Array.from(select.querySelectorAll("option")).map((o) => o.textContent);
+    expect(opciones).toContain("Radicador");
+    expect(opciones).toContain("Administrador de Compañía");
+    expect(opciones).not.toContain("Super Administrador");
+  });
+
+  it("tampoco lo ofrece al editar un usuario de un organismo", () => {
+    renderWithRoles("OT");
+    const select = screen.getByLabelText(/cambiar rol del usuario/i);
+    const opciones = Array.from(select.querySelectorAll("option")).map((o) => o.textContent);
+    expect(opciones).not.toContain("Super Administrador");
+  });
+
+  it("mantiene visible el rol vigente aunque quede fuera del catálogo del perfil", () => {
+    renderWithRoles("GESTOR", { currentRoleId: "r-super", currentRoleName: "Super Administrador" });
+    const select = screen.getByLabelText(/cambiar rol del usuario/i) as HTMLSelectElement;
+    // Se ve como opción deshabilitada —no en blanco— pero no se puede volver a elegir.
+    const actual = Array.from(select.querySelectorAll("option")).find(
+      (o) => o.textContent === "Super Administrador",
+    );
+    expect(actual).toBeDefined();
+    expect(actual).toBeDisabled();
+    expect(select.value).toBe("");
+  });
+
+  it("avisa cuando el perfil no tiene roles disponibles", () => {
+    renderWithRoles("GESTOR", { roles: [catalogo[0]] });
+    expect(screen.getByText(/no hay roles disponibles para este perfil/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/cambiar rol del usuario/i)).toBeDisabled();
   });
 });

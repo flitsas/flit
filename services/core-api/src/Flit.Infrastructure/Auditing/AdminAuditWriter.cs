@@ -41,8 +41,10 @@ internal sealed class AdminAuditWriter : IAdminAuditWriter
                 // Grano por operación (no por campo): no hay un field_name concreto en las
                 // operaciones administrativas/seguridad, se usa la operación misma.
                 FieldName = entry.Operation,
-                OldValue = null,
-                NewValue = null,
+                // Detalle del cambio cuando el endpoint lo aportó (AdminAuditDetailContext);
+                // null para las operaciones que no tienen un antes/después que registrar.
+                OldValue = entry.OldValue,
+                NewValue = entry.NewValue,
                 ChangedAt = DateTimeOffset.UtcNow,
                 ChangedBy = entry.ActorUserId,
                 CorrelationId = null,

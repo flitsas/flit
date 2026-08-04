@@ -58,50 +58,121 @@ public static class SecurityEndpoints
             Guid targetTenantId;
             IReadOnlyList<Guid> roleIds;
 
+            // Un usuario tiene UN rol: lo que define lo que puede hacer son los permisos de ese
+            // rol, no acumular roles. RoleIds sigue siendo lista por compatibilidad con la API
+            // de la HU #10506, pero solo se admite un elemento.
+            if ((request.RoleIds ?? []).Distinct().Count() > 1)
+                return Results.Json(
+                    new ErrorResponse(
+                        "SINGLE_ROLE_ONLY",
+                        "Un usuario solo puede tener un rol. Selecciona uno."),
+                    statusCode: StatusCodes.Status400BadRequest);
+
             if (isSuperAdmin)
             {
-                // SuperAdmin DEBE especificar empresa destino y no puede invitar a su propio tenant
-                if (!request.TargetTenantId.HasValue)
-                    return Results.Json(
-                        new ErrorResponse("TARGET_TENANT_REQUIRED", "El SuperAdmin debe especificar la empresa destino."),
-                        statusCode: StatusCodes.Status400BadRequest);
+                var requestedRoleIds = (request.RoleIds ?? []).Distinct().ToList();
 
-                if (request.TargetTenantId.Value == callerTenantId)
-                    return Results.Json(
-                        new ErrorResponse("CANNOT_INVITE_TO_OWN_TENANT", "El SuperAdmin no puede invitar usuarios a su propio tenant."),
-                        statusCode: StatusCodes.Status400BadRequest);
-
-                targetTenantId = request.TargetTenantId.Value;
-
-                // Rol de sistema forzado según el tipo de tenant destino (refactor adminOT):
-                // tenants OT (con TransitOfficeProfile asociado) reciben ot_admin; el resto
-                // (compañías) sigue recibiendo AdminCompany, comportamiento sin cambios.
-                var isOtTenant = await db.TransitOfficeProfiles
+                // ── Perfil FLIT ────────────────────────────────────────────────────────────
+                // Invitar a otro miembro del equipo interno de FLIT. No lleva compañía ni OT:
+                // el usuario vive en el tenant interno del propio SuperAdmin, que es justo el
+                // caso que CANNOT_INVITE_TO_OWN_TENANT bloqueaba y que dejaba el perfil FLIT
+                // sin ninguna ruta de creación. El rol SuperAdmin es transversal a la
+                // plataforma; no tiene target_entity_type propio (el CHECK de BD solo admite
+                // COMPANY | TRANSIT_OFFICE), así que vive con COMPANY — ver UserProfiles.
+                var superAdminRole = await db.Roles
                     .AsNoTracking()
-                    .AnyAsync(p => p.TenantId == targetTenantId, cancellationToken);
-                var targetRoleCode = isOtTenant
-                    ? AdminAuthorization.OtAdminRole
-                    : AdminAuthorization.AdminCompanyRole;
+                    .FirstOrDefaultAsync(
+                        r => r.Code == AdminAuthorization.SuperAdminRole && r.IsActive && r.DeletedAt == null,
+                        cancellationToken);
 
-                // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id),
-                // así que el rol de sistema se resuelve por Code únicamente (una sola fila por
-                // (code, target_entity_type) en todo el sistema).
-                var adminRole = await db.Roles
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(r => r.Code == targetRoleCode && r.IsActive && r.DeletedAt == null, cancellationToken);
+                var isFlitInvite = superAdminRole is not null && requestedRoleIds.Contains(superAdminRole.Id);
 
-                if (adminRole is null)
-                    return Results.Json(
-                        new ErrorResponse(
-                            "ADMIN_ROLE_NOT_FOUND",
-                            isOtTenant
-                                ? "El organismo de tránsito destino no tiene configurado el rol ot_admin. Verifica que se creó correctamente."
-                                : "La empresa destino no tiene configurado el rol AdminCompany. Verifica que la empresa se creó correctamente."),
-                        statusCode: StatusCodes.Status409Conflict);
+                if (isFlitInvite)
+                {
+                    if (request.TargetTenantId is { } explicitTenant && explicitTenant != callerTenantId)
+                        return Results.Json(
+                            new ErrorResponse(
+                                "FLIT_PROFILE_HAS_NO_TENANT",
+                                "El perfil FLIT no pertenece a una compañía ni a un organismo de tránsito."),
+                            statusCode: StatusCodes.Status400BadRequest);
 
-                // SuperAdmin siempre fuerza un único rol de sistema según el tipo de tenant
-                // destino — roleIds del body se ignora en esta rama (comportamiento sin cambios).
-                roleIds = [adminRole.Id];
+                    targetTenantId = callerTenantId;
+                    roleIds = [superAdminRole!.Id];
+                }
+                else
+                {
+                    // Perfiles Gestor / OT: el SuperAdmin SÍ debe decir a qué tenant invita.
+                    if (!request.TargetTenantId.HasValue)
+                        return Results.Json(
+                            new ErrorResponse("TARGET_TENANT_REQUIRED", "El SuperAdmin debe especificar la empresa destino."),
+                            statusCode: StatusCodes.Status400BadRequest);
+
+                    if (request.TargetTenantId.Value == callerTenantId)
+                        return Results.Json(
+                            new ErrorResponse("CANNOT_INVITE_TO_OWN_TENANT", "El SuperAdmin no puede invitar usuarios a su propio tenant."),
+                            statusCode: StatusCodes.Status400BadRequest);
+
+                    targetTenantId = request.TargetTenantId.Value;
+
+                    var isOtTenant = await db.TransitOfficeProfiles
+                        .AsNoTracking()
+                        .AnyAsync(p => p.TenantId == targetTenantId, cancellationToken);
+                    var expectedTargetEntityType = isOtTenant ? TenantTypes.TransitOffice : TenantTypes.Company;
+
+                    if (requestedRoleIds.Count == 0)
+                    {
+                        // Sin selección explícita se conserva el comportamiento histórico: rol de
+                        // sistema forzado según el tipo de tenant destino. Mantiene compatibles a
+                        // los clientes que nunca enviaron roleIds en esta rama.
+                        var targetRoleCode = isOtTenant
+                            ? AdminAuthorization.OtAdminRole
+                            : AdminAuthorization.AdminCompanyRole;
+
+                        // HU #10505 / ADR-0023: security.roles es un catálogo GLOBAL (sin tenant_id),
+                        // así que el rol de sistema se resuelve por Code únicamente (una sola fila por
+                        // (code, target_entity_type) en todo el sistema).
+                        var adminRole = await db.Roles
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(r => r.Code == targetRoleCode && r.IsActive && r.DeletedAt == null, cancellationToken);
+
+                        if (adminRole is null)
+                            return Results.Json(
+                                new ErrorResponse(
+                                    "ADMIN_ROLE_NOT_FOUND",
+                                    isOtTenant
+                                        ? "El organismo de tránsito destino no tiene configurado el rol ot_admin. Verifica que se creó correctamente."
+                                        : "La empresa destino no tiene configurado el rol AdminCompany. Verifica que la empresa se creó correctamente."),
+                                statusCode: StatusCodes.Status409Conflict);
+
+                        roleIds = [adminRole.Id];
+                    }
+                    else
+                    {
+                        // Selección explícita: se valida que cada rol exista, esté activo y aplique
+                        // al tipo de tenant destino, para no crear asignaciones incoherentes que
+                        // AssignRoleHandler rechazaría después (RoleTargetEntityTypeMismatch).
+                        var selectedRoles = await db.Roles
+                            .AsNoTracking()
+                            .Where(r => requestedRoleIds.Contains(r.Id) && r.IsActive && r.DeletedAt == null)
+                            .ToListAsync(cancellationToken);
+
+                        if (selectedRoles.Count != requestedRoleIds.Count)
+                            return Results.Json(
+                                new ErrorResponse("ROLE_NOT_FOUND", "Alguno de los roles seleccionados no existe o está inactivo."),
+                                statusCode: StatusCodes.Status404NotFound);
+
+                        if (selectedRoles.Exists(r => r.TargetEntityType != expectedTargetEntityType))
+                            return Results.Json(
+                                new ErrorResponse(
+                                    "ROLE_TARGET_ENTITY_TYPE_MISMATCH",
+                                    isOtTenant
+                                        ? "Alguno de los roles seleccionados no aplica a un organismo de tránsito."
+                                        : "Alguno de los roles seleccionados no aplica a una compañía."),
+                                statusCode: StatusCodes.Status409Conflict);
+
+                        roleIds = requestedRoleIds;
+                    }
+                }
             }
             else
             {
@@ -109,6 +180,13 @@ public static class SecurityEndpoints
                 // HU #10506 AC4/AC5: roleIds reemplaza el RoleId? nullable — seleccionar al
                 // menos un rol es OBLIGATORIO (validado por el handler → NoRolesSelectedException).
                 roleIds = request.RoleIds ?? [];
+
+                // El rol SuperAdmin pertenece solo al perfil FLIT. Su TargetEntityType es COMPANY
+                // (el CHECK de BD no admite un valor propio), así que ninguna de las validaciones
+                // de coherencia lo descarta: sin esto un AdminCompany podría mandarlo en roleIds
+                // y crear un SuperAdmin dentro de su propia compañía.
+                if (await ContainsSuperAdminRoleAsync(db, roleIds, cancellationToken))
+                    return SuperAdminRoleNotAssignable();
             }
 
             try
@@ -331,6 +409,8 @@ public static class SecurityEndpoints
             [FromBody] AssignRoleRequest request,
             ClaimsPrincipal caller,
             AssignRoleHandler handler,
+            FlitDbContext db,
+            HttpContext httpContext,
             ILoggerFactory lf,
             CancellationToken cancellationToken) =>
         {
@@ -344,11 +424,44 @@ public static class SecurityEndpoints
             if (!Guid.TryParse(subClaim, out var callerId))
                 return Results.Unauthorized();
 
+            // Solo el perfil FLIT lleva el rol SuperAdmin, y solo un SuperAdmin lo reparte (en su
+            // propio tenant interno). Para cualquier otro caller —AdminCompany, ot_admin— esto
+            // sería escalada de privilegios: el rol es de TargetEntityType COMPANY, así que
+            // AssignRoleHandler lo aceptaría sin más dentro de una compañía.
+            var callerIsSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+            if (!callerIsSuperAdmin && await ContainsSuperAdminRoleAsync(db, [request.RoleId], cancellationToken))
+                return SuperAdminRoleNotAssignable();
+
+            // Roles vigentes ANTES del cambio, para que el rastro diga qué rol tenía y cuál
+            // quedó — un "assign_role" a secas no le sirve a quien audita.
+            var rolesBefore = await (
+                from a in db.UserRoleAssignments.AsNoTracking()
+                join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+                // Sin filtrar por tenant: el SuperAdmin opera desde el tenant interno de FLIT, así
+                // que filtrar por el suyo dejaría el rastro sin el "antes" en el caso más común.
+                where a.UserId == userId && a.DeletedAt == null
+                select r.Name
+            ).ToListAsync(cancellationToken);
+
             try
             {
                 await handler.HandleAsync(
-                    new AssignRoleCommand(tenantId, userId, request.RoleId, callerId),
+                    new AssignRoleCommand(tenantId, userId, request.RoleId, callerId, callerIsSuperAdmin),
                     cancellationToken);
+
+                var assignedRoleName = await db.Roles
+                    .AsNoTracking()
+                    .Where(r => r.Id == request.RoleId)
+                    .Select(r => r.Name)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                AdminAuditDetailContext.SetChange(
+                    httpContext,
+                    new { roles = rolesBefore },
+                    new { rolAsignado = assignedRoleName ?? request.RoleId.ToString() });
+
                 return Results.Ok();
             }
             catch (SelfRoleAssignmentException)
@@ -391,7 +504,7 @@ public static class SecurityEndpoints
                     new ErrorResponse("ASSIGN_ROLE_ERROR", ex.Message),
                     statusCode: StatusCodes.Status500InternalServerError);
             }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+        }).RequireAuthorization(AdminAuthorization.UserAdminPolicy)
           .AddEndpointFilter(new AdminAuditFilter(
               AuditVocabulary.Modules.Roles, AuditVocabulary.Operations.AssignRole, "user", "USER", "userId"));
 
@@ -402,6 +515,8 @@ public static class SecurityEndpoints
             [FromBody] UpdateUserRequest request,
             ClaimsPrincipal caller,
             UpdateUserHandler handler,
+            FlitDbContext db,
+            HttpContext httpContext,
             ILoggerFactory lf,
             CancellationToken cancellationToken) =>
         {
@@ -421,12 +536,33 @@ public static class SecurityEndpoints
                 c.Type == AdminAuthorization.RoleClaimType
                 && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
 
+            // Detalle para la auditoría: se lee el estado ANTES de editar para que el rastro
+            // pueda responder "qué cambió" y no solo "hubo un update" (AdminAuditDetailContext).
+            var before = await db.Users
+                .AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => new { u.DisplayName, u.Email })
+                .FirstOrDefaultAsync(cancellationToken);
+
             try
             {
                 await handler.HandleAsync(
                     new UpdateUserCommand(
                         tenantId, userId, request.DisplayName, request.Email, request.RowVersion, callerId, isSuperAdmin),
                     cancellationToken);
+
+                if (before is not null)
+                {
+                    AdminAuditDetailContext.SetChange(
+                        httpContext,
+                        new { nombre = before.DisplayName, correo = before.Email },
+                        new
+                        {
+                            nombre = request.DisplayName ?? before.DisplayName,
+                            correo = request.Email ?? before.Email,
+                        });
+                }
+
                 return Results.Ok();
             }
             catch (TargetUserNotFoundException)
@@ -497,9 +633,14 @@ public static class SecurityEndpoints
             if (!Guid.TryParse(subClaim, out var callerId))
                 return Results.Unauthorized();
 
+            var callerIsSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+
             try
             {
-                await handler.HandleAsync(userId, tenantId, roleId, callerId, cancellationToken);
+                await handler.HandleAsync(
+                    userId, tenantId, roleId, callerId, cancellationToken, callerIsSuperAdmin);
                 return Results.NoContent();
             }
             catch (RoleAssignmentNotFoundException)
@@ -508,7 +649,7 @@ public static class SecurityEndpoints
                     new ErrorResponse("ROLE_ASSIGNMENT_NOT_FOUND", "El usuario no tiene ese rol asignado activamente."),
                     statusCode: StatusCodes.Status404NotFound);
             }
-        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+        }).RequireAuthorization(AdminAuthorization.UserAdminPolicy)
           .AddEndpointFilter(new AdminAuditFilter(
               AuditVocabulary.Modules.Roles, AuditVocabulary.Operations.RevokeRole, "user", "USER", "userId"));
 
@@ -547,6 +688,9 @@ public static class SecurityEndpoints
                     join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
                     join t in db.Tenants.AsNoTracking() on a.TenantId equals t.Id
                     where a.DeletedAt == null && u.DeletedAt != null
+                    // Más reciente primero: si quedaran datos multi-rol previos a la migración,
+                    // el colapso de WithProfile se queda con el último rol asignado.
+                    orderby a.AssignedAt descending
                     select new TenantUserDto(
                         u.Id.ToString(),
                         u.DisplayName,
@@ -560,7 +704,10 @@ public static class SecurityEndpoints
                         t.Id.ToString(),
                         t.LegalName,
                         u.RowVersion,
-                        u.DeletedAt)
+                        u.DeletedAt,
+                        db.TransitOfficeProfiles.Any(p => p.TenantId == t.Id)
+                            ? TenantTypes.TransitOffice
+                            : TenantTypes.Company)
                 ).ToListAsync(cancellationToken);
 
                 var deletedWithoutRole = await (
@@ -581,12 +728,14 @@ public static class SecurityEndpoints
                         t.Id.ToString(),
                         t.LegalName,
                         u.RowVersion,
-                        u.DeletedAt)
+                        u.DeletedAt,
+                        db.TransitOfficeProfiles.Any(p => p.TenantId == t.Id)
+                            ? TenantTypes.TransitOffice
+                            : TenantTypes.Company)
                 ).ToListAsync(cancellationToken);
 
-                return Results.Ok(deletedWithRole.Concat(deletedWithoutRole)
-                    .OrderByDescending(x => x.DeletedAt)
-                    .ToList());
+                return Results.Ok(WithProfile(deletedWithRole.Concat(deletedWithoutRole)
+                    .OrderByDescending(x => x.DeletedAt)));
             }
 
             var now = DateTimeOffset.UtcNow;
@@ -600,6 +749,7 @@ public static class SecurityEndpoints
                     join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
                     join t in db.Tenants.AsNoTracking() on a.TenantId equals t.Id
                     where a.TenantId != callerTenantId && a.DeletedAt == null && u.DeletedAt == null
+                    orderby a.AssignedAt descending
                     select new TenantUserDto(
                         u.Id.ToString(),
                         u.DisplayName,
@@ -612,7 +762,11 @@ public static class SecurityEndpoints
                         false,
                         t.Id.ToString(),
                         t.LegalName,
-                        u.RowVersion)
+                        u.RowVersion,
+                        null,
+                        db.TransitOfficeProfiles.Any(p => p.TenantId == t.Id)
+                            ? TenantTypes.TransitOffice
+                            : TenantTypes.Company)
                 ).ToListAsync(cancellationToken);
 
                 // SuperAdmin also sees users that belong to other tenants but have no role assignment
@@ -634,7 +788,11 @@ public static class SecurityEndpoints
                         false,
                         t.Id.ToString(),
                         t.LegalName,
-                        u.RowVersion)
+                        u.RowVersion,
+                        null,
+                        db.TransitOfficeProfiles.Any(p => p.TenantId == t.Id)
+                            ? TenantTypes.TransitOffice
+                            : TenantTypes.Company)
                 ).ToListAsync(cancellationToken);
 
                 var allPending = await (
@@ -646,28 +804,101 @@ public static class SecurityEndpoints
                         i.Id.ToString(),
                         i.FullName,
                         i.Email,
-                        null,
-                        null,
-                        null,
+                        // El rol de una invitación pendiente ya está decidido: mostrarlo evita
+                        // que la columna Perfil / Rol quede en "—" hasta que el usuario active.
+                        db.Roles.Where(r => r.Id == i.RoleId).Select(r => r.Name).FirstOrDefault(),
+                        db.Roles.Where(r => r.Id == i.RoleId).Select(r => r.Code).FirstOrDefault(),
+                        i.RoleId,
                         "pending",
                         i.CreatedAt,
                         false,
                         t.Id.ToString(),
                         t.LegalName,
-                        0L)
+                        0L,
+                        null,
+                        db.TransitOfficeProfiles.Any(p => p.TenantId == t.Id)
+                            ? TenantTypes.TransitOffice
+                            : TenantTypes.Company)
                 ).ToListAsync(cancellationToken);
 
-                return Results.Ok(allUsers.Concat(allUsersWithoutRole).Concat(allPending).ToList());
+                // Perfil FLIT: los usuarios del propio tenant interno quedaban fuera del listado
+                // (`a.TenantId != callerTenantId`), así que un SuperAdmin recién creado era
+                // invisible para quien lo creó. Se incluyen SOLO los que tienen el rol de sistema
+                // SuperAdmin — el resto del tenant interno sigue sin exponerse.
+                var flitUsers = await (
+                    from a in db.UserRoleAssignments.AsNoTracking()
+                    join u in db.Users.AsNoTracking() on a.UserId equals u.Id
+                    join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
+                    join t in db.Tenants.AsNoTracking() on a.TenantId equals t.Id
+                    where a.TenantId == callerTenantId
+                          && a.DeletedAt == null
+                          && u.DeletedAt == null
+                          && r.Code == AdminAuthorization.SuperAdminRole
+                    select new TenantUserDto(
+                        u.Id.ToString(),
+                        u.DisplayName,
+                        u.Email,
+                        r.Name,
+                        r.Code,
+                        a.RoleId,
+                        u.Status == "active" ? "active" : "inactive",
+                        null,
+                        false,
+                        t.Id.ToString(),
+                        t.LegalName,
+                        u.RowVersion,
+                        null,
+                        TenantTypes.Company)
+                ).ToListAsync(cancellationToken);
+
+                // Invitaciones pendientes al tenant interno: por construcción solo pueden ser de
+                // perfil FLIT (invitar a otro tenant propio con rol no-SuperAdmin está bloqueado).
+                var flitPending = await (
+                    from i in db.UserInvitations.AsNoTracking()
+                    join t in db.Tenants.AsNoTracking() on i.TenantId equals t.Id
+                    where i.TenantId == callerTenantId && i.Status == "pending"
+                    orderby i.CreatedAt descending
+                    select new TenantUserDto(
+                        i.Id.ToString(),
+                        i.FullName,
+                        i.Email,
+                        db.Roles.Where(r => r.Id == i.RoleId).Select(r => r.Name).FirstOrDefault(),
+                        db.Roles.Where(r => r.Id == i.RoleId).Select(r => r.Code).FirstOrDefault(),
+                        i.RoleId,
+                        "pending",
+                        i.CreatedAt,
+                        false,
+                        t.Id.ToString(),
+                        t.LegalName,
+                        0L,
+                        null,
+                        TenantTypes.Company)
+                ).ToListAsync(cancellationToken);
+
+                return Results.Ok(WithProfile(allUsers
+                    .Concat(allUsersWithoutRole)
+                    .Concat(allPending)
+                    .Concat(flitUsers)
+                    .Concat(flitPending)));
             }
 
             // AdminCompany: solo ve su tenant
             var tenantId = callerTenantId;
+
+            // El perfil (Gestor vs OT) de todo este listado lo fija el tenant del caller: un
+            // AdminCompany/ot_admin solo ve usuarios de su propio tenant.
+            var callerTenantType = await db.TransitOfficeProfiles
+                .AsNoTracking()
+                .AnyAsync(p => p.TenantId == tenantId, cancellationToken)
+                ? TenantTypes.TransitOffice
+                : TenantTypes.Company;
 
             var activeUsers = await (
                 from a in db.UserRoleAssignments.AsNoTracking()
                 join u in db.Users.AsNoTracking() on a.UserId equals u.Id
                 join r in db.Roles.AsNoTracking() on a.RoleId equals r.Id
                 where a.TenantId == tenantId && a.DeletedAt == null && u.DeletedAt == null
+                orderby a.AssignedAt descending
                 select new TenantUserDto(
                     u.Id.ToString(),
                     u.DisplayName,
@@ -681,7 +912,9 @@ public static class SecurityEndpoints
                         && s.DeletedAt == null && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now)),
                     null,
                     null,
-                    u.RowVersion)
+                    u.RowVersion,
+                    null,
+                    callerTenantType)
             ).ToListAsync(cancellationToken);
 
             var usersWithoutRole = await (
@@ -702,7 +935,9 @@ public static class SecurityEndpoints
                         && s.DeletedAt == null && s.StartsAt <= now && (s.EndsAt == null || s.EndsAt >= now)),
                     null,
                     null,
-                    u.RowVersion)
+                    u.RowVersion,
+                    null,
+                    callerTenantType)
             ).ToListAsync(cancellationToken);
 
             var pending = await db.UserInvitations
@@ -713,23 +948,25 @@ public static class SecurityEndpoints
                     x.Id.ToString(),
                     x.FullName,
                     x.Email,
-                    null,
-                    null,
-                    null,
+                    db.Roles.Where(r => r.Id == x.RoleId).Select(r => r.Name).FirstOrDefault(),
+                    db.Roles.Where(r => r.Id == x.RoleId).Select(r => r.Code).FirstOrDefault(),
+                    x.RoleId,
                     "pending",
                     x.CreatedAt,
                     false,
                     null,
                     null,
-                    0L))
+                    0L,
+                    null,
+                    callerTenantType))
                 .ToListAsync(cancellationToken);
 
-            return Results.Ok(activeUsers.Concat(usersWithoutRole).Concat(pending).ToList());
+            return Results.Ok(WithProfile(activeUsers.Concat(usersWithoutRole).Concat(pending)));
         });
 
-        // POST /security/users/{userId}/suspend — SuperAdmin suspende (temporal, con
-        // EndsAt) o desactiva indefinidamente (sin EndsAt) a un usuario (HU #10619).
-        // Bloquear/desactivar es EXCLUSIVO de SuperAdmin: AdminCompany/ot_admin no pueden.
+        // POST /security/users/{userId}/suspend — suspende (temporal, con EndsAt) o desactiva
+        // indefinidamente (sin EndsAt). AdminCompany solo su tenant; SuperAdmin cualquiera
+        // (handler AC3). Antes era SuperAdmin-only; se reabre a AdminCompanyPolicy (auth-parity).
         group.MapPost("/users/{userId:guid}/suspend", async (
             Guid userId,
             [FromBody] SuspendUserRequest request,
@@ -778,12 +1015,12 @@ public static class SecurityEndpoints
                 return Results.Conflict(new ErrorResponse(
                     "LAST_ACTIVE_ADMIN", "No es posible suspender/desactivar al último administrador activo."));
             }
-        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
           .AddEndpointFilter(new AdminAuditFilter(
               AuditVocabulary.Modules.Users, AuditVocabulary.Operations.Suspend, "user", "USER", "userId"));
 
         // DELETE /security/users/{userId}/suspend — levanta la suspensión/desactivación activa.
-        // Reactivar es EXCLUSIVO de SuperAdmin (contraparte de suspender).
+        // Misma policy que suspender (AdminCompany su tenant / SuperAdmin).
         group.MapDelete("/users/{userId:guid}/suspend", async (
             Guid userId,
             ClaimsPrincipal caller,
@@ -824,14 +1061,13 @@ public static class SecurityEndpoints
             {
                 return Results.NotFound(new ErrorResponse("NO_ACTIVE_SUSPENSION", "El usuario no tiene una suspensión activa."));
             }
-        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
           .AddEndpointFilter(new AdminAuditFilter(
               AuditVocabulary.Modules.Users, AuditVocabulary.Operations.Unsuspend, "user", "USER", "userId"));
 
         // DELETE /security/users/{userId} — elimina (soft-delete reversible) a un usuario.
-        // Eliminar es EXCLUSIVO de SuperAdmin (AdminCompany/ot_admin no pueden). rowVersion
-        // obligatorio (concurrencia optimista, igual que PATCH /users/{userId}). Restaurar
-        // también es EXCLUSIVO de SuperAdmin — ver POST /api/v1/superadmin/users/{userId}/restore.
+        // AdminCompany solo su tenant; SuperAdmin cualquiera. Restaurar sigue EXCLUSIVO de
+        // SuperAdmin — ver POST /api/v1/superadmin/users/{userId}/restore. rowVersion obligatorio.
         group.MapDelete("/users/{userId:guid}", async (
             Guid userId,
             [FromBody] DeleteUserRequest request,
@@ -886,7 +1122,7 @@ public static class SecurityEndpoints
                     new ErrorResponse("CONCURRENCY_CONFLICT", ex.Message),
                     statusCode: StatusCodes.Status409Conflict);
             }
-        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
           .AddEndpointFilter(new AdminAuditFilter(
               AuditVocabulary.Modules.Users, AuditVocabulary.Operations.DeleteUser, "user", "USER", "userId"));
 
@@ -912,7 +1148,57 @@ public static class SecurityEndpoints
 
     // HU #10624 AC3 — DeletedAt opcional (default null): usado por la vista "Eliminados" de
     // SuperAdmin (?onlyDeleted=true); el listado normal no lo popula (siempre null).
-    private sealed record TenantUserDto(string Id, string FullName, string Email, string? Role, string? RoleCode, Guid? RoleId, string Status, DateTimeOffset? CreatedAt, bool IsSuspended, string? TenantId, string? TenantName, long RowVersion, DateTimeOffset? DeletedAt = null);
+    //
+    // TenantType/Profile: el perfil funcional (contexto-perfiles.md) lo resuelve el SERVIDOR, no
+    // el frontend. Antes la UI lo infería del roleCode y cualquier rol personalizado de un tenant
+    // OT terminaba etiquetado como Gestor. TenantType se proyecta en SQL (presencia de
+    // TransitOfficeProfile) y Profile se deriva de (roleCode, tenantType) con ResolveProfile.
+    private sealed record TenantUserDto(string Id, string FullName, string Email, string? Role, string? RoleCode, Guid? RoleId, string Status, DateTimeOffset? CreatedAt, bool IsSuspended, string? TenantId, string? TenantName, long RowVersion, DateTimeOffset? DeletedAt = null, string? TenantType = null, string? Profile = null);
+
+    /// <summary>
+    /// Perfil funcional FLIT — <c>FLIT</c> | <c>OT</c> | <c>GESTOR</c> (ver context/contexto-perfiles.md).
+    /// El rol de sistema SuperAdmin es transversal a la plataforma y manda sobre el tipo de tenant;
+    /// en el resto de casos decide el tenant al que pertenece la asignación.
+    /// </summary>
+    private static string ResolveProfile(string? roleCode, string? tenantType) =>
+        string.Equals(roleCode, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase)
+            ? UserProfiles.Flit
+            : string.Equals(tenantType, TenantTypes.TransitOffice, StringComparison.OrdinalIgnoreCase)
+                ? UserProfiles.TransitOffice
+                : UserProfiles.Manager;
+
+    /// <summary>
+    /// Resuelve el perfil de cada fila y deja UNA fila por (usuario, tenant).
+    ///
+    /// El listado se arma desde <c>user_role_assignments</c>, así que un usuario con dos
+    /// asignaciones activas salía duplicado. Con el rol único eso ya no debería pasar —lo
+    /// garantiza <c>uq_ura_active_user_tenant</c>—, pero el colapso se queda como red: los datos
+    /// anteriores a la migración siguen existiendo en entornos que aún no la corrieron. La clave
+    /// incluye el tenant porque un usuario sí puede pertenecer a más de uno, con un rol en cada.
+    /// </summary>
+    private static List<TenantUserDto> WithProfile(IEnumerable<TenantUserDto> rows) =>
+        rows.Select(r => r with { Profile = ResolveProfile(r.RoleCode, r.TenantType) })
+            .GroupBy(r => (r.Id, r.TenantId))
+            .Select(g => g.First())
+            .ToList();
+
+    /// <summary>
+    /// ¿Alguno de estos roles es el SuperAdmin? Se consulta por Code y no por un id cacheado
+    /// porque <c>security.roles</c> es un catálogo global y el id no está fijado en configuración.
+    /// </summary>
+    private static async Task<bool> ContainsSuperAdminRoleAsync(
+        FlitDbContext db, IReadOnlyList<Guid> roleIds, CancellationToken ct) =>
+        roleIds.Count > 0
+        && await db.Roles
+            .AsNoTracking()
+            .AnyAsync(r => roleIds.Contains(r.Id) && r.Code == AdminAuthorization.SuperAdminRole, ct);
+
+    private static IResult SuperAdminRoleNotAssignable() =>
+        Results.Json(
+            new ErrorResponse(
+                "SUPERADMIN_ROLE_NOT_ASSIGNABLE",
+                "El rol Super Administrador pertenece al perfil FLIT y no puede asignarse desde una compañía ni desde un organismo de tránsito."),
+            statusCode: StatusCodes.Status403Forbidden);
 
     private sealed record ErrorResponse(string Code, string Message);
 
