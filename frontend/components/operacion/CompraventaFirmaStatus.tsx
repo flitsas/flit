@@ -90,6 +90,8 @@ export function CompraventaFirmaStatus({
   }, [instanceId, parte]);
 
   useEffect(() => {
+    // Carga async al montar (setState tras await), mismo patrón que FirmaPosteriorSection.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 

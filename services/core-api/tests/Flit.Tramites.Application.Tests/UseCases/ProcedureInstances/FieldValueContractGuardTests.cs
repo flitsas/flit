@@ -67,6 +67,8 @@ public sealed class FieldValueContractGuardTests
     private const string RuesProvider = Infra + "Consultations/VerifikRuesConsultationProvider.cs";
     private const string RuesLookup = App + "UseCases/Consultations/RuesPersonLookupHandler.cs";
     private const string WizardFur = "frontend/components/operacion/FirmaFurStep.tsx";
+    /// <summary>P6 del wizard — observaciones del trámite (antes vivían en FirmaFurStep).</summary>
+    private const string WizardTramite = "frontend/components/operacion/TramiteWizard.tsx";
 
     /// <summary>Fichero que se lee para extraer las llaves CONSUMIDAS por los documentos.</summary>
     private const string Consumidor = App + "UseCases/ProcedureInstances/FurCommand.cs";
@@ -131,7 +133,7 @@ public sealed class FieldValueContractGuardTests
         // Organismo de tránsito y campos del FUR — los escribe el wizard vía PatchFieldValues.
         ["transit_office_code"] = new(WizardFur, Modo.Literal),
         ["transit_office_city"] = new(WizardFur, Modo.Literal),
-        ["fur_observations"] = new(WizardFur, Modo.Literal),   // HU #10987
+        ["fur_observations"] = new(WizardTramite, Modo.Literal), // HU #10987 — productor en P6 del wizard
         ["fur_processing_date"] = new(WizardFur, Modo.Literal), // HU #10988
 
         // RUES — provider de consulta; el resolutor por actor (HU #10990) devuelve estas mismas llaves.

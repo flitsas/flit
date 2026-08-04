@@ -320,10 +320,15 @@ export function TramiteWizard(props: Props) {
   // síncrona dentro del efecto (react-hooks/set-state-in-effect).
   const [instanceDetailLoading, setInstanceDetailLoading] = useState(!!existingInstanceId);
   const [instanceDetailError, setInstanceDetailError] = useState<string | null>(null);
-  const [referenceNumber, setReferenceNumber] = useState<string | null>(null);
+  const [referenceNumber, setReferenceNumber] = useState<string | null>(
+    () => state.detail?.referenceNumber ?? null,
+  );
   useEffect(() => {
     const fromDetail = state.detail?.referenceNumber;
-    if (fromDetail) setReferenceNumber(fromDetail);
+    if (!fromDetail) return;
+    // Sincroniza referencia cuando el detalle del reducer llega después del mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setReferenceNumber(fromDetail);
   }, [state.detail?.referenceNumber]);
   useEffect(() => {
     if (!existingInstanceId) return;
