@@ -14,6 +14,7 @@ import {
 import { useDockScrollCondense } from "./useDockScrollCondense";
 import { buildDockGroups, flattenDockEntries } from "./dock/dockGroups";
 import { DockDesktop } from "./dock/DockDesktop";
+import { DrFlitAssistant } from "@/components/dr-flit";
 
 const logoWhite = "/assets/logo-flit-white.svg";
 const logoDark = "/assets/logo-flit-dark.svg";
@@ -533,6 +534,11 @@ export function Shell({
           atBottom={atBottom}
           onHome={() => onNav("dashboard")}
           homeActive={!onAdminRoute && active === "dashboard"}
+        />
+
+        {/* DR. FLIT — asistente conversacional (UI-only; sin APIs). */}
+        <DrFlitAssistant
+          displayName={currentUser?.displayName ?? currentUser?.email ?? null}
         />
 
         {/* Bottom dock — móvil/tablet (<lg): lanzador + hoja agrupada. */}
