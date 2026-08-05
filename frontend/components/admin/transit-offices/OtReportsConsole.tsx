@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   fetchOtClientCompanies,
   fetchOtReviewerOptions,
@@ -68,8 +68,34 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
+/**
+ * La pestaña activa vive en la dirección, no solo en memoria.
+ *
+ * Sin esto, la dirección miente: dice «reportes» mientras la pantalla enseña «Revisores», así que
+ * recargar devolvía a «Ahora mismo» y un enlace copiado abría una pestaña distinta de la que lo
+ * generó. Lo segundo se notaba sobre todo en «Consultas», donde el enlace lleva la consulta en
+ * `?q=`: llegaba entera, pero la leía un componente que no llegaba a montarse.
+ *
+ * Se usa `replaceState` y no `pushState` a propósito. Con `pushState`, quien recorre las cinco
+ * pestañas necesita cinco veces «atrás» para salir de reportes; con `replaceState`, «atrás» hace lo
+ * que se espera —salir— y volver del detalle de un trámite sigue aterrizando en la pestaña correcta,
+ * que es el caso que de verdad importa.
+ *
+ * Mismo mecanismo que la consola de reportes de la empresa (`atom/modules/Reportes.tsx`), que ya
+ * guardaba su pestaña en `?reportesTab=`.
+ */
+const TAB_QUERY_PARAM = "tab";
+
+function initialTab(): TabId {
+  if (typeof window === "undefined") return "ahora";
+  const requested = new URLSearchParams(window.location.search).get(TAB_QUERY_PARAM);
+  // Una pestaña que ya no existe —un enlace viejo, un parámetro escrito a mano— no puede dejar la
+  // consola en blanco: cae en la primera.
+  return TABS.some((t) => t.id === requested) ? (requested as TabId) : "ahora";
+}
+
 export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
-  const [tab, setTab] = useState<TabId>("ahora");
+  const [tab, setTab] = useState<TabId>(initialTab);
   const [companies, setCompanies] = useState<OtClientCompanyOption[]>([]);
   const [reviewers, setReviewers] = useState<OtReviewerOption[]>([]);
 
@@ -85,6 +111,19 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
       .then(setReviewers)
       .catch(() => setReviewers([]));
   }, [transitOfficeId]);
+
+  const selectTab = useCallback((id: TabId) => {
+    setTab(id);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set(TAB_QUERY_PARAM, id);
+      // Se conserva el resto de la dirección: «Consultas» guarda su propia consulta en `?q=` y
+      // borrarla aquí perdería lo que el usuario acaba de armar.
+      window.history.replaceState(window.history.state, "", url);
+    } catch {
+      /* entorno sin history: la pestaña cambia igual, solo no queda en la dirección */
+    }
+  }, []);
 
   return (
     <div className="flex flex-col gap-6" data-testid="ot-reports-console">
@@ -102,7 +141,7 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
               role="tab"
               aria-selected={active}
               title={item.hint}
-              onClick={() => setTab(item.id)}
+              onClick={() => selectTab(item.id)}
               className={`-mb-px border-b-2 px-4 py-2 text-xs font-semibold transition ${
                 active
                   ? "border-[#557EFF] text-[#557EFF]"

@@ -11,7 +11,7 @@
 // El catálogo de campos lo sirve el backend. Esta pantalla no sabe qué campos existen: un campo
 // consultable nuevo aparece aquí sin desplegar frontend.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteOtSavedQuery,
   fetchOtQueryFields,
@@ -141,7 +141,40 @@ export function OtQueriesTab({ transitOfficeId }: OtQueriesTabProps) {
     if (decoded) setDefinition(decoded);
   }, []);
 
+  /**
+   * …y la dirección se mantiene al día con lo que hay en pantalla.
+   *
+   * No es solo para compartir. Cada pestaña de la consola se monta y se desmonta, así que sin esto
+   * ir a «Análisis» y volver devolvía la consulta al estado del enlace de entrada —o a la vacía—,
+   * tirando lo que el usuario llevaba armado. Con la consulta en la dirección, salir y volver, o
+   * recargar, la encuentra donde la dejó.
+   *
+   * `replaceState` por lo mismo que en la consola: ajustar un filtro no es navegar, y cada retoque
+   * empujando una entrada al historial dejaría el botón «atrás» inservible.
+   */
   const definitionKey = JSON.stringify(definition);
+  const sincronizado = useRef(false);
+
+  useEffect(() => {
+    // La primera pasada se salta: corre junto al efecto de arriba, cuando `definition` es todavía
+    // la vacía, y borraría el `?q=` del enlace justo antes de que llegue a aplicarse.
+    if (!sincronizado.current) {
+      sincronizado.current = true;
+      return;
+    }
+    try {
+      const url = new URL(window.location.href);
+      const vacia = definition.condiciones.length === 0 && definition.fechas.preset === "ultimos_30";
+      // Una consulta sin tocar no ensucia la dirección con un base64 que no dice nada.
+      if (vacia) url.searchParams.delete("q");
+      else url.searchParams.set("q", encodeDefinition(definition));
+      window.history.replaceState(window.history.state, "", url);
+    } catch {
+      /* entorno sin history: se pierde el enlace vivo, no la consulta */
+    }
+    // La clave serializada evita reescribir la dirección por una identidad de objeto nueva.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [definitionKey]);
 
   /**
    * La huella de la PREGUNTA: fechas y condiciones, no columnas ni orden.

@@ -151,6 +151,9 @@ const SAVED: OtSavedQuery[] = [
 ];
 
 beforeEach(() => {
+  // La consulta viaja en `?q=` y jsdom conserva la dirección entre pruebas: sin esto, la consulta
+  // de una prueba se sembraría sola en la siguiente.
+  window.history.replaceState(null, "", "/");
   vi.clearAllMocks();
   mocks.fetchOtQueryFields.mockResolvedValue(FIELDS);
   mocks.fetchOtSavedQueries.mockResolvedValue(SAVED);
@@ -404,5 +407,38 @@ describe("Excel de la consulta", () => {
 
     expect(csv).toContain('"Sí"');
     expect(csv).toContain('"No"');
+  });
+});
+
+describe("La consulta vive en la dirección", () => {
+  async function ponerFiltroDePlaca() {
+    await userEvent.click(screen.getByTestId("ot-query-agregar-filtro"));
+    await userEvent.click(within(screen.getByTestId("ot-query-campos")).getByText("Placa"));
+    await userEvent.type(await screen.findByTestId("ot-query-valores-placa"), "ABC123");
+    await userEvent.click(screen.getByTestId("ot-query-aplicar-placa"));
+    await screen.findByTestId("ot-query-chip-placa");
+  }
+
+  it("sobrevive a salir de la pestaña y volver", async () => {
+    // Cada pestaña de la consola se monta y se desmonta. Sin la consulta en la dirección, asomarse
+    // a otra pestaña tiraba lo que el usuario llevaba armado.
+    const primera = renderTab();
+    await screen.findByTestId("ot-query-total");
+    await ponerFiltroDePlaca();
+    primera.unmount();
+
+    renderTab();
+    expect(await screen.findByTestId("ot-query-chip-placa")).toHaveTextContent("ABC123");
+  });
+
+  it("no ensucia la dirección mientras nadie ha filtrado nada", async () => {
+    renderTab();
+    await screen.findByTestId("ot-query-total");
+
+    // Un base64 en la barra desde el primer segundo no dice nada y se copia por error.
+    expect(new URL(window.location.href).searchParams.get("q")).toBeNull();
+
+    await ponerFiltroDePlaca();
+    await waitFor(() => expect(new URL(window.location.href).searchParams.get("q")).not.toBeNull());
   });
 });

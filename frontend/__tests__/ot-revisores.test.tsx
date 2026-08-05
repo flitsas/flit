@@ -114,6 +114,8 @@ async function openRevisores() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Ver ot-reportes: la pestaña activa viaja en `?tab=` y jsdom no reinicia la dirección.
+  window.history.replaceState(null, "", "/");
   mocks.fetchOtOperationalPanel.mockResolvedValue({
     movimiento: { entregadosHoy: 0, decididosHoy: 0, pendientesTotal: 0, tiempoMedianoDecisionHoras: null },
     cola: { porRevisar: 0, esperandoAsignarPlaca: 0, enEsperaDelCliente: 0 },

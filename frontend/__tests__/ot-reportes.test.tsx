@@ -257,6 +257,9 @@ async function openTab(name: RegExp) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // La consola guarda la pestaña activa en `?tab=`, y jsdom conserva la dirección entre pruebas del
+  // mismo archivo: sin esto, una prueba que cambia de pestaña abriría la siguiente en esa misma.
+  window.history.replaceState(null, "", "/");
   mocks.fetchOtOperationalPanel.mockResolvedValue(PANEL);
   mocks.fetchOtPerformance.mockResolvedValue(PERFORMANCE);
   mocks.fetchOtRejectionReasons.mockResolvedValue(REASONS);
@@ -264,6 +267,50 @@ beforeEach(() => {
   mocks.fetchOtDrilldown.mockResolvedValue(DRILLDOWN);
   mocks.fetchOtReport.mockResolvedValue(REPORT);
   mocks.fetchOtReviewerOptions.mockResolvedValue([]);
+});
+
+// ── La pestaña activa vive en la dirección ────────────────────────────────────
+
+describe("Reportes del organismo — pestaña en la dirección", () => {
+  it("recarga en la pestaña donde estaba, no en la primera", async () => {
+    const { unmount } = render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Revisores/);
+
+    // Cambiar de pestaña deja rastro en la dirección; recargar es volver a montar sobre ella.
+    expect(new URL(window.location.href).searchParams.get("tab")).toBe("revisores");
+    unmount();
+
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    expect(await screen.findByRole("tab", { name: /Revisores/, selected: true })).toBeInTheDocument();
+  });
+
+  it("abre la pestaña que pide el enlace", async () => {
+    // Es el caso que hacía inútil el enlace de «Consultas»: la consulta llegaba dentro de `?q=`,
+    // pero la leía un componente que se quedaba sin montar porque mandaba la pestaña por defecto.
+    window.history.replaceState(null, "", "/?tab=analisis");
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+
+    expect(await screen.findByRole("tab", { name: /Análisis/, selected: true })).toBeInTheDocument();
+  });
+
+  it("cae en la primera pestaña si el enlace nombra una que no existe", async () => {
+    window.history.replaceState(null, "", "/?tab=inventada");
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+
+    // Un enlace viejo no puede dejar la consola en blanco.
+    expect(await screen.findByRole("tab", { name: /Ahora mismo/, selected: true })).toBeInTheDocument();
+  });
+
+  it("no empuja una entrada al historial por cada pestaña", async () => {
+    const antes = window.history.length;
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Análisis/);
+    await openTab(/Informe/);
+    await openTab(/Revisores/);
+
+    // Con `pushState`, salir de reportes costaría tantos «atrás» como pestañas se hayan mirado.
+    expect(window.history.length).toBe(antes);
+  });
 });
 
 // ── Pestaña «Ahora mismo» ─────────────────────────────────────────────────────
