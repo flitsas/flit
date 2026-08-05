@@ -1,0 +1,75 @@
+asyncapi: '2.6.0'
+info:
+  title: FLIT Domain Events
+  description: |
+    Eventos de dominio del motor de trámites.
+    N 03 (ADR-0022): webhook OT de cambio de estado del trámite con el vocabulario
+    de estados de negocio (borrador | anulado | preparado | entregado | aprobado | rechazado).
+  version: 1.1.0
+
+channels:
+  ot-webhook/vehicle_state_changed:
+    description: |
+      Webhook saliente hacia el Organismo de Tránsito suscrito (admin.ot_webhook_subscriptions).
+      Se emite EXACTAMENTE UNA VEZ por transición confirmada de procedure_instances.status
+      (outbox transaccional tramites.procedure_state_change_outbox, RNF01): una transición que
+      hace rollback no notifica. Entrega HTTP POST firmada (X-Webhook-Signature: HMAC-SHA256
+      del cuerpo crudo) con X-Correlation-Id; reintentos con tope (attempts) y dead-letter.
+    publish:
+      operationId: vehicleStateChanged
+      message:
+        $ref: '#/components/messages/VehicleStateChanged'
+
+components:
+  messages:
+    VehicleStateChanged:
+      name: vehicle_state_changed
+      title: Cambio de estado del trámite
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/VehicleStateChangedPayload'
+
+  schemas:
+    TramiteEstado:
+      type: string
+      description: Estado de negocio del trámite (ADR-0022, N 03 RF01).
+      enum:
+        - borrador
+        - anulado
+        - preparado
+        - entregado
+        - aprobado
+        - rechazado
+
+    VehicleStateChangedPayload:
+      type: object
+      required:
+        - event_type
+        - procedure_instance_id
+        - to_status
+        - changed_at
+      properties:
+        event_type:
+          type: string
+          const: vehicle_state_changed
+        procedure_instance_id:
+          type: string
+          format: uuid
+          description: Instancia de trámite transicionada (tramites.procedure_instances.id).
+        from_status:
+          oneOf:
+            - $ref: '#/components/schemas/TramiteEstado'
+            - type: 'null'
+          description: Estado origen; null solo en la creación de la instancia.
+        to_status:
+          $ref: '#/components/schemas/TramiteEstado'
+        changed_at:
+          type: string
+          format: date-time
+          description: Momento de la transición (occurred_at de la fila de outbox).
+        reason:
+          type: string
+          maxLength: 500
+          description: >-
+            Motivo de la transición (RF05). Obligatorio de negocio para anulado y
+            rechazado; puede ser null en las demás transiciones.
