@@ -68,7 +68,12 @@ export function SavedQueryList({
       </Grupo>
 
       {fabrica.length > 0 && (
-        <Grupo titulo="Para empezar" cuenta={fabrica.length} nota="Ábralas y cámbielas a su gusto.">
+        <Grupo
+          titulo="Para empezar"
+          cuenta={fabrica.length}
+          nota="Ábralas y cámbielas a su gusto."
+          separado
+        >
           <ul className="space-y-1.5">
             {fabrica.map((query) => (
               <Item
@@ -89,24 +94,37 @@ export function SavedQueryList({
   );
 }
 
+/**
+ * Un bloque de la lista con su título.
+ *
+ * El título pesa más que las tarjetas que encabeza —negrita y color de texto normal, no el gris de
+ * pie de página que tenía—, y el grupo que no va primero se separa con una línea. Sin eso, «Mis
+ * consultas» y «Para empezar» se leían como una sola lista larga con dos rótulos sueltos por el
+ * medio, y la diferencia entre ambas importa: unas son suyas y se borran, las otras vienen dadas.
+ */
 function Grupo({
   titulo,
   cuenta,
   nota,
+  separado,
   children,
 }: {
   titulo: string;
   cuenta: number;
   nota?: string;
+  /** Traza la línea de separación con el grupo anterior. */
+  separado?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <div className="mb-1.5 flex items-baseline gap-1.5 px-0.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-[#6B7280] dark:text-white/40">
+    <div className={separado ? "border-t border-[#DFE5ED] pt-4 dark:border-white/10" : undefined}>
+      <div className="mb-2 flex items-center gap-1.5 px-0.5">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-[#162744] dark:text-white/75">
           {titulo}
         </p>
-        <span className="text-[10px] tabular-nums text-[#9AA5B4] dark:text-white/25">{cuenta}</span>
+        <span className="rounded-full bg-[#F5F7FA] px-1.5 py-px text-[10px] font-semibold tabular-nums text-[#6B7280] dark:bg-white/10 dark:text-white/50">
+          {cuenta}
+        </span>
       </div>
       {nota && (
         <p className="mb-1.5 px-0.5 text-[10px] leading-snug text-[#9AA5B4] dark:text-white/30">
