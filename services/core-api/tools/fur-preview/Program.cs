@@ -22,6 +22,27 @@ const string ObsLarga =
     "AUTORIDAD COMPETENTE. CUALQUIER INCONSISTENCIA SERA INFORMADA AL ORGANISMO DE TRANSITO PARA " +
     "LOS FINES PERTINENTES DENTRO DEL TRAMITE EN CURSO.";
 
+// HU #11256 — observación DESMEDIDA (~2.000 caracteres): fuerza el último recurso de
+// `FurTextFitter.FitMultiline` (cuerpo al piso de 5 pt + truncado con elipsis). Verifica CF2/CF3: el
+// texto queda dentro del recuadro, sin tinta fuera, por arriba y por abajo.
+const string ObsDesmedida =
+    "GRAVAMEN / PRENDA A FAVOR DE: BANCO FINANCIERO DE COLOMBIA S.A. - NIT 890900608-1. " +
+    "VEHICULO VERIFICADO CONTRA EL RUNT SIN NOVEDADES REPORTADAS A LA FECHA DE RADICACION DEL " +
+    "TRAMITE ANTE EL ORGANISMO DE TRANSITO COMPETENTE. SE ADJUNTA SOAT Y RTM VIGENTES A LA FECHA. " +
+    "EL PROPIETARIO DECLARA BAJO GRAVEDAD DE JURAMENTO QUE LA INFORMACION SUMINISTRADA EN EL " +
+    "PRESENTE FORMULARIO ES VERAZ Y COMPLETA, Y QUE EL VEHICULO NO SE ENCUENTRA REPORTADO COMO " +
+    "HURTADO NI PRESENTA MEDIDAS CAUTELARES VIGENTES ANTE LA AUTORIDAD COMPETENTE. CUALQUIER " +
+    "INCONSISTENCIA SERA INFORMADA AL ORGANISMO DE TRANSITO PARA LOS FINES PERTINENTES DENTRO DEL " +
+    "TRAMITE EN CURSO. TRANSFORMACION REGISTRADA CONFORME ADR-0029: CAMBIO DE COLOR DE BLANCO " +
+    "PERLA A NEGRO MATE, CON SOPORTE FOTOGRAFICO Y CERTIFICADO DE TALLER AUTORIZADO ADJUNTO AL " +
+    "EXPEDIENTE DIGITAL DEL TRAMITE. EL GESTOR CERTIFICA HABER VERIFICADO FISICAMENTE LA " +
+    "CORRESPONDENCIA ENTRE EL NUMERO DE MOTOR, EL NUMERO DE CHASIS Y LOS DATOS REGISTRADOS EN EL " +
+    "SISTEMA RUNT, SIN ENCONTRAR NOVEDADES QUE IMPIDAN LA CONTINUACION DEL TRAMITE SOLICITADO POR " +
+    "EL INTERESADO ANTE ESTE ORGANISMO DE TRANSITO, DE CONFORMIDAD CON LA NORMATIVIDAD VIGENTE " +
+    "APLICABLE EN MATERIA DE TRANSITO Y TRANSPORTE TERRESTRE AUTOMOTOR EN EL TERRITORIO NACIONAL " +
+    "COLOMBIANO, SEGUN LO ESTABLECIDO POR EL MINISTERIO DE TRANSPORTE Y LA SUPERINTENDENCIA DE " +
+    "TRANSPORTE PARA ESTE TIPO DE TRAMITES DE REGISTRO AUTOMOTOR NACIONAL.";
+
 var scenarios = new (string Slug, FurDocumentData Data)[]
 {
     // Uno por formato (Feature #10918). TemplateFormat se fija EXPLÍCITO para forzar la plantilla blank
@@ -56,6 +77,18 @@ var scenarios = new (string Slug, FurDocumentData Data)[]
         Vehiculo = RemolquesData().Vehiculo with { NumeroSerie = "SN-REM-000004" },
         Observaciones = ObsMedia,
     }),
+
+    // HU #11256 — observación DESMEDIDA (~2.000 car.) en los tres formatos: CF2/CF3, último recurso
+    // de FitMultiline (piso 5 pt + truncado con elipsis, sin tinta fuera del recuadro).
+    ("10-automotor-obs-desmedida", AutomotorData() with { Observaciones = ObsDesmedida }),
+    ("11-maquinaria-obs-desmedida", MaquinariaData() with { Observaciones = ObsDesmedida }),
+    ("12-remolques-obs-desmedida", RemolquesData() with { Observaciones = ObsDesmedida }),
+
+    // HU #11256 (CF12) — sello "NO FIRMADO" explícito (IdentidadValidada=false) en `vehicle_owner_signature`,
+    // multiline sin autoFit: debe salir idéntico antes/después en los tres formatos.
+    ("13-automotor-no-firmado", AutomotorData() with { IdentidadValidada = false }),
+    ("14-maquinaria-no-firmado", MaquinariaData() with { IdentidadValidada = false }),
+    ("15-remolques-no-firmado", RemolquesData() with { IdentidadValidada = false }),
 };
 
 foreach (var (slug, data) in scenarios)

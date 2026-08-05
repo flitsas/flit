@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
 using Flit.Tramites.Application.Documents;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Flit.Infrastructure.Documents.Fur;
 
@@ -13,6 +15,7 @@ namespace Flit.Infrastructure.Documents.Fur;
 public sealed class FurOverlayDocumentGenerator : IFurDocumentGenerator
 {
     private readonly Dictionary<FurTemplateFormat, FurFormatAssets> _byFormat;
+    private readonly ILogger<FurOverlayDocumentGenerator> _logger;
 
     // HU #10256 fix — PdfSharpCore resuelve "Arial" contra las fuentes del SO y el runtime alpine no tiene
     // ninguna. Registrar el resolutor con fuente embebida antes de cualquier render (idempotente) hace la
@@ -20,13 +23,21 @@ public sealed class FurOverlayDocumentGenerator : IFurDocumentGenerator
     static FurOverlayDocumentGenerator() => FurFontResolver.EnsureRegistered();
 
     public FurOverlayDocumentGenerator()
-        : this(AppContext.BaseDirectory)
+        : this(AppContext.BaseDirectory, NullLogger<FurOverlayDocumentGenerator>.Instance)
     {
     }
 
-    internal FurOverlayDocumentGenerator(string baseDirectory)
+    // DI (AddSingleton en InfrastructureExtensions) resuelve este ctor: ILogger<T> siempre está
+    // disponible en el contenedor. HU #11256 — id del trámite en el LogWarning de truncado (R4).
+    public FurOverlayDocumentGenerator(ILogger<FurOverlayDocumentGenerator> logger)
+        : this(AppContext.BaseDirectory, logger)
+    {
+    }
+
+    internal FurOverlayDocumentGenerator(string baseDirectory, ILogger<FurOverlayDocumentGenerator>? logger = null)
     {
         _byFormat = BuildRegistry(baseDirectory);
+        _logger = logger ?? NullLogger<FurOverlayDocumentGenerator>.Instance;
     }
 
     // Ctor de tests (compat HU #10256): inyecta directamente el manifest + plantillas AUTOMOTOR.
@@ -36,6 +47,7 @@ public sealed class FurOverlayDocumentGenerator : IFurDocumentGenerator
         {
             [FurTemplateFormat.Automotor] = new(manifest, templates, FurFieldMapper.Map),
         };
+        _logger = NullLogger<FurOverlayDocumentGenerator>.Instance;
     }
 
     public GeneratedDocument GenerateFur(FurDocumentData data)
@@ -52,7 +64,7 @@ public sealed class FurOverlayDocumentGenerator : IFurDocumentGenerator
         var p1Template = File.ReadAllBytes(assets.Templates.FormularioP1);
         var p2Template = File.ReadAllBytes(assets.Templates.InstruccionesP2);
 
-        var p1 = FurOverlayRenderer.RenderPage1(p1Template, assets.Manifest, values);
+        var p1 = FurOverlayRenderer.RenderPage1(p1Template, assets.Manifest, values, _logger, data.ReferenceNumber);
         var pdf = FurOverlayRenderer.MergePages(p1, p2Template);
 
         return new GeneratedDocument("fur", $"fur_{SafeRef(data.ReferenceNumber)}.pdf", "application/pdf", pdf);

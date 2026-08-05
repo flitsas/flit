@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-04-hu11255-desplazamientos-obs-serial",
+  "version": "2026-08-04-hu11256-observations-autofit",
   "pageWidth": 792,
   "pageHeight": 612,
   "coordinateOrigin": "top-left",
@@ -791,7 +791,8 @@
       "h": 33.0,
       "fontSize": 7.2,
       "bold": true,
-      "align": "left"
+      "align": "left",
+      "autoFit": true
     }
   ]
 }

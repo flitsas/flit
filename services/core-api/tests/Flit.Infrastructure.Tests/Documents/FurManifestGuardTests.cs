@@ -27,12 +27,16 @@ public sealed class FurManifestGuardTests
 
     private static string N(double d) => d.ToString(CultureInfo.InvariantCulture);
 
-    /// <summary>Huella canónica de un campo: id + tipo + geometría. Cualquier cambio la altera.</summary>
+    /// <summary>
+    /// Huella canónica de un campo: id + tipo + geometría + <c>AutoFit</c> (HU #11256). Cualquier
+    /// cambio la altera, incluida la bandera de auto-encaje: un <c>autoFit</c> que se cuele sin
+    /// querer en un sello de firma debe fallar la guardia igual que un descuadre.
+    /// </summary>
     private static string Canon(FurFieldDefinition f) =>
         f.Type == FurFieldType.Checkbox
             ? string.Create(CultureInfo.InvariantCulture, $"{f.Id}=cb:{N(f.X)},{N(f.Y)},{N(f.Size)}")
             : string.Create(CultureInfo.InvariantCulture,
-                $"{f.Id}={f.Type}:{N(f.X)},{N(f.Y)},{N(f.W)},{N(f.H)},{N(f.FontSize)},{f.Align}");
+                $"{f.Id}={f.Type}:{N(f.X)},{N(f.Y)},{N(f.W)},{N(f.H)},{N(f.FontSize)},{f.Align},{f.AutoFit}");
 
     // ── Integridad estructural ────────────────────────────────────────────────
 
@@ -170,28 +174,30 @@ public sealed class FurManifestGuardTests
 
     // Línea base congelada de la geometría del manifest (version 2026-07-03...-newtpl792).
     // Recalibrada 2026-07-24 tras reemplazar el blank AUTOMOTOR por el formulario oficial 792×612
-    // (HU #10921). Regenerar SOLO de forma deliberada vía EmitBaseline tras recalibrar el manifest.
+    // (HU #10921). Regenerada 2026-08-04 (HU #11256) tras añadir `AutoFit` a la huella `Canon`: solo
+    // `observations` cambia de valor (True); el resto queda en False, igual que hoy. Regenerar SOLO
+    // de forma deliberada vía EmitBaseline tras recalibrar el manifest.
     private const string Baseline = """
-        traffic_secretary_name=Text:525,64,175,11.9,6.5,Left
-        traffic_secretary_city=Text:500,89,50,11.9,6.5,Left
-        traffic_secretary_code=Text:551,89,48,11.8,6.5,Left
-        processing_day=Text:593.4,91,25.7,11.8,7.7,Center
-        processing_month=Text:619.4,89.8,27.3,12.2,7.8,Center
-        processing_year=Text:649.3,91.1,30.4,11.9,7.7,Center
-        plate_letter=Text:704.7,75.9,26.2,11.6,9.7,Center
-        plate_number=Text:734.1,76,23.7,11.8,9.7,Center
+        traffic_secretary_name=Text:525,64,175,11.9,6.5,Left,False
+        traffic_secretary_city=Text:500,89,50,11.9,6.5,Left,False
+        traffic_secretary_code=Text:551,89,48,11.8,6.5,Left,False
+        processing_day=Text:593.4,91,25.7,11.8,7.7,Center,False
+        processing_month=Text:619.4,89.8,27.3,12.2,7.8,Center,False
+        processing_year=Text:649.3,91.1,30.4,11.9,7.7,Center,False
+        plate_letter=Text:704.7,75.9,26.2,11.6,9.7,Center,False
+        plate_number=Text:734.1,76,23.7,11.8,9.7,Center,False
         requested_process_1=cb:71.3,119.2,9.9
         requested_process_2=cb:119.5,121.1,9.8
         requested_process_11=cb:286.9,170.9,10.1
         vehicle_class_1=cb:53.6,222.4,9.9
         vehicle_class_5=cb:231.5,221.5,10
         vehicle_class_9=cb:101.7,232.7,10
-        vehicle_brand=Text:380.8,129.3,70.2,13.3,7.8,Left
-        vehicle_line=Text:461.9,128.4,70,13,7.7,Left
-        vehicle_colors=Text:380.5,157.5,229,13.7,7.5,Left
-        vehicle_model=Text:624.7,156.7,49.9,14.2,7.6,Left
-        vehicle_displacement=Text:683.9,155.5,65,14,7.6,Left
-        vehicle_capacity=Text:371.5,178.5,70.4,14,7.6,Center
+        vehicle_brand=Text:380.8,129.3,70.2,13.3,7.8,Left,False
+        vehicle_line=Text:461.9,128.4,70,13,7.7,Left,False
+        vehicle_colors=Text:380.5,157.5,229,13.7,7.5,Left,False
+        vehicle_model=Text:624.7,156.7,49.9,14.2,7.6,Left,False
+        vehicle_displacement=Text:683.9,155.5,65,14,7.6,Left,False
+        vehicle_capacity=Text:371.5,178.5,70.4,14,7.6,Center,False
         vehicle_fuel_type_1=cb:551.8,130,8
         vehicle_fuel_type_2=cb:580.5,130,8
         vehicle_fuel_type_3=cb:607.4,130,8
@@ -202,9 +208,9 @@ public sealed class FurManifestGuardTests
         vehicle_fuel_type_8=cb:743.4,130,8
         is_armored_vehicle_no=cb:536,168,8
         is_dismantling_armor_no=cb:670,168,8
-        vehicle_bodywork_type=Text:382.3,245,176.7,16.7,7.8,Left
-        vehicle_engine_number=Text:572.7,226.3,134.4,13.2,7.8,Left
-        vehicle_chassis_number=Text:572.8,248.3,134.7,16.8,7.8,Left
+        vehicle_bodywork_type=Text:382.3,245,176.7,16.7,7.8,Left,False
+        vehicle_engine_number=Text:572.7,226.3,134.4,13.2,7.8,Left,False
+        vehicle_chassis_number=Text:572.8,248.3,134.7,16.8,7.8,Left,False
         importacion_manifest=cb:382.8,309.6,10.1
         importacion_declaracion=cb:404.4,309.7,10.1
         remate_acta=cb:431.3,310.1,10
@@ -216,12 +222,12 @@ public sealed class FurManifestGuardTests
         vehicle_service_type_4=cb:658.2,364,10.2
         vehicle_service_type_5=cb:687.9,364.1,9.8
         vehicle_service_type_6=cb:726.5,364.5,9.8
-        vehicle_serial_number=Text:570,286.5,124.7,14.5,7.8,Left
-        vehicle_vin_number=Text:569.1,313.7,124.5,14.5,7.8,Left
-        alert_data_code_5=Text:595.6,338.6,142.1,14.4,7.2,Left
-        vehicle_owner_first_last_name=Text:30,303.8,128.4,14.3,7.7,Left
-        vehicle_owner_second_last_name=Text:158.9,304.3,113.6,14.4,7.8,Left
-        vehicle_owner_name=Text:276.4,303.6,93.5,14.4,7.7,Left
+        vehicle_serial_number=Text:570,286.5,124.7,14.5,7.8,Left,False
+        vehicle_vin_number=Text:569.1,313.7,124.5,14.5,7.8,Left,False
+        alert_data_code_5=Text:595.6,338.6,142.1,14.4,7.2,Left,False
+        vehicle_owner_first_last_name=Text:30,303.8,128.4,14.3,7.7,Left,False
+        vehicle_owner_second_last_name=Text:158.9,304.3,113.6,14.4,7.8,Left,False
+        vehicle_owner_name=Text:276.4,303.6,93.5,14.4,7.7,Left,False
         vehicle_owner_document_type_c=cb:34.7,336.9,9.9
         vehicle_owner_document_type_nit=cb:63,338.2,10
         vehicle_owner_document_type_nn=cb:90,337.6,9.9
@@ -230,14 +236,14 @@ public sealed class FurManifestGuardTests
         vehicle_owner_document_type_ti=cb:192.1,336,10
         vehicle_owner_document_type_nuip=cb:236,338.1,10
         vehicle_owner_document_type_cd=cb:278.9,336.8,9.9
-        vehicle_owner_document_number=Text:318,335.1,43,14.3,7.8,Left
-        vehicle_owner_address=Text:56.6,364.6,154.7,14,7.6,Left
-        vehicle_owner_city=Text:218.8,363.8,37,14,7.7,Left
-        vehicle_owner_phone=Text:317,364.9,44.9,14.2,7.7,Left
-        vehicle_owner_signature=Multiline:34.4,385.6,331.1,35.2,6.5,Left
-        vehicle_buyer_first_last_name=Text:30.5,451.5,127.3,14,7.6,Left
-        vehicle_buyer_second_last_name=Text:159.5,451.2,112.7,14.1,7.7,Left
-        vehicle_buyer_name=Text:274.7,451.4,93.7,14.1,7.7,Left
+        vehicle_owner_document_number=Text:318,335.1,43,14.3,7.8,Left,False
+        vehicle_owner_address=Text:56.6,364.6,154.7,14,7.6,Left,False
+        vehicle_owner_city=Text:218.8,363.8,37,14,7.7,Left,False
+        vehicle_owner_phone=Text:317,364.9,44.9,14.2,7.7,Left,False
+        vehicle_owner_signature=Multiline:34.4,385.6,331.1,35.2,6.5,Left,False
+        vehicle_buyer_first_last_name=Text:30.5,451.5,127.3,14,7.6,Left,False
+        vehicle_buyer_second_last_name=Text:159.5,451.2,112.7,14.1,7.7,Left,False
+        vehicle_buyer_name=Text:274.7,451.4,93.7,14.1,7.7,Left,False
         vehicle_buyer_document_type_c=cb:33.2,486.5,9.9
         vehicle_buyer_document_type_nit=cb:64.7,481.4,9.9
         vehicle_buyer_document_type_nn=cb:91.6,486.4,9.9
@@ -246,42 +252,44 @@ public sealed class FurManifestGuardTests
         vehicle_buyer_document_type_ti=cb:190.1,486.3,9.9
         vehicle_buyer_document_type_nuip=cb:231.5,486.5,9.9
         vehicle_buyer_document_type_cd=cb:276.6,486.7,9.9
-        vehicle_buyer_document_number=Text:314.8,482,42.9,14.1,7.7,Left
-        vehicle_buyer_address=Text:52.5,508.7,158.1,14.1,7.7,Left
-        vehicle_buyer_city=Text:215.9,508.7,36.8,14.1,7.7,Left
-        vehicle_buyer_phone=Text:314.8,509.3,44.9,14.1,7.7,Left
-        vehicle_buyer_signature=Multiline:33.2,529.7,341.6,35.3,8,Left
-        observations=Multiline:379.9,472.6,403.1,33,7.2,Left
+        vehicle_buyer_document_number=Text:314.8,482,42.9,14.1,7.7,Left,False
+        vehicle_buyer_address=Text:52.5,508.7,158.1,14.1,7.7,Left,False
+        vehicle_buyer_city=Text:215.9,508.7,36.8,14.1,7.7,Left,False
+        vehicle_buyer_phone=Text:314.8,509.3,44.9,14.1,7.7,Left,False
+        vehicle_buyer_signature=Multiline:33.2,529.7,341.6,35.3,8,Left,False
+        observations=Multiline:379.9,472.6,403.1,33,7.2,Left,True
         """;
 
     // Línea base congelada de la geometría del manifest MAQUINARIA (version 2026-07-24-maquinaria-v2-traspaso-calib,
-    // recalibrada para HU #11255 con el desplazamiento de `observations`). Regenerar SOLO de forma
-    // deliberada vía EmitBaseline tras recalibrar el manifest.
+    // recalibrada para HU #11255 con el desplazamiento de `observations`). Regenerada 2026-08-04
+    // (HU #11256) tras añadir `AutoFit` a la huella `Canon`: solo `observations` cambia de valor
+    // (True); el resto queda en False, igual que hoy. Regenerar SOLO de forma deliberada vía
+    // EmitBaseline tras recalibrar el manifest.
     private const string BaselineMaquinaria = """
-        traffic_secretary_name=Text:665,44,280,10,7,Left
-        traffic_secretary_city=Text:648,66,62,10,7,Left
-        traffic_secretary_code=Text:715,66,55,10,7,Left
-        processing_day=Text:776,71,28,10,7,Center
-        processing_month=Text:808,71,28,10,7,Center
-        processing_year=Text:842,71,32,10,7,Center
-        plate_letter=Text:900,59,28,11,7,Center
-        plate_number=Text:935,59,30,11,7,Center
+        traffic_secretary_name=Text:665,44,280,10,7,Left,False
+        traffic_secretary_city=Text:648,66,62,10,7,Left,False
+        traffic_secretary_code=Text:715,66,55,10,7,Left,False
+        processing_day=Text:776,71,28,10,7,Center,False
+        processing_month=Text:808,71,28,10,7,Center,False
+        processing_year=Text:842,71,32,10,7,Center,False
+        plate_letter=Text:900,59,28,11,7,Center,False
+        plate_number=Text:935,59,30,11,7,Center,False
         requested_process_1=cb:101,102,9
         requested_process_2=cb:170,102,9
-        vehicle_brand=Text:508,95,66,12,7,Left
-        vehicle_line=Text:578,95,74,12,7,Left
-        vehicle_colors=Text:500,134,268,12,7,Left
-        vehicle_model=Text:778,134,62,12,7,Left
+        vehicle_brand=Text:508,95,66,12,7,Left,False
+        vehicle_line=Text:578,95,74,12,7,Left,False
+        vehicle_colors=Text:500,134,268,12,7,Left,False
+        vehicle_model=Text:778,134,62,12,7,Left,False
         vehicle_fuel_type_1=cb:763,308,9
         vehicle_fuel_type_2=cb:830,308,9
         vehicle_fuel_type_5=cb:915,308,9
         vehicle_fuel_type_3=cb:763,326,9
         vehicle_fuel_type_4=cb:830,326,9
-        vehicle_engine_number=Text:736,204,150,11,7,Left
-        vehicle_vin_number=Text:736,227,240,12,7,Left
-        vehicle_owner_first_last_name=Text:90,297,150,12,7,Left
-        vehicle_owner_second_last_name=Text:245,297,150,12,7,Left
-        vehicle_owner_name=Text:400,297,120,12,7,Left
+        vehicle_engine_number=Text:736,204,150,11,7,Left,False
+        vehicle_vin_number=Text:736,227,240,12,7,Left,False
+        vehicle_owner_first_last_name=Text:90,297,150,12,7,Left,False
+        vehicle_owner_second_last_name=Text:245,297,150,12,7,Left,False
+        vehicle_owner_name=Text:400,297,120,12,7,Left,False
         vehicle_owner_document_type_c=cb:94,323,9
         vehicle_owner_document_type_nit=cb:127,323,9
         vehicle_owner_document_type_nn=cb:159,323,9
@@ -290,14 +298,14 @@ public sealed class FurManifestGuardTests
         vehicle_owner_document_type_ti=cb:276,323,9
         vehicle_owner_document_type_nuip=cb:322,323,9
         vehicle_owner_document_type_cd=cb:380,323,9
-        vehicle_owner_document_number=Text:428,322,62,12,7,Left
-        vehicle_owner_address=Text:90,350,190,12,7,Left
-        vehicle_owner_city=Text:286,350,120,12,7,Left
-        vehicle_owner_phone=Text:418,350,70,12,7,Left
-        vehicle_owner_signature=Multiline:90,376,390,28,4,Left
-        vehicle_buyer_first_last_name=Text:90,448,150,12,7,Left
-        vehicle_buyer_second_last_name=Text:245,448,150,12,7,Left
-        vehicle_buyer_name=Text:400,448,120,12,7,Left
+        vehicle_owner_document_number=Text:428,322,62,12,7,Left,False
+        vehicle_owner_address=Text:90,350,190,12,7,Left,False
+        vehicle_owner_city=Text:286,350,120,12,7,Left,False
+        vehicle_owner_phone=Text:418,350,70,12,7,Left,False
+        vehicle_owner_signature=Multiline:90,376,390,28,4,Left,False
+        vehicle_buyer_first_last_name=Text:90,448,150,12,7,Left,False
+        vehicle_buyer_second_last_name=Text:245,448,150,12,7,Left,False
+        vehicle_buyer_name=Text:400,448,120,12,7,Left,False
         vehicle_buyer_document_type_c=cb:94,484,9
         vehicle_buyer_document_type_nit=cb:127,484,9
         vehicle_buyer_document_type_nn=cb:159,484,9
@@ -306,37 +314,39 @@ public sealed class FurManifestGuardTests
         vehicle_buyer_document_type_ti=cb:276,484,9
         vehicle_buyer_document_type_nuip=cb:322,484,9
         vehicle_buyer_document_type_cd=cb:380,484,9
-        vehicle_buyer_document_number=Text:428,483,62,12,7,Left
-        vehicle_buyer_address=Text:90,510,190,12,7,Left
-        vehicle_buyer_city=Text:286,510,120,12,7,Left
-        vehicle_buyer_phone=Text:418,510,70,12,7,Left
-        vehicle_buyer_signature=Multiline:90,537,390,28,4,Left
-        observations=Multiline:496,445,490,38,6.5,Left
+        vehicle_buyer_document_number=Text:428,483,62,12,7,Left,False
+        vehicle_buyer_address=Text:90,510,190,12,7,Left,False
+        vehicle_buyer_city=Text:286,510,120,12,7,Left,False
+        vehicle_buyer_phone=Text:418,510,70,12,7,Left,False
+        vehicle_buyer_signature=Multiline:90,537,390,28,4,Left,False
+        observations=Multiline:496,445,490,38,6.5,Left,True
         """;
 
     // Línea base congelada de la geometría del manifest REMOLQUES (version 2026-07-24-remolques-v1,
     // recalibrada para HU #11255 con el desplazamiento de `observations` y `vehicle_serial_number`).
-    // Regenerar SOLO de forma deliberada vía EmitBaseline tras recalibrar el manifest.
+    // Regenerada 2026-08-04 (HU #11256) tras añadir `AutoFit` a la huella `Canon`: solo `observations`
+    // cambia de valor (True); el resto queda en False, igual que hoy. Regenerar SOLO de forma
+    // deliberada vía EmitBaseline tras recalibrar el manifest.
     private const string BaselineRemolques = """
-        traffic_secretary_name=Text:668,44,280,10,7,Left
-        traffic_secretary_city=Text:650,64,62,10,7,Left
-        traffic_secretary_code=Text:718,64,55,10,7,Left
-        processing_day=Text:779,71,28,10,7,Center
-        processing_month=Text:811,71,28,10,7,Center
-        processing_year=Text:845,71,32,10,7,Center
-        plate_letter=Text:903,56,28,11,9,Center
-        plate_number=Text:936,56,30,11,9,Center
+        traffic_secretary_name=Text:668,44,280,10,7,Left,False
+        traffic_secretary_city=Text:650,64,62,10,7,Left,False
+        traffic_secretary_code=Text:718,64,55,10,7,Left,False
+        processing_day=Text:779,71,28,10,7,Center,False
+        processing_month=Text:811,71,28,10,7,Center,False
+        processing_year=Text:845,71,32,10,7,Center,False
+        plate_letter=Text:903,56,28,11,9,Center,False
+        plate_number=Text:936,56,30,11,9,Center,False
         requested_process_1=cb:86,101,9
         requested_process_2=cb:155,101,9
-        vehicle_brand=Text:498,96,160,12,7,Left
-        vehicle_line=Text:666,96,165,12,7,Left
-        vehicle_colors=Text:498,132,130,12,7,Left
-        vehicle_model=Text:633,132,60,12,7,Left
-        vehicle_serial_number=Text:736,199,240,12,7,Left
-        vehicle_vin_number=Text:736,228,240,12,7,Left
-        vehicle_owner_first_last_name=Text:90,297,150,12,7,Left
-        vehicle_owner_second_last_name=Text:245,297,150,12,7,Left
-        vehicle_owner_name=Text:400,297,120,12,7,Left
+        vehicle_brand=Text:498,96,160,12,7,Left,False
+        vehicle_line=Text:666,96,165,12,7,Left,False
+        vehicle_colors=Text:498,132,130,12,7,Left,False
+        vehicle_model=Text:633,132,60,12,7,Left,False
+        vehicle_serial_number=Text:736,199,240,12,7,Left,False
+        vehicle_vin_number=Text:736,228,240,12,7,Left,False
+        vehicle_owner_first_last_name=Text:90,297,150,12,7,Left,False
+        vehicle_owner_second_last_name=Text:245,297,150,12,7,Left,False
+        vehicle_owner_name=Text:400,297,120,12,7,Left,False
         vehicle_owner_document_type_c=cb:94,321,9
         vehicle_owner_document_type_nit=cb:127,321,9
         vehicle_owner_document_type_nn=cb:159,321,9
@@ -345,14 +355,14 @@ public sealed class FurManifestGuardTests
         vehicle_owner_document_type_ti=cb:279,321,9
         vehicle_owner_document_type_nuip=cb:329,321,9
         vehicle_owner_document_type_cd=cb:385,321,9
-        vehicle_owner_document_number=Text:431,320,62,12,7,Left
-        vehicle_owner_address=Text:90,348,190,12,7,Left
-        vehicle_owner_city=Text:286,348,120,12,7,Left
-        vehicle_owner_phone=Text:418,348,70,12,7,Left
-        vehicle_owner_signature=Multiline:90,376,390,28,6,Left
-        vehicle_buyer_first_last_name=Text:90,448,150,12,7,Left
-        vehicle_buyer_second_last_name=Text:245,448,150,12,7,Left
-        vehicle_buyer_name=Text:400,448,120,12,7,Left
+        vehicle_owner_document_number=Text:431,320,62,12,7,Left,False
+        vehicle_owner_address=Text:90,348,190,12,7,Left,False
+        vehicle_owner_city=Text:286,348,120,12,7,Left,False
+        vehicle_owner_phone=Text:418,348,70,12,7,Left,False
+        vehicle_owner_signature=Multiline:90,376,390,28,6,Left,False
+        vehicle_buyer_first_last_name=Text:90,448,150,12,7,Left,False
+        vehicle_buyer_second_last_name=Text:245,448,150,12,7,Left,False
+        vehicle_buyer_name=Text:400,448,120,12,7,Left,False
         vehicle_buyer_document_type_c=cb:94,482,9
         vehicle_buyer_document_type_nit=cb:127,482,9
         vehicle_buyer_document_type_nn=cb:159,482,9
@@ -361,12 +371,12 @@ public sealed class FurManifestGuardTests
         vehicle_buyer_document_type_ti=cb:279,482,9
         vehicle_buyer_document_type_nuip=cb:329,482,9
         vehicle_buyer_document_type_cd=cb:385,482,9
-        vehicle_buyer_document_number=Text:431,481,62,12,7,Left
-        vehicle_buyer_address=Text:90,508,190,12,7,Left
-        vehicle_buyer_city=Text:286,508,120,12,7,Left
-        vehicle_buyer_phone=Text:418,508,70,12,7,Left
-        vehicle_buyer_signature=Multiline:90,537,390,28,6,Left
-        observations=Multiline:496,417,490,55,6.5,Left
+        vehicle_buyer_document_number=Text:431,481,62,12,7,Left,False
+        vehicle_buyer_address=Text:90,508,190,12,7,Left,False
+        vehicle_buyer_city=Text:286,508,120,12,7,Left,False
+        vehicle_buyer_phone=Text:418,508,70,12,7,Left,False
+        vehicle_buyer_signature=Multiline:90,537,390,28,6,Left,False
+        observations=Multiline:496,417,490,55,6.5,Left,True
         """;
 
     private static string BaselineFor(FurTemplateFormat format) => format switch
