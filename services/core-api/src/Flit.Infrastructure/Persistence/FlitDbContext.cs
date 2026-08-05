@@ -144,6 +144,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Preferencias de UI por usuario (base compartida: elegir columnas visibles en tablas).
     public DbSet<UserUiPreferenceEntity> UserUiPreferences => Set<UserUiPreferenceEntity>();
 
+    // Consultas que cada usuario del organismo arma y guarda sobre los trámites.
+    public DbSet<OtSavedQueryEntity> OtSavedQueries => Set<OtSavedQueryEntity>();
+
     // HU #10545 — requisitos configurables por OT (RNMC, ruta de placa, validación de identidad).
     public DbSet<OtRequirementsEntity> OtRequirements => Set<OtRequirementsEntity>();
 

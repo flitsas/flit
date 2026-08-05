@@ -246,7 +246,17 @@ public static class DependencyInjection
         services.AddScoped<OtMetrics.GetOtPerformanceHandler>();
         services.AddScoped<OtMetrics.GetOtRejectionReasonsHandler>();
         services.AddScoped<OtMetrics.GetOtDrilldownHandler>();
+        services.AddScoped<OtMetrics.GetOtReportHandler>();
         services.AddScoped<OtMetrics.ListOtClientCompaniesHandler>();
+        services.AddScoped<OtMetrics.GetOtReviewersReportHandler>();
+        services.AddScoped<OtMetrics.ListOtReviewerOptionsHandler>();
+
+        // Consultas propias: el usuario del organismo arma su búsqueda, la guarda y la exporta.
+        services.AddScoped<OtQueries.ExecuteOtQueryHandler>();
+        services.AddScoped<OtQueries.GetOtQueryFieldsHandler>();
+        services.AddScoped<OtQueries.ListOtSavedQueriesHandler>();
+        services.AddScoped<OtQueries.SaveOtQueryHandler>();
+        services.AddScoped<OtQueries.DeleteOtSavedQueryHandler>();
 
         // HU #10195 — asociación de documentos a tipos de trámite (CRUD SuperAdmin).
         services.AddScoped<CreateProcedureDocumentRequirementHandler>();

@@ -114,6 +114,39 @@ public sealed class GetOtDrilldownHandler(IOtMetricsReadRepository repository)
             otTenantId, filter, bucket, MaxItems, transitOfficeIdOverride, cancellationToken);
 }
 
+/// <summary>
+/// Informe del periodo. A diferencia del panel operativo —que describe el AHORA y se lee de un
+/// vistazo—, el informe responde una pregunta cerrada sobre un rango: qué recibí, en qué acabó y
+/// cuánto tardé. Por eso es el único reporte del organismo que devuelve detalle fila a fila.
+/// </summary>
+public sealed class GetOtReportHandler(IOtMetricsReadRepository repository)
+{
+    public Task<OtReportDto?> HandleAsync(
+        Guid otTenantId,
+        OtReportQuery query,
+        Guid? transitOfficeIdOverride,
+        CancellationToken cancellationToken = default) =>
+        repository.GetReportAsync(otTenantId, query, transitOfficeIdOverride, cancellationToken);
+
+    /// <summary>
+    /// Normaliza paginación y orden. Un <c>sortBy</c> desconocido NO es un error: cae al orden por
+    /// defecto. Rechazarlo con 400 rompería la consola cada vez que se retire una columna, y el
+    /// usuario perdería el informe por un detalle que no eligió.
+    /// </summary>
+    public static OtReportQuery BuildQuery(
+        OtMetricsFilter filter,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        bool descending) =>
+        new(
+            filter,
+            Math.Max(1, page ?? 1),
+            Math.Clamp(pageSize ?? OtReportLimits.DefaultPageSize, 1, OtReportLimits.MaxPageSize),
+            OtReportSort.IsKnown(sortBy) ? sortBy : OtReportSort.Radicado,
+            descending);
+}
+
 /// <summary>Empresas cliente del organismo para el filtro del reporte.</summary>
 public sealed class ListOtClientCompaniesHandler(IOtMetricsReadRepository repository)
 {
@@ -122,4 +155,47 @@ public sealed class ListOtClientCompaniesHandler(IOtMetricsReadRepository reposi
         Guid? transitOfficeIdOverride,
         CancellationToken cancellationToken = default) =>
         repository.ListClientCompaniesAsync(otTenantId, transitOfficeIdOverride, cancellationToken);
+}
+
+/// <summary>Informe de revisores: qué hizo cada persona del organismo en el periodo.</summary>
+public sealed class GetOtReviewersReportHandler(IOtMetricsReadRepository repository)
+{
+    public Task<OtReviewersReportDto?> HandleAsync(
+        Guid otTenantId,
+        OtReviewersQuery query,
+        Guid? transitOfficeIdOverride,
+        CancellationToken cancellationToken = default) =>
+        repository.GetReviewersReportAsync(otTenantId, query, transitOfficeIdOverride, cancellationToken);
+
+    /// <summary>
+    /// Normaliza los parámetros antes de llegar al repositorio.
+    ///
+    /// <para>Un <c>sortBy</c> desconocido cae al orden por volumen en vez de devolver 400: llega de
+    /// un enlace guardado o de una URL editada a mano, y perder el informe entero por un detalle que
+    /// el usuario no eligió es peor que ordenarlo distinto.</para>
+    ///
+    /// <para>Los ids repetidos y los vacíos se descartan aquí para que el repositorio reciba siempre
+    /// una selección limpia — un <c>Guid.Empty</c> colado en el filtro no casaría con nadie y el
+    /// informe saldría vacío sin explicación.</para>
+    /// </summary>
+    public static OtReviewersQuery BuildQuery(
+        OtMetricsFilter filter,
+        IEnumerable<Guid>? userIds,
+        string? sortBy,
+        bool descending) =>
+        new(
+            filter,
+            userIds?.Where(id => id != Guid.Empty).Distinct().ToList() ?? [],
+            OtReviewerSort.IsKnown(sortBy) ? sortBy : OtReviewerSort.Decididos,
+            descending);
+}
+
+/// <summary>Revisores del organismo para el filtro del informe.</summary>
+public sealed class ListOtReviewerOptionsHandler(IOtMetricsReadRepository repository)
+{
+    public Task<IReadOnlyList<OtReviewerOptionDto>?> HandleAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride,
+        CancellationToken cancellationToken = default) =>
+        repository.ListReviewerOptionsAsync(otTenantId, transitOfficeIdOverride, cancellationToken);
 }
