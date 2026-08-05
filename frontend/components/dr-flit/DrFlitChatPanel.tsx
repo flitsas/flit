@@ -97,6 +97,7 @@ export function DrFlitChatPanel({
           className="flex shrink-0 items-center gap-3 px-4 py-3.5"
           style={{ background: "var(--dr-flit-gradient-header)" }}
         >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={DR_FLIT_ASSETS.header}
             alt=""

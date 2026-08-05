@@ -37,6 +37,7 @@ export function DrFlitMessageBubble({ message }: { message: DrFlitMessage }) {
       data-role={message.role}
     >
       {!isUser && (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={DR_FLIT_ASSETS.header}
           alt=""

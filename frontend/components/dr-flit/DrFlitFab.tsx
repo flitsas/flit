@@ -39,6 +39,7 @@ export function DrFlitFab({
         aria-hidden="true"
       />
       <span className="block h-full w-full overflow-hidden rounded-full bg-transparent">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={DR_FLIT_ASSETS.fab}
           alt=""
