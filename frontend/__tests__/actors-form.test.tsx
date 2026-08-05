@@ -68,6 +68,7 @@ beforeEach(() => {
   });
   mocks.patchFieldValues.mockResolvedValue(undefined);
   mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'mock' });
+  sessionStorage.clear();
 });
 
 /** Completa consulta RUNT exitosa para el actor visible (layout split / un documento). */
@@ -552,6 +553,67 @@ describe('ActorsForm — cards RUNT enriquecidas', () => {
     expect(detalle).toHaveTextContent('$344.730 COP');
     expect(detalle).toHaveTextContent('STRIA TTOyTTE MCPAL SABANETA');
   });
+
+  it('al volver al paso restaura la consulta sin volver a llamar RUNT', async () => {
+    const user = userEvent.setup();
+    mocks.getActors.mockResolvedValue([
+      {
+        rol: 'comprador',
+        tipoDocumento: 'CC',
+        numeroDocumento: '1193552679',
+        nombreCompleto: 'DANIEL AMADO',
+        email: 'd@x.com',
+      },
+    ]);
+    mocks.runtPersonLookup.mockResolvedValue({
+      found: true,
+      fullName: 'DANIEL AMADO',
+      firstName: 'DANIEL',
+      lastName: 'AMADO',
+      documentType: 'CC',
+      documentNumber: '1193552679',
+      licenseStatus: 'ACTIVO',
+      source: 'RUNT',
+      mode: 'mock',
+      citizenStatus: 'ACTIVA',
+      hasPendingFines: true,
+      hasActiveLicense: true,
+      licenseCategories: 'A2,C1,B1',
+    });
+
+    const { unmount } = render(
+      <ActorsForm
+        instanceId={INSTANCE}
+        modalidad="matricula_inicial"
+        roles={['comprador']}
+        layout="split"
+        embeddedInWizard
+      />,
+    );
+
+    await screen.findByLabelText('Número de documento');
+    expect(screen.getByLabelText('Número de documento')).toHaveValue('1193552679');
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+    expect(await screen.findByText('Persona encontrada en RUNT')).toBeInTheDocument();
+    expect(mocks.runtPersonLookup).toHaveBeenCalledTimes(1);
+
+    unmount();
+    mocks.runtPersonLookup.mockClear();
+
+    render(
+      <ActorsForm
+        instanceId={INSTANCE}
+        modalidad="matricula_inicial"
+        roles={['comprador']}
+        layout="split"
+        embeddedInWizard
+      />,
+    );
+
+    expect(await screen.findByText('Persona encontrada en RUNT')).toBeInTheDocument();
+    expect(screen.getByText(/ALERTA: Comparendos\/Multas pendientes/i)).toBeInTheDocument();
+    expect(mocks.runtPersonLookup).not.toHaveBeenCalled();
+  });
 });
 
 describe('ActorsForm — prefill documento del propietario (paso vendedor)', () => {
@@ -764,6 +826,33 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
     expect(ok).toBe(true);
     const [, actors] = mocks.saveActors.mock.calls[0];
     expect(actors[0].tipoDocumento).toBe('CC');
+  });
+
+  it('en formulario unificado solo siembra el vendedor, no el comprador', async () => {
+    mocks.getActors.mockResolvedValue([]);
+    mocks.getInstance.mockResolvedValue({
+      fieldValues: [
+        { fieldKey: 'owner_document_type', valueText: 'CC' },
+        { fieldKey: 'owner_document_number', valueText: '1090123456' },
+      ],
+    });
+
+    render(
+      <ActorsForm
+        instanceId={INSTANCE}
+        modalidad="traspaso"
+        roles={['vendedor', 'comprador']}
+        embeddedInWizard
+        seedDocumentoFromOwner
+      />,
+    );
+
+    const vendedorDoc = await screen.findByDisplayValue('1090123456');
+    expect(vendedorDoc).toHaveAttribute('id', 'actor-vendedor-numeroDoc');
+
+    const compradorDoc = document.getElementById('actor-comprador-numeroDoc');
+    expect(compradorDoc).toBeTruthy();
+    expect(compradorDoc).toHaveValue('');
   });
 });
 

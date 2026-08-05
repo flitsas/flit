@@ -401,6 +401,17 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         "OBLIGACIONES DEL MANDANTE",
         "MANDATARIO",
         "MANDANTE",
+        // Marcadores del preview de plataforma (MandatoPreviewSample): se muestran en negrita.
+        MandatoPreviewSample.PhRlNombre,
+        MandatoPreviewSample.PhRlDocumento,
+        MandatoPreviewSample.PhRazonSocial,
+        MandatoPreviewSample.PhNit,
+        MandatoPreviewSample.PhPnNombre,
+        MandatoPreviewSample.PhPnDocumento,
+        MandatoPreviewSample.PhMandatarioNombre,
+        MandatoPreviewSample.PhMandatarioDocumento,
+        MandatoPreviewSample.PhPlaca,
+        MandatoPreviewSample.PhCamara,
     ];
 
     // HU #11034 — párrafos JUSTIFICADOS y compactos: el contrato debe caber en una sola hoja, firmas

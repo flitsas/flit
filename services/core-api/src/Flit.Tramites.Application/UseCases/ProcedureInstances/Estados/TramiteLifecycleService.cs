@@ -247,21 +247,12 @@ public sealed class TramiteLifecycleService(
     private async Task<string?> ResolverMandatarioAlAprobarAsync(
         ProcedureInstance instance, TramiteTransitionCommand command, CancellationToken ct)
     {
-        // ¿Exige mandato? Persona jurídica siempre; persona natural solo si el OT lo configura.
-        var comprador = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, BiometricRules.ParteComprador, StringComparison.OrdinalIgnoreCase));
-        var esJuridica = ActorPersonTypes.IsJuridical(comprador?.PersonType)
-            || string.Equals(comprador?.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase);
-
+        // Producto: el mandato aplica siempre (PN y PJ); aquí solo resolvemos firmante / plantilla.
         var code = instance.FieldValues.FirstOrDefault(f =>
             string.Equals(f.FieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase))?.ValueText;
         var config = string.IsNullOrWhiteSpace(code)
             ? null
             : await _mandatePolicy.ResolveAsync(code, ct).ConfigureAwait(false);
-
-        var exigeMandato = esJuridica || (config?.RequiresForNaturalPerson ?? false);
-        if (!exigeMandato)
-            return null;
 
         // Sabaneta (mandatario institucional UT-SETSA): solo firma el mandante ⇒ no hay firmante persona
         // que resolver. Cualquier otra plantilla (genérica/Bello) necesita un mandatario persona.
@@ -572,33 +563,28 @@ public sealed class TramiteLifecycleService(
     }
 
     /// <summary>
-    /// R10 (HU #10597) — gate de prenda del traspaso. Solo aplica a traspaso con el semáforo de
-    /// gravámenes en <c>warn</c>: exige una decisión de prenda vigente y, si la decisión requiere
-    /// documento, su adjunto. <c>(null, null)</c> = puede prepararse. Se omite si no hay repo cableado.
+    /// Gate de prenda: (1) política compañía+OT del certificado — cualquier modalidad;
+    /// (2) R10 decisión con gravámenes en warn — solo traspaso.
     /// </summary>
     private async Task<(string? Code, string? Detail)> EvaluarPrendaGateAsync(
         ProcedureInstance instance,
         CancellationToken ct)
     {
-        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) == TramiteModalidadEntrada.Traspaso;
-        if (!esTraspaso)
-            return (null, null);
-
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
 
-        // CF-06 (HU #10881) — override del OT (independiente del semáforo de gravámenes): exige el
-        // documento de prenda. SNAPSHOT (AC2): solo overrides ya activos AL CREAR el trámite aplican.
-        var otRequiereDocumento = await _prendaDocumentRequirementPolicy
-            .IsRequiredAsync(instance.ProcedureTypeId, instance.TransitOfficeId, instance.CreatedAt, ct)
+        // Compañía+OT: default exige certificado; opt-out al CreatedAt ⇒ opcional. Aplica a
+        // matrícula, traspaso y cualquier otra modalidad con OT.
+        var documentoExigido = await _prendaDocumentRequirementPolicy
+            .IsRequiredAsync(instance.TenantId, instance.TransitOfficeId, instance.CreatedAt, ct)
             .ConfigureAwait(false);
-        var otError = PrendaGate.EvaluateOtOverride(otRequiereDocumento, docTipos);
+        var otError = PrendaGate.EvaluateOtOverride(documentoExigido, docTipos);
         if (otError is not null)
             return (otError,
-                "El organismo de tránsito exige el documento de prenda para este tipo de trámite.");
+                "La compañía exige el documento de prenda para este organismo de tránsito.");
 
-        // R10 (HU #10597) — gate del semáforo de gravámenes (decisión de prenda vigente), solo con
-        // el repo de prenda cableado.
-        if (_prendaRepo is null || !HasGravamenWarn(instance))
+        // R10 (HU #10597) — gate del semáforo de gravámenes (decisión de prenda), solo traspaso.
+        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) == TramiteModalidadEntrada.Traspaso;
+        if (!esTraspaso || _prendaRepo is null || !HasGravamenWarn(instance))
             return (null, null);
 
         var prenda = await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
@@ -607,8 +593,9 @@ public sealed class TramiteLifecycleService(
         {
             TramiteEstadoErrores.PrendaDecisionRequerida => (TramiteEstadoErrores.PrendaDecisionRequerida,
                 "El vehículo tiene gravámenes: registra una decisión de prenda antes de preparar el trámite."),
-            TramiteEstadoErrores.PrendaDocumentoRequerido => (TramiteEstadoErrores.PrendaDocumentoRequerido,
-                "La decisión de prenda seleccionada requiere adjuntar su documento de soporte."),
+            TramiteEstadoErrores.PrendaDocumentoRequerido when documentoExigido =>
+                (TramiteEstadoErrores.PrendaDocumentoRequerido,
+                    "La decisión de prenda seleccionada requiere adjuntar su documento de soporte."),
             _ => (null, null),
         };
     }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useProcedureDocuments } from '@/hooks/useProcedureDocuments';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
@@ -18,6 +18,10 @@ interface Props {
   decision: PrendaDecision;
   docTipo: string;
   modalidad?: WizardModalidad;
+  /** Compañía+OT: default true (obligatorio). false ⇒ badge Opcional. */
+  documentRequired?: boolean;
+  /** Notifica si el adjunto de soporte está presente (para el gate de Continuar). */
+  onSatisfiedChange?: (satisfied: boolean) => void;
   onChanged?: () => void;
 }
 
@@ -30,6 +34,8 @@ export function PrendaDocumentUpload({
   decision,
   docTipo,
   modalidad = 'matricula_inicial',
+  documentRequired = true,
+  onSatisfiedChange,
   onChanged,
 }: Props) {
   const { state, upload, remove } = useProcedureDocuments(instanceId, { modalidad });
@@ -39,10 +45,14 @@ export function PrendaDocumentUpload({
     (a) => a.tipo.toLowerCase() === docTipo.toLowerCase(),
   );
 
+  useEffect(() => {
+    onSatisfiedChange?.(!!attachment);
+  }, [attachment, onSatisfiedChange]);
+
   const item: ChecklistItemView = {
     key: docTipo,
     label: prendaDocLabelFor(decision),
-    obligatorio: true,
+    obligatorio: documentRequired,
     docTipo,
     satisfied: !!attachment,
   };

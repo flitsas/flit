@@ -10,6 +10,7 @@ import {
   addTransitGrant,
   fetchOtBlockingPolicies,
   fetchOtConsultationRestrictions,
+  fetchOtPrendaDocumentPolicies,
   fetchTransitAgreements,
   fetchTransitGrants,
   fetchTransitOffices,
@@ -17,6 +18,7 @@ import {
   setTransitAgreement,
   setOtBlockingPolicy,
   setOtConsultationRestriction,
+  setOtPrendaDocumentPolicy,
 } from "@/lib/api/admin-companies";
 import {
   fetchTransitOfficesOperationalStatus,
@@ -27,6 +29,7 @@ import type {
   ConsultationRestrictionKind,
   OtBlockingPolicy,
   OtConsultationRestriction,
+  OtPrendaDocumentPolicy,
   TransitOffice,
 } from "@/lib/api/types";
 
@@ -50,6 +53,7 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
   const [operationalById, setOperationalById] = useState<Record<string, OtOperationalInfo>>({});
   const [policies, setPolicies] = useState<OtBlockingPolicy[]>([]);
   const [restrictions, setRestrictions] = useState<OtConsultationRestriction[]>([]);
+  const [prendaOptionalPolicies, setPrendaOptionalPolicies] = useState<OtPrendaDocumentPolicy[]>([]);
   const [configOffice, setConfigOffice] = useState<TransitOffice | null>(null);
   const [page, setPage] = useState(1);
 
@@ -57,7 +61,8 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const [catalog, grants, agreements, opStatus, blockingRows, restrictionRows] = await Promise.all([
+        const [catalog, grants, agreements, opStatus, blockingRows, restrictionRows, prendaRows] =
+          await Promise.all([
           fetchTransitOffices(undefined, signal),
           fetchTransitGrants(tenantId, signal),
           // Best-effort como el estado operativo: si falla, la tabla sigue funcionando sin la
@@ -70,6 +75,7 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
           ),
           fetchOtBlockingPolicies(tenantId, signal),
           fetchOtConsultationRestrictions(tenantId, signal),
+          fetchOtPrendaDocumentPolicies(tenantId, signal).catch(() => [] as OtPrendaDocumentPolicy[]),
         ]);
         if (signal?.aborted) {
           return;
@@ -84,6 +90,7 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
         );
         setPolicies(blockingRows);
         setRestrictions(restrictionRows);
+        setPrendaOptionalPolicies(prendaRows);
         setStatus(catalog.length === 0 ? "empty" : "ready");
       } catch {
         if (!signal?.aborted) {
@@ -172,6 +179,14 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
     ]);
   };
 
+  const handleTogglePrendaOptional = async (transitOfficeId: string, documentOptional: boolean) => {
+    await setOtPrendaDocumentPolicy(tenantId, transitOfficeId, documentOptional);
+    setPrendaOptionalPolicies((current) => {
+      const without = current.filter((p) => p.transitOfficeId !== transitOfficeId);
+      return documentOptional ? [...without, { transitOfficeId, documentOptional: true }] : without;
+    });
+  };
+
   return (
     <>
       <UiStateBoundary
@@ -204,8 +219,10 @@ export function OTConfigTablePanel({ tenantId }: { tenantId: string }) {
           office={configOffice}
           policies={policies}
           restrictions={restrictions}
+          prendaOptionalPolicies={prendaOptionalPolicies}
           onToggleBlocking={handleToggleBlocking}
           onToggleRestriction={handleToggleRestriction}
+          onTogglePrendaOptional={handleTogglePrendaOptional}
           onClose={() => setConfigOffice(null)}
           onError={(message) => show(message, "error")}
         />

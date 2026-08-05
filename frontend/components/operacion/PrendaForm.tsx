@@ -73,13 +73,25 @@ interface Props {
   embeddedInWizard?: boolean;
   /**
    * El RUNT reportó gravámenes/prendas (check `gravamenes` en warn). Muestra una aleta
-   * informativa junto a la decisión; no auto-selecciona.
+   * informativa y, si no hay decisión guardada, sugiere "registrar" precargando acreedor/NIT.
    */
   runtHasGravamen?: boolean;
   /** Mensaje opcional del check RUNT (detalle). */
   runtGravamenMessage?: string | null;
-  /** Modalidad del trámite (OCR / documentos). Default matrícula. */
+  /**
+   * Modalidad del trámite (OCR / documentos). Default matrícula.
+   */
   modalidad?: WizardModalidad;
+  /**
+   * Compañía+OT: certificado obligatorio (default) u opcional. Viene de GET /wizard
+   * (`prendaDocumentRequired`).
+   */
+  documentRequired?: boolean;
+  /**
+   * Gate Continuar: `false` cuando la decisión exige certificado obligatorio y aún no hay adjunto.
+   * Con certificado opcional (o sin decisión que lo exija) reporta `true`.
+   */
+  onDocumentGateChange?: (ready: boolean) => void;
 }
 
 const INPUT_BASE =
@@ -152,6 +164,24 @@ function hasRuntAcreedorDetail(s: RuntPrendaSummary): boolean {
   return Boolean(s.prendario || s.nombreAcreedor || s.items.length > 0);
 }
 
+/** Acreedor/NIT sugeridos por la consulta RUNT (primer ítem con dato, o campos resumen). */
+export function pickRuntAcreedor(
+  summary: RuntPrendaSummary,
+): { nombre: string; documento: string } | null {
+  const fromItem = summary.items.find(
+    (i) => Boolean(i.acreedor?.trim() || i.documentoAcreedor?.trim()),
+  );
+  if (fromItem) {
+    return {
+      nombre: (fromItem.acreedor ?? '').trim(),
+      documento: digitsOnly(fromItem.documentoAcreedor ?? ''),
+    };
+  }
+  const nombre = (summary.nombreAcreedor || summary.prendario || '').trim();
+  if (!nombre) return null;
+  return { nombre, documento: '' };
+}
+
 /** Fila etiqueta/valor del detalle RUNT. */
 function RuntField({ label, value }: { label: string; value: string | null | undefined }) {
   if (!value?.trim()) return null;
@@ -179,6 +209,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     runtHasGravamen = false,
     runtGravamenMessage = null,
     modalidad = 'matricula_inicial',
+    documentRequired = true,
+    onDocumentGateChange,
   },
   ref,
 ) {
@@ -192,6 +224,24 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   const [error, setError] = useState<string | null>(null);
   const [runtSummary, setRuntSummary] = useState<RuntPrendaSummary | null>(null);
   const [runtOpen, setRuntOpen] = useState(false);
+  const [docSatisfied, setDocSatisfied] = useState(false);
+  const offersRegistrar = decisions.includes('registrar');
+
+  const applyRuntAcreedorIfEmpty = (
+    summary: RuntPrendaSummary,
+    currentNombre: string,
+    currentDoc: string,
+  ): { nombre: string; documento: string } => {
+    if (currentNombre.trim() || currentDoc.trim()) {
+      return { nombre: currentNombre, documento: currentDoc };
+    }
+    const pick = pickRuntAcreedor(summary);
+    if (!pick) return { nombre: currentNombre, documento: currentDoc };
+    return {
+      nombre: pick.nombre || currentNombre,
+      documento: pick.documento || currentDoc,
+    };
+  };
 
   useEffect(() => {
     if (!instanceId) return;
@@ -204,16 +254,29 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
           tramitesClient.getInstance(instanceId).catch(() => null),
         ]);
         if (!active) return;
+        const summary = detail?.fieldValues
+          ? buildRuntPrendaSummary(detail.fieldValues)
+          : { items: [] as RuntGravamenItem[] };
+        setRuntSummary(summary);
+        if (hasRuntAcreedorDetail(summary)) setRuntOpen(true);
+
         if (p) {
           setDecision(p.decision);
-          setAcreedorNombre(p.acreedorNombre ?? '');
-          setAcreedorDocumento(digitsOnly(p.acreedorDocumento ?? ''));
-        }
-        if (detail?.fieldValues) {
-          const summary = buildRuntPrendaSummary(detail.fieldValues);
-          setRuntSummary(summary);
-          // Abrir el detalle cuando el RUNT trae acreedor/ítems (no solo SI/NO).
-          if (hasRuntAcreedorDetail(summary)) setRuntOpen(true);
+          const filled = applyRuntAcreedorIfEmpty(
+            summary,
+            p.acreedorNombre ?? '',
+            digitsOnly(p.acreedorDocumento ?? ''),
+          );
+          setAcreedorNombre(filled.nombre);
+          setAcreedorDocumento(filled.documento);
+        } else if (hasRuntAcreedorDetail(summary) || runtHasGravamen) {
+          // Consulta con prenda: sugerir "registrar" y precargar acreedor/NIT.
+          if (offersRegistrar) {
+            setDecision('registrar');
+          }
+          const filled = applyRuntAcreedorIfEmpty(summary, '', '');
+          setAcreedorNombre(filled.nombre);
+          setAcreedorDocumento(filled.documento);
         }
       } catch {
         /* sin decisión previa: el form queda vacío */
@@ -225,10 +288,28 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     return () => {
       active = false;
     };
-  }, [instanceId]);
+  }, [instanceId, runtHasGravamen, offersRegistrar]);
 
   const capturaAcreedor = decision !== '' && CAPTURA_ACREEDOR.has(decision);
   const requiereDocumento = decision !== '' && REQUIERE_DOCUMENTO.has(decision);
+  const documentGateReady = !requiereDocumento || !documentRequired || docSatisfied;
+
+  useEffect(() => {
+    onDocumentGateChange?.(documentGateReady);
+  }, [documentGateReady, onDocumentGateChange]);
+
+  useEffect(() => {
+    if (!requiereDocumento) setDocSatisfied(false);
+  }, [requiereDocumento, decision]);
+
+  const selectDecision = (d: PrendaDecision) => {
+    setDecision(d);
+    if (CAPTURA_ACREEDOR.has(d) && runtSummary) {
+      const filled = applyRuntAcreedorIfEmpty(runtSummary, acreedorNombre, acreedorDocumento);
+      setAcreedorNombre(filled.nombre);
+      setAcreedorDocumento(filled.documento);
+    }
+  };
 
   const submit = async (): Promise<boolean> => {
     if (!instanceId) return false;
@@ -410,7 +491,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                     name="prenda-decision"
                     value={d}
                     checked={decision === d}
-                    onChange={() => setDecision(d)}
+                    onChange={() => selectDecision(d)}
                     className="h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
                     disabled={readOnly}
                   />
@@ -459,6 +540,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               decision={decision}
               docTipo={prendaDocTipoFor(decision)!}
               modalidad={modalidad}
+              documentRequired={documentRequired}
+              onSatisfiedChange={setDocSatisfied}
               onChanged={onSaved}
             />
           )}

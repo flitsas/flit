@@ -12,6 +12,7 @@ import type {
   CreateCompanyRequest,
   OtBlockingPolicy,
   OtConsultationRestriction,
+  OtPrendaDocumentPolicy,
   TenantSettings,
   TenantSettingsUpdate,
   TransitGrantsResponse,
@@ -227,6 +228,28 @@ export function setOtBlockingPolicy(
     `${base}/${tenantId}/ot-blocking-policies/${transitOfficeId}/${criterion}`,
     { method: "PUT", body: { blocks } },
   );
+}
+
+/** GET — OTs donde el check de prenda opcional está activo (tabla dispersa). */
+export function fetchOtPrendaDocumentPolicies(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<OtPrendaDocumentPolicy[]> {
+  return apiFetch<OtPrendaDocumentPolicy[]>(`${base}/${tenantId}/ot-prenda-document-policies`, {
+    signal,
+  });
+}
+
+/** PUT — documentOptional=true deja de exigir prenda; false vuelve a obligatoria. */
+export function setOtPrendaDocumentPolicy(
+  tenantId: string,
+  transitOfficeId: string,
+  documentOptional: boolean,
+): Promise<void> {
+  return apiFetch<void>(`${base}/${tenantId}/ot-prenda-document-policies/${transitOfficeId}`, {
+    method: "PUT",
+    body: { documentOptional },
+  });
 }
 
 /** GET /{tenantId}/audit-log — historial paginado DESC (AC5). */

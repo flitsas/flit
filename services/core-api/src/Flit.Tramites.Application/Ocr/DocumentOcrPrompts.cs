@@ -17,7 +17,12 @@ public static class DocumentOcrPrompts
     /// impronta + soat). HU #10977 añade <c>rtm</c> en ambas modalidades.
     /// </summary>
     public static readonly IReadOnlySet<string> SupportedTipos =
-        new HashSet<string>(StringComparer.Ordinal) { "factura", "aduana", "impronta", "soat", "rtm" };
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "factura", "aduana", "impronta", "soat", "rtm",
+            // Solo extract de Plataforma → Mandatos; el lote de trámites NO lo solicita.
+            "mandato_config",
+        };
 
     /// <summary>true si <paramref name="tipo"/> tiene prompt OCR asociado.</summary>
     public static bool IsSupported(string? tipo) => tipo is not null && SupportedTipos.Contains(tipo);
@@ -30,6 +35,7 @@ public static class DocumentOcrPrompts
         "impronta" => Impronta,
         "soat" => Soat,
         "rtm" => Rtm,
+        "mandato_config" => MandatoConfig,
         _ => null,
     };
 
@@ -391,5 +397,35 @@ EXTRAER:
 
 JSON valido sin markdown:
 {"tipo_documento":"rtm","es_valido":true,"paginas_documento":[1],"total_paginas":1,"numero_certificado":"","cda_expide":"","cda_nit":"","fecha_expedicion":"","fecha_vigencia":"","fecha_vencimiento":"","estado":"no_determinado","resultado":"no_determinado","vehiculo_placa":"","vehiculo_marca":"","vehiculo_linea":"","vehiculo_modelo":"","vehiculo_clase":"","vehiculo_vin":"","observaciones":""}
+""";
+
+    /// <summary>
+    /// Extract de config de mandato para Plataforma → Mandatos. NO se usa en el lote de trámites.
+    /// El PDF subido solo aporta datos; el documento oficial se regenera con diseño FLIT.
+    /// </summary>
+    private const string MandatoConfig =
+"""
+Analiza este documento. Debe ser un CONTRATO PRIVADO DE MANDATO, poder o autorizacion a un apoderado
+para tramites de transito en Colombia (FLIT / organismos de transito / uniones temporales).
+
+NO es valido si es: FUR, SOAT, RTM, factura, cedula, compraventa, solicitud virtual sola.
+
+Heuristica de plantilla sugerida (suggestedTemplateCode):
+- "sabaneta" si menciona UT-SETSA, SETSA o Sabaneta como mandatario institucional
+- "bello" si menciona UT-MAB, MAB o Bello como mandatario institucional / union temporal
+- "generico" en cualquier otro caso (mandatario persona natural)
+
+EXTRAER JSON (sin markdown):
+- suggestedTemplateCode: "generico" | "sabaneta" | "bello"
+- requiresForNaturalPerson: true si el texto implica que aplica tambien a persona natural; si no false
+- mandataryFamily: "organismo_transito" si el mandatario es una UT/organismo; "individuo" si es una persona
+- institutionalMandataryName: razon social del mandatario institucional (si aplica)
+- institutionalMandataryNit: NIT del mandatario institucional (si aplica)
+- chamberCity: ciudad de la Camara de Comercio mencionada (si aparece)
+- mandatarySigla: sigla tipo UT-SETSA / UT-MAB (si aparece)
+- notes: breve observacion
+
+JSON valido:
+{"suggestedTemplateCode":"generico","requiresForNaturalPerson":false,"mandataryFamily":"individuo","institutionalMandataryName":"","institutionalMandataryNit":"","chamberCity":"","mandatarySigla":"","notes":""}
 """;
 }

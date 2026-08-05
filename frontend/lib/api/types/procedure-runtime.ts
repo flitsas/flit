@@ -897,6 +897,11 @@ export interface WizardState {
    * Ausente/false ⇒ trámite nativo de V2.
    */
   esMigrado?: boolean;
+  /**
+   * Compañía+OT: certificado de prenda obligatorio (default) u opcional (opt-out vigente al crear
+   * el trámite). Ausente ⇒ se trata como obligatorio.
+   */
+  prendaDocumentRequired?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
