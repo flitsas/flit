@@ -280,6 +280,96 @@ type LookupState =
   | { status: 'not_found' }
   | { status: 'error'; message: string };
 
+/** Solo estados `found` son candidatas a rehidratación al volver al paso. */
+type FoundLookupState = Extract<LookupState, { status: 'found' }>;
+
+type ActorConsultationCacheEntry = {
+  rol: ActorRol;
+  tipoDocumento: string;
+  numeroDocumento: string;
+  state: FoundLookupState;
+};
+
+function actorConsultationStorageKey(instanceId: string): string {
+  return `flit:actor-identity-consultation:${instanceId}`;
+}
+
+function consultationEntryKey(rol: string, tipo: string, numero: string): string {
+  return `${rol}|${tipo}|${numero.trim()}`;
+}
+
+/** Lee el snapshot de consultas de identidad del trámite (sobrevive a desmontar el paso). */
+export function readActorConsultationCache(
+  instanceId: string | null,
+): Record<string, ActorConsultationCacheEntry> {
+  if (!instanceId || typeof sessionStorage === 'undefined') return {};
+  try {
+    const raw = sessionStorage.getItem(actorConsultationStorageKey(instanceId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed as Record<string, ActorConsultationCacheEntry>;
+  } catch {
+    return {};
+  }
+}
+
+function writeActorConsultationCache(
+  instanceId: string | null,
+  cache: Record<string, ActorConsultationCacheEntry>,
+) {
+  if (!instanceId || typeof sessionStorage === 'undefined') return;
+  try {
+    sessionStorage.setItem(actorConsultationStorageKey(instanceId), JSON.stringify(cache));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+function rememberActorConsultation(
+  instanceId: string | null,
+  actor: ProcedureActor,
+  state: FoundLookupState,
+) {
+  if (!instanceId || !actor.numeroDocumento.trim()) return;
+  const cache = readActorConsultationCache(instanceId);
+  const key = consultationEntryKey(actor.rol, actor.tipoDocumento, actor.numeroDocumento);
+  // Una sola entrada vigente por rol: si cambió el documento, descarta la anterior.
+  for (const [k, entry] of Object.entries(cache)) {
+    if (entry.rol === actor.rol && k !== key) delete cache[k];
+  }
+  cache[key] = {
+    rol: actor.rol,
+    tipoDocumento: actor.tipoDocumento,
+    numeroDocumento: actor.numeroDocumento.trim(),
+    state,
+  };
+  writeActorConsultationCache(instanceId, cache);
+}
+
+function forgetActorConsultation(instanceId: string | null, rol: ActorRol) {
+  if (!instanceId) return;
+  const cache = readActorConsultationCache(instanceId);
+  let changed = false;
+  for (const [k, entry] of Object.entries(cache)) {
+    if (entry.rol === rol) {
+      delete cache[k];
+      changed = true;
+    }
+  }
+  if (changed) writeActorConsultationCache(instanceId, cache);
+}
+
+function restoreActorConsultation(
+  instanceId: string | null,
+  actor: ProcedureActor,
+): FoundLookupState | null {
+  if (!instanceId || !actor.numeroDocumento.trim()) return null;
+  const key = consultationEntryKey(actor.rol, actor.tipoDocumento, actor.numeroDocumento);
+  const entry = readActorConsultationCache(instanceId)[key];
+  return entry?.state?.status === 'found' ? entry.state : null;
+}
+
 /**
  * HU #10956 (AC2/AC3/AC4/AC5) — estado por actor de la precarga de datos de CONTACTO (ciudad,
  * correo, dirección, teléfono), disparada tras resolver la identidad del actor (RUNT/RUES/
@@ -615,10 +705,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     };
   }, [seedDocumentoFromOwner, instanceId]);
 
-  // Aplica el documento del propietario (paso 1) a un actor sin documento. No
-  // pisa un documento ya escrito/persistido: solo siembra el campo vacío.
+  // Aplica el documento del propietario (paso 1) SOLO al vendedor sin documento.
+  // No pisa un documento ya escrito/persistido y nunca siembra al comprador (en el
+  // formulario unificado vendedor+comprador ambos roles pasan por este helper).
   const withOwnerSeed = (a: ProcedureActor): ProcedureActor =>
-    ownerSeed && !a.numeroDocumento.trim()
+    ownerSeed && a.rol === 'vendedor' && !a.numeroDocumento.trim()
       ? withDerivedPersonType({
           ...a,
           numeroDocumento: ownerSeed.numero,
@@ -749,6 +840,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     // usa preserveConsultation para no disparar un segundo lookup ni perder el `found`.
     if (identityChanged && !opts?.preserveConsultation) {
       if (prevActor?.numeroDocumento) unlockRuesRazonSocial(prevActor.numeroDocumento);
+      if (prevActor) forgetActorConsultation(instanceId, prevActor.rol);
       setRuntFor(index, { status: 'idle' });
       autoLookupTriggeredRef.current = null;
     }
@@ -830,7 +922,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           const reps = repsOf(preload);
           setSelectedRepIdx((prev) => ({ ...prev, [index]: 0 }));
           if (reps[0]) applySelectedRep(index, reps[0]);
-          setRuntFor(index, { status: 'found', kind: 'preload', result: preload });
+          const foundPreload = { status: 'found' as const, kind: 'preload' as const, result: preload };
+          setRuntFor(index, foundPreload);
+          rememberActorConsultation(instanceId, {
+            ...actor,
+            tipoDocumento: 'NIT',
+            numeroDocumento: nit,
+            nombreCompleto: preload.company.razonSocial,
+          }, foundPreload);
           lockRuesRazonSocial(nit);
           // HU #10956 (AC2) — identidad resuelta (match del directorio): precarga el contacto conocido.
           void runContactLookup(index, 'NIT', nit);
@@ -852,6 +951,16 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             { preserveConsultation: true },
           );
           setRuntFor(index, { status: 'found', kind: 'rues', result });
+          rememberActorConsultation(
+            instanceId,
+            {
+              ...actor,
+              tipoDocumento: 'NIT',
+              numeroDocumento: nit,
+              nombreCompleto: result.razonSocial ?? actor.nombreCompleto,
+            },
+            { status: 'found', kind: 'rues', result },
+          );
           if (result.razonSocial?.trim()) lockRuesRazonSocial(nit);
           // HU #10956 (AC2) — identidad resuelta en RUES: precarga el contacto conocido.
           void runContactLookup(index, 'NIT', nit);
@@ -878,6 +987,16 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           { preserveConsultation: true },
         );
         setRuntFor(index, { status: 'found', kind: 'runt', result });
+        rememberActorConsultation(
+          instanceId,
+          {
+            ...actor,
+            tipoDocumento: resolvedTipo,
+            numeroDocumento: resolvedNumero,
+            nombreCompleto: result.fullName ?? actor.nombreCompleto,
+          },
+          { status: 'found', kind: 'runt', result },
+        );
         // HU #10956 (AC2) — identidad resuelta en RUNT: precarga el contacto conocido.
         void runContactLookup(index, resolvedTipo, resolvedNumero);
       } else {
@@ -925,10 +1044,33 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     }
   };
 
+  // Rehidrata consultas de identidad ya hechas en este trámite (Continuar → Anterior) sin
+  // volver a llamar RUNT/RUES. El snapshot vive en sessionStorage por instancia.
+  useEffect(() => {
+    if (!instanceId) return;
+    setRunt((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      actors.forEach((actor, index) => {
+        const current = next[index];
+        if (current && current.status !== 'idle') return;
+        const restored = restoreActorConsultation(instanceId, actor);
+        if (!restored) return;
+        next[index] = restored;
+        changed = true;
+        if (actor.rol === 'vendedor') {
+          autoLookupTriggeredRef.current = `${actor.tipoDocumento}:${actor.numeroDocumento.trim()}`;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [instanceId, actors]);
+
   // Paso vendedor: dispara la consulta en cuanto el documento está disponible (sembrado desde el
   // paso 1 o rehidratado del backend), sin clic manual. HU #10906 — el cortocircuito de precarga por
   // NIT vive dentro de handleIdentityLookup (rama jurídica).
   // Split (un vendedor) o MULTI unificado (índice del rol vendedor).
+  // Si ya hay snapshot restaurado (`found`), no vuelve a consultar.
   const vendedorIndex = actors.findIndex((a) => a.rol === 'vendedor');
   const vendedorDoc = vendedorIndex >= 0 ? actors[vendedorIndex]?.numeroDocumento : undefined;
   const vendedorTipo = vendedorIndex >= 0 ? actors[vendedorIndex]?.tipoDocumento : undefined;
@@ -942,6 +1084,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const documentNumber = (vendedorDoc ?? '').trim();
     if (!documentNumber) return;
     if ((vendedorRuntStatus ?? 'idle') !== 'idle') return;
+    const vendedor = actors[vendedorIndex];
+    const cached = vendedor ? restoreActorConsultation(instanceId, vendedor) : null;
+    if (cached) {
+      setRuntFor(vendedorIndex, cached);
+      autoLookupTriggeredRef.current = `${vendedorTipo}:${documentNumber}`;
+      return;
+    }
     const lookupKey = `${vendedorTipo}:${documentNumber}`;
     if (autoLookupTriggeredRef.current === lookupKey) return;
     autoLookupTriggeredRef.current = lookupKey;

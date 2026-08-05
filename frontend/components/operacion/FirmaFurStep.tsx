@@ -19,7 +19,6 @@ import MatriculaResumen from './MatriculaResumen';
 import ExpedienteVisor from './ExpedienteVisor';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
-import { MandatarioSection } from './MandatarioSection';
 import { PRENDA_DECISION_LABELS } from './PrendaForm';
 import { prendaDocLabelFor, prendaDocTipoFor } from './prenda-document-tipos';
 import { summarizeDeclaredTransformations } from './VehicleTransformationsCard';
@@ -570,18 +569,6 @@ export function FirmaFurStep({
         vaultCoveredPartes={vaultCoveredPartes}
         biometricForceEditable={biometricForceEditable}
       />
-
-      {/* HU #11203 — quién firma el mandato se elige aquí, con el organismo ya resuelto, en vez de
-          dejarlo para la aprobación del organismo. Solo aparece si hay mandatarios que ofrecer. */}
-      {instanceId && organismoSelected && (
-        <MandatarioSection
-          instanceId={instanceId}
-          onChanged={() => {
-            void loadDetail();
-            onRefresh?.();
-          }}
-        />
-      )}
 
       {/* HU #10799 — selección de placa preasignada como SECCIÓN explícita (Flujo A), solo en matrícula
           inicial y una vez elegido el OT. No aplica si el VIN ya tiene placa del RUNT (AC2). */}

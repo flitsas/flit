@@ -776,8 +776,10 @@ public sealed class AttachmentsHandlerTests
         var (result, error) = await handler.HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
-        result!.Items.Select(i => i.Key).Should().Equal("factura", "soat");
+        // Matriz del gestor + mandato autogenerado (ADR-0036: ExigeMandato siempre).
+        result!.Items.Select(i => i.Key).Should().Equal("factura", "soat", "mandato");
         result.FaltanObligatorios.Should().Contain("soat"); // el gestor lo hizo obligatorio
+        result.FaltanObligatorios.Should().NotContain("mandato"); // mandato es Add no-obligatorio
     }
 
     [Fact]

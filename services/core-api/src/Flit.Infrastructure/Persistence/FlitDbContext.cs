@@ -68,6 +68,13 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<TenantTransitOfficeBlockingPolicy> TenantTransitOfficeBlockingPolicies =>
         Set<TenantTransitOfficeBlockingPolicy>();
 
+    /// <summary>
+    /// Opt-out de documento de prenda obligatorio por compañía + OT.
+    /// Ausencia de fila = obligatorio; <c>document_optional=true</c> = opcional.
+    /// </summary>
+    public DbSet<TenantTransitOfficePrendaDocumentPolicy> TenantTransitOfficePrendaDocumentPolicies =>
+        Set<TenantTransitOfficePrendaDocumentPolicy>();
+
     // ── Admin OT — mandatarios (firmantes de mandato) y sus compañías (ADR-0023) ──
     public DbSet<MandateSigner> MandateSigners => Set<MandateSigner>();
 

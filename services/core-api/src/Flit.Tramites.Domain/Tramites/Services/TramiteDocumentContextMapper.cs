@@ -76,11 +76,8 @@ public static class TramiteDocumentContextMapper
         var tieneLeasing = LeerBool(fieldValues, LeasingFieldKey);
         var cambioCarroceria = LeerBool(fieldValues, CambioCarroceriaFieldKey);
 
-        // ADR-0036 (HU #10913) — el mandato aplica a persona jurídica SIEMPRE, y a persona natural solo
-        // si el OT lo exige (config.RequiresForNaturalPerson, p. ej. Sabaneta). Sin config del OF ⇒ solo
-        // persona jurídica (default conservador, sin regresión).
-        var exigeMandato = esNit
-            || (esPersonaNatural && mandateConfig is { RequiresForNaturalPerson: true });
+        // Producto: el contrato de mandato aplica siempre (persona natural y jurídica).
+        const bool exigeMandato = true;
 
         return new TramiteDocumentContext(
             // Aduana es obligatorio de base en matrícula (catálogo + matriz del gestor); no se

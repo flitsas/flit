@@ -60,23 +60,16 @@ public sealed class TramiteDocumentContextMapperTests
     }
 
     [Fact]
-    public void PersonaNatural_ExigeMandato_SoloSiElOtLoExige()
+    public void PersonaNatural_ExigeMandato_Siempre()
     {
         var instance = InstanceWith(actors: [("comprador", "CC")]);
         foreach (var a in instance.Actors) a.PersonType = ActorPersonTypes.Natural;
 
-        // Sin config del OT ⇒ no exige mandato a persona natural.
-        TramiteDocumentContextMapper.From(instance).ExigeMandato.Should().BeFalse();
+        TramiteDocumentContextMapper.From(instance).ExigeMandato.Should().BeTrue();
 
-        // OT que exige mandato a persona natural (Sabaneta) ⇒ sí lo exige.
-        var sabaneta = new Flit.Tramites.Domain.Integration.MandateOtConfig(
-            Guid.NewGuid(), "sabaneta", RequiresForNaturalPerson: true, "UT-SETSA", "900273813-7");
-        TramiteDocumentContextMapper.From(instance, sabaneta).ExigeMandato.Should().BeTrue();
-
-        // OT con config pero que NO exige a persona natural ⇒ no lo exige.
         var bello = new Flit.Tramites.Domain.Integration.MandateOtConfig(
             Guid.NewGuid(), "bello", RequiresForNaturalPerson: false, "UT-MAB", "901783814-6");
-        TramiteDocumentContextMapper.From(instance, bello).ExigeMandato.Should().BeFalse();
+        TramiteDocumentContextMapper.From(instance, bello).ExigeMandato.Should().BeTrue();
     }
 
     [Fact]
