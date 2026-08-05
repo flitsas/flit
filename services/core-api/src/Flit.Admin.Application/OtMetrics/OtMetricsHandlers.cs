@@ -114,6 +114,39 @@ public sealed class GetOtDrilldownHandler(IOtMetricsReadRepository repository)
             otTenantId, filter, bucket, MaxItems, transitOfficeIdOverride, cancellationToken);
 }
 
+/// <summary>
+/// Informe del periodo. A diferencia del panel operativo —que describe el AHORA y se lee de un
+/// vistazo—, el informe responde una pregunta cerrada sobre un rango: qué recibí, en qué acabó y
+/// cuánto tardé. Por eso es el único reporte del organismo que devuelve detalle fila a fila.
+/// </summary>
+public sealed class GetOtReportHandler(IOtMetricsReadRepository repository)
+{
+    public Task<OtReportDto?> HandleAsync(
+        Guid otTenantId,
+        OtReportQuery query,
+        Guid? transitOfficeIdOverride,
+        CancellationToken cancellationToken = default) =>
+        repository.GetReportAsync(otTenantId, query, transitOfficeIdOverride, cancellationToken);
+
+    /// <summary>
+    /// Normaliza paginación y orden. Un <c>sortBy</c> desconocido NO es un error: cae al orden por
+    /// defecto. Rechazarlo con 400 rompería la consola cada vez que se retire una columna, y el
+    /// usuario perdería el informe por un detalle que no eligió.
+    /// </summary>
+    public static OtReportQuery BuildQuery(
+        OtMetricsFilter filter,
+        int? page,
+        int? pageSize,
+        string? sortBy,
+        bool descending) =>
+        new(
+            filter,
+            Math.Max(1, page ?? 1),
+            Math.Clamp(pageSize ?? OtReportLimits.DefaultPageSize, 1, OtReportLimits.MaxPageSize),
+            OtReportSort.IsKnown(sortBy) ? sortBy : OtReportSort.Radicado,
+            descending);
+}
+
 /// <summary>Empresas cliente del organismo para el filtro del reporte.</summary>
 public sealed class ListOtClientCompaniesHandler(IOtMetricsReadRepository repository)
 {

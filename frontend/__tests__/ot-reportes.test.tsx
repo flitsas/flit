@@ -1,7 +1,10 @@
 // Reportes del organismo de tránsito. Antes de esto la pantalla era un cartel de "en
 // construcción": el organismo trabajaba dentro de FLIT sin ningún instrumento propio.
+//
+// La consola está partida en tres pestañas porque responden preguntas con horizontes distintos.
+// Los tests reflejan ese corte: cada bloque abre la pestaña que lo contiene, igual que el usuario.
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type {
@@ -10,6 +13,7 @@ import type {
   OtOperationalPanel,
   OtPerformance,
   OtRejectionReasons,
+  OtReport,
 } from "@/lib/api/ot-metrics";
 
 const mocks = vi.hoisted(() => ({
@@ -18,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   fetchOtRejectionReasons: vi.fn(),
   fetchOtClientCompanies: vi.fn(),
   fetchOtDrilldown: vi.fn(),
+  fetchOtReport: vi.fn(),
 }));
 
 vi.mock("@/lib/api/ot-metrics", async (importOriginal) => {
@@ -29,10 +34,12 @@ vi.mock("@/lib/api/ot-metrics", async (importOriginal) => {
     fetchOtRejectionReasons: mocks.fetchOtRejectionReasons,
     fetchOtClientCompanies: mocks.fetchOtClientCompanies,
     fetchOtDrilldown: mocks.fetchOtDrilldown,
+    fetchOtReport: mocks.fetchOtReport,
   };
 });
 
 import { OtReportsConsole } from "@/components/admin/transit-offices/OtReportsConsole";
+import { buildReportCsv } from "@/components/admin/transit-offices/_reportes/report-columns";
 
 // 142 pendientes de los que solo 93 son accionables por el organismo: el caso que obliga a
 // explicar por qué el desglose no suma el total.
@@ -152,6 +159,95 @@ const DRILLDOWN: OtDrilldown = {
   ],
 };
 
+// Desglose que SUMA el total (5+2+3+18+4+0+0 = 32). Es el invariante del informe y la diferencia
+// deliberada con el panel operativo, cuyo desglose no cierra.
+const REPORT: OtReport = {
+  resumen: {
+    total: 32,
+    enRevision: 5,
+    esperandoPlaca: 2,
+    esperandoCliente: 3,
+    aprobados: 18,
+    enSubsanacion: 4,
+    rechazados: 0,
+    anulados: 0,
+    otros: 0,
+    decididos: 22,
+    devoluciones: 6,
+    devolucionesPromedio: 0.19,
+    tiempoMedianoHoras: 7.5,
+    tiempoPromedioHoras: 19.2,
+    tiempoP90Horas: 61,
+    tiempoMedianoAprobacionHoras: 6.1,
+    distribucionTiempos: [
+      { key: "h_0_24", label: "Menos de 1 día", tramites: 14 },
+      { key: "d_1_2", label: "1 a 2 días", tramites: 5 },
+      { key: "d_3_5", label: "3 a 5 días", tramites: 3 },
+      { key: "d_6_10", label: "6 a 10 días", tramites: 0 },
+      { key: "d_mas_10", label: "Más de 10 días", tramites: 0 },
+    ],
+    granularidad: "dia",
+    serie: [
+      { bucket: "2026-08-01", label: "01 ago", radicados: 12, aprobados: 8, rechazados: 2 },
+      { bucket: "2026-08-02", label: "02 ago", radicados: 0, aprobados: 0, rechazados: 0 },
+      { bucket: "2026-08-03", label: "03 ago", radicados: 20, aprobados: 10, rechazados: 2 },
+    ],
+  },
+  total: 32,
+  page: 1,
+  pageSize: 25,
+  filas: [
+    {
+      procedureInstanceId: "p1",
+      referenceNumber: "REF-100",
+      placa: "XYZ987",
+      vin: "9BWZZZ377VT004251",
+      clientTenantId: "c1",
+      clientTenantName: "Distribuidora del Valle S.A.S.",
+      modalidad: "matricula_inicial",
+      status: "aprobado",
+      estadoOt: "aprobado",
+      prioritario: false,
+      subsanacionActiva: false,
+      radicadoEn: "2026-08-01T14:00:00Z",
+      ultimaRadicacionEn: "2026-08-01T14:00:00Z",
+      decididoEn: "2026-08-02T09:00:00Z",
+      decididoPor: "Carla Revisora",
+      horasHastaDecision: 19,
+      diasEnOrganismo: 0.8,
+      devoluciones: 0,
+      causalesUltimoRechazo: [],
+    },
+    {
+      procedureInstanceId: "p2",
+      referenceNumber: "REF-101",
+      placa: null,
+      vin: null,
+      clientTenantId: "c2",
+      clientTenantName: "Comercializadora Andina Ltda.",
+      modalidad: "traspaso",
+      status: "rechazado",
+      estadoOt: "en_subsanacion",
+      prioritario: true,
+      subsanacionActiva: true,
+      radicadoEn: "2026-08-01T15:00:00Z",
+      ultimaRadicacionEn: "2026-08-01T15:00:00Z",
+      decididoEn: "2026-08-03T10:00:00Z",
+      decididoPor: "Carla Revisora",
+      horasHastaDecision: 43,
+      diasEnOrganismo: 1.8,
+      devoluciones: 2,
+      causalesUltimoRechazo: ["Improntas están borrosas"],
+    },
+  ],
+};
+
+async function openTab(name: RegExp) {
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("tab", { name }));
+  return user;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.fetchOtOperationalPanel.mockResolvedValue(PANEL);
@@ -159,9 +255,41 @@ beforeEach(() => {
   mocks.fetchOtRejectionReasons.mockResolvedValue(REASONS);
   mocks.fetchOtClientCompanies.mockResolvedValue(COMPANIES);
   mocks.fetchOtDrilldown.mockResolvedValue(DRILLDOWN);
+  mocks.fetchOtReport.mockResolvedValue(REPORT);
 });
 
-describe("Reportes del organismo de tránsito", () => {
+// ── Pestaña «Ahora mismo» ─────────────────────────────────────────────────────
+
+describe("Reportes del organismo — Ahora mismo", () => {
+  it("abre en esta pestaña: lo primero que necesita un organismo es su cola", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+
+    expect(await screen.findByTestId("ot-now-tab")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Ahora mismo" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("no ofrece rango de fechas, porque la cola describe el ahora y no lo filtraría", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+
+    await waitFor(() => expect(screen.getByTestId("ot-reports-operational")).toBeInTheDocument());
+
+    // El control existía y no cambiaba un solo número del panel: una promesa falsa.
+    expect(screen.queryByLabelText("Desde")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Hasta")).not.toBeInTheDocument();
+  });
+
+  it("declara la ventana de la mediana en vez de dejar creer que la eligió el usuario", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Tiempo mediano de decisión")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Últimos 30 días")).toBeInTheDocument();
+  });
+
   it("muestra el movimiento del día y la antigüedad de la cola", async () => {
     render(<OtReportsConsole transitOfficeId="ot-1" />);
 
@@ -201,55 +329,6 @@ describe("Reportes del organismo de tránsito", () => {
     // El ámbar señala trabajo atrasado. Encendido sobre un cero enseña a ignorarlo cuando importa.
     const cero = await screen.findByText("+7 días");
     expect(cero.className).not.toMatch(/amber/);
-  });
-
-  it("rotula los motivos como % de rechazos que incluyen la causal, no como reparto", async () => {
-    render(<OtReportsConsole transitOfficeId="ot-1" />);
-
-    await waitFor(() => expect(screen.getByTestId("ot-reports-reasons")).toBeInTheDocument());
-    expect(screen.getByText("Improntas mal cargadas")).toBeInTheDocument();
-    // La aclaración es parte del dato: leído como reparto, el porcentaje engaña.
-    expect(
-      screen.getByText(/la suma puede pasar del 100 %/),
-    ).toBeInTheDocument();
-  });
-
-  it("expone el promedio de causales por rechazo como indicador de salud", async () => {
-    render(<OtReportsConsole transitOfficeId="ot-1" />);
-
-    // Si este número se acerca al tamaño del catálogo, alguien está marcando todo.
-    await waitFor(() =>
-      expect(screen.getByText("Causales por rechazo (promedio)")).toBeInTheDocument(),
-    );
-    expect(screen.getByText("1.8")).toBeInTheDocument();
-  });
-
-  it("muestra volumen y calidad juntos en el equipo de revisores", async () => {
-    render(<OtReportsConsole transitOfficeId="ot-1" />);
-
-    await waitFor(() => expect(screen.getByTestId("ot-reports-reviewers")).toBeInTheDocument());
-    // El conteo solo premia a quien decide rápido y mal: por eso va con % aprobado y % rechazo.
-    expect(screen.getByText("% aprobado")).toBeInTheDocument();
-    expect(screen.getByText("Carla Revisora")).toBeInTheDocument();
-    expect(screen.getByText("89 %")).toBeInTheDocument();
-  });
-
-  it("muestra la calidad por empresa cliente", async () => {
-    render(<OtReportsConsole transitOfficeId="ot-1" />);
-
-    await waitFor(() => expect(screen.getByTestId("ot-reports-companies")).toBeInTheDocument());
-    expect(screen.getByText("Flota Andina S.A.S.")).toBeInTheDocument();
-    expect(screen.getByText("Pasan a la primera")).toBeInTheDocument();
-    expect(screen.getByText("88 %")).toBeInTheDocument();
-  });
-
-  it("no muestra un porcentaje sin base para empresas sin nada decidido", async () => {
-    render(<OtReportsConsole transitOfficeId="ot-1" />);
-
-    // «100 %» sobre cero aprobados se leería como una empresa impecable; el dato correcto es «—».
-    const fila = (await screen.findByText("Renting Sin Actividad S.A.")).closest("tr");
-    expect(fila).not.toBeNull();
-    expect(fila!.textContent).toContain("—");
   });
 
   it("muestra el error sin romper la pantalla si la carga falla", async () => {
@@ -333,5 +412,270 @@ describe("Reportes del organismo de tránsito", () => {
     );
 
     expect(mocks.fetchOtDrilldown).toHaveBeenLastCalledWith(expect.anything(), "entregados_hoy");
+  });
+});
+
+// ── Pestaña «Análisis» ────────────────────────────────────────────────────────
+
+describe("Reportes del organismo — Análisis", () => {
+  it("aquí sí hay rango de fechas, porque todo lo de esta pestaña depende de él", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Análisis/);
+
+    expect(await screen.findByLabelText("Desde")).toBeInTheDocument();
+    expect(screen.getByLabelText("Hasta")).toBeInTheDocument();
+  });
+
+  it("rotula los motivos como % de rechazos que incluyen la causal, no como reparto", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Análisis/);
+
+    await waitFor(() => expect(screen.getByTestId("ot-reports-reasons")).toBeInTheDocument());
+    expect(screen.getByText("Improntas mal cargadas")).toBeInTheDocument();
+    // La aclaración es parte del dato: leído como reparto, el porcentaje engaña.
+    expect(screen.getByText(/la suma puede pasar del 100 %/)).toBeInTheDocument();
+  });
+
+  it("expone el promedio de causales por rechazo como indicador de salud", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Análisis/);
+
+    // Si este número se acerca al tamaño del catálogo, alguien está marcando todo.
+    await waitFor(() =>
+      expect(screen.getByText("Causales por rechazo (promedio)")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("1.8")).toBeInTheDocument();
+  });
+
+  it("muestra volumen y calidad juntos en el equipo de revisores", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Análisis/);
+
+    await waitFor(() => expect(screen.getByTestId("ot-reports-reviewers")).toBeInTheDocument());
+    // El conteo solo premia a quien decide rápido y mal: por eso va con % aprobado y % rechazo.
+    expect(screen.getByText("% aprobado")).toBeInTheDocument();
+    expect(screen.getByText("Carla Revisora")).toBeInTheDocument();
+    expect(screen.getByText("89 %")).toBeInTheDocument();
+  });
+
+  it("no muestra un porcentaje sin base para empresas sin nada decidido", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Análisis/);
+
+    // «100 %» sobre cero aprobados se leería como una empresa impecable; el dato correcto es «—».
+    const fila = (await screen.findByText("Renting Sin Actividad S.A.")).closest("tr");
+    expect(fila).not.toBeNull();
+    expect(fila!.textContent).toContain("—");
+  });
+
+  it("un atajo de rango recarga el análisis con el rango elegido", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    const user = await openTab(/Análisis/);
+
+    await waitFor(() => expect(mocks.fetchOtRejectionReasons).toHaveBeenCalled());
+    mocks.fetchOtRejectionReasons.mockClear();
+
+    await user.click(screen.getByRole("button", { name: "Últimos 7 días" }));
+
+    await waitFor(() => expect(mocks.fetchOtRejectionReasons).toHaveBeenCalled());
+    const [params] = mocks.fetchOtRejectionReasons.mock.calls.at(-1)!;
+    const dias =
+      (Date.parse(params.to) - Date.parse(params.from)) / (1000 * 60 * 60 * 24) + 1;
+    expect(dias).toBe(7);
+  });
+});
+
+// ── Pestaña «Informe» ─────────────────────────────────────────────────────────
+
+describe("Reportes del organismo — Informe", () => {
+  it("el desglose por estado suma el total, a diferencia del panel operativo", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Informe/);
+
+    await waitFor(() => expect(screen.getByTestId("ot-report-resumen")).toBeInTheDocument());
+
+    const resumen = screen.getByTestId("ot-report-resumen");
+    expect(within(resumen).getByText("Trámites recibidos")).toBeInTheDocument();
+    expect(within(resumen).getByText("32")).toBeInTheDocument();
+    expect(
+      within(resumen).getByText(/el desglose suma el total/i),
+    ).toBeInTheDocument();
+
+    // La barra apilada es lo que hace visible el invariante.
+    expect(screen.getByTestId("ot-report-composicion")).toBeInTheDocument();
+  });
+
+  it("no mezcla borradores ni preparados: el organismo nunca los vio", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Informe/);
+
+    await waitFor(() => expect(screen.getByTestId("ot-report-filters")).toBeInTheDocument());
+    expect(screen.getByText(/Los estados previos a la radicación no aparecen/)).toBeInTheDocument();
+    expect(screen.queryByText("Borrador")).not.toBeInTheDocument();
+    expect(screen.queryByText("Preparado")).not.toBeInTheDocument();
+  });
+
+  it("acompaña la mediana con p90 y con el histograma, para que la cola no quede escondida", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Informe/);
+
+    await waitFor(() => expect(screen.getByTestId("ot-report-tiempos")).toBeInTheDocument());
+    expect(screen.getByText("Mediana (p50)")).toBeInTheDocument();
+    expect(screen.getByText("p90")).toBeInTheDocument();
+    expect(screen.getByTestId("ot-report-histograma")).toBeInTheDocument();
+    // Dice sobre cuántos se calculó: un tiempo sin denominador no se puede defender.
+    expect(screen.getByText(/Sobre 22 de 32 trámites recibidos/)).toBeInTheDocument();
+  });
+
+  it("dibuja los periodos vacíos de la serie en lugar de omitirlos", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Informe/);
+
+    const grafica = await screen.findByTestId("ot-report-tendencia");
+    // Los tres periodos están presentes aunque el del medio esté en cero: un hueco omitido se
+    // leería como continuidad.
+    expect(within(grafica).getByTitle("01 ago · Radicados: 12")).toBeInTheDocument();
+    expect(within(grafica).getByTitle("02 ago · Radicados: 0")).toBeInTheDocument();
+    expect(within(grafica).getByTitle("03 ago · Radicados: 20")).toBeInTheDocument();
+  });
+
+  it("permite elegir columnas y la tabla responde sin volver a consultar", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    const user = await openTab(/Informe/);
+
+    await waitFor(() => expect(screen.getByTestId("ot-report-table")).toBeInTheDocument());
+    expect(screen.getByRole("columnheader", { name: /Placa/ })).toBeInTheDocument();
+
+    mocks.fetchOtReport.mockClear();
+    await user.click(screen.getByTestId("ot-report-column-picker"));
+    await user.click(await screen.findByLabelText("Placa"));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("columnheader", { name: /Placa/ })).not.toBeInTheDocument(),
+    );
+    // El backend devuelve todos los campos de cada fila: marcar columnas no puede costar una consulta.
+    expect(mocks.fetchOtReport).not.toHaveBeenCalled();
+  });
+
+  it("una vista rápida reconfigura las columnas de golpe", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    const user = await openTab(/Informe/);
+
+    await waitFor(() => expect(screen.getByTestId("ot-report-table")).toBeInTheDocument());
+    expect(screen.queryByRole("columnheader", { name: /Decidido por/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Tiempos de respuesta" }));
+
+    expect(
+      await screen.findByRole("columnheader", { name: /Decidido por/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /Tiempo de decisión/ })).toBeInTheDocument();
+  });
+
+  it("ordenar por una columna vuelve a pedir el informe al backend", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    const user = await openTab(/Informe/);
+
+    await waitFor(() => expect(screen.getByTestId("ot-report-table")).toBeInTheDocument());
+    mocks.fetchOtReport.mockClear();
+
+    await user.click(screen.getByRole("button", { name: "Ordenar por Devoluciones" }));
+
+    // El orden es del universo completo, no de la página: tiene que resolverlo el servidor.
+    await waitFor(() =>
+      expect(mocks.fetchOtReport).toHaveBeenCalledWith(
+        expect.objectContaining({ sortBy: "devoluciones" }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("el resumen describe el universo aunque la tabla muestre una página", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Informe/);
+
+    await waitFor(() => expect(screen.getByTestId("ot-report-tabla")).toBeInTheDocument());
+    // 32 trámites en total con 2 filas visibles: el pie lo dice explícitamente.
+    expect(screen.getByText(/32 trámites · página 1 de 2/)).toBeInTheDocument();
+  });
+
+  it("marca el estado con su etiqueta del organismo, no con el estado crudo", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Informe/);
+
+    const tabla = await screen.findByTestId("ot-report-table");
+    // `rechazado` + subsanación abierta no es lo mismo que un rechazo cerrado: vuelve.
+    expect(within(tabla).getByText("En subsanación")).toBeInTheDocument();
+    expect(within(tabla).getByText("Aprobado")).toBeInTheDocument();
+    // El estado crudo del trámite no se filtra a la pantalla.
+    expect(within(tabla).queryByText("en_subsanacion")).not.toBeInTheDocument();
+  });
+
+  it("exporta el informe completo, no solo la página visible", async () => {
+    const createObjectURL = vi.fn(() => "blob:informe");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL });
+
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    const user = await openTab(/Informe/);
+
+    await waitFor(() => expect(screen.getByTestId("ot-report-export")).toBeEnabled());
+    mocks.fetchOtReport.mockResolvedValue({ ...REPORT, total: 2, pageSize: 200 });
+
+    await user.click(screen.getByTestId("ot-report-export"));
+
+    // Un CSV con 25 filas cuando la pantalla dice «32 trámites» es una trampa silenciosa.
+    await waitFor(() =>
+      expect(mocks.fetchOtReport).toHaveBeenCalledWith(
+        expect.objectContaining({ pageSize: 200 }),
+      ),
+    );
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
+    expect(await screen.findByText(/Se exportaron 2 filas/)).toBeInTheDocument();
+
+    vi.unstubAllGlobals();
+  });
+
+  it("dice cuándo no hay nada, en vez de dejar una tabla vacía sin explicación", async () => {
+    mocks.fetchOtReport.mockResolvedValue({
+      ...REPORT,
+      resumen: { ...REPORT.resumen, total: 0, decididos: 0 },
+      total: 0,
+      filas: [],
+    });
+
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Informe/);
+
+    expect(
+      await screen.findByText(/Ningún trámite fue recibido por el organismo en el periodo/),
+    ).toBeInTheDocument();
+  });
+});
+
+// ── Exportación ───────────────────────────────────────────────────────────────
+
+describe("CSV del informe", () => {
+  it("exporta exactamente las columnas visibles y en su orden", () => {
+    const csv = buildReportCsv(REPORT.filas, ["empresa", "referencia", "devoluciones"]);
+
+    // El BOM va delante o Excel en español rompe las tildes.
+    expect(csv.startsWith("﻿")).toBe(true);
+
+    const [header, primera] = csv.slice(1).split("\r\n");
+
+    // El orden lo fija la definición de columnas, no el orden en que se fueron marcando.
+    expect(header).toBe('"Radicado";"Empresa";"Devoluciones"');
+    expect(primera).toBe('"REF-100";"Distribuidora del Valle S.A.S.";"0"');
+  });
+
+  it("neutraliza los valores que Excel ejecutaría como fórmula", () => {
+    const csv = buildReportCsv(
+      [{ ...REPORT.filas[0], referenceNumber: "=1+1" }],
+      ["referencia"],
+    );
+
+    // El radicado lo escribe la empresa cliente: es una vía de inyección real, no teórica.
+    expect(csv).toContain(`"'=1+1"`);
   });
 });

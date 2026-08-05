@@ -46,6 +46,19 @@ public interface IOtMetricsReadRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Informe del periodo: resumen por estado, tiempos y el detalle trámite a trámite.
+    ///
+    /// <para>El universo son los trámites que el organismo RECIBIÓ en el rango (entraron a
+    /// <c>entregado</c>), no los que se decidieron. Es la única lectura que permite que el desglose
+    /// por estado cierre contra el total: un trámite recibido está en exactamente un estado hoy.</para>
+    /// </summary>
+    Task<OtReportDto?> GetReportAsync(
+        Guid otTenantId,
+        OtReportQuery query,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Empresas con grant vigente con el organismo. Alimenta el filtro por empresa; se listan todas
     /// las habilitadas y no solo las que tuvieron movimiento, para que el filtro no cambie de
     /// contenido cada vez que se mueve el rango de fechas.

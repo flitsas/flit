@@ -155,6 +155,118 @@ export interface OtClientCompanyOption {
   name: string;
 }
 
+// ── B. Informe del periodo ──────────────────────────────────────────────────────
+
+/**
+ * Estados del informe. NO son los estados crudos del trámite: son su lectura DESDE el organismo.
+ * Borrador y preparado no existen aquí porque el organismo nunca los vio, y `rechazado` se parte
+ * según si el gestor ya abrió la subsanación — para el organismo, uno vuelve y el otro no.
+ *
+ * Los buckets son excluyentes y exhaustivos: su suma es siempre el total del informe.
+ */
+export const OT_REPORT_ESTADOS = {
+  enRevision: "en_revision",
+  esperandoPlaca: "esperando_placa",
+  esperandoCliente: "esperando_cliente",
+  aprobado: "aprobado",
+  enSubsanacion: "en_subsanacion",
+  rechazado: "rechazado",
+  anulado: "anulado",
+  otro: "otro",
+} as const;
+
+export type OtReportEstado = (typeof OT_REPORT_ESTADOS)[keyof typeof OT_REPORT_ESTADOS];
+
+export interface OtReportTimeBucket {
+  key: string;
+  label: string;
+  tramites: number;
+}
+
+export interface OtReportSeriesPoint {
+  bucket: string;
+  label: string;
+  radicados: number;
+  aprobados: number;
+  rechazados: number;
+}
+
+export interface OtReportSummary {
+  total: number;
+  enRevision: number;
+  esperandoPlaca: number;
+  esperandoCliente: number;
+  aprobados: number;
+  enSubsanacion: number;
+  rechazados: number;
+  anulados: number;
+  otros: number;
+  decididos: number;
+  devoluciones: number;
+  devolucionesPromedio: number;
+  /** Mediana del turno del organismo (última radicación → decisión), en horas. */
+  tiempoMedianoHoras: number | null;
+  tiempoPromedioHoras: number | null;
+  /** p90: el compromiso que el organismo puede sostener, no el caso típico. */
+  tiempoP90Horas: number | null;
+  tiempoMedianoAprobacionHoras: number | null;
+  distribucionTiempos: OtReportTimeBucket[];
+  /** "dia" | "semana" | "mes". La elige el servidor según el ancho del rango. */
+  granularidad: string;
+  serie: OtReportSeriesPoint[];
+}
+
+export interface OtReportRow {
+  procedureInstanceId: string;
+  referenceNumber: string;
+  placa: string | null;
+  vin: string | null;
+  clientTenantId: string;
+  clientTenantName: string;
+  modalidad: string;
+  status: string;
+  estadoOt: string;
+  prioritario: boolean;
+  subsanacionActiva: boolean;
+  radicadoEn: string;
+  ultimaRadicacionEn: string | null;
+  decididoEn: string | null;
+  decididoPor: string | null;
+  horasHastaDecision: number | null;
+  diasEnOrganismo: number | null;
+  devoluciones: number;
+  causalesUltimoRechazo: string[];
+}
+
+export interface OtReport {
+  resumen: OtReportSummary;
+  /** Universo completo, no las filas devueltas: el resumen nunca describe solo la página. */
+  total: number;
+  page: number;
+  pageSize: number;
+  filas: OtReportRow[];
+}
+
+/** Campos por los que el backend sabe ordenar. Uno desconocido cae al orden por defecto, no falla. */
+export const OT_REPORT_SORT = {
+  radicado: "radicado",
+  decidido: "decidido",
+  dias: "dias",
+  empresa: "empresa",
+  referencia: "referencia",
+  devoluciones: "devoluciones",
+  estado: "estado",
+} as const;
+
+export type OtReportSort = (typeof OT_REPORT_SORT)[keyof typeof OT_REPORT_SORT];
+
+export interface OtReportParams extends OtMetricsParams {
+  page?: number;
+  pageSize?: number;
+  sortBy?: OtReportSort;
+  desc?: boolean;
+}
+
 // ── Llamadas ────────────────────────────────────────────────────────────────────
 
 function toQuery(params: OtMetricsParams): Record<string, string> {
@@ -186,6 +298,19 @@ export function fetchOtDrilldown(
   bucket: OtDrilldownBucket,
 ): Promise<OtDrilldown> {
   return apiFetch<OtDrilldown>(`${base}/drilldown`, { query: { ...toQuery(params), bucket } });
+}
+
+/**
+ * Informe del periodo. El universo son los trámites RECIBIDOS en el rango, no los decididos: es
+ * lo que permite que el desglose por estado cierre contra el total.
+ */
+export function fetchOtReport(params: OtReportParams, signal?: AbortSignal): Promise<OtReport> {
+  const query: Record<string, string> = toQuery(params);
+  if (params.page) query.page = String(params.page);
+  if (params.pageSize) query.pageSize = String(params.pageSize);
+  if (params.sortBy) query.sortBy = params.sortBy;
+  if (params.desc !== undefined) query.desc = String(params.desc);
+  return apiFetch<OtReport>(`${base}/report`, { query, signal });
 }
 
 /** Empresas cliente del organismo, para poblar el filtro del reporte. */

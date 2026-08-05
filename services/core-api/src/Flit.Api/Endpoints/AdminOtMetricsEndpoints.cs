@@ -73,6 +73,19 @@ public static class AdminOtMetricsEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapGet("/report", GetReportAsync)
+            .WithName("AdminOtMetricsReport")
+            .WithSummary("Informe del periodo: estados del OT, tiempos y detalle por trámite")
+            .WithDescription("El universo son los trámites RECIBIDOS en el rango (los que entraron a "
+                + "'entregado'), no los decididos: solo así el desglose por estado cierra contra el "
+                + "total. Los estados son la lectura desde el organismo — borrador y preparado no "
+                + "aparecen porque el organismo nunca los vio.")
+            .Produces<OtReportDto>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         group.MapGet("/client-companies", ListClientCompaniesAsync)
             .WithName("AdminOtMetricsClientCompanies")
             .WithSummary("Empresas cliente del organismo, para el filtro del reporte")
@@ -135,6 +148,37 @@ public static class AdminOtMetricsEndpoints
 
         var result = await handler
             .HandleAsync(context.TenantId, context.ScopedOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return result is null ? NoTransitOffice() : Results.Ok(result);
+    }
+
+    private static async Task<IResult> GetReportAsync(
+        HttpContext httpContext,
+        [FromServices] GetOtReportHandler handler,
+        [FromServices] ITransitOfficeCatalog transitOfficeCatalog,
+        CancellationToken cancellationToken,
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
+        [FromQuery] string? modalidad = null,
+        [FromQuery] Guid? clientTenantId = null,
+        [FromQuery] Guid? transitOfficeId = null,
+        [FromQuery] int? page = null,
+        [FromQuery] int? pageSize = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] bool desc = true)
+    {
+        var (context, error) = ResolveContext(
+            httpContext, transitOfficeCatalog, from, to, modalidad, clientTenantId, transitOfficeId);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var query = GetOtReportHandler.BuildQuery(context.Filter, page, pageSize, sortBy, desc);
+
+        var result = await handler
+            .HandleAsync(context.TenantId, query, context.ScopedOfficeId, cancellationToken)
             .ConfigureAwait(false);
 
         return result is null ? NoTransitOffice() : Results.Ok(result);

@@ -242,6 +242,7 @@ public static class DependencyInjection
         services.AddScoped<OtMetrics.GetOtPerformanceHandler>();
         services.AddScoped<OtMetrics.GetOtRejectionReasonsHandler>();
         services.AddScoped<OtMetrics.GetOtDrilldownHandler>();
+        services.AddScoped<OtMetrics.GetOtReportHandler>();
         services.AddScoped<OtMetrics.ListOtClientCompaniesHandler>();
 
         // HU #10195 — asociación de documentos a tipos de trámite (CRUD SuperAdmin).
