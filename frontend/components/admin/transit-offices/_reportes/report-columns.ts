@@ -179,7 +179,7 @@ export const REPORT_COLUMNS: ReportColumn[] = [
   },
   {
     id: "modalidad",
-    label: "Modalidad",
+    label: "Tipo de trámite",
     group: "Identificación",
     value: (r) => MODALIDAD_LABEL[r.modalidad] ?? r.modalidad,
     defaultVisible: true,

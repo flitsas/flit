@@ -10,8 +10,11 @@
 import type { OtClientCompanyOption } from "@/lib/api/ot-metrics";
 import { FIELD_CLS } from "./shared";
 
+// En pantalla esto se llama «tipo de trámite», que es como lo nombra quien opera el organismo.
+// `modalidad` sobrevive como nombre del campo porque así viaja en la API y así se llama en la
+// base; renombrarlo ahí sería tocar medio dominio de trámites para no cambiar nada visible.
 export const MODALIDADES = [
-  { value: "", label: "Todas las modalidades" },
+  { value: "", label: "Todos los trámites" },
   { value: "matricula_inicial", label: "Matrícula inicial" },
   { value: "traspaso", label: "Traspaso" },
 ];
@@ -151,7 +154,7 @@ export function ModalidadSelect({
 }) {
   return (
     <label className="flex flex-col gap-1 text-xs font-semibold">
-      Modalidad
+      Tipo de trámite
       <select value={value} onChange={(e) => onChange(e.target.value)} className={FIELD_CLS}>
         {MODALIDADES.map((m) => (
           <option key={m.value} value={m.value}>
