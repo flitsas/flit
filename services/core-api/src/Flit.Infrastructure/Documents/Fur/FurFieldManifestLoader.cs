@@ -91,6 +91,7 @@ public static class FurFieldManifestLoader
             FontSize = f.FontSize > 0 ? f.FontSize : 7,
             Bold = f.Bold ?? true,
             Align = align,
+            AutoFit = f.AutoFit ?? false,
         };
     }
 
@@ -117,5 +118,6 @@ public static class FurFieldManifestLoader
         public double FontSize { get; set; }
         public bool? Bold { get; set; }
         public string? Align { get; set; }
+        public bool? AutoFit { get; set; }
     }
 }

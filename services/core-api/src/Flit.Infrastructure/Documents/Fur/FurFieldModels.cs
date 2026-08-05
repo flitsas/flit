@@ -29,6 +29,17 @@ public sealed class FurFieldDefinition
     public double FontSize { get; init; } = 7;
     public bool Bold { get; init; } = true;
     public FurTextAlign Align { get; init; } = FurTextAlign.Left;
+
+    /// <summary>
+    /// Opt-in al auto-encaje de <see cref="FurTextFitter.FitMultiline"/> (HU #11256, CF12). Solo
+    /// aplica a campos <see cref="FurFieldType.Multiline"/>; en cualquier otro tipo se ignora.
+    /// Default <c>false</c> a propósito: los sellos de firma (<c>vehicle_owner_signature</c> /
+    /// <c>vehicle_buyer_signature</c>) también son <c>multiline</c> y NO deben medirse — aplicar el
+    /// encaje a todo <c>multiline</c> los encogería, una regresión visible en el 100% de los FUR
+    /// firmados. Se declara explícitamente por campo en el manifiesto (nunca por <c>Id</c> en el
+    /// renderer: eso sería un string mágico invisible desde el manifiesto).
+    /// </summary>
+    public bool AutoFit { get; init; }
 }
 
 /// <summary>Manifest de coordenadas para overlay FUR (origen top-left, puntos PDF).</summary>

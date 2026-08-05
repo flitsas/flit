@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Documents;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.Documents;
 
@@ -91,10 +92,13 @@ public sealed record FurDocumentData(
     // documento, uuid, serie/hash del certificado (firmaSerie de Kyverum) y fechas de aprobación/vencimiento.
     // Se pinta en el espacio de firma del FUR. Vacío/null ⇒ se cae al sello previo (SellosFirma).
     IReadOnlyDictionary<string, string>? SellosIdentidad = null,
-    // HU #10601 (Feature #10585) — marcación de prenda/gravamen en el FUR: TienePrenda marca el
-    // checkbox requested_process_11 cuando la decisión de prenda vigente implica gravamen
-    // (solicitar/registrar). Por defecto sin prenda.
-    bool TienePrenda = false,
+    // HU #10601 (Feature #10585), ampliado por HU #11257 (Feature #11254) — marcación de prenda/gravamen
+    // en el FUR: PrendaMarking resuelve, YA en el dominio (PrendaDecision.ToFurMarking), qué casilla
+    // marca el mapper: Constitucion → requested_process_11 (solicitar/registrar), Levantamiento →
+    // requested_process_12 (levantar), Ninguna → ninguna de las dos. Antes de esta HU el modelo
+    // transportaba solo `bool TienePrenda`: `levantar` colapsaba al mismo `false` que "sin prenda", así
+    // que el generador no podía distinguirlos. Por defecto sin marcación.
+    FurPrendaMarking PrendaMarking = FurPrendaMarking.Ninguna,
     // Beneficiario del gravamen. HU #10989: su TEXTO ya no se transporta hasta el mapper — se compone
     // en GenerarFurHandler (FurPrendaObservation) y llega impreso dentro de Observaciones, porque el
     // recuadro OBSERVACIONES es el sitio del formulario donde se declara (decisión D2 del plan de
@@ -106,6 +110,12 @@ public sealed record FurDocumentData(
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;
+
+    // HU #11257 — aquí vivía `TienePrenda`, conservada como propiedad calculada para que los
+    // call-sites que la pasaban como parámetro con nombre rompieran la compilación. Cumplida esa
+    // función y migrados todos, se elimina: no le quedaba ningún consumidor y su nombre engañaba
+    // —un trámite en `levantar` SÍ tiene prenda y la propiedad devolvía `false`—. La única fuente
+    // de verdad es `PrendaMarking`.
 
     /// <summary>La parte radicadora (comprador en matrícula; comprador en traspaso es el adquiriente).</summary>
     public DocumentParte? Radicador => Partes.FirstOrDefault(p =>
