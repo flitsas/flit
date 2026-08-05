@@ -11,7 +11,6 @@
 // El catálogo de campos lo sirve el backend. Esta pantalla no sabe qué campos existen: un campo
 // consultable nuevo aparece aquí sin desplegar frontend.
 
-import { Plus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteOtSavedQuery,
@@ -395,10 +394,9 @@ export function OtQueriesTab({ transitOfficeId }: OtQueriesTabProps) {
               setActiveId(null);
               setActiveSnapshot(null);
             }}
-            className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#DFE5ED] px-2 py-2 text-[11px] font-semibold text-[#6B7280] transition hover:border-[#557EFF] hover:text-[#557EFF] dark:border-white/20 dark:text-white/60"
+            className="mt-1 w-full rounded-xl border border-dashed border-[#DFE5ED] px-2 py-2 text-[11px] font-semibold text-[#6B7280] transition hover:border-[#557EFF] hover:text-[#557EFF] dark:border-white/20 dark:text-white/60"
             data-testid="ot-query-nueva"
           >
-            <Plus className="h-3 w-3" aria-hidden="true" />
             Empezar de cero
           </button>
         </Section>

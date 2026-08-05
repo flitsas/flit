@@ -15,7 +15,7 @@
 // El resumen («2 filtros · últimos 30 días») hace además el trabajo de fondo: convierte un nombre
 // que solo significaba algo el día que se guardó en algo que se reconoce meses después.
 
-import { Bookmark, Check, ChevronRight, Sparkles, Trash2 } from "lucide-react";
+import { Check, ChevronRight, Trash2 } from "lucide-react";
 
 import { RANGE_PRESETS, type OtSavedQuery } from "@/lib/api/ot-queries";
 
@@ -169,8 +169,6 @@ function Item({
     );
   }
 
-  const Icono = query.deFabrica ? Sparkles : Bookmark;
-
   return (
     <li className="group relative">
       <button
@@ -186,12 +184,6 @@ function Item({
         data-testid={`ot-query-guardada-${query.id}`}
       >
         <span className="flex items-start gap-1.5">
-          <Icono
-            className={`mt-[3px] h-3 w-3 shrink-0 ${
-              activo ? "text-[#557EFF]" : "text-[#9AA5B4] dark:text-white/30"
-            }`}
-            aria-hidden="true"
-          />
           {/* Dos líneas antes de cortar, no una. El nombre es lo único que identifica la consulta;
               «Con prenda y sin licencia …» obliga a abrirla para saber cuál es. */}
           <span
@@ -208,7 +200,7 @@ function Item({
           )}
         </span>
 
-        <span className="mt-0.5 flex items-center gap-1 pl-[1.125rem] text-[10px] leading-snug text-[#6B7280] dark:text-white/40">
+        <span className="mt-0.5 flex items-center gap-1 text-[10px] leading-snug text-[#6B7280] dark:text-white/40">
           {resumen(query)}
         </span>
 
