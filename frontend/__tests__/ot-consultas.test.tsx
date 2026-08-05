@@ -355,10 +355,10 @@ describe("Resultado", () => {
 
     renderTab();
     await screen.findByTestId("ot-query-total");
-    await waitFor(() => expect(screen.getByTestId("ot-query-export-csv")).toBeEnabled());
+    await waitFor(() => expect(screen.getByTestId("ot-query-export-xlsx")).toBeEnabled());
 
     mocks.runOtQuery.mockClear();
-    await userEvent.click(screen.getByTestId("ot-query-export-csv"));
+    await userEvent.click(screen.getByTestId("ot-query-export-xlsx"));
 
     // La respuesta contraria —exportar los 25 de pantalla— sería una trampa: el archivo parecería
     // completo y nadie lo comprobaría.
@@ -440,5 +440,51 @@ describe("La consulta vive en la dirección", () => {
 
     await ponerFiltroDePlaca();
     await waitFor(() => expect(new URL(window.location.href).searchParams.get("q")).not.toBeNull());
+  });
+});
+
+describe("El panel de consultas guardadas", () => {
+  it("resume qué pregunta cada consulta, para reconocerla meses después", async () => {
+    renderTab();
+    const lista = await screen.findByTestId("ot-query-guardadas");
+
+    // Un nombre puesto por su autor —«revisión lunes»— no significa nada tres meses después. El
+    // resumen sale de la definición, así que no puede quedarse desactualizado.
+    expect(within(lista).getByTestId("ot-query-guardada-s1")).toHaveTextContent(
+      "Sin filtros · últimos 30 días",
+    );
+    expect(within(lista).getByTestId("ot-query-guardada-f1")).toHaveTextContent(
+      "1 filtro · últimos 90 días",
+    );
+  });
+
+  it("al borrar dice cuál se va a borrar y deja arrepentirse", async () => {
+    renderTab();
+    await screen.findByTestId("ot-query-guardadas");
+
+    await userEvent.click(screen.getByLabelText("Borrar Mis traspasos"));
+
+    // Lo que hay que confirmar es CUÁL, no «si»: por eso se nombra en vez de preguntar «¿seguro?».
+    const confirmacion = screen.getByTestId("ot-query-borrar-s1");
+    expect(confirmacion).toHaveTextContent("Se borrará «Mis traspasos»");
+
+    await userEvent.click(within(confirmacion).getByText("Cancelar"));
+    expect(screen.queryByTestId("ot-query-borrar-s1")).not.toBeInTheDocument();
+    expect(mocks.deleteOtSavedQuery).not.toHaveBeenCalled();
+    expect(screen.getByTestId("ot-query-guardada-s1")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText("Borrar Mis traspasos"));
+    await userEvent.click(screen.getByTestId("ot-query-borrar-confirmar-s1"));
+
+    await waitFor(() => expect(mocks.deleteOtSavedQuery).toHaveBeenCalledWith("s1", "ot-1"));
+  });
+
+  it("no ofrece la descarga en CSV", async () => {
+    renderTab();
+    await screen.findByTestId("ot-query-total");
+
+    // Oculta, no eliminada: `buildQueryCsv` y sus pruebas siguen enteros bajo CSV_EXPORT_VISIBLE.
+    expect(screen.getByTestId("ot-query-export-xlsx")).toBeInTheDocument();
+    expect(screen.queryByTestId("ot-query-export-csv")).not.toBeInTheDocument();
   });
 });

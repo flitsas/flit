@@ -8,6 +8,19 @@
 
 import type { ReactNode } from "react";
 
+/**
+ * Si se ofrece la descarga en CSV, además del Excel.
+ *
+ * Está OCULTA, no eliminada: el generador de CSV, sus pruebas y el camino de descarga siguen
+ * enteros, y volver a ofrecerla es poner esto en `true`. Se apagó porque el Excel es donde estos
+ * informes acaban de verdad —fechas como fechas y números sumables—, y dos botones de descarga
+ * obligan a elegir entre formatos a quien solo quería el archivo.
+ *
+ * El tipo es `boolean` y no el literal `false` a propósito: así apagarla no vuelve muerto, a ojos
+ * del compilador, todo el código que cuelga de ella.
+ */
+export const CSV_EXPORT_VISIBLE: boolean = false;
+
 export function Section({
   title,
   testId,

@@ -11,6 +11,7 @@
 // El catálogo de campos lo sirve el backend. Esta pantalla no sabe qué campos existen: un campo
 // consultable nuevo aparece aquí sin desplegar frontend.
 
+import { Plus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteOtSavedQuery,
@@ -44,7 +45,7 @@ import {
   queryFileName,
 } from "./query-columns";
 import { SavedQueryList } from "./SavedQueryList";
-import { Empty, ErrorNotice, FIELD_CLS, PrimaryButton, Section } from "./shared";
+import { CSV_EXPORT_VISIBLE, Empty, ErrorNotice, FIELD_CLS, PrimaryButton, Section } from "./shared";
 
 const COLUMNS_STORAGE_KEY = "flit-ot-consultas-columnas";
 const PAGE_SIZE = 25;
@@ -374,7 +375,9 @@ export function OtQueriesTab({ transitOfficeId }: OtQueriesTabProps) {
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row" data-testid="ot-queries-tab">
-      <aside className="lg:w-56 lg:shrink-0">
+      {/* Algo más ancha que antes: las tarjetas llevan nombre y resumen, y a 14rem el resumen se
+          cortaba justo donde empieza a ser útil. */}
+      <aside className="lg:w-64 lg:shrink-0">
         <Section title="Consultas" testId="ot-query-lista">
           <SavedQueryList
             queries={saved}
@@ -392,9 +395,10 @@ export function OtQueriesTab({ transitOfficeId }: OtQueriesTabProps) {
               setActiveId(null);
               setActiveSnapshot(null);
             }}
-            className="mt-2 w-full rounded-lg border border-dashed border-[#DFE5ED] px-2 py-1.5 text-[11px] font-semibold text-[#6B7280] hover:border-[#557EFF] hover:text-[#557EFF] dark:border-white/20 dark:text-white/60"
+            className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#DFE5ED] px-2 py-2 text-[11px] font-semibold text-[#6B7280] transition hover:border-[#557EFF] hover:text-[#557EFF] dark:border-white/20 dark:text-white/60"
             data-testid="ot-query-nueva"
           >
+            <Plus className="h-3 w-3" aria-hidden="true" />
             Empezar de cero
           </button>
         </Section>
@@ -518,15 +522,17 @@ export function OtQueriesTab({ transitOfficeId }: OtQueriesTabProps) {
               >
                 {exporting ? "Exportando…" : "Exportar a Excel"}
               </button>
-              <button
-                type="button"
-                onClick={() => void handleExport("csv")}
-                disabled={exporting || !result || result.total === 0}
-                className="rounded-lg border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold text-[#6B7280] disabled:opacity-40 dark:border-white/15 dark:text-white/60"
-                data-testid="ot-query-export-csv"
-              >
-                CSV
-              </button>
+              {CSV_EXPORT_VISIBLE && (
+                <button
+                  type="button"
+                  onClick={() => void handleExport("csv")}
+                  disabled={exporting || !result || result.total === 0}
+                  className="rounded-lg border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold text-[#6B7280] disabled:opacity-40 dark:border-white/15 dark:text-white/60"
+                  data-testid="ot-query-export-csv"
+                >
+                  CSV
+                </button>
+              )}
             </div>
           </div>
 

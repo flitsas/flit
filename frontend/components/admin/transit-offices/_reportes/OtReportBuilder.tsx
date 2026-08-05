@@ -43,7 +43,7 @@ import {
 } from "./report-columns";
 import { XLSX_MIME } from "@/lib/xlsx";
 import { EstadoComposition, TimeHistogram, TrendChart, granularidadLabel } from "./report-visuals";
-import { Empty, ErrorNotice, PrimaryButton, Section, Tile } from "./shared";
+import { CSV_EXPORT_VISIBLE, Empty, ErrorNotice, PrimaryButton, Section, Tile } from "./shared";
 
 const PAGE_SIZE = 25;
 
@@ -417,8 +417,7 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <ColumnPicker visible={visibleColumns} onChange={applyColumns} columns={REPORT_COLUMNS} />
-            {/* Excel primero porque es donde el informe acaba de verdad; el CSV se queda para quien
-                lo mete en otra herramienta. */}
+            {/* El informe acaba en Excel: fechas como fechas y números que se pueden sumar. */}
             <button
               type="button"
               onClick={() => void handleExport("xlsx")}
@@ -430,16 +429,18 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
             >
               {exportState.busy ? "Exportando…" : "Exportar a Excel"}
             </button>
-            <button
-              type="button"
-              onClick={() => void handleExport("csv")}
-              disabled={exportDisabled}
-              aria-busy={exportState.busy}
-              className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold transition hover:border-[#557EFF] disabled:opacity-60 dark:border-white/10"
-              data-testid="ot-report-export"
-            >
-              CSV
-            </button>
+            {CSV_EXPORT_VISIBLE && (
+              <button
+                type="button"
+                onClick={() => void handleExport("csv")}
+                disabled={exportDisabled}
+                aria-busy={exportState.busy}
+                className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold transition hover:border-[#557EFF] disabled:opacity-60 dark:border-white/10"
+                data-testid="ot-report-export"
+              >
+                CSV
+              </button>
+            )}
           </div>
         }
       >

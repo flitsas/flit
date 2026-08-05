@@ -42,7 +42,7 @@ import {
   REVIEWER_PRESETS,
   reviewersFileName,
 } from "./reviewer-columns";
-import { Empty, ErrorNotice, PrimaryButton, Section, Tile } from "./shared";
+import { CSV_EXPORT_VISIBLE, Empty, ErrorNotice, PrimaryButton, Section, Tile } from "./shared";
 
 const COLUMNS_STORAGE_KEY = "flit-ot-revisores-columnas";
 
@@ -291,15 +291,17 @@ export function OtReviewersTab({ transitOfficeId, companies, reviewers }: OtRevi
             >
               {exportState.busy ? "Exportando…" : "Exportar a Excel"}
             </button>
-            <button
-              type="button"
-              onClick={() => handleExport("csv")}
-              disabled={exportState.busy || sinFilas}
-              className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold transition hover:border-[#557EFF] disabled:opacity-60 dark:border-white/10"
-              data-testid="ot-reviewers-export-csv"
-            >
-              CSV
-            </button>
+            {CSV_EXPORT_VISIBLE && (
+              <button
+                type="button"
+                onClick={() => handleExport("csv")}
+                disabled={exportState.busy || sinFilas}
+                className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold transition hover:border-[#557EFF] disabled:opacity-60 dark:border-white/10"
+                data-testid="ot-reviewers-export-csv"
+              >
+                CSV
+              </button>
+            )}
           </div>
         }
       >

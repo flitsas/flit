@@ -301,6 +301,15 @@ describe("Reportes del organismo — Revisores", () => {
 });
 
 describe("Exportación del informe de revisores", () => {
+  it("no ofrece la descarga en CSV", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openRevisores();
+
+    // Oculta bajo CSV_EXPORT_VISIBLE, no eliminada: el generador sigue probado aquí abajo.
+    expect(await screen.findByTestId("ot-reviewers-export-xlsx")).toBeInTheDocument();
+    expect(screen.queryByTestId("ot-reviewers-export-csv")).not.toBeInTheDocument();
+  });
+
   it("el CSV lleva las columnas visibles en el orden de la definición", () => {
     const csv = buildReviewersCsv(REPORT.filas, ["decididos", "revisor"]);
 

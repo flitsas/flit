@@ -708,12 +708,12 @@ describe("Reportes del organismo — Informe", () => {
     render(<OtReportsConsole transitOfficeId="ot-1" />);
     const user = await openTab(/Informe/);
 
-    await waitFor(() => expect(screen.getByTestId("ot-report-export")).toBeEnabled());
+    await waitFor(() => expect(screen.getByTestId("ot-report-export-xlsx")).toBeEnabled());
     mocks.fetchOtReport.mockResolvedValue({ ...REPORT, total: 2, pageSize: 200 });
 
-    await user.click(screen.getByTestId("ot-report-export"));
+    await user.click(screen.getByTestId("ot-report-export-xlsx"));
 
-    // Un CSV con 25 filas cuando la pantalla dice «32 trámites» es una trampa silenciosa.
+    // Un archivo con 25 filas cuando la pantalla dice «32 trámites» es una trampa silenciosa.
     await waitFor(() =>
       expect(mocks.fetchOtReport).toHaveBeenCalledWith(
         expect.objectContaining({ pageSize: 200 }),
@@ -796,6 +796,17 @@ describe("Reportes del organismo — Informe", () => {
 });
 
 // ── Exportación ───────────────────────────────────────────────────────────────
+
+describe("Descarga del informe", () => {
+  it("no ofrece la descarga en CSV", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Informe/);
+
+    // Oculta bajo CSV_EXPORT_VISIBLE, no eliminada: el generador sigue probado más abajo.
+    expect(await screen.findByTestId("ot-report-export-xlsx")).toBeInTheDocument();
+    expect(screen.queryByTestId("ot-report-export")).not.toBeInTheDocument();
+  });
+});
 
 describe("CSV del informe", () => {
   it("exporta exactamente las columnas visibles y en su orden", () => {
