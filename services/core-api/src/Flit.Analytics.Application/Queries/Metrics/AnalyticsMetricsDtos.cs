@@ -53,8 +53,33 @@ public sealed record RejectionByOfficeDto(
     int Rechazados,
     double RejectionRatePct);
 
-/// <summary>Distribución de causales de rechazo (texto libre de <c>reason</c>).</summary>
+/// <summary>
+/// Distribución de causales de rechazo escritas a mano (<c>reason</c>). Se conserva porque los
+/// rechazos anteriores al catálogo solo tienen texto libre, pero NO es agregable: cada revisor
+/// escribe distinto y devuelve decenas de motivos con un caso cada uno. La lectura útil es
+/// <see cref="RejectionByReasonCatalogDto"/>.
+/// </summary>
 public sealed record RejectionByReasonDto(string Reason, int Count, double Pct);
+
+/// <summary>
+/// Causal TIPIFICADA del catálogo global.
+/// <para><see cref="Pct"/> es el porcentaje de RECHAZOS que incluyen esta causal, no el reparto de
+/// un total: un rechazo puede llevar varias causales, así que la suma puede pasar del 100 %. Es una
+/// distinción que hay que respetar al pintarlo, porque leído como reparto el número engaña.</para>
+/// </summary>
+public sealed record RejectionByReasonCatalogDto(
+    Guid ReasonId,
+    string Code,
+    string Description,
+    int Rechazos,
+    double Pct);
+
+/// <summary>
+/// Tramo PROPIO del ciclo: horas desde que se crea el trámite hasta que se entrega por primera vez.
+/// Complementa a <see cref="ApprovalTimesByOfficeDto"/> (el tramo del organismo) y cierra la
+/// partición del tiempo: hasta ahora se medía al organismo pero no a uno mismo.
+/// </summary>
+public sealed record InternalCycleDto(double? AvgHours, double? P50Hours, double? P90Hours);
 
 /// <summary>Tasa de rechazo por tipo de trámite.</summary>
 public sealed record RejectionByTypeDto(
@@ -107,7 +132,15 @@ public sealed record OtMetricsDto(
     IReadOnlyList<ApprovalTimesByOfficeDto> ApprovalTimesByOffice,
     IReadOnlyList<OfficeRankingDto> OfficeRanking,
     ReincidenceDto Reincidence,
-    StuckDto Stuck);
+    StuckDto Stuck,
+    /// <summary>Causales del catálogo. Vacío mientras no haya rechazos tipificados en el rango.</summary>
+    IReadOnlyList<RejectionByReasonCatalogDto> RejectionByReasonCatalog,
+    /// <summary>
+    /// Causales marcadas por rechazo (promedio). Es el indicador de salud del dato: si se acerca al
+    /// tamaño del catálogo, alguien está marcando todo y la distribución deja de discriminar.
+    /// </summary>
+    double AvgReasonsPerRejection,
+    InternalCycleDto InternalCycle);
 
 // ── Funnel (§4.3) ─────────────────────────────────────────────────────────────────────────────────
 

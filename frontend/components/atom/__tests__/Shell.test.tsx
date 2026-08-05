@@ -116,12 +116,15 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     expect(screen.getByRole("button", { name: "Improntas" })).toBeInTheDocument();
   });
 
-  it("muestra la píldora 'Tránsito' hacia el listado de OT (sin submenú de hub)", () => {
+  it("agrupa bajo 'Tránsito' el listado de OT y el catálogo de causales", async () => {
     setDevSuperAdminToken();
     renderShell();
-    expect(screen.getByRole("button", { name: "Tránsito" })).toBeInTheDocument();
+    // La píldora conserva el nombre que ya conocía el usuario; lo que cambia es que ahora
+    // despliega, porque el catálogo de causales alimenta el rechazo del organismo.
     expect(screen.queryByRole("button", { name: "OT" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Organismos" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Tránsito" }));
+    expect(screen.getByRole("button", { name: "Organismos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Causales de rechazo" })).toBeInTheDocument();
   });
 
   it("no muestra la entrada 'Improntas' sin sesión SuperAdmin", () => {

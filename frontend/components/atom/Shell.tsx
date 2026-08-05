@@ -230,10 +230,19 @@ export function Shell({
       },
       {
         key: "admin-transit",
-        label: "Tránsito",
+        label: "Organismos",
         icon: Landmark,
         active: pathname.startsWith("/admin/transit-offices"),
         onClick: () => window.location.assign(otHubListPath()),
+      },
+      {
+        // El catálogo alimenta el modal de rechazo del organismo, así que vive bajo Tránsito
+        // y no bajo Compañías. Ubicación provisional: queda por definir en la reunión.
+        key: "admin-rejection-reasons",
+        label: "Causales de rechazo",
+        icon: ClipboardList,
+        active: pathname.startsWith("/admin/causales-rechazo"),
+        onClick: () => window.location.assign("/admin/causales-rechazo"),
       },
       {
         key: "admin-documents",

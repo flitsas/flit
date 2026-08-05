@@ -44,7 +44,7 @@ export const DOCK_GROUP_LABEL: Record<DockGroupId, string> = {
   preasignacion: "Preasignación",
   administracion: "Administración",
   companias: "Compañías",
-  ot: "OT",
+  ot: "Tránsito",
   administradores: "Administradores",
   soporte: "Soporte",
   ayuda: "Ayuda",
@@ -89,6 +89,7 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   "admin-improntas": "companias",
   "admin-quipux": "companias",
   "admin-transit": "ot",
+  "admin-rejection-reasons": "ot",
   // Admin OT — pestañas hub en el dock
   [OT_ADM_DOCK.tramites]: "tramites",
   [OT_ADM_DOCK.rules]: "administracion",

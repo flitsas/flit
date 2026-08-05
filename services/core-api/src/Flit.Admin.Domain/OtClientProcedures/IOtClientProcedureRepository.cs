@@ -60,6 +60,11 @@ public interface IOtClientProcedureRepository
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Rechazo definitivo. <paramref name="rejectionReasonIds"/> son causales del catálogo global ya
+    /// validadas por el handler; se persisten colgando del evento de rechazo (la fila de
+    /// <c>procedure_instance_status_history</c>) para que el reporte de motivos pueda agregarlas.
+    /// </summary>
     Task<OtClientProcedure?> RejectAsync(
         Guid otTenantId,
         Guid procedureInstanceId,
@@ -67,6 +72,7 @@ public interface IOtClientProcedureRepository
         Guid? rejectedBy,
         string source,
         Guid? transitOfficeIdOverride = null,
+        IReadOnlyList<Guid>? rejectionReasonIds = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -81,6 +87,7 @@ public interface IOtClientProcedureRepository
         Guid? observedBy,
         string source,
         Guid? transitOfficeIdOverride = null,
+        IReadOnlyList<Guid>? rejectionReasonIds = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

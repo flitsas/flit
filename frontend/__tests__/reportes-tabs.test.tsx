@@ -131,6 +131,14 @@ const OT_METRICS: OtMetricsResponse = {
         },
       ],
     },
+    // Causales tipificadas: los porcentajes NO suman 100 % a propósito — un rechazo puede llevar
+    // varias causales, y la vista lo rotula así.
+    rejectionByReasonCatalog: [
+      { reasonId: "rr1", code: "soat_no_vigente", description: "SOAT no vigente", rechazos: 12, pct: 66.7 },
+      { reasonId: "rr2", code: "improntas_borrosas", description: "Improntas están borrosas", rechazos: 7, pct: 38.9 },
+    ],
+    avgReasonsPerRejection: 1.06,
+    internalCycle: { avgHours: 38.5, p50Hours: 26, p90Hours: 96 },
   },
   previous: null,
   comparison: null,

@@ -159,6 +159,15 @@ public static class AdminInfrastructureExtensions
         // HU #10193 — catálogo de tipos de documento (CRUD SuperAdmin).
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
 
+        // Causales de rechazo — catálogo global (CRUD SuperAdmin) y validación de las causales
+        // que llegan en el rechazo del organismo.
+        services.AddScoped<Flit.Admin.Domain.RejectionReasons.IRejectionReasonRepository,
+            RejectionReasonRepository>();
+
+        // Reportes del organismo: acceso cross-tenant por grant, mismo mecanismo que la bandeja.
+        services.AddScoped<Flit.Admin.Domain.OtMetrics.IOtMetricsReadRepository,
+            OtMetricsReadRepository>();
+
         // HU #10195 — asociación documentos ↔ tipos de trámite + catálogo de trámites
         // (read-only). El guard de uso es ahora la implementación real (HU #10197).
         services.AddScoped<IProcedureDocumentRequirementRepository, ProcedureDocumentRequirementRepository>();

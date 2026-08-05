@@ -43,6 +43,7 @@ using Flit.Admin.Application.DocumentRequirements.DeleteProcedureDocumentRequire
 using Flit.Admin.Application.DocumentRequirements.ListProcedureDocumentRequirements;
 using Flit.Admin.Application.DocumentRequirements.PreviewInformativos;
 using Flit.Admin.Application.DocumentRequirements.UpdateProcedureDocumentRequirement;
+using Flit.Admin.Application.RejectionReasons;
 using Flit.Admin.Application.DocumentTypes.CreateDocumentType;
 using Flit.Admin.Application.DocumentTypes.DeleteDocumentType;
 using Flit.Admin.Application.DocumentTypes.ListDocumentTypes;
@@ -227,6 +228,21 @@ public static class DependencyInjection
         services.AddScoped<UpdateDocumentTypeHandler>();
         services.AddScoped<DeleteDocumentTypeHandler>();
         services.AddScoped<ReactivateDocumentTypeHandler>();
+
+        // Causales de rechazo — catálogo global (CRUD SuperAdmin). Sustituye al motivo escrito a
+        // mano como dato agregable del reporte de motivos del organismo y de la empresa.
+        services.AddScoped<ListRejectionReasonsHandler>();
+        services.AddScoped<CreateRejectionReasonHandler>();
+        services.AddScoped<UpdateRejectionReasonHandler>();
+        services.AddScoped<SetRejectionReasonActiveHandler>();
+
+        // Reportes del organismo de tránsito: hasta ahora el módulo de reportes solo existía para
+        // la empresa gestora, y el organismo operaba sin ningún instrumento propio.
+        services.AddScoped<OtMetrics.GetOtOperationalPanelHandler>();
+        services.AddScoped<OtMetrics.GetOtPerformanceHandler>();
+        services.AddScoped<OtMetrics.GetOtRejectionReasonsHandler>();
+        services.AddScoped<OtMetrics.GetOtDrilldownHandler>();
+        services.AddScoped<OtMetrics.ListOtClientCompaniesHandler>();
 
         // HU #10195 — asociación de documentos a tipos de trámite (CRUD SuperAdmin).
         services.AddScoped<CreateProcedureDocumentRequirementHandler>();
