@@ -102,3 +102,190 @@ public sealed class FurTextFitterTests
         (fit.Lines.Count * fit.FontSize * 1.25).Should().BeLessThanOrEqualTo(CampoH);
     }
 }
+
+/// <summary>
+/// HU #11256 — encaje del texto en la caja declarada de un campo <c>multiline</c> con
+/// <c>autoFit: true</c> (hoy, solo <c>observations</c>). Geometría del caso real (automotor):
+/// caja 403.1 × 33.0 pt, cuerpo base 7.2. La medición se inyecta igual que en <see cref="FurTextFitterTests"/>
+/// para que el algoritmo se pruebe sin PdfSharpCore ni fuentes del sistema.
+/// </summary>
+public sealed class FurTextFitterFitMultilineTests
+{
+    /// <summary>Ancho aproximado de carácter: 0,5 × cuerpo (igual criterio que <see cref="FurTextFitterTests"/>).</summary>
+    private static double Measure(string text, double fontSize) => text.Length * fontSize * 0.5;
+
+    private const double CampoW = 403.1;
+    private const double CampoH = 33.0;
+    private const double CampoFont = 7.2;
+
+    private static FurTextFit FitMultiline(
+        string text, double w = CampoW, double h = CampoH, double font = CampoFont, Action<int>? onTruncate = null) =>
+        FurTextFitter.FitMultiline(text, w, h, font, Measure, onTruncate);
+
+    [Fact]
+    public void TextoQueYaCabe_PassthroughExacto_MismasLineasYMismoCuerpo()
+    {
+        // 30 chars × 7.2 × 0.5 = 108 pt < 403.1 ⇒ una sola línea, cuerpo intacto (garantía CF4).
+        const string texto = "Vehículo con platón adaptado.";
+        var fit = FitMultiline(texto);
+
+        fit.Lines.Should().Equal(texto);
+        fit.FontSize.Should().Be(CampoFont);
+    }
+
+    [Fact]
+    public void TextoVacio_PassthroughDevuelveSinLineas()
+    {
+        var fit = FitMultiline(string.Empty);
+
+        fit.Lines.Should().BeEmpty();
+        fit.FontSize.Should().Be(CampoFont);
+    }
+
+    [Fact]
+    public void AnchoCero_NoAlteraElTexto()
+    {
+        var fit = FitMultiline("CUALQUIER OBSERVACIÓN MUY LARGA QUE NO SE MIDE PORQUE EL CAMPO NO DECLARA ANCHO", w: 0);
+
+        fit.Lines.Should().Equal(["CUALQUIER OBSERVACIÓN MUY LARGA QUE NO SE MIDE PORQUE EL CAMPO NO DECLARA ANCHO"]);
+        fit.FontSize.Should().Be(CampoFont);
+    }
+
+    [Fact]
+    public void SaltosDeLineaExplicitos_SeRespetanComoParrafosSeparados()
+    {
+        // Dos párrafos cortos que caben cada uno en el ancho y cuyo bloque cabe en el alto: passthrough,
+        // preservando el salto duro como dos líneas (no se concatenan en una).
+        var fit = FitMultiline("Primera línea corta.\nSegunda línea corta.");
+
+        fit.Lines.Should().Equal("Primera línea corta.", "Segunda línea corta.");
+        fit.FontSize.Should().Be(CampoFont);
+    }
+
+    [Fact]
+    public void ParrafoLargo_SeEnvuelveAlCuerpoBase_SinReducirElCuerpo()
+    {
+        // Un párrafo que no cabe en una línea al cuerpo base pero cuyo envolvido sí cabe en el alto de 3
+        // líneas (CampoH=33 ⇒ MaxLines(7.2)=floor(33/9)=3).
+        var texto = string.Join(" ", Enumerable.Repeat("PALABRA", 20)); // 20×"PALABRA " ≈ 160 chars
+
+        var fit = FitMultiline(texto);
+
+        fit.FontSize.Should().Be(CampoFont);
+        fit.Lines.Count.Should().BeGreaterThan(1).And.BeLessThanOrEqualTo(3);
+        fit.Lines.Should().OnlyContain(l => Measure(l, fit.FontSize) <= CampoW);
+    }
+
+    [Fact]
+    public void ParrafoMuyLargo_ReduceElCuerpoReenvolviendo()
+    {
+        // Demasiadas palabras para caber en 3 líneas al cuerpo base: baja de cuerpo re-envolviendo hasta
+        // que el número de líneas quepa en el alto.
+        var texto = string.Join(" ", Enumerable.Repeat("PALABRA", 60));
+
+        var fit = FitMultiline(texto);
+
+        fit.FontSize.Should().BeLessThan(CampoFont).And.BeGreaterThanOrEqualTo(FurTextFitterFitMultilineTests.MinMultilineFontSizeForTests);
+        fit.Lines.Should().OnlyContain(l => Measure(l, fit.FontSize) <= CampoW);
+        (fit.Lines.Count * fit.FontSize * 1.25).Should().BeLessThanOrEqualTo(CampoH);
+    }
+
+    /// <summary>Espejo de <c>FurTextFitter.MinMultilineFontSize</c> (privado): el piso documentado en el diseño.</summary>
+    private const double MinMultilineFontSizeForTests = 5;
+
+    [Fact]
+    public void TextoDesmedido_NuncaBajaDelPisoDe5Puntos()
+    {
+        var texto = string.Join(" ", Enumerable.Repeat("PALABRA", 400)); // ≈2.800 caracteres
+
+        var fit = FitMultiline(texto);
+
+        fit.FontSize.Should().Be(MinMultilineFontSizeForTests);
+    }
+
+    [Fact]
+    public void TextoDesmedido_TruncaConElipsisYAvisaCaracteresElididos()
+    {
+        var texto = string.Join(" ", Enumerable.Repeat("PALABRA", 400));
+        int? elidedChars = null;
+
+        var fit = FitMultiline(texto, onTruncate: n => elidedChars = n);
+
+        fit.Lines[^1].Should().EndWith("…");
+        fit.Lines.Should().OnlyContain(l => Measure(l, fit.FontSize) <= CampoW);
+        (fit.Lines.Count * fit.FontSize * 1.25).Should().BeLessThanOrEqualTo(CampoH);
+        elidedChars.Should().NotBeNull().And.BeGreaterThan(0);
+    }
+
+    [Fact]
+    public void PalabraUnicaMasAnchaQueLaCaja_NuncaSeDibujaFueraDeLaCaja()
+    {
+        // Una sola "palabra" (sin espacios) tan larga que ningún cuerpo entre el base y el piso la hace
+        // caber: debe terminar truncada, nunca desbordando el ancho declarado.
+        var fit = FitMultiline(new string('X', 400));
+
+        fit.Lines.Should().HaveCount(1);
+        fit.Lines[0].Should().EndWith("…");
+        Measure(fit.Lines[0], fit.FontSize).Should().BeLessThanOrEqualTo(CampoW);
+    }
+
+    [Fact]
+    public void CabeConVariasLineasCortas_SinLlegarAlLimiteDeAlto_QuedaAlCuerpoBase()
+    {
+        // Tres párrafos con `\n` explícitos, cada uno corto: caben tal cual al cuerpo base porque tanto
+        // el ancho por párrafo como el alto total (3 líneas) respetan la caja.
+        var fit = FitMultiline("Línea uno.\nLínea dos.\nLínea tres.");
+
+        fit.Lines.Should().Equal("Línea uno.", "Línea dos.", "Línea tres.");
+        fit.FontSize.Should().Be(CampoFont);
+    }
+
+    // ── Guarda de entrada y coste del truncado (hallazgo de seguridad del PR #230) ──────────────
+
+    [Fact]
+    public void TokenDesmedidoSinEspacios_TerminaEnTiempoRazonable_YNoDesbordaElAncho()
+    {
+        // El descenso carácter a carácter medía la cadena entera en cada vuelta: sobre un token sin
+        // espacios eso es O(N²) y con un pegado largo dejaba la generación del FUR colgada. Con la
+        // búsqueda binaria el número de mediciones es logarítmico en la longitud del corte.
+        var mediciones = 0;
+        double Contando(string t, double f) { mediciones++; return Measure(t, f); }
+
+        var fit = FurTextFitter.FitMultiline(
+            new string('X', 100_000), CampoW, CampoH, CampoFont, Contando);
+
+        fit.Lines.Should().OnlyContain(l => Measure(l, fit.FontSize) <= CampoW);
+        fit.Lines[^1].Should().EndWith("…");
+        // Cota generosa: lo que importa es que no crezca con N. El bucle lineal habría hecho decenas
+        // de miles de mediciones solo en el truncado final.
+        mediciones.Should().BeLessThan(2_000);
+    }
+
+    [Fact]
+    public void EntradaPorEncimaDelTope_SeRecorta_YLoElididoSeReportaCompleto()
+    {
+        // La guarda recorta antes de medir, pero lo recortado tiene que sumarse a lo que se informa:
+        // perder texto de un documento oficial en silencio es justo lo que no se quiere.
+        var elidedChars = 0;
+        var fit = FitMultiline(new string('X', 50_000), onTruncate: n => elidedChars = n);
+
+        fit.Lines.Should().OnlyContain(l => Measure(l, fit.FontSize) <= CampoW);
+        // Lo reportado incluye tanto lo que quitó la guarda como lo que elidió el último recurso.
+        elidedChars.Should().BeGreaterThan(42_000);
+    }
+
+    [Fact]
+    public void BusquedaBinaria_DevuelveElMismoPrefijoQueElDescensoLineal()
+    {
+        // Blindaje del refactor: el prefijo elegido debe ser EXACTAMENTE el mayor que cabe. Se contrasta
+        // contra el descenso lineal, que era la implementación anterior.
+        var fit = FitMultiline(new string('Y', 300));
+        var pintada = fit.Lines[^1];
+
+        var esperado = new string('Y', 300);
+        while (esperado.Length > 0 && Measure(esperado + "…", fit.FontSize) > CampoW)
+            esperado = esperado[..^1];
+
+        pintada.Should().Be(esperado + "…");
+    }
+}

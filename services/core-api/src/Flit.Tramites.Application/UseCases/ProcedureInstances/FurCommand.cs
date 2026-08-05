@@ -166,15 +166,19 @@ public sealed class GenerarFurHandler(
             }
         }
 
-        // HU #10601 — prenda vigente: marca el gravamen en el FUR cuando la decisión implica prenda
-        // (solicitar/registrar). sin_prenda/omitir/levantar no marcan gravamen.
+        // HU #10601, ampliado por HU #11257 (Feature #11254) — prenda vigente: resuelve YA en el
+        // dominio (PrendaDecision.ToFurMarking) qué casilla marca el FUR: Constitucion (solicitar/
+        // registrar) → 11, Levantamiento (levantar) → 12, Ninguna (omitir/sin_prenda/sin fila) →
+        // ninguna. Antes `tienePrenda` (bool) colapsaba `levantar` al mismo `false` que "sin prenda":
+        // el generador no podía distinguirlos.
         var prendaVigente = await prendaRepo.GetVigenteAsync(id, tenantId, ct);
-        var tienePrenda = prendaVigente is not null && PrendaDecision.ImplicaGravamen(prendaVigente.Decision);
-        var acreedorPrenda = tienePrenda ? prendaVigente!.AcreedorNombre : null;
-        // HU #10989 — el documento del acreedor acompaña al nombre en el bloque de observaciones.
-        // Se lee solo cuando la decisión implica gravamen: una decisión previa 'registrar' que se
-        // reemplazó por 'levantar' no debe arrastrar su acreedor al FUR.
-        var acreedorPrendaDocumento = tienePrenda ? prendaVigente!.AcreedorDocumento : null;
+        var prendaMarking = PrendaDecision.ToFurMarking(prendaVigente?.Decision);
+        var acreedorPrenda = prendaMarking != FurPrendaMarking.Ninguna ? prendaVigente!.AcreedorNombre : null;
+        // HU #10989, CF11 (HU #11257) — el documento del acreedor acompaña al nombre en el bloque de
+        // observaciones, tanto en constitución como en levantamiento. Se lee solo cuando la marca no es
+        // Ninguna: una fila previa 'registrar' que se reemplazó por 'levantar' no arrastra su acreedor
+        // al FUR porque siempre se lee de la fila VIGENTE (prendaRepo.GetVigenteAsync), nunca de historia.
+        var acreedorPrendaDocumento = prendaMarking != FurPrendaMarking.Ninguna ? prendaVigente!.AcreedorDocumento : null;
 
         // HU #10645 (ADR-0025 §4) — imagen REAL de la firma del baúl por parte NIT cubierta: se descarga el
         // artefacto (best-effort) y se alimenta FurDocumentData.FirmaImagenes; el mapper la estampa en el
@@ -218,7 +222,7 @@ public sealed class GenerarFurHandler(
         // una función pura y síncrona.
         var nombresRlDirectorio = await ResolverNombresDelDirectorioAsync(instance, esTraspaso, ct);
 
-        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, tienePrenda, acreedorPrenda, acreedorPrendaDocumento, firmaImagenes, firmaBaulMetadatos, templateFormat, nombresRlDirectorio);
+        var data = AssembleData(instance, codigo, esTraspaso, fv, identidadValidada, sellosIdentidad, prendaMarking, acreedorPrenda, acreedorPrendaDocumento, firmaImagenes, firmaBaulMetadatos, templateFormat, nombresRlDirectorio);
 
         var now = DateTimeOffset.UtcNow;
         var docs = new List<FurDocumentDto>(3);
@@ -506,7 +510,7 @@ public sealed class GenerarFurHandler(
     private static FurDocumentData AssembleData(
         ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv,
         bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad,
-        bool tienePrenda, string? acreedorPrenda, string? acreedorPrendaDocumento,
+        FurPrendaMarking prendaMarking, string? acreedorPrenda, string? acreedorPrendaDocumento,
         IReadOnlyDictionary<string, byte[]>? firmaImagenes,
         IReadOnlyDictionary<string, FirmaBaulMetadata>? firmaBaulMetadatos,
         FurTemplateFormat templateFormat,
@@ -565,12 +569,13 @@ public sealed class GenerarFurHandler(
             SellosFirma: sellos,
             FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
             // El recuadro OBSERVACIONES del FUR reúne tres cosas, en este orden:
-            //   1. HU #10989 — el beneficiario del gravamen, cuando la prenda lo implica.
+            //   1. HU #10989, CF11 (HU #11257) — el beneficiario del gravamen, en constitución o en
+            //      levantamiento.
             //   2. HU #10987 — las observaciones que escribe el gestor (fur_observations).
             //   3. A4/B4 (HU #10673, ADR-0029) — el texto automático de las transformaciones de
             //      color/combustible declaradas (diff snapshot RUNT vs efectivo).
             Observaciones: FurPrendaObservation.Join(
-                FurPrendaObservation.Compose(tienePrenda, acreedorPrenda, acreedorPrendaDocumento),
+                FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento),
                 FurTransformationObservations.Compose(
                     Get(fv, "fur_observations"),
                     Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
@@ -580,7 +585,7 @@ public sealed class GenerarFurHandler(
             FirmaBaulMetadatos: firmaBaulMetadatos,
             IdentidadValidada: identidadValidada,
             SellosIdentidad: sellosIdentidad,
-            TienePrenda: tienePrenda,
+            PrendaMarking: prendaMarking,
             AcreedorPrenda: acreedorPrenda,
             TemplateFormat: templateFormat)
         {

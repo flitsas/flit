@@ -1,5 +1,5 @@
 {
-  "version": "2026-07-03-comprador-vendedor-calibrated-newtpl792",
+  "version": "2026-08-04-hu11257-prenda-marking",
   "pageWidth": 792,
   "pageHeight": 612,
   "coordinateOrigin": "top-left",
@@ -122,6 +122,14 @@
       "page": 1,
       "type": "checkbox",
       "x": 286.9,
+      "y": 170.9,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_12",
+      "page": 1,
+      "type": "checkbox",
+      "x": 343.3,
       "y": 170.9,
       "size": 10.1
     },
@@ -430,7 +438,7 @@
       "page": 1,
       "type": "text",
       "x": 570.0,
-      "y": 291.5,
+      "y": 286.5,
       "w": 124.7,
       "h": 14.5,
       "fontSize": 7.8,
@@ -785,13 +793,14 @@
       "id": "observations",
       "page": 1,
       "type": "multiline",
-      "x": 381.9,
-      "y": 477.6,
+      "x": 379.9,
+      "y": 472.6,
       "w": 403.1,
       "h": 33.0,
       "fontSize": 7.2,
       "bold": true,
-      "align": "left"
+      "align": "left",
+      "autoFit": true
     }
   ]
 }

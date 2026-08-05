@@ -56,6 +56,47 @@ public static class PrendaDecision
         Levantar => PrendaDocTipos.Levantamiento,
         _ => null,
     };
+
+    /// <summary>
+    /// HU #11257 (Feature #11254) — traduce la decisión al valor semántico que consume el generador del
+    /// FUR: <c>solicitar</c>/<c>registrar</c> constituyen el gravamen (casilla 11), <c>levantar</c> lo
+    /// levanta (casilla 12), y <c>omitir</c>/<c>sin_prenda</c>/<c>null</c>/cualquier valor desconocido no
+    /// marcan ninguna. Antes de esta HU el FUR transportaba <c>bool ImplicaGravamen(decision)</c>, que
+    /// colapsa <c>levantar</c> al mismo <c>false</c> que "sin prenda" — la modalidad se perdía antes de
+    /// llegar al generador. <see cref="ImplicaGravamen"/> NO se toca: sigue sirviendo a otros consumidores
+    /// con su semántica original (presencia de gravamen, no la modalidad de marcación del FUR).
+    /// </summary>
+    public static FurPrendaMarking ToFurMarking(string? decision)
+    {
+        if (string.Equals(decision, Solicitar, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(decision, Registrar, StringComparison.OrdinalIgnoreCase))
+            return FurPrendaMarking.Constitucion;
+
+        if (string.Equals(decision, Levantar, StringComparison.OrdinalIgnoreCase))
+            return FurPrendaMarking.Levantamiento;
+
+        return FurPrendaMarking.Ninguna;
+    }
+}
+
+/// <summary>
+/// HU #11257 (Feature #11254) — valor semántico ya resuelto de la marcación de prenda en el FUR (dominio,
+/// no Infrastructure): qué casilla marcar, sin que la capa de dibujo compare strings de
+/// <see cref="PrendaDecision"/>. Vive junto a <see cref="PrendaDecision"/> (y no en
+/// <c>Flit.Tramites.Application/Documents</c>, como marcaba el plan técnico original) porque
+/// <c>Flit.Tramites.Domain</c> no referencia ningún otro proyecto: un enum consumido por
+/// <see cref="PrendaDecision.ToFurMarking"/> no puede vivir en una capa que Domain no ve.
+/// </summary>
+public enum FurPrendaMarking
+{
+    /// <summary>Sin marcación: <c>omitir</c>, <c>sin_prenda</c>, <c>null</c> o valor desconocido.</summary>
+    Ninguna,
+
+    /// <summary>Constituye el gravamen (<c>solicitar</c>/<c>registrar</c>): casilla 11.</summary>
+    Constitucion,
+
+    /// <summary>Levanta un gravamen existente (<c>levantar</c>): casilla 12.</summary>
+    Levantamiento,
 }
 
 /// <summary>DocTipos de los adjuntos de prenda (compartidos con <c>AttachmentRules.ValidTipos</c>).</summary>

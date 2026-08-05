@@ -29,6 +29,21 @@ internal static class FurTextFitter
     /// <summary>Suelo absoluto de cuerpo, en puntos (mismo que usa el renderer).</summary>
     private const double MinFontSize = 3;
 
+    /// <summary>
+    /// Suelo absoluto de cuerpo para <see cref="FitMultiline"/> (HU #11256). Propio de la ruta
+    /// multilínea: el <see cref="MinFontRatio"/> de <see cref="Fit"/> daría 4,2–4,7 pt sobre los
+    /// cuerpos base 6,5/7,2 de los manifiestos de observaciones y no cumple CF3.
+    /// </summary>
+    private const double MinMultilineFontSize = 5;
+
+    /// <summary>
+    /// Tope defensivo de entrada de <see cref="FitMultiline"/>. El recuadro más grande del FUR
+    /// (remolques, 490×55 pt) rinde ~8 líneas a 5 pt, del orden de 1.500 caracteres: cualquier cosa
+    /// por encima de este tope se truncaría igual, así que recortar antes de medir no cambia la salida.
+    /// Existe porque el campo de observaciones es texto libre sin límite en el wizard ni en la columna.
+    /// </summary>
+    private const int MaxMultilineInputChars = 8_000;
+
     /// <summary>Paso de reducción del cuerpo.</summary>
     private const double Step = 0.25;
 
@@ -82,6 +97,224 @@ internal static class FurTextFitter
         return new FurTextFit([Truncate(text, maxWidth, minFont, measure)], minFont);
     }
 
+    /// <summary>
+    /// Encaja el texto de un campo <c>multiline</c> declarado con <c>autoFit: true</c> en el
+    /// manifiesto (HU #11256, CF12). <see cref="Fit"/> (campos <c>text</c>, HU #11048) NO se toca —
+    /// sigue siendo quien sirve esa ruta en producción — y este método reutiliza sus privados
+    /// (<see cref="Wrap"/>, <see cref="MaxLines"/>, <see cref="Truncate"/>) y su misma inyección de
+    /// <paramref name="measure"/> para seguir siendo puro y testeable sin PdfSharpCore.
+    ///
+    /// <para><b>El orden de estrategias es el inverso al de <see cref="Fit"/>, a propósito.</b> En un
+    /// campo <c>text</c> (nombre, razón social) se encoge antes de partir: partir un nombre en dos
+    /// líneas rompe la calibración de la casilla, que el manifiesto asume de una sola línea. En un
+    /// párrafo (observaciones) el recuadro admite varias líneas por diseño, así que la legibilidad
+    /// manda: se parte primero y solo se reduce el cuerpo si partir no basta.</para>
+    ///
+    /// <para><b>Opt-in, no un flag global.</b> Este método solo se invoca cuando el campo declara
+    /// <see cref="FurFieldDefinition.AutoFit"/><c> == true</c>. Los sellos de firma
+    /// (<c>vehicle_owner_signature</c> / <c>vehicle_buyer_signature</c>) también son <c>multiline</c>,
+    /// y aunque hoy no desbordan —el mapper les aplica un <c>FontSizeDelta</c> negativo que baja el
+    /// cuerpo efectivo— medirlos con este algoritmo los recalcularía: una regresión visible en el 100%
+    /// de los FUR firmados. Por eso el renderer NUNCA aplica este método por defecto a todo
+    /// <c>multiline</c>: solo cuando el manifiesto lo pide explícitamente.</para>
+    /// </summary>
+    /// <param name="onTruncate">
+    /// Se invoca cuando se pierde contenido: en el último recurso (paso 4) y también si la guarda de
+    /// entrada recortó el texto. Recibe el número aproximado de caracteres elididos. El llamador
+    /// decide cómo loguearlo (incluye ahí el id del trámite): este método no depende de ningún
+    /// framework de logging para seguir siendo puro.
+    /// </param>
+    internal static FurTextFit FitMultiline(
+        string text,
+        double maxWidth,
+        double maxHeight,
+        double baseFontSize,
+        Func<string, double, double> measure,
+        Action<int>? onTruncate = null)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(measure);
+
+        // Guarda de entrada. `observations` es texto libre y no tiene tope ni en el wizard ni en la
+        // columna, así que puede llegar un pegado de cientos de miles de caracteres. Recortar aquí no
+        // cambia la salida —el recuadro más grande del FUR rinde del orden de 1.500 caracteres, así
+        // que todo lo que pase del tope se elidiría igual— y evita pasear esa cadena por el envolvido
+        // y el truncado. Lo recortado se suma a los caracteres reportados: no se pierde en silencio.
+        if (text.Length <= MaxMultilineInputChars)
+            return FitMultilineCore(text, maxWidth, maxHeight, baseFontSize, measure, onTruncate);
+
+        var elidedByGuard = text.Length - MaxMultilineInputChars;
+        var reported = false;
+        var fit = FitMultilineCore(
+            text[..MaxMultilineInputChars], maxWidth, maxHeight, baseFontSize, measure,
+            elided =>
+            {
+                reported = true;
+                onTruncate?.Invoke(elided + elidedByGuard);
+            });
+
+        if (!reported)
+            onTruncate?.Invoke(elidedByGuard);
+
+        return fit;
+    }
+
+    private static FurTextFit FitMultilineCore(
+        string text,
+        double maxWidth,
+        double maxHeight,
+        double baseFontSize,
+        Func<string, double, double> measure,
+        Action<int>? onTruncate)
+    {
+
+        // Preprocesado IDÉNTICO al que usa hoy la ruta multiline del renderer sin autoFit: es la
+        // garantía de CF4. Si este split divergiera, el passthrough del paso (1) dejaría de reproducir
+        // la salida actual.
+        var paragraphs = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        // (1) Passthrough — garantía CF4: si ya cabe con el cuerpo declarado, ni una línea ni un punto
+        // de cuerpo cambian respecto de hoy.
+        if (maxWidth <= 0 || FitsAsIs(paragraphs, maxWidth, maxHeight, baseFontSize, measure))
+            return new FurTextFit(paragraphs, baseFontSize);
+
+        // (2) Envolver al cuerpo base (CF2): cada párrafo se envuelve por separado, así que los `\n`
+        // explícitos siguen siendo saltos duros. Se exige también que cada línea quepa en el ancho: una
+        // palabra suelta más ancha que la caja (sin espacios donde partir) no debe darse por "encajada".
+        var atBaseSize = WrapParagraphs(paragraphs, maxWidth, baseFontSize, measure);
+        if (atBaseSize.Count <= MaxLines(maxHeight, baseFontSize)
+            && atBaseSize.All(l => measure(l, baseFontSize) <= maxWidth))
+            return new FurTextFit(atBaseSize, baseFontSize);
+
+        // (3) Reducir el cuerpo re-envolviendo en cada tamaño (CF3): más ancho por línea ⇒ menos
+        // líneas. Se acepta el primer tamaño que quepa. El piso (`MinMultilineFontSize`) se prueba
+        // siempre de forma explícita al final: los pasos de 0.25 desde `baseFontSize` no necesariamente
+        // aterrizan justo en el piso (p. ej. 7.2 → …,5.2,4.95(excluido)), y sin este último intento un
+        // texto que sí cabría exactamente a 5 pt caería al truncado del paso (4) sin necesidad.
+        for (var size = baseFontSize - Step; size > MinMultilineFontSize; size -= Step)
+        {
+            var wrapped = WrapParagraphs(paragraphs, maxWidth, size, measure);
+            if (wrapped.Count <= MaxLines(maxHeight, size) && wrapped.All(l => measure(l, size) <= maxWidth))
+                return new FurTextFit(wrapped, size);
+        }
+
+        var atFloor = WrapParagraphs(paragraphs, maxWidth, MinMultilineFontSize, measure);
+        if (atFloor.Count <= MaxLines(maxHeight, MinMultilineFontSize)
+            && atFloor.All(l => measure(l, MinMultilineFontSize) <= maxWidth))
+            return new FurTextFit(atFloor, MinMultilineFontSize);
+
+        // (4) Último recurso, al piso de 5 pt: recorta a las líneas que caben en el alto y trunca la
+        // última con elipsis. Pisar los campos vecinos de un formulario oficial es peor que elidir texto.
+        return LastResortMultiline(paragraphs, maxWidth, maxHeight, measure, onTruncate);
+    }
+
+    /// <summary>Cada párrafo cabe en el ancho al cuerpo declarado y el bloque cabe en el alto.</summary>
+    private static bool FitsAsIs(
+        string[] paragraphs,
+        double maxWidth,
+        double maxHeight,
+        double fontSize,
+        Func<string, double, double> measure)
+    {
+        if (paragraphs.Length == 0)
+            return true;
+
+        if (!paragraphs.All(p => measure(p, fontSize) <= maxWidth))
+            return false;
+
+        // Sin alto declarado no hay nada que comprobar: evita dividir por cero (ningún campo real del
+        // FUR está en este caso).
+        return maxHeight <= 0 || paragraphs.Length * fontSize * LineHeightFactor <= maxHeight;
+    }
+
+    /// <summary>Envuelve cada párrafo por separado y concatena: los saltos duros no se mezclan entre sí.</summary>
+    private static List<string> WrapParagraphs(
+        string[] paragraphs, double maxWidth, double fontSize, Func<string, double, double> measure)
+    {
+        var lines = new List<string>();
+        foreach (var paragraph in paragraphs)
+            lines.AddRange(Wrap(paragraph, maxWidth, fontSize, measure));
+        return lines;
+    }
+
+    private static FurTextFit LastResortMultiline(
+        string[] paragraphs,
+        double maxWidth,
+        double maxHeight,
+        Func<string, double, double> measure,
+        Action<int>? onTruncate)
+    {
+        var wrapped = WrapParagraphs(paragraphs, maxWidth, MinMultilineFontSize, measure);
+        var maxLines = MaxLines(maxHeight, MinMultilineFontSize);
+
+        var kept = wrapped.Take(maxLines).ToList();
+        if (kept.Count == 0)
+            kept.Add(string.Empty);
+
+        var overflow = wrapped.Skip(kept.Count).ToList();
+        var lastIndex = kept.Count - 1;
+        var originalLast = kept[lastIndex];
+
+        // Si se descartaron líneas completas (`overflow`), la última línea visible SIEMPRE debe llevar
+        // elipsis, así su propio texto ya quepa en el ancho: de lo contrario el corte queda invisible
+        // para quien lee el FUR (parece que el texto simplemente terminó ahí). Si no hubo líneas
+        // descartadas, se llegó aquí porque una palabra suelta no cabe ni al piso — ahí sí basta el
+        // truncado normal (no fuerza elipsis si por algún motivo ya cupiera).
+        var truncatedLast = overflow.Count > 0
+            ? ForceEllipsis(originalLast, maxWidth, MinMultilineFontSize, measure)
+            : Truncate(originalLast, maxWidth, MinMultilineFontSize, measure);
+        kept[lastIndex] = truncatedLast;
+
+        var elidedChars = overflow.Sum(l => l.Length + 1)
+            + Math.Max(0, originalLast.Length - Math.Max(0, truncatedLast.Length - Ellipsis.Length));
+        if (elidedChars > 0)
+            onTruncate?.Invoke(elidedChars);
+
+        return new FurTextFit(kept, MinMultilineFontSize);
+    }
+
+    /// <summary>
+    /// Como <see cref="Truncate"/>, pero SIEMPRE deja constancia con elipsis, incluso si el texto ya
+    /// cabía tal cual. Se usa cuando hay contenido después que no se está mostrando (líneas completas
+    /// descartadas): sin esto, la línea visible parecería completa cuando no lo es.
+    /// </summary>
+    private static string ForceEllipsis(
+        string text, double maxWidth, double fontSize, Func<string, double, double> measure)
+        => EllipsizeToWidth(text, maxWidth, fontSize, minKept: 0, measure);
+
+    /// <summary>
+    /// Mayor prefijo de <paramref name="text"/> que, con la elipsis pegada, cabe en
+    /// <paramref name="maxWidth"/>; nunca conserva menos de <paramref name="minKept"/> caracteres.
+    ///
+    /// <para><b>Por qué búsqueda binaria y no quitar un carácter y remedir.</b> El descenso lineal es
+    /// O(N²) sobre un token sin espacios: cada vuelta copia la cadena entera y la vuelve a medir glifo
+    /// a glifo. Con las observaciones —texto libre, sin tope de longitud— un pegado de 100.000
+    /// caracteres seguidos suponía del orden de 5.000 millones de glifos medidos y dejaba un core al
+    /// 100% durante minutos, con la generación del FUR bloqueada de forma síncrona. El predicado
+    /// «cabe en el ancho» es monótono respecto del índice de corte, así que la binaria es exacta:
+    /// devuelve el mismo prefijo que el descenso lineal, en O(log N) mediciones.</para>
+    /// </summary>
+    private static string EllipsizeToWidth(
+        string text, double maxWidth, double fontSize, int minKept, Func<string, double, double> measure)
+    {
+        if (measure(text + Ellipsis, fontSize) <= maxWidth || text.Length <= minKept)
+            return text + Ellipsis;
+
+        // Invariante: `lo` es un corte aceptable (cabe, o es el mínimo exigido) y `hi` no cabe.
+        var lo = minKept;
+        var hi = text.Length;
+        while (hi - lo > 1)
+        {
+            var mid = lo + ((hi - lo) / 2);
+            if (measure(text[..mid] + Ellipsis, fontSize) <= maxWidth)
+                lo = mid;
+            else
+                hi = mid;
+        }
+
+        return text[..lo] + Ellipsis;
+    }
+
     /// <summary>Líneas que caben en el alto del campo con un cuerpo dado.</summary>
     private static int MaxLines(double maxHeight, double fontSize)
     {
@@ -126,10 +359,7 @@ internal static class FurTextFitter
         if (measure(text, fontSize) <= maxWidth)
             return text;
 
-        var trimmed = text;
-        while (trimmed.Length > 1 && measure(trimmed + Ellipsis, fontSize) > maxWidth)
-            trimmed = trimmed[..^1];
-
-        return trimmed + Ellipsis;
+        // Mismo prefijo que el descenso lineal anterior, sin su coste cuadrático. Ver EllipsizeToWidth.
+        return EllipsizeToWidth(text, maxWidth, fontSize, minKept: 1, measure);
     }
 }

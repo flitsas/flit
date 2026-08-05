@@ -526,6 +526,15 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
         _otAdminRoleId = await GetOrCreateGlobalRoleAsync(
             db, "ot_admin", "Administrador OT", "TRANSIT_OFFICE", TestContext.Current.CancellationToken);
 
+        // Perfil GESTOR: al invitar a una compañía SIN roleIds el endpoint fuerza el rol de
+        // sistema AdminCompany y responde 409 ADMIN_ROLE_NOT_FOUND si no está en el catálogo.
+        // El host de pruebas arranca con Database__AutoMigrate=false, así que DevelopmentAuthSeeder
+        // no corre y la única fila global es la que siembren los propios tests. Sin esta línea la
+        // clase solo pasaba cuando SecurityInvitationsRoleResolutionTests ganaba la carrera y la
+        // creaba antes — de ahí los fallos intermitentes de ListUsers y AuditLog en CI.
+        _ = await GetOrCreateGlobalRoleAsync(
+            db, "AdminCompany", "Administrador de Compañía", "COMPANY", TestContext.Current.CancellationToken);
+
         db.Roles.Add(new Role
         {
             Id = _customCompanyRoleId,
@@ -604,14 +613,16 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
     private FlitDbContext CreateDbContext() =>
         _factory.Services.CreateScope().ServiceProvider.GetRequiredService<FlitDbContext>();
 
+    /// <summary>
+    /// El catálogo de roles es GLOBAL y varias clases de test lo siembran. xUnit las corre en
+    /// paralelo, así que entre el SELECT y el INSERT otra clase puede haber creado la misma fila
+    /// y el índice único parcial <c>uq_roles_code_target_entity_type</c> rechaza la segunda. Ese
+    /// choque no es un fallo: significa que la fila ya existe, que es justo lo que se pedía.
+    /// </summary>
     private static async Task<Guid> GetOrCreateGlobalRoleAsync(
         FlitDbContext db, string code, string name, string targetEntityType, CancellationToken ct)
     {
-        var existingId = await db.Roles.AsNoTracking()
-            .Where(r => r.Code == code && r.TargetEntityType == targetEntityType && r.DeletedAt == null)
-            .Select(r => r.Id)
-            .FirstOrDefaultAsync(ct);
-
+        var existingId = await FindGlobalRoleAsync(db, code, targetEntityType, ct);
         if (existingId != Guid.Empty)
             return existingId;
 
@@ -626,9 +637,30 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
             CreatedAt = DateTimeOffset.UtcNow,
         };
         db.Roles.Add(role);
-        await db.SaveChangesAsync(ct);
-        return role.Id;
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return role.Id;
+        }
+        catch (DbUpdateException)
+        {
+            db.Entry(role).State = EntityState.Detached;
+
+            var winnerId = await FindGlobalRoleAsync(db, code, targetEntityType, ct);
+            if (winnerId == Guid.Empty)
+                throw; // No fue la carrera: el INSERT falló por otro motivo.
+
+            return winnerId;
+        }
     }
+
+    private static Task<Guid> FindGlobalRoleAsync(
+        FlitDbContext db, string code, string targetEntityType, CancellationToken ct) =>
+        db.Roles.AsNoTracking()
+            .Where(r => r.Code == code && r.TargetEntityType == targetEntityType && r.DeletedAt == null)
+            .Select(r => r.Id)
+            .FirstOrDefaultAsync(ct);
 
     private static string MintToken(string role, Guid tenantId, Guid userId)
     {
