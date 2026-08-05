@@ -29,9 +29,13 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
     private const int PrioritarioEstancadoDias = 3;
 
     private readonly FlitDbContext _context;
+    private readonly OtTenantScope _scope;
 
-    public OtMetricsReadRepository(FlitDbContext context) =>
+    public OtMetricsReadRepository(FlitDbContext context)
+    {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _scope = new OtTenantScope(_context);
+    }
 
     // ── A.1 Panel operativo ───────────────────────────────────────────────────────────────────
 
@@ -549,25 +553,9 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
     /// Estado del trámite LEÍDO DESDE EL ORGANISMO. Los buckets son excluyentes y exhaustivos: cada
     /// trámite del universo cae en exactamente uno, y por eso el desglose del informe suma el total.
     /// </summary>
-    private static string ResolveReportEstado(ReportInstanceRow instance) => instance.Status switch
-    {
-        TramiteEstado.Aprobado => OtReportEstado.Aprobado,
-        TramiteEstado.Anulado => OtReportEstado.Anulado,
-        // Un rechazo con subsanación abierta vuelve; uno sin ella se quedó ahí. Para el organismo
-        // son dos cosas distintas y contarlas juntas escondería cuánto trabajo tiene de vuelta.
-        TramiteEstado.Rechazado => instance.SubsanacionActiva
-            ? OtReportEstado.EnSubsanacion
-            : OtReportEstado.Rechazado,
-        TramiteEstado.Entregado when instance.IsPaused => OtReportEstado.EsperandoCliente,
-        TramiteEstado.Entregado => instance.PlateFlowStatus switch
-        {
-            PlateFlowStatus.Preasignado => OtReportEstado.EsperandoPlaca,
-            null => OtReportEstado.EnRevision,
-            // `asignado` y posteriores: la pelota está en el cliente (SOAT, impuestos).
-            _ => OtReportEstado.EsperandoCliente,
-        },
-        _ => OtReportEstado.Otro,
-    };
+    private static string ResolveReportEstado(ReportInstanceRow instance) =>
+        OtEstadoResolver.Resolve(
+            instance.Status, instance.SubsanacionActiva, instance.IsPaused, instance.PlateFlowStatus);
 
     private static OtReportSummaryDto BuildReportSummary(
         IReadOnlyList<ReportRow> rows,
@@ -1501,76 +1489,17 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
 
     // ── Scope OT (grant + organismo) ──────────────────────────────────────────────────────────
 
-    private async Task<T?> ExecuteScopedAsync<T>(
+    // La resolución del organismo y sus empresas vive en OtTenantScope: es la única regla que
+    // separa los trámites de un organismo de los de otro, y desde que hay un segundo repositorio con
+    // este mismo eje invertido tenerla escrita dos veces sería una fuga esperando a que las copias
+    // se desincronicen.
+    private Task<T?> ExecuteScopedAsync<T>(
         Guid otTenantId,
         Guid? transitOfficeIdOverride,
         Func<Guid, IReadOnlyList<Guid>, Task<T>> action,
         CancellationToken cancellationToken)
-        where T : class
-    {
-        var transitOfficeId = transitOfficeIdOverride is Guid overrideId && overrideId != Guid.Empty
-            ? overrideId
-            : await ResolveTransitOfficeIdAsync(otTenantId, cancellationToken).ConfigureAwait(false);
-
-        if (transitOfficeId is null)
-        {
-            return null;
-        }
-
-        return await ExecuteCrossTenantReadAsync(
-            async () =>
-            {
-                var tenantIds = await _context.TenantTransitOfficeGrants
-                    .AsNoTracking()
-                    .Where(g => g.TransitOfficeId == transitOfficeId.Value && g.IsEnabled)
-                    .Select(g => g.TenantId)
-                    .ToListAsync(cancellationToken)
-                    .ConfigureAwait(false);
-
-                return await action(transitOfficeId.Value, tenantIds).ConfigureAwait(false);
-            },
-            cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<Guid?> ResolveTransitOfficeIdAsync(
-        Guid otTenantId,
-        CancellationToken cancellationToken)
-    {
-        var profile = await ExecuteCrossTenantReadAsync(
-            () => _context.TransitOfficeProfiles
-                .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.TenantId == otTenantId, cancellationToken),
-            cancellationToken).ConfigureAwait(false);
-
-        return profile?.TransitOfficeId;
-    }
-
-    private async Task<T> ExecuteCrossTenantReadAsync<T>(
-        Func<Task<T>> action,
-        CancellationToken cancellationToken)
-    {
-        if (!_context.Database.IsRelational())
-        {
-            return await action().ConfigureAwait(false);
-        }
-
-        var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
-        {
-            var transaction = await _context.Database
-                .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-
-            await using (transaction.ConfigureAwait(false))
-            {
-                await _context.Database.ExecuteSqlRawAsync(
-                    "SET LOCAL row_security = off", cancellationToken).ConfigureAwait(false);
-
-                var result = await action().ConfigureAwait(false);
-                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                return result;
-            }
-        }).ConfigureAwait(false);
-    }
+        where T : class =>
+        _scope.ExecuteAsync(otTenantId, transitOfficeIdOverride, action, cancellationToken);
 
     // ── Utilidades ────────────────────────────────────────────────────────────────────────────
 
@@ -1670,13 +1599,6 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
     /// de cero en una columna <c>timestamptz</c>, y estos valores viajan como parámetros de consulta.
     /// Sin esto la consulta revienta contra PostgreSQL aunque funcione sobre InMemory.</para>
     /// </summary>
-    private static (DateTimeOffset From, DateTimeOffset To) BogotaDayRange(DateOnly from, DateOnly to)
-    {
-        var offset = Bogota.GetUtcOffset(DateTime.SpecifyKind(
-            from.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified));
-
-        return (
-            new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), offset).ToUniversalTime(),
-            new DateTimeOffset(to.ToDateTime(TimeOnly.MaxValue), offset).ToUniversalTime());
-    }
+    private static (DateTimeOffset From, DateTimeOffset To) BogotaDayRange(DateOnly from, DateOnly to) =>
+        OtTenantScope.DayRange(from, to);
 }

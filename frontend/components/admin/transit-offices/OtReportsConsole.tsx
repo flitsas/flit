@@ -9,6 +9,7 @@ import {
 } from "@/lib/api/ot-metrics";
 import { OtAnalysisTab } from "./_reportes/OtAnalysisTab";
 import { OtNowTab } from "./_reportes/OtNowTab";
+import { OtQueriesTab } from "./_reportes/OtQueriesTab";
 import { OtReportBuilder } from "./_reportes/OtReportBuilder";
 import { OtReviewersTab } from "./_reportes/OtReviewersTab";
 
@@ -27,6 +28,7 @@ import { OtReviewersTab } from "./_reportes/OtReviewersTab";
 //   · Análisis    — por qué rechazo y qué calidad me llega. Con rango.
 //   · Informe     — qué recibí en un periodo y en qué acabó, trámite a trámite.
 //   · Revisores   — qué hizo cada persona del organismo en un periodo.
+//   · Consultas   — la pregunta que el usuario quiera hacerse, guardada y exportable.
 //
 // «Revisores» se llevó la tabla que antes vivía dentro de «Análisis». Mantener las dos habría dejado
 // los mismos números en dos sitios con filtros distintos —Análisis no filtra por persona—, que es la
@@ -56,6 +58,11 @@ const TABS = [
     id: "revisores",
     label: "Revisores",
     hint: "Qué hizo cada persona del organismo en un periodo",
+  },
+  {
+    id: "consultas",
+    label: "Consultas",
+    hint: "Arme su propia búsqueda, guárdela y expórtela",
   },
 ] as const;
 
@@ -126,6 +133,7 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
           reviewers={reviewers}
         />
       )}
+      {tab === "consultas" && <OtQueriesTab transitOfficeId={transitOfficeId} />}
     </div>
   );
 }

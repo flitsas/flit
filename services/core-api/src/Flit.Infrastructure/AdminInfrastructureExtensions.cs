@@ -168,6 +168,10 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Domain.OtMetrics.IOtMetricsReadRepository,
             OtMetricsReadRepository>();
 
+        // Consultas que el usuario del organismo arma, guarda y exporta. Mismo alcance OT.
+        services.AddScoped<Flit.Admin.Domain.OtQueries.IOtQueryRepository,
+            OtQueryRepository>();
+
         // HU #10195 — asociación documentos ↔ tipos de trámite + catálogo de trámites
         // (read-only). El guard de uso es ahora la implementación real (HU #10197).
         services.AddScoped<IProcedureDocumentRequirementRepository, ProcedureDocumentRequirementRepository>();

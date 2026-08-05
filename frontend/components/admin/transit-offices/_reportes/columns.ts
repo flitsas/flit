@@ -116,12 +116,14 @@ export function buildWorkbook<TRow>(
   columns: DataColumn<TRow>[],
   rows: TRow[],
   visibleIds: string[],
+  notes?: string[],
 ): Uint8Array<ArrayBuffer> {
   const cols = visibleColumns(columns, visibleIds);
   return buildXlsx({
     name: sheetName,
     columns: cols.map((c) => ({ header: c.xlsxHeader ?? c.label, width: c.width })),
     rows: rows.map((row) => cols.map((c) => (c.raw ? c.raw(row) : c.value(row)))),
+    notes,
   });
 }
 

@@ -38,6 +38,17 @@ export interface XlsxSheet {
   name: string;
   columns: XlsxColumn[];
   rows: XlsxCell[][];
+  /**
+   * Notas al pie, en la primera columna y tras una fila en blanco.
+   *
+   * Existen para que una advertencia sobre el propio resultado viaje DENTRO del archivo. El .xlsx
+   * es lo que se reenvía por correo a quien no ejecutó la consulta: si el aviso de «estas dos
+   * placas no salieron y por esto» solo vive en la pantalla, quien recibe el archivo cuenta las
+   * filas y llega justo a la conclusión equivocada.
+   *
+   * Quedan fuera del autofiltro a propósito: son texto sobre la hoja, no datos que ordenar.
+   */
+  notes?: string[];
 }
 
 function isDate(value: XlsxCell): value is XlsxDate {
@@ -167,10 +178,15 @@ function sheetXml(sheet: XlsxSheet): string {
     })
     .join("");
 
+  // Las notas arrancan dejando una fila en blanco, para que se lean como pie y no como un dato más.
+  const notes = (sheet.notes ?? [])
+    .map((note, i) => `<row r="${lastRow + 2 + i}">${cellXml(`A${lastRow + 2 + i}`, note, false)}</row>`)
+    .join("");
+
   // Panel congelado y autofiltro: un informe de cientos de filas sin encabezado fijo obliga a
   // subir cada vez para recordar qué columna se está mirando.
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${cols}</cols><sheetData>${header}${body}</sheetData><autoFilter ref="A1:${lastCol}${lastRow}"/></worksheet>`;
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${cols}</cols><sheetData>${header}${body}${notes}</sheetData><autoFilter ref="A1:${lastCol}${lastRow}"/></worksheet>`;
 }
 
 const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
