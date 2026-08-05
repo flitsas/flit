@@ -8503,6 +8503,11 @@ components:
           description: >
             Motivo de rechazo SANITIZADO (sin PII), solo presente con status=rechazado (HU #10234 AC4).
             Para mock proviene del scorer; para Kyverum se deriva de las coincidencias del payload.
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fecha de registro de la validación (historial por persona: más reciente → más antigua).
     TenantBiometricValidationDto:
       type: object
       required: [id, name, documentType, documentNumber, status, provider, expired, createdAt, email, attempts, maxAttempts, resendCount, linkedProcedures]
@@ -8649,6 +8654,10 @@ components:
         email: { type: string }
         provider: { type: string }
         score: { type: integer, nullable: true }
+        captureUrl:
+          type: string
+          nullable: true
+          description: URL de captura de la validación más reciente (null si aún no hay enlace).
         expired: { type: boolean }
         createdAt: { type: string, format: date-time }
         validatedAt: { type: string, format: date-time, nullable: true }

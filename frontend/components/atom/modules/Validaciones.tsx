@@ -39,7 +39,6 @@ import type {
   TenantBiometricPersonFilters,
   TenantBiometricValidation,
   TenantBiometricValidationFilters,
-  IdentityValidationAlertKind,
 } from '@/lib/api/types/procedure-runtime';
 
 /**
@@ -112,10 +111,10 @@ function maskDoc(tipoDoc: string, documento: string): string {
  */
 function vigenciaBadge(dias: number | null): { label: string; color: string; bg: string } | null {
   if (dias == null) return null;
-  if (dias <= 0) return { label: 'Vencida', color: '#FF4E00', bg: 'rgba(255,78,0,0.12)' };
+  if (dias <= 0) return { label: 'Vencida', color: '#E43D30', bg: 'rgba(228,61,48,0.12)' };
   const label = `${dias} día${dias === 1 ? '' : 's'}`;
-  if (dias <= 7) return { label, color: '#B26A00', bg: 'rgba(249,172,0,0.16)' };
-  return { label, color: '#5B8A1F', bg: 'rgba(140,198,63,0.16)' };
+  if (dias <= 7) return { label, color: '#F05A35', bg: 'rgba(249,172,0,0.16)' };
+  return { label, color: '#70CF3A', bg: 'rgba(140,198,63,0.16)' };
 }
 
 /**
@@ -175,13 +174,6 @@ function buildPersonApiFilters(f: ValidacionesUiFilters): TenantBiometricPersonF
 }
 
 type ValidacionesViewMode = 'person' | 'validation';
-
-const ALERT_LABEL: Record<IdentityValidationAlertKind, string> = {
-  atascada: 'Atascada',
-  rechazada: 'Rechazada',
-  expirada: 'Expirada',
-  por_vencer: 'Por vencer',
-};
 
 /** Cadencia del auto-refresco en vivo de la grilla (fase 2). 15 s: fresco sin presionar el backend. */
 const AUTO_REFRESH_MS = 15_000;
@@ -480,8 +472,8 @@ export function Validaciones() {
             {/* HU #10868 — enlace a pantalla de prevalidación standalone */}
             <Link
               href="/tramites/prevalidaciones"
-              className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:border-[#557EFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
-              style={{ color: '#557EFF' }}
+              className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:border-[#4F74C9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F74C9]"
+              style={{ color: '#4F74C9' }}
               aria-label="Ir a prevalidaciones de identidad"
             >
               <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
@@ -505,9 +497,9 @@ export function Validaciones() {
             onClick={() => switchViewMode('person')}
             className="rounded-xl px-3 py-1.5 text-[11px] font-semibold border focus-visible:outline focus-visible:outline-2"
             style={{
-              borderColor: viewMode === 'person' ? '#557EFF' : 'rgba(22,39,68,0.15)',
-              background: viewMode === 'person' ? 'rgba(85,126,255,0.12)' : 'transparent',
-              color: viewMode === 'person' ? '#557EFF' : undefined,
+              borderColor: viewMode === 'person' ? '#4F74C9' : 'rgba(22,39,68,0.15)',
+              background: viewMode === 'person' ? 'rgba(79,116,201,0.12)' : 'transparent',
+              color: viewMode === 'person' ? '#4F74C9' : undefined,
             }}
             aria-pressed={viewMode === 'person'}
           >
@@ -518,9 +510,9 @@ export function Validaciones() {
             onClick={() => switchViewMode('validation')}
             className="rounded-xl px-3 py-1.5 text-[11px] font-semibold border focus-visible:outline focus-visible:outline-2"
             style={{
-              borderColor: viewMode === 'validation' ? '#557EFF' : 'rgba(22,39,68,0.15)',
-              background: viewMode === 'validation' ? 'rgba(85,126,255,0.12)' : 'transparent',
-              color: viewMode === 'validation' ? '#557EFF' : undefined,
+              borderColor: viewMode === 'validation' ? '#4F74C9' : 'rgba(22,39,68,0.15)',
+              background: viewMode === 'validation' ? 'rgba(79,116,201,0.12)' : 'transparent',
+              color: viewMode === 'validation' ? '#4F74C9' : undefined,
             }}
             aria-pressed={viewMode === 'validation'}
           >
@@ -553,7 +545,7 @@ export function Validaciones() {
       {stuckLoading && (
         <div
           className="rounded-2xl border p-4 shrink-0 animate-pulse"
-          style={{ borderColor: 'rgba(178,106,0,0.35)', background: 'rgba(249,172,0,0.06)' }}
+          style={{ borderColor: 'rgba(240,90,53,0.35)', background: 'rgba(249,172,0,0.06)' }}
           role="status"
           aria-label="Cargando validaciones atascadas"
         >
@@ -565,7 +557,7 @@ export function Validaciones() {
       {!stuckLoading && stuckError && (
         <div
           className="rounded-2xl p-4 border text-xs flex items-start gap-3 shrink-0"
-          style={{ borderColor: '#B26A00', background: 'rgba(249,172,0,0.10)', color: '#8A5200' }}
+          style={{ borderColor: '#F05A35', background: 'rgba(249,172,0,0.10)', color: '#F05A35' }}
           role="alert"
           aria-label="Error al cargar validaciones atascadas"
         >
@@ -577,7 +569,7 @@ export function Validaciones() {
               type="button"
               onClick={() => void refreshStuck()}
               className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ background: '#B26A00' }}
+              style={{ background: '#F05A35' }}
             >
               Reintentar
             </button>
@@ -598,7 +590,7 @@ export function Validaciones() {
       {error && (
         <div
           className="rounded-2xl p-4 border text-xs flex items-start gap-3"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          style={{ borderColor: '#E43D30', background: 'rgba(228,61,48,0.06)', color: '#E43D30' }}
           role="alert"
           aria-live="polite"
         >
@@ -610,7 +602,7 @@ export function Validaciones() {
               type="button"
               onClick={() => void handleRefresh()}
               className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ background: '#FF4E00' }}
+              style={{ background: '#E43D30' }}
             >
               Reintentar
             </button>
@@ -712,9 +704,9 @@ function LiveIndicator({ at }: { at: Date | null }) {
       <span className="relative flex h-2 w-2" aria-hidden="true">
         <span
           className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
-          style={{ background: '#5B8A1F' }}
+          style={{ background: '#70CF3A' }}
         />
-        <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: '#5B8A1F' }} />
+        <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: '#70CF3A' }} />
       </span>
       En vivo{time ? ` · ${time}` : ''}
     </span>
@@ -799,14 +791,14 @@ function StuckEventsBanner({
   return (
     <section
       className="rounded-2xl border p-4 shrink-0"
-      style={{ borderColor: '#B26A00', background: 'rgba(249,172,0,0.10)' }}
+      style={{ borderColor: '#F05A35', background: 'rgba(249,172,0,0.10)' }}
       aria-label="Validaciones de identidad atascadas"
     >
       <div className="flex items-start gap-3">
-        <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" style={{ color: '#B26A00' }} aria-hidden="true" />
+        <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" style={{ color: '#F05A35' }} aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
-            <p className="text-sm font-semibold" style={{ color: '#B26A00' }} role="status" aria-live="polite">
+            <p className="text-sm font-semibold" style={{ color: '#F05A35' }} role="status" aria-live="polite">
               {stuck.total} validación{stuck.total === 1 ? '' : 'es'} de identidad atascada
               {stuck.total === 1 ? '' : 's'}
             </p>
@@ -816,7 +808,7 @@ function StuckEventsBanner({
                 onClick={onRequeueAll}
                 disabled={requeuingAll}
                 className="flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                style={{ borderColor: '#B26A00', color: '#B26A00' }}
+                style={{ borderColor: '#F05A35', color: '#F05A35' }}
                 aria-label="Reintentar todas las validaciones atascadas"
               >
                 <RotateCcw className={`h-3 w-3 ${requeuingAll ? 'animate-spin' : ''}`} aria-hidden="true" />
@@ -833,12 +825,12 @@ function StuckEventsBanner({
               const open = openKeys.has(group.key);
               const panelId = `stuck-group-${group.key}`;
               return (
-                <li key={group.key} className="rounded-xl border bg-white/70 dark:bg-[#0B0F14]" style={{ borderColor: 'rgba(178,106,0,0.3)' }}>
+                <li key={group.key} className="rounded-xl border bg-white/70 dark:bg-[#0B0F14]" style={{ borderColor: 'rgba(240,90,53,0.3)' }}>
                   <button
                     type="button"
                     onClick={() => toggleGroup(group.key)}
                     className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                    style={{ color: '#8A5200' }}
+                    style={{ color: '#F05A35' }}
                     aria-expanded={open}
                     aria-controls={panelId}
                   >
@@ -854,7 +846,7 @@ function StuckEventsBanner({
                     />
                   </button>
                   {open && (
-                    <ul id={panelId} className="space-y-1.5 border-t px-2 py-2" style={{ borderColor: 'rgba(178,106,0,0.2)' }}>
+                    <ul id={panelId} className="space-y-1.5 border-t px-2 py-2" style={{ borderColor: 'rgba(240,90,53,0.2)' }}>
                       {group.events.map((e) => (
                         <StuckRow key={e.id} event={e} busy={requeuing.has(e.id)} onRequeue={onRequeue} />
                       ))}
@@ -886,12 +878,12 @@ function StuckRow({
   return (
     <li
       className="flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2 text-[11px] dark:bg-[#0B0F14]"
-      style={{ borderColor: 'rgba(178,106,0,0.3)' }}
+      style={{ borderColor: 'rgba(240,90,53,0.3)' }}
     >
       <span className="min-w-0 truncate">
         <span
           className="mr-1.5 inline-block rounded px-1.5 py-px text-[10px] font-semibold align-middle"
-          style={{ background: 'rgba(178,106,0,0.14)', color: '#8A5200' }}
+          style={{ background: 'rgba(240,90,53,0.14)', color: '#F05A35' }}
         >
           {kindLabel}
         </span>
@@ -907,7 +899,7 @@ function StuckRow({
         onClick={() => onRequeue(event.id)}
         disabled={busy}
         className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ background: '#B26A00' }}
+        style={{ background: '#F05A35' }}
         aria-label={`Reintentar la validación de ${event.name ?? 'persona no disponible'}`}
       >
         <RotateCcw className={`h-3 w-3 ${busy ? 'animate-spin' : ''}`} aria-hidden="true" />
@@ -948,7 +940,7 @@ function PaginationBar({
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
             disabled={disabled}
             aria-label="Filas por página"
-            className="rounded-lg border bg-white px-2 py-1 text-xs outline-none focus:border-[#557EFF] disabled:opacity-50 dark:bg-[#0B0F14]"
+            className="rounded-lg border bg-white px-2 py-1 text-xs outline-none focus:border-[#4F74C9] disabled:opacity-50 dark:bg-[#0B0F14]"
           >
             {PAGE_SIZE_OPTIONS.map((n) => (
               <option key={n} value={n}>
@@ -997,10 +989,10 @@ function StatsCards({
   loading: boolean;
 }) {
   const cards = [
-    { l: 'Total validaciones', v: stats?.total, i: ShieldCheck, c: '#557EFF' },
-    { l: 'Aprobadas', v: stats?.aprobadas, i: CheckCircle2, c: '#5B8A1F' },
-    { l: 'En proceso', v: stats?.enProceso, i: Clock, c: '#B26A00' },
-    { l: 'Rechazadas', v: stats?.rechazadas, i: XCircle, c: '#FF4E00' },
+    { l: 'Total validaciones', v: stats?.total, i: ShieldCheck, c: '#4F74C9' },
+    { l: 'Aprobadas', v: stats?.aprobadas, i: CheckCircle2, c: '#70CF3A' },
+    { l: 'En proceso', v: stats?.enProceso, i: Clock, c: '#F05A35' },
+    { l: 'Rechazadas', v: stats?.rechazadas, i: XCircle, c: '#E43D30' },
   ];
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 shrink-0">
@@ -1061,10 +1053,11 @@ function ValidacionesSkeleton() {
 const GRID_COLS =
   'minmax(0,1.5fr) minmax(0,1.4fr) minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,1.2fr) minmax(0,0.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,0.9fr)';
 
-const PERSON_GRID_COLS =
-  'minmax(0,1.6fr) minmax(0,1.2fr) minmax(0,1.1fr) minmax(0,0.7fr) minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,0.9fr)';
-
-/** Grilla agrupada por persona (HU #11271): una fila por documento + contador + peor alerta. */
+/**
+ * Vista agrupada por persona: reutiliza la misma fila/estilo de develop (ValidacionRow).
+ * Cada fila muestra los datos de la validación MÁS RECIENTE del grupo.
+ * "Ver proceso" abre el historial multi-validación de la persona (no el drawer de una sola val.).
+ */
 function PersonasTable({
   rows,
   onOpenPerson,
@@ -1072,99 +1065,37 @@ function PersonasTable({
   rows: TenantBiometricPerson[];
   onOpenPerson: (documentType: string, documentNumber: string) => void;
 }) {
+  const byLatestId = new Map(rows.map((r) => [r.latestValidationId, r]));
+  const mapped: TenantBiometricValidation[] = rows.map((p) => ({
+    id: p.latestValidationId,
+    instanceId: p.instanceId,
+    referenceNumber: p.referenceNumber,
+    modalidad: p.modalidad,
+    partyRole: p.partyRole,
+    name: p.name,
+    documentType: p.documentType,
+    documentNumber: p.documentNumber,
+    status: p.status,
+    score: p.score,
+    provider: p.provider,
+    expired: p.expired,
+    createdAt: p.createdAt,
+    validatedAt: p.validatedAt,
+    validUntil: p.validUntil,
+    daysRemaining: p.daysRemaining,
+    captureUrl: p.captureUrl,
+    linkExpiresAt: p.linkExpiresAt,
+    email: p.email,
+  }));
+
   return (
-    <div className="overflow-x-auto shrink-0">
-      <div className="min-w-[820px]">
-        <div
-          className="sticky top-0 z-10 grid gap-2 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl"
-          style={{ background: '#DFE5ED', color: '#162744', gridTemplateColumns: PERSON_GRID_COLS }}
-          aria-hidden="true"
-        >
-          <div>Persona</div>
-          <div>Documento</div>
-          <div>Estado (última)</div>
-          <div>Validaciones</div>
-          <div>Alerta</div>
-          <div>Vigencia</div>
-          <div>Acciones</div>
-        </div>
-        <ul className="space-y-2 pt-2" aria-label="Personas con validaciones de identidad">
-          {rows.map((r) => {
-            const meta = ESTADO_META[r.status] ?? ESTADO_META.enviado;
-            const vigencia = vigenciaBadge(r.daysRemaining);
-            const alert = r.worstAlertKind ? ALERT_LABEL[r.worstAlertKind] : null;
-            return (
-              <li key={`${r.documentType}|${r.documentNumber}|${r.latestValidationId}`}>
-                <div
-                  className="grid gap-2 items-center px-4 py-2.5 text-xs rounded-xl border bg-white dark:bg-[#0B0F14]"
-                  style={{ gridTemplateColumns: PERSON_GRID_COLS }}
-                >
-                  <div className="min-w-0">
-                    <p className="font-semibold truncate">{r.name}</p>
-                    <p className="text-[10px] opacity-60 truncate">{r.email}</p>
-                  </div>
-                  <div className="font-mono text-[11px]">
-                    {r.documentType} {r.documentNumber}
-                  </div>
-                  <div>
-                    <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} />
-                  </div>
-                  <div>
-                    <span
-                      className="inline-flex min-w-[1.75rem] justify-center rounded-full px-2 py-0.5 text-[11px] font-bold"
-                      style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
-                      aria-label={`${r.validationCount} validaciones`}
-                    >
-                      {r.validationCount}
-                    </span>
-                  </div>
-                  <div>
-                    {alert ? (
-                      <span
-                        className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                        style={{
-                          background:
-                            r.worstAlertKind === 'atascada'
-                              ? 'rgba(178,106,0,0.16)'
-                              : 'rgba(255,78,0,0.12)',
-                          color: r.worstAlertKind === 'atascada' ? '#B26A00' : '#FF4E00',
-                        }}
-                      >
-                        {alert}
-                      </span>
-                    ) : (
-                      <span className="opacity-40">—</span>
-                    )}
-                  </div>
-                  <div>
-                    {vigencia ? (
-                      <span
-                        className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                        style={{ background: vigencia.bg, color: vigencia.color }}
-                      >
-                        {vigencia.label}
-                      </span>
-                    ) : (
-                      <span className="opacity-40">—</span>
-                    )}
-                  </div>
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => onOpenPerson(r.documentType, r.documentNumber)}
-                      className="rounded-lg px-2 py-1 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2"
-                      style={{ color: '#557EFF' }}
-                    >
-                      Ver historial
-                    </button>
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    </div>
+    <ValidacionesTable
+      rows={mapped}
+      onViewProcess={(latestValidationId) => {
+        const person = byLatestId.get(latestValidationId);
+        if (person) onOpenPerson(person.documentType, person.documentNumber);
+      }}
+    />
   );
 }
 
@@ -1181,7 +1112,7 @@ function ValidacionesTable({
       <div className="min-w-[1080px]">
         <div
           className="sticky top-0 z-10 grid gap-2 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl"
-          style={{ background: '#DFE5ED', color: '#162744', gridTemplateColumns: GRID_COLS }}
+          style={{ background: '#DDE5F0', color: '#162744', gridTemplateColumns: GRID_COLS }}
           aria-hidden="true"
         >
           <div>Trámite</div>
@@ -1241,14 +1172,14 @@ function ValidacionRow({
     >
       <div className="min-w-0">
         {r.referenceNumber ? (
-          <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: '#557EFF' }}>
+          <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: '#4F74C9' }}>
             <span className="truncate">{r.referenceNumber}</span>
             {r.instanceId && <ExternalLink className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />}
           </span>
         ) : (
           <span
             className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold"
-            style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+            style={{ background: 'rgba(79,116,201,0.12)', color: '#4F74C9' }}
           >
             Prevalidación
           </span>
@@ -1256,7 +1187,7 @@ function ValidacionRow({
         <span className="block text-[10px] opacity-60">{r.modalidad ? modalidad : '—'}</span>
       </div>
       <div className="min-w-0">
-        <span className="block font-medium truncate">{r.name}</span>
+        <span className="block font-semibold truncate">{r.name}</span>
         <span className="block text-[10px] opacity-60 truncate">
           {provider}
           {r.partyRole ? ` · ${r.partyRole}` : ''}
@@ -1344,7 +1275,7 @@ function ValidacionRow({
   ];
 
   return (
-    <li className="relative rounded-xl bg-white dark:bg-[#0B0F14] border hover:border-[#557EFF] transition">
+    <li className="relative rounded-xl bg-white dark:bg-[#0B0F14] border hover:border-[#4F74C9] transition">
       {r.instanceId ? (
         <a
           href={`/tramites/${r.instanceId}`}
@@ -1366,7 +1297,7 @@ function ValidacionRow({
           className="bg-white dark:bg-[#0B0F14]"
         />
         {copied && (
-          <span className="text-[10px] font-semibold" style={{ color: '#557EFF' }} role="status" aria-live="polite">
+          <span className="text-[10px] font-semibold" style={{ color: '#4F74C9' }} role="status" aria-live="polite">
             Enlace copiado
           </span>
         )}

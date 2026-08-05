@@ -51,7 +51,8 @@ describe('IdentityValidationTrackingPanel (HU #11007)', () => {
     await user.click(screen.getByRole('button', { name: /ver tracking/i }));
 
     expect(mocks.getBiometricAuditByValidation).toHaveBeenCalledWith('val-1');
-    expect(await screen.findByText('send')).toBeInTheDocument();
+    expect(await screen.findByText('Envío al proveedor')).toBeInTheDocument();
+    expect(screen.getByText('OK (HTTP 200)')).toBeInTheDocument();
   });
 
   it('AC2 — pinta la línea de tiempo de una prevalidación standalone (sin instanceId) usando solo validationId', async () => {
@@ -78,7 +79,8 @@ describe('IdentityValidationTrackingPanel (HU #11007)', () => {
     render(<IdentityValidationTrackingPanel validationId="val-standalone" />);
     await user.click(screen.getByRole('button', { name: /ver tracking/i }));
 
-    expect(await screen.findByText('webhook_received')).toBeInTheDocument();
+    expect(await screen.findByText('Notificación recibida')).toBeInTheDocument();
+    expect(screen.getByText('Aprobado')).toBeInTheDocument();
     expect(screen.getByText('OK')).toBeInTheDocument();
   });
 

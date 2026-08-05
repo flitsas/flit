@@ -4,6 +4,52 @@ import { useCallback, useEffect, useState } from 'react';
 import { ChevronRight, RefreshCw } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { IdentityAuditEvent } from '@/lib/api/types/procedure-runtime';
+import { FLIT } from '@/lib/flit-design-tokens';
+
+/**
+ * Etiquetas legibles de `stage` (código técnico en BD sin cambiar).
+ * Desconocidas se muestran tal cual. "webhook" → "Notificación" en UI.
+ */
+const STAGE_LABEL: Record<string, string> = {
+  send: 'Envío al proveedor',
+  send_response: 'Respuesta del proveedor',
+  send_error: 'Error de envío',
+  webhook_received: 'Notificación recibida',
+  webhook_not_verifiable: 'Notificación no verificable',
+  webhook_signature_invalid: 'Firma de notificación inválida',
+  webhook_applied: 'Resultado de la notificación aplicado',
+  reconcile: 'Consulta de estado (reconciliación)',
+  expired: 'Enlace vencido',
+  contact_edited: 'Datos de contacto editados',
+  resend: 'Reenvío',
+};
+
+/**
+ * Etiquetas legibles de `outcome`. Desconocidas (p. ej. estado biométrico crudo) se muestran tal cual.
+ */
+const OUTCOME_LABEL: Record<string, string> = {
+  ok: 'OK',
+  error: 'Error',
+  received: 'Recibido',
+  not_found: 'No encontrado',
+  aprobado: 'Aprobado',
+  rechazado: 'Rechazado',
+  pendiente: 'Pendiente',
+  secret_missing: 'Secreto ausente',
+  decrypt_failed: 'Fallo al descifrar',
+  firma_invalida: 'Firma inválida',
+  proveedor_no_disponible: 'Proveedor no disponible',
+  expirado: 'Expirado',
+  cuerpo_invalido: 'Cuerpo inválido',
+};
+
+function auditStageLabel(stage: string): string {
+  return STAGE_LABEL[stage] ?? stage;
+}
+
+function auditOutcomeText(outcome: string): string {
+  return OUTCOME_LABEL[outcome] ?? outcome;
+}
 
 /**
  * Panel de tracking de identidad compartido (CF-07, Feature #11004, HU #11007). Extraído del
@@ -66,6 +112,7 @@ export function IdentityValidationTrackingPanel({
         type="button"
         onClick={toggle}
         className="flex items-center gap-1.5 text-[11px] font-semibold opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ outlineColor: FLIT.brand.blue }}
         aria-expanded={open}
         aria-label="Ver tracking de la validación"
       >
@@ -84,7 +131,7 @@ export function IdentityValidationTrackingPanel({
             </p>
           )}
           {error && (
-            <p className="text-[11px]" style={{ color: '#FF4E00' }} role="alert" aria-live="polite">
+            <p className="text-[11px]" style={{ color: FLIT.state.danger }} role="alert" aria-live="polite">
               {error}
             </p>
           )}
@@ -95,7 +142,7 @@ export function IdentityValidationTrackingPanel({
           {referenced && (
             <p
               className="rounded-lg px-2.5 py-1.5 text-[11px]"
-              style={{ background: 'rgba(85,126,255,0.10)', color: '#3B5BDB' }}
+              style={{ background: FLIT.blueAlpha(0.1), color: FLIT.brand.blue }}
               role="status"
             >
               Validación reutilizada de otro trámite del mismo cliente (identidad ya verificada). El
@@ -119,9 +166,9 @@ export function IdentityValidationTrackingPanel({
                 </thead>
                 <tbody>
                   {events.map((e, i) => (
-                    <tr key={i} className="border-t align-top" style={{ borderColor: '#EEF1F6' }}>
+                    <tr key={i} className="border-t align-top" style={{ borderColor: FLIT.border.soft }}>
                       <td className="whitespace-nowrap py-1 pr-2 opacity-70">{formatFecha(e.occurredAt)}</td>
-                      <td className="py-1 pr-2 font-medium">{e.stage}</td>
+                      <td className="py-1 pr-2 font-medium">{auditStageLabel(e.stage)}</td>
                       <td className="py-1 pr-2">{auditOutcomeLabel(e)}</td>
                       <td className="py-1 pr-2">
                         {e.decryptOk == null ? '—' : e.decryptOk ? 'OK' : 'Falló'}
@@ -140,7 +187,7 @@ export function IdentityValidationTrackingPanel({
             onClick={() => void loadAudit()}
             disabled={loading}
             className="flex items-center gap-1 text-[10.5px] font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{ color: '#557EFF' }}
+            style={{ color: FLIT.brand.blue, outlineColor: FLIT.brand.blue }}
             aria-label="Refrescar bitácora"
           >
             <RefreshCw className={`h-2.5 w-2.5 ${loading ? 'animate-spin' : ''}`} aria-hidden />
@@ -162,5 +209,6 @@ function formatFecha(iso: string | null | undefined): string {
 
 /** Texto del resultado de un evento de bitácora, anexando el código HTTP si lo hay. */
 function auditOutcomeLabel(e: IdentityAuditEvent): string {
-  return e.httpStatus != null ? `${e.outcome} (HTTP ${e.httpStatus})` : e.outcome;
+  const label = auditOutcomeText(e.outcome);
+  return e.httpStatus != null ? `${label} (HTTP ${e.httpStatus})` : label;
 }

@@ -599,6 +599,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             ct);
         var rows = await query
             .OrderByDescending(v => v.CreatedAt)
+            .ThenByDescending(v => v.Id)
             .Skip(skip)
             .Take(take)
             .ToListAsync(ct);
@@ -659,7 +660,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                     v.party_role,
                     v.email,
                     v.provider,
-                    v.score
+                    v.score,
+                    v.capture_url
                 FROM tramites.procedure_instance_biometric_validations v
                 LEFT JOIN tramites.procedure_instances pi
                     ON pi.id = v.procedure_instance_id
@@ -731,6 +733,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 email,
                 provider,
                 score,
+                capture_url,
                 validation_count,
                 COUNT(*) OVER() AS total_persons
             FROM filtered
@@ -842,6 +845,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                     Email = latest.Email,
                     Provider = latest.Provider,
                     Score = latest.Score,
+                    CaptureUrl = latest.CaptureUrl,
                     ValidationCount = g.Count(),
                 };
             })
@@ -929,6 +933,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         public string Email { get; init; } = string.Empty;
         public string Provider { get; init; } = string.Empty;
         public int? Score { get; init; }
+        public string? CaptureUrl { get; init; }
         public int ValidationCount { get; init; }
         public int TotalPersons { get; init; }
 
@@ -952,6 +957,7 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             Email = Email,
             Provider = Provider,
             Score = Score,
+            CaptureUrl = CaptureUrl,
             ValidationCount = ValidationCount,
         };
     }

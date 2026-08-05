@@ -24,5 +24,7 @@ public sealed class BiometricPersonGroupProjection
     public string Email { get; init; } = string.Empty;
     public string Provider { get; init; } = string.Empty;
     public int? Score { get; init; }
+    /// <summary>URL de captura de la validación más reciente (null si aún no hay enlace).</summary>
+    public string? CaptureUrl { get; init; }
     public int ValidationCount { get; init; }
 }

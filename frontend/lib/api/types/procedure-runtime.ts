@@ -1033,6 +1033,8 @@ export interface BiometricValidation {
   referenceNumber?: string | null;
   modalidad?: string | null;
   linkedProcedures?: LinkedProcedureRef[] | null;
+  /** Fecha de registro (historial por persona: más reciente → más antigua). */
+  createdAt?: string | null;
 }
 
 /**
@@ -1251,6 +1253,8 @@ export interface TenantBiometricPerson {
   email: string;
   provider: BiometricProvider;
   score: number | null;
+  /** URL de captura de la validación más reciente (null si aún no hay enlace). */
+  captureUrl: string | null;
   expired: boolean;
   createdAt: string;
   validatedAt: string | null;
