@@ -36,6 +36,13 @@ public sealed class ValidacionIdentidadNitSinRepresentanteTests
 
     public ValidacionIdentidadNitSinRepresentanteTests()
     {
+        _repo.ListInFlightByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<ProcedureInstanceBiometricValidation>());
+        _repo.FindVigenteApprovedByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns((ProcedureInstanceBiometricValidation?)null);
+
         var kyverumHandler = new IniciarKyverumVerifyHandler(
             _repo,
             _kyverumClient,
@@ -202,6 +209,38 @@ public sealed class ValidacionIdentidadNitSinRepresentanteTests
 
         await _kyverumClient.DidNotReceive().StartVerificationAsync(
             Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AC3_RepresentanteConIdentidadVigente_NoEnviaAunqueNoHayaRlUtilizable()
+    {
+        // HU #11265 AC3: PJ sin RL utilizable ni baúl, pero el RL ya tiene identidad vigente → no correo.
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenant, instance) = NuevoTramite();
+        SinRepresentanteUtilizable();
+        var now = DateTimeOffset.UtcNow;
+        _repo.FindVigenteApprovedByDocumentAsync(tenant, "CC", "1090123456", Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcedureInstanceBiometricValidation
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenant,
+                ProcedureInstanceId = Guid.NewGuid(),
+                DocumentType = "CC",
+                DocumentNumber = "1090123456",
+                Status = BiometricEstados.Aprobado,
+                ValidatedAt = now.AddDays(-1),
+                ValidUntil = now.AddDays(29),
+                TokenHash = "h",
+                ExpiresAt = now.AddHours(1),
+                CreatedAt = now.AddDays(-1),
+            });
+
+        var (_, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([CompradorJuridico()]), ct);
+
+        error.Should().BeNull();
+        await _kyverumClient.DidNotReceive().StartVerificationAsync(
+            Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+        instance.BiometricValidations.Should().BeEmpty();
     }
 
 

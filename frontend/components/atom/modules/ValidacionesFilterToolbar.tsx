@@ -109,6 +109,13 @@ interface Props {
   onClearFilters: () => void;
   loading?: boolean;
   resultCount: number;
+  /**
+   * HU #11271 / ADR-0040 — modo agrupado por persona: deshabilita filtros de semántica de validación
+   * (trámite, modalidad, parte, proveedor, score, motivo) e indica por qué.
+   */
+  groupedMode?: boolean;
+  /** Etiqueta del contador (p.ej. "12 personas" en modo agrupado). */
+  resultCountLabel?: string;
 }
 
 const MODALIDAD_OPTIONS: { value: '' | WizardModalidad; label: string }[] = [
@@ -167,18 +174,25 @@ function FilterSelect<T extends string>({
   value,
   options,
   onSelect,
+  disabled = false,
+  disabledTitle,
 }: {
   label: string;
   value: T;
   options: { value: T; label: string }[];
   onSelect: (v: T) => void;
+  disabled?: boolean;
+  disabledTitle?: string;
 }) {
   return (
     <Field label={label}>
       <select
         value={value}
+        disabled={disabled}
+        title={disabled ? disabledTitle : undefined}
+        aria-disabled={disabled || undefined}
         onChange={(e) => onSelect(e.target.value as T)}
-        className={CONTROL_CLASS}
+        className={`${CONTROL_CLASS}${disabled ? ' opacity-50 cursor-not-allowed' : ''}`}
       >
         {options.map((o) => (
           <option key={o.value || 'todos'} value={o.value}>
@@ -197,18 +211,34 @@ export function ValidacionesFilterToolbar({
   onClearFilters,
   loading = false,
   resultCount,
+  groupedMode = false,
+  resultCountLabel,
 }: Props) {
   const hasActiveFilters = hasActiveValidacionesFilters(filters);
   // Panel avanzado plegado por defecto para dejarle alto a la grilla; se abre si ya hay filtros avanzados.
   const [showAdvanced, setShowAdvanced] = useState(() => hasActiveAdvanced(filters));
 
+  const validationOnlyTitle =
+    'No aplica en vista por persona: este filtro es de una validación concreta, no de la persona.';
+
   const counterLabel =
-    resultCount === 0
+    resultCountLabel ??
+    (resultCount === 0
       ? 'Sin resultados'
-      : `${resultCount} validación${resultCount === 1 ? '' : 'es'}`;
+      : `${resultCount} validación${resultCount === 1 ? '' : 'es'}`);
 
   return (
     <div className="rounded-2xl border bg-white p-3 dark:bg-[#0B0F14] shrink-0">
+      {groupedMode && (
+        <p
+          className="mb-2 rounded-lg px-2 py-1.5 text-[11px]"
+          style={{ background: 'rgba(85,126,255,0.08)', color: '#162744' }}
+          role="status"
+        >
+          Vista por persona: los filtros de trámite, modalidad, parte, proveedor, score y motivo de
+          rechazo están deshabilitados porque aplican a una validación concreta, no a la persona.
+        </p>
+      )}
       {/* Trámite (búsqueda) + Actualizar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1">
@@ -223,7 +253,9 @@ export function ValidacionesFilterToolbar({
             maxLength={SEARCH_TEXT_MAX_LENGTH}
             placeholder="Buscar por número de trámite…"
             aria-label="Filtrar por número de trámite"
-            className={`${CONTROL_CLASS} pl-9`}
+            disabled={groupedMode}
+            title={groupedMode ? validationOnlyTitle : undefined}
+            className={`${CONTROL_CLASS} pl-9${groupedMode ? ' opacity-50 cursor-not-allowed' : ''}`}
           />
         </div>
         <button
@@ -246,12 +278,16 @@ export function ValidacionesFilterToolbar({
           value={filters.modalidad}
           options={MODALIDAD_OPTIONS}
           onSelect={(v) => onChange({ modalidad: v }, true)}
+          disabled={groupedMode}
+          disabledTitle={validationOnlyTitle}
         />
         <FilterSelect
           label="Parte"
           value={filters.partyRole}
           options={PARTE_OPTIONS}
           onSelect={(v) => onChange({ partyRole: v }, true)}
+          disabled={groupedMode}
+          disabledTitle={validationOnlyTitle}
         />
         <FilterSelect
           label="Estado"
@@ -270,6 +306,8 @@ export function ValidacionesFilterToolbar({
           value={filters.provider}
           options={PROVIDER_OPTIONS}
           onSelect={(v) => onChange({ provider: v }, true)}
+          disabled={groupedMode}
+          disabledTitle={validationOnlyTitle}
         />
         <Field label="Persona">
           <input
@@ -284,7 +322,7 @@ export function ValidacionesFilterToolbar({
       </div>
 
       {/* Motivo de rechazo: contextual (visible solo cuando se filtra por estado=rechazado) */}
-      {filters.status === 'rechazado' && (
+      {filters.status === 'rechazado' && !groupedMode && (
         <div className="mt-2">
           <Field label="Motivo de rechazo">
             <input
@@ -331,7 +369,9 @@ export function ValidacionesFilterToolbar({
               autoComplete="off"
               value={filters.scoreMin}
               onChange={(e) => onChange({ scoreMin: digitsOnly(e.target.value) })}
-              className={CONTROL_CLASS}
+              disabled={groupedMode}
+              title={groupedMode ? validationOnlyTitle : undefined}
+              className={`${CONTROL_CLASS}${groupedMode ? ' opacity-50 cursor-not-allowed' : ''}`}
             />
           </Field>
           <Field label="Score máx.">
@@ -342,7 +382,9 @@ export function ValidacionesFilterToolbar({
               autoComplete="off"
               value={filters.scoreMax}
               onChange={(e) => onChange({ scoreMax: digitsOnly(e.target.value) })}
-              className={CONTROL_CLASS}
+              disabled={groupedMode}
+              title={groupedMode ? validationOnlyTitle : undefined}
+              className={`${CONTROL_CLASS}${groupedMode ? ' opacity-50 cursor-not-allowed' : ''}`}
             />
           </Field>
           <Field label="Registro desde">

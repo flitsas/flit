@@ -2,12 +2,11 @@
 
 import { useState } from 'react';
 import { AlertCircle, CheckCircle2, ExternalLink, Loader2, X } from 'lucide-react';
-import { tramitesClient } from '@/lib/api/tramites-client';
+import { tramitesClient, getIdentitySendConflict, TramitesApiError } from '@/lib/api/tramites-client';
 import type {
   IniciarPrevalidacionRequest,
   IniciarPrevalidacionResult,
 } from '@/lib/api/types/procedure-runtime';
-import { TramitesApiError } from '@/lib/api/tramites-client';
 import { sanitizeDocNumber } from '@/lib/validation/fieldRules';
 
 /**
@@ -70,6 +69,9 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
   const [touched, setTouched] = useState<Partial<Record<keyof FormValues, boolean>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  // HU #11267 — confirmación con destinatario (AC3) y aviso de identidad existente (AC1).
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [existingConflict, setExistingConflict] = useState<ReturnType<typeof getIdentitySendConflict>>(null);
 
   const errors: Partial<Record<keyof FormValues, string>> = {};
   if (!required(values.documentType)) errors.documentType = 'Requerido';
@@ -84,6 +86,7 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
     setValues((prev) => ({ ...prev, [field]: value }));
     setTouched((prev) => ({ ...prev, [field]: true }));
     setApiError(null);
+    setExistingConflict(null);
   };
 
   const touchAll = () => {
@@ -94,16 +97,19 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
     setTouched(all);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     touchAll();
     if (hasErrors) return;
+    // AC3 — mostrar destinatario y pedir confirmación antes de enviar.
+    setConfirmOpen(true);
+  };
 
+  const sendPrevalidacion = async () => {
     setSubmitting(true);
     setApiError(null);
+    setExistingConflict(null);
     try {
-      // CF-01 (D1) — no se envía personType/legalRep*: el backend asume "natural" por defecto y
-      // rechaza cualquier otro valor. El formulario ya no ofrece la opción jurídica.
       const body: IniciarPrevalidacionRequest = {
         documentType: values.documentType,
         documentNumber: values.documentNumber.trim(),
@@ -111,9 +117,15 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
         email: values.email.trim(),
       };
       const result = await tramitesClient.createPrevalidacion(body);
+      setConfirmOpen(false);
       onSuccess(result);
     } catch (err) {
-      if (err instanceof TramitesApiError && err.status === 409) {
+      const conflict = getIdentitySendConflict(err);
+      if (conflict) {
+        setConfirmOpen(false);
+        setExistingConflict(conflict);
+        setApiError(null);
+      } else if (err instanceof TramitesApiError && err.status === 409) {
         setApiError(
           'Ya existe una prevalidación activa o pendiente para este documento. Revísala en el listado.',
         );
@@ -129,6 +141,13 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
     }
   };
 
+  const formatVigencia = (iso: string | null) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(d);
+  };
+
   const fieldClass = (field: keyof FormValues) =>
     `w-full rounded-xl border px-3 py-2 text-sm outline-none transition focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 disabled:opacity-50 ${
       touched[field] && errors[field] ? 'border-[#FF4E00]' : 'border-[#DDE5F0]'
@@ -142,7 +161,7 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
       aria-modal="true"
       aria-labelledby="prevalidacion-form-title"
     >
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl dark:bg-[#0B0F14]">
+      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-xl dark:bg-[#0B0F14]">
         {/* Header */}
         <div className="flex items-center justify-between border-b px-6 py-4">
           <h2 id="prevalidacion-form-title" className="text-base font-semibold text-[#162744] dark:text-white">
@@ -272,6 +291,40 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
               )}
             </div>
 
+            {/* HU #11267 AC1 — identidad existente: aviso + Ver proceso (sin reenviar) */}
+            {existingConflict && (
+              <div
+                className="space-y-2 rounded-xl border p-3 text-xs"
+                style={{ borderColor: '#5B8A1F', background: 'rgba(91,138,31,0.08)', color: '#3F5F14' }}
+                role="status"
+                aria-live="polite"
+              >
+                <p className="font-semibold">
+                  {existingConflict.motivo === 'identidad_vigente'
+                    ? 'Ya validada'
+                    : existingConflict.motivo === 'validacion_en_vuelo'
+                      ? 'Validación en curso'
+                      : 'No se puede crear una prevalidación nueva'}
+                  {existingConflict.validUntil
+                    ? ` · vigente hasta el ${formatVigencia(existingConflict.validUntil)}`
+                    : ''}
+                </p>
+                <p className="opacity-80">
+                  Estado: {existingConflict.status ?? 'disponible'}. Usa el proceso existente en lugar de reenviar.
+                </p>
+                {existingConflict.validationId && (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                    style={{ background: '#5B8A1F' }}
+                  >
+                    Ver el proceso existente
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* API error */}
             {apiError && (
               <div
@@ -296,17 +349,57 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
             >
               Cancelar
             </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
-              style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
-            >
-              {submitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-              {submitting ? 'Creando…' : 'Crear prevalidación'}
-            </button>
+            {!existingConflict && (
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
+                style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
+              >
+                Crear prevalidación
+              </button>
+            )}
           </div>
         </form>
+
+        {/* HU #11267 AC3 — confirmación con destinatario */}
+        {confirmOpen && (
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/40 px-4"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="pv-confirm-title"
+          >
+            <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-lg dark:bg-[#0B0F14]">
+              <h3 id="pv-confirm-title" className="text-sm font-semibold text-[#162744] dark:text-white">
+                Confirmar envío
+              </h3>
+              <p className="mt-2 text-xs opacity-80">
+                Se enviará el enlace de captura a <strong>{values.email.trim()}</strong>. ¿Continuar?
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmOpen(false)}
+                  disabled={submitting}
+                  className="rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                >
+                  Volver
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void sendPrevalidacion()}
+                  disabled={submitting}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                  style={{ background: '#557EFF' }}
+                >
+                  {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+                  {submitting ? 'Enviando…' : 'Confirmar y enviar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

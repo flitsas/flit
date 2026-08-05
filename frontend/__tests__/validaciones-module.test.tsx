@@ -137,9 +137,9 @@ describe('Validaciones — AC8 estados de UI', () => {
 
     render(<Validaciones />);
 
-    // role="status" con el texto sr-only de carga.
-    const status = screen.getByRole('status');
-    expect(status).toHaveTextContent(/cargando validaciones de identidad/i);
+    // role="status" con el texto sr-only de carga (la grilla; el panel de atascadas tiene el suyo).
+    const status = screen.getByText(/cargando validaciones de identidad/i).closest('[role="status"]');
+    expect(status).toBeTruthy();
 
     await act(async () => {
       resolveFn(EMPTY);
@@ -426,7 +426,7 @@ describe('Validaciones — filtros (HU #10348)', () => {
   });
 });
 
-describe('Validaciones — eventos atascados (dead-letter, HU #10349)', () => {
+describe('Validaciones — eventos atascados (dead-letter, HU #10349 / #11268)', () => {
   const STUCK = {
     stuck: [
       {
@@ -445,6 +445,17 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349)', () => {
     maxDeliveryAttempts: 5,
   };
 
+  async function expandStuckGroup(label: RegExp | string) {
+    const banner = await screen.findByRole('region', {
+      name: /validaciones de identidad atascadas/i,
+    });
+    const toggle = within(banner).getByRole('button', {
+      name: typeof label === 'string' ? new RegExp(label, 'i') : label,
+    });
+    await userEvent.click(toggle);
+    return banner;
+  }
+
   it('muestra el banner con el nombre y el documento enmascarado de la persona', async () => {
     mocks.listTenantBiometricValidations.mockResolvedValue(FULL);
     mocks.listStuckIdentityValidations.mockResolvedValue(STUCK);
@@ -452,9 +463,8 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349)', () => {
     render(<Validaciones />);
 
     expect(await screen.findByText(/de identidad atascada/i)).toBeInTheDocument();
-    // Dentro del banner: muestra el nombre (no el validation_id) y el documento enmascarado a los últimos 4.
-    const banner = screen.getByRole('region', { name: /validaciones de identidad atascadas/i });
-    expect(within(banner).getByText(/Maria Compradora/)).toBeInTheDocument();
+    const banner = await expandStuckGroup(/maria compradora/i);
+    expect(within(banner).getAllByText(/Maria Compradora/).length).toBeGreaterThanOrEqual(1);
     expect(within(banner).getByText(/CC ••••4050/)).toBeInTheDocument();
     expect(within(banner).queryByText(/val-12345678/)).not.toBeInTheDocument();
     expect(
@@ -473,6 +483,7 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349)', () => {
           validationId: 'val-bbbbbbbb',
           kind: 'encadenamiento',
           name: 'Ana Cadena',
+          documentNumber: '9999',
         },
       ],
       total: 2,
@@ -484,6 +495,8 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349)', () => {
     const banner = await screen.findByRole('region', {
       name: /validaciones de identidad atascadas/i,
     });
+    await userEvent.click(within(banner).getByRole('button', { name: /pedro envio/i }));
+    await userEvent.click(within(banner).getByRole('button', { name: /ana cadena/i }));
     expect(within(banner).getByText('Envío a proveedor')).toBeInTheDocument();
     expect(within(banner).getByText('Firma · FUR')).toBeInTheDocument();
   });
@@ -496,6 +509,7 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349)', () => {
       .mockResolvedValue(NO_STUCK); // tras reencolar: ya no
 
     render(<Validaciones />);
+    await expandStuckGroup(/maria compradora/i);
     const btn = await screen.findByRole('button', {
       name: /reintentar la validación de maria compradora/i,
     });
@@ -556,6 +570,134 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349)', () => {
     await waitFor(() =>
       expect(screen.queryByText(/de identidad atascada/i)).not.toBeInTheDocument(),
     );
+  });
+
+  // HU #11268 — acordeón por persona
+  it('agrupa por persona en grupos colapsados con contador (AC1)', async () => {
+    mocks.listTenantBiometricValidations.mockResolvedValue(FULL);
+    mocks.listStuckIdentityValidations.mockResolvedValue({
+      stuck: [
+        { ...STUCK.stuck[0], id: 'e1' },
+        { ...STUCK.stuck[0], id: 'e2', validationId: 'v2' },
+        { ...STUCK.stuck[0], id: 'e3', validationId: 'v3' },
+        {
+          id: 'e4',
+          validationId: 'v4',
+          eventType: 'identity_validation.completed',
+          attempts: 5,
+          occurredAt: '2026-06-20T12:00:00Z',
+          createdAt: '2026-06-20T12:00:00Z',
+          name: 'Luis Solo',
+          documentType: 'CC',
+          documentNumber: '1111',
+        },
+      ],
+      total: 4,
+      maxDeliveryAttempts: 5,
+    });
+
+    render(<Validaciones />);
+    const banner = await screen.findByRole('region', {
+      name: /validaciones de identidad atascadas/i,
+    });
+    const maria = within(banner).getByRole('button', { name: /maria compradora.*3 eventos/i });
+    const luis = within(banner).getByRole('button', { name: /luis solo.*1 evento/i });
+    expect(maria).toHaveAttribute('aria-expanded', 'false');
+    expect(luis).toHaveAttribute('aria-expanded', 'false');
+    // Filas no visibles mientras está colapsado
+    expect(
+      within(banner).queryByRole('button', { name: /reintentar la validación de maria/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('conserva Reintentar por fila y Reintentar todos al expandir (AC2)', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricValidations.mockResolvedValue(FULL);
+    mocks.listStuckIdentityValidations.mockResolvedValue({
+      stuck: [
+        { ...STUCK.stuck[0], id: 'e1' },
+        {
+          id: 'e2',
+          validationId: 'v2',
+          eventType: 'identity_validation.completed',
+          attempts: 5,
+          occurredAt: '2026-06-20T11:00:00Z',
+          createdAt: '2026-06-20T11:00:00Z',
+          name: 'Otra Persona',
+          documentType: 'CC',
+          documentNumber: '2222',
+        },
+      ],
+      total: 2,
+      maxDeliveryAttempts: 5,
+    });
+
+    render(<Validaciones />);
+    const banner = await screen.findByRole('region', {
+      name: /validaciones de identidad atascadas/i,
+    });
+    expect(
+      within(banner).getByRole('button', { name: /reintentar todas las validaciones atascadas/i }),
+    ).toBeInTheDocument();
+    await user.click(within(banner).getByRole('button', { name: /maria compradora/i }));
+    expect(
+      within(banner).getByRole('button', { name: /reintentar la validación de maria compradora/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('agrupa eventos sin nombre ni documento como No identificados (AC3)', async () => {
+    mocks.listTenantBiometricValidations.mockResolvedValue(FULL);
+    mocks.listStuckIdentityValidations.mockResolvedValue({
+      stuck: [
+        { ...STUCK.stuck[0], id: 'e1' },
+        {
+          id: 'e-orphan',
+          validationId: 'v-gone',
+          eventType: 'identity_validation.completed',
+          attempts: 5,
+          occurredAt: '2026-06-20T11:00:00Z',
+          createdAt: '2026-06-20T11:00:00Z',
+          name: null,
+          documentType: null,
+          documentNumber: null,
+        },
+      ],
+      total: 2,
+      maxDeliveryAttempts: 5,
+    });
+
+    render(<Validaciones />);
+    const banner = await screen.findByRole('region', {
+      name: /validaciones de identidad atascadas/i,
+    });
+    expect(within(banner).getByRole('button', { name: /no identificados/i })).toBeInTheDocument();
+    expect(within(banner).getByRole('button', { name: /maria compradora/i })).toBeInTheDocument();
+  });
+
+  it('muestra estado de carga y de error del panel de atascadas (AC4)', async () => {
+    mocks.listTenantBiometricValidations.mockResolvedValue(FULL);
+    let resolveStuck!: (v: typeof NO_STUCK) => void;
+    mocks.listStuckIdentityValidations.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStuck = resolve;
+        }),
+    );
+
+    const { unmount } = render(<Validaciones />);
+    expect(screen.getByRole('status', { name: /cargando validaciones atascadas/i })).toBeInTheDocument();
+    resolveStuck(NO_STUCK);
+    await waitFor(() =>
+      expect(screen.queryByRole('status', { name: /cargando validaciones atascadas/i })).not.toBeInTheDocument(),
+    );
+    unmount();
+
+    mocks.listStuckIdentityValidations.mockRejectedValue(new Error('cola caída'));
+    render(<Validaciones />);
+    expect(
+      await screen.findByRole('alert', { name: /error al cargar validaciones atascadas/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/cola caída/i)).toBeInTheDocument();
   });
 });
 

@@ -77,6 +77,10 @@ public sealed class IniciarPrevalidacionHandlerTests
             .Returns(person);
         _personRepo.FindActiveStandaloneValidationAsync(person.Id, Arg.Any<CancellationToken>())
             .Returns((ProcedureInstanceBiometricValidation?)null);
+        _procedureRepo.FindVigenteApprovedByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns((ProcedureInstanceBiometricValidation?)null);
         return person;
     }
 
@@ -98,7 +102,7 @@ public sealed class IniciarPrevalidacionHandlerTests
         StubPerson();
         var handler = BuildHandler(isKyverum: false);
 
-        var (result, error) = await handler.HandleAsync(_tenantId, NaturalRequest(), ct);
+        var (result, error, _) = await handler.HandleAsync(_tenantId, NaturalRequest(), ct);
 
         error.Should().BeNull();
         result.Should().NotBeNull();
@@ -120,7 +124,7 @@ public sealed class IniciarPrevalidacionHandlerTests
         StubPerson();
         var handler = BuildHandler(isKyverum: false);
 
-        var (result, error) = await handler.HandleAsync(_tenantId, NaturalRequest(), ct);
+        var (result, error, _) = await handler.HandleAsync(_tenantId, NaturalRequest(), ct);
 
         error.Should().BeNull();
         result!.CaptureUrl.Should().StartWith("/api/v1/public/biometric/", "la URL de captura mock apunta al magic-link público");
@@ -170,7 +174,7 @@ public sealed class IniciarPrevalidacionHandlerTests
         StubKyverumOk(captureUrl: "https://kyverum.example.com/capture/001");
         var handler = BuildHandler(isKyverum: true);
 
-        var (result, error) = await handler.HandleAsync(_tenantId, NaturalRequest(), ct);
+        var (result, error, _) = await handler.HandleAsync(_tenantId, NaturalRequest(), ct);
 
         error.Should().BeNull();
         result!.CaptureUrl.Should().Be("https://kyverum.example.com/capture/001");
@@ -206,7 +210,7 @@ public sealed class IniciarPrevalidacionHandlerTests
             .ThrowsAsync(new KyverumVerifyException("proveedor caído", transient: true));
         var handler = BuildHandler(isKyverum: true);
 
-        var (result, error) = await handler.HandleAsync(_tenantId, NaturalRequest(), ct);
+        var (result, error, _) = await handler.HandleAsync(_tenantId, NaturalRequest(), ct);
 
         error.Should().BeNull();
         result!.Queued.Should().BeTrue();
@@ -225,7 +229,7 @@ public sealed class IniciarPrevalidacionHandlerTests
             .ThrowsAsync(new KyverumVerifyException("datos inválidos", transient: false));
         var handler = BuildHandler(isKyverum: true);
 
-        var (result, error) = await handler.HandleAsync(_tenantId, NaturalRequest(), ct);
+        var (result, error, _) = await handler.HandleAsync(_tenantId, NaturalRequest(), ct);
 
         error.Should().Be("proveedor_error");
         result.Should().BeNull();
@@ -240,7 +244,7 @@ public sealed class IniciarPrevalidacionHandlerTests
         var handler = BuildHandler(isKyverum: false);
         var req = JuridicalRequest();
 
-        var (result, error) = await handler.HandleAsync(_tenantId, req, ct);
+        var (result, error, _) = await handler.HandleAsync(_tenantId, req, ct);
 
         error.Should().Be("prevalidacion_solo_natural");
         result.Should().BeNull();
@@ -269,7 +273,7 @@ public sealed class IniciarPrevalidacionHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var handler = BuildHandler(isKyverum: true);
 
-        var (result, error) = await handler.HandleAsync(_tenantId, JuridicalRequest(), ct);
+        var (result, error, _) = await handler.HandleAsync(_tenantId, JuridicalRequest(), ct);
 
         error.Should().Be("prevalidacion_solo_natural");
         result.Should().BeNull();
@@ -289,7 +293,7 @@ public sealed class IniciarPrevalidacionHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var handler = BuildHandler();
 
-        var (result, error) = await handler.HandleAsync(_tenantId, new IniciarPrevalidacionRequest(docType, docNum, name, email), ct);
+        var (result, error, _) = await handler.HandleAsync(_tenantId, new IniciarPrevalidacionRequest(docType, docNum, name, email), ct);
 
         error.Should().Be("datos_incompletos");
         result.Should().BeNull();
@@ -304,7 +308,7 @@ public sealed class IniciarPrevalidacionHandlerTests
         var handler = BuildHandler();
         var req = new IniciarPrevalidacionRequest("NIT", "900123456", "Empresa SAS", "emp@x.com", PersonTypes.Juridical);
 
-        var (result, error) = await handler.HandleAsync(_tenantId, req, ct);
+        var (result, error, _) = await handler.HandleAsync(_tenantId, req, ct);
 
         error.Should().Be("prevalidacion_solo_natural");
         result.Should().BeNull();
@@ -315,20 +319,64 @@ public sealed class IniciarPrevalidacionHandlerTests
     {
         var ct = TestContext.Current.CancellationToken;
         var person = StubPerson();
+        var now = DateTimeOffset.UtcNow;
         _personRepo.FindActiveStandaloneValidationAsync(person.Id, ct)
             .Returns(new ProcedureInstanceBiometricValidation
             {
                 Id = Guid.NewGuid(),
                 PersonId = person.Id,
+                DocumentType = "CC",
+                DocumentNumber = "1234567890",
                 Status = BiometricEstados.EnProceso,
+                ExpiresAt = now.AddHours(12),
+                UpdatedAt = now,
             });
         var handler = BuildHandler();
 
-        var (result, error) = await handler.HandleAsync(_tenantId, NaturalRequest(), ct);
+        var (result, error, conflict) = await handler.HandleAsync(_tenantId, NaturalRequest(), ct);
 
         error.Should().Be("prevalidacion_activa");
         result.Should().BeNull();
+        conflict.Should().NotBeNull();
+        conflict!.Motivo.Should().Be(IdentitySendMotivo.ValidacionEnVuelo);
         _procedureRepo.DidNotReceive().Add(Arg.Any<ProcedureInstanceBiometricValidation>());
+    }
+
+    [Fact]
+    public async Task HU11264_IdentidadVigente_Returns409ConCuerpoInformativo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        StubPerson();
+        var now = DateTimeOffset.UtcNow;
+        var vigenteId = Guid.NewGuid();
+        _procedureRepo.FindVigenteApprovedByDocumentAsync(
+                _tenantId, "CC", "1234567890", Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new ProcedureInstanceBiometricValidation
+            {
+                Id = vigenteId,
+                TenantId = _tenantId,
+                DocumentType = "CC",
+                DocumentNumber = "1234567890",
+                Status = BiometricEstados.Aprobado,
+                ValidatedAt = now.AddDays(-3),
+                ValidUntil = now.AddDays(27),
+                ExpiresAt = now.AddDays(-2),
+                ProcedureInstanceId = Guid.NewGuid(),
+                UpdatedAt = now.AddDays(-3),
+            });
+        var handler = BuildHandler();
+
+        var (result, error, conflict) = await handler.HandleAsync(_tenantId, NaturalRequest(), ct);
+
+        error.Should().Be("prevalidacion_activa");
+        result.Should().BeNull();
+        conflict.Should().NotBeNull();
+        conflict!.Motivo.Should().Be(IdentitySendMotivo.IdentidadVigente);
+        conflict.ValidationId.Should().Be(vigenteId);
+        conflict.Origen.Should().Be(IdentitySendOrigen.Tramite);
+        _procedureRepo.DidNotReceive().Add(Arg.Any<ProcedureInstanceBiometricValidation>());
+        await _kyverum.DidNotReceive().StartVerificationAsync(
+            Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
     }
 
     // ── Invariantes de la entidad ────────────────────────────────────────────────

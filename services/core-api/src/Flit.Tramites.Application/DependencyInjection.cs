@@ -128,6 +128,8 @@ public static class DependencyInjection
         services.AddScoped<ListBiometriaHandler>();
         // HU #10234 — vista transversal del submódulo "Validaciones de Identidad" (todas las instancias).
         services.AddScoped<ListTenantBiometricValidationsHandler>();
+        // HU #11270 — vista agrupada por persona (ADR-0040); endpoint propio.
+        services.AddScoped<ListTenantBiometricPersonsHandler>();
         services.AddScoped<GetBiometriaByTokenHandler>();
         services.AddScoped<CompletarBiometriaHandler>();
         services.AddScoped<SimularBiometriaHandler>();
@@ -144,6 +146,8 @@ public static class DependencyInjection
         // CF-06 (Feature #11004, ADR-0036) — detalle de UNA validación por id (poll), tenant-scoped,
         // sirve tanto a standalone como a trámite.
         services.AddScoped<UseCases.Persons.GetPrevalidacionDetailHandler>();
+        // HU #11272 — historial multi-validación por persona (ADR-0040).
+        services.AddScoped<UseCases.Persons.ListPersonBiometricValidationsHandler>();
 
         // Kyverum Verify (HU #10233): iniciar validación remota + procesar webhook firmado. El cliente
         // HTTP, el protector de secretos y el publisher de eventos se registran en Infraestructura.
