@@ -74,12 +74,49 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
             <KpiCard
               label="Reincidencia"
               value={formatPct(summary.reincidencePct)}
-              tooltip="% de trámites rechazados que volvieron a borrador para corregirse."
+              tooltip="% de trámites rechazados que se reintentaron: reapertura a borrador, re-radicación tras subsanar, o subsanación abierta."
               variation={kpiVariation("reincidencePct")}
               invertVariationColor
               color="#F9AC00"
             />
           </div>
+
+          {/* Partición del ciclo. Hasta ahora solo se medía el tramo del organismo, así que se
+              podía señalar al lento pero no corregirse uno mismo. */}
+          <section
+            className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border"
+            aria-labelledby="ciclo-interno-title"
+          >
+            <h2
+              id="ciclo-interno-title"
+              className="text-sm font-bold mb-3"
+              title="Horas desde que se crea el trámite hasta que se entrega al organismo, frente al tiempo que tarda el organismo en decidir."
+            >
+              Dónde se va el tiempo
+            </h2>
+            <BarList
+              items={[
+                {
+                  key: "interno",
+                  label: "Nuestro equipo (creación → entrega)",
+                  value: metrics.data.current.internalCycle?.p50Hours ?? 0,
+                  valueLabel: formatHours(metrics.data.current.internalCycle?.p50Hours ?? null),
+                },
+                {
+                  key: "organismo",
+                  label: "El organismo (entrega → decisión)",
+                  value: summary.p50ApprovalHours ?? 0,
+                  valueLabel: formatHours(summary.p50ApprovalHours),
+                },
+              ]}
+              color="#557EFF"
+              emptyMessage="Sin trámites entregados en el periodo."
+              testId="ciclo-interno-vs-ot"
+            />
+            <p className="mt-3 text-[11px] text-[#6B7280] dark:text-white/50">
+              Medianas del periodo. La primera barra es la que podemos corregir nosotros.
+            </p>
+          </section>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="rechazo-ot-title">
@@ -101,21 +138,60 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
               />
             </section>
 
+            {/* Causales del catálogo si las hay; si no, el texto libre de siempre. La lista
+                tipificada es la única agregable: el texto libre devuelve decenas de motivos
+                distintos con un caso cada uno porque cada revisor escribe a su manera. */}
             <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="rechazo-causal-title">
-              <h2 id="rechazo-causal-title" className="text-sm font-bold mb-3" title="Causales registradas en las transiciones a 'rechazado' dentro del rango.">
-                Rechazos por causal
-              </h2>
-              <BarList
-                items={metrics.data.current.rejectionByReason.map((r) => ({
-                  key: r.reason,
-                  label: r.reason,
-                  value: r.count,
-                  hint: `${formatPct(r.pct)} de los rechazos`,
-                }))}
-                color="#F9AC00"
-                emptyMessage="Sin causales de rechazo registradas en el periodo."
-                testId="rechazo-por-causal"
-              />
+              {metrics.data.current.rejectionByReasonCatalog?.length ? (
+                <>
+                  <h2 id="rechazo-causal-title" className="text-sm font-bold mb-3" title="Causales del catálogo marcadas por el organismo al rechazar, dentro del rango.">
+                    Rechazos por causal
+                  </h2>
+                  <BarList
+                    items={metrics.data.current.rejectionByReasonCatalog.map((r) => ({
+                      key: r.reasonId,
+                      label: r.description,
+                      value: r.pct,
+                      valueLabel: formatPct(r.pct),
+                      hint:
+                        r.rechazos === 1
+                          ? "1 rechazo la incluye"
+                          : `${formatInt(r.rechazos)} rechazos la incluyen`,
+                    }))}
+                    max={100}
+                    color="#F9AC00"
+                    emptyMessage="Sin causales de rechazo registradas en el periodo."
+                    testId="rechazo-por-causal"
+                  />
+                  {/* Un rechazo puede llevar varias causales: leído como reparto, el % engaña. */}
+                  <p className="mt-3 text-[11px] text-[#6B7280] dark:text-white/50">
+                    % de rechazos que incluyen cada causal; como un rechazo puede tener varias, la
+                    suma puede pasar del 100 %. Promedio de{" "}
+                    {metrics.data.current.avgReasonsPerRejection} causales por rechazo.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 id="rechazo-causal-title" className="text-sm font-bold mb-3" title="Motivos escritos a mano en las transiciones a 'rechazado' dentro del rango.">
+                    Rechazos por causal
+                  </h2>
+                  <BarList
+                    items={metrics.data.current.rejectionByReason.map((r) => ({
+                      key: r.reason,
+                      label: r.reason,
+                      value: r.count,
+                      hint: `${formatPct(r.pct)} de los rechazos`,
+                    }))}
+                    color="#F9AC00"
+                    emptyMessage="Sin causales de rechazo registradas en el periodo."
+                    testId="rechazo-por-causal"
+                  />
+                  <p className="mt-3 text-[11px] text-[#6B7280] dark:text-white/50">
+                    Motivos escritos a mano: no son agrupables. Se verán agrupados a medida que los
+                    organismos rechacen con las causales del catálogo.
+                  </p>
+                </>
+              )}
             </section>
           </div>
 

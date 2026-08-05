@@ -18,6 +18,9 @@ public sealed class OtClientProcedureResponse
 
     public string Status { get; init; } = string.Empty;
 
+    /// <summary>Modalidad (matricula_inicial | traspaso): determina qué causales de rechazo aplican.</summary>
+    public string ModalidadEntrada { get; init; } = string.Empty;
+
     /// <summary>Feature #10587 / HU #10785 — sub-estado interno de placa (null | preasignado | asignado).</summary>
     public string? PlateFlowStatus { get; init; }
 
@@ -76,7 +79,22 @@ public sealed class OtClientProcedureActorResponse
 
 public sealed class RejectOtClientProcedureRequest
 {
+    /// <summary>
+    /// Observación general del rechazo, en texto libre y obligatoria. NO la sustituyen las
+    /// causales: la causal dice QUÉ falló (dato agregable del reporte) y la observación dice CÓMO
+    /// corregirlo — qué documento exactamente, qué dato no cuadra, qué se espera del gestor. Es el
+    /// contexto que necesita quien va a subsanar, y por eso se pide aunque se marquen varias causales.
+    /// </summary>
     public string Reason { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Causales del catálogo marcadas por el revisor. Varias son válidas y esperadas: un expediente
+    /// puede llegar con improntas borrosas, sin impronta y sin pago de impuestos a la vez, y el
+    /// gestor necesita saberlo todo. Se validan contra el catálogo activo de la modalidad del
+    /// trámite; una causal ajena o inactiva devuelve 422 en vez de descartarse en silencio (el
+    /// revisor creería haberla registrado).
+    /// </summary>
+    public IReadOnlyList<Guid>? RejectionReasonIds { get; init; }
 
     /// <summary>
     /// HU #10871 (AC1) — checklist de ítems subsanables (opcional). Con al menos un ítem, el trámite
@@ -109,6 +127,7 @@ internal static class OtClientProcedureMapper
             ClientTenantName = procedure.ClientTenantName,
             ReferenceNumber = procedure.ReferenceNumber,
             Status = procedure.Status,
+            ModalidadEntrada = procedure.ModalidadEntrada,
             PlateFlowStatus = procedure.PlateFlowStatus,
             SoatEstado = procedure.SoatEstado,
             PlatePreferredLastDigit = procedure.PlatePreferredLastDigit,

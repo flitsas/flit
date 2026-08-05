@@ -233,11 +233,31 @@ export function Shell({
         onClick: () => window.location.assign("/admin/companies"),
       },
       {
+        // Tránsito pasa a ser contenedor (mismo patrón que Plataforma): el catálogo de causales
+        // alimenta el modal de rechazo del organismo, así que cuelga de aquí y no de Compañías.
         key: "admin-transit",
         label: "Tránsito",
         icon: Landmark,
-        active: pathname.startsWith("/admin/transit-offices"),
-        onClick: () => window.location.assign(otHubListPath()),
+        active:
+          pathname.startsWith("/admin/transit-offices") ||
+          pathname.startsWith("/admin/causales-rechazo"),
+        onClick: () => undefined,
+        children: [
+          {
+            key: "admin-transit-offices",
+            label: "Organismos",
+            icon: Landmark,
+            active: pathname.startsWith("/admin/transit-offices"),
+            onClick: () => window.location.assign(otHubListPath()),
+          },
+          {
+            key: "admin-rejection-reasons",
+            label: "Causales de rechazo",
+            icon: ClipboardList,
+            active: pathname.startsWith("/admin/causales-rechazo"),
+            onClick: () => window.location.assign("/admin/causales-rechazo"),
+          },
+        ],
       },
       {
         key: "admin-documents",

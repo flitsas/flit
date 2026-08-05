@@ -75,6 +75,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                                 ProcedureTypeId = p.ProcedureTypeId,
                                 ReferenceNumber = p.ReferenceNumber,
                                 Status = p.Status,
+                                ModalidadEntrada = p.ModalidadEntrada,
                                 PlateFlowStatus = p.PlateFlowStatus,
                                 // HU #10804 — soat_estado por fila (para ocultar Aprobar/Rechazar en el frontend
                                 // hasta que la placa esté 'asignado' con SOAT 'vigente'). Lectura cross-tenant
@@ -213,6 +214,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Guid? rejectedBy,
         string source,
         Guid? transitOfficeIdOverride = null,
+        IReadOnlyList<Guid>? rejectionReasonIds = null,
         CancellationToken cancellationToken = default) =>
         TransitionAsync(
             otTenantId,
@@ -222,7 +224,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             reason,
             source,
             cancellationToken,
-            transitOfficeIdOverride: transitOfficeIdOverride);
+            transitOfficeIdOverride: transitOfficeIdOverride,
+            rejectionReasonIds: rejectionReasonIds);
 
     // Observación subsanable: destino 'rechazado' con checklist HÍBRIDO (motivo + items).
     public Task<OtClientProcedure?> ObserveAsync(
@@ -233,6 +236,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         Guid? observedBy,
         string source,
         Guid? transitOfficeIdOverride = null,
+        IReadOnlyList<Guid>? rejectionReasonIds = null,
         CancellationToken cancellationToken = default) =>
         TransitionAsync(
             otTenantId,
@@ -243,7 +247,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             source,
             cancellationToken,
             items: items,
-            transitOfficeIdOverride: transitOfficeIdOverride);
+            transitOfficeIdOverride: transitOfficeIdOverride,
+            rejectionReasonIds: rejectionReasonIds);
 
     // La decisión del OT (aprobar/rechazar/observar) aplica SIEMPRE desde 'entregado' (máquina == develop).
     // La ruta de placa no cambia el status: su progreso vive en plate_flow_status (sub-estado interno,
@@ -258,7 +263,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         CancellationToken cancellationToken,
         Guid? mandateSignerId = null,
         IReadOnlyList<OtProcedureObservationItem>? items = null,
-        Guid? transitOfficeIdOverride = null)
+        Guid? transitOfficeIdOverride = null,
+        IReadOnlyList<Guid>? rejectionReasonIds = null)
     {
         var accessible = await ExecuteOtScopedAsync(
             otTenantId,
@@ -390,9 +396,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 // El historial se escribe aquí (no vía ITramiteTransitionRecorder) para conservar
                 // el metadata cross-tenant (ot_tenant_id/source) dentro de la transacción RLS del
                 // tenant cliente; la unificación con el recorder queda para la integración N 03.
+                var historyId = Guid.NewGuid();
                 _context.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
                 {
-                    Id = Guid.NewGuid(),
+                    Id = historyId,
                     TenantId = accessible.ClientTenantId,
                     ProcedureInstanceId = entity.Id,
                     FromStatus = effectiveFrom,
@@ -402,6 +409,26 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     Reason = reason,
                     Metadata = BuildStatusHistoryMetadata(otTenantId, source, reason, items, fieldSnapshot),
                 });
+
+                // Causales del catálogo, colgando del evento de rechazo. Van en el MISMO save que la
+                // transición: un rechazo cuyas causales no se guardaran dejaría el reporte de motivos
+                // contando de menos sin que nadie lo note.
+                if (rejectionReasonIds is { Count: > 0 } && targetStatus == TramiteEstado.Rechazado)
+                {
+                    foreach (var reasonId in rejectionReasonIds.Distinct())
+                    {
+                        _context.ProcedureInstanceRejectionReasons.Add(new ProcedureInstanceRejectionReason
+                        {
+                            Id = Guid.NewGuid(),
+                            TenantId = accessible.ClientTenantId,
+                            ProcedureInstanceId = entity.Id,
+                            StatusHistoryId = historyId,
+                            RejectionReasonId = reasonId,
+                            CreatedAt = now,
+                            CreatedBy = resolvedChangedBy,
+                        });
+                    }
+                }
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                 var mapped = Map(entity);
@@ -700,6 +727,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         ProcedureTypeId = p.ProcedureTypeId,
                         ReferenceNumber = p.ReferenceNumber,
                         Status = p.Status,
+                        // La modalidad gobierna qué causales de rechazo aplican: sin ella, el guard
+                        // del rechazo descartaría causales válidas por creerlas de otro proceso.
+                        ModalidadEntrada = p.ModalidadEntrada,
                         PlateFlowStatus = p.PlateFlowStatus,
                         // HU #10804 — soat_estado también en el detalle (mismo criterio de visibilidad).
                         SoatEstado = _context.ProcedureInstanceFieldValues
@@ -797,6 +827,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     ClientTenantName = mapped.ClientTenantName,
                     ReferenceNumber = mapped.ReferenceNumber,
                     Status = mapped.Status,
+                    ModalidadEntrada = mapped.ModalidadEntrada,
                     PlateFlowStatus = mapped.PlateFlowStatus,
                     SoatEstado = mapped.SoatEstado,
                     PlatePreferredLastDigit = mapped.PlatePreferredLastDigit,
@@ -1129,6 +1160,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         ProcedureTypeId = entity.ProcedureTypeId,
         ReferenceNumber = entity.ReferenceNumber,
         Status = entity.Status,
+        ModalidadEntrada = entity.ModalidadEntrada,
         PlateFlowStatus = entity.PlateFlowStatus,
         TransitOfficeId = entity.TransitOfficeId,
         CreatedAt = entity.CreatedAt,
@@ -1174,6 +1206,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 ProcedureTypeName = typeNames.GetValueOrDefault(item.ProcedureTypeId, "—"),
                 ReferenceNumber = item.ReferenceNumber,
                 Status = item.Status,
+                ModalidadEntrada = item.ModalidadEntrada,
                 PlateFlowStatus = item.PlateFlowStatus,
                 SoatEstado = item.SoatEstado,
                 PlatePreferredLastDigit = item.PlatePreferredLastDigit,

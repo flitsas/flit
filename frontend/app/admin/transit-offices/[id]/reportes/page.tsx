@@ -3,9 +3,15 @@
 import { useParams } from "next/navigation";
 import { ToastProvider } from "@/components/admin/Toast";
 import { OtHubLayout } from "@/components/admin/transit-offices/OtHubLayout";
-import { OtUnderConstructionState } from "@/components/admin/transit-offices/OtUnderConstructionState";
+import { OtReportsConsole } from "@/components/admin/transit-offices/OtReportsConsole";
 
-/** Placeholder de Reportes OT — módulo aún no construido (404 en construcción). */
+/**
+ * Reportes del organismo de tránsito.
+ *
+ * Antes esta ruta era un cartel de «módulo en construcción»: el organismo trabajaba dentro de FLIT
+ * sin ningún instrumento para ver su propia operación, mientras la empresa gestora sí tenía cinco
+ * tableros. Aquí se cierra esa asimetría.
+ */
 export default function OtReportesPage() {
   return (
     <ToastProvider>
@@ -23,11 +29,7 @@ function OtReportesPageInner() {
       activeTab="reportes"
       moduleTitle="Administración OT — Reportes"
     >
-      <OtUnderConstructionState
-        testId="ot-reportes-under-construction"
-        title="Reportes en construcción"
-        description="Este módulo aún no está disponible. Pronto podrás consultar reportes del organismo de tránsito desde aquí."
-      />
+      <OtReportsConsole transitOfficeId={params.id} />
     </OtHubLayout>
   );
 }

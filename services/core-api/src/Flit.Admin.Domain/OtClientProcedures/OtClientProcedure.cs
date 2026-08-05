@@ -18,6 +18,13 @@ public sealed class OtClientProcedure
     public string Status { get; init; } = string.Empty;
 
     /// <summary>
+    /// Modalidad del trámite (<c>matricula_inicial</c> | <c>traspaso</c>). La necesita el modal de
+    /// rechazo para ofrecer solo las causales del proceso correcto: «manifiesto de aduana» no
+    /// aplica a un traspaso ni «escritura del vendedor» a una matrícula inicial.
+    /// </summary>
+    public string ModalidadEntrada { get; init; } = string.Empty;
+
+    /// <summary>
     /// Feature #10587 / HU #10785 — sub-estado interno de la ruta de placa, ortogonal al <see cref="Status"/>
     /// (que permanece en 'entregado'): <c>null</c> (sin ruta de placa), <c>preasignado</c> (esperando placa)
     /// o <c>asignado</c> (placa registrada). Gobierna las acciones del OT (Asignar/Revocar placa).

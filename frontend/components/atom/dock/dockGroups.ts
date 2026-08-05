@@ -86,6 +86,7 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   "admin-documents": "administradores",
   "admin-improntas": "administradores",
   "admin-quipux": "administradores",
+  // Tránsito anida Organismos y Causales de rechazo; solo el padre necesita grupo.
   "admin-transit": "administradores",
   // SuperAdmin — Plataforma anidada dentro de Administradores
   "admin-plataforma": "administradores",

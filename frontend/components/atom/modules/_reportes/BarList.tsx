@@ -38,7 +38,12 @@ export function BarList({ items, color = "#557EFF", max, onSelect, emptyMessage,
   return (
     <ul className="flex flex-col gap-1.5" data-testid={testId}>
       {items.map((item) => {
-        const width = `${Math.max(2, Math.round((item.value / scale) * 100))}%`;
+        // El mínimo del 2 % existe para que un valor pequeño pero real siga siendo visible;
+        // no debe aplicarse al cero, porque una barra con ancho junto a un valor "—" se lee
+        // como "aquí hay algo" cuando lo que ocurre es que no hay dato que mostrar.
+        const width = item.value > 0
+          ? `${Math.max(2, Math.round((item.value / scale) * 100))}%`
+          : "0%";
         const row = (
           <>
             <div className="flex items-center justify-between gap-2 text-[11px]">
