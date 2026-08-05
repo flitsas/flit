@@ -7,6 +7,7 @@
 
 import type { OtReportRow, OtReportSort } from "@/lib/api/ot-metrics";
 import { OT_REPORT_ESTADOS, OT_REPORT_SORT } from "@/lib/api/ot-metrics";
+import { bogotaClock, bogotaDay, buildXlsx, type XlsxCell } from "@/lib/xlsx";
 
 // ── Estados ────────────────────────────────────────────────────────────────────
 
@@ -150,6 +151,21 @@ export interface ReportColumn {
   group: "Identificación" | "Estado" | "Tiempos" | "Calidad";
   /** Texto plano de la celda. Es también lo que va al CSV: una sola verdad por columna. */
   value: (row: OtReportRow) => string;
+  /**
+   * Valor TIPADO para Excel, cuando la columna representa un número o una fecha.
+   *
+   * Existe porque `value` produce texto pensado para leerse («3,5 h», «05/08/2026») y ese texto en
+   * una hoja de cálculo no se puede sumar, promediar ni ordenar cronológicamente. Sin esto el Excel
+   * sería un CSV con otra extensión.
+   */
+  raw?: (row: OtReportRow) => XlsxCell;
+  /**
+   * Encabezado alternativo para el Excel. Solo hace falta donde la pantalla lleva la unidad dentro
+   * de cada celda («2 días») y la hoja, al exportar el número desnudo, la pierde.
+   */
+  xlsxHeader?: string;
+  /** Ancho de la columna en el Excel, en caracteres. */
+  width?: number;
   /** Campo de orden del backend, si la columna es ordenable. */
   sort?: OtReportSort;
   numeric?: boolean;
@@ -171,6 +187,7 @@ export const REPORT_COLUMNS: ReportColumn[] = [
     label: "Empresa",
     group: "Identificación",
     value: (r) => r.clientTenantName,
+    width: 28,
     sort: OT_REPORT_SORT.empresa,
     defaultVisible: true,
   },
@@ -213,6 +230,8 @@ export const REPORT_COLUMNS: ReportColumn[] = [
     label: "Radicado el",
     group: "Tiempos",
     value: (r) => formatDate(r.radicadoEn),
+    raw: (r) => bogotaDay(r.radicadoEn),
+    width: 13,
     sort: OT_REPORT_SORT.radicado,
     defaultVisible: true,
   },
@@ -221,20 +240,29 @@ export const REPORT_COLUMNS: ReportColumn[] = [
     label: "Última radicación",
     group: "Tiempos",
     value: (r) => formatDateTime(r.ultimaRadicacionEn),
+    raw: (r) => bogotaClock(r.ultimaRadicacionEn),
+    width: 18,
   },
   {
     id: "decidido_en",
     label: "Decidido el",
     group: "Tiempos",
     value: (r) => formatDate(r.decididoEn),
+    raw: (r) => bogotaDay(r.decididoEn),
+    width: 13,
     sort: OT_REPORT_SORT.decidido,
     defaultVisible: true,
   },
   {
     id: "horas_decision",
+    // La cabecera dice la unidad porque el valor crudo va en horas: en pantalla «2 días» se lee
+    // solo, pero una celda con «48» sin unidad no significa nada.
     label: "Tiempo de decisión",
     group: "Tiempos",
     value: (r) => formatHours(r.horasHastaDecision),
+    raw: (r) => r.horasHastaDecision,
+    xlsxHeader: "Tiempo de decisión (h)",
+    width: 20,
     numeric: true,
     defaultVisible: true,
   },
@@ -243,6 +271,9 @@ export const REPORT_COLUMNS: ReportColumn[] = [
     label: "Días en el organismo",
     group: "Tiempos",
     value: (r) => formatDays(r.diasEnOrganismo),
+    raw: (r) => r.diasEnOrganismo,
+    xlsxHeader: "Días en el organismo (d)",
+    width: 22,
     sort: OT_REPORT_SORT.dias,
     numeric: true,
   },
@@ -257,6 +288,7 @@ export const REPORT_COLUMNS: ReportColumn[] = [
     label: "Devoluciones",
     group: "Calidad",
     value: (r) => formatInt(r.devoluciones),
+    raw: (r) => r.devoluciones,
     sort: OT_REPORT_SORT.devoluciones,
     numeric: true,
     defaultVisible: true,
@@ -266,6 +298,7 @@ export const REPORT_COLUMNS: ReportColumn[] = [
     label: "Causales del último rechazo",
     group: "Calidad",
     value: (r) => (r.causalesUltimoRechazo.length === 0 ? "—" : r.causalesUltimoRechazo.join(" · ")),
+    width: 40,
   },
 ];
 
@@ -332,6 +365,21 @@ export const REPORT_PRESETS: { id: string; label: string; hint: string; columns:
   },
 ];
 
+/**
+ * Cuál de las vistas rápidas describe la selección actual, o `null` si es una combinación propia.
+ *
+ * Se compara como CONJUNTO y no como lista: el selector de columnas devuelve los ids en el orden
+ * canónico de `REPORT_COLUMNS`, que no tiene por qué coincidir con el orden en que se escribió el
+ * preset. Comparando listas, elegir «Gestión» dejaría de marcarse a sí mismo un segundo después.
+ */
+export function activePresetId(visibleColumnIds: string[]): string | null {
+  const visible = new Set(visibleColumnIds);
+  const preset = REPORT_PRESETS.find(
+    (p) => p.columns.length === visible.size && p.columns.every((id) => visible.has(id)),
+  );
+  return preset?.id ?? null;
+}
+
 // ── Exportación ────────────────────────────────────────────────────────────────
 
 /**
@@ -361,7 +409,37 @@ export function buildReportCsv(rows: OtReportRow[], visibleColumnIds: string[]):
   return `﻿${[header, ...body].join("\r\n")}`;
 }
 
-/** Nombre del archivo con el rango dentro: un `informe.csv` suelto en Descargas no dice de cuándo es. */
-export function reportFileName(from: string, to: string): string {
-  return `informe-ot-${from}-a-${to}.csv`;
+/**
+ * El MISMO informe como libro de Excel, que es donde acaba de verdad.
+ *
+ * La diferencia con el CSV no es el envoltorio: aquí los tiempos, los días y las devoluciones van
+ * como números y las fechas como fechas, así que el usuario puede sumar una columna, ordenar por
+ * fecha de decisión o hacer una tabla dinámica sin tocar nada. Con el CSV todo eso pide primero
+ * media hora de limpieza a mano.
+ */
+export function buildReportXlsx(
+  rows: OtReportRow[],
+  visibleColumnIds: string[],
+): Uint8Array<ArrayBuffer> {
+  const columns = REPORT_COLUMNS.filter((c) => visibleColumnIds.includes(c.id));
+  return buildXlsx({
+    name: "Informe OT",
+    columns: columns.map((c) => ({ header: c.xlsxHeader ?? c.label, width: c.width })),
+    rows: rows.map((row) =>
+      columns.map((c) => {
+        if (!c.raw) return c.value(row);
+        // Un guion largo en una columna numérica la vuelve texto para toda la hoja: el hueco se
+        // deja vacío, que es lo que Excel entiende por «no hay dato».
+        return c.raw(row);
+      }),
+    ),
+  });
+}
+
+/**
+ * Nombre del archivo con el rango dentro: un `informe.xlsx` suelto en Descargas no dice de cuándo
+ * es, y quien exporta tres rangos seguidos acaba con `informe (2)`.
+ */
+export function reportFileName(from: string, to: string, ext: "csv" | "xlsx"): string {
+  return `informe-ot-${from}-a-${to}.${ext}`;
 }

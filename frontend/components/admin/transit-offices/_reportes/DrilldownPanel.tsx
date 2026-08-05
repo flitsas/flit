@@ -97,12 +97,18 @@ export function DrilldownPanel({
                         {item.diasEsperando !== null && ` · ${item.diasEsperando} días esperando`}
                       </p>
                     </div>
+                    {/* En pestaña nueva a propósito: el drill-down se abre desde un reporte con
+                        filtros puestos y, muchas veces, con varios trámites que atender. Navegar en
+                        la misma pestaña obliga a volver atrás y rearmar el reporte por cada uno. */}
                     <Link
                       href={procedureDeepLink(transitOfficeId, item)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Se abre en una pestaña nueva"
                       className="shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white"
                       style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
                     >
-                      Ir a gestionar
+                      Ir a gestionar ↗
                     </Link>
                   </li>
                 ))}

@@ -218,10 +218,17 @@ public sealed record OtReportTimeBucketDto(string Key, string Label, int Tramite
 /// <para>La serie se emite COMPLETA, con los periodos sin actividad en cero. Omitirlos deja una
 /// gráfica que miente por partida doble: los huecos se leen como continuidad y una sola quincena
 /// activa se dibuja como un punto suelto sin línea.</para>
+/// <para><see cref="Desde"/> y <see cref="Hasta"/> viajan con cada punto para que la gráfica pueda
+/// ser un control de navegación y no solo un dibujo: pinchar una columna acota el informe a ese
+/// periodo. Derivarlos en el cliente obligaría a reimplementar allí la regla de semanas que empiezan
+/// en lunes y el recorte contra los extremos del rango, que es justo la clase de lógica que se
+/// desincroniza en silencio.</para>
 /// </summary>
 public sealed record OtReportSeriesPointDto(
     string Bucket,
     string Label,
+    string Desde,
+    string Hasta,
     int Radicados,
     int Aprobados,
     int Rechazados);

@@ -39,7 +39,11 @@ vi.mock("@/lib/api/ot-metrics", async (importOriginal) => {
 });
 
 import { OtReportsConsole } from "@/components/admin/transit-offices/OtReportsConsole";
-import { buildReportCsv } from "@/components/admin/transit-offices/_reportes/report-columns";
+import {
+  buildReportCsv,
+  buildReportXlsx,
+} from "@/components/admin/transit-offices/_reportes/report-columns";
+import { buildTrendData } from "@/components/admin/transit-offices/_reportes/report-visuals";
 
 // 142 pendientes de los que solo 93 son accionables por el organismo: el caso que obliga a
 // explicar por qué el desglose no suma el total.
@@ -188,9 +192,9 @@ const REPORT: OtReport = {
     ],
     granularidad: "dia",
     serie: [
-      { bucket: "2026-08-01", label: "01 ago", radicados: 12, aprobados: 8, rechazados: 2 },
-      { bucket: "2026-08-02", label: "02 ago", radicados: 0, aprobados: 0, rechazados: 0 },
-      { bucket: "2026-08-03", label: "03 ago", radicados: 20, aprobados: 10, rechazados: 2 },
+      { bucket: "2026-08-01", label: "01 ago", desde: "2026-08-01", hasta: "2026-08-01", radicados: 12, aprobados: 8, rechazados: 2 },
+      { bucket: "2026-08-02", label: "02 ago", desde: "2026-08-02", hasta: "2026-08-02", radicados: 0, aprobados: 0, rechazados: 0 },
+      { bucket: "2026-08-03", label: "03 ago", desde: "2026-08-03", hasta: "2026-08-03", radicados: 20, aprobados: 10, rechazados: 2 },
     ],
   },
   total: 32,
@@ -387,7 +391,7 @@ describe("Reportes del organismo — Ahora mismo", () => {
     // El trámite prioritario debe destacarse: es el peor indicador de la cola.
     expect(screen.getByText("Prioritario")).toBeInTheDocument();
 
-    const links = screen.getAllByRole("link", { name: "Ir a gestionar" });
+    const links = screen.getAllByRole("link", { name: /Ir a gestionar/ });
     expect(links[0]).toHaveAttribute(
       "href",
       "/admin/transit-offices/ot-1/client-procedures?placa=ABC123&status=aprobado",
@@ -396,6 +400,12 @@ describe("Reportes del organismo — Ahora mismo", () => {
       "href",
       "/admin/transit-offices/ot-1/client-procedures?vin=9BWZZZ377VT004251&status=rechazado",
     );
+
+    // En pestaña nueva: el drill-down se abre sobre un reporte con filtros puestos y suele traer
+    // varios trámites que atender. Navegar en la misma pestaña obliga a rearmarlo por cada uno.
+    expect(links[0]).toHaveAttribute("target", "_blank");
+    // `noopener` no es adorno: sin él la pestaña destino puede manipular la de origen.
+    expect(links[0]).toHaveAttribute("rel", expect.stringContaining("noopener"));
   });
 
   it("avisa cuántos trámites quedaron fuera del tope en el drill-down", async () => {
@@ -542,29 +552,27 @@ describe("Reportes del organismo — Informe", () => {
     ).toBeInTheDocument();
   });
 
-  it("dibuja los periodos vacíos de la serie en lugar de omitirlos", async () => {
+  it("expone los valores de la serie en texto, incluidos los periodos vacíos", async () => {
     render(<OtReportsConsole transitOfficeId="ot-1" />);
     await openTab(/Informe/);
 
-    const grafica = await screen.findByTestId("ot-report-tendencia");
-    // Los tres periodos están presentes aunque el del medio esté en cero: un hueco omitido se
-    // leería como continuidad.
-    expect(within(grafica).getByTitle("01 ago · Radicados: 12")).toBeInTheDocument();
-    expect(within(grafica).getByTitle("02 ago · Radicados: 0")).toBeInTheDocument();
-    expect(within(grafica).getByTitle("03 ago · Radicados: 20")).toBeInTheDocument();
+    // El SVG de la gráfica no se puede copiar ni lo lee un lector de pantalla: la tabla es el mismo
+    // dato en texto. Los tres periodos están, aunque el del medio esté en cero — un hueco omitido
+    // se leería como continuidad.
+    const valores = await screen.findByTestId("ot-report-tendencia-valores");
+    expect(within(valores).getByText("01 ago")).toBeInTheDocument();
+    expect(within(valores).getByText("02 ago")).toBeInTheDocument();
+    expect(within(valores).getByText("03 ago")).toBeInTheDocument();
   });
 
-  it("las barras con dato tienen altura y las de cero no", async () => {
+  it("dice en texto si la cola creció, sin obligar a leer la gráfica", async () => {
     render(<OtReportsConsole transitOfficeId="ot-1" />);
     await openTab(/Informe/);
 
-    const grafica = await screen.findByTestId("ot-report-tendencia");
-
-    // El máximo de la serie es 20, así que su barra ocupa el alto completo. jsdom no calcula
-    // layout, pero sí fija esto: una barra sin altura declarada no se dibuja, y así es como la
-    // gráfica salió en blanco la primera vez que se miró en el navegador.
-    expect(within(grafica).getByTitle("03 ago · Radicados: 20")).toHaveStyle({ height: "100%" });
-    expect(within(grafica).getByTitle("02 ago · Radicados: 0")).toHaveStyle({ height: "0px" });
+    // 32 radicados contra 22 decisiones: la respuesta a «¿voy al ritmo?» es que no, y eso no puede
+    // depender de pasar el ratón por encima de una línea.
+    const saldo = await screen.findByTestId("ot-report-tendencia-saldo");
+    expect(saldo).toHaveTextContent("Se acumularon 10 sin decidir");
   });
 
   it("permite elegir columnas y la tabla responde sin volver a consultar", async () => {
@@ -664,6 +672,59 @@ describe("Reportes del organismo — Informe", () => {
     vi.unstubAllGlobals();
   });
 
+  it("marca cuál vista rápida se está mirando", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    const user = await openTab(/Informe/);
+
+    // Las columnas por defecto no son ninguna de las vistas: decirlo evita que el usuario crea que
+    // está exportando «Gestión» cuando está exportando otra cosa.
+    expect(await screen.findByTestId("ot-report-preset-personalizada")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Gestión" }));
+
+    expect(screen.getByRole("button", { name: "Gestión" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Calidad de lo que llega" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.queryByTestId("ot-report-preset-personalizada")).not.toBeInTheDocument();
+  });
+
+  it("pinchar un periodo de la gráfica acota el informe a esos días y se puede deshacer", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    const user = await openTab(/Informe/);
+
+    await waitFor(() => expect(screen.getByTestId("ot-report-tendencia")).toBeInTheDocument());
+    const desde = (mocks.fetchOtReport.mock.calls.at(-1)?.[0] as { from: string }).from;
+    mocks.fetchOtReport.mockClear();
+
+    await user.click(screen.getByRole("button", { name: "Acotar el informe a 03 ago" }));
+
+    // Los límites del periodo vienen del backend: derivarlos aquí duplicaría la regla de semanas.
+    await waitFor(() =>
+      expect(mocks.fetchOtReport).toHaveBeenCalledWith(
+        expect.objectContaining({ from: "2026-08-03", to: "2026-08-03" }),
+        expect.anything(),
+      ),
+    );
+    expect(screen.getByTestId("ot-report-zoom")).toHaveTextContent("03 ago");
+
+    await user.click(screen.getByRole("button", { name: "Volver al rango anterior" }));
+
+    // Volver devuelve el rango que había, no un rango por defecto: si no, el zoom sería una vía sin
+    // retorno para quien había escrito dos fechas a mano.
+    await waitFor(() =>
+      expect(mocks.fetchOtReport).toHaveBeenCalledWith(
+        expect.objectContaining({ from: desde }),
+        expect.anything(),
+      ),
+    );
+    expect(screen.queryByTestId("ot-report-zoom")).not.toBeInTheDocument();
+  });
+
   it("dice cuándo no hay nada, en vez de dejar una tabla vacía sin explicación", async () => {
     mocks.fetchOtReport.mockResolvedValue({
       ...REPORT,
@@ -697,6 +758,15 @@ describe("CSV del informe", () => {
     expect(primera).toBe('"REF-100";"Distribuidora del Valle S.A.S.";"0"');
   });
 
+  it("el pendiente acumulado suma los saldos periodo a periodo", () => {
+    const puntos = buildTrendData(REPORT.resumen.serie);
+
+    // 12−10 = +2, luego 0, luego 20−12 = +8 → 2, 2, 10. Es la respuesta a «¿voy al ritmo?»: la
+    // línea sube, o sea que entra más de lo que sale.
+    expect(puntos.map((p) => p.acumulado)).toEqual([2, 2, 10]);
+    expect(puntos[1].saldo).toBe(0);
+  });
+
   it("neutraliza los valores que Excel ejecutaría como fórmula", () => {
     const csv = buildReportCsv(
       [{ ...REPORT.filas[0], referenceNumber: "=1+1" }],
@@ -705,5 +775,56 @@ describe("CSV del informe", () => {
 
     // El radicado lo escribe la empresa cliente: es una vía de inyección real, no teórica.
     expect(csv).toContain(`"'=1+1"`);
+  });
+});
+
+describe("Excel del informe", () => {
+  // El .xlsx se escribe sin comprimir, así que el XML de la hoja aparece literal en los bytes del
+  // zip. Eso permite afirmar sobre el contenido sin descomprimir nada en el test.
+  const sheetXmlOf = (columnas: string[]) =>
+    new TextDecoder().decode(buildReportXlsx(REPORT.filas, columnas));
+
+  it("escribe los números como números, no como el texto de la pantalla", () => {
+    const xml = sheetXmlOf(["referencia", "devoluciones"]);
+
+    // La razón de ser del Excel frente al CSV: esta celda se puede sumar. Si fuera `t="inlineStr"`
+    // el archivo sería un CSV con otra extensión.
+    expect(xml).toContain('<c r="B2" s="0"><v>0</v></c>');
+    expect(xml).toContain('<c r="B3" s="0"><v>2</v></c>');
+    expect(xml).toContain("REF-100");
+  });
+
+  it("escribe las fechas como fechas, en el día de Bogotá", () => {
+    const xml = sheetXmlOf(["radicado_en"]);
+
+    // 01/08/2026 14:00 UTC son las 09:00 en Bogotá: el mismo día que muestra la pantalla. Con el
+    // instante UTC crudo, un trámite de las 22:00 saltaría al día siguiente solo en el Excel.
+    const serial = (Date.UTC(2026, 7, 1) - Date.UTC(1899, 11, 30)) / 86_400_000;
+    expect(xml).toContain(`<c r="A2" s="2"><v>${serial}</v></c>`);
+  });
+
+  it("lleva la unidad al encabezado cuando la celda exporta el número desnudo", () => {
+    const xml = sheetXmlOf(["horas_decision"]);
+
+    // En pantalla la celda dice «19 h»; en la hoja dice «19». Sin la unidad arriba, el número no
+    // significa nada.
+    expect(xml).toContain("Tiempo de decisión (h)");
+    expect(xml).toContain('<c r="A2" s="0"><v>19</v></c>');
+  });
+
+  it("deja vacías las celdas sin dato en vez de escribir un guion", () => {
+    const sinDecision = { ...REPORT.filas[0], horasHastaDecision: null };
+    const xml = new TextDecoder().decode(buildReportXlsx([sinDecision], ["horas_decision"]));
+
+    // Un «—» en una columna numérica la vuelve texto para toda la hoja y rompe cualquier suma.
+    expect(xml).toContain('<c r="A2"/>');
+    expect(xml).not.toContain("—");
+  });
+
+  it("produce un zip que empieza por la firma de archivo local", () => {
+    const bytes = buildReportXlsx(REPORT.filas, ["referencia"]);
+
+    // Sin esta firma Excel ni siquiera intenta abrirlo: es el contrato mínimo del formato.
+    expect([bytes[0], bytes[1], bytes[2], bytes[3]]).toEqual([0x50, 0x4b, 0x03, 0x04]);
   });
 });

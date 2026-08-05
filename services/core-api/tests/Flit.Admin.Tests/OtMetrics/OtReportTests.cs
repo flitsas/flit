@@ -188,6 +188,37 @@ public sealed class OtReportTests
         report.Resumen.Serie.Should().NotBeEmpty();
     }
 
+    [Fact] // Los límites de cada punto son lo que convierte la gráfica en un control de navegación:
+           // pinchar una columna acota el informe a ese periodo. Si el primer periodo empezara antes
+           // del rango, ese clic mostraría más trámites de los que dibujaba la barra.
+    public async Task Serie_RecortaLosLimitesDeCadaPeriodoContraElRango()
+    {
+        var db = NewDbName();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedScope(seed);
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        // 60 días fuerza granularidad semanal, que es donde el recorte se nota: las semanas empiezan
+        // en lunes y el rango casi nunca lo hace.
+        var filtro = UltimosDias(60);
+        var report = await RunAsync(db, filtro);
+
+        var serie = report!.Resumen.Serie;
+        serie.Should().NotBeEmpty();
+        serie[0].Desde.Should().Be(filtro.From.ToString("yyyy-MM-dd"));
+        serie[^1].Hasta.Should().Be(filtro.To.ToString("yyyy-MM-dd"));
+
+        // Sin huecos ni solapes: la unión de los periodos es exactamente el rango.
+        foreach (var (previo, siguiente) in serie.Zip(serie.Skip(1)))
+        {
+            DateOnly.Parse(previo.Hasta).AddDays(1).Should().Be(DateOnly.Parse(siguiente.Desde));
+            DateOnly.Parse(previo.Desde).Should().BeOnOrBefore(DateOnly.Parse(previo.Hasta));
+        }
+    }
+
     [Fact] // El resumen describe el universo, no la página. Si describiera la página, pasar a la
            // segunda cambiaría los totales y el informe se contradiría a sí mismo.
     public async Task Paginacion_ElResumenDescribeElUniversoNoLaPagina()

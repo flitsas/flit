@@ -186,6 +186,9 @@ export interface OtReportTimeBucket {
 export interface OtReportSeriesPoint {
   bucket: string;
   label: string;
+  /** Primer y último día del periodo, ya recortados contra el rango pedido (`yyyy-MM-dd`). */
+  desde: string;
+  hasta: string;
   radicados: number;
   aprobados: number;
   rechazados: number;

@@ -2,10 +2,24 @@
 
 // Gráficas del informe.
 //
-// Hechas a mano con CSS en vez de una librería de charts: el módulo OT no arrastra ninguna, las tres
-// formas que hacen falta aquí son barras, y una gráfica construida con elementos reales del DOM se
-// puede leer con un lector de pantalla y afirmar en un test sin montar un canvas.
+// La composición por estado y el histograma van a mano con CSS: son barras horizontales con su
+// etiqueta al lado, y construidas con DOM real se leen con un lector de pantalla y se afirman en un
+// test sin montar un canvas. La serie temporal sí usa Recharts —que ya es dependencia del repo y lo
+// que usan los reportes de empresa— porque ahí hacen falta ejes numerados, tooltip y una línea sobre
+// las barras, y reimplementar eso a mano es cómo se llega a una gráfica sin valores.
 
+import { useState } from "react";
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import type { OtReportSeriesPoint, OtReportSummary, OtReportTimeBucket } from "@/lib/api/ot-metrics";
 import { ESTADO_ORDER, estadoMeta, formatInt } from "./report-columns";
 import { Empty } from "./shared";
@@ -104,11 +118,48 @@ export function granularidadLabel(granularidad: string): string {
   return GRANULARIDAD_LABEL[granularidad] ?? granularidad;
 }
 
+/** Un periodo de la serie ya listo para dibujar, con el pendiente acumulado calculado. */
+export interface TrendPoint extends OtReportSeriesPoint {
+  decididos: number;
+  /** Radicados menos decididos DEL periodo: el saldo que ese periodo dejó o quitó. */
+  saldo: number;
+  /** Suma corrida de los saldos: la deuda de trabajo que el organismo arrastra. */
+  acumulado: number;
+}
+
 /**
- * Radicados contra decisiones a lo largo del periodo.
+ * Añade a la serie lo que la gráfica necesita decir y el backend no cuenta: el saldo del periodo y
+ * su acumulado.
  *
- * Se pintan las tres series juntas porque la pregunta que responde la gráfica no es «cuántos
- * radicaron» sino «¿estoy despachando al ritmo al que me llega?». Con una sola serie eso no se ve.
+ * El acumulado es la razón de ser de la gráfica. Tres barras contestan «cuánto entró y cuánto salió»
+ * periodo a periodo, pero la pregunta de verdad —«¿estoy despachando al ritmo al que me llega?»— no
+ * se ve en las barras: se ve en si la línea sube. Es un acumulado DENTRO del rango, no la cola real
+ * del organismo; arranca en cero el primer periodo porque lo anterior al rango no se consultó.
+ */
+export function buildTrendData(serie: OtReportSeriesPoint[]): TrendPoint[] {
+  let acumulado = 0;
+  return serie.map((point) => {
+    const decididos = point.aprobados + point.rechazados;
+    const saldo = point.radicados - decididos;
+    acumulado += saldo;
+    return { ...point, decididos, saldo, acumulado };
+  });
+}
+
+const SERIES = [
+  { key: "radicados", label: "Radicados", color: "#557EFF" },
+  { key: "aprobados", label: "Aprobados", color: "#8CC63F" },
+  { key: "rechazados", label: "Rechazados", color: "#FF4E00" },
+] as const;
+
+const ACUMULADO_COLOR = "#F9AC00";
+
+/**
+ * Radicados contra decisiones a lo largo del periodo, con el pendiente acumulado encima.
+ *
+ * Las barras y la línea comparten eje X pero no eje Y: las barras cuentan trámites por periodo y la
+ * línea cuenta un saldo que puede ser negativo. Mezclarlos en un solo eje aplastaría las barras cada
+ * vez que el acumulado creciera.
  *
  * La serie llega COMPLETA del backend, con los periodos vacíos en cero: por eso aquí no hay que
  * rellenar huecos ni la gráfica puede dibujar una continuidad que no existió.
@@ -116,42 +167,52 @@ export function granularidadLabel(granularidad: string): string {
 export function TrendChart({
   serie,
   granularidad,
+  onZoom,
 }: {
   serie: OtReportSeriesPoint[];
   granularidad: string;
+  /** Acota el informe a un periodo. Sin esto la gráfica sería un dibujo y no un control. */
+  onZoom?: (desde: string, hasta: string, label: string) => void;
 }) {
+  const [verValores, setVerValores] = useState(false);
+
   if (serie.length === 0) {
     return <Empty>No hay periodos que graficar en el rango seleccionado.</Empty>;
   }
 
-  const max = Math.max(1, ...serie.flatMap((p) => [p.radicados, p.aprobados, p.rechazados]));
-  const hayDatos = serie.some((p) => p.radicados + p.aprobados + p.rechazados > 0);
+  const data = buildTrendData(serie);
+  const hayDatos = data.some((p) => p.radicados + p.decididos > 0);
 
-  // Con muchos periodos las etiquetas se pisan; se muestran salteadas para que el eje siga siendo
-  // legible en vez de convertirse en una mancha.
-  const labelStep = Math.ceil(serie.length / 12);
+  const totalRadicados = data.reduce((sum, p) => sum + p.radicados, 0);
+  const totalDecididos = data.reduce((sum, p) => sum + p.decididos, 0);
+  const saldoFinal = data[data.length - 1]?.acumulado ?? 0;
 
-  const series = [
-    { key: "radicados" as const, label: "Radicados", color: "#557EFF" },
-    { key: "aprobados" as const, label: "Aprobados", color: "#8CC63F" },
-    { key: "rechazados" as const, label: "Rechazados", color: "#FF4E00" },
-  ];
+  // Con muchos periodos las etiquetas del eje se pisan. Se saltean en vez de rotarlas: un eje en
+  // diagonal se lee peor que uno con la mitad de marcas.
+  const tickInterval = Math.max(0, Math.ceil(data.length / 12) - 1);
 
   return (
     <div className="flex flex-col gap-3" data-testid="ot-report-tendencia">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        {series.map((s) => (
-          <span key={s.key} className="flex items-center gap-1.5 text-[11px]">
-            <span
-              aria-hidden="true"
-              className="h-2.5 w-2.5 rounded-sm"
-              style={{ background: s.color }}
-            />
-            {s.label}
-          </span>
-        ))}
-        <span className="text-[11px] text-[#6B7280] dark:text-white/50">
-          Agrupado {granularidadLabel(granularidad)} · máximo {formatInt(max)}
+      {/* Los titulares van en texto y no solo en la gráfica: son la respuesta de una línea, y
+          obligar a pasar el ratón por encima para leer el dato principal es esconderlo. */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+        <span>
+          Recibí <strong className="tabular-nums">{formatInt(totalRadicados)}</strong> y decidí{" "}
+          <strong className="tabular-nums">{formatInt(totalDecididos)}</strong>
+        </span>
+        <span
+          className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+          style={{
+            background: saldoFinal > 0 ? "#F9AC001A" : "#8CC63F1A",
+            color: saldoFinal > 0 ? "#B47800" : "#5B8A22",
+          }}
+          data-testid="ot-report-tendencia-saldo"
+        >
+          {saldoFinal > 0
+            ? `Se acumularon ${formatInt(saldoFinal)} sin decidir`
+            : saldoFinal < 0
+              ? `Se descargaron ${formatInt(Math.abs(saldoFinal))} de la cola`
+              : "La cola quedó igual que como empezó"}
         </span>
       </div>
 
@@ -161,49 +222,155 @@ export function TrendChart({
           silencio real, no un hueco de la gráfica.
         </Empty>
       ) : (
-        <div className="overflow-x-auto">
-          {/* Las columnas se estiran a la altura del contenedor (`h-full` sobre un padre con altura
-              definida) y solo las BARRAS se alinean abajo. Envolverlas en un contenedor con
-              `items-end` dejaba a la columna con altura natural — o sea cero— y las barras, que se
-              miden en porcentaje, desaparecían por completo. */}
-          <div className="flex min-w-full gap-1" style={{ height: "10rem" }}>
-            {serie.map((point) => (
-              <div
-                key={point.bucket}
-                className="flex h-full min-w-[1.5rem] flex-1 items-end justify-center gap-[2px]"
+        <>
+          <div className="h-64" data-testid="ot-report-tendencia-chart">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart
+                data={data}
+                margin={{ left: 0, right: 8, top: 8, bottom: 4 }}
+                onClick={(state: { activePayload?: { payload?: TrendPoint }[] }) => {
+                  const point = state?.activePayload?.[0]?.payload;
+                  if (point && onZoom) onZoom(point.desde, point.hasta, point.label);
+                }}
               >
-                {series.map((s) => {
-                  const value = point[s.key];
-                  return (
-                    <div
-                      key={s.key}
-                      className="w-1/4 rounded-t-sm transition-all"
-                      style={{
-                        // Un mínimo visible para los valores > 0: una barra de 0,3 px se lee como
-                        // ausencia, y confundir «uno» con «ninguno» es justo lo que no puede pasar.
-                        height: value === 0 ? "0" : `${Math.max(3, (value / max) * 100)}%`,
-                        background: s.color,
-                      }}
-                      title={`${point.label} · ${s.label}: ${value}`}
-                    />
-                  );
-                })}
-              </div>
-            ))}
+                <CartesianGrid strokeDasharray="3 3" stroke="#DFE5ED" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={tickInterval} />
+                <YAxis yAxisId="left" tick={{ fontSize: 11 }} allowDecimals={false} width={36} />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fontSize: 11, fill: ACUMULADO_COLOR }}
+                  allowDecimals={false}
+                  width={36}
+                />
+                <Tooltip content={<TrendTooltip granularidad={granularidad} />} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {SERIES.map((s) => (
+                  <Bar
+                    key={s.key}
+                    yAxisId="left"
+                    dataKey={s.key}
+                    name={s.label}
+                    fill={s.color}
+                    radius={[3, 3, 0, 0]}
+                    isAnimationActive={false}
+                  />
+                ))}
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="acumulado"
+                  name="Pendiente acumulado"
+                  stroke={ACUMULADO_COLOR}
+                  strokeWidth={2}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
           </div>
 
-          <div className="mt-1 flex min-w-full gap-1">
-            {serie.map((point, i) => (
-              <div
-                key={point.bucket}
-                className="min-w-[1.5rem] flex-1 text-center text-[9px] text-[#6B7280] dark:text-white/50"
-              >
-                {i % labelStep === 0 ? point.label : ""}
-              </div>
-            ))}
-          </div>
-        </div>
+          <p className="text-[11px] text-[#6B7280] dark:text-white/50">
+            Agrupado {granularidadLabel(granularidad)}. La línea es el pendiente acumulado dentro del
+            rango: si sube, entra más de lo que sale.
+            {onZoom ? " Haz clic en un periodo para acotar el informe a esos días." : ""}
+          </p>
+        </>
       )}
+
+      {/* Una gráfica no es una fuente consultable: no se puede copiar un valor de ella ni la lee un
+          lector de pantalla. La tabla es el mismo dato en texto, y de paso es la vía accesible para
+          acotar el informe sin depender del clic sobre un SVG. */}
+      <details
+        open={verValores}
+        onToggle={(e) => setVerValores((e.currentTarget as HTMLDetailsElement).open)}
+        data-testid="ot-report-tendencia-valores"
+      >
+        <summary className="cursor-pointer text-[11px] font-semibold text-[#557EFF]">
+          Ver los valores periodo a periodo
+        </summary>
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[28rem] text-xs">
+            <thead>
+              <tr className="border-b border-[#DFE5ED] text-left text-[11px] uppercase tracking-wide text-[#6B7280] dark:border-white/10 dark:text-white/50">
+                <th className="py-1.5 pr-3 font-semibold">Periodo</th>
+                <th className="py-1.5 pr-3 font-semibold">Radicados</th>
+                <th className="py-1.5 pr-3 font-semibold">Aprobados</th>
+                <th className="py-1.5 pr-3 font-semibold">Rechazados</th>
+                <th className="py-1.5 pr-3 font-semibold">Acumulado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((point) => (
+                <tr key={point.bucket} className="border-b border-[#EEF1F5] dark:border-white/5">
+                  <td className="py-1.5 pr-3">
+                    {onZoom ? (
+                      <button
+                        type="button"
+                        onClick={() => onZoom(point.desde, point.hasta, point.label)}
+                        className="font-semibold underline underline-offset-2 transition hover:text-[#557EFF]"
+                        aria-label={`Acotar el informe a ${point.label}`}
+                      >
+                        {point.label}
+                      </button>
+                    ) : (
+                      point.label
+                    )}
+                  </td>
+                  <td className="py-1.5 pr-3 tabular-nums">{formatInt(point.radicados)}</td>
+                  <td className="py-1.5 pr-3 tabular-nums">{formatInt(point.aprobados)}</td>
+                  <td className="py-1.5 pr-3 tabular-nums">{formatInt(point.rechazados)}</td>
+                  <td className="py-1.5 pr-3 tabular-nums">{formatInt(point.acumulado)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+  );
+}
+
+/**
+ * Tooltip propio en vez del de serie: el de Recharts lista `dataKey: valor` y aquí hacen falta el
+ * saldo del periodo y la frase que lo interpreta, que es lo que el usuario venía a saber.
+ */
+function TrendTooltip({
+  active,
+  payload,
+  granularidad,
+}: {
+  active?: boolean;
+  payload?: { payload: TrendPoint }[];
+  granularidad?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const point = payload[0]!.payload;
+
+  return (
+    <div className="rounded-xl bg-[#162744]/95 px-3 py-2 text-[11px] text-white shadow-lg">
+      <p className="mb-1 font-semibold">{point.label}</p>
+      {SERIES.map((s) => (
+        <p key={s.key} className="flex items-center gap-1.5">
+          <span
+            aria-hidden="true"
+            className="h-2 w-2 rounded-sm"
+            style={{ background: s.color }}
+          />
+          {s.label}: <span className="tabular-nums font-semibold">{formatInt(point[s.key])}</span>
+        </p>
+      ))}
+      <p className="mt-1 border-t border-white/20 pt-1 text-white/80">
+        {point.saldo > 0
+          ? `Entraron ${formatInt(point.saldo)} más de los que salieron`
+          : point.saldo < 0
+            ? `Salieron ${formatInt(Math.abs(point.saldo))} más de los que entraron`
+            : "Entró y salió lo mismo"}
+      </p>
+      <p className="text-white/60">
+        Acumulado: <span className="tabular-nums">{formatInt(point.acumulado)}</span>
+        {granularidad ? ` · ${granularidadLabel(granularidad)}` : ""}
+      </p>
     </div>
   );
 }

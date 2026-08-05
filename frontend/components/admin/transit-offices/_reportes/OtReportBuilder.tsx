@@ -29,7 +29,9 @@ import {
   type DateRange,
 } from "./filters";
 import {
+  activePresetId,
   buildReportCsv,
+  buildReportXlsx,
   defaultVisibleColumns,
   estadoMeta,
   formatHours,
@@ -39,6 +41,7 @@ import {
   REPORT_PRESETS,
   reportFileName,
 } from "./report-columns";
+import { XLSX_MIME } from "@/lib/xlsx";
 import { EstadoComposition, TimeHistogram, TrendChart, granularidadLabel } from "./report-visuals";
 import { Empty, ErrorNotice, PrimaryButton, Section, Tile } from "./shared";
 
@@ -55,8 +58,15 @@ export interface OtReportBuilderProps {
   companies: OtClientCompanyOption[];
 }
 
+/** Zoom activo sobre un periodo de la gráfica, con el rango al que hay que poder volver. */
+interface ZoomState {
+  label: string;
+  volverA: DateRange;
+}
+
 export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderProps) {
   const [range, setRange] = useState<DateRange>(() => defaultRange());
+  const [zoom, setZoom] = useState<ZoomState | null>(null);
   const [modalidad, setModalidad] = useState("");
   const [clientTenantId, setClientTenantId] = useState("");
 
@@ -162,7 +172,8 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
     [sortBy],
   );
 
-  const handleExport = useCallback(async () => {
+  const handleExport = useCallback(
+    async (formato: "xlsx" | "csv") => {
     setExportState({ busy: true, notice: null });
     try {
       const rows: OtReportRow[] = [];
@@ -188,7 +199,12 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
       }
 
       const recortado = rows.length < total;
-      downloadCsv(buildReportCsv(rows, visibleColumns), reportFileName(range.from, range.to));
+      const fileName = reportFileName(range.from, range.to, formato);
+      if (formato === "xlsx") {
+        download(buildReportXlsx(rows, visibleColumns), fileName, XLSX_MIME);
+      } else {
+        download(buildReportCsv(rows, visibleColumns), fileName, "text/csv;charset=utf-8;");
+      }
 
       setExportState({
         busy: false,
@@ -202,11 +218,42 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
         notice: e instanceof Error ? `No se pudo exportar: ${e.message}` : "No se pudo exportar.",
       });
     }
-  }, [params, sortBy, desc, visibleColumns, range.from, range.to]);
+    },
+    [params, sortBy, desc, visibleColumns, range.from, range.to],
+  );
+
+  // Acotar el informe a un periodo de la gráfica. Se guarda el rango del que se vino para poder
+  // deshacerlo: sin eso, un clic en una barra deja al usuario sin forma de volver salvo recordar de
+  // memoria las dos fechas que tenía puestas.
+  const handleZoom = useCallback(
+    (desde: string, hasta: string, label: string) => {
+      // Estando ya dentro de un zoom se conserva el rango ORIGINAL: si se guardara el rango
+      // actual, dos clics seguidos dejarían el «volver» apuntando al zoom anterior y salir
+      // costaría tantos clics como se hubieran dado.
+      setZoom({ label, volverA: zoom?.volverA ?? range });
+      setRange({ from: desde, to: hasta });
+    },
+    [range, zoom],
+  );
+
+  const salirDelZoom = useCallback(() => {
+    if (!zoom) return;
+    setRange(zoom.volverA);
+    setZoom(null);
+  }, [zoom]);
+
+  // Tocar las fechas a mano cancela el zoom: dejar el aviso «acotado a 12 ago» sobre un rango que
+  // el usuario acaba de reescribir sería una etiqueta que miente.
+  const changeRange = useCallback((next: DateRange) => {
+    setZoom(null);
+    setRange(next);
+  }, []);
 
   const resumen = report?.resumen;
   const columns = REPORT_COLUMNS.filter((c) => visibleColumns.includes(c.id));
   const totalPages = report ? Math.max(1, Math.ceil(report.total / report.pageSize)) : 1;
+  const presetActivo = activePresetId(visibleColumns);
+  const exportDisabled = exportState.busy || !report || report.total === 0;
 
   return (
     <div className="flex flex-col gap-6" data-testid="ot-report-builder">
@@ -215,15 +262,31 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
         testId="ot-report-filters"
         hint="El informe cubre los trámites que el organismo RECIBIÓ dentro del rango. Los estados previos a la radicación no aparecen: el organismo nunca los vio."
       >
-        <RangePresets range={range} onChange={setRange} />
+        <RangePresets range={range} onChange={changeRange} />
         <div className="flex flex-wrap items-end gap-3">
-          <DateRangeFields range={range} onChange={setRange} />
+          <DateRangeFields range={range} onChange={changeRange} />
           <ModalidadSelect value={modalidad} onChange={setModalidad} />
           <EmpresaSelect value={clientTenantId} companies={companies} onChange={setClientTenantId} />
           <PrimaryButton onClick={() => void load()} disabled={busy}>
             {busy ? "Generando…" : "Actualizar"}
           </PrimaryButton>
         </div>
+
+        {zoom && (
+          <p
+            className="flex flex-wrap items-center gap-2 rounded-xl bg-[#557EFF]/10 px-3 py-2 text-[11px] text-[#2B4AA8] dark:text-[#9DB4FF]"
+            data-testid="ot-report-zoom"
+          >
+            Informe acotado a <strong>{zoom.label}</strong> desde la gráfica.
+            <button
+              type="button"
+              onClick={salirDelZoom}
+              className="font-semibold underline underline-offset-2"
+            >
+              Volver al rango anterior
+            </button>
+          </p>
+        )}
       </Section>
 
       {error && <ErrorNotice message={error} />}
@@ -255,7 +318,7 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
               />
               <Tile
                 value={formatInt(resumen.enRevision + resumen.esperandoPlaca)}
-                label="Aún en mi cancha"
+                label="Pendientes en el organismo"
                 accent="#557EFF"
                 hint="En revisión o esperando placa"
               />
@@ -318,7 +381,11 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
             testId="ot-report-serie"
             hint={`Radicados contra decisiones, agrupado ${granularidadLabel(resumen.granularidad)}. Responde si estoy despachando al ritmo al que me llega.`}
           >
-            <TrendChart serie={resumen.serie} granularidad={resumen.granularidad} />
+            <TrendChart
+              serie={resumen.serie}
+              granularidad={resumen.granularidad}
+              onZoom={handleZoom}
+            />
           </Section>
 
           <Section
@@ -350,15 +417,28 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <ColumnPicker visible={visibleColumns} onChange={applyColumns} />
+            {/* Excel primero porque es donde el informe acaba de verdad; el CSV se queda para quien
+                lo mete en otra herramienta. */}
             <button
               type="button"
-              onClick={() => void handleExport()}
-              disabled={exportState.busy || !report || report.total === 0}
+              onClick={() => void handleExport("xlsx")}
+              disabled={exportDisabled}
+              aria-busy={exportState.busy}
+              className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60"
+              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              data-testid="ot-report-export-xlsx"
+            >
+              {exportState.busy ? "Exportando…" : "Exportar a Excel"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleExport("csv")}
+              disabled={exportDisabled}
               aria-busy={exportState.busy}
               className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold transition hover:border-[#557EFF] disabled:opacity-60 dark:border-white/10"
               data-testid="ot-report-export"
             >
-              {exportState.busy ? "Exportando…" : "Exportar CSV"}
+              CSV
             </button>
           </div>
         }
@@ -367,17 +447,37 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
           <span className="text-[11px] font-semibold text-[#6B7280] dark:text-white/50">
             Vistas rápidas:
           </span>
-          {REPORT_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              title={preset.hint}
-              onClick={() => applyColumns(preset.columns)}
-              className="rounded-full border border-[#DFE5ED] px-3 py-1 text-[11px] font-semibold text-[#6B7280] transition hover:border-[#557EFF] hover:text-[#557EFF] dark:border-white/10 dark:text-white/50"
+          {REPORT_PRESETS.map((preset) => {
+            const activa = preset.id === presetActivo;
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                title={preset.hint}
+                // `aria-pressed` y no solo color: el estado de un botón que conmuta tiene que
+                // llegar también a quien no ve el borde azul.
+                aria-pressed={activa}
+                onClick={() => applyColumns(preset.columns)}
+                className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
+                  activa
+                    ? "border-[#557EFF] bg-[#557EFF]/10 text-[#557EFF]"
+                    : "border-[#DFE5ED] text-[#6B7280] hover:border-[#557EFF] hover:text-[#557EFF] dark:border-white/10 dark:text-white/50"
+                }`}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
+          {/* Quitar o añadir una columna deja de coincidir con cualquier vista. Decirlo evita que
+              el usuario crea que sigue en «Gestión» y exporte otra cosa de la que espera. */}
+          {presetActivo === null && (
+            <span
+              className="rounded-full bg-[#F5F7FA] px-3 py-1 text-[11px] font-semibold text-[#6B7280] dark:bg-white/5 dark:text-white/50"
+              data-testid="ot-report-preset-personalizada"
             >
-              {preset.label}
-            </button>
-          ))}
+              Selección propia
+            </span>
+          )}
         </div>
 
         {exportState.notice && (
@@ -495,9 +595,9 @@ function pctOf(part: number, total: number): string {
   return `${((part / total) * 100).toFixed(1).replace(".", ",")} % de lo recibido`;
 }
 
-/** Descarga del CSV. Se revoca la URL para no dejar el blob retenido durante toda la sesión. */
-function downloadCsv(content: string, fileName: string): void {
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+/** Descarga de un archivo generado. Se revoca la URL para no dejar el blob retenido toda la sesión. */
+function download(content: BlobPart, fileName: string, mime: string): void {
+  const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;

@@ -684,6 +684,8 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             .Select(b => new OtReportSeriesPointDto(
                 b.Key,
                 b.Label,
+                b.Desde.ToString("yyyy-MM-dd"),
+                b.Hasta.ToString("yyyy-MM-dd"),
                 radicados.GetValueOrDefault(b.Key),
                 aprobados.GetValueOrDefault(b.Key),
                 rechazados.GetValueOrDefault(b.Key)))
@@ -711,7 +713,13 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
     private static DateOnly StartOfWeek(DateOnly date) =>
         date.AddDays(-(((int)date.DayOfWeek + 6) % 7));
 
-    private static IEnumerable<(string Key, string Label)> EnumerateBuckets(
+    /// <summary>
+    /// Periodos del eje, con sus límites RECORTADOS contra el rango pedido.
+    /// <para>El recorte importa porque estos límites se usan para acotar el informe al pinchar la
+    /// columna: si el primer mes empezara el día 1 cuando el rango arranca el 20, el usuario haría
+    /// clic en una barra de 4 trámites y aterrizaría en un informe con 30.</para>
+    /// </summary>
+    private static IEnumerable<(string Key, string Label, DateOnly Desde, DateOnly Hasta)> EnumerateBuckets(
         DateOnly from,
         DateOnly to,
         string granularidad)
@@ -727,25 +735,37 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                 var key = BucketKeyOf(cursor, granularidad);
                 if (seen.Add(key))
                 {
-                    yield return (key, $"{MesCorto(cursor.Month)} {cursor.Year}");
+                    yield return (
+                        key,
+                        $"{MesCorto(cursor.Month)} {cursor.Year}",
+                        Max(cursor, from),
+                        Min(cursor.AddMonths(1).AddDays(-1), to));
                 }
             }
 
             yield break;
         }
 
-        var step = granularidad == OtReportGranularity.Semana ? 7 : 1;
+        var span = granularidad == OtReportGranularity.Semana ? 7 : 1;
         var start = granularidad == OtReportGranularity.Semana ? StartOfWeek(from) : from;
 
-        for (var cursor = start; cursor <= to; cursor = cursor.AddDays(step))
+        for (var cursor = start; cursor <= to; cursor = cursor.AddDays(span))
         {
             var key = BucketKeyOf(cursor, granularidad);
             if (seen.Add(key))
             {
-                yield return (key, $"{cursor.Day:D2} {MesCorto(cursor.Month)}");
+                yield return (
+                    key,
+                    $"{cursor.Day:D2} {MesCorto(cursor.Month)}",
+                    Max(cursor, from),
+                    Min(cursor.AddDays(span - 1), to));
             }
         }
     }
+
+    private static DateOnly Max(DateOnly a, DateOnly b) => a > b ? a : b;
+
+    private static DateOnly Min(DateOnly a, DateOnly b) => a < b ? a : b;
 
     /// <summary>
     /// Mes abreviado en español, fijo. Se evita <c>ToString("MMM")</c> a propósito: dependería de la
