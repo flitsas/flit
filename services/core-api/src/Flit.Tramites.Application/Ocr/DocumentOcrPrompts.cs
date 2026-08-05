@@ -415,7 +415,14 @@ Heuristica de plantilla sugerida (suggestedTemplateCode):
 - "bello" si menciona UT-MAB, MAB o Bello como mandatario institucional / union temporal
 - "generico" en cualquier otro caso (mandatario persona natural)
 
+IMPORTANTE — DOCUMENTO MULTIPAGINA:
+Si el PDF contiene MULTIPLES documentos (factura + FUR + improntas + etc.), identifica SOLO las paginas que corresponden al tipo solicitado.
+- paginas_documento: array con los numeros de pagina donde esta el documento solicitado (ej: [1,2] o [3] o [1]). Base 1.
+- total_paginas: total de paginas del PDF
+Si el documento solicitado NO esta en el PDF, paginas_documento debe ser un array vacio [].
+
 EXTRAER JSON (sin markdown):
+- paginas_documento: [paginas], total_paginas: numero
 - suggestedTemplateCode: "generico" | "sabaneta" | "bello"
 - requiresForNaturalPerson: true si el texto implica que aplica tambien a persona natural; si no false
 - mandataryFamily: "organismo_transito" si el mandatario es una UT/organismo; "individuo" si es una persona
@@ -425,7 +432,7 @@ EXTRAER JSON (sin markdown):
 - mandatarySigla: sigla tipo UT-SETSA / UT-MAB (si aparece)
 - notes: breve observacion
 
-JSON valido:
-{"suggestedTemplateCode":"generico","requiresForNaturalPerson":false,"mandataryFamily":"individuo","institutionalMandataryName":"","institutionalMandataryNit":"","chamberCity":"","mandatarySigla":"","notes":""}
+JSON valido sin markdown:
+{"suggestedTemplateCode":"generico","requiresForNaturalPerson":false,"mandataryFamily":"individuo","institutionalMandataryName":"","institutionalMandataryNit":"","chamberCity":"","mandatarySigla":"","notes":"","paginas_documento":[1],"total_paginas":1}
 """;
 }

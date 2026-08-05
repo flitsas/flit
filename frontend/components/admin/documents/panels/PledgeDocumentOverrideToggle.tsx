@@ -54,6 +54,7 @@ export function PledgeDocumentOverrideToggle({ transitOfficeId }: PledgeDocument
 
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API con AbortController
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);

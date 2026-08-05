@@ -298,12 +298,12 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     onDocumentGateChange?.(documentGateReady);
   }, [documentGateReady, onDocumentGateChange]);
 
-  useEffect(() => {
-    if (!requiereDocumento) setDocSatisfied(false);
-  }, [requiereDocumento, decision]);
-
   const selectDecision = (d: PrendaDecision) => {
     setDecision(d);
+    // La decisión nueva no pide certificado: descarta el adjunto satisfecho de la anterior
+    // (se resetea aquí y no en un efecto: las otras dos rutas que fijan `decision` viven en la
+    // carga inicial, donde `docSatisfied` todavía es el `false` de arranque).
+    if (!REQUIERE_DOCUMENTO.has(d)) setDocSatisfied(false);
     if (CAPTURA_ACREEDOR.has(d) && runtSummary) {
       const filled = applyRuntAcreedorIfEmpty(runtSummary, acreedorNombre, acreedorDocumento);
       setAcreedorNombre(filled.nombre);
