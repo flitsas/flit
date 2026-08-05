@@ -7,6 +7,21 @@ Directory.CreateDirectory(outDir);
 
 var generator = new FurOverlayDocumentGenerator();
 
+// HU #11255 — textos de observación cortos/medios/largos usados por los escenarios 05-09.
+const string ObsCorta = "SIN OBSERVACIONES ADICIONALES.";
+
+const string ObsMedia =
+    "VEHICULO VERIFICADO CONTRA EL RUNT SIN NOVEDADES. SE ADJUNTA SOAT Y RTM VIGENTES A LA FECHA " +
+    "DE RADICACION DEL TRAMITE PARA CONSTANCIA DEL ORGANISMO DE TRANSITO.";
+
+const string ObsLarga =
+    "VEHICULO VERIFICADO CONTRA EL RUNT SIN NOVEDADES REPORTADAS A LA FECHA DE RADICACION. SE " +
+    "ADJUNTA SOAT Y RTM VIGENTES. EL PROPIETARIO DECLARA BAJO GRAVEDAD DE JURAMENTO QUE LA " +
+    "INFORMACION SUMINISTRADA EN EL PRESENTE FORMULARIO ES VERAZ Y COMPLETA, Y QUE EL VEHICULO NO " +
+    "SE ENCUENTRA REPORTADO COMO HURTADO NI PRESENTA MEDIDAS CAUTELARES VIGENTES ANTE LA " +
+    "AUTORIDAD COMPETENTE. CUALQUIER INCONSISTENCIA SERA INFORMADA AL ORGANISMO DE TRANSITO PARA " +
+    "LOS FINES PERTINENTES DENTRO DEL TRAMITE EN CURSO.";
+
 var scenarios = new (string Slug, FurDocumentData Data)[]
 {
     // Uno por formato (Feature #10918). TemplateFormat se fija EXPLÍCITO para forzar la plantilla blank
@@ -15,6 +30,32 @@ var scenarios = new (string Slug, FurDocumentData Data)[]
     ("02-maquinaria-retroexcavadora", MaquinariaData()),
     ("03-remolques-semirremolque", RemolquesData()),
     ("04-automotor-traspaso", AutomotorTraspasoData()),
+
+    // HU #11255 — escenarios con observations/vehicle_serial_number con contenido real, para medir
+    // con pymupdf el desplazamiento (-2,-5) de observations y (0,-5) de vehicle_serial_number.
+    ("05-automotor-obs-corta", AutomotorData() with
+    {
+        Vehiculo = AutomotorData().Vehiculo with { NumeroSerie = "SN-AUTO-000001" },
+        Observaciones = ObsCorta,
+    }),
+    ("06-automotor-obs-media", AutomotorData() with
+    {
+        Vehiculo = AutomotorData().Vehiculo with { NumeroSerie = "SN-AUTO-000002" },
+        Observaciones = ObsMedia,
+    }),
+    ("07-automotor-obs-larga", AutomotorData() with
+    {
+        Vehiculo = AutomotorData().Vehiculo with { NumeroSerie = "SN-AUTO-000003" },
+        Observaciones = ObsLarga,
+    }),
+    // Maquinaria NO tiene casilla vehicle_serial_number en el manifest (CF10/AC3): aunque el dato
+    // venga poblado (como en MaquinariaData()), no debe imprimirse nada en esa zona.
+    ("08-maquinaria-obs-media", MaquinariaData() with { Observaciones = ObsMedia }),
+    ("09-remolques-obs-media", RemolquesData() with
+    {
+        Vehiculo = RemolquesData().Vehiculo with { NumeroSerie = "SN-REM-000004" },
+        Observaciones = ObsMedia,
+    }),
 };
 
 foreach (var (slug, data) in scenarios)
