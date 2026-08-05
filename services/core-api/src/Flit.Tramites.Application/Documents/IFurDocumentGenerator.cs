@@ -111,12 +111,11 @@ public sealed record FurDocumentData(
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;
 
-    /// <summary>
-    /// HU #11257 — propiedad calculada (única fuente de verdad: <see cref="PrendaMarking"/>). Los
-    /// call-sites que antes pasaban <c>TienePrenda:</c> como parámetro con nombre rompen la compilación
-    /// en vez de fallar en silencio.
-    /// </summary>
-    public bool TienePrenda => PrendaMarking == FurPrendaMarking.Constitucion;
+    // HU #11257 — aquí vivía `TienePrenda`, conservada como propiedad calculada para que los
+    // call-sites que la pasaban como parámetro con nombre rompieran la compilación. Cumplida esa
+    // función y migrados todos, se elimina: no le quedaba ningún consumidor y su nombre engañaba
+    // —un trámite en `levantar` SÍ tiene prenda y la propiedad devolvía `false`—. La única fuente
+    // de verdad es `PrendaMarking`.
 
     /// <summary>La parte radicadora (comprador en matrícula; comprador en traspaso es el adquiriente).</summary>
     public DocumentParte? Radicador => Partes.FirstOrDefault(p =>

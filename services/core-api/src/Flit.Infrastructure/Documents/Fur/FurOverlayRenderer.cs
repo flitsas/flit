@@ -28,7 +28,7 @@ public static partial class FurOverlayRenderer
         FurFieldManifest manifest,
         IReadOnlyDictionary<string, FurFieldValue> values,
         ILogger? logger = null,
-        string? tramiteId = null)
+        string? referenceNumber = null)
     {
         ArgumentNullException.ThrowIfNull(templatePdf);
         ArgumentNullException.ThrowIfNull(manifest);
@@ -45,7 +45,7 @@ public static partial class FurOverlayRenderer
         {
             if (!values.TryGetValue(field.Id, out var value))
                 continue;
-            DrawField(gfx, field, value, logger ?? NullLogger.Instance, tramiteId);
+            DrawField(gfx, field, value, logger ?? NullLogger.Instance, referenceNumber);
         }
 
         using var ms = new MemoryStream();
@@ -75,7 +75,7 @@ public static partial class FurOverlayRenderer
         FurFieldDefinition field,
         FurFieldValue value,
         ILogger logger,
-        string? tramiteId)
+        string? referenceNumber)
     {
         if (value.ImageBytes is { Length: > 0 })
         {
@@ -95,7 +95,7 @@ public static partial class FurOverlayRenderer
             case FurFieldType.Multiline:
             case FurFieldType.Text:
                 if (!string.IsNullOrWhiteSpace(value.Text))
-                    DrawText(gfx, field, value.Text!, value.FontSizeDelta, logger, tramiteId);
+                    DrawText(gfx, field, value.Text!, value.FontSizeDelta, logger, referenceNumber);
                 break;
         }
     }
@@ -113,7 +113,7 @@ public static partial class FurOverlayRenderer
         string text,
         double fontSizeDelta,
         ILogger logger,
-        string? tramiteId)
+        string? referenceNumber)
     {
         // HU #11031 — cuerpo efectivo = el del manifiesto ± el ajuste que traiga el valor, con un
         // mínimo legible. Lo usa el sello de identidad, que va 2pt por debajo del resto del campo.
@@ -134,7 +134,7 @@ public static partial class FurOverlayRenderer
                     field.H,
                     fontSize,
                     (value, size) => gfx.MeasureString(value, CreateFont(size, field.Bold)).Width,
-                    elidedChars => LogObservationsTruncated(logger, tramiteId ?? "(sin id)", field.Id, elidedChars));
+                    elidedChars => LogObservationsTruncated(logger, referenceNumber ?? "(sin id)", field.Id, elidedChars));
                 lines = [.. fit.Lines];
                 fontSize = fit.FontSize;
             }
@@ -294,6 +294,6 @@ public static partial class FurOverlayRenderer
     // mínimo y se truncó con elipsis. Se deja constancia del trámite y de cuánto se elidió; nunca se
     // dibuja fuera de la caja.
     [LoggerMessage(Level = LogLevel.Warning,
-        Message = "FUR {TramiteId}: observaciones truncadas en el campo {FieldId} — {ElidedChars} caracteres elididos")]
-    private static partial void LogObservationsTruncated(ILogger logger, string tramiteId, string fieldId, int elidedChars);
+        Message = "FUR {ReferenceNumber}: observaciones truncadas en el campo {FieldId} — {ElidedChars} caracteres elididos")]
+    private static partial void LogObservationsTruncated(ILogger logger, string referenceNumber, string fieldId, int elidedChars);
 }

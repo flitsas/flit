@@ -17,6 +17,15 @@
 
     { "id": "requested_process_1", "type": "checkbox", "x": 101, "y": 102, "size": 9 },
     { "id": "requested_process_2", "type": "checkbox", "x": 170, "y": 102, "size": 9 },
+    // OJO — en ESTA plantilla los rotulos impresos de tramite estan corridos respecto de automotor
+    // y remolques. Aqui el "10" impreso es INSCRIPC. PRENDA y el "11" es LEVANTA. PRENDA; el "12"
+    // impreso es DUPLICADO DE PLACAS y no tiene nada que ver con prenda.
+    // Los ids `requested_process_11` / `_12` son el contrato SEMANTICO del mapper (constitucion /
+    // levantamiento) en los tres formatos, no el numero del rotulo: por eso apuntan a coordenadas
+    // distintas aqui. Marcar por numero habria declarado un duplicado de placas.
+    // Si algun dia hace falta la casilla del rotulo "10" de maquinaria: NO la declares como
+    // `requested_process_10` copiando el patron de remolques — ese sitio ya lo ocupa `_11` y
+    // acabarias con dos casillas pintando encima de la misma celda.
     { "id": "requested_process_11", "type": "checkbox", "x": 303.6, "y": 129, "size": 9 },
     { "id": "requested_process_12", "type": "checkbox", "x": 370, "y": 129, "size": 9 },
 

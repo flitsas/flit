@@ -239,4 +239,53 @@ public sealed class FurTextFitterFitMultilineTests
         fit.Lines.Should().Equal("Línea uno.", "Línea dos.", "Línea tres.");
         fit.FontSize.Should().Be(CampoFont);
     }
+
+    // ── Guarda de entrada y coste del truncado (hallazgo de seguridad del PR #230) ──────────────
+
+    [Fact]
+    public void TokenDesmedidoSinEspacios_TerminaEnTiempoRazonable_YNoDesbordaElAncho()
+    {
+        // El descenso carácter a carácter medía la cadena entera en cada vuelta: sobre un token sin
+        // espacios eso es O(N²) y con un pegado largo dejaba la generación del FUR colgada. Con la
+        // búsqueda binaria el número de mediciones es logarítmico en la longitud del corte.
+        var mediciones = 0;
+        double Contando(string t, double f) { mediciones++; return Measure(t, f); }
+
+        var fit = FurTextFitter.FitMultiline(
+            new string('X', 100_000), CampoW, CampoH, CampoFont, Contando);
+
+        fit.Lines.Should().OnlyContain(l => Measure(l, fit.FontSize) <= CampoW);
+        fit.Lines[^1].Should().EndWith("…");
+        // Cota generosa: lo que importa es que no crezca con N. El bucle lineal habría hecho decenas
+        // de miles de mediciones solo en el truncado final.
+        mediciones.Should().BeLessThan(2_000);
+    }
+
+    [Fact]
+    public void EntradaPorEncimaDelTope_SeRecorta_YLoElididoSeReportaCompleto()
+    {
+        // La guarda recorta antes de medir, pero lo recortado tiene que sumarse a lo que se informa:
+        // perder texto de un documento oficial en silencio es justo lo que no se quiere.
+        var elidedChars = 0;
+        var fit = FitMultiline(new string('X', 50_000), onTruncate: n => elidedChars = n);
+
+        fit.Lines.Should().OnlyContain(l => Measure(l, fit.FontSize) <= CampoW);
+        // Lo reportado incluye tanto lo que quitó la guarda como lo que elidió el último recurso.
+        elidedChars.Should().BeGreaterThan(42_000);
+    }
+
+    [Fact]
+    public void BusquedaBinaria_DevuelveElMismoPrefijoQueElDescensoLineal()
+    {
+        // Blindaje del refactor: el prefijo elegido debe ser EXACTAMENTE el mayor que cabe. Se contrasta
+        // contra el descenso lineal, que era la implementación anterior.
+        var fit = FitMultiline(new string('Y', 300));
+        var pintada = fit.Lines[^1];
+
+        var esperado = new string('Y', 300);
+        while (esperado.Length > 0 && Measure(esperado + "…", fit.FontSize) > CampoW)
+            esperado = esperado[..^1];
+
+        pintada.Should().Be(esperado + "…");
+    }
 }
