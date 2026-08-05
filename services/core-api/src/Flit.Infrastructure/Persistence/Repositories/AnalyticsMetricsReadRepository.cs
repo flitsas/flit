@@ -104,8 +104,18 @@ internal sealed class AnalyticsMetricsReadRepository : IAnalyticsMetricsReadRepo
                (percentile_cont(0.9) WITHIN GROUP (ORDER BY hours))::float8
         FROM decided;
         """ +
-        // 3) Reincidencia: rechazadas en rango; reintentadas = con transición rechazado→borrador;
+        // 3) Reincidencia: rechazadas en rango; reintentadas = el rechazo NO cerró la historia;
         //    ciclos = veces que la instancia pasó por 'rechazado'.
+        //
+        //    CORRECCIÓN: antes solo contaba la transición rechazado→borrador, que es el camino que
+        //    casi nadie recorre. El flujo de subsanación (HU #10871) re-radica rechazado→ENTREGADO
+        //    con el flag `subsanacion_activa`, y activar ese flag NO escribe fila de historial a
+        //    propósito (StartSubsanacionCommand, para no ensuciar el timeline). Resultado: el
+        //    retrabajo real quedaba fuera del conteo. Ahora se cuenta como reintento:
+        //      · rechazado → borrador  (reapertura clásica),
+        //      · rechazado → entregado (re-radicación tras subsanar),
+        //      · subsanacion_count > 0 (subsanación abierta que aún no se re-radicó: el reintento
+        //        está en curso, y no contarlo volvería a reportar de menos).
         InstancesCte + $"""
         , rejected AS (
             SELECT DISTINCT h.procedure_instance_id
@@ -119,11 +129,17 @@ internal sealed class AnalyticsMetricsReadRepository : IAnalyticsMetricsReadRepo
                     WHERE h.tenant_id = @tenant
                       AND h.procedure_instance_id = r.procedure_instance_id
                       AND h.to_status = 'rechazado') AS ciclos,
-                   EXISTS (SELECT 1
+                   (EXISTS (SELECT 1
                     FROM tramites.procedure_instance_status_history h
                     WHERE h.tenant_id = @tenant
                       AND h.procedure_instance_id = r.procedure_instance_id
-                      AND h.from_status = 'rechazado' AND h.to_status = 'borrador') AS retried
+                      AND h.from_status = 'rechazado'
+                      AND h.to_status IN ('borrador', 'entregado'))
+                   OR EXISTS (SELECT 1
+                    FROM tramites.procedure_instances pi
+                    WHERE pi.tenant_id = @tenant
+                      AND pi.id = r.procedure_instance_id
+                      AND coalesce(pi.subsanacion_count, 0) > 0)) AS retried
             FROM rejected r
         )
         SELECT count(*)::int,
@@ -193,6 +209,47 @@ internal sealed class AnalyticsMetricsReadRepository : IAnalyticsMetricsReadRepo
         JOIN identity.users u ON u.id = s.created_by_user_id
         ORDER BY s.days_in_status DESC, s.id ASC
         LIMIT 50;
+        """ +
+        // 10) Causales TIPIFICADAS del catálogo. Convive con el statement 5 (texto libre): mientras
+        //     queden rechazos anteriores a las causales, ambos aportan. El conteo es de RECHAZOS
+        //     distintos que incluyen la causal, no de marcas — un rechazo con tres causales sigue
+        //     siendo un rechazo, y por eso los porcentajes pueden sumar más de 100 %.
+        InstancesCte + $"""
+        SELECT rr.id, rr.code, rr.description,
+               count(DISTINCT pirr.status_history_id)::int AS rechazos
+        FROM tramites.procedure_instance_rejection_reasons pirr
+        JOIN insts i ON i.id = pirr.procedure_instance_id
+        JOIN tramites.procedure_instance_status_history h ON h.id = pirr.status_history_id
+        JOIN catalogs.rejection_reasons rr ON rr.id = pirr.rejection_reason_id
+        WHERE pirr.tenant_id = @tenant
+          AND h.tenant_id = @tenant
+          AND h.to_status = 'rechazado' AND {ChangedInRange}
+        GROUP BY rr.id, rr.code, rr.description
+        ORDER BY 4 DESC, 3 ASC;
+        """ +
+        // 11) Ciclo INTERNO: horas desde que se creó el trámite hasta que se entregó por primera vez.
+        //     Es el tramo propio de la empresa. Hasta ahora solo se medía el tramo del organismo
+        //     (entregado→decisión), así que se podía señalar al lento pero no corregirse uno mismo.
+        InstancesCte + """
+        , first_delivery AS (
+            SELECT i.id,
+                   i.created_at,
+                   min(h.changed_at) AS delivered_at
+            FROM insts i
+            JOIN tramites.procedure_instance_status_history h
+              ON h.procedure_instance_id = i.id
+             AND h.tenant_id = @tenant
+             AND h.to_status = 'entregado'
+            GROUP BY i.id, i.created_at
+        ), internal_hours AS (
+            SELECT EXTRACT(EPOCH FROM (delivered_at - created_at)) / 3600.0 AS hours
+            FROM first_delivery
+            WHERE (delivered_at AT TIME ZONE 'America/Bogota')::date BETWEEN @from AND @to
+        )
+        SELECT avg(hours)::float8,
+               (percentile_cont(0.5) WITHIN GROUP (ORDER BY hours))::float8,
+               (percentile_cont(0.9) WITHIN GROUP (ORDER BY hours))::float8
+        FROM internal_hours;
         """;
 
     // ── Funnel (§4.3): cohorte por created_at (Bogotá) de la instancia dentro del rango ───────────
@@ -416,6 +473,32 @@ internal sealed class AnalyticsMetricsReadRepository : IAnalyticsMetricsReadRepo
                     x.Office.P50Hours!.Value, x.Rate, x.Office.Decididos))
                 .ToList();
 
+            // 10) Causales tipificadas del catálogo.
+            await reader.NextResultAsync(ct).ConfigureAwait(false);
+            var rejectionByReasonCatalog = new List<RejectionByReasonCatalogDto>();
+            var totalReasonMarks = 0;
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                var rechazosConLaCausal = reader.GetInt32(3);
+                totalReasonMarks += rechazosConLaCausal;
+                rejectionByReasonCatalog.Add(new RejectionByReasonCatalogDto(
+                    reader.GetGuid(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    rechazosConLaCausal,
+                    // Sobre RECHAZOS, no sobre marcas: un rechazo con tres causales sigue siendo uno.
+                    // Por eso la columna puede sumar más de 100 % y así se rotula en el frontend.
+                    Pct(rechazosConLaCausal, rechazados)));
+            }
+
+            // 11) Ciclo interno (creación → primera entrega).
+            await reader.NextResultAsync(ct).ConfigureAwait(false);
+            await reader.ReadAsync(ct).ConfigureAwait(false);
+            var internalCycle = new InternalCycleDto(
+                Round1(GetNullableDouble(reader, 0)),
+                Round1(GetNullableDouble(reader, 1)),
+                Round1(GetNullableDouble(reader, 2)));
+
             var summary = new OtMetricsSummaryDto(
                 entregados, aprobados, rechazados,
                 Pct(rechazados, aprobados + rechazados),
@@ -426,7 +509,10 @@ internal sealed class AnalyticsMetricsReadRepository : IAnalyticsMetricsReadRepo
             return new OtMetricsDto(
                 summary, rejectionByOffice, rejectionByReason, rejectionByType,
                 approvalTimesByOffice, officeRanking, reincidence,
-                new StuckDto(stuckTotal, stuckItems));
+                new StuckDto(stuckTotal, stuckItems),
+                rejectionByReasonCatalog,
+                rechazados == 0 ? 0 : Math.Round(totalReasonMarks / (double)rechazados, 2),
+                internalCycle);
         }, ct);
     }
 

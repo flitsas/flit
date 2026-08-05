@@ -119,6 +119,16 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<VehicleColor> VehicleColors => Set<VehicleColor>();
 
+    /// <summary>
+    /// Catálogo global de causales de rechazo (SuperAdmin). Sustituye al motivo escrito a mano
+    /// como dato agregable del reporte de motivos.
+    /// </summary>
+    public DbSet<RejectionReason> RejectionReasons => Set<RejectionReason>();
+
+    /// <summary>Causales marcadas por el organismo en cada evento de rechazo.</summary>
+    public DbSet<ProcedureInstanceRejectionReason> ProcedureInstanceRejectionReasons =>
+        Set<ProcedureInstanceRejectionReason>();
+
     // ── Admin OT — perfil y feature flags (HU #10152 DDL, HU #10215 API) ───────
     public DbSet<TransitOfficeProfile> TransitOfficeProfiles => Set<TransitOfficeProfile>();
 

@@ -1161,8 +1161,13 @@ public sealed class OtClientProcedureHandlerTests
     private static ApproveOtClientProcedureHandler NewApproveHandler(FlitDbContext ctx) =>
         new(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()), new AllowAllQuipuxGuard());
 
+    // Se inyecta el repositorio REAL de causales (funciona sobre InMemory) en vez de un doble: así
+    // los tests de rechazo también cubren la validación de causales contra el catálogo.
     private static RejectOtClientProcedureHandler NewRejectHandler(FlitDbContext ctx) =>
-        new(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()), new AllowAllQuipuxGuard());
+        new(
+            new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()),
+            new AllowAllQuipuxGuard(),
+            new RejectionReasonRepository(ctx));
 
     private sealed class AllowAllQuipuxGuard : IQuipuxReadOnlyGuard
     {

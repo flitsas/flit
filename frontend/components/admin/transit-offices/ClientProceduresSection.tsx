@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { tramitesClient } from "@/lib/api/tramites-client";
@@ -16,7 +16,13 @@ import {
   generarOtConsolidadoMaestro,
   rejectOtClientProcedure,
 } from "@/lib/api/admin-ot";
-import type { OtBandejaHealth, OtClientProcedure, OtProfile } from "@/lib/api/types-ot";
+import type {
+  OtBandejaHealth,
+  OtClientProcedure,
+  OtProfile,
+  RejectionReason,
+} from "@/lib/api/types-ot";
+import { fetchRejectionReasons } from "@/lib/api/ot-metrics";
 import { fetchMandateSigners, type MandateSigner } from "@/lib/api/admin-mandate-signers";
 import { ApiError } from "@/lib/api/types";
 import { getToken } from "@/lib/api/client";
@@ -109,6 +115,13 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [revokeTarget, setRevokeTarget] = useState<OtClientProcedure | null>(null);
   const [revokePlateReason, setRevokePlateReason] = useState("");
   const [rejectReason, setRejectReason] = useState("");
+  // Causales del catálogo para el modal de rechazo. Se cargan según la modalidad del trámite: las
+  // causales no son intercambiables entre matrícula y traspaso.
+  const [rejectReasonCatalog, setRejectReasonCatalog] = useState<RejectionReason[]>([]);
+  const [rejectReasonIds, setRejectReasonIds] = useState<string[]>([]);
+  const [rejectCatalogError, setRejectCatalogError] = useState<string | null>(null);
+  /** Trámite cuya carga de causales es la vigente; descarta respuestas de aperturas anteriores. */
+  const rejectCatalogRequestRef = useRef<string | null>(null);
   // Licencia de Tránsito opcional al aprobar; también adjuntable después (fila aprobada).
   const [ltFile, setLtFile] = useState<File | null>(null);
   const [ltTarget, setLtTarget] = useState<OtClientProcedure | null>(null);
@@ -156,6 +169,34 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       .listPublishedProcedureTypes()
       .then(setProcedureTypes)
       .catch(() => setProcedureTypes([]));
+  }, []);
+
+  // Deep-link desde el drill-down de reportes OT (?placa=/?vin=/?status=): abrir la lista de un
+  // bloque del panel debe aterrizar ya filtrado en el trámite, no en la bandeja completa. Se lee
+  // window.location directo (en vez de useSearchParams) para no requerir un boundary de router en
+  // este componente ni afectar los tests que lo montan fuera de una app real.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const placaParam = params.get("placa")?.trim();
+    const vinParam = params.get("vin")?.trim();
+    const statusParam = params.get("status")?.trim();
+    if (!placaParam && !vinParam && !statusParam) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- siembra desde la URL al montar: no hay otro momento para leerla */
+    if (placaParam) {
+      setPlacaFilter(placaParam);
+      setAppliedPlaca(placaParam);
+    }
+    if (vinParam) {
+      setVinFilter(vinParam);
+      setAppliedVin(vinParam);
+    }
+    if (statusParam) setStatusFilter(statusParam);
+    setFiltersOpen(true);
+    setPage(1);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    // Solo al montar: es una precarga desde la URL de entrada, no una sincronización continua.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const load = useCallback(
@@ -503,16 +544,49 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     }
   };
 
+  // Abre el modal y trae las causales activas de la modalidad del trámite. Si el catálogo falla, el
+  // rechazo NO se bloquea: la observación en texto libre basta para radicar la decisión, y dejar al
+  // revisor sin poder rechazar por un catálogo caído sería peor que perder el dato del reporte.
+  const openReject = async (procedure: OtClientProcedure) => {
+    setRejectTarget(procedure);
+    setRejectReason("");
+    setRejectReasonIds([]);
+    setRejectCatalogError(null);
+    setRejectReasonCatalog([]);
+    // El modal pudo cerrarse o reabrirse con otro trámite mientras esperábamos el catálogo: se
+    // marca cuál es la carga vigente para descartar la respuesta de una anterior, que pintaría
+    // las causales del trámite equivocado.
+    rejectCatalogRequestRef.current = procedure.id;
+    try {
+      const catalog = await fetchRejectionReasons({ modalidad: procedure.modalidadEntrada });
+      if (rejectCatalogRequestRef.current !== procedure.id) return;
+      setRejectReasonCatalog(catalog);
+    } catch {
+      if (rejectCatalogRequestRef.current !== procedure.id) return;
+      setRejectCatalogError(
+        "No se pudieron cargar las causales. Puedes rechazar describiendo el motivo.",
+      );
+    }
+  };
+
+  const toggleRejectReason = (id: string) => {
+    setRejectReasonIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
   const confirmReject = async () => {
     if (!rejectTarget || !rejectReason.trim()) return;
     setActing(true);
     try {
       const updated = await rejectOtClientProcedure(rejectTarget.id, {
         reason: rejectReason.trim(),
+        rejectionReasonIds: rejectReasonIds.length > 0 ? rejectReasonIds : undefined,
       });
       setRows((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
       setRejectTarget(null);
       setRejectReason("");
+      setRejectReasonIds([]);
       show("Trámite rechazado.", "success");
     } catch {
       show("No se pudo rechazar el trámite.", "error");
@@ -723,7 +797,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             setLtFile(null);
             setApproveTarget(row);
           }}
-          onReject={setRejectTarget}
+          onReject={(p) => void openReject(p)}
           onAssignPlate={!isReadOnly && !superAdmin ? openAssignPlate : undefined}
           onRevoke={!isReadOnly && !superAdmin ? (row) => { setRevokePlateReason(""); setRevokeTarget(row); } : undefined}
           showApprovalActions={!isReadOnly && !superAdmin}
@@ -983,9 +1057,48 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             <h2 className="text-lg font-semibold text-foreground">
               Motivo del rechazo
             </h2>
+
+            {/* Causales del catálogo: varias son válidas y esperadas. Un expediente puede llegar
+                con improntas borrosas, sin impronta y sin pago de impuestos a la vez, y el gestor
+                necesita saberlo todo para subsanar. */}
+            {rejectReasonCatalog.length > 0 && (
+              <fieldset className="mt-4" data-testid="reject-reason-catalog">
+                <legend className="text-xs font-semibold text-foreground">
+                  ¿Qué falló? Marca todo lo que aplique
+                </legend>
+                <div className="mt-2 flex flex-col gap-1.5">
+                  {rejectReasonCatalog.map((reason) => (
+                    <label
+                      key={reason.id}
+                      className="flex items-start gap-2 text-xs text-foreground"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={rejectReasonIds.includes(reason.id)}
+                        onChange={() => toggleRejectReason(reason.id)}
+                      />
+                      <span>{reason.description}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+            {rejectCatalogError && (
+              <p className="mt-3 text-[11px] text-amber-700 dark:text-amber-400">
+                {rejectCatalogError}
+              </p>
+            )}
+
+            <label className="mt-4 block text-xs font-semibold text-foreground">
+              Observación para quien va a subsanar
+            </label>
+            {/* El texto libre NO lo sustituyen las causales: la causal dice QUÉ falló y esto dice
+                CÓMO corregirlo — qué documento exactamente, qué dato no cuadra. */}
             <textarea
-              className={`mt-3 ${OT_INPUT_CLS}`}
+              className={`mt-2 ${OT_INPUT_CLS}`}
               rows={3}
+              placeholder="Indica qué debe corregirse y con qué detalle"
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
             />

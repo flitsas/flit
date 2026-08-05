@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
@@ -14,7 +14,13 @@ import {
   updateOtFeatureFlag,
   updateOtProfile,
 } from "@/lib/api/admin-ot";
-import type { OtClientProcedure, OtFeatureFlag, OtProfile } from "@/lib/api/types-ot";
+import { fetchRejectionReasons } from "@/lib/api/ot-metrics";
+import type {
+  OtClientProcedure,
+  OtFeatureFlag,
+  OtProfile,
+  RejectionReason,
+} from "@/lib/api/types-ot";
 import { TramitesProcedureList } from "./TramitesProcedureList";
 import { QuipuxQueueList } from "./QuipuxQueueList";
 import { OT_INPUT_CLS } from "./ot-form-styles";
@@ -42,6 +48,12 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
   const [approveTarget, setApproveTarget] = useState<OtClientProcedure | null>(null);
   const [rejectTarget, setRejectTarget] = useState<OtClientProcedure | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  // Causales del catálogo para el modal de rechazo, según la modalidad del trámite.
+  const [rejectReasonCatalog, setRejectReasonCatalog] = useState<RejectionReason[]>([]);
+  const [rejectReasonIds, setRejectReasonIds] = useState<string[]>([]);
+  const [rejectCatalogError, setRejectCatalogError] = useState<string | null>(null);
+  /** Trámite cuya carga de causales es la vigente; descarta respuestas de aperturas anteriores. */
+  const rejectCatalogRequestRef = useRef<string | null>(null);
   const [acting, setActing] = useState(false);
 
   const operationalFlags = (profile?.featureFlags ?? []).filter(
@@ -208,6 +220,35 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
     }
   };
 
+  // Abre el modal y trae las causales activas de la modalidad. Si el catálogo falla, el rechazo
+  // NO se bloquea: la observación basta para radicar la decisión.
+  const openReject = async (procedure: OtClientProcedure) => {
+    setRejectTarget(procedure);
+    setRejectReason("");
+    setRejectReasonIds([]);
+    setRejectCatalogError(null);
+    setRejectReasonCatalog([]);
+    // Marca cuál es la carga vigente para descartar la respuesta de una apertura anterior, que
+    // pintaría las causales del trámite equivocado.
+    rejectCatalogRequestRef.current = procedure.id;
+    try {
+      const catalog = await fetchRejectionReasons({ modalidad: procedure.modalidadEntrada });
+      if (rejectCatalogRequestRef.current !== procedure.id) return;
+      setRejectReasonCatalog(catalog);
+    } catch {
+      if (rejectCatalogRequestRef.current !== procedure.id) return;
+      setRejectCatalogError(
+        "No se pudieron cargar las causales. Puedes rechazar describiendo el motivo.",
+      );
+    }
+  };
+
+  const toggleRejectReason = (id: string) => {
+    setRejectReasonIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
   const confirmReject = async () => {
     if (!rejectTarget || !rejectReason.trim()) {
       return;
@@ -216,7 +257,10 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
     try {
       const updated = await rejectOtClientProcedure(
         rejectTarget.id,
-        { reason: rejectReason.trim() },
+        {
+          reason: rejectReason.trim(),
+          rejectionReasonIds: rejectReasonIds.length > 0 ? rejectReasonIds : undefined,
+        },
         { transitOfficeId },
       );
       const next = procedures.filter((p) => p.id !== updated.id);
@@ -224,6 +268,7 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
       setListStatus(next.length === 0 ? "empty" : "ready");
       setRejectTarget(null);
       setRejectReason("");
+      setRejectReasonIds([]);
       show("Trámite rechazado.", "success");
     } catch {
       show("No se pudo rechazar el trámite.", "error");
@@ -365,7 +410,10 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
             procedures={procedures}
             showApprovalActions={!isReadOnly}
             onApprove={(id) => setApproveTarget(procedures.find((p) => p.id === id) ?? null)}
-            onReject={(id) => setRejectTarget(procedures.find((p) => p.id === id) ?? null)}
+            onReject={(id) => {
+                const target = procedures.find((p) => p.id === id);
+                if (target) void openReject(target);
+              }}
             onGenerarConsolidado={isReadOnly ? undefined : handleGenerarConsolidado}
             onVerConsolidado={handleVerConsolidado}
             consolidadoActingId={consolidadoActingId}
@@ -436,9 +484,48 @@ export function TramitesSuperSection({ transitOfficeId }: TramitesSuperSectionPr
             <h2 className="text-lg font-semibold text-foreground">
               Motivo del rechazo
             </h2>
+
+            {/* Marcar varias causales es válido y esperado: un expediente puede llegar con
+                improntas borrosas, sin impronta y sin pago de impuestos a la vez, y el gestor
+                necesita saberlo todo para subsanar. */}
+            {rejectReasonCatalog.length > 0 && (
+              <fieldset className="mt-4" data-testid="reject-reason-catalog">
+                <legend className="text-xs font-semibold text-foreground">
+                  ¿Qué falló? Marca todo lo que aplique
+                </legend>
+                <div className="mt-2 flex flex-col gap-1.5">
+                  {rejectReasonCatalog.map((reason) => (
+                    <label
+                      key={reason.id}
+                      className="flex items-start gap-2 text-xs text-foreground"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={rejectReasonIds.includes(reason.id)}
+                        onChange={() => toggleRejectReason(reason.id)}
+                      />
+                      <span>{reason.description}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+            {rejectCatalogError && (
+              <p className="mt-3 text-[11px] text-amber-700 dark:text-amber-400">
+                {rejectCatalogError}
+              </p>
+            )}
+
+            <label className="mt-4 block text-xs font-semibold text-foreground">
+              Observación para quien va a subsanar
+            </label>
+            {/* El texto libre NO lo sustituyen las causales: la causal dice QUÉ falló y esto dice
+                CÓMO corregirlo. */}
             <textarea
-              className={`mt-3 ${OT_INPUT_CLS}`}
+              className={`mt-2 ${OT_INPUT_CLS}`}
               rows={3}
+              placeholder="Indica qué debe corregirse y con qué detalle"
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
             />

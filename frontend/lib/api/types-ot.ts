@@ -47,6 +47,8 @@ export interface OtClientProcedure {
   clientTenantName?: string;
   referenceNumber: string;
   status: string;
+  /** `matricula_inicial` | `traspaso`. Determina qué causales de rechazo ofrece el modal. */
+  modalidadEntrada?: string;
   /**
    * Sub-estado interno de la ruta de placa (null | preasignado | asignado | terminado),
    * ortogonal al status (que permanece en 'entregado').
@@ -182,7 +184,35 @@ export interface OtApiLogsParams {
 }
 
 export interface RejectOtClientProcedureRequest {
+  /**
+   * Observación general del rechazo, obligatoria. No la sustituyen las causales: la causal dice
+   * QUÉ falló (dato agregable del reporte) y la observación dice CÓMO corregirlo — qué documento
+   * exactamente, qué dato no cuadra. Es el contexto de quien va a subsanar.
+   */
   reason: string;
+  /**
+   * Causales del catálogo marcadas por el revisor. Varias son válidas y esperadas: un expediente
+   * puede llegar con improntas borrosas, sin impronta y sin pago de impuestos a la vez.
+   */
+  rejectionReasonIds?: string[];
+}
+
+/** Causal del catálogo global de rechazo (administrado por SuperAdmin). */
+export interface RejectionReason {
+  id: string;
+  code: string;
+  description: string;
+  /** `matricula_inicial` | `traspaso`. */
+  modalidad: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface SaveRejectionReasonRequest {
+  code: string;
+  description: string;
+  modalidad: string;
+  sortOrder?: number;
 }
 
 export type OtRuleLogic = "AND" | "OR";

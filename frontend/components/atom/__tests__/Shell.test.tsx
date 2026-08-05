@@ -121,6 +121,16 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     expect(screen.getByRole("button", { name: "Auditoría" })).toBeInTheDocument();
   });
 
+  it("anida Organismos y Causales de rechazo bajo Administradores → Tránsito", async () => {
+    setDevSuperAdminToken();
+    renderShell();
+    // El catálogo alimenta el modal de rechazo del organismo: cuelga de Tránsito, no de Compañías.
+    await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
+    await userEvent.click(screen.getByRole("button", { name: "Tránsito" }));
+    expect(screen.getByRole("button", { name: "Organismos" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Causales de rechazo" })).toBeInTheDocument();
+  });
+
   it("muestra Mandatos dentro de Administradores → Plataforma", async () => {
     setDevSuperAdminToken();
     renderShell();

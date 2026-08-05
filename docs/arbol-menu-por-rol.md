@@ -73,7 +73,7 @@ Orden estable (`DOCK_GROUP_ORDER`):
 | `reportes` | Reportes | Submenú si hay Reportes + Reportes Detallados |
 | `usuarios` | Usuarios | Píldora directa |
 | `administracion` | Administración | Submenú Admin OT (Reglas / Documentos / Requisitos) |
-| `administradores` | Administradores | SuperAdmin: Compañías, Tránsito, Documental, Improntas, Quipux, RBAC, Auditoría y submenú anidado Plataforma (Mandatos). AdminCompany: píldora “Administración”. |
+| `administradores` | Administradores | SuperAdmin: Compañías, Documental, Improntas, Quipux, RBAC, Auditoría y los submenús anidados Tránsito (Organismos, Causales de rechazo) y Plataforma (Mandatos). AdminCompany: píldora “Administración”. |
 | `integraciones` | Integraciones | Log QX / Log ICT si hay permiso |
 | `ayuda` | Ayuda | Universal |
 
@@ -96,7 +96,9 @@ FAB Inicio FLIT (Dashboard)
 ├── Usuarios                          → ?m=usuarios
 ├── Administradores ▾
 │   ├── Compañías                     → /admin/companies  (listado global)
-│   ├── Tránsito                      → /admin/transit-offices  (listado OT)
+│   ├── Tránsito ▾
+│   │   ├── Organismos                → /admin/transit-offices  (listado OT)
+│   │   └── Causales de rechazo       → /admin/causales-rechazo  (catálogo global)
 │   ├── Documental                    → /admin/documents
 │   ├── Improntas                     → /admin/improntas
 │   ├── Quipux                        → /admin/quipux
