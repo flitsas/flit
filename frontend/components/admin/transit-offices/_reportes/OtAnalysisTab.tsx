@@ -22,6 +22,7 @@ import {
   defaultRange,
   type DateRange,
 } from "./filters";
+import { formatHours } from "./report-columns";
 import { Bar, Empty, ErrorNotice, PrimaryButton, Section, Table, Tile } from "./shared";
 
 export interface OtAnalysisTabProps {
@@ -174,7 +175,8 @@ function PerformancePanel({ performance }: { performance: OtPerformance }) {
                 String(r.decididos),
                 `${r.aprobacionPct} %`,
                 `${r.rechazoPct} %`,
-                r.tiempoMedianoHoras === null ? "—" : `${r.tiempoMedianoHoras} h`,
+                // Mismo motivo que en el panel operativo: el número crudo salía como «0.03 h».
+                formatHours(r.tiempoMedianoHoras),
                 `${r.vuelvenARechazarsePct} %`,
               ],
             }))}

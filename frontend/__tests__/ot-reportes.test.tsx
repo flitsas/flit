@@ -290,6 +290,19 @@ describe("Reportes del organismo — Ahora mismo", () => {
     expect(screen.getByText("Últimos 30 días")).toBeInTheDocument();
   });
 
+  it("formatea la mediana en vez de interpolar el número crudo", async () => {
+    mocks.fetchOtOperationalPanel.mockResolvedValue({
+      ...PANEL,
+      movimiento: { ...PANEL.movimiento, tiempoMedianoDecisionHoras: 0.03 },
+    });
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+
+    // Con datos reales esta mediana salía como «0.03 h»: punto decimal inglés y una unidad en la
+    // que el dato no dice nada.
+    expect(await screen.findByText("2 min")).toBeInTheDocument();
+    expect(screen.queryByText("0.03 h")).not.toBeInTheDocument();
+  });
+
   it("muestra el movimiento del día y la antigüedad de la cola", async () => {
     render(<OtReportsConsole transitOfficeId="ot-1" />);
 

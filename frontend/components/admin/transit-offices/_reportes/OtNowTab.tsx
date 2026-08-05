@@ -22,6 +22,7 @@ import {
 } from "@/lib/api/ot-metrics";
 import { DrilldownPanel, type DrilldownState } from "./DrilldownPanel";
 import { EmpresaSelect, ModalidadSelect, defaultRange } from "./filters";
+import { formatHours } from "./report-columns";
 import { Bar, Bucket, Empty, ErrorNotice, PrimaryButton, Section, SubTitle, Tile } from "./shared";
 
 /** Ventana de la mediana de decisión. Fija y declarada; ver la nota de cabecera. */
@@ -144,11 +145,10 @@ function OperationalPanel({
           onClick={() => onOpenDrilldown(OT_DRILLDOWN_BUCKETS.pendientes, "Pendientes en total")}
         />
         <Tile
-          value={
-            movimiento.tiempoMedianoDecisionHoras === null
-              ? "—"
-              : `${movimiento.tiempoMedianoDecisionHoras} h`
-          }
+          // Se formatea en vez de interpolar el número crudo: con datos reales, una mediana de
+          // dos minutos salía como «0.03 h» — con punto decimal inglés y en una unidad en la que
+          // el dato no significa nada.
+          value={formatHours(movimiento.tiempoMedianoDecisionHoras)}
           label="Tiempo mediano de decisión"
           hint={`Últimos ${VENTANA_MEDIANA_DIAS} días`}
         />
