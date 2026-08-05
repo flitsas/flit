@@ -121,9 +121,11 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     expect(screen.getByRole("button", { name: "Auditoría" })).toBeInTheDocument();
   });
 
-  it("muestra Mandatos dentro del submenú Plataforma", async () => {
+  it("muestra Mandatos dentro de Administradores → Plataforma", async () => {
     setDevSuperAdminToken();
     renderShell();
+    expect(screen.queryByRole("button", { name: "Plataforma" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
     await userEvent.click(screen.getByRole("button", { name: "Plataforma" }));
     expect(screen.getByRole("button", { name: "Mandatos" })).toBeInTheDocument();
   });

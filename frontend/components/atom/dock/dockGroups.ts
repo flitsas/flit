@@ -9,7 +9,6 @@ import {
   HelpCircle,
   FolderCog,
   Tag,
-  Monitor,
 } from "lucide-react";
 import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
 
@@ -18,8 +17,8 @@ import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
  * Trámites e Identidad son grupos de un solo ítem → píldora directa (no submenú).
  * Dashboard no se lista: el FAB central abre Inicio.
  * `administracion` / `preasignacion`: Admin OT (pestañas hub → dock).
- * SuperAdmin: Compañías/Tránsito/Documental/Improntas/Quipux viven en `administradores`
- * (junto a RBAC y Auditoría). `plataforma` = submenú (Mandatos, …) aunque tenga un solo ítem.
+ * SuperAdmin: Compañías/Tránsito/Documental/Improntas/Quipux/RBAC/Auditoría y el
+ * submenú anidado Plataforma (Mandatos, …) viven en `administradores`.
  * `integraciones` = Log QX + Log ICT.
  * AdminCompany: la píldora "Administración" también cae en `administradores` (ítem único →
  * label del ítem, no del grupo).
@@ -32,15 +31,11 @@ export const DOCK_GROUP_ORDER = [
   "usuarios",
   "administracion",
   "administradores",
-  "plataforma",
   "integraciones",
   "ayuda",
 ] as const;
 
 export type DockGroupId = (typeof DOCK_GROUP_ORDER)[number];
-
-/** Grupos que siempre abren panel (aunque tengan un solo ítem). */
-export const DOCK_GROUP_FORCE_MENU: ReadonlySet<DockGroupId> = new Set(["plataforma"]);
 
 export const DOCK_GROUP_LABEL: Record<DockGroupId, string> = {
   tramites: "Trámites",
@@ -50,7 +45,6 @@ export const DOCK_GROUP_LABEL: Record<DockGroupId, string> = {
   preasignacion: "Preasignación",
   administracion: "Administración",
   administradores: "Administradores",
-  plataforma: "Plataforma",
   integraciones: "Integraciones",
   ayuda: "Ayuda",
 };
@@ -74,7 +68,6 @@ export const DOCK_GROUP_ICON: Record<DockGroupId, DockIconComponent> = {
   preasignacion: Tag,
   administracion: FolderCog,
   administradores: Lock,
-  plataforma: Monitor,
   integraciones: Radar,
   ayuda: HelpCircle,
 };
@@ -94,8 +87,8 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   "admin-improntas": "administradores",
   "admin-quipux": "administradores",
   "admin-transit": "administradores",
-  // SuperAdmin — submenú Plataforma
-  "admin-mandatos": "plataforma",
+  // SuperAdmin — Plataforma anidada dentro de Administradores
+  "admin-plataforma": "administradores",
   // Admin OT — pestañas hub en el dock
   [OT_ADM_DOCK.tramites]: "tramites",
   [OT_ADM_DOCK.rules]: "administracion",
@@ -117,6 +110,8 @@ export type DockEntryLike = {
   icon: DockIconComponent;
   active: boolean;
   onClick: () => void;
+  /** Submenú anidado (p. ej. Administradores → Plataforma → Mandatos). */
+  children?: DockEntryLike[];
 };
 
 export type DockGroupView = {
@@ -126,9 +121,12 @@ export type DockGroupView = {
   items: DockEntryLike[];
   /** Algún ítem del grupo está activo. */
   active: boolean;
-  /** Si true, la píldora abre panel aunque haya un solo ítem (p. ej. Plataforma). */
-  forceMenu: boolean;
 };
+
+/** Aplana ítems con hijos (móvil / tests): los leafs de navegación. */
+export function flattenDockEntries(entries: DockEntryLike[]): DockEntryLike[] {
+  return entries.flatMap((it) => (it.children?.length ? it.children : [it]));
+}
 
 /** Agrupa entradas visibles; omite agrupadores vacíos. Ítems sin mapa van a un cubo final no listado (no deberían existir). */
 export function buildDockGroups(entries: DockEntryLike[]): DockGroupView[] {
@@ -148,8 +146,9 @@ export function buildDockGroups(entries: DockEntryLike[]): DockGroupView[] {
       label: DOCK_GROUP_LABEL[id],
       icon: DOCK_GROUP_ICON[id],
       items,
-      active: items.some((i) => i.active),
-      forceMenu: DOCK_GROUP_FORCE_MENU.has(id),
+      active: items.some(
+        (i) => i.active || Boolean(i.children?.some((c) => c.active)),
+      ),
     };
   }).filter((g) => g.items.length > 0);
 }

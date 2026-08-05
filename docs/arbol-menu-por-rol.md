@@ -73,8 +73,7 @@ Orden estable (`DOCK_GROUP_ORDER`):
 | `reportes` | Reportes | Submenú si hay Reportes + Reportes Detallados |
 | `usuarios` | Usuarios | Píldora directa |
 | `administracion` | Administración | Submenú Admin OT (Reglas / Documentos / Requisitos) |
-| `administradores` | Administradores | SuperAdmin: Compañías, Tránsito, Documental, Improntas, Quipux, RBAC, Auditoría. AdminCompany: píldora “Administración”. |
-| `plataforma` | Plataforma | SuperAdmin: submenú (Mandatos → 404 placeholder; más ítems después) |
+| `administradores` | Administradores | SuperAdmin: Compañías, Tránsito, Documental, Improntas, Quipux, RBAC, Auditoría y submenú anidado Plataforma (Mandatos). AdminCompany: píldora “Administración”. |
 | `integraciones` | Integraciones | Log QX / Log ICT si hay permiso |
 | `ayuda` | Ayuda | Universal |
 
@@ -102,9 +101,9 @@ FAB Inicio FLIT (Dashboard)
 │   ├── Improntas                     → /admin/improntas
 │   ├── Quipux                        → /admin/quipux
 │   ├── RBAC Admin                    → ?m=rbac
-│   └── Auditoría                     → ?m=auditoria
-├── Plataforma ▾
-│   └── Mandatos                      → /admin/plataforma/mandatos  (404 placeholder)
+│   ├── Auditoría                     → ?m=auditoria
+│   └── Plataforma ▾
+│       └── Mandatos                  → /admin/plataforma/mandatos  (404 placeholder)
 ├── Integraciones ▾ (si aplica)
 │   ├── Log QX                        → ?m=log-qx
 │   └── Log ICT                       → ?m=ict-logs
@@ -299,8 +298,7 @@ Dentro del wizard, `tramites.create` es lo que habilita `/tramites/nuevo/{modali
 | Reportes (hub OT) | vía tabs | ❌ | ✅ | ❌ |
 | Usuarios (SPA) | ✅ | ✅ | ❌¹ | ❌ |
 | Usuarios (hub OT) | vía tabs | ❌ | ✅ | ❌ |
-| Administradores ▾ (Compañías, Tránsito, Documental, Improntas, Quipux, RBAC, Auditoría) | ✅ | ❌ | ❌ | ❌ |
-| Plataforma ▾ (Mandatos) | ✅ | ❌ | ❌ | ❌ |
+| Administradores ▾ (… + Plataforma → Mandatos) | ✅ | ❌ | ❌ | ❌ |
 | Administración → consola compañía | ❌² | ✅ | ❌ | ❌ |
 | Administración OT ▾ (Reglas/Docs/Requisitos) | vía tabs | ❌ | ✅ | ❌ |
 | Preasignación (dock) | vía tabs | ❌ | ✅ | ❌ |
@@ -323,7 +321,6 @@ flowchart TB
     SA_R[Reportes ▾]
     SA_U[Usuarios]
     SA_A[Administradores ▾]
-    SA_P[Plataforma ▾]
     SA_INT[Integraciones ▾]
     SA_H[Ayuda]
   end

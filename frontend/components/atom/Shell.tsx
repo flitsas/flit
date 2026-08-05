@@ -12,7 +12,7 @@ import {
   type OtHubTabId,
 } from "@/components/admin/transit-offices/ot-nav";
 import { useDockScrollCondense } from "./useDockScrollCondense";
-import { buildDockGroups } from "./dock/dockGroups";
+import { buildDockGroups, flattenDockEntries } from "./dock/dockGroups";
 import { DockDesktop } from "./dock/DockDesktop";
 
 const logoWhite = "/assets/logo-flit-white.svg";
@@ -47,6 +47,7 @@ import {
   FileText,
   ClipboardList,
   Tag,
+  Monitor,
   FileSignature,
 } from "lucide-react";
 
@@ -81,6 +82,8 @@ type DockEntry = {
   icon: typeof LayoutGrid;
   active: boolean;
   onClick: () => void;
+  /** Submenú anidado (Administradores → Plataforma → Mandatos). */
+  children?: DockEntry[];
 };
 
 function useTheme() {
@@ -272,11 +275,20 @@ export function Shell({
         onClick: () => onNav("auditoria"),
       },
       {
-        key: "admin-mandatos",
-        label: "Mandatos",
-        icon: FileSignature,
-        active: pathname.startsWith("/admin/plataforma/mandatos"),
-        onClick: () => window.location.assign("/admin/plataforma/mandatos"),
+        key: "admin-plataforma",
+        label: "Plataforma",
+        icon: Monitor,
+        active: pathname.startsWith("/admin/plataforma"),
+        onClick: () => undefined,
+        children: [
+          {
+            key: "admin-mandatos",
+            label: "Mandatos",
+            icon: FileSignature,
+            active: pathname.startsWith("/admin/plataforma/mandatos"),
+            onClick: () => window.location.assign("/admin/plataforma/mandatos"),
+          },
+        ],
       },
     );
   }
@@ -562,7 +574,7 @@ export function Shell({
                         {g.label}
                       </p>
                       <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
-                        {g.items.map((it) => {
+                        {flattenDockEntries(g.items).map((it) => {
                           const Icon = it.icon;
                           return (
                             <button

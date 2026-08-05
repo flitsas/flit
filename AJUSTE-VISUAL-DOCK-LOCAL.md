@@ -18,8 +18,7 @@
 |---|---|
 | Trámites / Identidad / Reportes / Usuarios | Píldoras SPA (RBAC) |
 | Administración | Admin OT: Reglas, Documentos, Requisitos |
-| Administradores | Compañías, Tránsito, Documental, Improntas, Quipux, RBAC Admin, Auditoría (SuperAdmin). AdminCompany: píldora “Administración”. |
-| Plataforma | Mandatos (submenú forzado; SuperAdmin) |
+| Administradores | Compañías, Tránsito, Documental, Improntas, Quipux, RBAC Admin, Auditoría, Plataforma → Mandatos (SuperAdmin). AdminCompany: píldora “Administración”. |
 | Integraciones | Log QX, Log ICT |
 | Ayuda | Ayuda |
 

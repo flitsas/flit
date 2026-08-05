@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { buildDockGroups, type DockEntryLike } from "../dockGroups";
+import { buildDockGroups, flattenDockEntries, type DockEntryLike } from "../dockGroups";
 import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
 import { LayoutGrid } from "lucide-react";
 
-function entry(key: string, label: string): DockEntryLike {
-  return { key, label, icon: LayoutGrid, active: false, onClick: () => undefined };
+function entry(key: string, label: string, children?: DockEntryLike[]): DockEntryLike {
+  return {
+    key,
+    label,
+    icon: LayoutGrid,
+    active: false,
+    onClick: () => undefined,
+    children,
+  };
 }
 
 describe("buildDockGroups", () => {
@@ -51,7 +58,7 @@ describe("buildDockGroups", () => {
     expect(admin?.items.map((i) => i.label)).toEqual(["Reglas", "Documentos", "Requisitos"]);
   });
 
-  it("SuperAdmin: Compañías y Tránsito viven en Administradores (con RBAC/Auditoría)", () => {
+  it("SuperAdmin: Plataforma (con Mandatos) vive anidada en Administradores", () => {
     const groups = buildDockGroups([
       entry("admin-companies", "Compañías"),
       entry("admin-transit", "Tránsito"),
@@ -60,6 +67,7 @@ describe("buildDockGroups", () => {
       entry("admin-quipux", "Quipux"),
       entry("rbac", "RBAC Admin"),
       entry("auditoria", "Auditoría"),
+      entry("admin-plataforma", "Plataforma", [entry("admin-mandatos", "Mandatos")]),
     ]);
     expect(groups).toHaveLength(1);
     expect(groups[0].label).toBe("Administradores");
@@ -71,15 +79,18 @@ describe("buildDockGroups", () => {
       "Quipux",
       "RBAC Admin",
       "Auditoría",
+      "Plataforma",
     ]);
+    const plataforma = groups[0].items.find((i) => i.key === "admin-plataforma");
+    expect(plataforma?.children?.map((c) => c.label)).toEqual(["Mandatos"]);
   });
 
-  it("Plataforma es submenú forzado con Mandatos (aunque sea un solo ítem)", () => {
-    const groups = buildDockGroups([entry("admin-mandatos", "Mandatos")]);
-    expect(groups).toHaveLength(1);
-    expect(groups[0].label).toBe("Plataforma");
-    expect(groups[0].forceMenu).toBe(true);
-    expect(groups[0].items.map((i) => i.label)).toEqual(["Mandatos"]);
+  it("flattenDockEntries expone Mandatos para la hoja móvil", () => {
+    const flat = flattenDockEntries([
+      entry("admin-companies", "Compañías"),
+      entry("admin-plataforma", "Plataforma", [entry("admin-mandatos", "Mandatos")]),
+    ]);
+    expect(flat.map((i) => i.label)).toEqual(["Compañías", "Mandatos"]);
   });
 
   it("Integraciones agrupa Log QX y Log ICT", () => {

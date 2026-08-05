@@ -1,7 +1,8 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
-import type { DockGroupView } from "./dockGroups";
+import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import type { DockEntryLike, DockGroupView } from "./dockGroups";
 import { useDisclosureNav } from "./useDisclosureNav";
 import { useEdgeClamp } from "./useEdgeClamp";
 
@@ -19,6 +20,7 @@ type Props = {
  * Dock de escritorio: agrupadores con panel hacia arriba.
  * Arriba (scroll): píldoras compactas con nombre.
  * Abajo (scroll): píldoras grandes solo icono.
+ * Soporta un nivel de submenú anidado (Administradores → Plataforma → Mandatos).
  */
 export function DockDesktop({ groups, atBottom, onHome, homeActive }: Props) {
   const { openSection, toggle, close, navRef, triggerId, panelId } = useDisclosureNav("flit-dock");
@@ -119,7 +121,7 @@ function DockGroupPill({
   panelId: string;
 }) {
   const { ref: panelRef, shift } = useEdgeClamp<HTMLDivElement>(open ? group.id : null);
-  const multi = group.items.length > 1 || group.forceMenu;
+  const multi = group.items.length > 1;
   const sole = !multi ? group.items[0] : null;
   const lit = group.active || open;
   const Icon = sole?.icon ?? group.icon;
@@ -133,7 +135,7 @@ function DockGroupPill({
     ? { background: "var(--nav-activo)", boxShadow: "var(--nav-sombra-activo)", color: "#ffffff" }
     : undefined;
 
-  if (sole) {
+  if (sole && !sole.children?.length) {
     return (
       <button
         id={triggerId}
@@ -203,32 +205,104 @@ function DockGroupPill({
           }}
         >
           <ul className="flex flex-col gap-0.5">
-            {group.items.map((it) => {
-              const ItemIcon = it.icon;
-              return (
-                <li key={it.key}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onNavigate();
-                      it.onClick();
-                    }}
-                    className="group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-[var(--nav-texto)] transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)] aria-[current=page]:bg-[var(--nav-app-bg)] aria-[current=page]:font-semibold aria-[current=page]:text-[var(--nav-texto-fuerte)]"
-                    aria-current={it.active ? "page" : undefined}
-                  >
-                    <ItemIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span className="truncate">{it.label}</span>
-                    <span
-                      aria-hidden="true"
-                      className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--nav-borde)] transition-colors group-hover:bg-[var(--acc)] group-aria-[current=page]:bg-[var(--acc)]"
-                    />
-                  </button>
-                </li>
-              );
-            })}
+            {group.items.map((it) => (
+              <DockPanelItem key={it.key} item={it} onNavigate={onNavigate} />
+            ))}
           </ul>
         </div>
       )}
     </div>
+  );
+}
+
+function DockPanelItem({
+  item,
+  onNavigate,
+}: {
+  item: DockEntryLike;
+  onNavigate: () => void;
+}) {
+  const kids = item.children;
+  const [nestedOpen, setNestedOpen] = useState(
+    () => Boolean(kids?.some((c) => c.active) || item.active),
+  );
+  const ItemIcon = item.icon;
+  const itemLit = item.active || Boolean(kids?.some((c) => c.active));
+
+  if (!kids?.length) {
+    return (
+      <li>
+        <button
+          type="button"
+          onClick={() => {
+            onNavigate();
+            item.onClick();
+          }}
+          className="group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-[var(--nav-texto)] transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)] aria-[current=page]:bg-[var(--nav-app-bg)] aria-[current=page]:font-semibold aria-[current=page]:text-[var(--nav-texto-fuerte)]"
+          aria-current={item.active ? "page" : undefined}
+        >
+          <ItemIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="truncate">{item.label}</span>
+          <span
+            aria-hidden="true"
+            className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--nav-borde)] transition-colors group-hover:bg-[var(--acc)] group-aria-[current=page]:bg-[var(--acc)]"
+          />
+        </button>
+      </li>
+    );
+  }
+
+  const nestedId = `flit-dock-nested-${item.key}`;
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => setNestedOpen((v) => !v)}
+        className={`group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)] ${
+          itemLit
+            ? "font-semibold text-[var(--nav-texto-fuerte)]"
+            : "text-[var(--nav-texto)]"
+        }`}
+        aria-expanded={nestedOpen}
+        aria-controls={nestedId}
+      >
+        <ItemIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span className="truncate">{item.label}</span>
+        <ChevronRight
+          className={`ml-auto h-3.5 w-3.5 shrink-0 transition-transform duration-200 motion-reduce:transition-none ${
+            nestedOpen ? "rotate-90" : ""
+          }`}
+          aria-hidden="true"
+        />
+      </button>
+      {nestedOpen && (
+        <ul id={nestedId} className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-[var(--nav-borde)] pl-2">
+          {kids.map((child) => {
+            const ChildIcon = child.icon;
+            return (
+              <li key={child.key}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onNavigate();
+                    child.onClick();
+                  }}
+                  className="group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-[var(--nav-texto)] transition-colors hover:bg-[var(--nav-app-bg)] hover:text-[var(--nav-texto-fuerte)] aria-[current=page]:bg-[var(--nav-app-bg)] aria-[current=page]:font-semibold aria-[current=page]:text-[var(--nav-texto-fuerte)]"
+                  aria-current={child.active ? "page" : undefined}
+                >
+                  <ChildIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="truncate">{child.label}</span>
+                  <span
+                    aria-hidden="true"
+                    className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--nav-borde)] transition-colors group-hover:bg-[var(--acc)] group-aria-[current=page]:bg-[var(--acc)]"
+                  />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </li>
   );
 }
