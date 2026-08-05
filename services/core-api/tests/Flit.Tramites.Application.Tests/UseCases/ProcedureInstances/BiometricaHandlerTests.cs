@@ -32,6 +32,12 @@ public sealed class BiometricaHandlerTests
                 Arg.Any<IReadOnlyCollection<(string DocumentType, string DocumentNumber)>>(),
                 Arg.Any<CancellationToken>())
             .Returns(new Dictionary<string, IReadOnlyList<LinkedProcedureSummary>>());
+        _repo.ListInFlightByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<ProcedureInstanceBiometricValidation>());
+        _repo.FindVigenteApprovedByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns((ProcedureInstanceBiometricValidation?)null);
 
         _iniciar = new IniciarBiometriaHandler(_repo);
         _getByToken = new GetBiometriaByTokenHandler(_repo);
@@ -111,9 +117,9 @@ public sealed class BiometricaHandlerTests
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
         var instance = Instance(id, tenant);
-        _repo.GetByIdWithBiometricsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
-        var (result, error) = await _iniciar.HandleAsync(id, tenant, Input(), ct);
+        var (result, error, _) = await _iniciar.HandleAsync(id, tenant, Input(), ct);
 
         error.Should().BeNull();
         result!.Token.Should().NotBeNullOrWhiteSpace();
@@ -132,9 +138,9 @@ public sealed class BiometricaHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
-        _repo.GetByIdWithBiometricsAsync(id, tenant, ct).Returns(Instance(id, tenant, status: "submitted"));
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(Instance(id, tenant, status: "submitted"));
 
-        var (_, error) = await _iniciar.HandleAsync(id, tenant, Input(), ct);
+        var (_, error, _) = await _iniciar.HandleAsync(id, tenant, Input(), ct);
 
         error.Should().Be("not_draft");
     }
@@ -143,9 +149,9 @@ public sealed class BiometricaHandlerTests
     public async Task Iniciar_NotFound_Returns404()
     {
         var ct = TestContext.Current.CancellationToken;
-        _repo.GetByIdWithBiometricsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
+        _repo.GetByIdWithBiometricsAndActorsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns((ProcedureInstance?)null);
 
-        var (_, error) = await _iniciar.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), Input(), ct);
+        var (_, error, _) = await _iniciar.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), Input(), ct);
 
         error.Should().Be("not_found");
     }
@@ -154,7 +160,7 @@ public sealed class BiometricaHandlerTests
     public async Task Iniciar_IncompleteData_Returns400()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (_, error) = await _iniciar.HandleAsync(
+        var (_, error, _) = await _iniciar.HandleAsync(
             Guid.NewGuid(), Guid.NewGuid(), new IniciarBiometriaInput(null, "", "CC", "1", "a@b.com"), ct);
 
         error.Should().Be("datos_incompletos");
@@ -164,7 +170,7 @@ public sealed class BiometricaHandlerTests
     public async Task Iniciar_InvalidParte_Returns400()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (_, error) = await _iniciar.HandleAsync(
+        var (_, error, _) = await _iniciar.HandleAsync(
             Guid.NewGuid(), Guid.NewGuid(), Input(parte: "tercero"), ct);
 
         error.Should().Be("parte_invalida");
@@ -186,11 +192,48 @@ public sealed class BiometricaHandlerTests
             ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
             CreatedAt = DateTimeOffset.UtcNow,
         });
-        _repo.GetByIdWithBiometricsAsync(id, tenant, ct).Returns(instance);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
 
-        var (_, error) = await _iniciar.HandleAsync(id, tenant, Input(), ct);
+        var (_, error, _) = await _iniciar.HandleAsync(id, tenant, Input(), ct);
 
         error.Should().Be("biometria_activa");
+    }
+
+    [Fact]
+    public async Task Iniciar_IdentidadVigenteEnOtroTramite_Returns409ConConflict()
+    {
+        // HU #11265 AC1: identidad aprobada vigente de otra fuente → no crear fila, 409 informativo.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
+        var vigenteId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        _repo.FindVigenteApprovedByDocumentAsync(tenant, "CC", "123456", Arg.Any<DateTimeOffset>(), ct)
+            .Returns(new ProcedureInstanceBiometricValidation
+            {
+                Id = vigenteId,
+                TenantId = tenant,
+                ProcedureInstanceId = Guid.NewGuid(),
+                DocumentType = "CC",
+                DocumentNumber = "123456",
+                Status = BiometricEstados.Aprobado,
+                ValidatedAt = now.AddDays(-2),
+                ValidUntil = now.AddDays(28),
+                TokenHash = "h",
+                ExpiresAt = now.AddHours(1),
+                CreatedAt = now.AddDays(-2),
+            });
+
+        var (_, error, conflict) = await _iniciar.HandleAsync(id, tenant, Input(), ct);
+
+        error.Should().Be("biometria_activa");
+        conflict.Should().NotBeNull();
+        conflict!.Motivo.Should().Be(IdentitySendMotivo.IdentidadVigente);
+        conflict.ValidationId.Should().Be(vigenteId);
+        instance.BiometricValidations.Should().BeEmpty();
+        _repo.DidNotReceive().Add(Arg.Any<ProcedureInstanceBiometricValidation>());
     }
 
     // ── Completar ──────────────────────────────────────────────────────────────

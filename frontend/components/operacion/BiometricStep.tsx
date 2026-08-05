@@ -12,7 +12,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { tramitesClient } from '@/lib/api/tramites-client';
+import { tramitesClient, getIdentitySendConflict } from '@/lib/api/tramites-client';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
@@ -801,40 +801,65 @@ function StartAction({
   provider,
   onStarted,
   label,
+  actorEmail,
 }: {
   parte: BiometricParte;
   instanceId: string | null;
   provider: string;
   onStarted: () => void;
   label?: string;
+  /** HU #11267 AC3 — correo del destinatario mostrado en la confirmación. */
+  actorEmail?: string | null;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [conflictMsg, setConflictMsg] = useState<string | null>(null);
   const readOnly = useWizardReadOnly();
 
   const isKyverum = provider === KYVERUM;
   const buttonLabel =
     label ?? (isKyverum ? 'Validar identidad' : 'Simular validación de identidad');
 
-  const handleStart = async () => {
+  const doStart = async () => {
     if (!instanceId) return;
     setError(null);
+    setConflictMsg(null);
     setSubmitting(true);
     try {
       if (isKyverum) {
-        // Solo la parte: el backend resuelve nombre/documento/email del actor del trámite.
         await tramitesClient.iniciarBiometric(instanceId, { parte });
       } else {
         await tramitesClient.simulateBiometric(instanceId, { parte });
       }
+      setConfirmOpen(false);
       onStarted();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'No se pudo iniciar la validación.',
-      );
+      const conflict = getIdentitySendConflict(err);
+      if (conflict) {
+        setConfirmOpen(false);
+        const hasta = conflict.validUntil
+          ? new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium' }).format(new Date(conflict.validUntil))
+          : null;
+        setConflictMsg(
+          conflict.motivo === 'identidad_vigente'
+            ? `Ya validada${hasta ? ` · vigente hasta el ${hasta}` : ''}. Se reutiliza la identidad existente.`
+            : 'Ya hay una validación en curso para esta persona. No se envió un correo nuevo.',
+        );
+      } else {
+        setError(
+          err instanceof Error ? err.message : 'No se pudo iniciar la validación.',
+        );
+      }
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleStart = () => {
+    if (!instanceId) return;
+    // AC3 — confirmación solo en disparadores con UI (no en el auto del wizard).
+    setConfirmOpen(true);
   };
 
   // En solo lectura no se inicia: solo se informa que la identidad quedó pendiente.
@@ -846,7 +871,6 @@ function StartAction({
 
   return (
     <div className="space-y-3">
-      {/* AC8 — estado vacío explícito: sin label (no es reintento) aún no hay validación para la parte. */}
       {!label && (
         <p className="text-[11px] font-medium opacity-70">
           Aún no se ha iniciado la validación de identidad de esta parte.
@@ -857,29 +881,52 @@ function StartAction({
           ? 'Inicia la validación: el cliente recibirá el enlace de captura por correo y aquí podrás compartir el enlace/QR.'
           : 'Mock de esta iteración: simula la validación biométrica de esta parte.'}
       </p>
-
-      {error && (
-        <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }} role="alert">
-          {error}
+      {conflictMsg && (
+        <p className="rounded-lg border px-2 py-1.5 text-[11px]" style={{ borderColor: '#5B8A1F', color: '#3F5F14' }} role="status">
+          {conflictMsg}
         </p>
       )}
-
-      <button
-        type="button"
-        onClick={() => void handleStart()}
-        disabled={submitting || !instanceId}
-        className="flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ background: '#557EFF' }}
-        aria-label={buttonLabel}
-      >
-        {submitting ? (
-          <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />
-        ) : (
-          <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-        )}
-        {submitting ? 'Procesando…' : buttonLabel}
-      </button>
+      {error && (
+        <p className="text-[11px] text-[#FF4E00]" role="alert">{error}</p>
+      )}
+      {!conflictMsg && (
+        <button
+          type="button"
+          onClick={handleStart}
+          disabled={submitting || !instanceId}
+          className="rounded-xl px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+          style={{ background: '#557EFF' }}
+        >
+          {buttonLabel}
+        </button>
+      )}
+      {confirmOpen && (
+        <div
+          className="rounded-xl border p-3 text-[11px]"
+          style={{ borderColor: '#557EFF' }}
+          role="alertdialog"
+          aria-label="Confirmar envío de validación"
+        >
+          <p>
+            Se enviará el enlace a{' '}
+            <strong>{actorEmail?.trim() || 'el correo registrado de la parte'}</strong>. ¿Continuar?
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button type="button" className="rounded-lg border px-2 py-1" onClick={() => setConfirmOpen(false)} disabled={submitting}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="rounded-lg px-2 py-1 font-semibold text-white disabled:opacity-50"
+              style={{ background: '#557EFF' }}
+              onClick={() => void doStart()}
+              disabled={submitting}
+            >
+              {submitting ? 'Enviando…' : 'Confirmar y enviar'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

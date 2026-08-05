@@ -116,10 +116,15 @@ public static class BiometricToken
 /// — el gestor debe reusar la existente en vez de duplicar. Requiere instancia en <c>draft</c>.
 /// La parte se normaliza vía <c>NormalizeParte</c>: matrícula usa 'comprador' (la FE/iniciar lo
 /// pasa explícito; vacío → null por compatibilidad legado); traspaso usa 'comprador'|'vendedor'.
+/// HU #11265: capa PREVIA de precedencia de envío (persona/tenant) antes del guard por parte.
 /// </summary>
-public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
+public sealed class IniciarBiometriaHandler(
+    IProcedureInstanceRepository repo,
+    ISignatureVaultPolicy? vaultPolicy = null)
 {
-    public async Task<(IniciarBiometriaResult? Result, string? Error)> HandleAsync(
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
+    public async Task<(IniciarBiometriaResult? Result, string? Error, IdentitySendDecision? Conflict)> HandleAsync(
         Guid id,
         Guid tenantId,
         IniciarBiometriaInput input,
@@ -129,26 +134,40 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
             || string.IsNullOrWhiteSpace(input.TipoDoc)
             || string.IsNullOrWhiteSpace(input.Documento)
             || string.IsNullOrWhiteSpace(input.Email))
-            return (null, "datos_incompletos");
+            return (null, "datos_incompletos", null);
 
         var parte = NormalizeParte(input.Parte);
         if (parte is "invalid")
-            return (null, "parte_invalida");
+            return (null, "parte_invalida", null);
 
-        var instance = await repo.GetByIdWithBiometricsAsync(id, tenantId, ct);
+        var instance = await repo.GetByIdWithBiometricsAndActorsAsync(id, tenantId, ct);
         if (instance is null)
-            return (null, "not_found");
+            return (null, "not_found", null);
         if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
-            return (null, "not_draft");
+            return (null, "not_draft", null);
+
+        var tipoDoc = input.TipoDoc.Trim();
+        var documento = input.Documento.Trim();
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
+        var now = DateTimeOffset.UtcNow;
+
+        // HU #11265 — precedencia de envío (capa PREVIA a idempotencia por parte).
+        var decision = await IdentitySendDecisionForTramite.EvaluateAsync(
+            repo, _vaultPolicy, tenantId, actor, tipoDoc, documento,
+            instance.BiometricValidations.ToList(), now, ct);
+        var (sendError, sendConflict, continueStart) = IdentitySendDecisionForTramite.ToStartOutcome(
+            decision, id, parte, instance.BiometricValidations.ToList());
+        if (!continueStart)
+            return (null, sendError, sendConflict);
 
         // Idempotencia por parte: una validación activa o aprobada bloquea recrear.
         var existing = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
             && v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso or BiometricEstados.Aprobado);
         if (existing is not null)
-            return (null, "biometria_activa");
+            return (null, "biometria_activa", null);
 
-        var now = DateTimeOffset.UtcNow;
         var token = BiometricToken.Generate();
         var validation = new ProcedureInstanceBiometricValidation
         {
@@ -157,8 +176,8 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
             ProcedureInstanceId = id,
             PartyRole = parte,
             Name = input.Nombre.Trim(),
-            DocumentType = input.TipoDoc.Trim(),
-            DocumentNumber = input.Documento.Trim(),
+            DocumentType = tipoDoc,
+            DocumentNumber = documento,
             Email = input.Email.Trim(),
             Status = BiometricEstados.Enviado,
             TokenHash = BiometricToken.Hash(token),
@@ -172,11 +191,20 @@ public sealed class IniciarBiometriaHandler(IProcedureInstanceRepository repo)
         // PK store-generated con Id ya seteado: marcar Added explícito para forzar INSERT
         // (mismo bug/convención que UploadAttachmentHandler).
         repo.Add(validation);
-        await repo.SaveChangesAsync(ct);
+        try
+        {
+            await repo.SaveChangesAsync(ct);
+        }
+        catch (Domain.Identity.IdentityInFlightConflictException)
+        {
+            // HU #11266 — carrera: otra petición ya creó la fila en vuelo.
+            return (null, "biometria_activa",
+                IdentitySendDecisionForTramite.InFlightRaceConflict(IdentitySendOrigen.Tramite));
+        }
 
         var dto = ToDto(validation, now);
         var result = new IniciarBiometriaResult(dto, token, $"/biometric/{token}");
-        return (result, null);
+        return (result, null, null);
     }
 
     private static string? NormalizeParte(string? parte)

@@ -357,6 +357,26 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return candidates.FirstOrDefault(v => BiometricRules.EsAprobadaVigente(v, now));
     }
 
+    public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListInFlightByDocumentAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct = default)
+    {
+        // HU #11265 — candidatos en vuelo para la precedencia de envío. Igualdad exacta (misma semántica
+        // que FindVigenteApprovedByDocumentAsync) para no cambiar veredictos del gate (AC5).
+        return await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => v.TenantId == tenantId
+                && v.DocumentType == tipoDoc
+                && v.DocumentNumber == documento
+                && (v.Status == BiometricEstados.PendienteEnvio
+                    || v.Status == BiometricEstados.Enviado
+                    || v.Status == BiometricEstados.EnProceso)
+                && (v.ProcedureInstanceId == null
+                    || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)))
+            .OrderByDescending(v => v.UpdatedAt ?? v.CreatedAt)
+            .Take(20)
+            .ToListAsync(ct);
+    }
+
     public async Task<IReadOnlySet<string>> ListVigenteApprovedIdentityKeysAsync(
         IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default)
     {
@@ -830,8 +850,27 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     public Task<bool> UserExistsAsync(Guid userId, CancellationToken ct) =>
         db.Users.AsNoTracking().AnyAsync(u => u.Id == userId, ct);
 
-    public Task SaveChangesAsync(CancellationToken ct) =>
-        db.SaveChangesAsync(ct);
+    public async Task SaveChangesAsync(CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (IsBiometricInFlightUniqueViolation(ex))
+        {
+            // HU #11266 — índice uq_biometric_validations_inflight_doc_norm: a lo sumo una validación
+            // en vuelo por (tenant, documento Trim+Upper). Se traduce el 23505 a excepción de dominio
+            // (checklist §B12); el handler responde 409 informativo.
+            throw new Domain.Identity.IdentityInFlightConflictException();
+        }
+    }
+
+    private const string BiometricInFlightUniqueIndex = "uq_biometric_validations_inflight_doc_norm";
+
+    private static bool IsBiometricInFlightUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException pg
+        && pg.SqlState == PostgresErrorCodes.UniqueViolation
+        && string.Equals(pg.ConstraintName, BiometricInFlightUniqueIndex, StringComparison.Ordinal);
 
     /// <summary>HU #11029 — ver <see cref="IProcedureInstanceRepository.ResetTracking"/>.</summary>
     public void ResetTracking() => db.ChangeTracker.Clear();

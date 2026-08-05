@@ -26,6 +26,13 @@ public sealed class PersonDataConsentCaptureTests
 
     public PersonDataConsentCaptureTests()
     {
+        _repo.ListInFlightByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<ProcedureInstanceBiometricValidation>());
+        _repo.FindVigenteApprovedByDocumentAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns((ProcedureInstanceBiometricValidation?)null);
+
         var kyverumHandler = new IniciarKyverumVerifyHandler(
             _repo,
             Substitute.For<IKyverumVerifyClient>(),

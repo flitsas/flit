@@ -33,7 +33,7 @@ internal static class BiometricaEndpoints
 
             if (providerOptions.IsKyverum)
             {
-                var (kResult, kError) = await kyverumHandler.HandleAsync(id, tenantId.Value, body, ct);
+                var (kResult, kError, kConflict) = await kyverumHandler.HandleAsync(id, tenantId.Value, body, ct);
                 return kError switch
                 {
                     "datos_incompletos" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Completa nombre, tipo de documento, documento y email."),
@@ -41,7 +41,10 @@ internal static class BiometricaEndpoints
                     "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                     "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en borrador o con subsanación activa."),
                     "actor_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Captura el actor de la parte antes de iniciar la validación de identidad."),
+                    "biometria_activa" or "enlace_vencido_reenvio" when kConflict is not null =>
+                        Results.Json(IdentitySendConflictDto.From(kConflict), statusCode: StatusCodes.Status409Conflict),
                     "biometria_activa" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe una biométrica activa o aprobada para esta parte."),
+                    "enlace_vencido_reenvio" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Hay una validación en vuelo con enlace vencido; reenvía la existente."),
                     "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor de validación de identidad rechazó la solicitud."),
                     "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
                     // Encolado (fallo transitorio del proveedor): 202 Accepted — el worker reintentará el envío.
@@ -50,14 +53,17 @@ internal static class BiometricaEndpoints
                 };
             }
 
-            var (result, error) = await mockHandler.HandleAsync(id, tenantId.Value, body, ct);
+            var (result, error, conflict) = await mockHandler.HandleAsync(id, tenantId.Value, body, ct);
             return error switch
             {
                 "datos_incompletos" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Completa nombre, tipo de documento, documento y email."),
                 "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor o vacío)."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede iniciar biométrica en borrador o con subsanación activa."),
+                "biometria_activa" or "enlace_vencido_reenvio" when conflict is not null =>
+                    Results.Json(IdentitySendConflictDto.From(conflict), statusCode: StatusCodes.Status409Conflict),
                 "biometria_activa" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe una biométrica activa o aprobada para esta parte."),
+                "enlace_vencido_reenvio" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Hay una validación en vuelo con enlace vencido; reenvía la existente."),
                 _ => Results.Created($"/api/v1/tramites/instances/{id}/biometric/{result!.Validation.Id}", result),
             };
         })
@@ -337,7 +343,7 @@ internal static class BiometricaEndpoints
             if (body is null)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el cuerpo de la solicitud.");
 
-            var (result, error) = await handler.HandleAsync(tenantId.Value, body, ct);
+            var (result, error, conflict) = await handler.HandleAsync(tenantId.Value, body, ct);
             return error switch
             {
                 "datos_incompletos" => Results.Problem(statusCode: 400, title: "Bad Request",
@@ -346,8 +352,13 @@ internal static class BiometricaEndpoints
                 // natural; la validación de personas jurídicas queda exclusiva del flujo de trámite.
                 "prevalidacion_solo_natural" => Results.Problem(statusCode: 422, title: "Unprocessable Entity",
                     detail: "La prevalidación solo admite persona natural. Para personas jurídicas, valida la identidad dentro de un trámite."),
+                // HU #11264 — 409 con cuerpo informativo (CF-03). Código HTTP sin cambiar.
+                "prevalidacion_activa" or "enlace_vencido_reenvio" when conflict is not null =>
+                    Results.Json(IdentitySendConflictDto.From(conflict), statusCode: StatusCodes.Status409Conflict),
                 "prevalidacion_activa" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "Ya existe una prevalidación activa para este documento."),
+                "enlace_vencido_reenvio" => Results.Problem(statusCode: 409, title: "Conflict",
+                    detail: "Hay una validación en vuelo con enlace vencido; reenvía en lugar de crear una nueva."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
                     detail: "El proveedor de validación de identidad rechazó la solicitud."),
                 "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable",

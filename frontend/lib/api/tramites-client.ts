@@ -248,6 +248,33 @@ export class TramitesApiError extends Error {
 }
 
 /**
+ * Duck-typing — 409 informativo de precedencia de envío de identidad (HU #11264/#11267).
+ * El cuerpo trae `motivo` (IdentitySendConflictDto), no un ProblemDetails clásico.
+ */
+export function getIdentitySendConflict(err: unknown): {
+  motivo: string;
+  status: string | null;
+  validatedAt: string | null;
+  validUntil: string | null;
+  validationId: string | null;
+  origen: string | null;
+} | null {
+  if (!err || typeof err !== 'object') return null;
+  const { status, problem } = err as { status?: unknown; problem?: unknown };
+  if (status !== 409 || !problem || typeof problem !== 'object') return null;
+  const p = problem as Record<string, unknown>;
+  if (typeof p.motivo !== 'string' || !p.motivo) return null;
+  return {
+    motivo: p.motivo,
+    status: typeof p.status === 'string' ? p.status : null,
+    validatedAt: typeof p.validatedAt === 'string' ? p.validatedAt : null,
+    validUntil: typeof p.validUntil === 'string' ? p.validUntil : null,
+    validationId: typeof p.validationId === 'string' ? p.validationId : null,
+    origen: typeof p.origen === 'string' ? p.origen : null,
+  };
+}
+
+/**
  * AC1 (HU #10882) — detecta el bloqueo de duplicidad de trámite en curso (409
  * `DUPLICATE_ACTIVE_PROCEDURE`, HU #10876) que puede devolver el preflight de consulta de
  * vehículo y extrae el id del trámite existente para ofrecer "Retomar" (AC2). Devuelve `null`

@@ -172,6 +172,15 @@ public interface IProcedureInstanceRepository
         Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #11265 — validaciones EN VUELO (<c>pendiente_envio</c> / <c>enviado</c> / <c>en_proceso</c>)
+    /// del documento en el tenant (standalone o ligadas a instancias no eliminadas). Igualdad exacta de
+    /// tipo/número como <see cref="FindVigenteApprovedByDocumentAsync"/> (no cambia el gate, AC5).
+    /// Solo lectura; lista acotada (máx. 20) ordenada por actividad reciente.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListInFlightByDocumentAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct = default);
+
+    /// <summary>
     /// Claves (<see cref="Entities.BiometricRules.IdentidadKey"/>) de todas las identidades APROBADAS y VIGENTES
     /// de los tenants indicados, en UNA consulta. Para el listado de trámites: resuelve la identidad por PERSONA
     /// sin N+1 (HU #10350 — referenciar la identidad vigente, no clonar por trámite). Set vacío si no hay ninguna.
