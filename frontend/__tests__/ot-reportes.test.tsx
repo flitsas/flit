@@ -524,7 +524,9 @@ describe("Reportes del organismo — Informe", () => {
     expect(screen.getByText("p90")).toBeInTheDocument();
     expect(screen.getByTestId("ot-report-histograma")).toBeInTheDocument();
     // Dice sobre cuántos se calculó: un tiempo sin denominador no se puede defender.
-    expect(screen.getByText(/Sobre 22 de 32 trámites recibidos/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Calculado sobre 22 de 32 trámites recibidos con decisión/),
+    ).toBeInTheDocument();
   });
 
   it("dibuja los periodos vacíos de la serie en lugar de omitirlos", async () => {
@@ -537,6 +539,19 @@ describe("Reportes del organismo — Informe", () => {
     expect(within(grafica).getByTitle("01 ago · Radicados: 12")).toBeInTheDocument();
     expect(within(grafica).getByTitle("02 ago · Radicados: 0")).toBeInTheDocument();
     expect(within(grafica).getByTitle("03 ago · Radicados: 20")).toBeInTheDocument();
+  });
+
+  it("las barras con dato tienen altura y las de cero no", async () => {
+    render(<OtReportsConsole transitOfficeId="ot-1" />);
+    await openTab(/Informe/);
+
+    const grafica = await screen.findByTestId("ot-report-tendencia");
+
+    // El máximo de la serie es 20, así que su barra ocupa el alto completo. jsdom no calcula
+    // layout, pero sí fija esto: una barra sin altura declarada no se dibuja, y así es como la
+    // gráfica salió en blanco la primera vez que se miró en el navegador.
+    expect(within(grafica).getByTitle("03 ago · Radicados: 20")).toHaveStyle({ height: "100%" });
+    expect(within(grafica).getByTitle("02 ago · Radicados: 0")).toHaveStyle({ height: "0px" });
   });
 
   it("permite elegir columnas y la tabla responde sin volver a consultar", async () => {

@@ -162,27 +162,32 @@ export function TrendChart({
         </Empty>
       ) : (
         <div className="overflow-x-auto">
-          <div className="flex min-w-full items-end gap-1" style={{ height: "10rem" }}>
+          {/* Las columnas se estiran a la altura del contenedor (`h-full` sobre un padre con altura
+              definida) y solo las BARRAS se alinean abajo. Envolverlas en un contenedor con
+              `items-end` dejaba a la columna con altura natural — o sea cero— y las barras, que se
+              miden en porcentaje, desaparecían por completo. */}
+          <div className="flex min-w-full gap-1" style={{ height: "10rem" }}>
             {serie.map((point) => (
-              <div key={point.bucket} className="flex min-w-[1.5rem] flex-1 flex-col items-center gap-1">
-                <div className="flex h-full w-full items-end justify-center gap-[2px]">
-                  {series.map((s) => {
-                    const value = point[s.key];
-                    return (
-                      <div
-                        key={s.key}
-                        className="w-1/4 rounded-t-sm transition-all"
-                        style={{
-                          // Un mínimo visible para los valores > 0: una barra de 0,3 px se lee como
-                          // ausencia, y confundir «uno» con «ninguno» es justo lo que no puede pasar.
-                          height: value === 0 ? "0" : `${Math.max(3, (value / max) * 100)}%`,
-                          background: s.color,
-                        }}
-                        title={`${point.label} · ${s.label}: ${value}`}
-                      />
-                    );
-                  })}
-                </div>
+              <div
+                key={point.bucket}
+                className="flex h-full min-w-[1.5rem] flex-1 items-end justify-center gap-[2px]"
+              >
+                {series.map((s) => {
+                  const value = point[s.key];
+                  return (
+                    <div
+                      key={s.key}
+                      className="w-1/4 rounded-t-sm transition-all"
+                      style={{
+                        // Un mínimo visible para los valores > 0: una barra de 0,3 px se lee como
+                        // ausencia, y confundir «uno» con «ninguno» es justo lo que no puede pasar.
+                        height: value === 0 ? "0" : `${Math.max(3, (value / max) * 100)}%`,
+                        background: s.color,
+                      }}
+                      title={`${point.label} · ${s.label}: ${value}`}
+                    />
+                  );
+                })}
               </div>
             ))}
           </div>

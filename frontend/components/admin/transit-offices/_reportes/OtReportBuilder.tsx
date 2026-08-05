@@ -34,6 +34,7 @@ import {
   estadoMeta,
   formatHours,
   formatInt,
+  plural,
   REPORT_COLUMNS,
   REPORT_PRESETS,
   reportFileName,
@@ -193,7 +194,7 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
         busy: false,
         notice: recortado
           ? `Se exportaron ${formatInt(rows.length)} de ${formatInt(total)} filas: el archivo llegó al tope de ${formatInt(EXPORT_MAX_ROWS)}. Acota el rango o filtra por empresa para llevarte el resto.`
-          : `Se exportaron ${formatInt(rows.length)} filas con las ${visibleColumns.length} columnas visibles.`,
+          : `Se exportaron ${plural(rows.length, "fila", "filas")} con ${plural(visibleColumns.length, "columna visible", "columnas visibles")}.`,
       });
     } catch (e: unknown) {
       setExportState({
@@ -305,8 +306,8 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
               <>
                 <TimeHistogram buckets={resumen.distribucionTiempos} />
                 <p className="text-[11px] text-[#6B7280] dark:text-white/50">
-                  Sobre {formatInt(resumen.decididos)} de {formatInt(resumen.total)} trámites
-                  recibidos que ya tienen decisión.
+                  Calculado sobre {formatInt(resumen.decididos)} de{" "}
+                  {plural(resumen.total, "trámite recibido", "trámites recibidos")} con decisión.
                 </p>
               </>
             )}
@@ -447,7 +448,7 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
 
             <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
               <span className="text-[#6B7280] dark:text-white/50">
-                {formatInt(report.total)} trámites · página {report.page} de {totalPages}
+                {plural(report.total, "trámite", "trámites")} · página {report.page} de {totalPages}
               </span>
               <div className="flex items-center gap-2">
                 <button

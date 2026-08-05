@@ -101,6 +101,14 @@ export function formatHours(value: number | null | undefined): string {
   return `${numFmt.format(value / 24)} días`;
 }
 
+/**
+ * Conteo con su sustantivo concordado. «1 trámites» delata que nadie leyó la pantalla con datos
+ * reales, y es justo el caso —un solo registro— en el que alguien mira el informe con lupa.
+ */
+export function plural(count: number, singular: string, many: string): string {
+  return `${formatInt(count)} ${count === 1 ? singular : many}`;
+}
+
 export function formatDays(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   return `${numFmt.format(value)} ${value === 1 ? "día" : "días"}`;
