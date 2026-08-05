@@ -7,6 +7,7 @@ import {
   type PrendaFormHandle,
   parseRuntGravamenesJson,
   buildRuntPrendaSummary,
+  pickRuntAcreedor,
 } from '../PrendaForm';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { FieldValue } from '@/lib/api/types/procedure-runtime';
@@ -73,9 +74,77 @@ describe('PrendaForm (matrícula, R4)', () => {
     expect(screen.getByLabelText('Acreedor (beneficiario)')).toBeInTheDocument();
     expect(screen.getByLabelText('Documento de soporte de prenda')).toBeInTheDocument();
     expect(screen.getByText('Certificado / registro de prenda')).toBeInTheDocument();
+    expect(screen.getByText(/Obligatorio/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Adjuntar' })).toBeInTheDocument();
     expect(screen.getByLabelText(/Subir Certificado/i)).toBeInTheDocument();
     await waitFor(() => expect(client.getAttachments).toHaveBeenCalled());
+  });
+
+  it('con documentRequired=false muestra el certificado como opcional', async () => {
+    render(<PrendaForm instanceId="abc" documentRequired={false} />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Registrar prenda' }));
+
+    expect(screen.getByLabelText('Documento de soporte de prenda')).toBeInTheDocument();
+    expect(screen.getByText(/Opcional/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Obligatorio/i)).not.toBeInTheDocument();
+  });
+
+  it('con documentRequired=true y registrar sin adjunto reporta gate Continuar en false', async () => {
+    const onGate = vi.fn();
+    render(
+      <PrendaForm instanceId="abc" documentRequired onDocumentGateChange={onGate} />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Registrar prenda' }));
+
+    await waitFor(() => expect(onGate).toHaveBeenCalledWith(false));
+  });
+
+  it('con documentRequired=false y registrar reporta gate Continuar en true', async () => {
+    const onGate = vi.fn();
+    render(
+      <PrendaForm
+        instanceId="abc"
+        documentRequired={false}
+        onDocumentGateChange={onGate}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Registrar prenda' }));
+
+    await waitFor(() => expect(onGate).toHaveBeenCalledWith(true));
+  });
+
+  it('precarga acreedor y NIT desde la consulta RUNT cuando no hay prenda guardada', async () => {
+    client.getInstance.mockResolvedValue({
+      fieldValues: [
+        {
+          formFieldId: '',
+          fieldKey: 'runt_gravamenes',
+          valueText: null,
+          valueJson: JSON.stringify([
+            {
+              nombreAcreedor: 'BANCO RUNT SA',
+              numeroDocumentoAcreedor: '900123456',
+            },
+          ]),
+          source: 'consultation',
+        },
+      ],
+    } as never);
+
+    render(<PrendaForm instanceId="abc" runtHasGravamen />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: 'Registrar prenda' })).toBeChecked();
+    });
+    expect(screen.getByLabelText('Acreedor (beneficiario)')).toHaveValue('BANCO RUNT SA');
+    expect(screen.getByLabelText('NIT / documento del acreedor')).toHaveValue('900123456');
   });
 
   it('en traspaso ofrece las 4 decisiones de gestión (sin "sin prenda") como radios', async () => {
@@ -238,5 +307,15 @@ describe('parseRuntGravamenesJson / buildRuntPrendaSummary', () => {
     ]);
     expect(summary.tienePrendas).toBe('SI');
     expect(summary.nombreAcreedor).toBe('Banco X');
+  });
+
+  it('pickRuntAcreedor prioriza el primer ítem con acreedor/documento', () => {
+    const pick = pickRuntAcreedor({
+      nombreAcreedor: 'Resumen',
+      items: [
+        { acreedor: 'BANCO ITEM', documentoAcreedor: '800111222' },
+      ],
+    });
+    expect(pick).toEqual({ nombre: 'BANCO ITEM', documento: '800111222' });
   });
 });

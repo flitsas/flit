@@ -21,13 +21,10 @@ vi.mock("@/lib/api/tramites-client", () => ({
   },
 }));
 
-// HU #10887 — el toggle dedicado que también expone esta sección (dependencias del hijo).
-vi.mock("@/lib/api/admin-procedure-documents", () => ({
-  fetchProcedureDocumentRequirements: vi.fn().mockResolvedValue([]),
-}));
-vi.mock("@/lib/api/admin-document-requirement-overrides", () => ({
-  fetchDocumentRequirementOverrides: vi.fn().mockResolvedValue([]),
-  setDocumentRequirementOverride: vi.fn(),
+// Toggle prenda opcional por compañía (hub OT).
+vi.mock("@/lib/api/admin-ot-prenda-document-policies", () => ({
+  fetchOtPrendaDocumentPoliciesForOffice: vi.fn().mockResolvedValue([]),
+  setOtPrendaDocumentPolicyForOffice: vi.fn(),
 }));
 
 import {
@@ -36,12 +33,10 @@ import {
   fetchOtDocumentTags,
   updateOtDocumentPrecedence,
 } from "@/lib/api/admin-ot";
-import { fetchProcedureDocumentRequirements } from "@/lib/api/admin-procedure-documents";
 import {
-  fetchDocumentRequirementOverrides,
-  setDocumentRequirementOverride,
-} from "@/lib/api/admin-document-requirement-overrides";
-import type { ProcedureDocumentRequirement } from "@/lib/api/types-documents";
+  fetchOtPrendaDocumentPoliciesForOffice,
+  setOtPrendaDocumentPolicyForOffice,
+} from "@/lib/api/admin-ot-prenda-document-policies";
 
 const OT_ID = "ot-hub-1";
 
@@ -192,23 +187,8 @@ describe("DocumentsSection — HU #11185 (prelación operativa)", () => {
   });
 });
 
-// HU #10887 — el toggle "Documento de prenda obligatorio" se expone también en el detalle
-// de la OT (pestaña Prelación), reutilizando PledgeDocumentOverrideToggle con el
-// transitOfficeId del hub y el tipo de trámite seleccionado en esta misma sección.
-describe("DocumentsSection — HU #10887 (toggle documento de prenda en el hub OT)", () => {
-  const pledgeRequirement: ProcedureDocumentRequirement = {
-    id: "req-prenda",
-    procedureTypeId: "pt-1",
-    documentTypeId: "doc-prenda",
-    ordenDefault: 10,
-    obligatorio: false,
-    documento: {
-      codigo: "inscripcion_prenda",
-      nombre: "Inscripción / Registro de Prenda",
-      estado: "activo",
-    },
-  };
-
+// Documento de prenda opcional por compañía en el hub OT.
+describe("DocumentsSection — prenda opcional por compañía", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchOtDocumentPrecedence).mockResolvedValue({
@@ -217,37 +197,23 @@ describe("DocumentsSection — HU #10887 (toggle documento de prenda en el hub O
     vi.mocked(fetchOtDocumentTags).mockResolvedValue({ data: [] });
   });
 
-  it("muestra el toggle con el transitOfficeId del hub y el trámite seleccionado, y al activarlo persiste", async () => {
-    vi.mocked(fetchProcedureDocumentRequirements).mockResolvedValue([pledgeRequirement]);
-    vi.mocked(fetchDocumentRequirementOverrides).mockResolvedValue([]);
-    vi.mocked(setDocumentRequirementOverride).mockResolvedValue(undefined);
+  it("lista compañías del OT y permite activar prenda opcional", async () => {
+    vi.mocked(fetchOtPrendaDocumentPoliciesForOffice).mockResolvedValue([
+      { tenantId: "t1", tenantName: "Gestora Uno", documentOptional: false },
+    ]);
+    vi.mocked(setOtPrendaDocumentPolicyForOffice).mockResolvedValue(undefined);
 
     const user = userEvent.setup();
     renderSection();
 
-    expect(
-      await screen.findByText("Documento de prenda por Organismo de Tránsito"),
-    ).toBeInTheDocument();
-    expect(fetchProcedureDocumentRequirements).toHaveBeenCalledWith("pt-1", expect.anything());
-    expect(fetchDocumentRequirementOverrides).toHaveBeenCalledWith(
-      "pt-1",
-      OT_ID,
-      expect.anything(),
-    );
+    expect(await screen.findByText("Documento de prenda por compañía")).toBeInTheDocument();
+    expect(fetchOtPrendaDocumentPoliciesForOffice).toHaveBeenCalledWith(OT_ID, expect.anything());
 
-    const toggle = await screen.findByRole("switch", { name: "Documento de prenda obligatorio" });
-    expect(toggle).toHaveAttribute("aria-checked", "false");
-
+    const toggle = await screen.findByRole("switch", { name: /gestora uno — prenda opcional/i });
     await user.click(toggle);
 
     await waitFor(() =>
-      expect(setDocumentRequirementOverride).toHaveBeenCalledWith({
-        procedureTypeId: "pt-1",
-        documentTypeId: "doc-prenda",
-        transitOfficeId: OT_ID,
-        estado: "REQUIRED",
-      }),
+      expect(setOtPrendaDocumentPolicyForOffice).toHaveBeenCalledWith(OT_ID, "t1", true),
     );
-    expect(toggle).toHaveAttribute("aria-checked", "true");
   });
 });

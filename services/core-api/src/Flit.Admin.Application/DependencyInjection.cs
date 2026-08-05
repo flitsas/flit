@@ -150,6 +150,10 @@ public static class DependencyInjection
         services.AddScoped<GetOtBlockingPoliciesHandler>();
         services.AddScoped<SetOtBlockingPolicyHandler>();
 
+        // Documento de prenda: opt-out por compañía + OT (default obligatorio).
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.OtPrendaDocumentPolicy.GetOtPrendaDocumentPoliciesHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.OtPrendaDocumentPolicy.SetOtPrendaDocumentPolicyHandler>();
+
         // HU #10679 — consulta global (cross-tenant, SuperAdmin) del rastro unificado de
         // auditoría administrativa/seguridad. IAdminAuditLogRepository se registra en
         // AddAdminInfrastructure.

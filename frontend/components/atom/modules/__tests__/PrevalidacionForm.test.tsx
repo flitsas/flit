@@ -33,6 +33,21 @@ vi.mock('@/lib/api/tramites-client', () => ({
       this.name = 'TramitesApiError';
     }
   },
+  getIdentitySendConflict: (err: unknown) => {
+    if (!err || typeof err !== 'object') return null;
+    const { status, problem } = err as { status?: unknown; problem?: unknown };
+    if (status !== 409 || !problem || typeof problem !== 'object') return null;
+    const p = problem as Record<string, unknown>;
+    if (typeof p.motivo !== 'string' || !p.motivo) return null;
+    return {
+      motivo: p.motivo,
+      status: typeof p.status === 'string' ? p.status : null,
+      validatedAt: typeof p.validatedAt === 'string' ? p.validatedAt : null,
+      validUntil: typeof p.validUntil === 'string' ? p.validUntil : null,
+      validationId: typeof p.validationId === 'string' ? p.validationId : null,
+      origen: typeof p.origen === 'string' ? p.origen : null,
+    };
+  },
 }));
 
 // ── Imports después de los mocks ────────────────────────────────────────────
@@ -154,6 +169,9 @@ describe('PrevalidacionForm (HU #10868)', () => {
     await user.type(screen.getByLabelText(/nombre completo/i), 'Carlos Prueba');
     await user.type(screen.getByLabelText(/correo electrónico/i), 'carlos@prueba.co');
     await user.click(screen.getByRole('button', { name: /crear prevalidación/i }));
+    // HU #11267 AC3 — confirmación con destinatario antes de enviar.
+    expect(screen.getByRole('alertdialog')).toHaveTextContent(/carlos@prueba\.co/i);
+    await user.click(screen.getByRole('button', { name: /confirmar y enviar/i }));
 
     await waitFor(() => {
       // CF-01 (HU #11006, D1) — ya no se envía personType/legalRep*: el backend asume "natural".
@@ -186,10 +204,39 @@ describe('PrevalidacionForm (HU #10868)', () => {
     await user.type(screen.getByLabelText(/nombre completo/i), 'Pedro Activo');
     await user.type(screen.getByLabelText(/correo electrónico/i), 'pedro@activo.co');
     await user.click(screen.getByRole('button', { name: /crear prevalidación/i }));
+    await user.click(screen.getByRole('button', { name: /confirmar y enviar/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(/ya existe una prevalidación activa/i);
     });
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it('HU11267 AC1: 409 con cuerpo informativo muestra vigencia y Ver proceso', async () => {
+    const user = userEvent.setup();
+    const { TramitesApiError } = await import('@/lib/api/tramites-client');
+    mocks.createPrevalidacion.mockRejectedValueOnce(
+      new TramitesApiError(409, 'Conflict', {
+        motivo: 'identidad_vigente',
+        status: 'aprobado',
+        validatedAt: '2026-08-01T00:00:00Z',
+        validUntil: '2026-08-31T00:00:00Z',
+        validationId: 'val-existente',
+        origen: 'tramite',
+      }),
+    );
+
+    render(<PrevalidacionForm onClose={onClose} onSuccess={onSuccess} />);
+
+    await user.type(screen.getByLabelText(/número de documento/i), '111');
+    await user.type(screen.getByLabelText(/nombre completo/i), 'Ana');
+    await user.type(screen.getByLabelText(/correo electrónico/i), 'ana@x.co');
+    await user.click(screen.getByRole('button', { name: /crear prevalidación/i }));
+    await user.click(screen.getByRole('button', { name: /confirmar y enviar/i }));
+
+    expect(await screen.findByText(/ya validada/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /ver el proceso existente/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /crear prevalidación/i })).not.toBeInTheDocument();
     expect(onSuccess).not.toHaveBeenCalled();
   });
 

@@ -249,6 +249,18 @@ export interface OtBlockingPolicy {
   blocks: boolean;
 }
 
+/** Check activo ⇒ documento de prenda opcional para el par compañía+OT (default = obligatorio). */
+export interface OtPrendaDocumentPolicy {
+  transitOfficeId: string;
+  documentOptional: boolean;
+}
+
+export interface OtPrendaDocumentPolicyCompany {
+  tenantId: string;
+  tenantName: string;
+  documentOptional: boolean;
+}
+
 /**
  * Posición por defecto del toggle "¿bloquea el trámite?" cuando la compañía no configuró una fila
  * (par tenant, OT). Refleja el comportamiento PREVIO del trámite:

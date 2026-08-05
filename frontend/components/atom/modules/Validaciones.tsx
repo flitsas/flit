@@ -6,6 +6,7 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -27,12 +28,15 @@ import {
   type ValidacionesUiFilters,
 } from './ValidacionesFilterToolbar';
 import { PrevalidacionDetailDrawer } from './PrevalidacionDetailDrawer';
+import { PersonIdentityDetailDrawer } from './PersonIdentityDetailDrawer';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   BiometricEstado,
   BiometricValidationStats,
   StuckIdentityValidation,
   StuckIdentityValidationsResponse,
+  TenantBiometricPerson,
+  TenantBiometricPersonFilters,
   TenantBiometricValidation,
   TenantBiometricValidationFilters,
 } from '@/lib/api/types/procedure-runtime';
@@ -107,10 +111,10 @@ function maskDoc(tipoDoc: string, documento: string): string {
  */
 function vigenciaBadge(dias: number | null): { label: string; color: string; bg: string } | null {
   if (dias == null) return null;
-  if (dias <= 0) return { label: 'Vencida', color: '#FF4E00', bg: 'rgba(255,78,0,0.12)' };
+  if (dias <= 0) return { label: 'Vencida', color: '#E43D30', bg: 'rgba(228,61,48,0.12)' };
   const label = `${dias} día${dias === 1 ? '' : 's'}`;
-  if (dias <= 7) return { label, color: '#B26A00', bg: 'rgba(249,172,0,0.16)' };
-  return { label, color: '#5B8A1F', bg: 'rgba(140,198,63,0.16)' };
+  if (dias <= 7) return { label, color: '#F05A35', bg: 'rgba(249,172,0,0.16)' };
+  return { label, color: '#70CF3A', bg: 'rgba(140,198,63,0.16)' };
 }
 
 /**
@@ -147,6 +151,30 @@ function buildApiFilters(f: ValidacionesUiFilters): TenantBiometricValidationFil
   };
 }
 
+/** Filtros de persona para el endpoint agrupado (HU #11271): sin campos de validación. */
+function buildPersonApiFilters(f: ValidacionesUiFilters): TenantBiometricPersonFilters {
+  const text = (s: string) => (s.trim() === '' ? undefined : s.trim());
+  const num = (s: string) => {
+    if (s.trim() === '') return undefined;
+    const n = Number(s);
+    return Number.isNaN(n) ? undefined : n;
+  };
+  return {
+    name: text(f.name),
+    documentType: text(f.documentType),
+    documentNumber: text(f.documentNumber),
+    status: f.status || undefined,
+    createdFrom: f.createdFrom ? `${f.createdFrom}T00:00:00` : undefined,
+    createdTo: f.createdTo ? `${f.createdTo}T23:59:59` : undefined,
+    vigenciaEstado: f.vigenciaEstado || undefined,
+    expiraDesde: f.expiraDesde ? `${f.expiraDesde}T00:00:00` : undefined,
+    expiraHasta: f.expiraHasta ? `${f.expiraHasta}T23:59:59` : undefined,
+    venceEnDias: num(f.venceEnDias),
+  };
+}
+
+type ValidacionesViewMode = 'person' | 'validation';
+
 /** Cadencia del auto-refresco en vivo de la grilla (fase 2). 15 s: fresco sin presionar el backend. */
 const AUTO_REFRESH_MS = 15_000;
 
@@ -155,18 +183,31 @@ const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
 const DEFAULT_PAGE_SIZE = 20;
 
 export function Validaciones() {
+  const [viewMode, setViewMode] = useState<ValidacionesViewMode>('person');
+  const viewModeRef = useRef(viewMode);
+  viewModeRef.current = viewMode;
+
   const [validations, setValidations] = useState<TenantBiometricValidation[] | null>(null);
+  const [persons, setPersons] = useState<TenantBiometricPerson[] | null>(null);
   const [stats, setStats] = useState<BiometricValidationStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   // Eventos de identidad ATASCADOS (dead-letter) del tenant + ids que se están reencolando.
+  // HU #11268 — cuatro estados del panel: loading / error / vacío / lleno.
   const [stuck, setStuck] = useState<StuckIdentityValidationsResponse | null>(null);
+  const [stuckLoading, setStuckLoading] = useState(true);
+  const [stuckError, setStuckError] = useState<string | null>(null);
   const [requeuing, setRequeuing] = useState<Set<string>>(() => new Set());
   const [requeuingAll, setRequeuingAll] = useState(false);
   // Panel lateral de proceso/tracking (CF-06/07): tabla compacta + botón "Proceso".
   const [processId, setProcessId] = useState<string | null>(null);
+  // HU #11273 — historial multi-validación por persona.
+  const [personDetail, setPersonDetail] = useState<{
+    documentType: string;
+    documentNumber: string;
+  } | null>(null);
 
   // Paginación server-side (el listado ya NO se topa a 500; se navega por páginas).
   const [page, setPage] = useState(1);
@@ -191,6 +232,8 @@ export function Validaciones() {
   appliedRef.current = applied;
   const validationsRef = useRef(validations);
   validationsRef.current = validations;
+  const personsRef = useRef(persons);
+  personsRef.current = persons;
   const fetchingRef = useRef(false);
   const reqIdRef = useRef(0);
 
@@ -200,21 +243,40 @@ export function Validaciones() {
       fetchingRef.current = true;
       if (!opts?.background) setFetching(true);
       try {
-        const res = await tramitesClient.listTenantBiometricValidations({
-          ...buildApiFilters(uiFilters),
-          page: pageRef.current,
-          pageSize: pageSizeRef.current,
-        });
-        if (reqId !== reqIdRef.current) return; // respuesta obsoleta (llegó otra consulta después)
-        setValidations(res.validations);
-        setStats(res.stats);
-        setTotal(res.total);
+        if (viewModeRef.current === 'person') {
+          const res = await tramitesClient.listTenantBiometricPersons({
+            ...buildPersonApiFilters(uiFilters),
+            page: pageRef.current,
+            pageSize: pageSizeRef.current,
+          });
+          if (reqId !== reqIdRef.current) return;
+          setPersons(res.persons);
+          setValidations(null);
+          setStats(res.stats);
+          setTotal(res.total);
+        } else {
+          const res = await tramitesClient.listTenantBiometricValidations({
+            ...buildApiFilters(uiFilters),
+            page: pageRef.current,
+            pageSize: pageSizeRef.current,
+          });
+          if (reqId !== reqIdRef.current) return;
+          setValidations(res.validations);
+          setPersons(null);
+          setStats(res.stats);
+          setTotal(res.total);
+        }
         setError(() => null);
         setLastUpdatedAt(new Date());
       } catch (err) {
         if (reqId !== reqIdRef.current) return;
         // En auto-refresco con datos ya en pantalla, un fallo transitorio NO machaca la vista con el error.
-        if (opts?.background && validationsRef.current !== null) return;
+        if (
+          opts?.background &&
+          (validationsRef.current !== null || personsRef.current !== null)
+        ) {
+          return;
+        }
         setError(() =>
           err instanceof Error ? err.message : 'No se pudieron cargar las validaciones.',
         );
@@ -229,13 +291,24 @@ export function Validaciones() {
     [],
   );
 
-  // Eventos atascados (dead-letter): independiente de los filtros y tolerante a fallo (no rompe la grilla).
-  const refreshStuck = useCallback(async () => {
+  // Eventos atascados (dead-letter): independiente de los filtros. HU #11268 — expone error/carga
+  // sin romper la grilla principal (el fallo queda acotado al panel de atascadas).
+  const stuckRef = useRef(stuck);
+  stuckRef.current = stuck;
+  const refreshStuck = useCallback(async (opts?: { background?: boolean }) => {
+    if (!opts?.background) setStuckLoading(true);
     try {
       const res = await tramitesClient.listStuckIdentityValidations();
       setStuck(res);
-    } catch {
-      // Observabilidad opcional: si falla, se conserva lo último mostrado.
+      setStuckError(null);
+    } catch (err) {
+      // En auto-refresco con datos ya mostrados, un fallo transitorio no machaca el panel.
+      if (opts?.background && stuckRef.current !== null) return;
+      setStuckError(
+        err instanceof Error ? err.message : 'No se pudieron cargar las validaciones atascadas.',
+      );
+    } finally {
+      if (!opts?.background) setStuckLoading(false);
     }
   }, []);
 
@@ -259,7 +332,7 @@ export function Validaciones() {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       if (fetchingRef.current) return;
       void load(appliedRef.current, { background: true });
-      void refreshStuck();
+      void refreshStuck({ background: true });
     };
     const intervalId = setInterval(tick, AUTO_REFRESH_MS);
     const onVisibility = () => {
@@ -351,10 +424,43 @@ export function Validaciones() {
   }, [refreshStuck, load]);
 
   // AC8 — estados de UI. La carga inicial (skeleton) solo aplica antes de la primera respuesta.
-  const initialLoading = !hasLoadedOnce && validations === null && error === null;
-  const isEmpty = validations !== null && validations.length === 0;
+  const initialLoading =
+    !hasLoadedOnce &&
+    validations === null &&
+    persons === null &&
+    error === null;
+  const isEmpty =
+    (viewMode === 'person' && persons !== null && persons.length === 0) ||
+    (viewMode === 'validation' && validations !== null && validations.length === 0);
   // "Sin resultados" (AC2) vs "Aún no hay validaciones" se decide por los filtros EFECTIVAMENTE aplicados.
   const filtersActive = hasActiveValidacionesFilters(applied);
+
+  const switchViewMode = (mode: ValidacionesViewMode) => {
+    if (mode === viewMode) return;
+    viewModeRef.current = mode;
+    setViewMode(mode);
+    setPage(1);
+    pageRef.current = 1;
+    setValidations(null);
+    setPersons(null);
+    if (mode === 'person') {
+      const cleared: ValidacionesUiFilters = {
+        ...filtersRef.current,
+        referenceNumber: '',
+        modalidad: '',
+        partyRole: '',
+        provider: '',
+        scoreMin: '',
+        scoreMax: '',
+        rejectionReason: '',
+      };
+      setFilters(cleared);
+      setApplied(cleared);
+      void load(cleared);
+    } else {
+      void load(appliedRef.current);
+    }
+  };
 
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
@@ -366,8 +472,8 @@ export function Validaciones() {
             {/* HU #10868 — enlace a pantalla de prevalidación standalone */}
             <Link
               href="/tramites/prevalidaciones"
-              className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:border-[#557EFF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
-              style={{ color: '#557EFF' }}
+              className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:border-[#4F74C9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F74C9]"
+              style={{ color: '#4F74C9' }}
               aria-label="Ir a prevalidaciones de identidad"
             >
               <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
@@ -381,17 +487,97 @@ export function Validaciones() {
       <StatsCards stats={stats} loading={initialLoading} />
 
       {hasLoadedOnce && (
+        <div
+          className="flex flex-wrap items-center gap-2 shrink-0"
+          role="group"
+          aria-label="Modo de vista de la grilla"
+        >
+          <button
+            type="button"
+            onClick={() => switchViewMode('person')}
+            className="rounded-xl px-3 py-1.5 text-[11px] font-semibold border focus-visible:outline focus-visible:outline-2"
+            style={{
+              borderColor: viewMode === 'person' ? '#4F74C9' : 'rgba(22,39,68,0.15)',
+              background: viewMode === 'person' ? 'rgba(79,116,201,0.12)' : 'transparent',
+              color: viewMode === 'person' ? '#4F74C9' : undefined,
+            }}
+            aria-pressed={viewMode === 'person'}
+          >
+            Por persona
+          </button>
+          <button
+            type="button"
+            onClick={() => switchViewMode('validation')}
+            className="rounded-xl px-3 py-1.5 text-[11px] font-semibold border focus-visible:outline focus-visible:outline-2"
+            style={{
+              borderColor: viewMode === 'validation' ? '#4F74C9' : 'rgba(22,39,68,0.15)',
+              background: viewMode === 'validation' ? 'rgba(79,116,201,0.12)' : 'transparent',
+              color: viewMode === 'validation' ? '#4F74C9' : undefined,
+            }}
+            aria-pressed={viewMode === 'validation'}
+          >
+            Por validación
+          </button>
+        </div>
+      )}
+
+      {hasLoadedOnce && (
         <ValidacionesFilterToolbar
           filters={filters}
           onChange={applyChange}
           onRefresh={() => void handleRefresh()}
           onClearFilters={handleClearFilters}
           loading={fetching}
-          resultCount={validations?.length ?? 0}
+          resultCount={
+            viewMode === 'person' ? (persons?.length ?? 0) : (validations?.length ?? 0)
+          }
+          groupedMode={viewMode === 'person'}
+          resultCountLabel={
+            viewMode === 'person'
+              ? total === 0
+                ? 'Sin resultados'
+                : `${total} persona${total === 1 ? '' : 's'}`
+              : undefined
+          }
         />
       )}
 
-      {stuck && stuck.total > 0 && (
+      {stuckLoading && (
+        <div
+          className="rounded-2xl border p-4 shrink-0 animate-pulse"
+          style={{ borderColor: 'rgba(240,90,53,0.35)', background: 'rgba(249,172,0,0.06)' }}
+          role="status"
+          aria-label="Cargando validaciones atascadas"
+        >
+          <div className="h-4 w-48 rounded bg-black/10 dark:bg-white/10" />
+          <div className="mt-2 h-3 w-72 max-w-full rounded bg-black/5 dark:bg-white/5" />
+        </div>
+      )}
+
+      {!stuckLoading && stuckError && (
+        <div
+          className="rounded-2xl p-4 border text-xs flex items-start gap-3 shrink-0"
+          style={{ borderColor: '#F05A35', background: 'rgba(249,172,0,0.10)', color: '#F05A35' }}
+          role="alert"
+          aria-label="Error al cargar validaciones atascadas"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="space-y-2">
+            <p className="font-semibold">No se pudieron cargar las validaciones atascadas.</p>
+            <p className="opacity-80">{stuckError}</p>
+            <button
+              type="button"
+              onClick={() => void refreshStuck()}
+              className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              style={{ background: '#F05A35' }}
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!stuckLoading && !stuckError && stuck && stuck.total > 0 && (
         <StuckEventsBanner
           stuck={stuck}
           requeuing={requeuing}
@@ -404,7 +590,7 @@ export function Validaciones() {
       {error && (
         <div
           className="rounded-2xl p-4 border text-xs flex items-start gap-3"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          style={{ borderColor: '#E43D30', background: 'rgba(228,61,48,0.06)', color: '#E43D30' }}
           role="alert"
           aria-live="polite"
         >
@@ -416,7 +602,7 @@ export function Validaciones() {
               type="button"
               onClick={() => void handleRefresh()}
               className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ background: '#FF4E00' }}
+              style={{ background: '#E43D30' }}
             >
               Reintentar
             </button>
@@ -454,11 +640,22 @@ export function Validaciones() {
         </div>
       )}
 
-      {!initialLoading && !isEmpty && validations !== null && (
+      {!initialLoading && !isEmpty && viewMode === 'validation' && validations !== null && (
         <ValidacionesTable rows={validations} onViewProcess={setProcessId} />
       )}
 
-      {!initialLoading && validations !== null && validations.length > 0 && (
+      {!initialLoading && !isEmpty && viewMode === 'person' && persons !== null && (
+        <PersonasTable
+          rows={persons}
+          onOpenPerson={(docType, docNumber) =>
+            setPersonDetail({ documentType: docType, documentNumber: docNumber })
+          }
+        />
+      )}
+
+      {!initialLoading &&
+        ((viewMode === 'validation' && validations !== null && validations.length > 0) ||
+          (viewMode === 'person' && persons !== null && persons.length > 0)) && (
         <PaginationBar
           page={page}
           pageSize={pageSize}
@@ -475,6 +672,15 @@ export function Validaciones() {
           onClose={() => setProcessId(null)}
           onStatusChanged={() => void load(appliedRef.current, { background: true })}
           title="Proceso de validación"
+        />
+      )}
+
+      {personDetail && (
+        <PersonIdentityDetailDrawer
+          documentType={personDetail.documentType}
+          documentNumber={personDetail.documentNumber}
+          onClose={() => setPersonDetail(null)}
+          onStatusChanged={() => void load(appliedRef.current, { background: true })}
         />
       )}
     </div>
@@ -498,9 +704,9 @@ function LiveIndicator({ at }: { at: Date | null }) {
       <span className="relative flex h-2 w-2" aria-hidden="true">
         <span
           className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
-          style={{ background: '#5B8A1F' }}
+          style={{ background: '#70CF3A' }}
         />
-        <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: '#5B8A1F' }} />
+        <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: '#70CF3A' }} />
       </span>
       En vivo{time ? ` · ${time}` : ''}
     </span>
@@ -508,10 +714,54 @@ function LiveIndicator({ at }: { at: Date | null }) {
 }
 
 /**
+ * Clave de agrupación por persona (HU #11268). Documento normalizado (trim+upper); si no hay
+ * documento ni nombre utilizable → grupo de no identificados.
+ */
+export function stuckPersonGroupKey(event: StuckIdentityValidation): string {
+  const tipo = (event.documentType ?? '').trim().toUpperCase();
+  const numero = (event.documentNumber ?? '').trim().toUpperCase();
+  if (tipo || numero) return `${tipo}|${numero}`;
+  return '__unidentified__';
+}
+
+export type StuckPersonGroup = {
+  key: string;
+  label: string;
+  events: StuckIdentityValidation[];
+};
+
+/** Agrupa eventos atascados por persona; no identificados al final. */
+export function groupStuckByPerson(events: StuckIdentityValidation[]): StuckPersonGroup[] {
+  const map = new Map<string, StuckPersonGroup>();
+  for (const event of events) {
+    const key = stuckPersonGroupKey(event);
+    let group = map.get(key);
+    if (!group) {
+      const isUnidentified = key === '__unidentified__';
+      const label = isUnidentified
+        ? 'No identificados'
+        : (event.name?.trim() ||
+          [event.documentType, event.documentNumber].filter(Boolean).join(' ') ||
+          'Persona');
+      group = { key, label, events: [] };
+      map.set(key, group);
+    }
+    group.events.push(event);
+  }
+  const groups = [...map.values()];
+  groups.sort((a, b) => {
+    if (a.key === '__unidentified__') return 1;
+    if (b.key === '__unidentified__') return -1;
+    return b.events.length - a.events.length || a.label.localeCompare(b.label, 'es');
+  });
+  return groups;
+}
+
+/**
  * Banner de validaciones de identidad ATASCADAS (dead-letter): agotaron los reintentos automáticos de su
  * cola —el envío al proveedor (Kyverum) o el encadenamiento async firma/FUR—. Se muestra solo cuando hay
- * atascadas; cada una trae un botón "Reintentar" que la reencola (reinicia intentos en el backend) para
- * que el sistema la procese de nuevo. Cada fila se etiqueta con su etapa (envío / firma·FUR).
+ * atascadas. HU #11268: acordeón por persona (colapsado por defecto), con Reintentar por fila y
+ * Reintentar todos.
  */
 function StuckEventsBanner({
   stuck,
@@ -526,17 +776,29 @@ function StuckEventsBanner({
   onRequeue: (id: string) => void;
   onRequeueAll: () => void;
 }) {
+  const groups = groupStuckByPerson(stuck.stuck);
+  const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
+
+  const toggleGroup = (key: string) => {
+    setOpenKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   return (
     <section
       className="rounded-2xl border p-4 shrink-0"
-      style={{ borderColor: '#B26A00', background: 'rgba(249,172,0,0.10)' }}
+      style={{ borderColor: '#F05A35', background: 'rgba(249,172,0,0.10)' }}
       aria-label="Validaciones de identidad atascadas"
     >
       <div className="flex items-start gap-3">
-        <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" style={{ color: '#B26A00' }} aria-hidden="true" />
+        <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" style={{ color: '#F05A35' }} aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
-            <p className="text-sm font-semibold" style={{ color: '#B26A00' }} role="status" aria-live="polite">
+            <p className="text-sm font-semibold" style={{ color: '#F05A35' }} role="status" aria-live="polite">
               {stuck.total} validación{stuck.total === 1 ? '' : 'es'} de identidad atascada
               {stuck.total === 1 ? '' : 's'}
             </p>
@@ -546,7 +808,7 @@ function StuckEventsBanner({
                 onClick={onRequeueAll}
                 disabled={requeuingAll}
                 className="flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                style={{ borderColor: '#B26A00', color: '#B26A00' }}
+                style={{ borderColor: '#F05A35', color: '#F05A35' }}
                 aria-label="Reintentar todas las validaciones atascadas"
               >
                 <RotateCcw className={`h-3 w-3 ${requeuingAll ? 'animate-spin' : ''}`} aria-hidden="true" />
@@ -558,10 +820,41 @@ function StuckEventsBanner({
             Agotaron {stuck.maxDeliveryAttempts} reintentos automáticos —el envío al proveedor de identidad o
             el encadenamiento de firma/FUR. Reencólalas para que el sistema las procese de nuevo.
           </p>
-          <ul className="mt-2 max-h-[40vh] space-y-1.5 overflow-y-auto pr-1" aria-label="Eventos atascados">
-            {stuck.stuck.map((e) => (
-              <StuckRow key={e.id} event={e} busy={requeuing.has(e.id)} onRequeue={onRequeue} />
-            ))}
+          <ul className="mt-2 max-h-[40vh] space-y-1.5 overflow-y-auto pr-1" aria-label="Eventos atascados agrupados por persona">
+            {groups.map((group) => {
+              const open = openKeys.has(group.key);
+              const panelId = `stuck-group-${group.key}`;
+              return (
+                <li key={group.key} className="rounded-xl border bg-white/70 dark:bg-[#0B0F14]" style={{ borderColor: 'rgba(240,90,53,0.3)' }}>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.key)}
+                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                    style={{ color: '#F05A35' }}
+                    aria-expanded={open}
+                    aria-controls={panelId}
+                  >
+                    <span className="min-w-0 truncate">
+                      {group.label}
+                      <span className="ml-1.5 font-medium opacity-70">
+                        · {group.events.length} evento{group.events.length === 1 ? '' : 's'}
+                      </span>
+                    </span>
+                    <ChevronDown
+                      className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+                      aria-hidden="true"
+                    />
+                  </button>
+                  {open && (
+                    <ul id={panelId} className="space-y-1.5 border-t px-2 py-2" style={{ borderColor: 'rgba(240,90,53,0.2)' }}>
+                      {group.events.map((e) => (
+                        <StuckRow key={e.id} event={e} busy={requeuing.has(e.id)} onRequeue={onRequeue} />
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       </div>
@@ -585,12 +878,12 @@ function StuckRow({
   return (
     <li
       className="flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2 text-[11px] dark:bg-[#0B0F14]"
-      style={{ borderColor: 'rgba(178,106,0,0.3)' }}
+      style={{ borderColor: 'rgba(240,90,53,0.3)' }}
     >
       <span className="min-w-0 truncate">
         <span
           className="mr-1.5 inline-block rounded px-1.5 py-px text-[10px] font-semibold align-middle"
-          style={{ background: 'rgba(178,106,0,0.14)', color: '#8A5200' }}
+          style={{ background: 'rgba(240,90,53,0.14)', color: '#F05A35' }}
         >
           {kindLabel}
         </span>
@@ -606,7 +899,7 @@ function StuckRow({
         onClick={() => onRequeue(event.id)}
         disabled={busy}
         className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ background: '#B26A00' }}
+        style={{ background: '#F05A35' }}
         aria-label={`Reintentar la validación de ${event.name ?? 'persona no disponible'}`}
       >
         <RotateCcw className={`h-3 w-3 ${busy ? 'animate-spin' : ''}`} aria-hidden="true" />
@@ -647,7 +940,7 @@ function PaginationBar({
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
             disabled={disabled}
             aria-label="Filas por página"
-            className="rounded-lg border bg-white px-2 py-1 text-xs outline-none focus:border-[#557EFF] disabled:opacity-50 dark:bg-[#0B0F14]"
+            className="rounded-lg border bg-white px-2 py-1 text-xs outline-none focus:border-[#4F74C9] disabled:opacity-50 dark:bg-[#0B0F14]"
           >
             {PAGE_SIZE_OPTIONS.map((n) => (
               <option key={n} value={n}>
@@ -696,10 +989,10 @@ function StatsCards({
   loading: boolean;
 }) {
   const cards = [
-    { l: 'Total validaciones', v: stats?.total, i: ShieldCheck, c: '#557EFF' },
-    { l: 'Aprobadas', v: stats?.aprobadas, i: CheckCircle2, c: '#5B8A1F' },
-    { l: 'En proceso', v: stats?.enProceso, i: Clock, c: '#B26A00' },
-    { l: 'Rechazadas', v: stats?.rechazadas, i: XCircle, c: '#FF4E00' },
+    { l: 'Total validaciones', v: stats?.total, i: ShieldCheck, c: '#4F74C9' },
+    { l: 'Aprobadas', v: stats?.aprobadas, i: CheckCircle2, c: '#70CF3A' },
+    { l: 'En proceso', v: stats?.enProceso, i: Clock, c: '#F05A35' },
+    { l: 'Rechazadas', v: stats?.rechazadas, i: XCircle, c: '#E43D30' },
   ];
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 shrink-0">
@@ -760,6 +1053,52 @@ function ValidacionesSkeleton() {
 const GRID_COLS =
   'minmax(0,1.5fr) minmax(0,1.4fr) minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,1.2fr) minmax(0,0.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,0.9fr)';
 
+/**
+ * Vista agrupada por persona: reutiliza la misma fila/estilo de develop (ValidacionRow).
+ * Cada fila muestra los datos de la validación MÁS RECIENTE del grupo.
+ * "Ver proceso" abre el historial multi-validación de la persona (no el drawer de una sola val.).
+ */
+function PersonasTable({
+  rows,
+  onOpenPerson,
+}: {
+  rows: TenantBiometricPerson[];
+  onOpenPerson: (documentType: string, documentNumber: string) => void;
+}) {
+  const byLatestId = new Map(rows.map((r) => [r.latestValidationId, r]));
+  const mapped: TenantBiometricValidation[] = rows.map((p) => ({
+    id: p.latestValidationId,
+    instanceId: p.instanceId,
+    referenceNumber: p.referenceNumber,
+    modalidad: p.modalidad,
+    partyRole: p.partyRole,
+    name: p.name,
+    documentType: p.documentType,
+    documentNumber: p.documentNumber,
+    status: p.status,
+    score: p.score,
+    provider: p.provider,
+    expired: p.expired,
+    createdAt: p.createdAt,
+    validatedAt: p.validatedAt,
+    validUntil: p.validUntil,
+    daysRemaining: p.daysRemaining,
+    captureUrl: p.captureUrl,
+    linkExpiresAt: p.linkExpiresAt,
+    email: p.email,
+  }));
+
+  return (
+    <ValidacionesTable
+      rows={mapped}
+      onViewProcess={(latestValidationId) => {
+        const person = byLatestId.get(latestValidationId);
+        if (person) onOpenPerson(person.documentType, person.documentNumber);
+      }}
+    />
+  );
+}
+
 /** Tabla de validaciones reales. Cada fila enlaza al trámite de origen (vista del wizard). */
 function ValidacionesTable({
   rows,
@@ -773,7 +1112,7 @@ function ValidacionesTable({
       <div className="min-w-[1080px]">
         <div
           className="sticky top-0 z-10 grid gap-2 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl"
-          style={{ background: '#DFE5ED', color: '#162744', gridTemplateColumns: GRID_COLS }}
+          style={{ background: '#DDE5F0', color: '#162744', gridTemplateColumns: GRID_COLS }}
           aria-hidden="true"
         >
           <div>Trámite</div>
@@ -833,14 +1172,14 @@ function ValidacionRow({
     >
       <div className="min-w-0">
         {r.referenceNumber ? (
-          <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: '#557EFF' }}>
+          <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: '#4F74C9' }}>
             <span className="truncate">{r.referenceNumber}</span>
             {r.instanceId && <ExternalLink className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />}
           </span>
         ) : (
           <span
             className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold"
-            style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+            style={{ background: 'rgba(79,116,201,0.12)', color: '#4F74C9' }}
           >
             Prevalidación
           </span>
@@ -848,7 +1187,7 @@ function ValidacionRow({
         <span className="block text-[10px] opacity-60">{r.modalidad ? modalidad : '—'}</span>
       </div>
       <div className="min-w-0">
-        <span className="block font-medium truncate">{r.name}</span>
+        <span className="block font-semibold truncate">{r.name}</span>
         <span className="block text-[10px] opacity-60 truncate">
           {provider}
           {r.partyRole ? ` · ${r.partyRole}` : ''}
@@ -936,7 +1275,7 @@ function ValidacionRow({
   ];
 
   return (
-    <li className="relative rounded-xl bg-white dark:bg-[#0B0F14] border hover:border-[#557EFF] transition">
+    <li className="relative rounded-xl bg-white dark:bg-[#0B0F14] border hover:border-[#4F74C9] transition">
       {r.instanceId ? (
         <a
           href={`/tramites/${r.instanceId}`}
@@ -958,7 +1297,7 @@ function ValidacionRow({
           className="bg-white dark:bg-[#0B0F14]"
         />
         {copied && (
-          <span className="text-[10px] font-semibold" style={{ color: '#557EFF' }} role="status" aria-live="polite">
+          <span className="text-[10px] font-semibold" style={{ color: '#4F74C9' }} role="status" aria-live="polite">
             Enlace copiado
           </span>
         )}

@@ -88,6 +88,13 @@ public sealed record WizardStateDto(
     /// </para>
     /// </summary>
     public bool EsMigrado { get; init; }
+
+    /// <summary>
+    /// Compañía+OT: <c>true</c> (default) exige certificado de prenda; <c>false</c> si el opt-out
+    /// <c>document_optional</c> estaba vigente al crear el trámite (snapshot). El wizard usa este
+    /// flag para pintar Obligatorio/Opcional en la carga del certificado.
+    /// </summary>
+    public bool PrendaDocumentRequired { get; init; } = true;
 }
 
 /// <summary>
@@ -176,7 +183,8 @@ public sealed class GetWizardStateHandler(
             {
                 // HU #10879 — el paso persistido prima como punto de retoma también en el wizard dinámico.
                 var dynamicState = await BuildDynamicStateAsync(instance, snapshot, ct);
-                return (AnnotateInstanceFlags(dynamicState, instance), null);
+                var dynamicRequired = await ResolvePrendaDocumentRequiredAsync(instance, ct);
+                return (AnnotateInstanceFlags(dynamicState with { PrendaDocumentRequired = dynamicRequired }, instance), null);
             }
         }
 
@@ -223,6 +231,8 @@ public sealed class GetWizardStateHandler(
         // consultaron de verdad en este trámite. Sin repositorio de tipos (tests) no hay exigencia.
         var runtExigido = await ResolveRuntExigidoAsync(instance, tenantId, ct);
 
+        var prendaDocumentRequired = await ResolvePrendaDocumentRequiredAsync(instance, ct);
+
         var state = AnnotateInstanceFlags(
             ComputeState(
                 instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaDocumentoOtRequerido,
@@ -230,10 +240,21 @@ public sealed class GetWizardStateHandler(
             {
                 IdentityValidationEnabled = identityRequired,
                 RnmcEnabled = rnmcEnabled,
+                PrendaDocumentRequired = prendaDocumentRequired,
             },
             instance);
         return (state, null);
     }
+
+    /// <summary>
+    /// Política compañía+OT del certificado de prenda (snapshot al <see cref="ProcedureInstance.CreatedAt"/>).
+    /// </summary>
+    private Task<bool> ResolvePrendaDocumentRequiredAsync(ProcedureInstance instance, CancellationToken ct) =>
+        _prendaDocumentRequirementPolicy.IsRequiredAsync(
+            instance.TenantId,
+            instance.TransitOfficeId ?? TransitOfficeIdFromFieldValues(instance),
+            instance.CreatedAt,
+            ct);
 
     /// <summary>
     /// FEATURE-08 / HU-BE-06 — computa el estado del wizard desde el snapshot del tipo (gate_profile +
@@ -373,20 +394,18 @@ public sealed class GetWizardStateHandler(
     }
 
     /// <summary>
-    /// CF-06 (HU #10881) — ¿el override del OT exige el documento de prenda y el trámite (traspaso)
-    /// no lo tiene adjunto? Usa <c>instance.TransitOfficeId</c> (mismo OT que consume
-    /// <see cref="ChecklistMatrixCompleteness"/> para la matriz documental por OT, HU #10522) y la
-    /// fecha de creación de la instancia para el comportamiento SNAPSHOT (AC2). Solo aplica a
-    /// traspaso; matrícula inicial no tiene concepto de prenda/gravamen.
+    /// Compañía+OT: ¿el documento de prenda es obligatorio y el trámite no lo tiene adjunto?
+    /// Aplica a cualquier modalidad (matrícula, traspaso, etc.). Usa <c>TransitOfficeId</c> de la
+    /// instancia (mismo OT que la matriz documental) y el <c>CreatedAt</c> para el snapshot.
     /// </summary>
     private async Task<bool> PrendaDocumentoOtBlockeaAsync(ProcedureInstance instance, CancellationToken ct)
     {
-        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) == TramiteModalidadEntrada.Traspaso;
-        if (!esTraspaso)
-            return false;
-
         var otRequiere = await _prendaDocumentRequirementPolicy
-            .IsRequiredAsync(instance.ProcedureTypeId, instance.TransitOfficeId, instance.CreatedAt, ct)
+            .IsRequiredAsync(
+                instance.TenantId,
+                instance.TransitOfficeId ?? TransitOfficeIdFromFieldValues(instance),
+                instance.CreatedAt,
+                ct)
             .ConfigureAwait(false);
         if (!otRequiere)
             return false;
@@ -440,7 +459,7 @@ public sealed class GetWizardStateHandler(
 
         return modalidad == TramiteModalidadEntrada.Traspaso
             ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride, comparendosBloquean, prendaDocumentoOtRequerido, runtExigido)
-            : BuildMatricula(instance, identidadAprobadaPartes, documentosCompletosOverride, runtExigido);
+            : BuildMatricula(instance, identidadAprobadaPartes, documentosCompletosOverride, runtExigido, prendaDocumentoOtRequerido);
     }
 
     /// <summary>
@@ -479,7 +498,11 @@ public sealed class GetWizardStateHandler(
     // ---- Matrícula inicial (5 pasos) ----------------------------------------
 
     private static WizardStateDto BuildMatricula(
-        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool? docsCompletosOverride = null, RuntConsultaExigida? runtExigido = null)
+        ProcedureInstance instance,
+        IReadOnlySet<string> identidadAprobadaPartes,
+        bool? docsCompletosOverride = null,
+        RuntConsultaExigida? runtExigido = null,
+        bool prendaDocumentoOtRequerido = false)
     {
         var fv = FieldValues(instance);
         var comprador = ParteOf(instance, "comprador");
@@ -582,7 +605,9 @@ public sealed class GetWizardStateHandler(
         // N 03 (RF03): canSubmit/blockers reflejan el gate borrador→preparado — identidad del
         // comprador aprobada/vigente + documentos obligatorios. El FUR/firma (paso 5, slice 7)
         // sigue diferido. El frontend nunca recalcula gates: solo pinta estos códigos.
-        var blockers = BlockersFrom(preflight, docsCompletos, riesgoAceptado, identidadAprobada);
+        // Compañía+OT: + documento de prenda cuando la política lo exige (cualquier modalidad).
+        var blockers = BlockersFrom(
+            preflight, docsCompletos, riesgoAceptado, identidadAprobada, prendaDocumentoOtRequerido);
         var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [4, 5]);
 
         return new WizardStateDto(

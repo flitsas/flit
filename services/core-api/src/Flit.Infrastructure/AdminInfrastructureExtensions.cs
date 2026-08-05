@@ -118,6 +118,10 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandateRequirementPolicy,
             Flit.Infrastructure.OtRules.MandateRequirementPolicy>();
 
+        // Plataforma → Mandatos: CRUD SuperAdmin de config por OT + extract OCR de referencia.
+        services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateConfigAdminService,
+            Flit.Infrastructure.OtRules.MandateConfigAdminService>();
+
         // Convenio comercial compañía↔organismo + firma física del mandatario: deciden si el contrato de
         // mandato lleva bloque de firma del mandatario y de qué forma.
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandatoFirmaPolicy,
@@ -252,6 +256,7 @@ public static class AdminInfrastructureExtensions
         // FEATURE 05 — política de bloqueo de preflight por criterio y OT: decide si un hallazgo
         // negativo (soat/rtm/estado/fines/rnmc) bloquea (rojo) o solo advierte (amarillo).
         services.AddScoped<IOtBlockingPolicyRepository, OtBlockingPolicyRepository>();
+        services.AddScoped<IOtPrendaDocumentPolicyRepository, OtPrendaDocumentPolicyRepository>();
         services.AddScoped<IConsultationBlockingPolicy, ConsultationBlockingPolicy>();
 
         // B11 (HU #10659) — en traspaso el OT lo fija el RUNT: resuelve el OT habilitado de la

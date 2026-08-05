@@ -1,5 +1,6 @@
 using System.Globalization;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Identity;
 using Flit.Tramites.Domain.ReadModels;
 using Flit.Tramites.Domain.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -357,6 +358,26 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return candidates.FirstOrDefault(v => BiometricRules.EsAprobadaVigente(v, now));
     }
 
+    public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListInFlightByDocumentAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct = default)
+    {
+        // HU #11265 — candidatos en vuelo para la precedencia de envío. Igualdad exacta (misma semántica
+        // que FindVigenteApprovedByDocumentAsync) para no cambiar veredictos del gate (AC5).
+        return await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => v.TenantId == tenantId
+                && v.DocumentType == tipoDoc
+                && v.DocumentNumber == documento
+                && (v.Status == BiometricEstados.PendienteEnvio
+                    || v.Status == BiometricEstados.Enviado
+                    || v.Status == BiometricEstados.EnProceso)
+                && (v.ProcedureInstanceId == null
+                    || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)))
+            .OrderByDescending(v => v.UpdatedAt ?? v.CreatedAt)
+            .Take(20)
+            .ToListAsync(ct);
+    }
+
     public async Task<IReadOnlySet<string>> ListVigenteApprovedIdentityKeysAsync(
         IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default)
     {
@@ -496,6 +517,449 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .ToListAsync(ct);
 
         return rows.ToDictionary(x => x.Estado, x => x.Count);
+    }
+
+    public Task<(IReadOnlyList<BiometricPersonGroupProjection> Rows, int TotalPersons)>
+        ListBiometricValidationsGroupedByPersonAsync(
+            Guid tenantId,
+            int skip,
+            int take,
+            BiometricPersonGroupFilter? filter,
+            DateTimeOffset now,
+            CancellationToken ct) =>
+        // DISTINCT ON es PostgreSQL; InMemory (tests) usa el equivalente GroupBy en memoria.
+        db.Database.IsNpgsql()
+            ? ListGroupedByPersonNpgsqlAsync(tenantId, skip, take, filter, now, ct)
+            : ListGroupedByPersonInMemoryAsync(tenantId, skip, take, filter, now, ct);
+
+    public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>>
+        ListBiometricValidationsForPersonAlertScanAsync(
+            Guid tenantId,
+            IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)> documents,
+            int alertWindowDays,
+            DateTimeOffset now,
+            CancellationToken ct)
+    {
+        if (documents.Count == 0)
+            return [];
+
+        var since = now.AddDays(-Math.Max(0, alertWindowDays));
+        var typeSet = documents.Select(d => d.DocumentTypeNorm).ToHashSet(StringComparer.Ordinal);
+        var numberSet = documents.Select(d => d.DocumentNumberNorm).ToHashSet(StringComparer.Ordinal);
+        var pairSet = documents
+            .Select(d => $"{d.DocumentTypeNorm}|{d.DocumentNumberNorm}")
+            .ToHashSet(StringComparer.Ordinal);
+
+        // Traemos candidatos por tipo/número normalizados y refinamos el par exacto en memoria
+        // (el conjunto de la página es pequeño, ≤ pageSize).
+        var candidates = await BaseTenantBiometricQuery(tenantId)
+            .Where(v => typeSet.Contains(v.DocumentType.Trim().ToUpper())
+                && numberSet.Contains(v.DocumentNumber.Trim().ToUpper()))
+            .ToListAsync(ct);
+
+        static bool IsTerminal(string status) =>
+            status is BiometricEstados.Aprobado or BiometricEstados.Rechazado or BiometricEstados.Expirado;
+
+        return candidates
+            .Where(v =>
+            {
+                var key = $"{DocumentCanonicalNormalization.NormalizePart(v.DocumentType)}|{DocumentCanonicalNormalization.NormalizePart(v.DocumentNumber)}";
+                if (!pairSet.Contains(key))
+                    return false;
+                if (!IsTerminal(v.Status))
+                    return true;
+                var activity = v.UpdatedAt ?? v.CreatedAt;
+                return activity >= since;
+            })
+            .ToList();
+    }
+
+    public async Task<(IReadOnlyList<ProcedureInstanceBiometricValidation> Rows, int Total, bool AnyNonTerminal)>
+        ListBiometricValidationsByPersonAsync(
+            Guid tenantId,
+            string documentType,
+            string documentNumber,
+            int skip,
+            int take,
+            CancellationToken ct)
+    {
+        var (tipo, numero) = DocumentCanonicalNormalization.Normalize(documentType, documentNumber);
+        if (tipo.Length == 0 || numero.Length == 0)
+            return ([], 0, false);
+
+        var query = BaseTenantBiometricQuery(tenantId)
+            .Where(v => v.DocumentType.Trim().ToUpper() == tipo
+                && v.DocumentNumber.Trim().ToUpper() == numero);
+
+        var total = await query.CountAsync(ct);
+        var anyNonTerminal = await query.AnyAsync(
+            v => v.Status != BiometricEstados.Aprobado
+                && v.Status != BiometricEstados.Rechazado
+                && v.Status != BiometricEstados.Expirado,
+            ct);
+        var rows = await query
+            .OrderByDescending(v => v.CreatedAt)
+            .ThenByDescending(v => v.Id)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(ct);
+        return (rows, total, anyNonTerminal);
+    }
+
+    private async Task<(IReadOnlyList<BiometricPersonGroupProjection> Rows, int TotalPersons)>
+        ListGroupedByPersonNpgsqlAsync(
+            Guid tenantId,
+            int skip,
+            int take,
+            BiometricPersonGroupFilter? filter,
+            DateTimeOffset now,
+            CancellationToken ct)
+    {
+        // Misma semántica que el fallback InMemory; DISTINCT ON + índice ix_biometric_validations_doc_norm_created.
+        var name = filter?.Name?.Trim();
+        var docType = string.IsNullOrWhiteSpace(filter?.DocumentType)
+            ? null
+            : DocumentCanonicalNormalization.NormalizePart(filter!.DocumentType);
+        var docNumber = string.IsNullOrWhiteSpace(filter?.DocumentNumber)
+            ? null
+            : DocumentCanonicalNormalization.NormalizePart(filter!.DocumentNumber);
+        var status = string.IsNullOrWhiteSpace(filter?.Status) ? null : filter!.Status!.Trim().ToLowerInvariant();
+        var vigencia = string.IsNullOrWhiteSpace(filter?.VigenciaEstado)
+            ? null
+            : filter!.VigenciaEstado!.Trim().ToLowerInvariant();
+        var createdFrom = filter?.CreatedFrom;
+        var createdTo = filter?.CreatedTo;
+        var expiraDesde = filter?.ExpiraDesde;
+        var expiraHasta = filter?.ExpiraHasta;
+        var venceEnDias = filter?.VenceEnDias;
+        var standalone = filter?.Standalone;
+
+        var corteVigente = now.AddDays(-BiometricRules.VigenciaDias);
+        var cortePorVencer = now.AddDays(-(BiometricRules.VigenciaDias - BiometricRules.VigenciaPorVencerDias));
+        var corteVenceEn = venceEnDias is int n
+            ? now.AddDays(n - BiometricRules.VigenciaDias)
+            : (DateTimeOffset?)null;
+
+        const string sql = """
+            WITH base AS (
+                SELECT
+                    v.id,
+                    v.document_type,
+                    v.document_number,
+                    upper(btrim(v.document_type)) AS document_type_norm,
+                    upper(btrim(v.document_number)) AS document_number_norm,
+                    v.name,
+                    v.status,
+                    v.created_at,
+                    v.validated_at,
+                    v.valid_until,
+                    v.expires_at,
+                    v.procedure_instance_id,
+                    pi.reference_number,
+                    pi.modalidad_entrada AS modalidad,
+                    v.party_role,
+                    v.email,
+                    v.provider,
+                    v.score,
+                    v.capture_url
+                FROM tramites.procedure_instance_biometric_validations v
+                LEFT JOIN tramites.procedure_instances pi
+                    ON pi.id = v.procedure_instance_id
+                WHERE v.tenant_id = {0}
+                  AND v.deleted_at IS NULL
+                  AND (v.procedure_instance_id IS NULL OR pi.deleted_at IS NULL)
+                  AND ({1}::text IS NULL OR upper(btrim(v.document_type)) = {1})
+                  AND ({2}::text IS NULL OR upper(btrim(v.document_number)) = {2})
+                  AND ({3}::text IS NULL OR v.name ILIKE '%' || {3} || '%' ESCAPE '\')
+                  AND ({4}::boolean IS NULL
+                       OR ({4} = TRUE AND v.procedure_instance_id IS NULL)
+                       OR ({4} = FALSE AND v.procedure_instance_id IS NOT NULL))
+            ),
+            counted AS (
+                SELECT document_type_norm, document_number_norm, COUNT(*)::int AS validation_count
+                FROM base
+                GROUP BY document_type_norm, document_number_norm
+            ),
+            latest AS (
+                SELECT DISTINCT ON (b.document_type_norm, b.document_number_norm)
+                    b.*,
+                    c.validation_count
+                FROM base b
+                JOIN counted c
+                  ON c.document_type_norm = b.document_type_norm
+                 AND c.document_number_norm = b.document_number_norm
+                ORDER BY b.document_type_norm, b.document_number_norm, b.created_at DESC
+            ),
+            filtered AS (
+                SELECT *
+                FROM latest
+                WHERE ({5}::text IS NULL OR status = {5})
+                  AND ({6}::timestamptz IS NULL OR created_at >= {6})
+                  AND ({7}::timestamptz IS NULL OR created_at <= {7})
+                  AND (
+                        {8}::text IS NULL
+                     OR ({8} = 'vigente' AND status = 'aprobado' AND validated_at IS NOT NULL AND validated_at > {11})
+                     OR ({8} = 'por_vencer' AND status = 'aprobado' AND validated_at IS NOT NULL
+                         AND validated_at > {11} AND validated_at <= {12})
+                     OR ({8} = 'vencida' AND status = 'aprobado' AND validated_at IS NOT NULL AND validated_at <= {11})
+                  )
+                  AND ({9}::timestamptz IS NULL OR (validated_at IS NOT NULL AND validated_at >= {9}))
+                  AND ({10}::timestamptz IS NULL OR (validated_at IS NOT NULL AND validated_at <= {10}))
+                  AND (
+                        {13}::timestamptz IS NULL
+                     OR (status = 'aprobado' AND validated_at IS NOT NULL
+                         AND validated_at > {11} AND validated_at <= {13})
+                  )
+            )
+            -- Columnas en snake_case SIN alias PascalCase: UseSnakeCaseNamingConvention
+            -- mapea CreatedAt→created_at. AS "CreatedAt" hacía que EF buscara created_at
+            -- y no lo hallara → InvalidOperationException 500 en by-person.
+            SELECT
+                id AS latest_validation_id,
+                document_type,
+                document_number,
+                document_type_norm,
+                document_number_norm,
+                name,
+                status,
+                created_at,
+                validated_at,
+                valid_until,
+                expires_at,
+                procedure_instance_id,
+                reference_number,
+                modalidad,
+                party_role,
+                email,
+                provider,
+                score,
+                capture_url,
+                validation_count,
+                COUNT(*) OVER() AS total_persons
+            FROM filtered
+            ORDER BY created_at DESC
+            OFFSET {14} LIMIT {15}
+            """;
+
+        // ExpiraDesde/Hasta en el listado plano desplazan por VigenciaDias sobre validated_at;
+        // aquí aplicamos el mismo desplazamiento para no divergir el filtro de vigencia por fecha.
+        DateTimeOffset? expiraDesdeShifted = expiraDesde?.AddDays(-BiometricRules.VigenciaDias);
+        DateTimeOffset? expiraHastaShifted = expiraHasta?.AddDays(-BiometricRules.VigenciaDias);
+
+        string? nameEscaped = null;
+        if (!string.IsNullOrEmpty(name))
+            nameEscaped = EscapeLike(name);
+
+        // SqlQueryRaw no acepta nulls tipados en params object[] (CS8604): DBNull → NULL SQL.
+        object Db(object? v) => v ?? DBNull.Value;
+
+        var rows = await db.Database
+            .SqlQueryRaw<BiometricPersonGroupSqlRow>(
+                sql,
+                Db(tenantId),
+                Db(docType),
+                Db(docNumber),
+                Db(nameEscaped),
+                Db(standalone),
+                Db(status),
+                Db(createdFrom),
+                Db(createdTo),
+                Db(vigencia),
+                Db(expiraDesdeShifted),
+                Db(expiraHastaShifted),
+                Db(corteVigente),
+                Db(cortePorVencer),
+                Db(corteVenceEn),
+                Db(skip),
+                Db(take))
+            .ToListAsync(ct);
+
+        var total = rows.Count > 0 ? rows[0].TotalPersons : 0;
+        var projections = rows.Select(r => r.ToProjection()).ToList();
+        return (projections, total);
+    }
+
+    private async Task<(IReadOnlyList<BiometricPersonGroupProjection> Rows, int TotalPersons)>
+        ListGroupedByPersonInMemoryAsync(
+            Guid tenantId,
+            int skip,
+            int take,
+            BiometricPersonGroupFilter? filter,
+            DateTimeOffset now,
+            CancellationToken ct)
+    {
+        var all = await BaseTenantBiometricQuery(tenantId).ToListAsync(ct);
+
+        if (filter is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(filter.DocumentType))
+            {
+                var tipo = DocumentCanonicalNormalization.NormalizePart(filter.DocumentType);
+                all = all.Where(v => DocumentCanonicalNormalization.NormalizePart(v.DocumentType) == tipo).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(filter.DocumentNumber))
+            {
+                var numero = DocumentCanonicalNormalization.NormalizePart(filter.DocumentNumber);
+                all = all.Where(v => DocumentCanonicalNormalization.NormalizePart(v.DocumentNumber) == numero).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(filter.Name))
+            {
+                var term = filter.Name.Trim();
+                all = all.Where(v => v.Name.Contains(term, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            if (filter.Standalone is { } standalone)
+            {
+                all = standalone
+                    ? all.Where(v => v.ProcedureInstanceId is null).ToList()
+                    : all.Where(v => v.ProcedureInstanceId is not null).ToList();
+            }
+        }
+
+        var groups = all
+            .GroupBy(v => (
+                DocumentCanonicalNormalization.NormalizePart(v.DocumentType),
+                DocumentCanonicalNormalization.NormalizePart(v.DocumentNumber)))
+            .Select(g =>
+            {
+                var latest = g.OrderByDescending(v => v.CreatedAt).First();
+                return new BiometricPersonGroupProjection
+                {
+                    LatestValidationId = latest.Id,
+                    DocumentType = latest.DocumentType,
+                    DocumentNumber = latest.DocumentNumber,
+                    DocumentTypeNorm = g.Key.Item1,
+                    DocumentNumberNorm = g.Key.Item2,
+                    Name = latest.Name,
+                    Status = latest.Status,
+                    CreatedAt = latest.CreatedAt,
+                    ValidatedAt = latest.ValidatedAt,
+                    ValidUntil = latest.ValidUntil,
+                    ExpiresAt = latest.ExpiresAt,
+                    ProcedureInstanceId = latest.ProcedureInstanceId,
+                    ReferenceNumber = latest.ProcedureInstance?.ReferenceNumber,
+                    Modalidad = latest.ProcedureInstance?.ModalidadEntrada,
+                    PartyRole = latest.PartyRole,
+                    Email = latest.Email,
+                    Provider = latest.Provider,
+                    Score = latest.Score,
+                    CaptureUrl = latest.CaptureUrl,
+                    ValidationCount = g.Count(),
+                };
+            })
+            .ToList();
+
+        if (filter is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(filter.Status))
+            {
+                var st = filter.Status.Trim();
+                groups = groups.Where(g => string.Equals(g.Status, st, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            if (filter.CreatedFrom is { } from)
+                groups = groups.Where(g => g.CreatedAt >= from).ToList();
+            if (filter.CreatedTo is { } to)
+                groups = groups.Where(g => g.CreatedAt <= to).ToList();
+
+            if (!string.IsNullOrWhiteSpace(filter.VigenciaEstado))
+            {
+                var corteVigente = now.AddDays(-BiometricRules.VigenciaDias);
+                var cortePorVencer = now.AddDays(-(BiometricRules.VigenciaDias - BiometricRules.VigenciaPorVencerDias));
+                groups = filter.VigenciaEstado.Trim().ToLowerInvariant() switch
+                {
+                    BiometricVigenciaEstados.Vigente => groups.Where(g =>
+                        g.Status == BiometricEstados.Aprobado && g.ValidatedAt is { } va && va > corteVigente).ToList(),
+                    BiometricVigenciaEstados.PorVencer => groups.Where(g =>
+                        g.Status == BiometricEstados.Aprobado && g.ValidatedAt is { } va
+                        && va > corteVigente && va <= cortePorVencer).ToList(),
+                    BiometricVigenciaEstados.Vencida => groups.Where(g =>
+                        g.Status == BiometricEstados.Aprobado && g.ValidatedAt is { } va && va <= corteVigente).ToList(),
+                    _ => groups,
+                };
+            }
+
+            if (filter.ExpiraDesde is { } expiraDesde)
+            {
+                var shifted = expiraDesde.AddDays(-BiometricRules.VigenciaDias);
+                groups = groups.Where(g => g.ValidatedAt is { } va && va >= shifted).ToList();
+            }
+
+            if (filter.ExpiraHasta is { } expiraHasta)
+            {
+                var shifted = expiraHasta.AddDays(-BiometricRules.VigenciaDias);
+                groups = groups.Where(g => g.ValidatedAt is { } va && va <= shifted).ToList();
+            }
+
+            if (filter.VenceEnDias is { } venceEnDias)
+            {
+                var corteVigente = now.AddDays(-BiometricRules.VigenciaDias);
+                var corteVenceEn = now.AddDays(venceEnDias - BiometricRules.VigenciaDias);
+                groups = groups.Where(g =>
+                    g.Status == BiometricEstados.Aprobado && g.ValidatedAt is { } va
+                    && va > corteVigente && va <= corteVenceEn).ToList();
+            }
+        }
+
+        var total = groups.Count;
+        var page = groups
+            .OrderByDescending(g => g.CreatedAt)
+            .Skip(skip)
+            .Take(take)
+            .ToList();
+        return (page, total);
+    }
+
+    /// <summary>Fila intermedia de SqlQueryRaw para el DISTINCT ON agrupado (HU #11270).</summary>
+    private sealed class BiometricPersonGroupSqlRow
+    {
+        public Guid LatestValidationId { get; init; }
+        public string DocumentType { get; init; } = string.Empty;
+        public string DocumentNumber { get; init; } = string.Empty;
+        public string DocumentTypeNorm { get; init; } = string.Empty;
+        public string DocumentNumberNorm { get; init; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
+        public string Status { get; init; } = string.Empty;
+        public DateTimeOffset CreatedAt { get; init; }
+        public DateTimeOffset? ValidatedAt { get; init; }
+        public DateTimeOffset? ValidUntil { get; init; }
+        public DateTimeOffset ExpiresAt { get; init; }
+        public Guid? ProcedureInstanceId { get; init; }
+        public string? ReferenceNumber { get; init; }
+        public string? Modalidad { get; init; }
+        public string? PartyRole { get; init; }
+        public string Email { get; init; } = string.Empty;
+        public string Provider { get; init; } = string.Empty;
+        public int? Score { get; init; }
+        public string? CaptureUrl { get; init; }
+        public int ValidationCount { get; init; }
+        public int TotalPersons { get; init; }
+
+        public BiometricPersonGroupProjection ToProjection() => new()
+        {
+            LatestValidationId = LatestValidationId,
+            DocumentType = DocumentType,
+            DocumentNumber = DocumentNumber,
+            DocumentTypeNorm = DocumentTypeNorm,
+            DocumentNumberNorm = DocumentNumberNorm,
+            Name = Name,
+            Status = Status,
+            CreatedAt = CreatedAt,
+            ValidatedAt = ValidatedAt,
+            ValidUntil = ValidUntil,
+            ExpiresAt = ExpiresAt,
+            ProcedureInstanceId = ProcedureInstanceId,
+            ReferenceNumber = ReferenceNumber,
+            Modalidad = Modalidad,
+            PartyRole = PartyRole,
+            Email = Email,
+            Provider = Provider,
+            Score = Score,
+            CaptureUrl = CaptureUrl,
+            ValidationCount = ValidationCount,
+        };
     }
 
     private IQueryable<ProcedureInstanceBiometricValidation> BaseTenantBiometricQuery(Guid tenantId) =>
@@ -830,8 +1294,27 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     public Task<bool> UserExistsAsync(Guid userId, CancellationToken ct) =>
         db.Users.AsNoTracking().AnyAsync(u => u.Id == userId, ct);
 
-    public Task SaveChangesAsync(CancellationToken ct) =>
-        db.SaveChangesAsync(ct);
+    public async Task SaveChangesAsync(CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (IsBiometricInFlightUniqueViolation(ex))
+        {
+            // HU #11266 — índice uq_biometric_validations_inflight_doc_norm: a lo sumo una validación
+            // en vuelo por (tenant, documento Trim+Upper). Se traduce el 23505 a excepción de dominio
+            // (checklist §B12); el handler responde 409 informativo.
+            throw new IdentityInFlightConflictException();
+        }
+    }
+
+    private const string BiometricInFlightUniqueIndex = "uq_biometric_validations_inflight_doc_norm";
+
+    private static bool IsBiometricInFlightUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException pg
+        && pg.SqlState == PostgresErrorCodes.UniqueViolation
+        && string.Equals(pg.ConstraintName, BiometricInFlightUniqueIndex, StringComparison.Ordinal);
 
     /// <summary>HU #11029 — ver <see cref="IProcedureInstanceRepository.ResetTracking"/>.</summary>
     public void ResetTracking() => db.ChangeTracker.Clear();

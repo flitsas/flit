@@ -135,7 +135,7 @@ public sealed class WizardStateHandlerTests
     private sealed class StubPrendaDocumentRequirementPolicy(bool required) : IPrendaDocumentRequirementPolicy
     {
         public Task<bool> IsRequiredAsync(
-            Guid procedureTypeId, Guid? transitOfficeId, DateTimeOffset procedureCreatedAt,
+            Guid tenantId, Guid? transitOfficeId, DateTimeOffset procedureCreatedAt,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(required);
     }
@@ -435,6 +435,71 @@ public sealed class WizardStateHandlerTests
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
         result!.CanSubmit.Should().BeTrue();
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
+    [Fact]
+    public async Task Get_PrendaDocumentRequired_TrueCuandoPoliticaExige()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoListoParaRadicar();
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.PrendaDocumentRequired.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Get_PrendaDocumentRequired_FalseCuandoOptOutCompañiaOt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = TraspasoListoParaRadicar();
+        instance.Attachments.Add(Attachment("prenda_registro"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: false));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.PrendaDocumentRequired.Should().BeFalse();
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
+    [Fact]
+    public async Task Get_Matricula_PoliticaPrendaObligatoria_SinDocumento_CanSubmitFalseConBlocker()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.TransitOfficeId = Guid.NewGuid();
+        instance.Actors.Add(Actor("comprador"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.PrendaDocumentRequired.Should().BeTrue();
+        result.Blockers.Should().Contain(TramiteEstadoErrores.PrendaDocumentoRequerido);
+        result.CanSubmit.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Get_Matricula_PoliticaPrendaOpcional_SinDocumento_NoAgregaBlocker()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.TransitOfficeId = Guid.NewGuid();
+        instance.Actors.Add(Actor("comprador"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: false));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.PrendaDocumentRequired.Should().BeFalse();
         result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequerido);
     }
 

@@ -667,7 +667,7 @@ public sealed class TramiteLifecycleServiceTests
         var otId = Guid.NewGuid();
         var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
         _prendaPolicy
-            .IsRequiredAsync(i.ProcedureTypeId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
             .Returns(true);
 
         var outcome = await Transition(i, TramiteEstado.Preparado);
@@ -684,7 +684,7 @@ public sealed class TramiteLifecycleServiceTests
         var otId = Guid.NewGuid();
         var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: true);
         _prendaPolicy
-            .IsRequiredAsync(i.ProcedureTypeId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
             .Returns(true);
 
         var outcome = await Transition(i, TramiteEstado.Preparado);
@@ -701,7 +701,7 @@ public sealed class TramiteLifecycleServiceTests
         var otId = Guid.NewGuid();
         var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
         _prendaPolicy
-            .IsRequiredAsync(i.ProcedureTypeId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
             .Returns(false);
 
         var outcome = await Transition(i, TramiteEstado.Preparado);
