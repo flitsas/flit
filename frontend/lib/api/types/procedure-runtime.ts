@@ -1232,6 +1232,74 @@ export interface TenantBiometricValidationFilters {
   standalone?: boolean;
 }
 
+/**
+ * Fila agrupada por persona (HU #11270 / #11271, ADR-0040): estado de la más reciente + contador +
+ * peor alerta. Espejo de TenantBiometricPersonDto.
+ */
+export interface TenantBiometricPerson {
+  documentType: string;
+  documentNumber: string;
+  name: string;
+  status: BiometricEstado;
+  validationCount: number;
+  worstAlertKind: IdentityValidationAlertKind | null;
+  latestValidationId: string;
+  instanceId: string | null;
+  referenceNumber: string | null;
+  modalidad: string | null;
+  partyRole: string | null;
+  email: string;
+  provider: BiometricProvider;
+  score: number | null;
+  expired: boolean;
+  createdAt: string;
+  validatedAt: string | null;
+  validUntil: string | null;
+  daysRemaining: number | null;
+  linkExpiresAt: string | null;
+}
+
+/** Respuesta de GET /biometric-validations/by-person. `total` = personas; `stats` = validaciones. */
+export interface TenantBiometricPersonsResponse {
+  persons: TenantBiometricPerson[];
+  stats: BiometricValidationStats;
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+/** Filtros del listado agrupado (solo semántica de persona). */
+export interface TenantBiometricPersonFilters {
+  name?: string;
+  documentType?: string;
+  documentNumber?: string;
+  status?: BiometricEstado;
+  createdFrom?: string;
+  createdTo?: string;
+  vigenciaEstado?: BiometricVigenciaEstado;
+  expiraDesde?: string;
+  expiraHasta?: string;
+  venceEnDias?: number;
+  page?: number;
+  pageSize?: number;
+  standalone?: boolean;
+}
+
+/**
+ * Historial multi-validación por persona (HU #11272 / #11273). Espejo de
+ * PersonBiometricValidationsResponse. `allTerminal` detiene el polling del drawer.
+ */
+export interface PersonBiometricValidationsResponse {
+  documentType: string;
+  documentNumber: string;
+  name: string | null;
+  validations: BiometricValidation[];
+  page: number;
+  pageSize: number;
+  total: number;
+  allTerminal: boolean;
+}
+
 /** Cola en dead-letter de una validación atascada. `envio` = el envío al proveedor (Kyverum) agotó
  * reintentos (estado error_envio); `encadenamiento` = el encadenamiento async firma/FUR agotó reintentos. */
 export type StuckIdentityValidationKind = 'envio' | 'encadenamiento';

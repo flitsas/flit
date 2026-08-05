@@ -77,6 +77,9 @@ import type {
   StatusHistoryPage,
   TenantBiometricValidationsResponse,
   TenantBiometricValidationFilters,
+  TenantBiometricPersonsResponse,
+  TenantBiometricPersonFilters,
+  PersonBiometricValidationsResponse,
   StuckIdentityValidationsResponse,
   WizardModalidad,
   WizardState,
@@ -1382,6 +1385,78 @@ export const tramitesClient = {
         page: 1,
         pageSize: 20,
         total: 0,
+      }
+    );
+  },
+
+  // HU #11270/#11271 — vista agrupada por persona (ADR-0040). Endpoint propio; no altera el listado plano.
+  listTenantBiometricPersons: async (
+    filters: TenantBiometricPersonFilters = {},
+    tenantId?: string,
+  ): Promise<TenantBiometricPersonsResponse> => {
+    const params = new URLSearchParams();
+    const add = (key: string, value: string | number | undefined) => {
+      if (value === undefined) return;
+      const s = typeof value === 'number' ? String(value) : value.trim();
+      if (s !== '') params.set(key, s);
+    };
+    add('name', filters.name);
+    add('documentType', filters.documentType);
+    add('documentNumber', filters.documentNumber);
+    add('status', filters.status);
+    add('createdFrom', filters.createdFrom);
+    add('createdTo', filters.createdTo);
+    add('vigenciaEstado', filters.vigenciaEstado);
+    add('expiraDesde', filters.expiraDesde);
+    add('expiraHasta', filters.expiraHasta);
+    add('venceEnDias', filters.venceEnDias);
+    add('page', filters.page);
+    add('pageSize', filters.pageSize);
+    if (filters.standalone !== undefined) {
+      params.set('standalone', String(filters.standalone));
+    }
+    const query = params.toString();
+    const res = await request<TenantBiometricPersonsResponse>(
+      `/api/v1/tramites/biometric-validations/by-person${query ? `?${query}` : ''}`,
+      { headers: tenantHeader(tenantId) },
+    );
+    return (
+      res ?? {
+        persons: [],
+        stats: { total: 0, aprobadas: 0, enProceso: 0, rechazadas: 0, expiradas: 0 },
+        page: 1,
+        pageSize: 20,
+        total: 0,
+      }
+    );
+  },
+
+  // HU #11272/#11273 — historial multi-validación de una persona (tope 50).
+  listPersonBiometricValidations: async (
+    documentType: string,
+    documentNumber: string,
+    opts: { page?: number; pageSize?: number } = {},
+    tenantId?: string,
+  ): Promise<PersonBiometricValidationsResponse> => {
+    const params = new URLSearchParams();
+    params.set('documentType', documentType);
+    params.set('documentNumber', documentNumber);
+    if (opts.page != null) params.set('page', String(opts.page));
+    if (opts.pageSize != null) params.set('pageSize', String(opts.pageSize));
+    const res = await request<PersonBiometricValidationsResponse>(
+      `/api/v1/tramites/biometric-validations/by-person/detail?${params.toString()}`,
+      { headers: tenantHeader(tenantId) },
+    );
+    return (
+      res ?? {
+        documentType,
+        documentNumber,
+        name: null,
+        validations: [],
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        allTerminal: true,
       }
     );
   },

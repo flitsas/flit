@@ -149,6 +149,85 @@ internal static class BiometricaEndpoints
         .WithName("ListTenantBiometricValidations")
         .Produces<TenantBiometricValidationsResponse>(StatusCodes.Status200OK);
 
+        // GET vista agrupada por persona (HU #11270 / ADR-0040): una fila por documento normalizado.
+        // Endpoint PROPIO — no altera el listado plano que consumen Dashboard y Prevalidaciones.
+        group.MapGet("/biometric-validations/by-person", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            [FromQuery] string? name,
+            [FromQuery] string? documentType,
+            [FromQuery] string? documentNumber,
+            [FromQuery] string? status,
+            [FromQuery] DateTimeOffset? createdFrom,
+            [FromQuery] DateTimeOffset? createdTo,
+            [FromQuery] string? vigenciaEstado,
+            [FromQuery] DateTimeOffset? expiraDesde,
+            [FromQuery] DateTimeOffset? expiraHasta,
+            [FromQuery] int? venceEnDias,
+            [FromQuery] int? page,
+            [FromQuery] int? pageSize,
+            [FromQuery] bool? standalone,
+            ListTenantBiometricPersonsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var query = new TenantBiometricPersonListQuery(
+                name,
+                documentType,
+                documentNumber,
+                status,
+                createdFrom,
+                createdTo,
+                vigenciaEstado,
+                expiraDesde,
+                expiraHasta,
+                venceEnDias,
+                page ?? 1,
+                pageSize ?? TenantBiometricValidationListQuery.DefaultPageSize,
+                standalone);
+
+            var (result, error) = await handler.HandleAsync(tenantId.Value, query, ct);
+            return error is not null
+                ? Results.Problem(statusCode: 400, title: "Bad Request", detail: error)
+                : Results.Ok(result);
+        })
+        .WithName("ListTenantBiometricPersons")
+        .Produces<TenantBiometricPersonsResponse>(StatusCodes.Status200OK);
+
+        // GET historial multi-validación de UNA persona (HU #11272 / CF-06): tope 50 + paginación.
+        group.MapGet("/biometric-validations/by-person/detail", async (
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            [FromQuery] string? documentType,
+            [FromQuery] string? documentNumber,
+            [FromQuery] int? page,
+            [FromQuery] int? pageSize,
+            ListPersonBiometricValidationsHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(
+                tenantId.Value,
+                documentType,
+                documentNumber,
+                page ?? 1,
+                pageSize ?? ListPersonBiometricValidationsHandler.DefaultPageSize,
+                ct);
+
+            return error switch
+            {
+                "documento_requerido" => Results.Problem(statusCode: 400, title: "Bad Request",
+                    detail: "documentType y documentNumber son obligatorios."),
+                "not_found" => Results.Problem(statusCode: 404, title: "Not Found",
+                    detail: "No hay validaciones de identidad para ese documento."),
+                _ => Results.Ok(result),
+            };
+        })
+        .WithName("ListPersonBiometricValidations")
+        .Produces<PersonBiometricValidationsResponse>(StatusCodes.Status200OK);
+
         // GET eventos de validación de identidad ATASCADOS (dead-letter): pendientes que agotaron los
         // reintentos del worker de outbox (fase 2). Observabilidad para reencolar manualmente.
         group.MapGet("/identity-validation/stuck", async (
