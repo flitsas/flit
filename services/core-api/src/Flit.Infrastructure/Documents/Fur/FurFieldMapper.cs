@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Infrastructure.Documents.Fur;
 
@@ -192,8 +193,12 @@ public static class FurFieldMapper
     {
         MarkCheckbox(dict, "requested_process_1", !esTraspaso);
         MarkCheckbox(dict, "requested_process_2", esTraspaso);
-        // HU #10601 — marca el gravamen (prenda) cuando la decisión vigente del trámite lo implica.
-        MarkCheckbox(dict, "requested_process_11", data.TienePrenda);
+        // HU #10601, ampliado por HU #11257 — marca 11 (constitución) o 12 (levantamiento) del gravamen
+        // según la marca YA resuelta en el dominio (FurPrendaMarking): el mapper solo compara el enum,
+        // nunca un string de PrendaDecision. requested_process_1/_2 (tipo de trámite) no cambian: una
+        // matrícula con prenda sigue saliendo 1 + 11, no 2 + 11 (son casillas independientes).
+        MarkCheckbox(dict, "requested_process_11", data.PrendaMarking == FurPrendaMarking.Constitucion);
+        MarkCheckbox(dict, "requested_process_12", data.PrendaMarking == FurPrendaMarking.Levantamiento);
     }
 
     private static void MarkClase(Dictionary<string, FurFieldValue> dict, string? clase)

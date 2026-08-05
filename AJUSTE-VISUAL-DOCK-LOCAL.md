@@ -16,13 +16,10 @@
 
 | Agrupador | Opciones |
 |---|---|
-| Operación | Dashboard, Trámites, Validaciones |
-| Reportes | Reportes, Reportes Detallados |
-| Usuarios | Usuarios y Permisos |
-| Compañías | Compañías, Mi Empresa, Documental, Improntas, Quipux |
-| OT | Tránsito |
-| Administradores | RBAC Admin, Auditoría |
-| Soporte | LOG QX, ICT |
+| Trámites / Identidad / Reportes / Usuarios | Píldoras SPA (RBAC) |
+| Administración | Admin OT: Reglas, Documentos, Requisitos |
+| Administradores | Compañías, Tránsito, Documental, Improntas, Quipux, RBAC Admin, Auditoría, Plataforma → Mandatos (SuperAdmin). AdminCompany: píldora “Administración”. |
+| Integraciones | Log QX, Log ICT |
 | Ayuda | Ayuda |
 
 Regla: 1 opción visible → píldora directa con el label del ítem; 2+ → panel hacia arriba.

@@ -4,8 +4,6 @@ import {
   ShieldCheck,
   BarChart3,
   Users,
-  Building2,
-  Landmark,
   Lock,
   Radar,
   HelpCircle,
@@ -19,6 +17,11 @@ import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
  * Trámites e Identidad son grupos de un solo ítem → píldora directa (no submenú).
  * Dashboard no se lista: el FAB central abre Inicio.
  * `administracion` / `preasignacion`: Admin OT (pestañas hub → dock).
+ * SuperAdmin: Compañías/Tránsito/Documental/Improntas/Quipux/RBAC/Auditoría y el
+ * submenú anidado Plataforma (Mandatos, …) viven en `administradores`.
+ * `integraciones` = Log QX + Log ICT.
+ * AdminCompany: la píldora "Administración" también cae en `administradores` (ítem único →
+ * label del ítem, no del grupo).
  */
 export const DOCK_GROUP_ORDER = [
   "tramites",
@@ -27,10 +30,8 @@ export const DOCK_GROUP_ORDER = [
   "reportes",
   "usuarios",
   "administracion",
-  "companias",
-  "ot",
   "administradores",
-  "soporte",
+  "integraciones",
   "ayuda",
 ] as const;
 
@@ -43,10 +44,8 @@ export const DOCK_GROUP_LABEL: Record<DockGroupId, string> = {
   usuarios: "Usuarios",
   preasignacion: "Preasignación",
   administracion: "Administración",
-  companias: "Compañías",
-  ot: "Tránsito",
   administradores: "Administradores",
-  soporte: "Soporte",
+  integraciones: "Integraciones",
   ayuda: "Ayuda",
 };
 
@@ -68,10 +67,8 @@ export const DOCK_GROUP_ICON: Record<DockGroupId, DockIconComponent> = {
   usuarios: Users,
   preasignacion: Tag,
   administracion: FolderCog,
-  companias: Building2,
-  ot: Landmark,
   administradores: Lock,
-  soporte: Radar,
+  integraciones: Radar,
   ayuda: HelpCircle,
 };
 
@@ -83,13 +80,16 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   reportes: "reportes",
   "reportes-detallados": "reportes",
   usuarios: "usuarios",
-  "admin-companies": "companias",
-  "mi-empresa": "companias",
-  "admin-documents": "companias",
-  "admin-improntas": "companias",
-  "admin-quipux": "companias",
-  "admin-transit": "ot",
-  "admin-rejection-reasons": "ot",
+  // SuperAdmin + AdminCompany ("Administración"): consola / listado de compañías
+  "admin-companies": "administradores",
+  "mi-empresa": "administradores",
+  "admin-documents": "administradores",
+  "admin-improntas": "administradores",
+  "admin-quipux": "administradores",
+  // Tránsito anida Organismos y Causales de rechazo; solo el padre necesita grupo.
+  "admin-transit": "administradores",
+  // SuperAdmin — Plataforma anidada dentro de Administradores
+  "admin-plataforma": "administradores",
   // Admin OT — pestañas hub en el dock
   [OT_ADM_DOCK.tramites]: "tramites",
   [OT_ADM_DOCK.rules]: "administracion",
@@ -100,8 +100,8 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   [OT_ADM_DOCK.reportes]: "reportes",
   rbac: "administradores",
   auditoria: "administradores",
-  "log-qx": "soporte",
-  "ict-logs": "soporte",
+  "log-qx": "integraciones",
+  "ict-logs": "integraciones",
   ayuda: "ayuda",
 };
 
@@ -111,6 +111,8 @@ export type DockEntryLike = {
   icon: DockIconComponent;
   active: boolean;
   onClick: () => void;
+  /** Submenú anidado (p. ej. Administradores → Plataforma → Mandatos). */
+  children?: DockEntryLike[];
 };
 
 export type DockGroupView = {
@@ -121,6 +123,11 @@ export type DockGroupView = {
   /** Algún ítem del grupo está activo. */
   active: boolean;
 };
+
+/** Aplana ítems con hijos (móvil / tests): los leafs de navegación. */
+export function flattenDockEntries(entries: DockEntryLike[]): DockEntryLike[] {
+  return entries.flatMap((it) => (it.children?.length ? it.children : [it]));
+}
 
 /** Agrupa entradas visibles; omite agrupadores vacíos. Ítems sin mapa van a un cubo final no listado (no deberían existir). */
 export function buildDockGroups(entries: DockEntryLike[]): DockGroupView[] {
@@ -140,7 +147,9 @@ export function buildDockGroups(entries: DockEntryLike[]): DockGroupView[] {
       label: DOCK_GROUP_LABEL[id],
       icon: DOCK_GROUP_ICON[id],
       items,
-      active: items.some((i) => i.active),
+      active: items.some(
+        (i) => i.active || Boolean(i.children?.some((c) => c.active)),
+      ),
     };
   }).filter((g) => g.items.length > 0);
 }
