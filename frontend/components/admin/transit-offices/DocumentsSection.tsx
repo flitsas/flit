@@ -169,17 +169,12 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
             </select>
           </label>
 
-          {procedureTypeId && (
-            <section className="space-y-2 rounded-2xl border p-4">
-              <h3 className="text-xs font-semibold text-foreground">
-                Documento de prenda por Organismo de Tránsito
-              </h3>
-              <PledgeDocumentOverrideToggle
-                procedureTypeId={procedureTypeId}
-                transitOfficeId={transitOfficeId}
-              />
-            </section>
-          )}
+          <section className="space-y-2 rounded-2xl border p-4">
+            <h3 className="text-xs font-semibold text-foreground">
+              Documento de prenda por compañía
+            </h3>
+            <PledgeDocumentOverrideToggle transitOfficeId={transitOfficeId} />
+          </section>
 
           <UiStateBoundary
             status={precStatus}

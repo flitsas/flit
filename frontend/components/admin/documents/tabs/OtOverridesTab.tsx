@@ -260,17 +260,13 @@ export function OtOverridesTab({ procedureTypeId }: { procedureTypeId: string })
         <>
           <section className="flex flex-col gap-3">
             <div>
-              <h3 className="text-xs font-semibold">Documento de prenda (HU #10887)</h3>
+              <h3 className="text-xs font-semibold">Documento de prenda por compañía</h3>
               <p className="text-[11px] opacity-60">
-                Override dedicado de obligatoriedad para el documento de inscripción/registro
-                de prenda en este OT. Independiente de «Orden de los documentos»: no requiere
-                agregarlo ahí primero.
+                Por defecto es obligatorio. Activa el check por compañía para que deje de exigirse
+                en este OT.
               </p>
             </div>
-            <PledgeDocumentOverrideToggle
-              procedureTypeId={procedureTypeId}
-              transitOfficeId={transitOfficeId}
-            />
+            <PledgeDocumentOverrideToggle transitOfficeId={transitOfficeId} />
           </section>
 
           <section className="flex flex-col gap-3 border-t pt-4">

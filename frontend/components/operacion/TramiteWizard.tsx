@@ -463,6 +463,11 @@ export function TramiteWizard(props: Props) {
    * El formulario notifica el gate; al salir del paso se resetea.
    */
   const [actorsConsultationReady, setActorsConsultationReady] = useState(false);
+  /**
+   * Certificado de prenda: Continuar solo si no falta un adjunto obligatorio
+   * (política compañía+OT + decisión que exige documento).
+   */
+  const [prendaDocGateOk, setPrendaDocGateOk] = useState(true);
   /** Feature #11066 — cambios locales pendientes de Guardar (docs/forms). */
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   /**
@@ -753,6 +758,9 @@ export function TramiteWizard(props: Props) {
     activeStep?.key === 'vendedor' ||
     activeStep?.key === 'comercial';
   const isActorStep = activeStep?.key === 'comprador' || activeStep?.key === 'vendedor';
+  const isPrendaStep =
+    (activeStep?.key === 'documentos' && modalidad !== 'traspaso') ||
+    activeStep?.key === 'comercial';
   // El siguiente paso es navegable (no hay paso de datos incompleto por delante). Permite "Continuar"
   // desde un paso diferido incompleto (Identidad) hacia el FUR para finalizar/radicar.
   const nextStepNavigable = canNavigateToStep(steps, activeIndex + 1, navViewOnly);
@@ -762,6 +770,8 @@ export function TramiteWizard(props: Props) {
     continuing ||
     // Sin consulta RUNT/RUES exitosa no se avanza en pasos de actores.
     (isActorStep && !actorsConsultationReady) ||
+    // Certificado de prenda obligatorio sin adjuntar: no Continuar.
+    (isPrendaStep && !prendaDocGateOk) ||
     // CF-02 — sin trámite creado, "Continuar" es justamente lo que lo crea: se habilita en cuanto la
     // consulta del vehículo salió bien (sin bloqueos), que es el único requisito del paso 1.
     (deferredCreation
@@ -1130,6 +1140,8 @@ export function TramiteWizard(props: Props) {
                 vaultCoveredPartes={vaultCoveredPartes}
                 rnmcEnabled={wizard?.rnmcEnabled ?? false}
                 esMigrado={wizard?.esMigrado ?? false}
+                prendaDocumentRequired={wizard?.prendaDocumentRequired ?? true}
+                onPrendaDocumentGateChange={setPrendaDocGateOk}
                 deferredModalidad={deferredCreation ? entryModalidad : undefined}
                 seedVin={seedVin}
                 seedPlaca={seedPlaca}
@@ -2393,6 +2405,8 @@ function StepBody({
   vaultCoveredPartes = [],
   rnmcEnabled = false,
   esMigrado = false,
+  prendaDocumentRequired = true,
+  onPrendaDocumentGateChange,
   deferredModalidad,
   seedVin,
   seedPlaca,
@@ -2427,6 +2441,10 @@ function StepBody({
   rnmcEnabled?: boolean;
   /** Migración V1→V2 — el trámite viene de V1; el paso de consulta lo explica en el pre-vuelo. */
   esMigrado?: boolean;
+  /** Compañía+OT: certificado de prenda obligatorio (default) u opcional. */
+  prendaDocumentRequired?: boolean;
+  /** Gate Continuar: certificado de prenda listo (o no exigible). */
+  onPrendaDocumentGateChange?: (ready: boolean) => void;
   /**
    * HU #10350 — borrador finalizado: aunque el wizard esté en solo lectura para los datos, el paso
    * de Identidad debe seguir operable (iniciar/compartir/refrescar Kyverum) porque la validación del
@@ -2487,6 +2505,8 @@ function StepBody({
                 onSaved={onRefresh}
                 embeddedInWizard
                 modalidad="matricula_inicial"
+                documentRequired={prendaDocumentRequired}
+                onDocumentGateChange={onPrendaDocumentGateChange}
                 runtHasGravamen={gravamen?.status === 'warn'}
                 runtGravamenMessage={gravamen?.message}
               />
@@ -2567,6 +2587,8 @@ function StepBody({
             onSaved={onRefresh}
             embeddedInWizard
             modalidad="traspaso"
+            documentRequired={prendaDocumentRequired}
+            onDocumentGateChange={onPrendaDocumentGateChange}
             runtHasGravamen={
               preflight?.checks?.find((c) => c.key === 'gravamenes')?.status === 'warn'
             }

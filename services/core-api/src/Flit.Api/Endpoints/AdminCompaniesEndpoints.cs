@@ -15,6 +15,7 @@ using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Application.Companies.TransitOffices.RemoveTransitGrant;
 using Flit.Admin.Application.Companies.TransitOffices.SetOtBlockingPolicy;
 using Flit.Admin.Application.Companies.TransitOffices.SetOtConsultationRestriction;
+using Flit.Admin.Application.Companies.TransitOffices.OtPrendaDocumentPolicy;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Application.Companies.Whitelist;
 using Flit.Admin.Application.Companies.Whitelist.AddWhitelistEmails;
@@ -271,6 +272,27 @@ public static class AdminCompaniesEndpoints
                 + "informativo para un Organismo de Tránsito puntual de la compañía. Idempotente: reenviar "
                 + "el mismo estado no duplica auditoría. 422 si el OT no existe, no está habilitado para la "
                 + "compañía, o el criterio no es configurable. Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // GET/PUT — documento de prenda opcional (opt-out) por compañía + OT.
+        group.MapGet("/{tenantId:guid}/ot-prenda-document-policies", GetOtPrendaDocumentPoliciesAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
+            .WithName("AdminCompanyGetOtPrendaDocumentPolicies")
+            .WithSummary("Lista OTs donde la prenda es opcional (check activo)")
+            .Produces<IReadOnlyList<OtPrendaDocumentPolicyResponse>>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapPut(
+                "/{tenantId:guid}/ot-prenda-document-policies/{transitOfficeId:guid}",
+                SetOtPrendaDocumentPolicyAsync)
+            .AddEndpointFilter<CompanyOwnTenantFilter>()
+            .WithName("AdminCompanySetOtPrendaDocumentPolicy")
+            .WithSummary("Activa o desactiva el check de prenda opcional por OT")
+            .WithDescription("documentOptional=true ⇒ deja de exigir prenda; false ⇒ vuelve a obligatoria (default).")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -669,6 +691,40 @@ public static class AdminCompaniesEndpoints
             ? Results.NoContent()
             : Results.Json(
                 new OtBlockingPolicyValidationErrorResponse(result.Errors),
+                statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+
+    private static async Task<IResult> GetOtPrendaDocumentPoliciesAsync(
+        Guid tenantId,
+        [FromServices] GetOtPrendaDocumentPoliciesHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(tenantId, cancellationToken).ConfigureAwait(false);
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> SetOtPrendaDocumentPolicyAsync(
+        Guid tenantId,
+        Guid transitOfficeId,
+        SetOtPrendaDocumentPolicyRequest request,
+        HttpContext httpContext,
+        [FromServices] SetOtPrendaDocumentPolicyHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var command = new SetOtPrendaDocumentPolicyCommand
+        {
+            TenantId = tenantId,
+            TransitOfficeId = transitOfficeId,
+            DocumentOptional = request.DocumentOptional,
+            ChangedBy = ResolveUserId(httpContext.User),
+        };
+
+        var result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+
+        return result.IsValid
+            ? Results.NoContent()
+            : Results.Json(
+                new { errors = result.Errors.Select(e => new { field = e.Field, message = e.Message, value = e.Value }) },
                 statusCode: StatusCodes.Status422UnprocessableEntity);
     }
 

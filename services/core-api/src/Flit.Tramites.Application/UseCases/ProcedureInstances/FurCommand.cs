@@ -800,11 +800,10 @@ public sealed class GenerarFurHandler(
     }
 
     /// <summary>
-    /// ADR-0036 (HU #10915) — Genera el Contrato de Mandato si el trámite lo EXIGE: persona jurídica
-    /// siempre; persona natural solo si el OT lo configura (<c>RequiresForNaturalPerson</c>). Resuelve la
-    /// config del OT por el <c>transit_office_code</c> del trámite; sin generador o sin exigencia devuelve
-    /// <c>null</c> (el caller retira el mandato previo). El firmante (mandatario) va <c>null</c>: en
-    /// preparado aún no está elegido/filtrado (HU #10916 lo resuelve al aprobar y regenera).
+    /// ADR-0036 (HU #10915) — Genera el Contrato de Mandato siempre que haya generador y código de OT
+    /// (persona natural y jurídica). Resuelve la config del OT por el <c>transit_office_code</c>;
+    /// sin generador o sin código de OT devuelve <c>null</c> (el caller retira el mandato previo).
+    /// El firmante (mandatario) va <c>null</c> en preparado: HU #10916 lo resuelve al aprobar y regenera.
     /// </summary>
     /// <summary>
     /// HU #11206 — transformaciones declaradas en el trámite (<c>field_values</c> con valor <c>true</c>).
@@ -834,12 +833,7 @@ public sealed class GenerarFurHandler(
             return null;
 
         var config = await _mandatePolicy.ResolveAsync(transitOfficeCode, ct);
-        // HU #11030 — quien otorga el mandato es el MANDANTE (el vendedor en traspaso): su naturaleza es
-        // la que decide si el trámite exige mandato, no la de quien radica.
-        var esJuridica = data.Mandante?.EsJuridica ?? false;
-        var exigeMandato = esJuridica || (config?.RequiresForNaturalPerson ?? false);
-        if (!exigeMandato)
-            return null;
+        // Producto: el mandato se emite siempre (PN y PJ). La plantilla/familia vienen de la config del OT.
 
         // HU #10916 — firmante resuelto al aprobar (instance.MandateSignerId). En preparado va null ⇒ el
         // PDF pinta placeholders y se regenera al aprobar. Sabaneta (institucional) no lleva firmante persona.
