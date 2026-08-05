@@ -1,5 +1,7 @@
 using Flit.Infrastructure.Documents.Fur;
 using Flit.Tramites.Application.Documents;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 var coreApiRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 var outDir = Path.Combine(coreApiRoot, "artifacts", "fur-analysis");
@@ -42,6 +44,10 @@ const string ObsDesmedida =
     "APLICABLE EN MATERIA DE TRANSITO Y TRANSPORTE TERRESTRE AUTOMOTOR EN EL TERRITORIO NACIONAL " +
     "COLOMBIANO, SEGUN LO ESTABLECIDO POR EL MINISTERIO DE TRANSPORTE Y LA SUPERINTENDENCIA DE " +
     "TRANSPORTE PARA ESTE TIPO DE TRAMITES DE REGISTRO AUTOMOTOR NACIONAL.";
+
+// HU #11257 — acreedor de prueba compartido por los seis escenarios de prenda.
+const string AcreedorPrendaNombre = "BANCO FINANCIERO DE COLOMBIA S.A.";
+const string AcreedorPrendaDocumento = "890900608-1";
 
 var scenarios = new (string Slug, FurDocumentData Data)[]
 {
@@ -89,6 +95,53 @@ var scenarios = new (string Slug, FurDocumentData Data)[]
     ("13-automotor-no-firmado", AutomotorData() with { IdentidadValidada = false }),
     ("14-maquinaria-no-firmado", MaquinariaData() with { IdentidadValidada = false }),
     ("15-remolques-no-firmado", RemolquesData() with { IdentidadValidada = false }),
+
+    // HU #11257 (Feature #11254) — modalidad de prenda en los tres formatos: constitución marca 11,
+    // levantamiento marca 12 (nunca la contraria) y el recuadro OBSERVACIONES declara el literal propio
+    // de cada modalidad (CF11). `Observaciones` se compone igual que `FurCommand.AssembleData` para que
+    // el render sea representativo del handler real.
+    ("16-automotor-prenda-constitucion", AutomotorData() with
+    {
+        PrendaMarking = FurPrendaMarking.Constitucion,
+        AcreedorPrenda = AcreedorPrendaNombre,
+        Observaciones = FurPrendaObservation.Compose(
+            FurPrendaMarking.Constitucion, AcreedorPrendaNombre, AcreedorPrendaDocumento),
+    }),
+    ("17-automotor-prenda-levantamiento", AutomotorData() with
+    {
+        PrendaMarking = FurPrendaMarking.Levantamiento,
+        AcreedorPrenda = AcreedorPrendaNombre,
+        Observaciones = FurPrendaObservation.Compose(
+            FurPrendaMarking.Levantamiento, AcreedorPrendaNombre, AcreedorPrendaDocumento),
+    }),
+    ("18-maquinaria-prenda-constitucion", MaquinariaData() with
+    {
+        PrendaMarking = FurPrendaMarking.Constitucion,
+        AcreedorPrenda = AcreedorPrendaNombre,
+        Observaciones = FurPrendaObservation.Compose(
+            FurPrendaMarking.Constitucion, AcreedorPrendaNombre, AcreedorPrendaDocumento),
+    }),
+    ("19-maquinaria-prenda-levantamiento", MaquinariaData() with
+    {
+        PrendaMarking = FurPrendaMarking.Levantamiento,
+        AcreedorPrenda = AcreedorPrendaNombre,
+        Observaciones = FurPrendaObservation.Compose(
+            FurPrendaMarking.Levantamiento, AcreedorPrendaNombre, AcreedorPrendaDocumento),
+    }),
+    ("20-remolques-prenda-constitucion", RemolquesData() with
+    {
+        PrendaMarking = FurPrendaMarking.Constitucion,
+        AcreedorPrenda = AcreedorPrendaNombre,
+        Observaciones = FurPrendaObservation.Compose(
+            FurPrendaMarking.Constitucion, AcreedorPrendaNombre, AcreedorPrendaDocumento),
+    }),
+    ("21-remolques-prenda-levantamiento", RemolquesData() with
+    {
+        PrendaMarking = FurPrendaMarking.Levantamiento,
+        AcreedorPrenda = AcreedorPrendaNombre,
+        Observaciones = FurPrendaObservation.Compose(
+            FurPrendaMarking.Levantamiento, AcreedorPrendaNombre, AcreedorPrendaDocumento),
+    }),
 };
 
 foreach (var (slug, data) in scenarios)

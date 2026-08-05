@@ -175,7 +175,9 @@ public sealed class FurManifestGuardTests
     // Línea base congelada de la geometría del manifest (version 2026-07-03...-newtpl792).
     // Recalibrada 2026-07-24 tras reemplazar el blank AUTOMOTOR por el formulario oficial 792×612
     // (HU #10921). Regenerada 2026-08-04 (HU #11256) tras añadir `AutoFit` a la huella `Canon`: solo
-    // `observations` cambia de valor (True); el resto queda en False, igual que hoy. Regenerar SOLO
+    // `observations` cambia de valor (True); el resto queda en False, igual que hoy. Regenerada
+    // 2026-08-05 (HU #11257) tras añadir `requested_process_12` (levantamiento de prenda), derivada
+    // directamente de `requested_process_11` (mismo `size`, offset rótulo11→rótulo12). Regenerar SOLO
     // de forma deliberada vía EmitBaseline tras recalibrar el manifest.
     private const string Baseline = """
         traffic_secretary_name=Text:525,64,175,11.9,6.5,Left,False
@@ -189,6 +191,7 @@ public sealed class FurManifestGuardTests
         requested_process_1=cb:71.3,119.2,9.9
         requested_process_2=cb:119.5,121.1,9.8
         requested_process_11=cb:286.9,170.9,10.1
+        requested_process_12=cb:343.3,170.9,10.1
         vehicle_class_1=cb:53.6,222.4,9.9
         vehicle_class_5=cb:231.5,221.5,10
         vehicle_class_9=cb:101.7,232.7,10
@@ -263,8 +266,14 @@ public sealed class FurManifestGuardTests
     // Línea base congelada de la geometría del manifest MAQUINARIA (version 2026-07-24-maquinaria-v2-traspaso-calib,
     // recalibrada para HU #11255 con el desplazamiento de `observations`). Regenerada 2026-08-04
     // (HU #11256) tras añadir `AutoFit` a la huella `Canon`: solo `observations` cambia de valor
-    // (True); el resto queda en False, igual que hoy. Regenerar SOLO de forma deliberada vía
-    // EmitBaseline tras recalibrar el manifest.
+    // (True); el resto queda en False, igual que hoy. Regenerada 2026-08-05 (HU #11257) tras añadir
+    // `requested_process_11`/`_12` (modalidad de prenda, H2): en MAQUINARIA los rótulos IMPRESOS de
+    // prenda son "10"/"11" (no "11"/"12" como en automotor/remolques — ver calibrate-prenda-boxes.py),
+    // pero los IDs internos del manifest siguen siendo `requested_process_11`(constitución)/
+    // `_12`(levantamiento) en los tres formatos: es un contrato semántico del mapper, no el número
+    // impreso. Medido por respaldo (offset desde `requested_process_1`/`_2`), no hay rectángulo
+    // vectorial que ancle la casilla en el blank. Regenerar SOLO de forma deliberada vía EmitBaseline
+    // tras recalibrar el manifest.
     private const string BaselineMaquinaria = """
         traffic_secretary_name=Text:665,44,280,10,7,Left,False
         traffic_secretary_city=Text:648,66,62,10,7,Left,False
@@ -276,6 +285,8 @@ public sealed class FurManifestGuardTests
         plate_number=Text:935,59,30,11,7,Center,False
         requested_process_1=cb:101,102,9
         requested_process_2=cb:170,102,9
+        requested_process_11=cb:303.6,129,9
+        requested_process_12=cb:370,129,9
         vehicle_brand=Text:508,95,66,12,7,Left,False
         vehicle_line=Text:578,95,74,12,7,Left,False
         vehicle_colors=Text:500,134,268,12,7,Left,False
@@ -325,8 +336,13 @@ public sealed class FurManifestGuardTests
     // Línea base congelada de la geometría del manifest REMOLQUES (version 2026-07-24-remolques-v1,
     // recalibrada para HU #11255 con el desplazamiento de `observations` y `vehicle_serial_number`).
     // Regenerada 2026-08-04 (HU #11256) tras añadir `AutoFit` a la huella `Canon`: solo `observations`
-    // cambia de valor (True); el resto queda en False, igual que hoy. Regenerar SOLO de forma
-    // deliberada vía EmitBaseline tras recalibrar el manifest.
+    // cambia de valor (True); el resto queda en False, igual que hoy. Regenerada 2026-08-05
+    // (HU #11257) tras añadir `requested_process_10` (bonus, sin relación con prenda — "DUPLICADO
+    // TARJETA DE REGISTRO" impreso; medido en el mismo barrido para no repetir la calibración cuando
+    // una HU futura lo necesite, aún sin consumidor en el mapper) y `requested_process_11`/`_12`
+    // (modalidad de prenda, H2), medidas por respaldo (offset desde `requested_process_1`/`_2`; no hay
+    // rectángulo vectorial que ancle la casilla en el blank). Regenerar SOLO de forma deliberada vía
+    // EmitBaseline tras recalibrar el manifest.
     private const string BaselineRemolques = """
         traffic_secretary_name=Text:668,44,280,10,7,Left,False
         traffic_secretary_city=Text:650,64,62,10,7,Left,False
@@ -338,6 +354,9 @@ public sealed class FurManifestGuardTests
         plate_number=Text:936,56,30,11,9,Center,False
         requested_process_1=cb:86,101,9
         requested_process_2=cb:155,101,9
+        requested_process_10=cb:291.9,128,9
+        requested_process_11=cb:361.5,128,9
+        requested_process_12=cb:421.7,128,9
         vehicle_brand=Text:498,96,160,12,7,Left,False
         vehicle_line=Text:666,96,165,12,7,Left,False
         vehicle_colors=Text:498,132,130,12,7,Left,False

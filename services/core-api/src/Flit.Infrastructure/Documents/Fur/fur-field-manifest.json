@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-04-hu11256-observations-autofit",
+  "version": "2026-08-04-hu11257-prenda-marking",
   "pageWidth": 792,
   "pageHeight": 612,
   "coordinateOrigin": "top-left",
@@ -122,6 +122,14 @@
       "page": 1,
       "type": "checkbox",
       "x": 286.9,
+      "y": 170.9,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_12",
+      "page": 1,
+      "type": "checkbox",
+      "x": 343.3,
       "y": 170.9,
       "size": 10.1
     },
