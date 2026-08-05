@@ -51,11 +51,44 @@ describe("buildDockGroups", () => {
     expect(admin?.items.map((i) => i.label)).toEqual(["Reglas", "Documentos", "Requisitos"]);
   });
 
-  it("SuperAdmin: Tránsito es píldora única del agrupador OT", () => {
-    const groups = buildDockGroups([entry("admin-transit", "Tránsito")]);
+  it("SuperAdmin: Compañías y Tránsito viven en Administradores (con RBAC/Auditoría)", () => {
+    const groups = buildDockGroups([
+      entry("admin-companies", "Compañías"),
+      entry("admin-transit", "Tránsito"),
+      entry("admin-documents", "Documental"),
+      entry("admin-improntas", "Improntas"),
+      entry("admin-quipux", "Quipux"),
+      entry("rbac", "RBAC Admin"),
+      entry("auditoria", "Auditoría"),
+    ]);
     expect(groups).toHaveLength(1);
-    expect(groups[0].label).toBe("OT");
-    expect(groups[0].items).toHaveLength(1);
-    expect(groups[0].items[0].label).toBe("Tránsito");
+    expect(groups[0].label).toBe("Administradores");
+    expect(groups[0].items.map((i) => i.label)).toEqual([
+      "Compañías",
+      "Tránsito",
+      "Documental",
+      "Improntas",
+      "Quipux",
+      "RBAC Admin",
+      "Auditoría",
+    ]);
+  });
+
+  it("Plataforma es submenú forzado con Mandatos (aunque sea un solo ítem)", () => {
+    const groups = buildDockGroups([entry("admin-mandatos", "Mandatos")]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].label).toBe("Plataforma");
+    expect(groups[0].forceMenu).toBe(true);
+    expect(groups[0].items.map((i) => i.label)).toEqual(["Mandatos"]);
+  });
+
+  it("Integraciones agrupa Log QX y Log ICT", () => {
+    const groups = buildDockGroups([
+      entry("log-qx", "Log QX"),
+      entry("ict-logs", "Log ICT"),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].label).toBe("Integraciones");
+    expect(groups[0].items.map((i) => i.label)).toEqual(["Log QX", "Log ICT"]);
   });
 });

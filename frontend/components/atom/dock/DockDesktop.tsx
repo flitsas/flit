@@ -119,7 +119,7 @@ function DockGroupPill({
   panelId: string;
 }) {
   const { ref: panelRef, shift } = useEdgeClamp<HTMLDivElement>(open ? group.id : null);
-  const multi = group.items.length > 1;
+  const multi = group.items.length > 1 || group.forceMenu;
   const sole = !multi ? group.items[0] : null;
   const lit = group.active || open;
   const Icon = sole?.icon ?? group.icon;
