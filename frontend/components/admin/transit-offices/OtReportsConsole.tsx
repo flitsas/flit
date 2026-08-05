@@ -57,7 +57,7 @@ interface DrilldownState {
 }
 
 export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
-  const initial = useMemo(defaultRange, []);
+  const initial = useMemo(() => defaultRange(), []);
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
   const [modalidad, setModalidad] = useState("");
@@ -107,6 +107,7 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
   }, [from, to, modalidad, clientTenantId, transitOfficeId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: patrón del repo, skeleton inmediato antes del fetch
     void load();
   }, [load]);
 

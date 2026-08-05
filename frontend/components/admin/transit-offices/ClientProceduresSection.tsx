@@ -182,6 +182,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     const vinParam = params.get("vin")?.trim();
     const statusParam = params.get("status")?.trim();
     if (!placaParam && !vinParam && !statusParam) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- siembra desde la URL al montar: no hay otro momento para leerla */
     if (placaParam) {
       setPlacaFilter(placaParam);
       setAppliedPlaca(placaParam);
@@ -193,6 +194,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     if (statusParam) setStatusFilter(statusParam);
     setFiltersOpen(true);
     setPage(1);
+    /* eslint-enable react-hooks/set-state-in-effect */
     // Solo al montar: es una precarga desde la URL de entrada, no una sincronización continua.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -279,6 +279,67 @@ describe("Reportes — pestañas según permisos RBAC", () => {
   });
 });
 
+// ── Pestaña Uso del aplicativo ───────────────────────────────────────────────
+describe("Reportes — pestaña Uso del aplicativo", () => {
+  it("no muestra el consumo de APIs externas aunque el backend lo devuelva", async () => {
+    // Es telemetría de nuestras integraciones (URLs, latencias, tasa de error): operación
+    // nuestra, no información de la empresa. El endpoint sigue enviándola; la vista la ignora.
+    setPermissions(["reportes.uso.read"]);
+    mocks.fetchUsageMetrics.mockResolvedValue({
+      ...USAGE_EMPTY,
+      current: {
+        ...USAGE_EMPTY.current,
+        moduleUsage: [{ module: "tramites", events: 42, uniqueUsers: 7 }],
+        externalApis: [
+          {
+            endpoint: "https://quipux.example.gov.co/api/radicar",
+            direction: "outbound",
+            calls: 120,
+            errors: 9,
+            errorRatePct: 7.5,
+            avgDurationMs: 840,
+            p90DurationMs: 1900,
+          },
+        ],
+      },
+    });
+
+    render(<Reportes />);
+
+    // La pestaña sí tiene datos que pintar (módulos), así que no cae al estado vacío.
+    expect(await screen.findByTestId("modulos-mas-usados")).toBeInTheDocument();
+    expect(screen.queryByTestId("apis-externas-table")).not.toBeInTheDocument();
+    expect(screen.queryByText(/APIs externas/i)).not.toBeInTheDocument();
+    // Y no se filtra la URL del proveedor por ningún otro lado de la vista.
+    expect(screen.queryByText(/quipux\.example\.gov\.co/i)).not.toBeInTheDocument();
+  });
+
+  it("con solo APIs externas la pestaña se declara vacía, sin bloques huérfanos", async () => {
+    setPermissions(["reportes.uso.read"]);
+    mocks.fetchUsageMetrics.mockResolvedValue({
+      ...USAGE_EMPTY,
+      current: {
+        ...USAGE_EMPTY.current,
+        externalApis: [
+          {
+            endpoint: "https://quipux.example.gov.co/api/radicar",
+            direction: "outbound",
+            calls: 120,
+            errors: 9,
+            errorRatePct: 7.5,
+            avgDurationMs: 840,
+            p90DurationMs: 1900,
+          },
+        ],
+      },
+    });
+
+    render(<Reportes />);
+
+    expect(await screen.findByText(/aún no hay datos de uso registrados/i)).toBeInTheDocument();
+  });
+});
+
 // ── Pestaña Resumen ──────────────────────────────────────────────────────────
 describe("Reportes — pestaña Resumen general", () => {
   it("carga y muestra los KPIs y el panel 'Ahora mismo'", async () => {

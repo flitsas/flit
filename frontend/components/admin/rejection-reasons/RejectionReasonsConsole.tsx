@@ -57,6 +57,7 @@ export function RejectionReasonsConsole() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: patrón del repo, skeleton inmediato antes del fetch
     void load();
   }, [load]);
 
