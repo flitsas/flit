@@ -1,9 +1,13 @@
 "use client";
 
-// «Análisis»: por qué rechazo, cómo decide mi equipo y qué calidad me llega.
+// «Análisis»: por qué rechazo y qué calidad me llega.
 //
 // Todo lo de aquí SÍ depende del rango, así que el rango vive en esta pestaña y no encima del panel
 // operativo, que describe el ahora. Es el otro lado del mismo arreglo.
+//
+// El desempeño de las PERSONAS se fue a la pestaña «Revisores», que además filtra por revisor y
+// exporta. Dejar aquí una copia habría puesto los mismos números en dos sitios con filtros
+// distintos, y en cuanto los dos difieren por un filtro, el reporte deja de merecer confianza.
 
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -22,7 +26,6 @@ import {
   defaultRange,
   type DateRange,
 } from "./filters";
-import { formatHours } from "./report-columns";
 import { Bar, Empty, ErrorNotice, PrimaryButton, Section, Table, Tile } from "./shared";
 
 export interface OtAnalysisTabProps {
@@ -150,41 +153,7 @@ function RejectionReasonsPanel({ reasons }: { reasons: OtRejectionReasons }) {
 
 function PerformancePanel({ performance }: { performance: OtPerformance }) {
   return (
-    <>
-      <Section
-        title="Mi equipo de revisores"
-        testId="ot-reports-reviewers"
-        hint="Volumen siempre acompañado de calidad: el conteo solo premiaría a quien decide rápido y mal."
-      >
-        {performance.revisores.length === 0 ? (
-          <Empty>Nadie decidió trámites en el periodo seleccionado.</Empty>
-        ) : (
-          <Table
-            headers={[
-              "Revisor",
-              "Decididos",
-              "% aprobado",
-              "% rechazo",
-              "Tiempo mediano",
-              "Vuelven a rechazarse",
-            ]}
-            rows={performance.revisores.map((r) => ({
-              key: r.userId,
-              cells: [
-                r.displayName,
-                String(r.decididos),
-                `${r.aprobacionPct} %`,
-                `${r.rechazoPct} %`,
-                // Mismo motivo que en el panel operativo: el número crudo salía como «0.03 h».
-                formatHours(r.tiempoMedianoHoras),
-                `${r.vuelvenARechazarsePct} %`,
-              ],
-            }))}
-          />
-        )}
-      </Section>
-
-      <Section
+    <Section
         title="Calidad de lo que me llega, por empresa"
         testId="ot-reports-companies"
         hint="«Pasan a la primera» se mide sobre los aprobados: medirlo sobre todo lo entregado castigaría a la empresa por lo que aún está en revisión."
@@ -207,8 +176,7 @@ function PerformancePanel({ performance }: { performance: OtPerformance }) {
               ],
             }))}
           />
-        )}
-      </Section>
-    </>
+      )}
+    </Section>
   );
 }

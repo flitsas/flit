@@ -86,6 +86,30 @@ public static class AdminOtMetricsEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapGet("/reviewers", GetReviewersReportAsync)
+            .WithName("AdminOtMetricsReviewers")
+            .WithSummary("Informe de revisores: volumen, tiempos y calidad por persona")
+            .WithDescription("El universo son las DECISIONES tomadas dentro del rango, no los "
+                + "trámites recibidos: la pregunta es qué hizo cada persona en estas fechas. "
+                + "'userIds' admite varios valores repitiendo el parámetro; vacío significa TODOS "
+                + "los revisores con actividad, no ninguno.")
+            .Produces<OtReviewersReportDto>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/reviewer-options", ListReviewerOptionsAsync)
+            .WithName("AdminOtMetricsReviewerOptions")
+            .WithSummary("Revisores del organismo, para el filtro del informe")
+            .WithDescription("Todos los que han decidido algo alguna vez, con su volumen histórico. "
+                + "No se recorta por rango a propósito: si lo hiciera, un revisor de vacaciones "
+                + "desaparecería del selector justo cuando alguien quiere comprobar que no decidió nada.")
+            .Produces<IReadOnlyList<OtReviewerOptionDto>>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         group.MapGet("/client-companies", ListClientCompaniesAsync)
             .WithName("AdminOtMetricsClientCompanies")
             .WithSummary("Empresas cliente del organismo, para el filtro del reporte")
@@ -179,6 +203,60 @@ public static class AdminOtMetricsEndpoints
 
         var result = await handler
             .HandleAsync(context.TenantId, query, context.ScopedOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return result is null ? NoTransitOffice() : Results.Ok(result);
+    }
+
+    private static async Task<IResult> GetReviewersReportAsync(
+        HttpContext httpContext,
+        [FromServices] GetOtReviewersReportHandler handler,
+        [FromServices] ITransitOfficeCatalog transitOfficeCatalog,
+        CancellationToken cancellationToken,
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
+        [FromQuery] string? modalidad = null,
+        [FromQuery] Guid? clientTenantId = null,
+        [FromQuery] Guid? transitOfficeId = null,
+        [FromQuery] Guid[]? userIds = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] bool desc = true)
+    {
+        var (context, error) = ResolveContext(
+            httpContext, transitOfficeCatalog, from, to, modalidad, clientTenantId, transitOfficeId);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var query = GetOtReviewersReportHandler.BuildQuery(context.Filter, userIds, sortBy, desc);
+
+        var result = await handler
+            .HandleAsync(context.TenantId, query, context.ScopedOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return result is null ? NoTransitOffice() : Results.Ok(result);
+    }
+
+    private static async Task<IResult> ListReviewerOptionsAsync(
+        HttpContext httpContext,
+        [FromServices] ListOtReviewerOptionsHandler handler,
+        [FromServices] ITransitOfficeCatalog transitOfficeCatalog,
+        CancellationToken cancellationToken,
+        [FromQuery] Guid? transitOfficeId = null)
+    {
+        // Mismo apaño que el catálogo de empresas: aquí solo interesan tenant y override, pero la
+        // resolución común pide un rango.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var (context, error) = ResolveContext(
+            httpContext, transitOfficeCatalog, today, today, null, null, transitOfficeId);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var result = await handler
+            .HandleAsync(context.TenantId, context.ScopedOfficeId, cancellationToken)
             .ConfigureAwait(false);
 
         return result is null ? NoTransitOffice() : Results.Ok(result);

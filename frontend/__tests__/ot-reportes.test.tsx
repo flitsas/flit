@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   fetchOtClientCompanies: vi.fn(),
   fetchOtDrilldown: vi.fn(),
   fetchOtReport: vi.fn(),
+  // La consola pide el catálogo de revisores al montar; sin mock saldría una petición real.
+  fetchOtReviewerOptions: vi.fn(),
 }));
 
 vi.mock("@/lib/api/ot-metrics", async (importOriginal) => {
@@ -35,6 +37,7 @@ vi.mock("@/lib/api/ot-metrics", async (importOriginal) => {
     fetchOtClientCompanies: mocks.fetchOtClientCompanies,
     fetchOtDrilldown: mocks.fetchOtDrilldown,
     fetchOtReport: mocks.fetchOtReport,
+    fetchOtReviewerOptions: mocks.fetchOtReviewerOptions,
   };
 });
 
@@ -260,6 +263,7 @@ beforeEach(() => {
   mocks.fetchOtClientCompanies.mockResolvedValue(COMPANIES);
   mocks.fetchOtDrilldown.mockResolvedValue(DRILLDOWN);
   mocks.fetchOtReport.mockResolvedValue(REPORT);
+  mocks.fetchOtReviewerOptions.mockResolvedValue([]);
 });
 
 // ── Pestaña «Ahora mismo» ─────────────────────────────────────────────────────
@@ -470,15 +474,17 @@ describe("Reportes del organismo — Análisis", () => {
     expect(screen.getByText("1.8")).toBeInTheDocument();
   });
 
-  it("muestra volumen y calidad juntos en el equipo de revisores", async () => {
+  it("ya no duplica el desempeño de las personas, que vive en su propia pestaña", async () => {
     render(<OtReportsConsole transitOfficeId="ot-1" />);
     await openTab(/Análisis/);
 
-    await waitFor(() => expect(screen.getByTestId("ot-reports-reviewers")).toBeInTheDocument());
-    // El conteo solo premia a quien decide rápido y mal: por eso va con % aprobado y % rechazo.
-    expect(screen.getByText("% aprobado")).toBeInTheDocument();
-    expect(screen.getByText("Carla Revisora")).toBeInTheDocument();
-    expect(screen.getByText("89 %")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("ot-reports-companies")).toBeInTheDocument());
+
+    // La tabla de revisores se MUDÓ a «Revisores», que además filtra por persona y exporta.
+    // Mantener una copia aquí habría dejado los mismos números en dos sitios con filtros
+    // distintos, y en cuanto difieren el reporte deja de merecer confianza.
+    expect(screen.queryByTestId("ot-reports-reviewers")).not.toBeInTheDocument();
+    expect(screen.queryByText("Carla Revisora")).not.toBeInTheDocument();
   });
 
   it("no muestra un porcentaje sin base para empresas sin nada decidido", async () => {

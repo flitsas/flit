@@ -7,15 +7,25 @@
 // dejarlo abierto e ir probando, en vez de convertirse en un formulario que se llena una vez.
 
 import { useEffect, useRef, useState } from "react";
-import { COLUMN_GROUPS, REPORT_COLUMNS } from "./report-columns";
+import { groupsOf, type DataColumn } from "./columns";
 
-export function ColumnPicker({
+/**
+ * Recibe la definición de columnas por props en vez de importarla: el informe del periodo y el de
+ * revisores usan este mismo selector con listas distintas, y un componente que conociera una de las
+ * dos obligaría a duplicarlo entero para la otra.
+ */
+export function ColumnPicker<TRow>({
   visible,
   onChange,
+  columns,
+  testId = "ot-report-column-picker",
 }: {
   visible: string[];
   onChange: (ids: string[]) => void;
+  columns: DataColumn<TRow, string>[];
+  testId?: string;
 }) {
+  const groups = groupsOf(columns);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -51,9 +61,9 @@ export function ColumnPicker({
       return;
     }
 
-    // Se reordena según REPORT_COLUMNS para que el orden de las columnas sea estable y no dependa
+    // Se reordena según la definición para que el orden de las columnas sea estable y no dependa
     // del orden en que se fueron marcando.
-    onChange(REPORT_COLUMNS.filter((c) => c.id === id || visible.includes(c.id)).map((c) => c.id));
+    onChange(columns.filter((c) => c.id === id || visible.includes(c.id)).map((c) => c.id));
   }
 
   return (
@@ -64,7 +74,7 @@ export function ColumnPicker({
         aria-expanded={open}
         aria-haspopup="true"
         className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold transition hover:border-[#557EFF] dark:border-white/10"
-        data-testid="ot-report-column-picker"
+        data-testid={testId}
       >
         Columnas ({visible.length})
       </button>
@@ -72,14 +82,14 @@ export function ColumnPicker({
       {open && (
         <div
           className="absolute right-0 z-50 mt-2 max-h-[24rem] w-64 overflow-y-auto rounded-2xl border border-[#DFE5ED] bg-white p-3 shadow-2xl dark:border-white/10 dark:bg-[#0B0F14]"
-          data-testid="ot-report-column-panel"
+          data-testid={`${testId}-panel`}
         >
-          {COLUMN_GROUPS.map((group) => (
+          {groups.map((group) => (
             <fieldset key={group} className="mb-2 last:mb-0">
               <legend className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#6B7280] dark:text-white/50">
                 {group}
               </legend>
-              {REPORT_COLUMNS.filter((c) => c.group === group).map((column) => (
+              {columns.filter((c) => c.group === group).map((column) => (
                 <label
                   key={column.id}
                   className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-[#F5F7FA] dark:hover:bg-white/5"

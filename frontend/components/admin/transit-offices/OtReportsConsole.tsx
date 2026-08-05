@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchOtClientCompanies, type OtClientCompanyOption } from "@/lib/api/ot-metrics";
+import {
+  fetchOtClientCompanies,
+  fetchOtReviewerOptions,
+  type OtClientCompanyOption,
+  type OtReviewerOption,
+} from "@/lib/api/ot-metrics";
 import { OtAnalysisTab } from "./_reportes/OtAnalysisTab";
 import { OtNowTab } from "./_reportes/OtNowTab";
 import { OtReportBuilder } from "./_reportes/OtReportBuilder";
+import { OtReviewersTab } from "./_reportes/OtReviewersTab";
 
 // Reportes del organismo de tránsito.
 //
@@ -12,14 +18,19 @@ import { OtReportBuilder } from "./_reportes/OtReportBuilder";
 // FLIT sin ningún instrumento para ver su propia operación. El eje está invertido respecto a los
 // reportes de empresa — aquí un organismo mira hacia las empresas que le radican.
 //
-// La consola se parte en tres pestañas porque las tres responden preguntas con horizontes distintos,
+// La consola se parte en pestañas porque cada una responde una pregunta con un horizonte distinto,
 // y meterlas en una sola pantalla obligaba a compartir filtros que no todas usan. El síntoma era un
 // selector de rango de fechas presidiendo un bloque titulado «¿Cómo vamos hoy?», donde no cambiaba
 // ni un número. Ahora cada pestaña trae los filtros que de verdad gobierna:
 //
 //   · Ahora mismo — estado de la cola y movimiento del día. Sin fechas.
-//   · Análisis    — causales, revisores y calidad del periodo. Con rango.
-//   · Informe     — la pregunta cerrada sobre un rango, con detalle exportable.
+//   · Análisis    — por qué rechazo y qué calidad me llega. Con rango.
+//   · Informe     — qué recibí en un periodo y en qué acabó, trámite a trámite.
+//   · Revisores   — qué hizo cada persona del organismo en un periodo.
+//
+// «Revisores» se llevó la tabla que antes vivía dentro de «Análisis». Mantener las dos habría dejado
+// los mismos números en dos sitios con filtros distintos —Análisis no filtra por persona—, que es la
+// forma más rápida de que un reporte deje de merecer confianza.
 
 export interface OtReportsConsoleProps {
   transitOfficeId: string;
@@ -34,12 +45,17 @@ const TABS = [
   {
     id: "analisis",
     label: "Análisis",
-    hint: "Por qué rechazo y cómo decide mi equipo",
+    hint: "Por qué rechazo y qué calidad me llega",
   },
   {
     id: "informe",
     label: "Informe",
     hint: "Qué recibí en un periodo y en qué acabó",
+  },
+  {
+    id: "revisores",
+    label: "Revisores",
+    hint: "Qué hizo cada persona del organismo en un periodo",
   },
 ] as const;
 
@@ -48,13 +64,19 @@ type TabId = (typeof TABS)[number]["id"];
 export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
   const [tab, setTab] = useState<TabId>("ahora");
   const [companies, setCompanies] = useState<OtClientCompanyOption[]>([]);
+  const [reviewers, setReviewers] = useState<OtReviewerOption[]>([]);
 
-  // El catálogo de empresas se resuelve UNA vez por organismo y se reparte a las tres pestañas: no
-  // cambia con el rango ni con la modalidad, y recargarlo en cada pestaña solo sumaría llamadas.
+  // Los dos catálogos se resuelven UNA vez por organismo y se reparten a las pestañas: ninguno
+  // cambia con el rango ni con la modalidad, y recargarlos en cada pestaña solo sumaría llamadas.
+  // Si alguno falla se deja vacío en vez de romper la consola: sin catálogo se pierde un filtro,
+  // no el reporte.
   useEffect(() => {
     fetchOtClientCompanies(transitOfficeId)
       .then(setCompanies)
       .catch(() => setCompanies([]));
+    fetchOtReviewerOptions(transitOfficeId)
+      .then(setReviewers)
+      .catch(() => setReviewers([]));
   }, [transitOfficeId]);
 
   return (
@@ -96,6 +118,13 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
       )}
       {tab === "informe" && (
         <OtReportBuilder transitOfficeId={transitOfficeId} companies={companies} />
+      )}
+      {tab === "revisores" && (
+        <OtReviewersTab
+          transitOfficeId={transitOfficeId}
+          companies={companies}
+          reviewers={reviewers}
+        />
       )}
     </div>
   );

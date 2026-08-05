@@ -360,3 +360,89 @@ export function setRejectionReasonActive(
     body: { isActive },
   });
 }
+
+// ── C. Informe de revisores ─────────────────────────────────────────────────────
+
+export interface OtReviewerOption {
+  userId: string;
+  displayName: string;
+  /** Decisiones históricas, no del rango: por eso el selector no cambia al mover las fechas. */
+  decisiones: number;
+}
+
+export interface OtReviewerRow {
+  userId: string;
+  displayName: string;
+  decididos: number;
+  aprobados: number;
+  aprobacionPct: number;
+  rechazados: number;
+  rechazoPct: number;
+  tiempoMedianoHoras: number | null;
+  tiempoPromedioHoras: number | null;
+  tiempoP90Horas: number | null;
+  tiempoMaximoHoras: number | null;
+  enMenosDe24hPct: number;
+  vuelvenARechazarsePct: number;
+  causalesPorRechazo: number;
+  diasActivos: number;
+  decisionesPorDiaActivo: number;
+  empresasAtendidas: number;
+  prioritariosDecididos: number;
+  primeraDecision: string | null;
+  ultimaDecision: string | null;
+}
+
+export interface OtReviewersSummary {
+  revisores: number;
+  decididos: number;
+  aprobados: number;
+  rechazados: number;
+  aprobacionPct: number;
+  tiempoMedianoHoras: number | null;
+  tiempoP90Horas: number | null;
+  /** Porcentaje del total que se lleva quien más decidió. El promedio esconde justo esto. */
+  concentracionTopPct: number;
+  revisorMasActivo: string | null;
+}
+
+export interface OtReviewersReport {
+  resumen: OtReviewersSummary;
+  filas: OtReviewerRow[];
+}
+
+export const OT_REVIEWER_SORT = {
+  decididos: "decididos",
+  nombre: "nombre",
+  aprobacion: "aprobacion",
+  rechazo: "rechazo",
+  tiempo: "tiempo",
+  reincidencia: "reincidencia",
+  actividad: "actividad",
+} as const;
+
+export type OtReviewerSort = (typeof OT_REVIEWER_SORT)[keyof typeof OT_REVIEWER_SORT];
+
+export interface OtReviewersParams extends OtMetricsParams {
+  /** Vacío significa TODOS los revisores con actividad, no ninguno. */
+  userIds?: string[];
+  sortBy?: OtReviewerSort;
+  desc?: boolean;
+}
+
+export function fetchOtReviewers(
+  params: OtReviewersParams,
+  signal?: AbortSignal,
+): Promise<OtReviewersReport> {
+  const query: Record<string, string | string[]> = toQuery(params);
+  if (params.userIds && params.userIds.length > 0) query.userIds = params.userIds;
+  if (params.sortBy) query.sortBy = params.sortBy;
+  if (params.desc !== undefined) query.desc = String(params.desc);
+  return apiFetch<OtReviewersReport>(`${base}/reviewers`, { query, signal });
+}
+
+export function fetchOtReviewerOptions(transitOfficeId?: string): Promise<OtReviewerOption[]> {
+  return apiFetch<OtReviewerOption[]>(`${base}/reviewer-options`, {
+    query: transitOfficeId ? { transitOfficeId } : undefined,
+  });
+}

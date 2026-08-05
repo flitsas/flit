@@ -67,4 +67,27 @@ public interface IOtMetricsReadRepository
         Guid otTenantId,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Informe de revisores: una fila por persona con su volumen, sus tiempos y su calidad.
+    ///
+    /// <para>El universo son las DECISIONES tomadas dentro del rango, no los trámites recibidos.
+    /// Es el corte que corresponde a la pregunta —qué hizo esta persona en estas fechas— y la
+    /// diferencia deliberada con el informe del periodo, cuyo universo son los recibidos.</para>
+    /// </summary>
+    Task<OtReviewersReportDto?> GetReviewersReportAsync(
+        Guid otTenantId,
+        OtReviewersQuery query,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Revisores elegibles en el filtro: todos los que han decidido algo en el organismo alguna vez.
+    /// Igual que el catálogo de empresas, no se recorta por rango para que el selector no cambie de
+    /// contenido cada vez que se mueven las fechas.
+    /// </summary>
+    Task<IReadOnlyList<OtReviewerOptionDto>?> ListReviewerOptionsAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
 }

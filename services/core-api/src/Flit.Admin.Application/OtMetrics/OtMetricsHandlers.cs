@@ -156,3 +156,46 @@ public sealed class ListOtClientCompaniesHandler(IOtMetricsReadRepository reposi
         CancellationToken cancellationToken = default) =>
         repository.ListClientCompaniesAsync(otTenantId, transitOfficeIdOverride, cancellationToken);
 }
+
+/// <summary>Informe de revisores: qué hizo cada persona del organismo en el periodo.</summary>
+public sealed class GetOtReviewersReportHandler(IOtMetricsReadRepository repository)
+{
+    public Task<OtReviewersReportDto?> HandleAsync(
+        Guid otTenantId,
+        OtReviewersQuery query,
+        Guid? transitOfficeIdOverride,
+        CancellationToken cancellationToken = default) =>
+        repository.GetReviewersReportAsync(otTenantId, query, transitOfficeIdOverride, cancellationToken);
+
+    /// <summary>
+    /// Normaliza los parámetros antes de llegar al repositorio.
+    ///
+    /// <para>Un <c>sortBy</c> desconocido cae al orden por volumen en vez de devolver 400: llega de
+    /// un enlace guardado o de una URL editada a mano, y perder el informe entero por un detalle que
+    /// el usuario no eligió es peor que ordenarlo distinto.</para>
+    ///
+    /// <para>Los ids repetidos y los vacíos se descartan aquí para que el repositorio reciba siempre
+    /// una selección limpia — un <c>Guid.Empty</c> colado en el filtro no casaría con nadie y el
+    /// informe saldría vacío sin explicación.</para>
+    /// </summary>
+    public static OtReviewersQuery BuildQuery(
+        OtMetricsFilter filter,
+        IEnumerable<Guid>? userIds,
+        string? sortBy,
+        bool descending) =>
+        new(
+            filter,
+            userIds?.Where(id => id != Guid.Empty).Distinct().ToList() ?? [],
+            OtReviewerSort.IsKnown(sortBy) ? sortBy : OtReviewerSort.Decididos,
+            descending);
+}
+
+/// <summary>Revisores del organismo para el filtro del informe.</summary>
+public sealed class ListOtReviewerOptionsHandler(IOtMetricsReadRepository repository)
+{
+    public Task<IReadOnlyList<OtReviewerOptionDto>?> HandleAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride,
+        CancellationToken cancellationToken = default) =>
+        repository.ListReviewerOptionsAsync(otTenantId, transitOfficeIdOverride, cancellationToken);
+}

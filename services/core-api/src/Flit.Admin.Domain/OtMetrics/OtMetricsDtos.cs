@@ -324,3 +324,98 @@ public sealed record OtReportDto(
     int Page,
     int PageSize,
     IReadOnlyList<OtReportRowDto> Filas);
+
+// ── C. Informe de revisores ───────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Un revisor elegible en el filtro, con el volumen que lleva decidido.
+/// <para>El conteo NO se limita al rango: si lo hiciera, mover las fechas cambiaría la lista de
+/// opciones y un revisor de vacaciones desaparecería del selector justo cuando alguien quiere
+/// comprobar que no decidió nada.</para>
+/// </summary>
+public sealed record OtReviewerOptionDto(Guid UserId, string DisplayName, int Decisiones);
+
+/// <summary>
+/// Una fila del informe de revisores: todo lo que se puede decir de una persona en el periodo.
+///
+/// <para>El volumen nunca viaja solo. Un informe que solo contara decisiones premiaría a quien
+/// decide rápido y mal, así que cada indicador de cantidad va acompañado de uno de calidad:
+/// <see cref="Decididos"/> con <see cref="VuelvenARechazarsePct"/>, y los tiempos con su p90 además
+/// de la mediana.</para>
+///
+/// <para>Los tiempos se miden desde la ÚLTIMA radicación anterior a la decisión, igual que en el
+/// informe del periodo: es el turno que esa persona trabajó, sin el tiempo que la empresa tardó en
+/// subsanar.</para>
+/// </summary>
+public sealed record OtReviewerRowDto(
+    Guid UserId,
+    string DisplayName,
+    int Decididos,
+    int Aprobados,
+    double AprobacionPct,
+    int Rechazados,
+    double RechazoPct,
+    double? TiempoMedianoHoras,
+    double? TiempoPromedioHoras,
+    double? TiempoP90Horas,
+    double? TiempoMaximoHoras,
+    // Porcentaje de sus decisiones resueltas en menos de 24 h.
+    double EnMenosDe24hPct,
+    // De sus rechazos, cuántos volvieron a rechazarse después. Señal de motivo poco claro.
+    double VuelvenARechazarsePct,
+    // Causales marcadas por rechazo. Si se acerca al tamaño del catálogo, alguien marca todo.
+    double CausalesPorRechazo,
+    // Días calendario de Bogotá con al menos una decisión.
+    int DiasActivos,
+    // Decisiones por día ACTIVO, no por día del rango: no penaliza a quien tuvo vacaciones.
+    double DecisionesPorDiaActivo,
+    int EmpresasAtendidas,
+    int PrioritariosDecididos,
+    DateTimeOffset? PrimeraDecision,
+    DateTimeOffset? UltimaDecision);
+
+/// <summary>
+/// Cabecera del informe de revisores: el equipo visto en conjunto.
+/// <para><see cref="ConcentracionTopPct"/> mide qué porcentaje de las decisiones se lleva la persona
+/// que más decidió. Es la pregunta que el promedio esconde: un equipo de seis donde uno hace la
+/// mitad no es un equipo de seis.</para>
+/// </summary>
+public sealed record OtReviewersSummaryDto(
+    int Revisores,
+    int Decididos,
+    int Aprobados,
+    int Rechazados,
+    double AprobacionPct,
+    double? TiempoMedianoHoras,
+    double? TiempoP90Horas,
+    double ConcentracionTopPct,
+    string? RevisorMasActivo);
+
+public static class OtReviewerSort
+{
+    public const string Decididos = "decididos";
+    public const string Nombre = "nombre";
+    public const string Aprobacion = "aprobacion";
+    public const string Rechazo = "rechazo";
+    public const string Tiempo = "tiempo";
+    public const string Reincidencia = "reincidencia";
+    public const string Actividad = "actividad";
+
+    public static bool IsKnown(string? sort) => sort is
+        Decididos or Nombre or Aprobacion or Rechazo or Tiempo or Reincidencia or Actividad;
+}
+
+/// <summary>
+/// Parámetros del informe de revisores.
+/// <para><see cref="UserIds"/> vacío significa TODOS los revisores con actividad, no ninguno: es lo
+/// que hace que el informe sea útil antes de tocar el filtro.</para>
+/// </summary>
+public sealed record OtReviewersQuery(
+    OtMetricsFilter Filter,
+    IReadOnlyList<Guid> UserIds,
+    string? SortBy,
+    bool Descending);
+
+public sealed record OtReviewersReportDto(
+    OtReviewersSummaryDto Resumen,
+    IReadOnlyList<OtReviewerRowDto> Filas);

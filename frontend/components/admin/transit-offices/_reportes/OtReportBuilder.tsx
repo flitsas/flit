@@ -416,7 +416,7 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
         hint="Elige las columnas que quieres ver. Lo que exportes será exactamente esto."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <ColumnPicker visible={visibleColumns} onChange={applyColumns} />
+            <ColumnPicker visible={visibleColumns} onChange={applyColumns} columns={REPORT_COLUMNS} />
             {/* Excel primero porque es donde el informe acaba de verdad; el CSV se queda para quien
                 lo mete en otra herramienta. */}
             <button

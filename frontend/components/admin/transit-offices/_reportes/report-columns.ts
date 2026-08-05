@@ -1,13 +1,23 @@
-// Columnas del informe del organismo y su formateo.
+// Columnas del informe del periodo y formateo compartido por los reportes del organismo.
 //
-// La lista vive en un solo sitio a propósito: la tabla, el selector de columnas y el CSV consumen la
-// MISMA definición, de modo que lo exportado es literalmente lo que se está viendo. Mantener dos
-// listas paralelas terminaría con un CSV que no coincide con la pantalla, que es la peor forma de
-// perder la confianza en un informe.
+// La lista vive en un solo sitio a propósito: la tabla, el selector de columnas y los exports
+// consumen la MISMA definición, de modo que lo exportado es literalmente lo que se está viendo.
+// La maquinaria genérica (CSV, Excel, presets) está en `columns.ts`, compartida con el informe de
+// revisores; aquí queda solo lo que es propio de este informe.
 
 import type { OtReportRow, OtReportSort } from "@/lib/api/ot-metrics";
 import { OT_REPORT_ESTADOS, OT_REPORT_SORT } from "@/lib/api/ot-metrics";
-import { bogotaClock, bogotaDay, buildXlsx, type XlsxCell } from "@/lib/xlsx";
+import { bogotaClock, bogotaDay } from "@/lib/xlsx";
+import {
+  activePreset,
+  buildCsv,
+  buildWorkbook,
+  defaultVisible,
+  groupsOf,
+  rangedFileName,
+  type ColumnPreset,
+  type DataColumn,
+} from "./columns";
 
 // ── Estados ────────────────────────────────────────────────────────────────────
 
@@ -144,34 +154,10 @@ export function formatDateTime(iso: string | null): string {
 
 // ── Columnas ───────────────────────────────────────────────────────────────────
 
-export interface ReportColumn {
-  id: string;
-  label: string;
-  /** Grupo del selector: agrupa por la pregunta que responde la columna, no por tipo de dato. */
+/** Columna de este informe. El grupo se restringe a los cuatro que tiene la pantalla. */
+export type ReportColumn = DataColumn<OtReportRow, OtReportSort> & {
   group: "Identificación" | "Estado" | "Tiempos" | "Calidad";
-  /** Texto plano de la celda. Es también lo que va al CSV: una sola verdad por columna. */
-  value: (row: OtReportRow) => string;
-  /**
-   * Valor TIPADO para Excel, cuando la columna representa un número o una fecha.
-   *
-   * Existe porque `value` produce texto pensado para leerse («3,5 h», «05/08/2026») y ese texto en
-   * una hoja de cálculo no se puede sumar, promediar ni ordenar cronológicamente. Sin esto el Excel
-   * sería un CSV con otra extensión.
-   */
-  raw?: (row: OtReportRow) => XlsxCell;
-  /**
-   * Encabezado alternativo para el Excel. Solo hace falta donde la pantalla lleva la unidad dentro
-   * de cada celda («2 días») y la hoja, al exportar el número desnudo, la pierde.
-   */
-  xlsxHeader?: string;
-  /** Ancho de la columna en el Excel, en caracteres. */
-  width?: number;
-  /** Campo de orden del backend, si la columna es ordenable. */
-  sort?: OtReportSort;
-  numeric?: boolean;
-  /** Visible al abrir el informe por primera vez. */
-  defaultVisible?: boolean;
-}
+};
 
 export const REPORT_COLUMNS: ReportColumn[] = [
   {
@@ -302,15 +288,10 @@ export const REPORT_COLUMNS: ReportColumn[] = [
   },
 ];
 
-export const COLUMN_GROUPS: ReportColumn["group"][] = [
-  "Identificación",
-  "Estado",
-  "Tiempos",
-  "Calidad",
-];
+export const COLUMN_GROUPS = groupsOf(REPORT_COLUMNS);
 
 export function defaultVisibleColumns(): string[] {
-  return REPORT_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.id);
+  return defaultVisible(REPORT_COLUMNS);
 }
 
 /**
@@ -318,7 +299,7 @@ export function defaultVisibleColumns(): string[] {
  * mira el desenlace de cada trámite, «cuánto tardo» mira el reloj. Con una sola vista, quien viene a
  * la segunda pregunta tiene que armarla a mano cada vez.
  */
-export const REPORT_PRESETS: { id: string; label: string; hint: string; columns: string[] }[] = [
+export const REPORT_PRESETS: ColumnPreset[] = [
   {
     id: "gestion",
     label: "Gestión",
@@ -373,73 +354,22 @@ export const REPORT_PRESETS: { id: string; label: string; hint: string; columns:
  * preset. Comparando listas, elegir «Gestión» dejaría de marcarse a sí mismo un segundo después.
  */
 export function activePresetId(visibleColumnIds: string[]): string | null {
-  const visible = new Set(visibleColumnIds);
-  const preset = REPORT_PRESETS.find(
-    (p) => p.columns.length === visible.size && p.columns.every((id) => visible.has(id)),
-  );
-  return preset?.id ?? null;
+  return activePreset(REPORT_PRESETS, visibleColumnIds);
 }
 
 // ── Exportación ────────────────────────────────────────────────────────────────
 
-/**
- * Neutraliza el prefijo de fórmula. Un valor que empieza por `=`, `+`, `-` o `@` lo ejecuta Excel al
- * abrir el archivo: es una vía de inyección real, y aquí los valores vienen de campos que la empresa
- * cliente escribe.
- */
-function neutralize(value: string): string {
-  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-}
-
-function csvCell(value: string): string {
-  const safe = neutralize(value);
-  return `"${safe.replace(/"/g, '""')}"`;
-}
-
-/**
- * CSV de lo que se está viendo: mismas columnas, mismo orden, mismo formateo.
- *
- * Separador `;` y BOM porque el destino real es Excel en español, que con `,` mete la fila entera en
- * una sola celda y sin BOM rompe las tildes.
- */
 export function buildReportCsv(rows: OtReportRow[], visibleColumnIds: string[]): string {
-  const columns = REPORT_COLUMNS.filter((c) => visibleColumnIds.includes(c.id));
-  const header = columns.map((c) => csvCell(c.label)).join(";");
-  const body = rows.map((row) => columns.map((c) => csvCell(c.value(row))).join(";"));
-  return `﻿${[header, ...body].join("\r\n")}`;
+  return buildCsv(REPORT_COLUMNS, rows, visibleColumnIds);
 }
 
-/**
- * El MISMO informe como libro de Excel, que es donde acaba de verdad.
- *
- * La diferencia con el CSV no es el envoltorio: aquí los tiempos, los días y las devoluciones van
- * como números y las fechas como fechas, así que el usuario puede sumar una columna, ordenar por
- * fecha de decisión o hacer una tabla dinámica sin tocar nada. Con el CSV todo eso pide primero
- * media hora de limpieza a mano.
- */
 export function buildReportXlsx(
   rows: OtReportRow[],
   visibleColumnIds: string[],
 ): Uint8Array<ArrayBuffer> {
-  const columns = REPORT_COLUMNS.filter((c) => visibleColumnIds.includes(c.id));
-  return buildXlsx({
-    name: "Informe OT",
-    columns: columns.map((c) => ({ header: c.xlsxHeader ?? c.label, width: c.width })),
-    rows: rows.map((row) =>
-      columns.map((c) => {
-        if (!c.raw) return c.value(row);
-        // Un guion largo en una columna numérica la vuelve texto para toda la hoja: el hueco se
-        // deja vacío, que es lo que Excel entiende por «no hay dato».
-        return c.raw(row);
-      }),
-    ),
-  });
+  return buildWorkbook("Informe OT", REPORT_COLUMNS, rows, visibleColumnIds);
 }
 
-/**
- * Nombre del archivo con el rango dentro: un `informe.xlsx` suelto en Descargas no dice de cuándo
- * es, y quien exporta tres rangos seguidos acaba con `informe (2)`.
- */
 export function reportFileName(from: string, to: string, ext: "csv" | "xlsx"): string {
-  return `informe-ot-${from}-a-${to}.${ext}`;
+  return rangedFileName("informe-ot", from, to, ext);
 }

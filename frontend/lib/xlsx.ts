@@ -108,7 +108,6 @@ function esc(value: string): string {
  * si aparece uno. Los valores de este informe vienen de campos que escribe la empresa cliente, así
  * que llegan tal cual desde una base de datos.
  */
-// eslint-disable-next-line no-control-regex -- justamente los caracteres de control son lo que hay que quitar
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
 
 function sanitize(value: string): string {

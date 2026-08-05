@@ -43,7 +43,8 @@ export function setDevSuperAdminToken(sub = "11111111-1111-1111-1111-11111111111
 export interface RequestOptions {
   method?: string;
   body?: unknown;
-  query?: Record<string, string | number | boolean | undefined | null>;
+  /** Los arrays se serializan repitiendo el parámetro (`userIds=a&userIds=b`), que es lo que espera el binding de Minimal API. */
+  query?: Record<string, string | number | boolean | string[] | undefined | null>;
   signal?: AbortSignal;
 }
 
@@ -59,9 +60,18 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
 
   if (query) {
     for (const [key, value] of Object.entries(query)) {
-      if (value !== undefined && value !== null && value !== "") {
-        url.searchParams.set(key, String(value));
+      if (value === undefined || value === null || value === "") {
+        continue;
       }
+
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          url.searchParams.append(key, item);
+        }
+        continue;
+      }
+
+      url.searchParams.set(key, String(value));
     }
   }
 
