@@ -12,7 +12,7 @@ import {
   type OtHubTabId,
 } from "@/components/admin/transit-offices/ot-nav";
 import { useDockScrollCondense } from "./useDockScrollCondense";
-import { buildDockGroups } from "./dock/dockGroups";
+import { buildDockGroups, flattenDockEntries } from "./dock/dockGroups";
 import { DockDesktop } from "./dock/DockDesktop";
 
 const logoWhite = "/assets/logo-flit-white.svg";
@@ -47,6 +47,8 @@ import {
   FileText,
   ClipboardList,
   Tag,
+  Monitor,
+  FileSignature,
 } from "lucide-react";
 
 export type ModuleId =
@@ -80,6 +82,8 @@ type DockEntry = {
   icon: typeof LayoutGrid;
   active: boolean;
   onClick: () => void;
+  /** Submenú anidado (Administradores → Plataforma → Mandatos). */
+  children?: DockEntry[];
 };
 
 function useTheme() {
@@ -270,6 +274,22 @@ export function Shell({
         active: !onAdminRoute && active === "auditoria",
         onClick: () => onNav("auditoria"),
       },
+      {
+        key: "admin-plataforma",
+        label: "Plataforma",
+        icon: Monitor,
+        active: pathname.startsWith("/admin/plataforma"),
+        onClick: () => undefined,
+        children: [
+          {
+            key: "admin-mandatos",
+            label: "Mandatos",
+            icon: FileSignature,
+            active: pathname.startsWith("/admin/plataforma/mandatos"),
+            onClick: () => window.location.assign("/admin/plataforma/mandatos"),
+          },
+        ],
+      },
     );
   }
 
@@ -343,14 +363,13 @@ export function Shell({
     });
   }
 
-  // LOG QX (HU #10795): trazabilidad Quipux para soporte/administración. Bloque propio
-  // gateado por el permiso `logqx.read` (o SuperAdmin, vía canReadLogQx) — se muestra para
-  // SuperAdmin y para un rol de soporte con el permiso, sin depender del claim SuperAdmin.
-  // No se duplica: el bloque isSuperAdmin de arriba no incluye "log-qx".
+  // LOG QX (HU #10795): trazabilidad Quipux. Agrupador "Integraciones" (ex Soporte),
+  // gateado por `logqx.read` (o SuperAdmin vía canReadLogQx). No se duplica en el bloque
+  // isSuperAdmin de arriba.
   if (currentUser?.canReadLogQx) {
     entries.push({
       key: "log-qx",
-      label: "LOG QX",
+      label: "Log QX",
       icon: Radar,
       active: !onAdminRoute && active === "log-qx",
       onClick: () => onNav("log-qx"),
@@ -358,10 +377,11 @@ export function Shell({
   }
 
   // ICT (Integración con Terceros, HU10893) — gate por el permiso `ict.logs.read` (o SuperAdmin).
+  // Vive en el agrupador "Integraciones" junto a LOG QX.
   if (currentUser?.canReadIctLogs) {
     entries.push({
       key: "ict-logs",
-      label: "ICT",
+      label: "Log ICT",
       icon: Network,
       active: !onAdminRoute && active === "ict-logs",
       onClick: () => onNav("ict-logs"),
@@ -554,7 +574,7 @@ export function Shell({
                         {g.label}
                       </p>
                       <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
-                        {g.items.map((it) => {
+                        {flattenDockEntries(g.items).map((it) => {
                           const Icon = it.icon;
                           return (
                             <button

@@ -84,7 +84,7 @@ describe("Shell — Administración gestora (AdminCompany)", () => {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   });
 
-  it("muestra 'Administración' y no empuja Usuarios en el menú compañías", () => {
+  it("muestra 'Administración' y no empuja Usuarios en el menú admin", () => {
     window.localStorage.setItem(
       TOKEN_STORAGE_KEY,
       makeToken({ sub: "u1", role: "AdminCompany", email: "admin@empresa.local" }),
@@ -95,10 +95,9 @@ describe("Shell — Administración gestora (AdminCompany)", () => {
       </Shell>,
     );
 
+    // Ítem único en administradores → píldora directa con el label del ítem.
     expect(screen.getByRole("button", { name: "Administración" })).toBeInTheDocument();
-    // El módulo RBAC `usuarios` puede aparecer aparte; no debe haber ítem extra "Usuarios"
-    // empujado junto a Administración (antes "mi-empresa"). Con solo Administración en el
-    // grupo companias, no hay submenú con Usuarios.
+    expect(screen.queryByRole("button", { name: "Administradores" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mi Empresa" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Compañías" })).not.toBeInTheDocument();
   });
@@ -109,24 +108,40 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   });
 
-  it("muestra 'Improntas' dentro del agrupador Compañías cuando es SuperAdmin", async () => {
+  it("muestra Compañías, Tránsito e Improntas dentro de Administradores", async () => {
     setDevSuperAdminToken();
     renderShell();
-    await userEvent.click(screen.getByRole("button", { name: "Compañías" }));
+    expect(screen.queryByRole("button", { name: "Compañías" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tránsito" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
+    expect(screen.getByRole("button", { name: "Compañías" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tránsito" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Improntas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "RBAC Admin" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Auditoría" })).toBeInTheDocument();
   });
 
-  it("muestra la píldora 'Tránsito' hacia el listado de OT (sin submenú de hub)", () => {
+  it("muestra Mandatos dentro de Administradores → Plataforma", async () => {
     setDevSuperAdminToken();
     renderShell();
-    expect(screen.getByRole("button", { name: "Tránsito" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "OT" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Organismos" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Plataforma" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
+    await userEvent.click(screen.getByRole("button", { name: "Plataforma" }));
+    expect(screen.getByRole("button", { name: "Mandatos" })).toBeInTheDocument();
+  });
+
+  it("muestra Log QX y Log ICT en el agrupador Integraciones", async () => {
+    setDevSuperAdminToken();
+    renderShell();
+    await userEvent.click(screen.getByRole("button", { name: "Integraciones" }));
+    expect(screen.getByRole("button", { name: "Log QX" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Log ICT" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Soporte" })).not.toBeInTheDocument();
   });
 
   it("no muestra la entrada 'Improntas' sin sesión SuperAdmin", () => {
     renderShell();
     expect(screen.queryByRole("button", { name: "Improntas" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Compañías" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Administradores" })).not.toBeInTheDocument();
   });
 });

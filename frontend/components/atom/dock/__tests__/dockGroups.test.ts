@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { buildDockGroups, type DockEntryLike } from "../dockGroups";
+import { buildDockGroups, flattenDockEntries, type DockEntryLike } from "../dockGroups";
 import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
 import { LayoutGrid } from "lucide-react";
 
-function entry(key: string, label: string): DockEntryLike {
-  return { key, label, icon: LayoutGrid, active: false, onClick: () => undefined };
+function entry(key: string, label: string, children?: DockEntryLike[]): DockEntryLike {
+  return {
+    key,
+    label,
+    icon: LayoutGrid,
+    active: false,
+    onClick: () => undefined,
+    children,
+  };
 }
 
 describe("buildDockGroups", () => {
@@ -51,11 +58,48 @@ describe("buildDockGroups", () => {
     expect(admin?.items.map((i) => i.label)).toEqual(["Reglas", "Documentos", "Requisitos"]);
   });
 
-  it("SuperAdmin: Tránsito es píldora única del agrupador OT", () => {
-    const groups = buildDockGroups([entry("admin-transit", "Tránsito")]);
+  it("SuperAdmin: Plataforma (con Mandatos) vive anidada en Administradores", () => {
+    const groups = buildDockGroups([
+      entry("admin-companies", "Compañías"),
+      entry("admin-transit", "Tránsito"),
+      entry("admin-documents", "Documental"),
+      entry("admin-improntas", "Improntas"),
+      entry("admin-quipux", "Quipux"),
+      entry("rbac", "RBAC Admin"),
+      entry("auditoria", "Auditoría"),
+      entry("admin-plataforma", "Plataforma", [entry("admin-mandatos", "Mandatos")]),
+    ]);
     expect(groups).toHaveLength(1);
-    expect(groups[0].label).toBe("OT");
-    expect(groups[0].items).toHaveLength(1);
-    expect(groups[0].items[0].label).toBe("Tránsito");
+    expect(groups[0].label).toBe("Administradores");
+    expect(groups[0].items.map((i) => i.label)).toEqual([
+      "Compañías",
+      "Tránsito",
+      "Documental",
+      "Improntas",
+      "Quipux",
+      "RBAC Admin",
+      "Auditoría",
+      "Plataforma",
+    ]);
+    const plataforma = groups[0].items.find((i) => i.key === "admin-plataforma");
+    expect(plataforma?.children?.map((c) => c.label)).toEqual(["Mandatos"]);
+  });
+
+  it("flattenDockEntries expone Mandatos para la hoja móvil", () => {
+    const flat = flattenDockEntries([
+      entry("admin-companies", "Compañías"),
+      entry("admin-plataforma", "Plataforma", [entry("admin-mandatos", "Mandatos")]),
+    ]);
+    expect(flat.map((i) => i.label)).toEqual(["Compañías", "Mandatos"]);
+  });
+
+  it("Integraciones agrupa Log QX y Log ICT", () => {
+    const groups = buildDockGroups([
+      entry("log-qx", "Log QX"),
+      entry("ict-logs", "Log ICT"),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].label).toBe("Integraciones");
+    expect(groups[0].items.map((i) => i.label)).toEqual(["Log QX", "Log ICT"]);
   });
 });
