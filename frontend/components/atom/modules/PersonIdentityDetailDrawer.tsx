@@ -57,14 +57,13 @@ export function PersonIdentityDetailDrawer({
 }: PersonIdentityDetailDrawerProps) {
   const [data, setData] = useState<PersonBiometricValidationsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const failedRef = useRef(false);
   const allTerminalRef = useRef(false);
-  const onStatusChangedRef = useRef(onStatusChanged);
-  onStatusChangedRef.current = onStatusChanged;
   const prevStatusesRef = useRef<string>('');
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       const res = await tramitesClient.listPersonBiometricValidations(
         documentType,
@@ -78,7 +77,7 @@ export function PersonIdentityDetailDrawer({
 
       const statusKey = res.validations.map((v) => `${v.id}:${v.status}`).join('|');
       if (prevStatusesRef.current && prevStatusesRef.current !== statusKey) {
-        onStatusChangedRef.current?.();
+        onStatusChanged?.();
       }
       prevStatusesRef.current = statusKey;
     } catch (err) {
@@ -87,21 +86,28 @@ export function PersonIdentityDetailDrawer({
     } finally {
       setLoading(false);
     }
+  }, [documentType, documentNumber, onStatusChanged]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset al cambiar documento + fetch async
+    setData(null);
+    setError(null);
+    failedRef.current = false;
+    allTerminalRef.current = false;
+    prevStatusesRef.current = '';
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentType, documentNumber]);
 
   useEffect(() => {
-    setLoading(true);
-    void load();
-  }, [load]);
-
-  useEffect(() => {
+    if (!data || data.allTerminal || failedRef.current) return;
     const id = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return;
       if (failedRef.current || allTerminalRef.current) return;
       void load();
     }, POLL_MS);
     return () => window.clearInterval(id);
-  }, [load]);
+  }, [data, load]);
 
   return (
     <div

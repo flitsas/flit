@@ -8,7 +8,6 @@ import {
   FileSignature,
   RefreshCw,
   RotateCcw,
-  ShieldCheck,
   XCircle,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
