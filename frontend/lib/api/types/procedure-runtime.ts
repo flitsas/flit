@@ -1137,7 +1137,9 @@ export interface TenantBiometricValidation {
   referenceNumber: string | null;
   /** HU #10869 — null para prevalidaciones standalone (sin trámite). */
   modalidad: string | null;
-  partyRole: BiometricParte | null;
+  // string (no BiometricParte): el contrato declara partyRole como string libre y el backend lo expone
+  // como string? — la vista transversal solo lo pinta como texto, nunca discrimina por rol.
+  partyRole: string | null;
   name: string;
   documentType: string;
   documentNumber: string;

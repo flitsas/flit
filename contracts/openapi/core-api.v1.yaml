@@ -8507,7 +8507,7 @@ components:
           type: string
           format: date-time
           nullable: true
-          description: Fecha de registro de la validación (historial por persona: más reciente → más antigua).
+          description: 'Fecha de registro de la validación (historial por persona: más reciente → más antigua).'
     TenantBiometricValidationDto:
       type: object
       required: [id, name, documentType, documentNumber, status, provider, expired, createdAt, email, attempts, maxAttempts, resendCount, linkedProcedures]
