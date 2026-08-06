@@ -3,6 +3,7 @@ using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Queries.Domain;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
@@ -62,15 +63,15 @@ public sealed class OtQueryRepositoryTests
 
         var cobertura = result.Cobertura.ToDictionary(c => c.Valor);
 
-        cobertura["ABC123"].Resultado.Should().Be(OtQueryCoverageResult.Encontrado);
+        cobertura["ABC123"].Resultado.Should().Be(QueryCoverageResult.Encontrado);
 
-        cobertura["XYZ789"].Resultado.Should().Be(OtQueryCoverageResult.Excluido);
+        cobertura["XYZ789"].Resultado.Should().Be(QueryCoverageResult.Excluido);
         cobertura["XYZ789"].MotivoCampo.Should().Be(OtQueryFieldCatalog.LicenciaTransito);
         cobertura["XYZ789"].Motivo.Should().Contain("Licencia de tránsito cargada");
 
         // No existir y quedar excluida son cosas distintas, y quien lee el informe necesita
         // distinguirlas: una se arregla aflojando un filtro y la otra no.
-        cobertura["NOP000"].Resultado.Should().Be(OtQueryCoverageResult.NoExiste);
+        cobertura["NOP000"].Resultado.Should().Be(QueryCoverageResult.NoExiste);
     }
 
     [Fact] // La fecha vive en la barra de arriba y no entre los chips, así que es el filtro que el
@@ -91,7 +92,7 @@ public sealed class OtQueryRepositoryTests
         result!.Total.Should().Be(0);
 
         var item = result.Cobertura.Should().ContainSingle().Subject;
-        item.Resultado.Should().Be(OtQueryCoverageResult.Excluido);
+        item.Resultado.Should().Be(QueryCoverageResult.Excluido);
         item.MotivoCampo.Should().Be(OtQueryDateField.Radicacion);
         item.Motivo.Should().Contain("fuera del rango");
     }
@@ -114,7 +115,7 @@ public sealed class OtQueryRepositoryTests
 
         result!.Total.Should().Be(1);
         result.Cobertura.Should().ContainSingle()
-            .Which.Resultado.Should().Be(OtQueryCoverageResult.Encontrado);
+            .Which.Resultado.Should().Be(QueryCoverageResult.Encontrado);
     }
 
     [Fact] // Solo se rinden cuentas de lo que el usuario escribió valor a valor. Avisar de que
@@ -240,9 +241,9 @@ public sealed class OtQueryRepositoryTests
         soloColor!.Filas.Should().ContainSingle().Which.ReferenceNumber.Should().Be("REF-1");
 
         var ninguna = await RunAsync(db, Definir(
-            new OtQueryCondition(
+            new QueryCondition(
                 OtQueryFieldCatalog.Transformaciones,
-                OtQueryOperator.NoEsNinguno,
+                QueryOperator.NoEsNinguno,
                 ["cambio_color", "cambio_carroceria", "cambio_combustible"])));
 
         ninguna!.Filas.Should().ContainSingle().Which.ReferenceNumber.Should().Be("REF-3");
@@ -268,15 +269,15 @@ public sealed class OtQueryRepositoryTests
             await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        var porDecision = await RunAsync(db, new OtQueryDefinition(
-            new OtQueryDateFilter(OtQueryDateField.Decision, OtQueryRangePreset.Ultimos30),
+        var porDecision = await RunAsync(db, new QueryDefinition(
+            new QueryDateFilter(OtQueryDateField.Decision, QueryRangePreset.Ultimos30),
             [],
             []));
 
         porDecision!.Filas.Should().ContainSingle().Which.ReferenceNumber.Should().Be("REF-1");
 
-        var porRadicacion = await RunAsync(db, new OtQueryDefinition(
-            new OtQueryDateFilter(OtQueryDateField.Radicacion, OtQueryRangePreset.Ultimos30),
+        var porRadicacion = await RunAsync(db, new QueryDefinition(
+            new QueryDateFilter(OtQueryDateField.Radicacion, QueryRangePreset.Ultimos30),
             [],
             []));
 
@@ -305,7 +306,7 @@ public sealed class OtQueryRepositoryTests
 
         result!.Filas.Should().ContainSingle().Which.ReferenceNumber.Should().Be("REF-1");
         result.Cobertura.Single(c => c.Valor == "ZZZ999")
-            .Resultado.Should().Be(OtQueryCoverageResult.NoExiste);
+            .Resultado.Should().Be(QueryCoverageResult.NoExiste);
     }
 
     // ── Rangos y comparación ──────────────────────────────────────────────────────────────────
@@ -316,18 +317,18 @@ public sealed class OtQueryRepositoryTests
     {
         var hoy = new DateOnly(2026, 8, 5);
 
-        OtQueryRangePreset.Resolve(
-            new OtQueryDateFilter(OtQueryDateField.Radicacion, OtQueryRangePreset.MesAnterior), hoy)
+        QueryRangePreset.Resolve(
+            new QueryDateFilter(OtQueryDateField.Radicacion, QueryRangePreset.MesAnterior), hoy)
             .Should().Be((new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 31)));
 
-        OtQueryRangePreset.Resolve(
-            new OtQueryDateFilter(OtQueryDateField.Radicacion, OtQueryRangePreset.Ultimos7), hoy)
+        QueryRangePreset.Resolve(
+            new QueryDateFilter(OtQueryDateField.Radicacion, QueryRangePreset.Ultimos7), hoy)
             .Should().Be((new DateOnly(2026, 7, 30), hoy));
 
         // Un preset que dejó de existir abre la consulta en el defecto en vez de reventar: una
         // consulta guardada que ya no se puede abrir es una consulta perdida.
-        OtQueryRangePreset.Resolve(
-            new OtQueryDateFilter(OtQueryDateField.Radicacion, "inventado"), hoy)
+        QueryRangePreset.Resolve(
+            new QueryDateFilter(OtQueryDateField.Radicacion, "inventado"), hoy)
             .Should().Be((hoy.AddDays(-29), hoy));
     }
 
@@ -347,8 +348,8 @@ public sealed class OtQueryRepositoryTests
             await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        var result = await RunAsync(db, new OtQueryDefinition(
-            new OtQueryDateFilter(OtQueryDateField.Radicacion, OtQueryRangePreset.Ultimos7),
+        var result = await RunAsync(db, new QueryDefinition(
+            new QueryDateFilter(OtQueryDateField.Radicacion, QueryRangePreset.Ultimos7),
             [],
             []));
 
@@ -363,21 +364,21 @@ public sealed class OtQueryRepositoryTests
            // retirara un campo dejaría inservibles las consultas guardadas que lo usaban.
     public void Normalize_DescartaLoDesconocidoYDejaElRestoIntacto()
     {
-        var definition = OtQueryFieldCatalog.Normalize(new OtQueryDefinition(
-            new OtQueryDateFilter("inventado", "raro"),
+        var definition = OtQueryFieldCatalog.Normalize(new QueryDefinition(
+            new QueryDateFilter("inventado", "raro"),
             [
-                new OtQueryCondition("campo_que_no_existe", OtQueryOperator.EsAlguno, ["x"]),
-                new OtQueryCondition(OtQueryFieldCatalog.Placa, "operador_raro", ["x"]),
+                new QueryCondition("campo_que_no_existe", QueryOperator.EsAlguno, ["x"]),
+                new QueryCondition(OtQueryFieldCatalog.Placa, "operador_raro", ["x"]),
                 // Sin valores no restringe nada; descartarla evita romper la consulta justo cuando el
                 // usuario acaba de borrar el último valor para escribir otro.
-                new OtQueryCondition(OtQueryFieldCatalog.Vin, OtQueryOperator.EsAlguno, []),
-                new OtQueryCondition(OtQueryFieldCatalog.Placa, OtQueryOperator.EsAlguno, ["ABC123", "ABC123"]),
+                new QueryCondition(OtQueryFieldCatalog.Vin, QueryOperator.EsAlguno, []),
+                new QueryCondition(OtQueryFieldCatalog.Placa, QueryOperator.EsAlguno, ["ABC123", "ABC123"]),
             ],
             [],
             "orden_inventado"));
 
         definition.Fechas.Campo.Should().Be(OtQueryDateField.Radicacion);
-        definition.Fechas.Preset.Should().Be(OtQueryRangePreset.Ultimos30);
+        definition.Fechas.Preset.Should().Be(QueryRangePreset.Ultimos30);
         definition.SortBy.Should().Be(OtQuerySort.Radicado);
 
         var condicion = definition.Condiciones.Should().ContainSingle().Subject;
@@ -456,7 +457,7 @@ public sealed class OtQueryRepositoryTests
 
         await repo.SaveAsync(
             OtTenant, Carla, null,
-            new OtSavedQueryInput("Mi consulta", null, Definir(Cond(OtQueryFieldCatalog.Placa, "ABC123"))),
+            new SavedQueryInput("Mi consulta", null, Definir(Cond(OtQueryFieldCatalog.Placa, "ABC123"))),
             cancellationToken: TestContext.Current.CancellationToken);
 
         var lista = await repo.ListSavedAsync(
@@ -483,7 +484,7 @@ public sealed class OtQueryRepositoryTests
 
         await using var ctx = NewContext(db);
         var repo = new OtQueryRepository(ctx);
-        var input = new OtSavedQueryInput("Rechazados", null, Definir());
+        var input = new SavedQueryInput("Rechazados", null, Definir());
 
         await repo.SaveAsync(OtTenant, Carla, null, input,
             cancellationToken: TestContext.Current.CancellationToken);
@@ -491,7 +492,7 @@ public sealed class OtQueryRepositoryTests
         var repetir = async () => await repo.SaveAsync(
             OtTenant, Carla, null, input, cancellationToken: TestContext.Current.CancellationToken);
 
-        await repetir.Should().ThrowAsync<OtSavedQueryNameTakenException>();
+        await repetir.Should().ThrowAsync<SavedQueryNameTakenException>();
     }
 
     [Fact] // Guardar sobre una de fábrica la DUPLICA. Editarla no puede ser posible: no vive en la
@@ -512,7 +513,7 @@ public sealed class OtQueryRepositoryTests
 
         var guardada = await repo.SaveAsync(
             OtTenant, Carla, deFabrica.Id,
-            new OtSavedQueryInput("Mi versión", null, deFabrica.Definition),
+            new SavedQueryInput("Mi versión", null, deFabrica.Definition),
             cancellationToken: TestContext.Current.CancellationToken);
 
         guardada!.Id.Should().NotBe(deFabrica.Id);
@@ -542,7 +543,7 @@ public sealed class OtQueryRepositoryTests
         var repo = new OtQueryRepository(ctx);
 
         var mia = await repo.SaveAsync(
-            OtTenant, Carla, null, new OtSavedQueryInput("Mía", null, Definir()),
+            OtTenant, Carla, null, new SavedQueryInput("Mía", null, Definir()),
             cancellationToken: TestContext.Current.CancellationToken);
 
         var deOtro = await repo.ListSavedAsync(
@@ -588,18 +589,18 @@ public sealed class OtQueryRepositoryTests
 
     // ── Infraestructura de prueba ─────────────────────────────────────────────────────────────
 
-    private static OtQueryCondition Cond(string fieldId, params string[] values) =>
-        new(fieldId, OtQueryOperator.EsAlguno, values);
+    private static QueryCondition Cond(string fieldId, params string[] values) =>
+        new(fieldId, QueryOperator.EsAlguno, values);
 
-    private static OtQueryDefinition Definir(params OtQueryCondition[] condiciones) =>
+    private static QueryDefinition Definir(params QueryCondition[] condiciones) =>
         new(
-            new OtQueryDateFilter(OtQueryDateField.Radicacion, OtQueryRangePreset.Ultimos30),
+            new QueryDateFilter(OtQueryDateField.Radicacion, QueryRangePreset.Ultimos30),
             condiciones,
             []);
 
     private static async Task<OtQueryResultDto?> RunAsync(
         string db,
-        OtQueryDefinition definition,
+        QueryDefinition definition,
         int page = 1,
         int pageSize = 50)
     {
@@ -608,7 +609,7 @@ public sealed class OtQueryRepositoryTests
 
         return await repo.ExecuteAsync(
             OtTenant,
-            new OtQueryRequest(definition, page, pageSize),
+            new QueryRequest(definition, page, pageSize),
             cancellationToken: TestContext.Current.CancellationToken);
     }
 

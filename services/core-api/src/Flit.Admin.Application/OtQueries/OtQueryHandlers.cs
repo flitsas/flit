@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.OtQueries;
+using Flit.Queries.Domain;
 
 namespace Flit.Admin.Application.OtQueries;
 
@@ -13,22 +14,19 @@ public sealed class ExecuteOtQueryHandler(IOtQueryRepository repository)
 {
     public Task<OtQueryResultDto?> HandleAsync(
         Guid otTenantId,
-        OtQueryRequest request,
+        QueryRequest request,
         Guid? transitOfficeIdOverride,
         CancellationToken cancellationToken = default) =>
         repository.ExecuteAsync(otTenantId, request, transitOfficeIdOverride, cancellationToken);
 
-    public static OtQueryRequest BuildRequest(OtQueryDefinition? definition, int? page, int? pageSize) =>
-        new(
-            OtQueryFieldCatalog.Normalize(definition),
-            Math.Max(1, page ?? 1),
-            Math.Clamp(pageSize ?? OtQueryLimits.DefaultPageSize, 1, OtQueryLimits.MaxPageSize));
+    public static QueryRequest BuildRequest(QueryDefinition? definition, int? page, int? pageSize) =>
+        QueryNormalizer.BuildRequest(OtQueryFieldCatalog.Instance, definition, page, pageSize);
 }
 
 /// <summary>Catálogo de campos consultables, con las opciones del organismo ya resueltas.</summary>
 public sealed class GetOtQueryFieldsHandler(IOtQueryRepository repository)
 {
-    public Task<IReadOnlyList<OtQueryFieldDto>?> HandleAsync(
+    public Task<IReadOnlyList<QueryFieldDto>?> HandleAsync(
         Guid otTenantId,
         Guid? transitOfficeIdOverride,
         CancellationToken cancellationToken = default) =>
@@ -37,7 +35,7 @@ public sealed class GetOtQueryFieldsHandler(IOtQueryRepository repository)
 
 public sealed class ListOtSavedQueriesHandler(IOtQueryRepository repository)
 {
-    public Task<IReadOnlyList<OtSavedQueryDto>?> HandleAsync(
+    public Task<IReadOnlyList<SavedQueryDto>?> HandleAsync(
         Guid otTenantId,
         Guid userId,
         Guid? transitOfficeIdOverride,
@@ -47,11 +45,11 @@ public sealed class ListOtSavedQueriesHandler(IOtQueryRepository repository)
 
 public sealed class SaveOtQueryHandler(IOtQueryRepository repository)
 {
-    public Task<OtSavedQueryDto?> HandleAsync(
+    public Task<SavedQueryDto?> HandleAsync(
         Guid otTenantId,
         Guid userId,
         Guid? id,
-        OtSavedQueryInput input,
+        SavedQueryInput input,
         Guid? transitOfficeIdOverride,
         CancellationToken cancellationToken = default) =>
         repository.SaveAsync(otTenantId, userId, id, input, transitOfficeIdOverride, cancellationToken);
@@ -60,11 +58,8 @@ public sealed class SaveOtQueryHandler(IOtQueryRepository repository)
     /// Un nombre vacío no se rechaza con un error: se pone uno. Que la consulta se guarde es más
     /// importante que cómo se llama, y renombrarla es un clic.
     /// </summary>
-    public static OtSavedQueryInput BuildInput(string? nombre, string? descripcion, OtQueryDefinition? definition) =>
-        new(
-            string.IsNullOrWhiteSpace(nombre) ? "Consulta sin nombre" : nombre.Trim()[..Math.Min(nombre.Trim().Length, 120)],
-            descripcion,
-            OtQueryFieldCatalog.Normalize(definition));
+    public static SavedQueryInput BuildInput(string? nombre, string? descripcion, QueryDefinition? definition) =>
+        SavedQuery.BuildInput(OtQueryFieldCatalog.Instance, nombre, descripcion, definition);
 }
 
 public sealed class DeleteOtSavedQueryHandler(IOtQueryRepository repository)

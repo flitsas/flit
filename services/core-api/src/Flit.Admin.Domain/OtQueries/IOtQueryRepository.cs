@@ -1,3 +1,5 @@
+using Flit.Queries.Domain;
+
 namespace Flit.Admin.Domain.OtQueries;
 
 /// <summary>
@@ -12,7 +14,7 @@ public interface IOtQueryRepository
     /// <summary>Ejecuta una consulta ya normalizada y devuelve una página del resultado.</summary>
     Task<OtQueryResultDto?> ExecuteAsync(
         Guid otTenantId,
-        OtQueryRequest request,
+        QueryRequest request,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
 
@@ -20,23 +22,23 @@ public interface IOtQueryRepository
     /// Catálogo de campos con las opciones que dependen del organismo (empresas, revisores) ya
     /// rellenadas.
     /// </summary>
-    Task<IReadOnlyList<OtQueryFieldDto>?> GetFieldsAsync(
+    Task<IReadOnlyList<QueryFieldDto>?> GetFieldsAsync(
         Guid otTenantId,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Las del usuario más las de fábrica, éstas siempre al final.</summary>
-    Task<IReadOnlyList<OtSavedQueryDto>?> ListSavedAsync(
+    Task<IReadOnlyList<SavedQueryDto>?> ListSavedAsync(
         Guid otTenantId,
         Guid userId,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
 
-    Task<OtSavedQueryDto?> SaveAsync(
+    Task<SavedQueryDto?> SaveAsync(
         Guid otTenantId,
         Guid userId,
         Guid? id,
-        OtSavedQueryInput input,
+        SavedQueryInput input,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
 
