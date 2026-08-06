@@ -97,15 +97,6 @@ export function PrimaryButton({
 export const FIELD_CLS =
   "rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60";
 
-// ── Formateo ───────────────────────────────────────────────────────────────────
-
-const intFmt = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 });
-
-export function formatInt(value: number | null | undefined): string {
-  return value === null || value === undefined || Number.isNaN(value) ? "—" : intFmt.format(value);
-}
-
-/** «3 trámites», «1 trámite». El número formateado y la palabra que le toca, en una sola pieza. */
-export function plural(count: number, singular: string, many: string): string {
-  return `${formatInt(count)} ${count === 1 ? singular : many}`;
-}
+// El formateo vive en `./format`, que no es un módulo de cliente: lo importan las definiciones de
+// columnas, que son ficheros de datos y no componentes.
+export { formatInt, plural } from "./format";

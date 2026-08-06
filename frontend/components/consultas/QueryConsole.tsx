@@ -43,7 +43,15 @@ import { download, queryFileName } from "./export";
 import { decodeDefinition, encodeDefinition } from "./link-state";
 import { QueryFilterBar } from "./QueryFilterBar";
 import { SavedQueryList } from "./SavedQueryList";
-import { CSV_EXPORT_VISIBLE, Empty, ErrorNotice, FIELD_CLS, formatInt, plural, PrimaryButton, Section } from "./ui";
+import { formatInt, plural } from "./format";
+import {
+  CSV_EXPORT_VISIBLE,
+  Empty,
+  ErrorNotice,
+  FIELD_CLS,
+  PrimaryButton,
+  Section,
+} from "./ui";
 
 const PAGE_SIZE = 25;
 
