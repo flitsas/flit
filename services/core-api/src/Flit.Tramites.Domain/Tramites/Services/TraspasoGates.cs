@@ -50,6 +50,10 @@ public static class TraspasoGates
                 // avanza con un dato vital sin verificar; hay que reejecutar la consulta.
                 if (ctx.Preflight?.ProviderError == true)
                     return GateResult.Block("preflight_provider_error", "No fue posible verificar la información del vehículo en el RUNT. Vuelve a ejecutar la consulta antes de continuar");
+                // Bloqueo DURO: el RUNT respondió y el vehículo NO existe. Sin vehículo no hay trámite,
+                // así que no se subsana con "aceptar riesgo" ni forzando; hay que corregir el identificador.
+                if (ctx.Preflight?.VehiculoNoEncontrado == true)
+                    return GateResult.Block("vehiculo_no_encontrado", "El vehículo no se encontró en el RUNT. Verifica la placa y el documento del propietario antes de continuar");
                 if (ImpuestoGateBloquea(ctx.Preflight, ctx.PazSalvoImpuestoVerificado, forzar))
                     return GateResult.Block("impuesto_pendiente", "Confirma paz y salvo de impuesto vehicular antes de continuar");
                 return GateResult.Allowed;
@@ -77,6 +81,9 @@ public static class TraspasoGates
                 // caído/timeout) NO se subsana con "aceptar riesgo" ni forzando; hay que reintentar.
                 if (ctx.Preflight?.ProviderError == true)
                     return GateResult.Block("preflight_provider_error", "No fue posible verificar la información en el RUNT/SIMIT/RNMC. Vuelve a ejecutar la consulta antes de continuar");
+                // Mismo bloqueo DURO del paso 1: sin vehículo verificado no se avanza a documentos.
+                if (ctx.Preflight?.VehiculoNoEncontrado == true)
+                    return GateResult.Block("vehiculo_no_encontrado", "El vehículo no se encontró en el RUNT. Verifica la placa y el documento del propietario antes de continuar");
                 if (PreflightBloquea(ctx.Preflight, forzar || ctx.RiesgoPreflightAceptado))
                     return GateResult.Block("preflight_red", "Hay bloqueos críticos (SOAT/RTM). Subsana antes de continuar");
                 if (!ctx.DocumentosObligatoriosCompletos)

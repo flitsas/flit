@@ -161,6 +161,79 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     expect(await screen.findByText('RENAULT')).toBeInTheDocument();
   });
 
+  // Sin instancia no hay gates de backend que evaluar, así que el bloqueo tiene que vivir también
+  // aquí. Antes bastaba con que la consulta respondiera —aunque fuera con el vehículo inexistente—
+  // para habilitar "Continuar": se creaba el trámite y quedaba atascado en el paso 1.
+  it('bloquea "Continuar" si el vehículo no se encontró en el RUNT (no subsanable)', async () => {
+    mocks.runPreflightPreview.mockResolvedValue({
+      ...PREVIEW_RESULT,
+      preflight: {
+        overall: 'red' as const,
+        checks: [
+          {
+            key: 'vehiculo',
+            label: 'Vehículo RUNT',
+            status: 'fail' as const,
+            source: 'verifik',
+            message: 'Vehículo no encontrado en RUNT',
+          },
+        ],
+        createdAt: '2026-08-06T00:00:00Z',
+      },
+    });
+    const user = userEvent.setup();
+    renderNuevaMatricula();
+
+    await prepararConsulta(user);
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+    await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
+
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
+    // Es bloqueo DURO: no se ofrece el escape de "asumo el riesgo".
+    expect(screen.queryByText(/Asumo el riesgo/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Continuar/ }));
+    expect(mocks.createInstanceFromConsulta).not.toHaveBeenCalled();
+  });
+
+  // Rojo subsanable (SOAT/RTM): sí se puede avanzar, pero solo aceptando el riesgo.
+  it('con rojo subsanable exige aceptar el riesgo antes de habilitar "Continuar"', async () => {
+    mocks.runPreflightPreview.mockResolvedValue({
+      ...PREVIEW_RESULT,
+      preflight: {
+        overall: 'red' as const,
+        checks: [
+          {
+            key: 'soat',
+            label: 'SOAT',
+            status: 'fail' as const,
+            source: 'verifik',
+            message: 'SOAT vencido',
+          },
+        ],
+        createdAt: '2026-08-06T00:00:00Z',
+      },
+    });
+    const user = userEvent.setup();
+    renderNuevaMatricula();
+
+    await prepararConsulta(user);
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+    await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
+
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
+
+    await user.click(
+      await screen.findByRole('checkbox', {
+        name: /Asumo el riesgo de rechazo en el organismo de tránsito/i,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled(),
+    );
+  });
+
   it('AC4: "Continuar" crea el trámite reusando la consulta y navega a su ruta', async () => {
     const user = userEvent.setup();
     renderNuevaMatricula();

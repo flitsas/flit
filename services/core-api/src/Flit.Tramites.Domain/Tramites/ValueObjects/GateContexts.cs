@@ -9,7 +9,16 @@ public sealed record ParteDatos(string? Nombre, string? Documento, string? Email
 /// <param name="ProviderError">Algún proveedor no se pudo verificar (check "error"): la información
 /// es vital, así que es un bloqueo DURO no subsanable con "aceptar riesgo" (distinto del rojo por
 /// SOAT/RTM/estado, que sí es subsanable). Obliga a reintentar la consulta antes de continuar.</param>
-public sealed record PreflightSnapshot(string? Overall, bool ImpuestoVehicularUnknown, bool ProviderError = false);
+/// <param name="VehiculoNoEncontrado">La consulta del vehículo respondió, pero el vehículo NO existe
+/// en el RUNT (check "vehiculo" en "fail"). Como <paramref name="ProviderError"/>, es un bloqueo DURO:
+/// sin vehículo verificado no hay trámite posible, así que no se subsana con "aceptar riesgo" ni
+/// forzando. Se distingue de ProviderError porque aquí la fuente SÍ respondió (no es un fallo técnico),
+/// y el mensaje al operador debe pedir corregir el identificador, no reintentar.</param>
+public sealed record PreflightSnapshot(
+    string? Overall,
+    bool ImpuestoVehicularUnknown,
+    bool ProviderError = false,
+    bool VehiculoNoEncontrado = false);
 
 /// <summary>Snapshot de una consulta RUNT contra un documento concreto.</summary>
 /// <param name="Consultado">Si la consulta se realizó.</param>
