@@ -35,8 +35,8 @@ import {
 } from "@/components/admin/transit-offices/_reportes/query-columns";
 import {
   coverageLines,
-} from "@/components/admin/transit-offices/_reportes/CoverageNotice";
-import { parseValueList } from "@/components/admin/transit-offices/_reportes/QueryFilterBar";
+} from "@/components/consultas/CoverageNotice";
+import { parseValueList } from "@/components/consultas/QueryFilterBar";
 
 const FIELDS: OtQueryField[] = [
   {

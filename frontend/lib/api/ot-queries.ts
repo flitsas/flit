@@ -7,85 +7,36 @@
 import { apiFetch } from "./client";
 
 const base = "/api/v1/admin/ot/queries";
+// El modelo de la consulta es COMPARTIDO con las consultas de la empresa gestora (`./queries`).
+// Aquí se reexporta con los nombres con los que ya se cita en todo el módulo OT: son la misma
+// forma, y tener dos definiciones haría que un enlace guardado en un lado dejara de abrir en el
+// otro sin que nada avisara.
+export type {
+  QueryCondition as OtQueryCondition,
+  QueryCoverageItem as OtQueryCoverageItem,
+  QueryCoverageResult as OtQueryCoverageResult,
+  QueryDateFilter as OtQueryDateFilter,
+  QueryDefinition as OtQueryDefinition,
+  QueryField as OtQueryField,
+  QueryFieldKind as OtQueryFieldKind,
+  QueryFieldOption as OtQueryFieldOption,
+  QueryOperator as OtQueryOperator,
+  QueryRangePreset as OtQueryRangePreset,
+  SavedQuery as OtSavedQuery,
+} from "./queries";
 
-// ── Catálogo de campos ──────────────────────────────────────────────────────────
+export { OPERATOR_LABEL, RANGE_PRESETS, UNARY_OPERATORS } from "./queries";
 
-export type OtQueryFieldKind = "texto" | "opcion" | "booleano";
+import type {
+  QueryDefinition as OtQueryDefinition,
+  QueryField as OtQueryField,
+  QueryResult as SharedResult,
+  SavedQuery as OtSavedQuery,
+} from "./queries";
+import { QUERY_MAX_PAGE_SIZE, QUERY_PAGE_SIZE } from "./queries";
 
-export type OtQueryOperator =
-  | "es_alguno"
-  | "no_es_ninguno"
-  | "contiene"
-  | "esta_vacio"
-  | "no_esta_vacio";
-
-export interface OtQueryFieldOption {
-  value: string;
-  label: string;
-}
-
-export interface OtQueryField {
-  id: string;
-  label: string;
-  kind: OtQueryFieldKind;
-  group: string;
-  operators: OtQueryOperator[];
-  options: OtQueryFieldOption[];
-  hint: string | null;
-  /** Si tiene sentido pegar una lista de valores (placas, VIN, radicados). */
-  admiteLista: boolean;
-}
-
-/** Etiquetas de los operadores tal y como se leen dentro de un chip. */
-export const OPERATOR_LABEL: Record<OtQueryOperator, string> = {
-  es_alguno: "es",
-  no_es_ninguno: "no es",
-  contiene: "contiene",
-  esta_vacio: "está vacío",
-  no_esta_vacio: "tiene dato",
-};
-
-export const UNARY_OPERATORS: OtQueryOperator[] = ["esta_vacio", "no_esta_vacio"];
-
-// ── Definición ──────────────────────────────────────────────────────────────────
-
-export interface OtQueryCondition {
-  fieldId: string;
-  operator: OtQueryOperator;
-  values: string[];
-}
-
+/** Sobre qué fecha del trámite se aplica el rango. Esto sí es propio del organismo. */
 export type OtQueryDateFieldId = "radicacion" | "decision" | "actualizacion";
-
-export type OtQueryRangePreset =
-  | "hoy"
-  | "ultimos_7"
-  | "ultimos_30"
-  | "ultimos_90"
-  | "mes_actual"
-  | "mes_anterior"
-  | "anio_actual"
-  | "personalizado";
-
-/**
- * El rango se guarda RELATIVO («últimos 30 días»), no con extremos fijos, y lo resuelve el servidor
- * contra el día de Bogotá en cada ejecución. Una consulta guardada con «1 al 31 de agosto» mentiría
- * en septiembre.
- */
-export interface OtQueryDateFilter {
-  campo: OtQueryDateFieldId;
-  preset: OtQueryRangePreset;
-  from?: string | null;
-  to?: string | null;
-}
-
-export interface OtQueryDefinition {
-  fechas: OtQueryDateFilter;
-  condiciones: OtQueryCondition[];
-  columnas: string[];
-  sortBy?: string | null;
-  descending?: boolean;
-}
 
 export const DATE_FIELD_LABEL: Record<OtQueryDateFieldId, string> = {
   radicacion: "Fecha de radicación",
@@ -93,32 +44,9 @@ export const DATE_FIELD_LABEL: Record<OtQueryDateFieldId, string> = {
   actualizacion: "Última actualización",
 };
 
-export const RANGE_PRESETS: { value: OtQueryRangePreset; label: string }[] = [
-  { value: "hoy", label: "Hoy" },
-  { value: "ultimos_7", label: "Últimos 7 días" },
-  { value: "ultimos_30", label: "Últimos 30 días" },
-  { value: "ultimos_90", label: "Últimos 90 días" },
-  { value: "mes_actual", label: "Mes actual" },
-  { value: "mes_anterior", label: "Mes anterior" },
-  { value: "anio_actual", label: "Año actual" },
-  { value: "personalizado", label: "Rango propio" },
-];
-
-// ── Resultado ───────────────────────────────────────────────────────────────────
-
-export type OtQueryCoverageResult = "encontrado" | "excluido" | "no_existe";
-
-/**
- * Qué pasó con cada valor que el usuario pidió por nombre. Sin esto, un resultado con menos filas
- * de las esperadas se lee como «se perdió un dato».
- */
-export interface OtQueryCoverageItem {
-  campo: string;
-  valor: string;
-  resultado: OtQueryCoverageResult;
-  motivoCampo: string | null;
-  motivo: string | null;
-}
+export const OT_DATE_FIELDS: { value: string; label: string }[] = (
+  Object.keys(DATE_FIELD_LABEL) as OtQueryDateFieldId[]
+).map((value) => ({ value, label: DATE_FIELD_LABEL[value] }));
 
 export interface OtQueryRow {
   procedureInstanceId: string;
@@ -150,30 +78,10 @@ export interface OtQueryRow {
   causalesUltimoRechazo: string[];
 }
 
-export interface OtQueryResult {
-  total: number;
-  page: number;
-  pageSize: number;
-  desde: string;
-  hasta: string;
-  totalPeriodoAnterior: number;
-  filas: OtQueryRow[];
-  cobertura: OtQueryCoverageItem[];
-}
+export type OtQueryResult = SharedResult<OtQueryRow>;
 
-export interface OtSavedQuery {
-  id: string;
-  nombre: string;
-  descripcion: string | null;
-  /** Las de fábrica no se editan ni se borran: guardarlas las duplica. */
-  deFabrica: boolean;
-  definition: OtQueryDefinition;
-  createdAt: string;
-  updatedAt: string | null;
-}
-
-export const OT_QUERY_PAGE_SIZE = 50;
-export const OT_QUERY_MAX_PAGE_SIZE = 200;
+export const OT_QUERY_PAGE_SIZE = QUERY_PAGE_SIZE;
+export const OT_QUERY_MAX_PAGE_SIZE = QUERY_MAX_PAGE_SIZE;
 
 // ── Llamadas ────────────────────────────────────────────────────────────────────
 

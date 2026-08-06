@@ -17,7 +17,7 @@ import {
   rangedFileName,
   type ColumnPreset,
   type DataColumn,
-} from "./columns";
+} from "@/components/consultas/columns";
 
 // ── Estados ────────────────────────────────────────────────────────────────────
 
@@ -94,12 +94,14 @@ const MODALIDAD_LABEL: Record<string, string> = {
 
 // ── Formateo ───────────────────────────────────────────────────────────────────
 
+// `formatInt` y `plural` viven en el kit compartido: los usan las dos consolas de consultas, y dos
+// formateadores de número acaban enseñando «1.284» en un informe y «1284» en el otro.
+import { formatInt, plural } from "@/components/consultas/ui";
+
+export { formatInt, plural };
+
 const intFmt = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 });
 const numFmt = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 1 });
-
-export function formatInt(value: number | null | undefined): string {
-  return value === null || value === undefined || Number.isNaN(value) ? "—" : intFmt.format(value);
-}
 
 /**
  * Duración legible. Por debajo de 48 h se dice en horas y por encima en días: «73,5 h» obliga a
@@ -116,10 +118,6 @@ export function formatHours(value: number | null | undefined): string {
  * Conteo con su sustantivo concordado. «1 trámites» delata que nadie leyó la pantalla con datos
  * reales, y es justo el caso —un solo registro— en el que alguien mira el informe con lupa.
  */
-export function plural(count: number, singular: string, many: string): string {
-  return `${formatInt(count)} ${count === 1 ? singular : many}`;
-}
-
 export function formatDays(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   return `${numFmt.format(value)} ${value === 1 ? "día" : "días"}`;

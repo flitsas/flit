@@ -15,7 +15,7 @@ import {
   rangedFileName,
   type ColumnPreset,
   type DataColumn,
-} from "./columns";
+} from "@/components/consultas/columns";
 import { estadoMeta, formatDate, formatDateTime, formatHours, formatInt } from "./report-columns";
 
 const MODALIDAD_LABEL: Record<string, string> = {

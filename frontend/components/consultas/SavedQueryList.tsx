@@ -17,7 +17,7 @@
 
 import { Check, ChevronRight, Trash2 } from "lucide-react";
 
-import { RANGE_PRESETS, type OtSavedQuery } from "@/lib/api/ot-queries";
+import { RANGE_PRESETS, type SavedQuery } from "@/lib/api/queries";
 
 export function SavedQueryList({
   queries,
@@ -27,22 +27,25 @@ export function SavedQueryList({
   onOpen,
   onPedirBorrado,
   onConfirmarBorrado,
+  testIdPrefix,
 }: {
-  queries: OtSavedQuery[];
+  queries: SavedQuery[];
   activeId: string | null;
   /** Lo que hay en pantalla se apartó de la consulta abierta. */
   modificada: boolean;
   /** La que está esperando confirmación de borrado, si hay alguna. */
-  porBorrar: OtSavedQuery | null;
-  onOpen: (query: OtSavedQuery) => void;
-  onPedirBorrado: (query: OtSavedQuery | null) => void;
-  onConfirmarBorrado: (query: OtSavedQuery) => void;
+  porBorrar: SavedQuery | null;
+  onOpen: (query: SavedQuery) => void;
+  onPedirBorrado: (query: SavedQuery | null) => void;
+  onConfirmarBorrado: (query: SavedQuery) => void;
+  /** Las dos consolas usan esta lista; el prefijo las hace distinguibles en las pruebas. */
+  testIdPrefix: string;
 }) {
   const propias = queries.filter((q) => !q.deFabrica);
   const fabrica = queries.filter((q) => q.deFabrica);
 
   return (
-    <div className="flex flex-col gap-4" data-testid="ot-query-guardadas">
+    <div className="flex flex-col gap-4" data-testid={`${testIdPrefix}-guardadas`}>
       <Grupo titulo="Mis consultas" cuenta={propias.length}>
         {propias.length === 0 ? (
           // Un hueco en blanco no explica nada. Este dice qué aparecerá aquí y de dónde sale.
@@ -61,6 +64,7 @@ export function SavedQueryList({
                 onOpen={onOpen}
                 onPedirBorrado={onPedirBorrado}
                 onConfirmarBorrado={onConfirmarBorrado}
+                testIdPrefix={testIdPrefix}
               />
             ))}
           </ul>
@@ -85,6 +89,7 @@ export function SavedQueryList({
                 onOpen={onOpen}
                 onPedirBorrado={onPedirBorrado}
                 onConfirmarBorrado={onConfirmarBorrado}
+                testIdPrefix={testIdPrefix}
               />
             ))}
           </ul>
@@ -144,14 +149,16 @@ function Item({
   onOpen,
   onPedirBorrado,
   onConfirmarBorrado,
+  testIdPrefix,
 }: {
-  query: OtSavedQuery;
+  query: SavedQuery;
   activo: boolean;
   modificada: boolean;
   confirmando: boolean;
-  onOpen: (query: OtSavedQuery) => void;
-  onPedirBorrado: (query: OtSavedQuery | null) => void;
-  onConfirmarBorrado: (query: OtSavedQuery) => void;
+  onOpen: (query: SavedQuery) => void;
+  onPedirBorrado: (query: SavedQuery | null) => void;
+  onConfirmarBorrado: (query: SavedQuery) => void;
+  testIdPrefix: string;
 }) {
   // Confirmar en la propia tarjeta y no en un diálogo del navegador: se ve QUÉ se va a borrar
   // mientras se decide, que es justo lo que un cuadro modal tapa. Y se dice el nombre completo en
@@ -160,7 +167,7 @@ function Item({
     return (
       <li
         className="rounded-xl border border-[#C0392B]/40 bg-[#C0392B]/5 p-2.5"
-        data-testid={`ot-query-borrar-${query.id}`}
+        data-testid={`${testIdPrefix}-borrar-${query.id}`}
       >
         <p className="mb-2 text-[11px] leading-snug text-[#0B1F33] dark:text-white/80">
           Se borrará <span className="font-semibold">«{query.nombre}»</span>.
@@ -170,7 +177,7 @@ function Item({
             type="button"
             onClick={() => onConfirmarBorrado(query)}
             className="flex-1 rounded-lg bg-[#C0392B] px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-[#A63325]"
-            data-testid={`ot-query-borrar-confirmar-${query.id}`}
+            data-testid={`${testIdPrefix}-borrar-confirmar-${query.id}`}
           >
             Borrar
           </button>
@@ -199,7 +206,7 @@ function Item({
             ? "border-[#557EFF] bg-[#557EFF]/[0.07] shadow-[inset_3px_0_0_0_#557EFF]"
             : "border-[#DFE5ED] hover:border-[#557EFF]/50 hover:bg-[#F5F7FA] dark:border-white/10 dark:hover:border-[#557EFF]/40 dark:hover:bg-white/5"
         }`}
-        data-testid={`ot-query-guardada-${query.id}`}
+        data-testid={`${testIdPrefix}-guardada-${query.id}`}
       >
         <span className="flex items-start gap-1.5">
           {/* Dos líneas antes de cortar, no una. El nombre es lo único que identifica la consulta;
@@ -261,7 +268,7 @@ function Item({
  * Un nombre puesto por su autor —«revisión lunes»— no significa nada tres meses después, ni para
  * quien lo escribió. El resumen se saca de la definición, así que no puede desactualizarse.
  */
-function resumen(query: OtSavedQuery): string {
+function resumen(query: SavedQuery): string {
   const n = query.definition.condiciones.length;
   const filtros = n === 0 ? "Sin filtros" : `${n} ${n === 1 ? "filtro" : "filtros"}`;
   const rango = RANGE_PRESETS.find((p) => p.value === query.definition.fechas.preset)?.label;

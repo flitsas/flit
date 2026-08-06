@@ -22,8 +22,8 @@ import {
   type OtReviewersReport,
 } from "@/lib/api/ot-metrics";
 import { XLSX_MIME } from "@/lib/xlsx";
-import { ColumnPicker } from "./ColumnPicker";
-import { activePreset } from "./columns";
+import { ColumnPicker } from "@/components/consultas/ColumnPicker";
+import { activePreset } from "@/components/consultas/columns";
 import {
   DateRangeFields,
   EmpresaSelect,

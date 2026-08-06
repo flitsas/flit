@@ -16,7 +16,7 @@ import {
   rangedFileName,
   type ColumnPreset,
   type DataColumn,
-} from "./columns";
+} from "@/components/consultas/columns";
 import { formatDateTime, formatHours, formatInt } from "./report-columns";
 
 export type ReviewerColumn = DataColumn<OtReviewerRow, OtReviewerSort> & {
