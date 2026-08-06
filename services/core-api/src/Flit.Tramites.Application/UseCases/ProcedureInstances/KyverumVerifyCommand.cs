@@ -5,6 +5,7 @@ using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Identity.Events;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.Extensions.Logging;
@@ -43,9 +44,12 @@ public sealed class IniciarKyverumVerifyHandler(
     IKyverumVerifyClient kyverum,
     IWebhookSecretProtector secretProtector,
     IIdentityValidationEventPublisher events,
-    IIdentityValidationAuditLog audit)
+    IIdentityValidationAuditLog audit,
+    ISignatureVaultPolicy? vaultPolicy = null)
 {
-    public async Task<(IniciarKyverumVerifyResult? Result, string? Error)> HandleAsync(
+    private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+
+    public async Task<(IniciarKyverumVerifyResult? Result, string? Error, IdentitySendDecision? Conflict)> HandleAsync(
         Guid id,
         Guid tenantId,
         IniciarBiometriaInput input,
@@ -53,16 +57,39 @@ public sealed class IniciarKyverumVerifyHandler(
     {
         var parte = NormalizeParte(input.Parte);
         if (parte is "invalid")
-            return (null, "parte_invalida");
+            return (null, "parte_invalida", null);
 
         // Se cargan también los actores: el wizard dispara la validación enviando SOLO la parte y los
         // datos del sujeto se toman del actor del trámite (fuente única de verdad). Mismo repo que
         // SimularBiometriaHandler.
         var instance = await repo.GetByIdWithBiometricsAndActorsAsync(id, tenantId, ct);
         if (instance is null)
-            return (null, "not_found");
+            return (null, "not_found", null);
         if (!TramiteEstado.PermiteEdicionDatos(instance.Status, instance.SubsanacionActiva))
-            return (null, "not_draft");
+            return (null, "not_draft", null);
+
+        // Datos del sujeto ANTES de la precedencia de envío / guard por parte: el body puede
+        // sobreescribir; si vienen vacíos, se resuelven desde el SUJETO DE IDENTIDAD (HU #10688).
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
+        var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
+        var nombre = FirstNonEmpty(input.Nombre, subject?.Nombre);
+        var tipoDoc = FirstNonEmpty(input.TipoDoc, subject?.TipoDocumento);
+        var documento = FirstNonEmpty(input.Documento, subject?.NumeroDocumento);
+        var email = FirstNonEmpty(input.Email, subject?.Email);
+        if (nombre is null || tipoDoc is null || documento is null || email is null)
+            return (null, actor is null ? "actor_requerido" : "datos_incompletos", null);
+
+        var nowDecision = DateTimeOffset.UtcNow;
+
+        // HU #11265 — precedencia de envío (persona/tenant) PREVIA al guard por parte.
+        var decision = await IdentitySendDecisionForTramite.EvaluateAsync(
+            repo, _vaultPolicy, tenantId, actor, tipoDoc, documento,
+            instance.BiometricValidations.ToList(), nowDecision, ct);
+        var (sendError, sendConflict, continueStart) = IdentitySendDecisionForTramite.ToStartOutcome(
+            decision, id, parte, instance.BiometricValidations.ToList());
+        if (!continueStart)
+            return (null, sendError, sendConflict);
 
         var existing = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
@@ -77,7 +104,7 @@ public sealed class IniciarKyverumVerifyHandler(
             var vencida = existing.Status is BiometricEstados.EnProceso or BiometricEstados.Enviado
                 && nowGuard > existing.ExpiresAt;
             if (!vencida)
-                return (null, "biometria_activa");
+                return (null, "biometria_activa", null);
 
             existing.Status = BiometricEstados.Expirado;
             existing.UpdatedAt = nowGuard;
@@ -89,21 +116,6 @@ public sealed class IniciarKyverumVerifyHandler(
                 Message: "Enlace de captura vencido: se expira la validación previa para permitir el reenvío.",
                 Detail: $"expires_at={existing.ExpiresAt:O}"), ct);
         }
-
-        // Datos del sujeto: el body los puede sobreescribir (API/Postman directo); si vienen vacíos, se
-        // resuelven desde el SUJETO DE IDENTIDAD de la parte (HU #10688): el actor si es natural, el
-        // representante legal si es jurídico. Así una PJ valida con el documento/correo del RL, no con el NIT.
-        var actor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
-        var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
-        var nombre = FirstNonEmpty(input.Nombre, subject?.Nombre);
-        var tipoDoc = FirstNonEmpty(input.TipoDoc, subject?.TipoDocumento);
-        var documento = FirstNonEmpty(input.Documento, subject?.NumeroDocumento);
-        var email = FirstNonEmpty(input.Email, subject?.Email);
-        if (nombre is null || tipoDoc is null || documento is null || email is null)
-            // Sin datos: si ni siquiera hay actor registrado → actor_requerido; si el actor existe pero le
-            // falta algún dato (p.ej. email) → datos_incompletos.
-            return (null, actor is null ? "actor_requerido" : "datos_incompletos");
 
         // Id de NUESTRA validación: se genera ANTES de llamar al proveedor para incrustarlo en la
         // webhookUrl (el webhook de Kyverum no repite el id en el cuerpo → correlación por URL).
@@ -132,7 +144,7 @@ public sealed class IniciarKyverumVerifyHandler(
 
             // Fallo DEFINITIVO (datos/4xx): no se reintenta.
             if (!ex.Transient)
-                return (null, "proveedor_error");
+                return (null, "proveedor_error", null);
 
             // Fallo TRANSITORIO (proveedor caído/timeout/5xx): se ENCOLA para reintento. Persiste la
             // validación en pendiente_envio con los datos del sujeto; el worker (provider-agnostic)
@@ -158,10 +170,18 @@ public sealed class IniciarKyverumVerifyHandler(
             };
             instance.BiometricValidations.Add(queued);
             repo.Add(queued);
-            await repo.SaveChangesAsync(ct);
+            try
+            {
+                await repo.SaveChangesAsync(ct);
+            }
+            catch (Domain.Identity.IdentityInFlightConflictException)
+            {
+                return (null, "biometria_activa",
+                    IdentitySendDecisionForTramite.InFlightRaceConflict(IdentitySendOrigen.Tramite));
+            }
 
             var queuedDto = IniciarBiometriaHandler.ToDto(queued, queuedAt);
-            return (new IniciarKyverumVerifyResult(queuedDto, string.Empty, Queued: true), null);
+            return (new IniciarKyverumVerifyResult(queuedDto, string.Empty, Queued: true), null, null);
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -210,7 +230,15 @@ public sealed class IniciarKyverumVerifyHandler(
             ProviderVerificationId = provider.VerificationId,
         }, ct);
 
-        await repo.SaveChangesAsync(ct);
+        try
+        {
+            await repo.SaveChangesAsync(ct);
+        }
+        catch (Domain.Identity.IdentityInFlightConflictException)
+        {
+            return (null, "biometria_activa",
+                IdentitySendDecisionForTramite.InFlightRaceConflict(IdentitySendOrigen.Tramite));
+        }
 
         await audit.LogAsync(new IdentityValidationAuditEntry(
             IdentityValidationAuditStages.SendResponse, IdentityValidationAuditOutcomes.Ok,
@@ -220,7 +248,7 @@ public sealed class IniciarKyverumVerifyHandler(
             Message: "Create OK: validación en_proceso, captura enviada."), ct);
 
         var dto = IniciarBiometriaHandler.ToDto(validation, now);
-        return (new IniciarKyverumVerifyResult(dto, provider.CaptureUrl), null);
+        return (new IniciarKyverumVerifyResult(dto, provider.CaptureUrl), null, null);
     }
 
     // Parte vacía → comprador (matrícula, única parte), igual que SimularBiometriaHandler: así la

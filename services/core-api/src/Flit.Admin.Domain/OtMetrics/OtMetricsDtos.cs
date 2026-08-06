@@ -166,3 +166,256 @@ public sealed record OtDrilldownDto(
 
 /// <summary>Empresa cliente del organismo, para el filtro del reporte.</summary>
 public sealed record OtClientCompanyOptionDto(Guid TenantId, string Name);
+
+// ── B. Informe del periodo ────────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Estados del informe. NO son los estados crudos de <c>procedure_instances</c>: son la lectura del
+/// trámite <b>desde el organismo</b>. Los estados anteriores a la radicación (borrador, preparado)
+/// no aparecen porque el organismo nunca los vio, y <c>rechazado</c> se parte en dos según si el
+/// gestor ya abrió la subsanación — que para el organismo son dos situaciones distintas: una vuelve
+/// y la otra no.
+/// <para>Los buckets son excluyentes y exhaustivos: su suma es SIEMPRE el total del informe. Es una
+/// diferencia deliberada con el panel operativo, cuyo desglose no cierra porque solo expone lo
+/// accionable.</para>
+/// </summary>
+public static class OtReportEstado
+{
+    public const string EnRevision = "en_revision";
+    public const string EsperandoPlaca = "esperando_placa";
+    public const string EsperandoCliente = "esperando_cliente";
+    public const string Aprobado = "aprobado";
+    public const string EnSubsanacion = "en_subsanacion";
+    public const string Rechazado = "rechazado";
+    public const string Anulado = "anulado";
+
+    /// <summary>Radicado y de vuelta en un estado previo a la radicación: no debería ocurrir, pero si ocurre se ve.</summary>
+    public const string Otro = "otro";
+}
+
+/// <summary>Granularidad de la serie temporal del informe. La elige el servidor según el ancho del rango.</summary>
+public static class OtReportGranularity
+{
+    public const string Dia = "dia";
+    public const string Semana = "semana";
+    public const string Mes = "mes";
+}
+
+/// <summary>Topes del informe.</summary>
+public static class OtReportLimits
+{
+    /// <summary>Filas por página. Suficiente para una jornada de trabajo sin volcar el histórico en una respuesta.</summary>
+    public const int MaxPageSize = 200;
+
+    public const int DefaultPageSize = 50;
+}
+
+/// <summary>Un tramo de la distribución de tiempos. El histograma que la tabla no puede contar.</summary>
+public sealed record OtReportTimeBucketDto(string Key, string Label, int Tramites);
+
+/// <summary>
+/// Un punto de la serie temporal del informe.
+/// <para>La serie se emite COMPLETA, con los periodos sin actividad en cero. Omitirlos deja una
+/// gráfica que miente por partida doble: los huecos se leen como continuidad y una sola quincena
+/// activa se dibuja como un punto suelto sin línea.</para>
+/// <para><see cref="Desde"/> y <see cref="Hasta"/> viajan con cada punto para que la gráfica pueda
+/// ser un control de navegación y no solo un dibujo: pinchar una columna acota el informe a ese
+/// periodo. Derivarlos en el cliente obligaría a reimplementar allí la regla de semanas que empiezan
+/// en lunes y el recorte contra los extremos del rango, que es justo la clase de lógica que se
+/// desincroniza en silencio.</para>
+/// </summary>
+public sealed record OtReportSeriesPointDto(
+    string Bucket,
+    string Label,
+    string Desde,
+    string Hasta,
+    int Radicados,
+    int Aprobados,
+    int Rechazados);
+
+/// <summary>
+/// Cabecera del informe.
+/// <para>Los tiempos se miden desde la ÚLTIMA radicación hasta la decisión: es el turno que el
+/// organismo realmente trabajó. Medir desde la primera radicación mezclaría en el mismo número el
+/// tiempo del organismo y el que el gestor tardó en subsanar.</para>
+/// <para>Se acompañan de mediana, promedio y p90 a la vez a propósito: la mediana dice el caso
+/// típico, el promedio se desplaza con los casos extremos y el p90 es el compromiso que el
+/// organismo puede sostener. Solo la mediana escondería la cola.</para>
+/// </summary>
+public sealed record OtReportSummaryDto(
+    int Total,
+    int EnRevision,
+    int EsperandoPlaca,
+    int EsperandoCliente,
+    int Aprobados,
+    int EnSubsanacion,
+    int Rechazados,
+    int Anulados,
+    int Otros,
+    int Decididos,
+    int Devoluciones,
+    double DevolucionesPromedio,
+    double? TiempoMedianoHoras,
+    double? TiempoPromedioHoras,
+    double? TiempoP90Horas,
+    double? TiempoMedianoAprobacionHoras,
+    IReadOnlyList<OtReportTimeBucketDto> DistribucionTiempos,
+    string Granularidad,
+    IReadOnlyList<OtReportSeriesPointDto> Serie);
+
+/// <summary>
+/// Una fila del informe: un trámite con TODO lo que alguna columna pueda pedir.
+/// <para>Se devuelven todos los campos aunque la consola muestre pocos: la selección de columnas es
+/// del usuario y cambia sin recargar, así que recortarla en el servidor obligaría a volver a
+/// consultar cada vez que alguien marca una casilla.</para>
+/// </summary>
+public sealed record OtReportRowDto(
+    Guid ProcedureInstanceId,
+    string ReferenceNumber,
+    string? Placa,
+    string? Vin,
+    Guid ClientTenantId,
+    string ClientTenantName,
+    string Modalidad,
+    string Status,
+    string EstadoOt,
+    bool Prioritario,
+    bool SubsanacionActiva,
+    DateTimeOffset RadicadoEn,
+    DateTimeOffset? UltimaRadicacionEn,
+    DateTimeOffset? DecididoEn,
+    string? DecididoPor,
+    double? HorasHastaDecision,
+    double? DiasEnOrganismo,
+    int Devoluciones,
+    IReadOnlyList<string> CausalesUltimoRechazo);
+
+/// <summary>Campos por los que se puede ordenar el informe. Lista cerrada: un campo libre sería inyección de orden.</summary>
+public static class OtReportSort
+{
+    public const string Radicado = "radicado";
+    public const string Decidido = "decidido";
+    public const string Dias = "dias";
+    public const string Empresa = "empresa";
+    public const string Referencia = "referencia";
+    public const string Devoluciones = "devoluciones";
+    public const string Estado = "estado";
+
+    public static bool IsKnown(string? sort) => sort is
+        Radicado or Decidido or Dias or Empresa or Referencia or Devoluciones or Estado;
+}
+
+/// <summary>Parámetros del informe: el filtro común más paginación y orden.</summary>
+public sealed record OtReportQuery(
+    OtMetricsFilter Filter,
+    int Page,
+    int PageSize,
+    string? SortBy,
+    bool Descending);
+
+/// <summary>
+/// El informe: cabecera calculada sobre el universo COMPLETO y una página de filas.
+/// <para><see cref="Total"/> es el universo, no las filas devueltas: el resumen nunca describe solo
+/// la página que se está viendo.</para>
+/// </summary>
+public sealed record OtReportDto(
+    OtReportSummaryDto Resumen,
+    int Total,
+    int Page,
+    int PageSize,
+    IReadOnlyList<OtReportRowDto> Filas);
+
+// ── C. Informe de revisores ───────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Un revisor elegible en el filtro, con el volumen que lleva decidido.
+/// <para>El conteo NO se limita al rango: si lo hiciera, mover las fechas cambiaría la lista de
+/// opciones y un revisor de vacaciones desaparecería del selector justo cuando alguien quiere
+/// comprobar que no decidió nada.</para>
+/// </summary>
+public sealed record OtReviewerOptionDto(Guid UserId, string DisplayName, int Decisiones);
+
+/// <summary>
+/// Una fila del informe de revisores: todo lo que se puede decir de una persona en el periodo.
+///
+/// <para>El volumen nunca viaja solo. Un informe que solo contara decisiones premiaría a quien
+/// decide rápido y mal, así que cada indicador de cantidad va acompañado de uno de calidad:
+/// <see cref="Decididos"/> con <see cref="VuelvenARechazarsePct"/>, y los tiempos con su p90 además
+/// de la mediana.</para>
+///
+/// <para>Los tiempos se miden desde la ÚLTIMA radicación anterior a la decisión, igual que en el
+/// informe del periodo: es el turno que esa persona trabajó, sin el tiempo que la empresa tardó en
+/// subsanar.</para>
+/// </summary>
+public sealed record OtReviewerRowDto(
+    Guid UserId,
+    string DisplayName,
+    int Decididos,
+    int Aprobados,
+    double AprobacionPct,
+    int Rechazados,
+    double RechazoPct,
+    double? TiempoMedianoHoras,
+    double? TiempoPromedioHoras,
+    double? TiempoP90Horas,
+    double? TiempoMaximoHoras,
+    // Porcentaje de sus decisiones resueltas en menos de 24 h.
+    double EnMenosDe24hPct,
+    // De sus rechazos, cuántos volvieron a rechazarse después. Señal de motivo poco claro.
+    double VuelvenARechazarsePct,
+    // Causales marcadas por rechazo. Si se acerca al tamaño del catálogo, alguien marca todo.
+    double CausalesPorRechazo,
+    // Días calendario de Bogotá con al menos una decisión.
+    int DiasActivos,
+    // Decisiones por día ACTIVO, no por día del rango: no penaliza a quien tuvo vacaciones.
+    double DecisionesPorDiaActivo,
+    int EmpresasAtendidas,
+    int PrioritariosDecididos,
+    DateTimeOffset? PrimeraDecision,
+    DateTimeOffset? UltimaDecision);
+
+/// <summary>
+/// Cabecera del informe de revisores: el equipo visto en conjunto.
+/// <para><see cref="ConcentracionTopPct"/> mide qué porcentaje de las decisiones se lleva la persona
+/// que más decidió. Es la pregunta que el promedio esconde: un equipo de seis donde uno hace la
+/// mitad no es un equipo de seis.</para>
+/// </summary>
+public sealed record OtReviewersSummaryDto(
+    int Revisores,
+    int Decididos,
+    int Aprobados,
+    int Rechazados,
+    double AprobacionPct,
+    double? TiempoMedianoHoras,
+    double? TiempoP90Horas,
+    double ConcentracionTopPct,
+    string? RevisorMasActivo);
+
+public static class OtReviewerSort
+{
+    public const string Decididos = "decididos";
+    public const string Nombre = "nombre";
+    public const string Aprobacion = "aprobacion";
+    public const string Rechazo = "rechazo";
+    public const string Tiempo = "tiempo";
+    public const string Reincidencia = "reincidencia";
+    public const string Actividad = "actividad";
+
+    public static bool IsKnown(string? sort) => sort is
+        Decididos or Nombre or Aprobacion or Rechazo or Tiempo or Reincidencia or Actividad;
+}
+
+/// <summary>
+/// Parámetros del informe de revisores.
+/// <para><see cref="UserIds"/> vacío significa TODOS los revisores con actividad, no ninguno: es lo
+/// que hace que el informe sea útil antes de tocar el filtro.</para>
+/// </summary>
+public sealed record OtReviewersQuery(
+    OtMetricsFilter Filter,
+    IReadOnlyList<Guid> UserIds,
+    string? SortBy,
+    bool Descending);
+
+public sealed record OtReviewersReportDto(
+    OtReviewersSummaryDto Resumen,
+    IReadOnlyList<OtReviewerRowDto> Filas);

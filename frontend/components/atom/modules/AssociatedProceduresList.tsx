@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronRight, ExternalLink } from 'lucide-react';
 import type { LinkedProcedureRef } from '@/lib/api/types/procedure-runtime';
+import { FLIT } from '@/lib/flit-design-tokens';
 
 const MODALIDAD_LABEL: Record<string, string> = {
   traspaso: 'Traspaso',
@@ -55,9 +56,9 @@ export function AssociatedProceduresList({
               className={
                 compact
                   ? 'block truncate underline'
-                  : 'flex flex-col gap-0.5 rounded-lg border px-3 py-2 hover:bg-[#557EFF0D]'
+                  : 'flex flex-col gap-0.5 rounded-lg border px-3 py-2 hover:bg-[rgba(79,116,201,0.05)]'
               }
-              style={compact ? { color: '#557EFF' } : { borderColor: '#DFE5ED' }}
+              style={compact ? { color: FLIT.brand.blue } : { borderColor: FLIT.border.soft }}
               title={`${p.referenceNumber}${tipo ? ` · ${tipo}` : ''}${p.status ? ` (${p.status})` : ''}`}
             >
               {compact ? (
@@ -67,7 +68,7 @@ export function AssociatedProceduresList({
                 </>
               ) : (
                 <>
-                  <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: '#557EFF' }}>
+                  <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: FLIT.brand.blue }}>
                     <ExternalLink className="h-3 w-3 shrink-0" aria-hidden />
                     {p.referenceNumber}
                     {p.primary ? (

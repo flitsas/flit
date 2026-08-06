@@ -29,9 +29,13 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
     private const int PrioritarioEstancadoDias = 3;
 
     private readonly FlitDbContext _context;
+    private readonly OtTenantScope _scope;
 
-    public OtMetricsReadRepository(FlitDbContext context) =>
+    public OtMetricsReadRepository(FlitDbContext context)
+    {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _scope = new OtTenantScope(_context);
+    }
 
     // ── A.1 Panel operativo ───────────────────────────────────────────────────────────────────
 
@@ -360,6 +364,812 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             },
             cancellationToken);
 
+    // ── B. Informe del periodo ────────────────────────────────────────────────────────────────
+
+    public Task<OtReportDto?> GetReportAsync(
+        Guid otTenantId,
+        OtReportQuery query,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteScopedAsync<OtReportDto>(
+            otTenantId,
+            transitOfficeIdOverride,
+            async (transitOfficeId, tenantIds) =>
+            {
+                var filter = query.Filter;
+                var (from, to) = BogotaDayRange(filter.From, filter.To);
+
+                var instances = await QueryInstances(transitOfficeId, tenantIds, filter)
+                    .Select(p => new ReportInstanceRow(
+                        p.Id,
+                        p.ReferenceNumber,
+                        p.Plate,
+                        p.Vin,
+                        p.TenantId,
+                        p.ModalidadEntrada,
+                        p.Status,
+                        p.PlateFlowStatus,
+                        p.Prioritario,
+                        p.SubsanacionActiva,
+                        p.IsPaused))
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var instanceIds = instances.Select(i => i.Id).ToList();
+
+                // Historial COMPLETO, no solo el del rango: la fila necesita saber si la decisión
+                // cayó después del periodo y cuántas devoluciones acumuló desde que se radicó.
+                var history = await _context.ProcedureInstanceStatusHistories
+                    .AsNoTracking()
+                    .Where(h => instanceIds.Contains(h.ProcedureInstanceId))
+                    .Select(h => new HistoryEventRow(
+                        h.Id, h.ProcedureInstanceId, h.ToStatus, h.ChangedAt, h.ChangedBy))
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var byInstance = history
+                    .GroupBy(h => h.InstanceId)
+                    .ToDictionary(g => g.Key, g => g.OrderBy(h => h.ChangedAt).ToList());
+
+                var rows = BuildReportRows(instances, byInstance, from, to);
+
+                var names = await ResolveTenantNamesAsync(
+                    rows.Select(r => r.Instance.TenantId).Distinct().ToList(), cancellationToken)
+                    .ConfigureAwait(false);
+
+                var resumen = BuildReportSummary(rows, filter, from, to);
+
+                var page = Math.Max(1, query.Page);
+                var pageSize = Math.Clamp(query.PageSize, 1, OtReportLimits.MaxPageSize);
+
+                var ordered = SortReportRows(rows, names, query.SortBy, query.Descending)
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                // Causales y nombres de revisor se resuelven solo para la página visible: son joins
+                // extra por fila y traerlos del universo entero para mostrar cincuenta sería
+                // trabajo tirado.
+                var causales = await ResolveLastRejectionReasonsAsync(ordered, cancellationToken)
+                    .ConfigureAwait(false);
+
+                var revisores = await ResolveUserNamesAsync(
+                    ordered
+                        .Select(r => r.DecididoPor)
+                        .Where(id => id is not null)
+                        .Select(id => id!.Value)
+                        .Distinct()
+                        .ToList(),
+                    cancellationToken)
+                    .ConfigureAwait(false);
+
+                var filas = ordered
+                    .Select(r => ToReportRowDto(r, names, causales, revisores))
+                    .ToList();
+
+                return new OtReportDto(resumen, rows.Count, page, pageSize, filas);
+            },
+            cancellationToken);
+
+    /// <summary>Datos de la instancia que el informe necesita, ya materializados.</summary>
+    private sealed record ReportInstanceRow(
+        Guid Id,
+        string ReferenceNumber,
+        string? Plate,
+        string? Vin,
+        Guid TenantId,
+        string ModalidadEntrada,
+        string Status,
+        string? PlateFlowStatus,
+        bool Prioritario,
+        bool SubsanacionActiva,
+        bool IsPaused);
+
+    private sealed record HistoryEventRow(
+        Guid Id,
+        Guid InstanceId,
+        string ToStatus,
+        DateTimeOffset ChangedAt,
+        Guid? ChangedBy);
+
+    /// <summary>Una fila del informe con lo ya calculado, antes de resolver nombres y causales.</summary>
+    private sealed record ReportRow(
+        ReportInstanceRow Instance,
+        string EstadoOt,
+        DateTimeOffset RadicadoEn,
+        DateTimeOffset? UltimaRadicacionEn,
+        DateTimeOffset? DecididoEn,
+        string? DecisionStatus,
+        Guid? DecididoPor,
+        Guid? UltimoRechazoEventId,
+        double? HorasHastaDecision,
+        double? DiasEnOrganismo,
+        int Devoluciones);
+
+    /// <summary>
+    /// Universo del informe: los trámites que ENTRARON a <c>entregado</c> dentro del rango. Un
+    /// trámite radicado antes del periodo y decidido dentro NO cuenta: el informe responde «qué
+    /// recibí y en qué acabó», y mezclarlo con lo que solo se decidió haría que el desglose por
+    /// estado dejara de cerrar contra el total.
+    /// </summary>
+    private static List<ReportRow> BuildReportRows(
+        IReadOnlyList<ReportInstanceRow> instances,
+        Dictionary<Guid, List<HistoryEventRow>> byInstance,
+        DateTimeOffset from,
+        DateTimeOffset to)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var rows = new List<ReportRow>();
+
+        foreach (var instance in instances)
+        {
+            if (!byInstance.TryGetValue(instance.Id, out var events))
+            {
+                continue;
+            }
+
+            var radicacion = events.FirstOrDefault(e =>
+                e.ToStatus == TramiteEstado.Entregado && e.ChangedAt >= from && e.ChangedAt <= to);
+
+            if (radicacion is null)
+            {
+                continue;
+            }
+
+            var posteriores = events.Where(e => e.ChangedAt >= radicacion.ChangedAt).ToList();
+
+            var decision = posteriores.LastOrDefault(e => IsDecision(e.ToStatus));
+            var ultimaRadicacion = posteriores
+                .LastOrDefault(e => e.ToStatus == TramiteEstado.Entregado
+                    && (decision is null || e.ChangedAt <= decision.ChangedAt));
+
+            // El reloj arranca en la ÚLTIMA radicación previa a la decisión: es el turno que el
+            // organismo trabajó. Desde la primera sumaría el tiempo que el gestor tardó en subsanar.
+            var horas = decision is not null && ultimaRadicacion is not null
+                ? Math.Round((decision.ChangedAt - ultimaRadicacion.ChangedAt).TotalHours, 2)
+                : (double?)null;
+
+            var cierre = decision?.ChangedAt ?? now;
+
+            rows.Add(new ReportRow(
+                Instance: instance,
+                EstadoOt: ResolveReportEstado(instance),
+                RadicadoEn: radicacion.ChangedAt,
+                UltimaRadicacionEn: ultimaRadicacion?.ChangedAt,
+                DecididoEn: decision?.ChangedAt,
+                DecisionStatus: decision?.ToStatus,
+                DecididoPor: decision?.ChangedBy,
+                UltimoRechazoEventId: posteriores
+                    .LastOrDefault(e => e.ToStatus == TramiteEstado.Rechazado)?.Id,
+                HorasHastaDecision: horas,
+                DiasEnOrganismo: Math.Round((cierre - radicacion.ChangedAt).TotalDays, 2),
+                Devoluciones: posteriores.Count(e => e.ToStatus == TramiteEstado.Rechazado)));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Estado del trámite LEÍDO DESDE EL ORGANISMO. Los buckets son excluyentes y exhaustivos: cada
+    /// trámite del universo cae en exactamente uno, y por eso el desglose del informe suma el total.
+    /// </summary>
+    private static string ResolveReportEstado(ReportInstanceRow instance) =>
+        OtEstadoResolver.Resolve(
+            instance.Status, instance.SubsanacionActiva, instance.IsPaused, instance.PlateFlowStatus);
+
+    private static OtReportSummaryDto BuildReportSummary(
+        IReadOnlyList<ReportRow> rows,
+        OtMetricsFilter filter,
+        DateTimeOffset from,
+        DateTimeOffset to)
+    {
+        var horas = rows
+            .Where(r => r.HorasHastaDecision is not null)
+            .Select(r => r.HorasHastaDecision!.Value)
+            .ToList();
+
+        var horasAprobacion = rows
+            .Where(r => r.DecisionStatus == TramiteEstado.Aprobado && r.HorasHastaDecision is not null)
+            .Select(r => r.HorasHastaDecision!.Value)
+            .ToList();
+
+        var devoluciones = rows.Sum(r => r.Devoluciones);
+
+        return new OtReportSummaryDto(
+            Total: rows.Count,
+            EnRevision: rows.Count(r => r.EstadoOt == OtReportEstado.EnRevision),
+            EsperandoPlaca: rows.Count(r => r.EstadoOt == OtReportEstado.EsperandoPlaca),
+            EsperandoCliente: rows.Count(r => r.EstadoOt == OtReportEstado.EsperandoCliente),
+            Aprobados: rows.Count(r => r.EstadoOt == OtReportEstado.Aprobado),
+            EnSubsanacion: rows.Count(r => r.EstadoOt == OtReportEstado.EnSubsanacion),
+            Rechazados: rows.Count(r => r.EstadoOt == OtReportEstado.Rechazado),
+            Anulados: rows.Count(r => r.EstadoOt == OtReportEstado.Anulado),
+            Otros: rows.Count(r => r.EstadoOt == OtReportEstado.Otro),
+            Decididos: rows.Count(r => r.DecididoEn is not null),
+            Devoluciones: devoluciones,
+            DevolucionesPromedio: rows.Count == 0
+                ? 0
+                : Math.Round(devoluciones / (double)rows.Count, 2),
+            TiempoMedianoHoras: Median(horas),
+            TiempoPromedioHoras: horas.Count == 0 ? null : Math.Round(horas.Average(), 2),
+            TiempoP90Horas: Percentile(horas, 0.9),
+            TiempoMedianoAprobacionHoras: Median(horasAprobacion),
+            DistribucionTiempos: BuildTimeBuckets(horas),
+            Granularidad: ResolveGranularity(filter.From, filter.To),
+            Serie: BuildReportSeries(rows, filter, from, to));
+    }
+
+    /// <summary>
+    /// Histograma de tiempos de decisión. Los tramos están puestos donde el organismo toma
+    /// decisiones distintas: dentro del día es rutina, más de una semana ya es un caso a explicar.
+    /// </summary>
+    private static List<OtReportTimeBucketDto> BuildTimeBuckets(IReadOnlyList<double> horas) =>
+    [
+        new("h_0_24", "Menos de 1 día", horas.Count(h => h < 24)),
+        new("d_1_2", "1 a 2 días", horas.Count(h => h >= 24 && h < 72)),
+        new("d_3_5", "3 a 5 días", horas.Count(h => h >= 72 && h < 144)),
+        new("d_6_10", "6 a 10 días", horas.Count(h => h >= 144 && h < 264)),
+        new("d_mas_10", "Más de 10 días", horas.Count(h => h >= 264)),
+    ];
+
+    /// <summary>
+    /// Granularidad de la serie según el ancho del rango. Un rango de un año agrupado por día son
+    /// 365 puntos ilegibles; uno de una semana agrupado por mes es un solo punto, que no es una
+    /// tendencia sino un número disfrazado de gráfica.
+    /// </summary>
+    private static string ResolveGranularity(DateOnly from, DateOnly to)
+    {
+        var dias = to.DayNumber - from.DayNumber + 1;
+        return dias switch
+        {
+            <= 31 => OtReportGranularity.Dia,
+            <= 120 => OtReportGranularity.Semana,
+            _ => OtReportGranularity.Mes,
+        };
+    }
+
+    /// <summary>
+    /// Serie de radicados y decisiones a lo largo del periodo, con TODOS los periodos presentes
+    /// aunque estén en cero. Emitir solo los que tienen actividad produce gráficas que mienten: los
+    /// huecos se leen como continuidad.
+    /// </summary>
+    private static List<OtReportSeriesPointDto> BuildReportSeries(
+        IReadOnlyList<ReportRow> rows,
+        OtMetricsFilter filter,
+        DateTimeOffset from,
+        DateTimeOffset to)
+    {
+        var granularidad = ResolveGranularity(filter.From, filter.To);
+
+        var radicados = new Dictionary<string, int>();
+        var aprobados = new Dictionary<string, int>();
+        var rechazados = new Dictionary<string, int>();
+
+        foreach (var row in rows)
+        {
+            Increment(radicados, SeriesBucketKey(row.RadicadoEn, granularidad));
+
+            // Las decisiones fuera del rango no entran en la serie: la gráfica cubre el periodo
+            // pedido, y un aprobado del mes siguiente no tiene columna donde caer.
+            if (row.DecididoEn is not DateTimeOffset decidido
+                || decidido < from || decidido > to)
+            {
+                continue;
+            }
+
+            var key = SeriesBucketKey(decidido, granularidad);
+            if (row.DecisionStatus == TramiteEstado.Aprobado)
+            {
+                Increment(aprobados, key);
+            }
+            else if (row.DecisionStatus == TramiteEstado.Rechazado)
+            {
+                Increment(rechazados, key);
+            }
+        }
+
+        return EnumerateBuckets(filter.From, filter.To, granularidad)
+            .Select(b => new OtReportSeriesPointDto(
+                b.Key,
+                b.Label,
+                b.Desde.ToString("yyyy-MM-dd"),
+                b.Hasta.ToString("yyyy-MM-dd"),
+                radicados.GetValueOrDefault(b.Key),
+                aprobados.GetValueOrDefault(b.Key),
+                rechazados.GetValueOrDefault(b.Key)))
+            .ToList();
+
+        static void Increment(Dictionary<string, int> counter, string key) =>
+            counter[key] = counter.GetValueOrDefault(key) + 1;
+    }
+
+    /// <summary>Bucket de un instante, en día calendario de Bogotá — el mismo huso con el que se lee el reporte.</summary>
+    private static string SeriesBucketKey(DateTimeOffset at, string granularidad)
+    {
+        var local = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, Bogota).DateTime);
+        return BucketKeyOf(local, granularidad);
+    }
+
+    private static string BucketKeyOf(DateOnly date, string granularidad) => granularidad switch
+    {
+        OtReportGranularity.Mes => $"{date.Year:D4}-{date.Month:D2}",
+        OtReportGranularity.Semana => StartOfWeek(date).ToString("yyyy-MM-dd"),
+        _ => date.ToString("yyyy-MM-dd"),
+    };
+
+    /// <summary>Lunes de la semana. Las semanas del reporte empiezan en lunes, como la semana laboral.</summary>
+    private static DateOnly StartOfWeek(DateOnly date) =>
+        date.AddDays(-(((int)date.DayOfWeek + 6) % 7));
+
+    /// <summary>
+    /// Periodos del eje, con sus límites RECORTADOS contra el rango pedido.
+    /// <para>El recorte importa porque estos límites se usan para acotar el informe al pinchar la
+    /// columna: si el primer mes empezara el día 1 cuando el rango arranca el 20, el usuario haría
+    /// clic en una barra de 4 trámites y aterrizaría en un informe con 30.</para>
+    /// </summary>
+    private static IEnumerable<(string Key, string Label, DateOnly Desde, DateOnly Hasta)> EnumerateBuckets(
+        DateOnly from,
+        DateOnly to,
+        string granularidad)
+    {
+        var seen = new HashSet<string>();
+
+        if (granularidad == OtReportGranularity.Mes)
+        {
+            for (var cursor = new DateOnly(from.Year, from.Month, 1);
+                cursor <= to;
+                cursor = cursor.AddMonths(1))
+            {
+                var key = BucketKeyOf(cursor, granularidad);
+                if (seen.Add(key))
+                {
+                    yield return (
+                        key,
+                        $"{MesCorto(cursor.Month)} {cursor.Year}",
+                        Max(cursor, from),
+                        Min(cursor.AddMonths(1).AddDays(-1), to));
+                }
+            }
+
+            yield break;
+        }
+
+        var span = granularidad == OtReportGranularity.Semana ? 7 : 1;
+        var start = granularidad == OtReportGranularity.Semana ? StartOfWeek(from) : from;
+
+        for (var cursor = start; cursor <= to; cursor = cursor.AddDays(span))
+        {
+            var key = BucketKeyOf(cursor, granularidad);
+            if (seen.Add(key))
+            {
+                yield return (
+                    key,
+                    $"{cursor.Day:D2} {MesCorto(cursor.Month)}",
+                    Max(cursor, from),
+                    Min(cursor.AddDays(span - 1), to));
+            }
+        }
+    }
+
+    private static DateOnly Max(DateOnly a, DateOnly b) => a > b ? a : b;
+
+    private static DateOnly Min(DateOnly a, DateOnly b) => a < b ? a : b;
+
+    /// <summary>
+    /// Mes abreviado en español, fijo. Se evita <c>ToString("MMM")</c> a propósito: dependería de la
+    /// cultura del proceso y el reporte cambiaría de idioma según dónde corra el servidor.
+    /// </summary>
+    private static string MesCorto(int month) => month switch
+    {
+        1 => "ene", 2 => "feb", 3 => "mar", 4 => "abr", 5 => "may", 6 => "jun",
+        7 => "jul", 8 => "ago", 9 => "sep", 10 => "oct", 11 => "nov", _ => "dic",
+    };
+
+    private static IEnumerable<ReportRow> SortReportRows(
+        IReadOnlyList<ReportRow> rows,
+        IReadOnlyDictionary<Guid, string> names,
+        string? sortBy,
+        bool descending)
+    {
+        // El desempate por referencia no es cosmético: sin él dos filas con la misma fecha pueden
+        // cambiar de orden entre páginas y el usuario ve un trámite repetido o ninguno.
+        IOrderedEnumerable<ReportRow> ordered = sortBy switch
+        {
+            OtReportSort.Decidido => Apply(rows, r => r.DecididoEn ?? DateTimeOffset.MinValue),
+            OtReportSort.Dias => Apply(rows, r => r.DiasEnOrganismo ?? 0),
+            OtReportSort.Empresa => Apply(
+                rows, r => names.GetValueOrDefault(r.Instance.TenantId, string.Empty)),
+            OtReportSort.Referencia => Apply(rows, r => r.Instance.ReferenceNumber),
+            OtReportSort.Devoluciones => Apply(rows, r => r.Devoluciones),
+            OtReportSort.Estado => Apply(rows, r => r.EstadoOt),
+            _ => Apply(rows, r => r.RadicadoEn),
+        };
+
+        return ordered.ThenBy(r => r.Instance.ReferenceNumber, StringComparer.OrdinalIgnoreCase);
+
+        IOrderedEnumerable<ReportRow> Apply<TKey>(
+            IEnumerable<ReportRow> source,
+            Func<ReportRow, TKey> selector) =>
+            descending ? source.OrderByDescending(selector) : source.OrderBy(selector);
+    }
+
+    /// <summary>
+    /// Causales del último rechazo de cada fila de la página. Se resuelven contra el catálogo, y una
+    /// causal retirada se nombra como tal en vez de desaparecer: el rechazo histórico sí ocurrió.
+    /// </summary>
+    private async Task<Dictionary<Guid, List<string>>> ResolveLastRejectionReasonsAsync(
+        IReadOnlyList<ReportRow> rows,
+        CancellationToken cancellationToken)
+    {
+        var eventIds = rows
+            .Select(r => r.UltimoRechazoEventId)
+            .Where(id => id is not null)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+        if (eventIds.Count == 0)
+        {
+            return [];
+        }
+
+        var marks = await _context.ProcedureInstanceRejectionReasons
+            .AsNoTracking()
+            .Where(r => r.StatusHistoryId != null && eventIds.Contains(r.StatusHistoryId!.Value))
+            .Select(r => new { EventId = r.StatusHistoryId!.Value, r.RejectionReasonId })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var reasonIds = marks.Select(m => m.RejectionReasonId).Distinct().ToList();
+        var catalog = await _context.RejectionReasons
+            .AsNoTracking()
+            .Where(r => reasonIds.Contains(r.Id))
+            .Select(r => new { r.Id, r.Description })
+            .ToDictionaryAsync(r => r.Id, r => r.Description, cancellationToken)
+            .ConfigureAwait(false);
+
+        return marks
+            .GroupBy(m => m.EventId)
+            .ToDictionary(
+                g => g.Key,
+                g => g
+                    .Select(m => catalog.GetValueOrDefault(m.RejectionReasonId, "(causal retirada)"))
+                    .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
+                    .ToList());
+    }
+
+    private static OtReportRowDto ToReportRowDto(
+        ReportRow row,
+        IReadOnlyDictionary<Guid, string> names,
+        IReadOnlyDictionary<Guid, List<string>> causales,
+        IReadOnlyDictionary<Guid, string> revisores) =>
+        new(
+            ProcedureInstanceId: row.Instance.Id,
+            ReferenceNumber: row.Instance.ReferenceNumber,
+            Placa: row.Instance.Plate,
+            Vin: row.Instance.Vin,
+            ClientTenantId: row.Instance.TenantId,
+            ClientTenantName: names.GetValueOrDefault(row.Instance.TenantId, "(empresa desconocida)"),
+            Modalidad: row.Instance.ModalidadEntrada,
+            Status: row.Instance.Status,
+            EstadoOt: row.EstadoOt,
+            Prioritario: row.Instance.Prioritario,
+            SubsanacionActiva: row.Instance.SubsanacionActiva,
+            RadicadoEn: row.RadicadoEn,
+            UltimaRadicacionEn: row.UltimaRadicacionEn,
+            DecididoEn: row.DecididoEn,
+            // Decidido pero sin usuario resoluble = decisión de sistema (webhook del organismo,
+            // consulta Quipux). Decirlo es más útil que dejar la celda vacía.
+            DecididoPor: row.DecididoPor is Guid userId
+                ? revisores.GetValueOrDefault(userId, "(usuario desconocido)")
+                : row.DecididoEn is null ? null : "(automático)",
+            HorasHastaDecision: row.HorasHastaDecision,
+            DiasEnOrganismo: row.DiasEnOrganismo,
+            Devoluciones: row.Devoluciones,
+            CausalesUltimoRechazo: row.UltimoRechazoEventId is Guid eventId
+                ? causales.GetValueOrDefault(eventId, [])
+                : []);
+
+    // ── C. Informe de revisores ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Evento de historial con su id. El id hace falta para colgar las causales del rechazo, que es
+    /// lo que distingue «rechacé 20» de «rechacé 20 marcando 9 causales cada vez».
+    /// </summary>
+    private sealed record ReviewerEventRow(
+        Guid Id,
+        Guid InstanceId,
+        string ToStatus,
+        DateTimeOffset ChangedAt,
+        Guid? ChangedBy);
+
+    public Task<OtReviewersReportDto?> GetReviewersReportAsync(
+        Guid otTenantId,
+        OtReviewersQuery query,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteScopedAsync<OtReviewersReportDto>(
+            otTenantId,
+            transitOfficeIdOverride,
+            async (transitOfficeId, tenantIds) =>
+            {
+                var filter = query.Filter;
+                var (from, to) = BogotaDayRange(filter.From, filter.To);
+
+                var instances = await QueryInstances(transitOfficeId, tenantIds, filter)
+                    .Select(p => new { p.Id, p.TenantId, p.Prioritario })
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var instanceIds = instances.Select(i => i.Id).ToList();
+                var prioritarios = instances.Where(i => i.Prioritario).Select(i => i.Id).ToHashSet();
+                var instanceTenant = instances.ToDictionary(i => i.Id, i => i.TenantId);
+
+                // Historial COMPLETO, sin recortar por rango: la reincidencia pregunta si un rechazo
+                // volvió a rechazarse DESPUÉS, y ese segundo rechazo suele caer fuera del periodo.
+                var history = await _context.ProcedureInstanceStatusHistories
+                    .AsNoTracking()
+                    .Where(h => instanceIds.Contains(h.ProcedureInstanceId))
+                    .Select(h => new ReviewerEventRow(
+                        h.Id, h.ProcedureInstanceId, h.ToStatus, h.ChangedAt, h.ChangedBy))
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var deliveries = history
+                    .Where(h => h.ToStatus == TramiteEstado.Entregado)
+                    .GroupBy(h => h.InstanceId)
+                    .ToDictionary(g => g.Key, g => g.Select(h => h.ChangedAt).OrderBy(d => d).ToList());
+
+                var rejections = history
+                    .Where(h => h.ToStatus == TramiteEstado.Rechazado)
+                    .GroupBy(h => h.InstanceId)
+                    .ToDictionary(g => g.Key, g => g.Select(h => h.ChangedAt).OrderBy(d => d).ToList());
+
+                // El universo son las DECISIONES del rango, no los trámites recibidos: la pregunta
+                // es qué hizo esta persona en estas fechas.
+                var decisiones = history
+                    .Where(h => IsDecision(h.ToStatus)
+                        && h.ChangedBy is not null
+                        && h.ChangedAt >= from && h.ChangedAt <= to)
+                    .ToList();
+
+                // Filtro vacío = todos los revisores. Devolver cero filas cuando nadie ha tocado el
+                // selector dejaría el informe inservible justo al abrirlo.
+                if (query.UserIds.Count > 0)
+                {
+                    var elegidos = query.UserIds.ToHashSet();
+                    decisiones = decisiones.Where(d => elegidos.Contains(d.ChangedBy!.Value)).ToList();
+                }
+
+                var marcas = await CountRejectionMarksAsync(
+                    decisiones
+                        .Where(d => d.ToStatus == TramiteEstado.Rechazado)
+                        .Select(d => d.Id)
+                        .ToList(),
+                    cancellationToken)
+                    .ConfigureAwait(false);
+
+                var filas = BuildReviewerRows(
+                    decisiones, deliveries, rejections, instanceTenant, prioritarios, marcas);
+
+                var nombres = await ResolveUserNamesAsync(
+                    filas.Select(f => f.UserId).ToList(), cancellationToken).ConfigureAwait(false);
+
+                var conNombre = filas
+                    .Select(f => f with
+                    {
+                        DisplayName = nombres.TryGetValue(f.UserId, out var name)
+                            ? name
+                            : "(usuario desconocido)",
+                    })
+                    .ToList();
+
+                var ordenadas = SortReviewerRows(conNombre, query.SortBy, query.Descending);
+
+                return new OtReviewersReportDto(
+                    BuildReviewersSummary(ordenadas, decisiones, deliveries),
+                    ordenadas);
+            },
+            cancellationToken);
+
+    private static List<OtReviewerRowDto> BuildReviewerRows(
+        IReadOnlyList<ReviewerEventRow> decisiones,
+        Dictionary<Guid, List<DateTimeOffset>> deliveries,
+        Dictionary<Guid, List<DateTimeOffset>> rejections,
+        Dictionary<Guid, Guid> instanceTenant,
+        HashSet<Guid> prioritarios,
+        Dictionary<Guid, int> marcasPorEvento) =>
+        decisiones
+            .GroupBy(d => d.ChangedBy!.Value)
+            .Select(g =>
+            {
+                var propias = g.ToList();
+                var aprobados = propias.Count(d => d.ToStatus == TramiteEstado.Aprobado);
+                var rechazos = propias.Where(d => d.ToStatus == TramiteEstado.Rechazado).ToList();
+
+                // Solo las decisiones con radicación previa tienen reloj. Las demás no se cuentan ni
+                // como cero: un cero inventado bajaría la mediana de todo el equipo.
+                var horas = propias
+                    .Select(d => LastDeliveryBefore(deliveries, d.InstanceId, d.ChangedAt))
+                    .Where(h => h is not null)
+                    .Select(h => h!.Value)
+                    .ToList();
+
+                var reincidentes = rechazos.Count(d =>
+                    rejections.TryGetValue(d.InstanceId, out var all)
+                    && all.Any(at => at > d.ChangedAt));
+
+                var marcas = rechazos.Sum(d => marcasPorEvento.GetValueOrDefault(d.Id));
+
+                // Días ACTIVOS en calendario de Bogotá, no días del rango: quien estuvo de
+                // vacaciones media semana no debe parecer menos productivo por ello.
+                var diasActivos = propias
+                    .Select(d => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(d.ChangedAt, Bogota).DateTime))
+                    .Distinct()
+                    .Count();
+
+                return new OtReviewerRowDto(
+                    UserId: g.Key,
+                    DisplayName: string.Empty,
+                    Decididos: propias.Count,
+                    Aprobados: aprobados,
+                    AprobacionPct: Pct(aprobados, propias.Count),
+                    Rechazados: rechazos.Count,
+                    RechazoPct: Pct(rechazos.Count, propias.Count),
+                    TiempoMedianoHoras: Median(horas),
+                    TiempoPromedioHoras: horas.Count == 0 ? null : Math.Round(horas.Average(), 2),
+                    TiempoP90Horas: Percentile(horas, 0.9),
+                    TiempoMaximoHoras: horas.Count == 0 ? null : Math.Round(horas.Max(), 2),
+                    EnMenosDe24hPct: Pct(horas.Count(h => h < 24), horas.Count),
+                    VuelvenARechazarsePct: Pct(reincidentes, rechazos.Count),
+                    CausalesPorRechazo: rechazos.Count == 0
+                        ? 0
+                        : Math.Round(marcas / (double)rechazos.Count, 2),
+                    DiasActivos: diasActivos,
+                    DecisionesPorDiaActivo: diasActivos == 0
+                        ? 0
+                        : Math.Round(propias.Count / (double)diasActivos, 2),
+                    EmpresasAtendidas: propias
+                        .Select(d => instanceTenant.GetValueOrDefault(d.InstanceId))
+                        .Where(t => t != Guid.Empty)
+                        .Distinct()
+                        .Count(),
+                    PrioritariosDecididos: propias.Count(d => prioritarios.Contains(d.InstanceId)),
+                    PrimeraDecision: propias.Min(d => d.ChangedAt),
+                    UltimaDecision: propias.Max(d => d.ChangedAt));
+            })
+            .ToList();
+
+    /// <summary>
+    /// El equipo en conjunto. La mediana y el p90 se calculan sobre TODAS las decisiones, no
+    /// promediando las medianas de cada persona: el promedio de medianas le da el mismo peso a quien
+    /// decidió tres casos que a quien decidió trescientos.
+    /// </summary>
+    private static OtReviewersSummaryDto BuildReviewersSummary(
+        List<OtReviewerRowDto> filas,
+        List<ReviewerEventRow> decisiones,
+        Dictionary<Guid, List<DateTimeOffset>> deliveries)
+    {
+        var horas = decisiones
+            .Select(d => LastDeliveryBefore(deliveries, d.InstanceId, d.ChangedAt))
+            .Where(h => h is not null)
+            .Select(h => h!.Value)
+            .ToList();
+
+        var decididos = filas.Sum(f => f.Decididos);
+        var aprobados = filas.Sum(f => f.Aprobados);
+        var lider = filas.OrderByDescending(f => f.Decididos).FirstOrDefault();
+
+        return new OtReviewersSummaryDto(
+            Revisores: filas.Count,
+            Decididos: decididos,
+            Aprobados: aprobados,
+            Rechazados: filas.Sum(f => f.Rechazados),
+            AprobacionPct: Pct(aprobados, decididos),
+            TiempoMedianoHoras: Median(horas),
+            TiempoP90Horas: Percentile(horas, 0.9),
+            ConcentracionTopPct: Pct(lider?.Decididos ?? 0, decididos),
+            RevisorMasActivo: lider?.DisplayName);
+    }
+
+    private static List<OtReviewerRowDto> SortReviewerRows(
+        List<OtReviewerRowDto> filas,
+        string? sortBy,
+        bool descending)
+    {
+        // Desempate por nombre para que el orden sea estable: sin él, dos revisores con el mismo
+        // volumen pueden intercambiarse entre recargas y parecer que la tabla cambió.
+        IOrderedEnumerable<OtReviewerRowDto> ordered = sortBy switch
+        {
+            OtReviewerSort.Nombre => descending
+                ? filas.OrderByDescending(f => f.DisplayName)
+                : filas.OrderBy(f => f.DisplayName),
+            OtReviewerSort.Aprobacion => descending
+                ? filas.OrderByDescending(f => f.AprobacionPct)
+                : filas.OrderBy(f => f.AprobacionPct),
+            OtReviewerSort.Rechazo => descending
+                ? filas.OrderByDescending(f => f.RechazoPct)
+                : filas.OrderBy(f => f.RechazoPct),
+            // Sin tiempo medible va al final en ambos sentidos: «—» no es ni rápido ni lento.
+            OtReviewerSort.Tiempo => descending
+                ? filas.OrderByDescending(f => f.TiempoMedianoHoras ?? double.MinValue)
+                : filas.OrderBy(f => f.TiempoMedianoHoras ?? double.MaxValue),
+            OtReviewerSort.Reincidencia => descending
+                ? filas.OrderByDescending(f => f.VuelvenARechazarsePct)
+                : filas.OrderBy(f => f.VuelvenARechazarsePct),
+            OtReviewerSort.Actividad => descending
+                ? filas.OrderByDescending(f => f.DecisionesPorDiaActivo)
+                : filas.OrderBy(f => f.DecisionesPorDiaActivo),
+            _ => descending
+                ? filas.OrderByDescending(f => f.Decididos)
+                : filas.OrderBy(f => f.Decididos),
+        };
+
+        return ordered.ThenBy(f => f.DisplayName).ToList();
+    }
+
+    /// <summary>Cuántas causales lleva marcada cada evento de rechazo.</summary>
+    private async Task<Dictionary<Guid, int>> CountRejectionMarksAsync(
+        List<Guid> eventIds,
+        CancellationToken cancellationToken)
+    {
+        if (eventIds.Count == 0)
+        {
+            return [];
+        }
+
+        var marks = await _context.ProcedureInstanceRejectionReasons
+            .AsNoTracking()
+            .Where(r => r.StatusHistoryId != null && eventIds.Contains(r.StatusHistoryId!.Value))
+            .GroupBy(r => r.StatusHistoryId!.Value)
+            .Select(g => new { EventId = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return marks.ToDictionary(m => m.EventId, m => m.Count);
+    }
+
+    public Task<IReadOnlyList<OtReviewerOptionDto>?> ListReviewerOptionsAsync(
+        Guid otTenantId,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteScopedAsync<IReadOnlyList<OtReviewerOptionDto>>(
+            otTenantId,
+            transitOfficeIdOverride,
+            async (transitOfficeId, tenantIds) =>
+            {
+                // Filtro vacío a propósito: el catálogo de revisores no depende de modalidad ni de
+                // empresa, igual que el de empresas no depende del rango.
+                var instanceIds = await QueryInstances(
+                        transitOfficeId, tenantIds, new OtMetricsFilter(default, default))
+                    .Select(p => p.Id)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var counts = await _context.ProcedureInstanceStatusHistories
+                    .AsNoTracking()
+                    .Where(h => instanceIds.Contains(h.ProcedureInstanceId)
+                        && h.ChangedBy != null
+                        && (h.ToStatus == TramiteEstado.Aprobado || h.ToStatus == TramiteEstado.Rechazado))
+                    .GroupBy(h => h.ChangedBy!.Value)
+                    .Select(g => new { UserId = g.Key, Decisiones = g.Count() })
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var nombres = await ResolveUserNamesAsync(
+                    counts.Select(c => c.UserId).ToList(), cancellationToken).ConfigureAwait(false);
+
+                return counts
+                    .Select(c => new OtReviewerOptionDto(
+                        c.UserId,
+                        nombres.TryGetValue(c.UserId, out var name) ? name : "(usuario desconocido)",
+                        c.Decisiones))
+                    .OrderByDescending(o => o.Decisiones)
+                    .ThenBy(o => o.DisplayName)
+                    .ToList();
+            },
+            cancellationToken);
+
     // ── Drill-down y catálogo de empresas ─────────────────────────────────────────────────────
 
     public Task<IReadOnlyList<OtClientCompanyOptionDto>?> ListClientCompaniesAsync(
@@ -679,76 +1489,17 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
 
     // ── Scope OT (grant + organismo) ──────────────────────────────────────────────────────────
 
-    private async Task<T?> ExecuteScopedAsync<T>(
+    // La resolución del organismo y sus empresas vive en OtTenantScope: es la única regla que
+    // separa los trámites de un organismo de los de otro, y desde que hay un segundo repositorio con
+    // este mismo eje invertido tenerla escrita dos veces sería una fuga esperando a que las copias
+    // se desincronicen.
+    private Task<T?> ExecuteScopedAsync<T>(
         Guid otTenantId,
         Guid? transitOfficeIdOverride,
         Func<Guid, IReadOnlyList<Guid>, Task<T>> action,
         CancellationToken cancellationToken)
-        where T : class
-    {
-        var transitOfficeId = transitOfficeIdOverride is Guid overrideId && overrideId != Guid.Empty
-            ? overrideId
-            : await ResolveTransitOfficeIdAsync(otTenantId, cancellationToken).ConfigureAwait(false);
-
-        if (transitOfficeId is null)
-        {
-            return null;
-        }
-
-        return await ExecuteCrossTenantReadAsync(
-            async () =>
-            {
-                var tenantIds = await _context.TenantTransitOfficeGrants
-                    .AsNoTracking()
-                    .Where(g => g.TransitOfficeId == transitOfficeId.Value && g.IsEnabled)
-                    .Select(g => g.TenantId)
-                    .ToListAsync(cancellationToken)
-                    .ConfigureAwait(false);
-
-                return await action(transitOfficeId.Value, tenantIds).ConfigureAwait(false);
-            },
-            cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<Guid?> ResolveTransitOfficeIdAsync(
-        Guid otTenantId,
-        CancellationToken cancellationToken)
-    {
-        var profile = await ExecuteCrossTenantReadAsync(
-            () => _context.TransitOfficeProfiles
-                .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.TenantId == otTenantId, cancellationToken),
-            cancellationToken).ConfigureAwait(false);
-
-        return profile?.TransitOfficeId;
-    }
-
-    private async Task<T> ExecuteCrossTenantReadAsync<T>(
-        Func<Task<T>> action,
-        CancellationToken cancellationToken)
-    {
-        if (!_context.Database.IsRelational())
-        {
-            return await action().ConfigureAwait(false);
-        }
-
-        var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
-        {
-            var transaction = await _context.Database
-                .BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-
-            await using (transaction.ConfigureAwait(false))
-            {
-                await _context.Database.ExecuteSqlRawAsync(
-                    "SET LOCAL row_security = off", cancellationToken).ConfigureAwait(false);
-
-                var result = await action().ConfigureAwait(false);
-                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                return result;
-            }
-        }).ConfigureAwait(false);
-    }
+        where T : class =>
+        _scope.ExecuteAsync(otTenantId, transitOfficeIdOverride, action, cancellationToken);
 
     // ── Utilidades ────────────────────────────────────────────────────────────────────────────
 
@@ -764,9 +1515,20 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
 
     private static double? LastDeliveryBefore(
         Dictionary<Guid, List<DateTimeOffset>> deliveries,
-        HistoryRow decision)
+        HistoryRow decision) =>
+        LastDeliveryBefore(deliveries, decision.InstanceId, decision.ChangedAt);
+
+    /// <summary>
+    /// Horas desde la última radicación anterior a la decisión. Es el turno que el organismo
+    /// trabajó: medir desde la PRIMERA radicación le cargaría además el tiempo que la empresa
+    /// tardó en subsanar.
+    /// </summary>
+    private static double? LastDeliveryBefore(
+        Dictionary<Guid, List<DateTimeOffset>> deliveries,
+        Guid instanceId,
+        DateTimeOffset decidedAt)
     {
-        if (!deliveries.TryGetValue(decision.InstanceId, out var entregas))
+        if (!deliveries.TryGetValue(instanceId, out var entregas))
         {
             return null;
         }
@@ -774,13 +1536,13 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         DateTimeOffset? last = null;
         foreach (var at in entregas)
         {
-            if (at <= decision.ChangedAt)
+            if (at <= decidedAt)
             {
                 last = at;
             }
         }
 
-        return last is null ? null : (decision.ChangedAt - last.Value).TotalHours;
+        return last is null ? null : (decidedAt - last.Value).TotalHours;
     }
 
     /// <summary>Mediana (p50). Devuelve null sin datos: preferible a un 0 que se lee como «instantáneo».</summary>
@@ -799,6 +1561,32 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             2);
     }
 
+    /// <summary>
+    /// Percentil por interpolación lineal. Acompaña siempre a la mediana en el informe: p50 y p90
+    /// juntos distinguen «casi todo tarda esto» de «la mitad tarda esto y la otra mitad quién sabe».
+    /// </summary>
+    private static double? Percentile(List<double> values, double q)
+    {
+        if (values.Count == 0)
+        {
+            return null;
+        }
+
+        var ordered = values.OrderBy(v => v).ToList();
+        if (ordered.Count == 1)
+        {
+            return Math.Round(ordered[0], 2);
+        }
+
+        var position = q * (ordered.Count - 1);
+        var lower = (int)Math.Floor(position);
+        var upper = (int)Math.Ceiling(position);
+
+        return Math.Round(
+            ordered[lower] + ((ordered[upper] - ordered[lower]) * (position - lower)),
+            2);
+    }
+
     private static double Pct(int part, int total) =>
         total == 0 ? 0 : Math.Round(part * 100.0 / total, 1);
 
@@ -811,13 +1599,6 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
     /// de cero en una columna <c>timestamptz</c>, y estos valores viajan como parámetros de consulta.
     /// Sin esto la consulta revienta contra PostgreSQL aunque funcione sobre InMemory.</para>
     /// </summary>
-    private static (DateTimeOffset From, DateTimeOffset To) BogotaDayRange(DateOnly from, DateOnly to)
-    {
-        var offset = Bogota.GetUtcOffset(DateTime.SpecifyKind(
-            from.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified));
-
-        return (
-            new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), offset).ToUniversalTime(),
-            new DateTimeOffset(to.ToDateTime(TimeOnly.MaxValue), offset).ToUniversalTime());
-    }
+    private static (DateTimeOffset From, DateTimeOffset To) BogotaDayRange(DateOnly from, DateOnly to) =>
+        OtTenantScope.DayRange(from, to);
 }

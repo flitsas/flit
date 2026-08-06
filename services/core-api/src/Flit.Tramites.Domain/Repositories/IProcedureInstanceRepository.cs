@@ -136,6 +136,46 @@ public interface IProcedureInstanceRepository
         CancellationToken ct = default);
 
     /// <summary>
+    /// HU #11270 — listado agrupado por persona (tenant + documento Trim+Upper): una fila por
+    /// documento con la validación más reciente (<c>DISTINCT ON</c> / equivalente) y el contador
+    /// del grupo. No altera el listado plano. Solo lectura.
+    /// </summary>
+    Task<(IReadOnlyList<ReadModels.BiometricPersonGroupProjection> Rows, int TotalPersons)>
+        ListBiometricValidationsGroupedByPersonAsync(
+            Guid tenantId,
+            int skip,
+            int take,
+            BiometricPersonGroupFilter? filter,
+            DateTimeOffset now,
+            CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #11270 — candidatos para calcular la peor alerta de las personas de una página:
+    /// validaciones no terminales o creadas/actualizadas en los últimos <paramref name="alertWindowDays"/> días.
+    /// Clave de documento ya normalizada (Trim+Upper). Solo lectura.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListBiometricValidationsForPersonAlertScanAsync(
+        Guid tenantId,
+        IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)> documents,
+        int alertWindowDays,
+        DateTimeOffset now,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #11272 — todas las validaciones de una persona (documento normalizado) en el tenant,
+    /// más reciente primero, con tope/paginación. <paramref name="AnyNonTerminal"/> indica si existe
+    /// alguna no terminal (para detener polling). Solo lectura.
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstanceBiometricValidation> Rows, int Total, bool AnyNonTerminal)>
+        ListBiometricValidationsByPersonAsync(
+            Guid tenantId,
+            string documentType,
+            string documentNumber,
+            int skip,
+            int take,
+            CancellationToken ct = default);
+
+    /// <summary>
     /// Carga la instancia con sus validaciones biométricas + actores (Slice M4 — simular biométrica:
     /// resuelve el actor de la parte para poblar nombre/documento/email de la validación aprobada).
     /// </summary>
@@ -170,6 +210,15 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<ProcedureInstanceBiometricValidation?> FindVigenteApprovedByDocumentAsync(
         Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #11265 — validaciones EN VUELO (<c>pendiente_envio</c> / <c>enviado</c> / <c>en_proceso</c>)
+    /// del documento en el tenant (standalone o ligadas a instancias no eliminadas). Igualdad exacta de
+    /// tipo/número como <see cref="FindVigenteApprovedByDocumentAsync"/> (no cambia el gate, AC5).
+    /// Solo lectura; lista acotada (máx. 20) ordenada por actividad reciente.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListInFlightByDocumentAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct = default);
 
     /// <summary>
     /// Claves (<see cref="Entities.BiometricRules.IdentidadKey"/>) de todas las identidades APROBADAS y VIGENTES

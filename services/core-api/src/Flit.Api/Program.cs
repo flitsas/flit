@@ -222,6 +222,7 @@ app.MapUserUiPreferencesEndpoints();
 app.MapAdminCompaniesEndpoints();
 app.MapAdminOtEndpoints();
 app.MapAdminOtMetricsEndpoints();
+app.MapAdminOtQueriesEndpoints();
 app.MapAdminPlateRangesEndpoints();
 app.MapOtIntegrationEndpoints();
 app.MapAdminTransitOfficesEndpoints();

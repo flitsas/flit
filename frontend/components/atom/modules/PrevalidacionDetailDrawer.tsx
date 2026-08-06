@@ -4,8 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   Calendar,
-  Copy,
-  ExternalLink,
   FileText,
   Hash,
   Mail,
@@ -15,7 +13,6 @@ import {
   User,
   X,
 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
@@ -23,6 +20,9 @@ import {
   AssociatedProceduresList,
   buildAssociatedProcedures,
 } from '@/components/atom/modules/AssociatedProceduresList';
+import { IdentityCaptureLinkBlock } from '@/components/atom/modules/IdentityCaptureLinkBlock';
+import { IdentityInfoTile } from '@/components/atom/modules/IdentityInfoTile';
+import { FLIT } from '@/lib/flit-design-tokens';
 import type { BiometricEstado, BiometricValidation } from '@/lib/api/types/procedure-runtime';
 
 /**
@@ -148,7 +148,7 @@ export function PrevalidacionDetailDrawer({
           <div className="flex min-w-0 items-center gap-2">
             <span
               className="grid h-8 w-8 shrink-0 place-items-center rounded-xl"
-              style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+              style={{ background: FLIT.blueAlpha(0.12), color: FLIT.brand.blue }}
               aria-hidden
             >
               <ScanFace className="h-4 w-4" />
@@ -164,7 +164,7 @@ export function PrevalidacionDetailDrawer({
             type="button"
             onClick={onClose}
             aria-label="Cerrar proceso"
-            className="grid h-8 w-8 place-items-center rounded-lg border hover:bg-[#557EFF1A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
+            className="grid h-8 w-8 place-items-center rounded-lg border hover:bg-[rgba(79,116,201,0.1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F74C9]"
           >
             <X className="h-4 w-4 opacity-70" aria-hidden="true" />
           </button>
@@ -182,7 +182,7 @@ export function PrevalidacionDetailDrawer({
           {error && !detail && (
             <div
               className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-              style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+              style={{ borderColor: FLIT.state.danger, background: FLIT.dangerAlpha(0.06), color: FLIT.state.danger }}
               role="alert"
             >
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
@@ -198,8 +198,8 @@ export function PrevalidacionDetailDrawer({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 {awaiting ? (
                   <div className="flex items-center gap-2">
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: '#557EFF' }} aria-hidden />
-                    <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: FLIT.brand.blue }} aria-hidden />
+                    <p className="text-xs font-semibold" style={{ color: FLIT.brand.blue }}>
                       Esperando validación de {detail.name}
                     </p>
                   </div>
@@ -211,21 +211,21 @@ export function PrevalidacionDetailDrawer({
 
               {/* Campos con iconos — lectura rápida, sin tabla densa */}
               <div className="grid gap-2 sm:grid-cols-2">
-                <InfoTile icon={User} label="Persona" value={detail.name} />
-                <InfoTile
+                <IdentityInfoTile icon={User} label="Persona" value={detail.name} />
+                <IdentityInfoTile
                   icon={FileText}
                   label="Documento"
                   value={`${detail.documentType} ${detail.documentNumber}`}
                   mono
                 />
-                <InfoTile icon={Mail} label="Correo" value={detail.email || '—'} />
-                <InfoTile
+                <IdentityInfoTile icon={Mail} label="Correo" value={detail.email || '—'} />
+                <IdentityInfoTile
                   icon={Hash}
                   label="Intentos Kyverum"
                   value={`${detail.intentos} / ${detail.maxIntentos}`}
                 />
-                <InfoTile icon={Calendar} label="Enlace vigente hasta" value={detail.expired ? 'Vencido' : formatFecha(detail.expiresAt)} />
-                <InfoTile
+                <IdentityInfoTile icon={Calendar} label="Enlace vigente hasta" value={detail.expired ? 'Vencido' : formatFecha(detail.expiresAt)} />
+                <IdentityInfoTile
                   icon={ShieldCheck}
                   label="Score"
                   value={detail.score != null ? String(detail.score) : '—'}
@@ -248,7 +248,7 @@ export function PrevalidacionDetailDrawer({
               {detail.status === 'rechazado' && detail.rejectionReason && (
                 <p
                   className="rounded-xl px-3 py-2 text-[11px]"
-                  style={{ background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+                  style={{ background: FLIT.dangerAlpha(0.06), color: FLIT.state.danger }}
                 >
                   Motivo del rechazo: {detail.rejectionReason}
                 </p>
@@ -258,9 +258,9 @@ export function PrevalidacionDetailDrawer({
                 <div
                   className="rounded-xl p-3 text-[11px]"
                   style={{
-                    background: 'rgba(178,106,0,0.08)',
-                    border: '1px solid rgba(178,106,0,0.3)',
-                    color: '#B26A00',
+                    background: FLIT.warningAlpha(0.08),
+                    border: `1px solid ${FLIT.warningAlpha(0.3)}`,
+                    color: FLIT.state.warning,
                   }}
                   role="status"
                   aria-live="polite"
@@ -275,31 +275,7 @@ export function PrevalidacionDetailDrawer({
                 </div>
               )}
 
-              {showCaptura && (
-                <div className="space-y-2 rounded-xl border p-3">
-                  <p className="text-[11px] font-semibold" style={{ color: '#557EFF' }}>
-                    Enlace de captura
-                  </p>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <div className="rounded-xl border bg-white p-2">
-                      <QRCodeSVG value={detail.captureUrl!} size={112} aria-label="Código QR del enlace de captura" />
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <a
-                        href={detail.captureUrl!}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex w-fit items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-semibold text-white"
-                        style={{ background: '#557EFF' }}
-                      >
-                        <ExternalLink className="h-3 w-3" aria-hidden />
-                        Abrir captura Kyverum
-                      </a>
-                      <CopyLinkButton captureUrl={detail.captureUrl!} />
-                    </div>
-                  </div>
-                </div>
-              )}
+              {showCaptura && <IdentityCaptureLinkBlock captureUrl={detail.captureUrl!} />}
 
               <div className="rounded-xl border p-3">
                 <p className="mb-1 text-[11px] font-semibold text-[#162744] dark:text-white">
@@ -319,65 +295,5 @@ export function PrevalidacionDetailDrawer({
         </div>
       </aside>
     </div>
-  );
-}
-
-function InfoTile({
-  icon: Icon,
-  label,
-  value,
-  mono,
-}: {
-  icon: typeof User;
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="flex items-start gap-2.5 rounded-xl border px-3 py-2.5">
-      <span
-        className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg"
-        style={{ background: '#DFE5ED', color: '#162744' }}
-        aria-hidden
-      >
-        <Icon className="h-3.5 w-3.5" />
-      </span>
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-wide opacity-55">{label}</p>
-        <p className={`mt-0.5 truncate text-[12px] font-medium text-[#162744] dark:text-white ${mono ? 'font-mono' : ''}`}>
-          {value}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function CopyLinkButton({ captureUrl }: { captureUrl: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard?.writeText(captureUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* clipboard no disponible */
-    }
-  };
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => void copy()}
-        className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ borderColor: '#557EFF', color: '#557EFF' }}
-        aria-label="Copiar enlace de captura"
-      >
-        <Copy className="h-3 w-3" aria-hidden />
-        {copied ? 'Copiado' : 'Copiar enlace'}
-      </button>
-      <span className="sr-only" role="status" aria-live="polite">
-        {copied ? 'Enlace copiado al portapapeles.' : ''}
-      </span>
-    </>
   );
 }
