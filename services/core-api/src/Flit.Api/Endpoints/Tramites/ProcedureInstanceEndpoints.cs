@@ -58,20 +58,29 @@ internal static class ProcedureInstanceEndpoints
                 CreatedByUserId = ResolveUserId(http.User) ?? request.CreatedByUserId,
             };
 
-            // #5 — La compañía debe habilitar explícitamente la matrícula inicial vía el
-            // toggle "Permitir matrícula inicial" (admin/companies). Por defecto está en OFF:
-            // solo se permite crear ese trámite si existe configuración del tenant Y el flag
-            // está en true. Sin fila de settings (tenant no configurado) → NO permitido, para
-            // que una compañía sin configuración no radique matrícula inicial por accidente.
+            // Bloqueo por familia (config compañía → Trámites). Activo = no permitir crear.
+            // También se evalúa en CreateProcedureInstanceHandler por procedureType.Family.
             if (EsMatriculaInicial(effectiveRequest.Modalidad))
             {
                 var settings = await settingsHandler.HandleAsync(
                     new GetTenantSettingsQuery { TenantId = effectiveRequest.TenantId }, ct);
-                if (settings is not { SwitchesMatricula.AllowInitialRegistration: true })
+                var blocked = settings?.SwitchesMatricula.BlockProcedureFamily?.Matriculas
+                    ?? settings is not { SwitchesMatricula.AllowInitialRegistration: true };
+                if (blocked)
                     return Results.Problem(
                         statusCode: 422,
                         title: "Unprocessable Entity",
-                        detail: "La compañía no tiene habilitada la matrícula inicial. Contacta al administrador para activarla.");
+                        detail: "La compañía tiene bloqueada la creación de trámites de matrículas. Contacta al administrador.");
+            }
+            else if (EsTraspaso(effectiveRequest.Modalidad))
+            {
+                var settings = await settingsHandler.HandleAsync(
+                    new GetTenantSettingsQuery { TenantId = effectiveRequest.TenantId }, ct);
+                if (settings?.SwitchesMatricula.BlockProcedureFamily?.Traspaso == true)
+                    return Results.Problem(
+                        statusCode: 422,
+                        title: "Unprocessable Entity",
+                        detail: "La compañía tiene bloqueada la creación de trámites de traspaso. Contacta al administrador.");
             }
 
             var (result, error) = await handler.HandleAsync(effectiveRequest, ct);
@@ -83,6 +92,7 @@ internal static class ProcedureInstanceEndpoints
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
                 "invalid_reference" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El tenant, el usuario o el tipo de trámite indicado no existe."),
                 "reference_conflict" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se pudo generar un número de referencia único. Reintente."),
+                "procedure_family_blocked" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "La compañía tiene bloqueada la creación de trámites de esta familia. Contacta al administrador."),
                 // FEATURE-08 / HU-BE-02 (CFD-03): validaciones iniciales configurables por gate_profile.
                 "COMPANY_RULE_VIOLATION" => Results.Problem(statusCode: 422, title: "COMPANY_RULE_VIOLATION", detail: "El OT del operador no cumple la regla de compañía del tipo."),
                 "OT_NOT_AUTHORIZED_FOR_TYPE" => Results.Problem(statusCode: 422, title: "OT_NOT_AUTHORIZED_FOR_TYPE", detail: "El OT del operador no está habilitado/operable para este tipo."),
@@ -850,12 +860,26 @@ internal static class ProcedureInstanceEndpoints
         {
             var settings = await settingsHandler.HandleAsync(
                 new GetTenantSettingsQuery { TenantId = effectiveTenant }, ct);
-            if (settings is not { SwitchesMatricula.AllowInitialRegistration: true })
+            var blocked = settings?.SwitchesMatricula.BlockProcedureFamily?.Matriculas
+                ?? settings is not { SwitchesMatricula.AllowInitialRegistration: true };
+            if (blocked)
             {
                 return (effectiveTenant, Results.Problem(
                     statusCode: 422,
                     title: "Unprocessable Entity",
-                    detail: "La compañía no tiene habilitada la matrícula inicial. Contacta al administrador para activarla."));
+                    detail: "La compañía tiene bloqueada la creación de trámites de matrículas. Contacta al administrador."));
+            }
+        }
+        else if (EsTraspaso(modalidad))
+        {
+            var settings = await settingsHandler.HandleAsync(
+                new GetTenantSettingsQuery { TenantId = effectiveTenant }, ct);
+            if (settings?.SwitchesMatricula.BlockProcedureFamily?.Traspaso == true)
+            {
+                return (effectiveTenant, Results.Problem(
+                    statusCode: 422,
+                    title: "Unprocessable Entity",
+                    detail: "La compañía tiene bloqueada la creación de trámites de traspaso. Contacta al administrador."));
             }
         }
 
@@ -888,6 +912,13 @@ internal static class ProcedureInstanceEndpoints
         string.Equals(
             modalidad?.Trim(),
             TramiteModalidadEntradaCodes.MatriculaInicial,
+            StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>La modalidad solicitada es traspaso (tolerante a espacios/caja).</summary>
+    private static bool EsTraspaso(string? modalidad) =>
+        string.Equals(
+            modalidad?.Trim(),
+            TramiteModalidadEntradaCodes.Traspaso,
             StringComparison.OrdinalIgnoreCase);
 }
 

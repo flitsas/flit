@@ -495,6 +495,7 @@ public sealed class TramiteLifecycleService(
             FurGenerado = instance.Attachments.Any(a =>
                 string.Equals(a.Tipo, "fur", StringComparison.OrdinalIgnoreCase)),
             PreflightProviderError = LatestPreflightHasProviderError(instance),
+            PreflightVehiculoNoEncontrado = LatestPreflightHasVehiculoNoEncontrado(instance),
             UploadedDocumentCodes = new HashSet<string>(
                 instance.Attachments.Select(a => a.Tipo), StringComparer.OrdinalIgnoreCase),
         };
@@ -518,6 +519,19 @@ public sealed class TramiteLifecycleService(
             return false;
         var checks = GetPreflightHandler.DeserializeChecks(latest.Checks);
         return checks.Any(c => string.Equals(c.Status, "error", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>El RUNT respondió y el vehículo NO existe (check "vehiculo" en "fail"): bloqueo DURO,
+    /// igual que el error de proveedor. Ver PreflightSnapshot.VehiculoNoEncontrado.</summary>
+    private static bool LatestPreflightHasVehiculoNoEncontrado(ProcedureInstance instance)
+    {
+        var latest = instance.PreflightSnapshots.OrderByDescending(s => s.CreatedAt).FirstOrDefault();
+        if (latest is null)
+            return false;
+        var checks = GetPreflightHandler.DeserializeChecks(latest.Checks);
+        return checks.Any(c =>
+            string.Equals(c.Key, "vehiculo", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(c.Status, "fail", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Mapea partes aprobadas (comprador/vendedor/locatario) a códigos de entidad (BUYER/OWNER/LESSEE).</summary>

@@ -27,6 +27,9 @@ public sealed record DynamicWizardContext
 {
     public bool VehiculoConsultado { get; init; }
     public bool PreflightProviderError { get; init; }
+    /// <summary>El RUNT respondió y el vehículo NO existe: bloqueo DURO, igual que
+    /// <see cref="PreflightProviderError"/> (ver PreflightSnapshot.VehiculoNoEncontrado).</summary>
+    public bool PreflightVehiculoNoEncontrado { get; init; }
     public bool DocumentosCompletos { get; init; }
     public bool HasBuyer { get; init; }
     public bool BuyerRuntConsultado { get; init; }
@@ -54,6 +57,7 @@ public static class DynamicGateEvaluator
     // Reasons/blockers alineados con el camino estático (WizardStateQuery / SubmitGate).
     public const string VehiculoNoConsultado = "vehiculo_no_consultado";
     public const string PreflightProviderError = "preflight_provider_error";
+    public const string VehiculoNoEncontrado = "vehiculo_no_encontrado";
     public const string DocumentosIncompletos = "documentos_incompletos";
     public const string CompradorPendiente = "comprador_pendiente";
     public const string VendedorPendiente = "vendedor_pendiente";
@@ -108,6 +112,8 @@ public static class DynamicGateEvaluator
             case "vehicle_query":
                 if (ctx.PreflightProviderError)
                     return Incomplete(reasons, PreflightProviderError);
+                if (ctx.PreflightVehiculoNoEncontrado)
+                    return Incomplete(reasons, VehiculoNoEncontrado);
                 return ctx.VehiculoConsultado ? Complete() : Incomplete(reasons, VehiculoNoConsultado);
 
             case "document_checklist":
@@ -173,6 +179,8 @@ public static class DynamicGateEvaluator
         var blockers = new List<string>();
         if (ctx.PreflightProviderError)
             blockers.Add(PreflightProviderError);
+        if (ctx.PreflightVehiculoNoEncontrado)
+            blockers.Add(VehiculoNoEncontrado);
         if (!DocumentosOk(profile, ctx))
             blockers.Add(DocumentosIncompletos);
         if (profile.RequiresBiometrics && !BiometricsOk(profile, ctx))

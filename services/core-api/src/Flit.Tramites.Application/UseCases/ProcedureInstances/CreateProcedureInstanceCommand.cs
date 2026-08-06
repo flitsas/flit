@@ -36,7 +36,8 @@ public sealed class CreateProcedureInstanceHandler(
     IProcedureTypeRepository typeRepo,
     CaptureTypeSnapshotHandler? snapshotCapture = null,
     IOtOperabilityGate? otOperability = null,
-    ITransitOfficeGrantGate? companyGrant = null)
+    ITransitOfficeGrantGate? companyGrant = null,
+    IProcedureFamilyCreationGate? familyCreationGate = null)
 {
     // M0: mapeo modalidad → código canónico del procedure_type sembrado (dev seed).
     // matricula_inicial → MATRICULA_NUEVA (familia MATRICULAS), traspaso → TRASPASO_STANDARD (familia TRASPASO).
@@ -89,6 +90,11 @@ public sealed class CreateProcedureInstanceHandler(
             if (procedureType is null)
                 return (null, "modalidad_not_available");
         }
+
+        // Compañía puede bloquear creación por familia (config admin → Trámites).
+        var familyGate = familyCreationGate ?? new NullProcedureFamilyCreationGate();
+        if (await familyGate.IsFamilyBlockedAsync(request.TenantId, procedureType.Family, ct))
+            return (null, "procedure_family_blocked");
 
         // FEATURE-08 / HU-BE-02 (CFD-03): validaciones iniciales configurables por gate_profile,
         // evaluadas ANTES de persistir. La duplicidad por placa/VIN no se evalúa aquí (la instancia

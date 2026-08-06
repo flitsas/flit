@@ -110,7 +110,18 @@ function fallbackFor(family: "vehicle" | "conductor", primary: string): string[]
 export interface SettingsForm {
   allowInitialRegistration: boolean;
   allowMiscNewVehicles: boolean;
+  /** Espejo legado de onlyOwnVehiclesTraspaso (PUT `onlyOwnVehicles`). */
   onlyOwnVehicles: boolean;
+  onlyOwnVehiclesMatriculas: boolean;
+  onlyOwnVehiclesTraspaso: boolean;
+  onlyOwnVehiclesOtros: boolean;
+  /**
+   * Bloqueo de creación por familia (`true` = no permitir crear).
+   * Matrículas se deriva de `!allowInitialRegistration` al serializar.
+   */
+  blockProcedureFamilyMatriculas: boolean;
+  blockProcedureFamilyTraspaso: boolean;
+  blockProcedureFamilyOtros: boolean;
   baulFirmasActivo: boolean;
   preasignacionPlacaActiva: boolean;
   /** Con placa completa → Terminado directo (omite Asignado). */
@@ -134,10 +145,19 @@ export interface SettingsForm {
 /** Construye el estado del formulario a partir de la configuración cargada. */
 export function formFromSettings(settings: TenantSettings): SettingsForm {
   const cfg = settings.consultationProviderConfig ?? {};
+  const byFamily = settings.switchesMatricula.onlyOwnVehiclesByFamily;
+  const onlyTraspaso = byFamily?.traspaso ?? settings.switchesMatricula.onlyOwnVehicles;
+  const block = settings.switchesMatricula.blockProcedureFamily;
   return {
     allowInitialRegistration: settings.switchesMatricula.allowInitialRegistration,
     allowMiscNewVehicles: settings.switchesMatricula.allowMiscNewVehicles,
-    onlyOwnVehicles: settings.switchesMatricula.onlyOwnVehicles,
+    onlyOwnVehicles: onlyTraspaso,
+    onlyOwnVehiclesMatriculas: byFamily?.matriculas ?? settings.switchesMatricula.onlyOwnVehicles,
+    onlyOwnVehiclesTraspaso: onlyTraspaso,
+    onlyOwnVehiclesOtros: byFamily?.otros ?? settings.switchesMatricula.onlyOwnVehicles,
+    blockProcedureFamilyMatriculas: block?.matriculas ?? !settings.switchesMatricula.allowInitialRegistration,
+    blockProcedureFamilyTraspaso: block?.traspaso ?? false,
+    blockProcedureFamilyOtros: block?.otros ?? false,
     baulFirmasActivo: settings.baulFirmasActivo,
     preasignacionPlacaActiva: settings.preasignacionPlacaActiva,
     plateFlowSkipToTerminado: settings.plateFlowSkipToTerminado ?? false,
@@ -171,9 +191,19 @@ function avaluoFromSettings(config: TenantSettings["avaluoProviderConfig"]): {
 export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
   return {
     switchesMatricula: {
-      allowInitialRegistration: form.allowInitialRegistration,
+      allowInitialRegistration: !form.blockProcedureFamilyMatriculas,
       allowMiscNewVehicles: form.allowMiscNewVehicles,
-      onlyOwnVehicles: form.onlyOwnVehicles,
+      onlyOwnVehicles: form.onlyOwnVehiclesTraspaso,
+      onlyOwnVehiclesByFamily: {
+        matriculas: form.onlyOwnVehiclesMatriculas,
+        traspaso: form.onlyOwnVehiclesTraspaso,
+        otros: form.onlyOwnVehiclesOtros,
+      },
+      blockProcedureFamily: {
+        matriculas: form.blockProcedureFamilyMatriculas,
+        traspaso: form.blockProcedureFamilyTraspaso,
+        otros: form.blockProcedureFamilyOtros,
+      },
     },
     baulFirmasActivo: form.baulFirmasActivo,
     preasignacionPlacaActiva: form.preasignacionPlacaActiva,
@@ -226,22 +256,46 @@ const onOff = (value: boolean): Omit<ConfigChangeItem, "label"> =>
 
 const FIELD_DESCRIPTORS: FieldDescriptor[] = [
   {
-    key: "allowInitialRegistration",
-    module: "Matrícula Inicial",
-    label: "Permitir matrícula inicial",
-    describe: (_i, c) => onOff(c.allowInitialRegistration),
+    key: "blockProcedureFamilyMatriculas",
+    module: "Matrículas",
+    label: "No permitir trámites de matrículas",
+    describe: (_i, c) => onOff(c.blockProcedureFamilyMatriculas),
   },
   {
     key: "allowMiscNewVehicles",
-    module: "Matrícula Inicial",
+    module: "Matrículas",
     label: "Permitir vehículos de categorías misceláneas",
     describe: (_i, c) => onOff(c.allowMiscNewVehicles),
   },
   {
-    key: "onlyOwnVehicles",
-    module: "Traspasos",
+    key: "onlyOwnVehiclesMatriculas",
+    module: "Matrículas",
     label: "Solo vehículos propios",
-    describe: (_i, c) => onOff(c.onlyOwnVehicles),
+    describe: (_i, c) => onOff(c.onlyOwnVehiclesMatriculas),
+  },
+  {
+    key: "blockProcedureFamilyTraspaso",
+    module: "Traspaso",
+    label: "No permitir trámites de traspaso",
+    describe: (_i, c) => onOff(c.blockProcedureFamilyTraspaso),
+  },
+  {
+    key: "onlyOwnVehiclesTraspaso",
+    module: "Traspaso",
+    label: "Solo vehículos propios",
+    describe: (_i, c) => onOff(c.onlyOwnVehiclesTraspaso),
+  },
+  {
+    key: "blockProcedureFamilyOtros",
+    module: "Otros trámites",
+    label: "No permitir otros trámites",
+    describe: (_i, c) => onOff(c.blockProcedureFamilyOtros),
+  },
+  {
+    key: "onlyOwnVehiclesOtros",
+    module: "Otros trámites",
+    label: "Solo vehículos propios",
+    describe: (_i, c) => onOff(c.onlyOwnVehiclesOtros),
   },
   {
     key: "baulFirmasActivo",
@@ -370,8 +424,9 @@ const providerChange = (
 });
 
 const MODULE_ORDER = [
-  "Matrícula Inicial",
-  "Traspasos",
+  "Matrículas",
+  "Traspaso",
+  "Otros trámites",
   "Configuración Empresa",
   CONSULTA_MODULE,
   AVALUO_MODULE,
