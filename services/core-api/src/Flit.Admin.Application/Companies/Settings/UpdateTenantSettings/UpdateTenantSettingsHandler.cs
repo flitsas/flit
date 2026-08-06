@@ -94,12 +94,36 @@ public sealed class UpdateTenantSettingsHandler
             ?? TenantSettings.Default(command.TenantId);
 
         var switches = request.SwitchesMatricula!;
+        var byFamily = switches.OnlyOwnVehiclesByFamily;
+        // Nuevo contrato: onlyOwnVehiclesByFamily manda. Legado: onlyOwnVehicles solo actualiza TRASPASO.
+        var onlyTraspaso = byFamily?.Traspaso ?? switches.OnlyOwnVehicles;
+        var onlyMatriculas = byFamily?.Matriculas ?? previous.OnlyOwnVehiclesMatriculas;
+        var onlyOtros = byFamily?.Otros ?? previous.OnlyOwnVehiclesOtros;
+        if (byFamily is null)
+        {
+            // Cliente legado sin byFamily: el booleano único sigue siendo TRASPASO.
+            onlyTraspaso = switches.OnlyOwnVehicles;
+        }
+
+        // Bloqueo por familia: blockProcedureFamily manda; si no viene, MATRICULAS sigue en allowInitial
+        // (invertido) y TRASPASO/OTROS conservan el valor previo.
+        var block = switches.BlockProcedureFamily;
+        var allowInitial = block is null
+            ? switches.AllowInitialRegistration
+            : !block.Matriculas;
+        var blockTraspaso = block?.Traspaso ?? previous.BlockProcedureFamilyTraspaso;
+        var blockOtros = block?.Otros ?? previous.BlockProcedureFamilyOtros;
+
         var updated = new TenantSettings
         {
             TenantId = command.TenantId,
-            AllowInitialRegistration = switches.AllowInitialRegistration,
+            AllowInitialRegistration = allowInitial,
+            BlockProcedureFamilyTraspaso = blockTraspaso,
+            BlockProcedureFamilyOtros = blockOtros,
             AllowMiscNewVehicles = switches.AllowMiscNewVehicles,
-            OnlyOwnVehicles = switches.OnlyOwnVehicles,
+            OnlyOwnVehicles = onlyTraspaso,
+            OnlyOwnVehiclesMatriculas = onlyMatriculas,
+            OnlyOwnVehiclesOtros = onlyOtros,
             SignatureVaultEnabled = request.BaulFirmasActivo,
             PlatePreassignEnabled = request.PreasignacionPlacaActiva,
             ValidateSoatWithRunt = request.ValidarSoatConRunt,

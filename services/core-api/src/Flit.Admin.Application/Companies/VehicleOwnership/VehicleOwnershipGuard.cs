@@ -37,8 +37,8 @@ public sealed class VehicleOwnershipGuard : IVehicleOwnershipGuard
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        // (1) La regla no aplica: el tenant no restringe a vehículos propios.
-        if (!context.EffectivePolicy.OnlyOwnVehicles)
+        // (1) La regla no aplica para la familia del trámite.
+        if (!context.EffectivePolicy.ResolveOnlyOwnVehicles(context.ProcedureFamily))
         {
             return VehicleOwnershipGuardResult.Allowed();
         }

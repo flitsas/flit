@@ -21,8 +21,12 @@ internal sealed class TenantOperationalPolicyConfiguration
             .HasDatabaseName("uq_tenant_operational_policies_tenant_id");
 
         builder.Property(x => x.AllowInitialRegistration).HasDefaultValue(false);
+        builder.Property(x => x.BlockProcedureFamilyTraspaso).HasDefaultValue(false);
+        builder.Property(x => x.BlockProcedureFamilyOtros).HasDefaultValue(false);
         builder.Property(x => x.AllowMiscNewVehicles).HasDefaultValue(true);
         builder.Property(x => x.OnlyOwnVehicles).HasDefaultValue(false);
+        builder.Property(x => x.OnlyOwnVehiclesMatriculas).HasDefaultValue(false);
+        builder.Property(x => x.OnlyOwnVehiclesOtros).HasDefaultValue(false);
         builder.Property(x => x.SignatureVaultEnabled).HasDefaultValue(false);
         builder.Property(x => x.PlatePreassignEnabled).HasDefaultValue(false);
         builder.Property(x => x.PlateFlowSkipToTerminado).HasDefaultValue(false);

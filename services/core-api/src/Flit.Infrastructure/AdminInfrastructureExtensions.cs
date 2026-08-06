@@ -26,6 +26,7 @@ using Flit.Infrastructure.OtRules;
 using Flit.Infrastructure.OtWebhooks;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Integration;
+using Flit.Infrastructure.Tramites;
 using Flit.Admin.Domain.ProcedureSnapshots;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Services;
@@ -235,6 +236,9 @@ public static class AdminInfrastructureExtensions
         // HU #10518 — enforcement runtime del ciclo de vida OT: el OT elegido debe estar
         // OPERATIVO (catálogo activo + perfil/tenant OT + tenant activo), no solo con grant.
         services.AddScoped<IOtOperabilityGate, OtOperabilityGate>();
+
+        // Bloqueo de creación de trámites por familia (config compañía → Trámites).
+        services.AddScoped<IProcedureFamilyCreationGate, ProcedureFamilyCreationGate>();
 
         // HU #10548 — exigibilidad de la validación de identidad según la config del OT destino.
         services.AddScoped<IIdentityValidationPolicy, IdentityValidationPolicy>();

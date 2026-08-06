@@ -1708,10 +1708,11 @@ function ConsultaStep({
     };
   }, [eligeSecretaria]);
 
-  // FEATURE 02 — política "solo vehículos propios" del tenant y NIT de la compañía (del JWT). Cuando la
-  // política está activa, en traspaso se autorrellena el documento del propietario con el NIT del tenant
-  // y, si el gestor lo edita a otro, se bloquea la consulta al RUNT con un mensaje claro.
+  // FEATURE 02 — política "solo vehículos propios" por familia (MATRICULAS | TRASPASO) y NIT del tenant.
+  // En traspaso (placa) se autorrellena el documento del propietario con el NIT y, si se edita a otro,
+  // se bloquea la consulta al RUNT. En matrícula (VIN) el flag aplica si el flujo de placa entra en juego.
   const [onlyOwnVehicles, setOnlyOwnVehicles] = useState(false);
+  const [familyBlocked, setFamilyBlocked] = useState(false);
   const tenantNitDigits = normalizeNitDigits(
     (decodeJwtPayload(getToken())?.company_nit as string | undefined) ?? '',
   );
@@ -1743,18 +1744,28 @@ function ConsultaStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceId]);
 
-  // HU #10478 — resuelve el proveedor de consulta por placa del tenant (solo traspaso) para decidir si
-  // se pide el tipo de documento del propietario. Silencioso ante fallo: deja el campo visible.
+  // HU #10478 + config de compañía (bloqueo / solo propios por familia).
   useEffect(() => {
-    if (isVin) return;
+    let active = true;
     void tramitesClient
       .getConsultationConfig()
       .then((cfg) => {
+        if (!active) return;
         setPlatePrimaryProvider(cfg.vehiclePlate);
-        // FEATURE 02 — flag para adaptar la captura del propietario en traspaso.
-        setOnlyOwnVehicles(cfg.onlyOwnVehicles);
+        const byFamily = cfg.onlyOwnVehiclesByFamily;
+        const block = cfg.blockProcedureFamily;
+        if (isVin) {
+          setOnlyOwnVehicles(byFamily?.matriculas ?? false);
+          setFamilyBlocked(block?.matriculas ?? false);
+        } else {
+          setOnlyOwnVehicles(byFamily?.traspaso ?? cfg.onlyOwnVehicles);
+          setFamilyBlocked(block?.traspaso ?? false);
+        }
       })
       .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, [isVin]);
 
   // FEATURE 02 — autorrelleno del documento del tenant (NIT) cuando la política está activa. Una sola
@@ -1833,6 +1844,15 @@ function ConsultaStep({
     // ella; esta guarda cubre el disparo por Enter en el input del VIN.
     if (eligeSecretaria && !transitOfficeId) {
       setError(SECRETARIA_REQUERIDA);
+      return;
+    }
+    // Familia bloqueada en config de compañía: no consultar ni crear.
+    if (familyBlocked) {
+      setError(
+        isVin
+          ? 'La compañía tiene bloqueada la creación de trámites de matrículas. Contacta al administrador.'
+          : 'La compañía tiene bloqueada la creación de trámites de traspaso. Contacta al administrador.',
+      );
       return;
     }
     // FEATURE 02 — "solo vehículos propios": en traspaso, si el documento del propietario no es el NIT
@@ -2097,10 +2117,10 @@ function ConsultaStep({
       type="button"
       onClick={() => void handleRun()}
       // HU #11199 (AC2) — sin secretaría la consulta no se habilita.
-      disabled={loading || (eligeSecretaria && !transitOfficeId)}
+      disabled={loading || familyBlocked || (eligeSecretaria && !transitOfficeId)}
       className="flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
       style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-      aria-label="Consultar RUNT"
+      aria-label={familyBlocked ? 'Consulta no permitida para esta compañía' : 'Consultar RUNT'}
     >
       <Search className="h-3.5 w-3.5" />
       {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}

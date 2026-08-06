@@ -19,9 +19,16 @@ public sealed class GetConsultationConfigHandler(
             PrimaryFor(ConsultationKind.VehicleVin, tenantOverride),
             PrimaryFor(ConsultationKind.VehiclePlate, tenantOverride),
             PrimaryFor(ConsultationKind.Conductor, tenantOverride),
-            // FEATURE 02 — el wizard usa este flag para autorrellenar el documento del tenant en la
-            // consulta de traspaso y validar antes de consultar el RUNT. Sin fila ⇒ false.
-            tenantOverride?.OnlyOwnVehicles ?? false);
+            // FEATURE 02 — wizard de traspaso (legado): flag TRASPASO.
+            tenantOverride?.OnlyOwnVehicles ?? false,
+            new OnlyOwnVehiclesByFamilyConfig(
+                tenantOverride?.OnlyOwnVehiclesMatriculas ?? false,
+                tenantOverride?.OnlyOwnVehicles ?? false,
+                tenantOverride?.OnlyOwnVehiclesOtros ?? false),
+            new BlockProcedureFamilyConfig(
+                tenantOverride?.BlockProcedureFamilyMatriculas ?? false,
+                tenantOverride?.BlockProcedureFamilyTraspaso ?? false,
+                tenantOverride?.BlockProcedureFamilyOtros ?? false));
     }
 
     private string PrimaryFor(ConsultationKind kind, ConsultationTenantOverride? tenantOverride)
@@ -31,8 +38,20 @@ public sealed class GetConsultationConfigHandler(
     }
 }
 
+/// <summary>Solo vehículos propios por familia de trámite.</summary>
+public sealed record OnlyOwnVehiclesByFamilyConfig(bool Matriculas, bool Traspaso, bool Otros);
+
+/// <summary>Bloqueo de creación por familia (<c>true</c> = no permitir crear).</summary>
+public sealed record BlockProcedureFamilyConfig(bool Matriculas, bool Traspaso, bool Otros);
+
 /// <summary>
-/// Proveedor primario de consulta por tipo, resuelto para el tenant (claves como en la cadena), más el
-/// flag <c>OnlyOwnVehicles</c> (FEATURE 02) para que el wizard adapte la captura del propietario.
+/// Proveedor primario de consulta por tipo, resuelto para el tenant (claves como en la cadena), más
+/// flags de radicación por familia (solo vehículos propios + bloqueo de creación).
 /// </summary>
-public sealed record ConsultationConfigResult(string VehicleVin, string VehiclePlate, string Conductor, bool OnlyOwnVehicles);
+public sealed record ConsultationConfigResult(
+    string VehicleVin,
+    string VehiclePlate,
+    string Conductor,
+    bool OnlyOwnVehicles,
+    OnlyOwnVehiclesByFamilyConfig? OnlyOwnVehiclesByFamily = null,
+    BlockProcedureFamilyConfig? BlockProcedureFamily = null);

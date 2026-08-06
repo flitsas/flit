@@ -16,6 +16,8 @@ const settings: TenantSettings = {
     allowInitialRegistration: true,
     allowMiscNewVehicles: false,
     onlyOwnVehicles: true,
+    onlyOwnVehiclesByFamily: { matriculas: true, traspaso: true, otros: true },
+    blockProcedureFamily: { matriculas: false, traspaso: false, otros: false },
   },
   baulFirmasActivo: true,
   preasignacionPlacaActiva: false,
@@ -51,6 +53,8 @@ describe("CompanyConfigTabs (AC2)", () => {
         allowInitialRegistration: true,
         allowMiscNewVehicles: false,
         onlyOwnVehicles: true,
+        onlyOwnVehiclesByFamily: { matriculas: true, traspaso: true, otros: true },
+        blockProcedureFamily: { matriculas: false, traspaso: false, otros: false },
       },
       baulFirmasActivo: true,
       preasignacionPlacaActiva: false,
@@ -85,17 +89,32 @@ describe("CompanyConfigTabs (AC2)", () => {
 
     render(<CompanyConfigTabs settings={settings} onSaveSettings={onSaveSettings} />);
 
-    // Pestaña Matrícula Inicial activa por defecto. Estado inicial: inicial=ON, misceláneas=OFF.
-    await user.click(screen.getByLabelText(/permitir matrícula inicial/i)); // ON → OFF (Desactivar)
-    await user.click(screen.getByLabelText(/permitir vehículos de categorías misceláneas/i)); // OFF → ON (Activar)
+    // Pestaña Trámites: familias como desplegables (Matrículas abierta por defecto).
+    expect(screen.getByRole("tab", { name: /^trámites$/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("tab", { name: /matrícula inicial/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /^traspasos$/i })).not.toBeInTheDocument();
+
+    const matriculasHeader = screen.getByRole("button", { name: /matrículas/i });
+    expect(matriculasHeader).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText(/no permitir trámites de matrículas/i)).toBeInTheDocument();
+
+    // Abrir Traspaso y Otros para alcanzar los tres toggles de solo vehículos propios.
+    await user.click(screen.getByRole("button", { name: /^traspaso/i }));
+    await user.click(screen.getByRole("button", { name: /otros trámites/i }));
+
+    await user.click(screen.getByLabelText(/no permitir trámites de matrículas/i)); // OFF → ON (bloquea)
+    await user.click(screen.getByLabelText(/permitir vehículos de categorías misceláneas/i)); // OFF → ON
+    const ownToggles = screen.getAllByLabelText(/^solo vehículos propios$/i);
+    expect(ownToggles).toHaveLength(3);
+    await user.click(ownToggles[1]!); // Traspaso ON → OFF
     await user.click(screen.getByRole("button", { name: /guardar todo/i }));
 
-    // La confirmación agrupa por módulo y describe el cambio REAL de cada campo.
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Matrícula Inicial")).toBeInTheDocument();
-    expect(within(dialog).getByText(/permitir matrícula inicial/i)).toBeInTheDocument();
+    expect(within(dialog).getByText("Matrículas")).toBeInTheDocument();
+    expect(within(dialog).getByText("Traspaso")).toBeInTheDocument();
+    expect(within(dialog).getByText(/no permitir trámites de matrículas/i)).toBeInTheDocument();
+    expect(within(dialog).getAllByText("Activar").length).toBeGreaterThanOrEqual(2);
     expect(within(dialog).getByText("Desactivar")).toBeInTheDocument();
-    expect(within(dialog).getByText("Activar")).toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("button", { name: /guardar cambios/i }));
 
@@ -104,6 +123,17 @@ describe("CompanyConfigTabs (AC2)", () => {
         switchesMatricula: expect.objectContaining({
           allowInitialRegistration: false,
           allowMiscNewVehicles: true,
+          onlyOwnVehicles: false,
+          onlyOwnVehiclesByFamily: expect.objectContaining({
+            matriculas: true,
+            traspaso: false,
+            otros: true,
+          }),
+          blockProcedureFamily: expect.objectContaining({
+            matriculas: true,
+            traspaso: false,
+            otros: false,
+          }),
         }),
       }),
     );
@@ -231,11 +261,13 @@ describe("CompanyConfigTabs — identificación de la compañía (HU #11062)", (
     expect(within(callout).getByText(/900123456-7/)).toBeInTheDocument();
   });
 
-  it("sin identidad resuelta la pantalla funciona igual, sin hueco", async () => {
+  it("sin identidad resuelta la pantalla funciona igual, sin hueco de empresa", async () => {
     const user = userEvent.setup();
     render(<CompanyConfigTabs settings={settings} company={null} onSaveSettings={vi.fn()} />);
 
-    expect(screen.queryByLabelText("Compañía en configuración")).not.toBeInTheDocument();
+    // El encabezado puede existir (alojar «Guardar todo»), pero sin razón social ni NIT.
+    expect(screen.queryByText(/transportes acme/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/nit 900/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /guardar todo/i }));
     expect(

@@ -10,7 +10,15 @@ internal static class SettingsMapper
         new SwitchesMatricula(
             settings.AllowInitialRegistration,
             settings.AllowMiscNewVehicles,
-            settings.OnlyOwnVehicles),
+            settings.OnlyOwnVehicles,
+            new OnlyOwnVehiclesByFamily(
+                settings.OnlyOwnVehiclesMatriculas,
+                settings.OnlyOwnVehicles,
+                settings.OnlyOwnVehiclesOtros),
+            new BlockProcedureFamily(
+                Matriculas: !settings.AllowInitialRegistration,
+                Traspaso: settings.BlockProcedureFamilyTraspaso,
+                Otros: settings.BlockProcedureFamilyOtros)),
         settings.SignatureVaultEnabled,
         SettingsWire.ToWire(settings.NotificationChannel),
         SettingsWire.ToWire(settings.NotificationTarget),

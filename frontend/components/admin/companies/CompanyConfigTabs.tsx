@@ -1,12 +1,11 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { Building2, FileClock, FileText, Hash, Save, Shuffle, Stamp, UserCheck, UserCog, Users } from "lucide-react";
+import { Building2, FileClock, FileText, Hash, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
 import { SaveConfigDialog, type SaveConfigPhase } from "./SaveConfigDialog";
-import { MatriculaInicialTab } from "./tabs/MatriculaInicialTab";
-import { TraspasosTab } from "./tabs/TraspasosTab";
+import { TramitesTab } from "./tabs/TramitesTab";
 import { ConfiguracionEmpresaTab } from "./tabs/ConfiguracionEmpresaTab";
 
 // Contenedor multi-pestaña de configuración (HU #10194, AC2). Mantiene un único
@@ -15,10 +14,10 @@ import { ConfiguracionEmpresaTab } from "./tabs/ConfiguracionEmpresaTab";
 // ventana de confirmación (SaveConfigDialog) que los lista y pide confirmar; el resultado
 // se muestra en esa misma ventana (sin banner de éxito que quede fijo en la vista).
 // Whitelist (AC3), matriz OT (AC4) e historial (AC5) se inyectan como slots.
+// Matrícula Inicial y Traspaso viven juntos en la pestaña «Trámites» (por tipo de trámite).
 
 type TabId =
-  | "matricula"
-  | "traspasos"
+  | "tramites"
   | "config"
   | "documentos"
   | "placas"
@@ -52,8 +51,7 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { id: "matricula", label: "Matrícula Inicial", icon: Stamp, isConfig: true },
-  { id: "traspasos", label: "Traspasos", icon: Shuffle, isConfig: true },
+  { id: "tramites", label: "Trámites", icon: Stamp, isConfig: true },
   { id: "config", label: "Configuración Empresa", icon: Building2, isConfig: true },
   // HU #10523 (RF31) — parámetros documentales por gestora (no forma parte del PUT de settings).
   { id: "documentos", label: "Documentos", icon: FileText, isConfig: false },
@@ -115,7 +113,7 @@ export function CompanyConfigTabs({
   usuariosSlot,
   company,
 }: CompanyConfigTabsProps) {
-  const [tab, setTab] = useState<TabId>("matricula");
+  const [tab, setTab] = useState<TabId>("tramites");
   // La pestaña de placas solo aparece si la preasignación está activa.
   // Usuarios solo si el consumidor inyecta el slot (SuperAdmin en ficha compañía).
   const visibleTabs = useMemo(
@@ -139,6 +137,10 @@ export function CompanyConfigTabs({
   const patch = (p: Partial<SettingsForm>) => setForm((f) => ({ ...f, ...p }));
 
   const changes = useMemo(() => diffSettings(initialForm, form), [initialForm, form]);
+  const pendingChangeCount = useMemo(
+    () => changes.reduce((n, g) => n + g.items.length, 0),
+    [changes],
+  );
 
   // "Guardar todo" no persiste directo: abre la confirmación con el resumen de cambios.
   const openConfirm = () => {
@@ -184,22 +186,48 @@ export function CompanyConfigTabs({
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      {/* HU #11062 — identifica la compañía en TODA la pantalla: va sobre la barra de pestañas, así
-          que no desaparece al cambiar de pestaña. Antes el tenant solo estaba en la URL y nada en
-          pantalla confirmaba sobre qué compañía persistía el "Guardar todo" (un PUT atómico). */}
-      {company && (
+      {/* Identidad de compañía + «Guardar todo» a la derecha (PUT atómico de settings). */}
+      {(company || currentTab?.isConfig) && (
         <header
-          className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-[#DFE5ED] px-4 py-3 dark:border-white/10"
+          className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-[#DFE5ED] px-4 py-3 dark:border-white/10"
           style={{ background: "rgba(85,126,255,0.04)" }}
           aria-label="Compañía en configuración"
         >
-          <span className="text-[10px] font-semibold uppercase tracking-wider opacity-60">
-            Configurando
-          </span>
-          <span className="text-sm font-bold text-[#162744] dark:text-white">
-            {company.razonSocial}
-          </span>
-          <span className="text-xs opacity-70">NIT {company.nit}</span>
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+            {company ? (
+              <>
+                <span className="text-[10px] font-semibold uppercase tracking-wider opacity-60">
+                  Configurando
+                </span>
+                <span className="text-sm font-bold text-[#162744] dark:text-white">
+                  {company.razonSocial}
+                </span>
+                <span className="text-xs opacity-70">NIT {company.nit}</span>
+              </>
+            ) : (
+              <span className="text-xs opacity-60">Configuración de compañía</span>
+            )}
+          </div>
+
+          {currentTab?.isConfig && (
+            <div className="flex shrink-0 items-center gap-3">
+              {pendingChangeCount > 0 && (
+                <span className="hidden text-[11px] font-medium opacity-60 sm:inline" aria-live="polite">
+                  {pendingChangeCount} cambio{pendingChangeCount === 1 ? "" : "s"} pendiente
+                  {pendingChangeCount === 1 ? "" : "s"}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={openConfirm}
+                disabled={confirmOpen}
+                className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              >
+                <Save className="h-4 w-4" aria-hidden /> Guardar todo
+              </button>
+            </div>
+          )}
         </header>
       )}
 
@@ -219,19 +247,35 @@ export function CompanyConfigTabs({
               <Icon className="h-3.5 w-3.5" />
               {t.label}
               {active && (
-                <span className="absolute right-2 left-2 -bottom-px h-0.5 rounded-full" style={{ background: "#557EFF" }} />
+                <span
+                  className="absolute right-2 left-2 -bottom-px h-0.5 rounded-full"
+                  style={{ background: "#557EFF" }}
+                />
               )}
             </button>
           );
         })}
       </div>
 
+      {errorBanner && (
+        <div
+          role="alert"
+          aria-live="polite"
+          className="rounded-xl border px-4 py-3 text-xs font-medium"
+          style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+        >
+          {errorBanner}
+        </div>
+      )}
+
       <div role="tabpanel" className="flex-1">
-        {activeTabId === "matricula" && (
-          <MatriculaInicialTab form={form} onChange={patch} fieldErrors={fieldErrors} />
-        )}
-        {activeTabId === "traspasos" && (
-          <TraspasosTab form={form} onChange={patch} whitelistSlot={whitelistSlot} />
+        {activeTabId === "tramites" && (
+          <TramitesTab
+            form={form}
+            onChange={patch}
+            fieldErrors={fieldErrors}
+            whitelistSlot={whitelistSlot}
+          />
         )}
         {activeTabId === "config" && (
           <ConfiguracionEmpresaTab
@@ -248,33 +292,6 @@ export function CompanyConfigTabs({
         {activeTabId === "usuarios" && usuariosSlot}
         {activeTabId === "historial" && auditSlot}
       </div>
-
-      {errorBanner && (
-        <div
-          role="alert"
-          aria-live="polite"
-          className="rounded-xl border px-4 py-3 text-xs font-medium"
-          style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
-        >
-          {errorBanner}
-        </div>
-      )}
-
-      {currentTab?.isConfig && (
-        <div
-          className="sticky bottom-0 flex items-center justify-end gap-3 border-t bg-white/90 py-3 backdrop-blur dark:bg-[#0B0F14]/90"
-        >
-          <button
-            type="button"
-            onClick={openConfirm}
-            disabled={confirmOpen}
-            className="flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-          >
-            <Save className="h-4 w-4" /> Guardar todo
-          </button>
-        </div>
-      )}
 
       {confirmOpen && (
         <SaveConfigDialog

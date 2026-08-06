@@ -46,6 +46,8 @@ public static class TransfersEndpoints
             AllowInitialRegistration = true,
             AllowMiscNewVehicles = true,
             OnlyOwnVehicles = request.OnlyOwnVehicles,
+            OnlyOwnVehiclesMatriculas = request.OnlyOwnVehicles,
+            OnlyOwnVehiclesOtros = request.OnlyOwnVehicles,
             SignatureVaultEnabled = false,
             NotificationChannel = NotificationChannel.FlitSmtp,
             NotificationTarget = NotificationTarget.Radicador,
@@ -56,7 +58,8 @@ public static class TransfersEndpoints
             request.TenantId,
             request.VehicleIdentifier ?? string.Empty,
             request.UserEmail ?? string.Empty,
-            effectivePolicy);
+            effectivePolicy,
+            request.ProcedureFamily);
 
         var result = await guard.ValidateTransferStartAsync(context, cancellationToken).ConfigureAwait(false);
 
@@ -73,7 +76,9 @@ public static class TransfersEndpoints
         Guid TenantId,
         string? VehicleIdentifier,
         string? UserEmail,
-        bool OnlyOwnVehicles);
+        bool OnlyOwnVehicles,
+        /// <summary>Familia del trámite (<c>MATRICULAS</c> | <c>TRASPASO</c> | <c>OTROS</c>). Null ⇒ TRASPASO.</summary>
+        string? ProcedureFamily = null);
 
     private sealed record TransferStartedResponse(Guid TenantId, string? VehicleIdentifier);
 }
