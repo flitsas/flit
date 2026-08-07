@@ -56,7 +56,8 @@ public sealed class GenerarFurHandler(
     IFurTemplateResolver? templateResolver = null,
     IProcedureDeedResolver? deedResolver = null,
     IRuesActorDataResolver? ruesResolver = null,
-    IRepresentanteLegalDirectory? representanteDirectory = null)
+    IRepresentanteLegalDirectory? representanteDirectory = null,
+    IMandateCustomTemplateBlobReader? mandateTemplateBlobReader = null)
     : IExpedienteHotDocumentsRegenerator
 {
     // HU #11198 (AC3) — respaldo del directorio para el nombre del representante cuando el trámite no lo
@@ -92,6 +93,9 @@ public sealed class GenerarFurHandler(
     // ADR-0036 §D9 (HU #10916) — directorio de mandatarios: rellena el firmante del PDF del mandato desde
     // instance.MandateSignerId (resuelto al aprobar). Default seguro (NUNCA resuelve) si no se inyecta.
     private readonly IMandateSignerDirectory _mandateDirectory = mandateDirectory ?? NullMandateSignerDirectory.Instance;
+
+    private readonly IMandateCustomTemplateBlobReader _mandateTemplateBlob =
+        mandateTemplateBlobReader ?? NullMandateCustomTemplateBlobReader.Instance;
 
     // HU #10920 (Feature #10918) — resuelve la plantilla de FUR según la clasificación del vehículo. Si no
     // se inyecta (tests), la plantilla es AUTOMOTOR (comportamiento previo intacto).
@@ -240,10 +244,8 @@ public sealed class GenerarFurHandler(
         if (_solicitudVirtualGenerator is not null)
             generated.Add(_solicitudVirtualGenerator.GenerateSolicitudVirtual(data));
 
-        // ADR-0036 (HU #10915) — Contrato de mandato: CONDICIONAL (persona jurídica siempre; persona
-        // natural solo si el OT lo exige). El firmante (mandatario) aún NO se resuelve en preparado: se
-        // regenera al aprobar con el firmante elegido/filtrado (HU #10916). Generar-o-limpiar: si el
-        // trámite dejó de exigir mandato en una regeneración, se retira el adjunto 'mandato' previo.
+        // ADR-0036 (HU #10915) — Contrato de mandato. El firmante persona puede venir ya elegido
+        // en el wizard (MandateSignerId); si no, el PDF lleva placeholders y la aprobación lo regenera.
         var mandato = await TryGenerateMandatoAsync(
             data, Get(fv, "transit_office_code"), instance.MandateSignerId, TransformacionesActivas(fv), ct);
         if (mandato is not null)
@@ -832,7 +834,7 @@ public sealed class GenerarFurHandler(
         if (_mandatoGenerator is null || string.IsNullOrWhiteSpace(transitOfficeCode))
             return null;
 
-        var config = await _mandatePolicy.ResolveAsync(transitOfficeCode, ct);
+        var config = await _mandatePolicy.ResolveAsync(transitOfficeCode, data.TenantIdParaFirmas, ct);
         // Producto: el mandato se emite siempre (PN y PJ). La plantilla/familia vienen de la config del OT.
 
         // HU #10916 — firmante resuelto al aprobar (instance.MandateSignerId). En preparado va null ⇒ el
@@ -859,6 +861,24 @@ public sealed class GenerarFurHandler(
             .ResolveAsync(data.TenantIdParaFirmas, config?.TransitOfficeId ?? Guid.Empty, mandateSignerId, ct)
             .ConfigureAwait(false);
 
+        var customKind = MandatoCustomTemplateKindCodes.Resolve(config?.CustomTemplateKind);
+        byte[]? customPdf = null;
+        if (customKind == MandatoCustomTemplateKindCodes.Pdf
+            && !string.IsNullOrWhiteSpace(config?.CustomTemplateStoragePath))
+        {
+            customPdf = await _mandateTemplateBlob
+                .OpenPdfAsync(config!.CustomTemplateStoragePath!, ct)
+                .ConfigureAwait(false);
+        }
+
+        // Abierto / institucional: sin bloque de firmante persona (placeholders / solo mandante).
+        var skipsPerson = MandatoAssignmentModeCodes.SkipsPersonSigner(config?.AssignmentMode);
+        var modoFirmaMandatario = skipsPerson || modoFirma.TieneConvenio
+            ? MandatarioFirmaModo.SinBloque
+            : modoFirma.FirmaFisica
+                ? MandatarioFirmaModo.Manual
+                : MandatarioFirmaModo.Estampada;
+
         var mandatoData = new MandatoData(
             data,
             config?.TemplateCode ?? MandatoTemplateResolver.Generico,
@@ -872,14 +892,10 @@ public sealed class GenerarFurHandler(
             config?.MandatarySigla,
             // HU #11206 — las transformaciones entran DENTRO del objeto del contrato, sin cláusula nueva.
             transformaciones,
-            // Con convenio, el recuadro de firmas solo lleva al MANDANTE; sin convenio el mandatario
-            // firma, porque es un actor obligatorio. La firma física conserva el bloque pero deja la
-            // línea para firmar a mano.
-            modoFirma.TieneConvenio
-                ? MandatarioFirmaModo.SinBloque
-                : modoFirma.FirmaFisica
-                    ? MandatarioFirmaModo.Manual
-                    : MandatarioFirmaModo.Estampada);
+            modoFirmaMandatario,
+            customKind,
+            config?.CustomTemplateBody,
+            customPdf);
 
         return _mandatoGenerator.GenerateMandato(mandatoData);
     }

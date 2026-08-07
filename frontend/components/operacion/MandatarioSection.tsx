@@ -7,12 +7,11 @@ import { formatFecha } from '@/lib/format/date';
 import type { MandateSignerSelection } from '@/lib/api/types/procedure-runtime';
 
 /**
- * HU #11203 — quién firma el mandato se elige al registrar el trámite, no al aprobarlo.
+ * Quién firma el mandato se elige al registrar el trámite (paso FUR / documentos del expediente),
+ * no como pregunta principal en la aprobación del OT.
  *
- * Antes el firmante se resolvía en la aprobación: el gestor no sabía quién iba a firmar y, con varios
- * mandatarios disponibles, era el organismo el que tenía que decidirlo con el trámite ya radicado.
- * Ahora se decide aquí; la resolución automática queda solo como respaldo para los trámites que no
- * traigan elección.
+ * La elección es opcional: si hay varios mandatarios se muestran para que el gestor escoja;
+ * si no elige, al preparar/aprobar aplica la resolución automática de respaldo.
  */
 export function MandatarioSection({
   instanceId,
@@ -56,8 +55,7 @@ export function MandatarioSection({
     }
   };
 
-  // Sin mandatarios no hay nada que elegir: el mandato lo firma el mandatario institucional del
-  // organismo, si lo tiene. No se pinta una sección vacía.
+  // Sin mandatarios (o tipo institucional/abierto): no pintar sección vacía.
   if (!seleccion || seleccion.opciones.length === 0) {
     return null;
   }
@@ -65,12 +63,12 @@ export function MandatarioSection({
   const { opciones, elegidoId, editable } = seleccion;
 
   return (
-    <section className="space-y-3" aria-label="Mandatario que firma">
+    <section className="space-y-3" aria-label="Mandatario que firma" data-testid="mandatario-section">
       <div>
         <h4 className="text-sm font-bold">Mandatario que firma</h4>
         <p className="text-xs opacity-70">
           {editable
-            ? 'Quien firmará el contrato de mandato en nombre de la compañía.'
+            ? 'Opcional. Quien firmará el contrato de mandato en el expediente (junto al FUR). Si no eliges, el sistema puede resolverlo después.'
             : 'El trámite ya salió de borrador: el mandatario no puede cambiarse.'}
         </p>
       </div>

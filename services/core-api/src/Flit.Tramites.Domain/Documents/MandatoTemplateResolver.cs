@@ -32,6 +32,66 @@ public static class MandatoFamiliaCodes
 }
 
 /// <summary>
+/// Modo de asignación del mandatario (capa de negocio Plataforma). Independiente de
+/// <see cref="MandatoVariante"/> (redacción legal) y de <see cref="MandatoFamilia"/>.
+/// </summary>
+public static class MandatoAssignmentModeCodes
+{
+    /// <summary>Persona o RL firma el bloque del mandatario (default).</summary>
+    public const string Signer = "signer";
+
+    /// <summary>El OT / unión temporal actúa como mandatario (sin firmante persona).</summary>
+    public const string Institutional = "institutional";
+
+    /// <summary>Contrato abierto: sin mandatario asignado (placeholders en el PDF).</summary>
+    public const string Open = "open";
+
+    /// <summary>Desconocido o ausente ⇒ <see cref="Signer"/> (comportamiento histórico).</summary>
+    public static string Resolve(string? mode)
+    {
+        var value = mode?.Trim().ToLowerInvariant();
+        return value switch
+        {
+            Institutional => Institutional,
+            Open => Open,
+            _ => Signer,
+        };
+    }
+
+    /// <summary>True si el flujo no debe exigir ni fijar un firmante persona.</summary>
+    public static bool SkipsPersonSigner(string? mode)
+    {
+        var resolved = Resolve(mode);
+        return resolved is Institutional or Open;
+    }
+}
+
+/// <summary>Origen de la plantilla del mandato por OT.</summary>
+public static class MandatoCustomTemplateKindCodes
+{
+    public const string None = "none";
+    public const string Pdf = "pdf";
+    public const string Editor = "editor";
+
+    public static string Resolve(string? kind)
+    {
+        var value = kind?.Trim().ToLowerInvariant();
+        return value switch
+        {
+            Pdf => Pdf,
+            Editor => Editor,
+            _ => None,
+        };
+    }
+
+    public static bool HasCustom(string? kind)
+    {
+        var resolved = Resolve(kind);
+        return resolved is Pdf or Editor;
+    }
+}
+
+/// <summary>
 /// Variante de plantilla del Contrato Privado de Mandato (ADR-0036, HU #10915). Cada valor es una
 /// REDACCIÓN legal distinta portada de FLIT 1.0. Añadir una redacción nueva exige tocar el generador;
 /// reutilizar una existente en otro organismo, no (HU #11204: los datos propios del OT —ciudad de la

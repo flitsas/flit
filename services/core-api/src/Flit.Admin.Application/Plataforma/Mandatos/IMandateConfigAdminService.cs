@@ -13,7 +13,12 @@ public sealed record MandateOtConfigView(
     string? ChamberCity,
     string? MandatarySigla,
     bool HasExplicitConfig,
-    long? RowVersion);
+    long? RowVersion,
+    string AssignmentMode = "signer",
+    string CustomTemplateKind = "none",
+    string? CustomTemplateFileName = null,
+    string? CustomTemplateBody = null,
+    bool HasCustomTemplate = false);
 
 public sealed record UpsertMandateOtConfigRequest(
     string TemplateCode,
@@ -23,6 +28,11 @@ public sealed record UpsertMandateOtConfigRequest(
     string? InstitutionalMandataryNit,
     string? ChamberCity,
     string? MandatarySigla,
+    long? RowVersion,
+    string AssignmentMode = "signer");
+
+public sealed record SaveMandateEditorBodyRequest(
+    string Body,
     long? RowVersion);
 
 public sealed record MandateConfigExtractResult(
@@ -33,7 +43,8 @@ public sealed record MandateConfigExtractResult(
     string? InstitutionalMandataryNit,
     string? ChamberCity,
     string? MandatarySigla,
-    string? Notes);
+    string? Notes,
+    string AssignmentMode = "signer");
 
 public enum MandateConfigWriteStatus
 {
@@ -41,9 +52,32 @@ public enum MandateConfigWriteStatus
     OfficeNotFound,
     InvalidTemplate,
     InvalidFamily,
+    InvalidAssignmentMode,
     InstitutionalRequired,
     Conflict,
+    InvalidTemplateFile,
+    InvalidEditorBody,
+    CompanyNotFound,
 }
+
+public sealed record CompanyOtMandateRuleView(
+    Guid CompanyTenantId,
+    string CompanyName,
+    string AssignmentMode,
+    string MandataryFamily,
+    string? InstitutionalMandataryName,
+    string? InstitutionalMandataryNit,
+    string? ChamberCity,
+    string? MandatarySigla,
+    bool HasExplicitRule);
+
+public sealed record UpsertCompanyOtMandateRuleRequest(
+    string AssignmentMode,
+    string MandataryFamily = "individuo",
+    string? InstitutionalMandataryName = null,
+    string? InstitutionalMandataryNit = null,
+    string? ChamberCity = null,
+    string? MandatarySigla = null);
 
 public interface IMandateConfigAdminService
 {
@@ -62,5 +96,42 @@ public interface IMandateConfigAdminService
     Task<MandateConfigExtractResult> ExtractAsync(
         ReadOnlyMemory<byte> content,
         string mediaType,
+        CancellationToken ct = default);
+
+    Task<(MandateConfigWriteStatus Status, MandateOtConfigView? View)> UploadPdfTemplateAsync(
+        Guid officeId,
+        Stream content,
+        string fileName,
+        Guid? userId,
+        CancellationToken ct = default);
+
+    Task<(MandateConfigWriteStatus Status, MandateOtConfigView? View)> SaveEditorBodyAsync(
+        Guid officeId,
+        SaveMandateEditorBodyRequest request,
+        Guid? userId,
+        CancellationToken ct = default);
+
+    Task<(MandateConfigWriteStatus Status, MandateOtConfigView? View)> DeleteCustomTemplateAsync(
+        Guid officeId,
+        Guid? userId,
+        CancellationToken ct = default);
+
+    /// <summary>Bytes del PDF propio (si kind=pdf); null si no aplica.</summary>
+    Task<byte[]?> OpenCustomPdfAsync(Guid officeId, CancellationToken ct = default);
+
+    Task<IReadOnlyList<CompanyOtMandateRuleView>> ListCompanyRulesAsync(
+        Guid officeId,
+        CancellationToken ct = default);
+
+    Task<(MandateConfigWriteStatus Status, CompanyOtMandateRuleView? View)> UpsertCompanyRuleAsync(
+        Guid officeId,
+        Guid companyTenantId,
+        UpsertCompanyOtMandateRuleRequest request,
+        Guid? userId,
+        CancellationToken ct = default);
+
+    Task<MandateConfigWriteStatus> DeleteCompanyRuleAsync(
+        Guid officeId,
+        Guid companyTenantId,
         CancellationToken ct = default);
 }

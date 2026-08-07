@@ -61,6 +61,24 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     {
         ArgumentNullException.ThrowIfNull(data);
 
+        var kind = MandatoCustomTemplateKindCodes.Resolve(data.CustomTemplateKind);
+        if (kind == MandatoCustomTemplateKindCodes.Editor
+            && !string.IsNullOrWhiteSpace(data.CustomTemplateBody))
+        {
+            return GenerateFromEditor(data);
+        }
+
+        if (kind == MandatoCustomTemplateKindCodes.Pdf
+            && data.CustomTemplatePdf is { Length: > 0 })
+        {
+            return GenerateFromCustomPdf(data);
+        }
+
+        return GenerateFromSystemTemplate(data);
+    }
+
+    private static GeneratedDocument GenerateFromSystemTemplate(MandatoData data)
+    {
         var tramite = data.Tramite;
         // HU #11030 — el mandato lo otorga quien VENDE (en matrícula, el radicador).
         var parte = tramite.Mandante;
@@ -115,6 +133,126 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             $"mandato_{SafeRef(tramite.ReferenceNumber)}.pdf",
             "application/pdf",
             bytes);
+    }
+
+    /// <summary>Plantilla editor: cuerpo con placeholders + pie de firmas FLIT fijo abajo.</summary>
+    private static GeneratedDocument GenerateFromEditor(MandatoData data)
+    {
+        var tramite = data.Tramite;
+        var parte = tramite.Mandante;
+        var esJuridica = parte?.EsJuridica ?? false;
+        var body = ApplyPlaceholders(data.CustomTemplateBody!, data);
+
+        var bytes = Document.Create(doc =>
+        {
+            doc.Page(page =>
+            {
+                FlitLetterhead.ApplyTo(page);
+                page.DefaultTextStyle(t => t.FontSize(9).FontFamily(FlitDocumentTheme.FontRegular));
+                FlitLetterhead.Content(page).Column(col =>
+                {
+                    col.Spacing(3);
+                    col.Item().AlignCenter().Text(t => t.Span("Contrato Privado de Mandato").Bold().FontSize(12));
+                    foreach (var line in body.Split('\n'))
+                        col.Item().Text(line.TrimEnd()).FontSize(9);
+                    RenderFirmas(col, data, parte, esJuridica, MandatoVariante.Generico);
+                });
+            });
+        }).GeneratePdf();
+
+        return new GeneratedDocument(
+            "mandato",
+            $"mandato_{SafeRef(tramite.ReferenceNumber)}.pdf",
+            "application/pdf",
+            bytes);
+    }
+
+    /// <summary>
+    /// PDF propio del OT como cuerpo + página de firmas FLIT al final (mismo layout abajo).
+    /// </summary>
+    private static GeneratedDocument GenerateFromCustomPdf(MandatoData data)
+    {
+        var tramite = data.Tramite;
+        var parte = tramite.Mandante;
+        var esJuridica = parte?.EsJuridica ?? false;
+
+        var firmasPage = Document.Create(doc =>
+        {
+            doc.Page(page =>
+            {
+                FlitLetterhead.ApplyTo(page);
+                page.DefaultTextStyle(t => t.FontSize(9).FontFamily(FlitDocumentTheme.FontRegular));
+                FlitLetterhead.Content(page).Column(col =>
+                {
+                    col.Item().AlignCenter().Text(t =>
+                        t.Span("Firmas del Contrato Privado de Mandato").Bold().FontSize(11));
+                    RenderFirmas(col, data, parte, esJuridica, MandatoVariante.Generico);
+                });
+            });
+        }).GeneratePdf();
+
+        var merged = MergePdfs(data.CustomTemplatePdf!, firmasPage);
+        return new GeneratedDocument(
+            "mandato",
+            $"mandato_{SafeRef(tramite.ReferenceNumber)}.pdf",
+            "application/pdf",
+            merged);
+    }
+
+    private static byte[] MergePdfs(byte[] first, byte[] second)
+    {
+        using var output = new PdfSharpCore.Pdf.PdfDocument();
+        using (var ms1 = new MemoryStream(first))
+        using (var src1 = PdfSharpCore.Pdf.IO.PdfReader.Open(ms1, PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import))
+        {
+            for (var i = 0; i < src1.PageCount; i++)
+                output.AddPage(src1.Pages[i]);
+        }
+
+        using (var ms2 = new MemoryStream(second))
+        using (var src2 = PdfSharpCore.Pdf.IO.PdfReader.Open(ms2, PdfSharpCore.Pdf.IO.PdfDocumentOpenMode.Import))
+        {
+            for (var i = 0; i < src2.PageCount; i++)
+                output.AddPage(src2.Pages[i]);
+        }
+
+        using var outMs = new MemoryStream();
+        output.Save(outMs, false);
+        return outMs.ToArray();
+    }
+
+    private static string ApplyPlaceholders(string body, MandatoData data)
+    {
+        var tramite = data.Tramite;
+        var parte = tramite.Mandante;
+        var esTraspaso = string.Equals(
+            tramite.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
+        var nombreTramite = MandatoObjetoComposer.Componer(
+            esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL",
+            data.Transformaciones);
+        var (mandNombre, mandDoc) = MandatarioTexto(data.Mandatario);
+
+        return body
+            .Replace("{{placa}}", Val(tramite.Placa, "___"), StringComparison.OrdinalIgnoreCase)
+            .Replace("{{tramite}}", nombreTramite, StringComparison.OrdinalIgnoreCase)
+            .Replace("{{organismo}}", Val(tramite.Organismo.Nombre, "___"), StringComparison.OrdinalIgnoreCase)
+            .Replace("{{ciudad}}", tramite.Organismo.Ciudad?.Trim() ?? "", StringComparison.OrdinalIgnoreCase)
+            .Replace(
+                "{{fecha}}",
+                FormatFechaEs(tramite.FechaTramite ?? DateTime.UtcNow.AddHours(-5)),
+                StringComparison.OrdinalIgnoreCase)
+            .Replace("{{mandante_nombre}}", Val(parte?.Nombre, "___"), StringComparison.OrdinalIgnoreCase)
+            .Replace("{{mandante_documento}}", Val(parte?.Documento, "___"), StringComparison.OrdinalIgnoreCase)
+            .Replace("{{mandatario_nombre}}", mandNombre, StringComparison.OrdinalIgnoreCase)
+            .Replace("{{mandatario_documento}}", mandDoc, StringComparison.OrdinalIgnoreCase)
+            .Replace(
+                "{{mandatario_institucional}}",
+                Val(data.InstitutionalMandataryName, "___"),
+                StringComparison.OrdinalIgnoreCase)
+            .Replace(
+                "{{mandatario_nit}}",
+                Val(data.InstitutionalMandataryNit, "___"),
+                StringComparison.OrdinalIgnoreCase);
     }
 
     private static List<string> BuildParrafos(

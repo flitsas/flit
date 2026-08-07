@@ -98,6 +98,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<TransitOfficeMandateConfigEntity> TransitOfficeMandateConfigs =>
         Set<TransitOfficeMandateConfigEntity>();
 
+    /// <summary>Tipo de mandato (3) por compañía gestora × OT.</summary>
+    public DbSet<CompanyOtMandateRuleEntity> CompanyOtMandateRules =>
+        Set<CompanyOtMandateRuleEntity>();
+
     // ── Admin Compañías — baúl de firmas precargadas (HU #10642, ADR-0025) ─────────
     public DbSet<SignatureVaultEntity> SignatureVault => Set<SignatureVaultEntity>();
 

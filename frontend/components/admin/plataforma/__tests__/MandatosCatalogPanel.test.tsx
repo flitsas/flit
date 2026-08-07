@@ -15,6 +15,12 @@ vi.mock("@/lib/api/admin-plataforma-mandatos", () => ({
   fetchMandateOtPreview: vi.fn(),
   upsertMandateOtConfig: vi.fn(),
   extractMandateConfigFromFile: vi.fn(),
+  uploadMandateOtPdfTemplate: vi.fn(),
+  saveMandateOtEditorBody: vi.fn(),
+  deleteMandateOtCustomTemplate: vi.fn(),
+  listCompanyOtMandateRules: vi.fn().mockResolvedValue([]),
+  upsertCompanyOtMandateRule: vi.fn(),
+  deleteCompanyOtMandateRule: vi.fn(),
 }));
 
 vi.mock("@/lib/documents/open-document-tab", () => ({
@@ -29,12 +35,17 @@ const sampleRows = [
     templateCode: "sabaneta",
     requiresForNaturalPerson: true,
     mandataryFamily: "organismo_transito",
+    assignmentMode: "institutional",
     institutionalMandataryName: "UT-SETSA",
     institutionalMandataryNit: "900273813-7",
     chamberCity: "Medellín",
     mandatarySigla: "UT-SETSA",
     hasExplicitConfig: true,
     rowVersion: 1,
+    customTemplateKind: "none",
+    customTemplateFileName: null,
+    customTemplateBody: null,
+    hasCustomTemplate: false,
   },
   {
     officeId: "o2",
@@ -43,12 +54,17 @@ const sampleRows = [
     templateCode: "generico",
     requiresForNaturalPerson: false,
     mandataryFamily: "individuo",
+    assignmentMode: "signer",
     institutionalMandataryName: null,
     institutionalMandataryNit: null,
     chamberCity: null,
     mandatarySigla: null,
     hasExplicitConfig: false,
     rowVersion: null,
+    customTemplateKind: "none",
+    customTemplateFileName: null,
+    customTemplateBody: null,
+    hasCustomTemplate: false,
   },
 ];
 
@@ -67,6 +83,7 @@ describe("MandatosCatalogPanel configurador", () => {
     render(<MandatosCatalogPanel />);
     expect(await screen.findByText("Sabaneta")).toBeInTheDocument();
     expect(screen.getByText("Medellín")).toBeInTheDocument();
+    expect(screen.getAllByText("Por compañía").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /configurar mandato de sabaneta/i })).toBeInTheDocument();
   });
 

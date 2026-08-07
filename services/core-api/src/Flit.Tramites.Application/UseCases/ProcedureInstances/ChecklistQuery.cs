@@ -78,7 +78,7 @@ public sealed class GetChecklistHandler(
             ?.ValueText;
         var mandateConfig = string.IsNullOrWhiteSpace(otCode)
             ? null
-            : await _mandatePolicy.ResolveAsync(otCode, ct);
+            : await _mandatePolicy.ResolveAsync(otCode, tenantId, ct);
 
         var context = TramiteDocumentContextMapper.From(instance, mandateConfig);
         var rules = ConditionalDocumentRules.For(codigo);

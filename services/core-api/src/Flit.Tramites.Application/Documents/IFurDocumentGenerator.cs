@@ -230,7 +230,13 @@ public sealed record MandatoData(
     /// del convenio comercial compañía↔organismo y de la marca de firma física del mandatario, datos que
     /// viven en Admin.
     /// </summary>
-    MandatarioFirmaModo ModoFirmaMandatario = MandatarioFirmaModo.Estampada);
+    MandatarioFirmaModo ModoFirmaMandatario = MandatarioFirmaModo.Estampada,
+    /// <summary>none | pdf | editor — plantilla propia del OT.</summary>
+    string CustomTemplateKind = "none",
+    /// <summary>Cuerpo del editor (placeholders {{placa}}, {{mandante_nombre}}, …).</summary>
+    string? CustomTemplateBody = null,
+    /// <summary>Bytes del PDF blank propio (cargados por el caller antes de generar).</summary>
+    byte[]? CustomTemplatePdf = null);
 
 /// <summary>
 /// Cómo aparece el MANDATARIO en el recuadro de firmas del contrato de mandato.

@@ -14,6 +14,7 @@ import {
 import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 import {
   MANDATO_TEMPLATES,
+  tipoNegocioLabel,
   type MandatoTemplateCode,
   type MandatoTemplateDefinition,
 } from "@/lib/plataforma/mandato-templates";
@@ -91,7 +92,7 @@ export function MandatosCatalogPanel() {
       header: "Organismo",
       render: (row) => (
         <div className="flex flex-col gap-0.5">
-          <span className="font-semibold text-[#162744] dark:text-white">{row.name}</span>
+          <span className="font-semibold text-[#162244] dark:text-white">{row.name}</span>
           <span className="font-mono text-[11px] text-[#59677D] dark:text-white/55">{row.code}</span>
         </div>
       ),
@@ -100,16 +101,16 @@ export function MandatosCatalogPanel() {
       key: "template",
       header: "Plantilla",
       render: (row) => (
-        <span className="font-mono text-sm text-[#162744] dark:text-white">{row.templateCode}</span>
+        <span className="font-mono text-sm text-[#162244] dark:text-white">
+          {row.hasCustomTemplate ? "propia" : row.templateCode}
+        </span>
       ),
     },
     {
-      key: "familia",
-      header: "Familia",
-      render: (row) => (
-        <span className="text-sm text-[#162744] dark:text-white">
-          {row.mandataryFamily === "organismo_transito" ? "Organismo" : "Individuo"}
-        </span>
+      key: "tipo",
+      header: "Tipo",
+      render: () => (
+        <span className="text-sm text-[#59677D] dark:text-white/65">Por compañía</span>
       ),
     },
     {
@@ -143,7 +144,7 @@ export function MandatosCatalogPanel() {
               type="button"
               disabled={actingId !== null}
               onClick={() => void handleReset(row)}
-              className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold text-[#162744] disabled:opacity-50 dark:border-white/15 dark:text-white"
+              className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold text-[#162244] disabled:opacity-50 dark:border-white/15 dark:text-white"
               aria-label={`Restablecer default de ${row.name}`}
             >
               <RotateCcw className="h-3 w-3" aria-hidden="true" />
@@ -160,19 +161,25 @@ export function MandatosCatalogPanel() {
       {banner ? (
         <div
           role="status"
-          className="rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/5 px-4 py-3 text-sm text-[#162744] dark:text-white/80"
+          className="rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/5 px-4 py-3 text-sm text-[#162244] dark:text-white/80"
         >
           {banner}
         </div>
       ) : null}
 
       <section aria-labelledby="mandatos-plantillas-heading" className="flex flex-col gap-3">
-        <h2
-          id="mandatos-plantillas-heading"
-          className="text-sm font-semibold text-[#162744] dark:text-white"
-        >
-          Plantillas del sistema ({MANDATO_TEMPLATES.length})
-        </h2>
+        <div className="flex flex-col gap-1">
+          <h2
+            id="mandatos-plantillas-heading"
+            className="text-sm font-semibold text-[#162244] dark:text-white"
+          >
+            Redacciones del sistema ({MANDATO_TEMPLATES.length})
+          </h2>
+          <p className="text-xs text-[#59677D] dark:text-white/65">
+            La redacción es independiente del tipo de mandatario (Persona/RL, Institucional u Abierto)
+            que configures por organismo.
+          </p>
+        </div>
         <ul className="grid gap-3 md:grid-cols-3">
           {MANDATO_TEMPLATES.map((template) => (
             <li key={template.code}>
@@ -191,7 +198,7 @@ export function MandatosCatalogPanel() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h2
             id="mandatos-aplicacion-heading"
-            className="text-sm font-semibold text-[#162744] dark:text-white"
+            className="text-sm font-semibold text-[#162244] dark:text-white"
           >
             Configuración por organismo
           </h2>
@@ -206,7 +213,7 @@ export function MandatosCatalogPanel() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar OT o plantilla…"
-              className="w-full rounded-xl border border-[#DFE5ED] bg-white py-2 pr-3 pl-9 text-sm text-[#162744] outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+              className="w-full rounded-xl border border-[#DFE5ED] bg-white py-2 pr-3 pl-9 text-sm text-[#162244] outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
             />
           </label>
         </div>
@@ -264,11 +271,14 @@ function TemplateCard({
           <FileText className="h-5 w-5" strokeWidth={1.8} />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-semibold text-[#162744] dark:text-white">{template.label}</h3>
+          <h3 className="text-sm font-semibold text-[#162244] dark:text-white">{template.label}</h3>
           <p className="font-mono text-[11px] text-[#59677D] dark:text-white/55">{template.code}</p>
         </div>
       </div>
       <p className="text-xs leading-relaxed text-[#59677D] dark:text-white/65">{template.summary}</p>
+      <p className="text-[11px] text-[#59677D] dark:text-white/55">
+        Tipo típico: {tipoNegocioLabel(template.tipoTipico)}
+      </p>
       <button
         type="button"
         onClick={() => onPreview(template.code)}

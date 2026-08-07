@@ -57,6 +57,7 @@ describe('HU #11203 — elegir el mandatario que firma', () => {
 
     expect(await screen.findByText('Ana Restrepo')).toBeInTheDocument();
     expect(screen.getByText('Carlos Pérez')).toBeInTheDocument();
+    expect(screen.getByText(/Opcional/i)).toBeInTheDocument();
     expect(mocks.listMandateSigners).toHaveBeenCalledWith('inst-1', undefined);
   });
 
