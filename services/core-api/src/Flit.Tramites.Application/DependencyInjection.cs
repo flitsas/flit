@@ -223,6 +223,12 @@ public static class DependencyInjection
         services.AddScoped<GetFirmaUrlPortalHandler>();
         services.AddScoped<SimularFirmaPortalHandler>();
 
+        // HU #11304 (Feature #11301, ADR-0041) — único punto de escritura del almacén canónico de
+        // certificaciones. Lo consumen los escritores de SOAT/RTM/RUES (consulta, OCR y validación
+        // del OT) para que la precedencia entre fuentes sea una sola regla y no una por escritor.
+        services.AddScoped<UseCases.Certifications.ICertificationIngestionService,
+            UseCases.Certifications.CertificationIngestionService>();
+
         // HU #10878 (Feature #10862, CF-04, ADR-0030/ADR-0031) — cache-aside cross-trámite de
         // consultas externas, consumido por los 3 handlers de consulta de abajo.
         services.AddScoped<UseCases.Consultations.ExternalQueryCacheService>();

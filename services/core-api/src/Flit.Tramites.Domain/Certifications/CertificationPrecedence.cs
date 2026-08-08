@@ -13,9 +13,15 @@ namespace Flit.Tramites.Domain.Certifications;
 ///   <item><b>Un valor ausente nunca desplaza a uno presente.</b> Un proveedor que no manda el número
 ///         de póliza no puede borrar el que ya se tenía. Esta regla va primero porque es la que
 ///         convierte la reconsulta en una operación segura.</item>
-///   <item><b>Una corrección manual posterior a la consulta se conserva</b> (D2). Es una excepción
-///         deliberada al peso: si un operador arregló un dato <i>después</i> de la última consulta,
-///         sabía algo que el proveedor no.</item>
+///   <item><b>Una corrección manual sobrevive a la reconsulta</b> (D2). Es una excepción deliberada
+///         al peso: si un operador arregló un dato a mano, sabía algo que el proveedor no.
+///         <para><b>Nota sobre la formulación del plan.</b> El plan enuncia esta regla como «<c>user</c>
+///         con <c>observed_at</c> posterior prevalece sobre <c>consultation</c>». Comparar las fechas
+///         deja la excepción <b>inerte</b>: una consulta nueva siempre llega con un <c>observed_at</c>
+///         más reciente que la corrección que pretende proteger, así que la corrección se perdería
+///         igual — exactamente el defecto que D2 venía a cerrar. Se implementa la intención que el PO
+///         enunció («¿sobrevive una corrección manual a una reconsulta posterior? sí, gana la
+///         corrección»), sin comparar fechas entre esas dos fuentes.</para></item>
 ///   <item>Si no, gana el peso; a igual peso, gana lo más reciente.</item>
 /// </list>
 ///
@@ -48,10 +54,10 @@ public static class CertificationPrecedence
         if (!existingHasValue)
             return true;
 
-        // (2) D2 — la corrección manual sobrevive a la reconsulta posterior.
+        // (2) D2 — la corrección manual sobrevive a la reconsulta. Sin comparación de fechas: ver la
+        // nota de la documentación de esta clase.
         if (existing.Source == CertificationSourceKind.User
-            && incoming.Source == CertificationSourceKind.Consultation
-            && existing.ObservedAt > incoming.ObservedAt)
+            && incoming.Source == CertificationSourceKind.Consultation)
         {
             return false;
         }

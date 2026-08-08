@@ -28,7 +28,8 @@ public sealed record ValidateSoatResult(
 public sealed class ValidateSoatViaRuntHandler(
     IProcedureInstanceRepository instanceRepo,
     ICatalogRepository catalogRepo,
-    IConsultationProviderRegistry registry)
+    IConsultationProviderRegistry registry,
+    Certifications.ICertificationIngestionService? certificationIngestion = null)
 {
     private const string TemplateCode = "RUNT_VEHICLE";
     private const string SoatCheckKey = "soat";
@@ -74,6 +75,12 @@ public sealed class ValidateSoatViaRuntHandler(
         UpsertSoatEstado(instance, tenantId, instanceRepo, soatEstado);
         await instanceRepo.SaveChangesAsync(ct);
 
+        // HU #11304 — esta consulta trae la póliza completa y hasta ahora se tiraba entera salvo el
+        // estado: fuera de borrador el trigger de inmutabilidad de field_values solo deja escribir
+        // soat_estado. El almacén canónico no tiene esa restricción (el congelamiento es explícito,
+        // por frozen_at), así que aquí se recupera un dato ya pagado que se venía descartando.
+        await IngestCertificationsAsync(instanceId, tenantId, result, ct);
+
         var vencimiento = FindHydrated(result.HydratedFields, "soat_vencimiento");
         var aseguradora = FindHydrated(result.HydratedFields, "soat_aseguradora");
 
@@ -102,6 +109,32 @@ public sealed class ValidateSoatViaRuntHandler(
         "fail" => SoatGate.Vencido,
         _ => SoatGate.Unknown,
     };
+
+    /// <summary>
+    /// Entrega al almacén canónico lo que certificó esta re-consulta (HU #11304). Best-effort: el
+    /// estado del SOAT —que es lo que desbloquea la aprobación del OT— ya quedó persistido.
+    /// </summary>
+    private async Task IngestCertificationsAsync(
+        Guid instanceId, Guid tenantId, ConsultationResult result, CancellationToken ct)
+    {
+        if (certificationIngestion is null || result.Certifications is null)
+            return;
+
+        var provenance = new Domain.Certifications.CertificationProvenance(
+            Domain.Certifications.CertificationSourceKind.Consultation,
+            result.Provider,
+            result.QueriedAt ?? DateTimeOffset.UtcNow);
+
+        try
+        {
+            await certificationIngestion.IngestAsync(
+                instanceId, tenantId, result.Certifications, provenance, result.RawPayload, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Silencio acotado: ver RunConsultationHandler.IngestCertificationsAsync.
+        }
+    }
 
     private static void UpsertSoatEstado(
         ProcedureInstance instance,

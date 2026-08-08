@@ -106,10 +106,10 @@ public sealed class FieldValueContractGuardTests
         // HU #10673 (A4/B4) — carrocería se suma al mismo patrón de transformación.
         ["vehicle_body_type_runt"] = new(Preflight, Modo.Dinamico, "RuntSnapshotSuffix"),
 
-        // HU #11136 — fecha de matrícula del vehículo: insumo de la regla de antigüedad de la RTM.
-        // OJO: solo la reporta Verifik. Las respuestas capturadas de Kyverum no traen fecha alguna de
-        // matrícula, así que con ese proveedor la regla cae al lado seguro (mostrar la tabla).
-        ["vehicle_registration_date"] = new(Verifik, Modo.Literal),
+        // HU #11136 / #11303 — fecha de matrícula del vehículo: insumo de la regla de antigüedad de la
+        // RTM. Se creía exclusiva de Verifik porque Kyverum manda `fechaMatricula` en null; la fecha
+        // real viaja en `vehiculo.fechaRegistro`, que ahora sí se lee.
+        ["vehicle_registration_date"] = new([Verifik, Kyverum], Modo.Literal),
 
         // SOAT y RTM — parte del RUNT, parte del OCR del documento (HU #10975/#10976/#10977).
         ["soat_vencimiento"] = new(Verifik, Modo.Literal),
@@ -118,14 +118,24 @@ public sealed class FieldValueContractGuardTests
         ["rtm_vencimiento"] = new(Verifik, Modo.Literal),
         ["rtm_estado"] = new(Verifik, Modo.Literal),
         ["rtm_entidad"] = new(Verifik, Modo.Literal),
-        // HU #11134 / #11135 — doble productor: el RUNT es el primario y el OCR del PDF el respaldo
-        // (PersistOcrFieldsHandler nunca pisa un valor de consulta). Ambos deben seguir existiendo.
-        ["soat_poliza"] = new([Verifik, Ocr], Modo.Literal),
-        ["soat_vigencia"] = new([Verifik, Ocr], Modo.Literal),
-        ["soat_expedicion"] = new([Verifik, Ocr], Modo.Literal),
-        ["rtm_numero"] = new([Verifik, Ocr], Modo.Literal),
-        ["rtm_vigencia"] = new([Verifik, Ocr], Modo.Literal),
-        ["rtm_expedicion"] = new([Verifik, Ocr], Modo.Literal),
+        // HU #11134 / #11135 / #11303 — doble productor: el RUNT es el primario y el OCR del PDF el
+        // respaldo (PersistOcrFieldsHandler nunca pisa un valor de consulta). Ambos deben existir.
+        // La HU #11303 suma Kyverum a las tres del SOAT: el proveedor primario SÍ manda numSoat,
+        // fechaExpediSoat y fechaInicioPoliza, y el DTO afirmaba lo contrario.
+        ["soat_poliza"] = new([Verifik, Kyverum, Ocr], Modo.Literal),
+        ["soat_vigencia"] = new([Verifik, Kyverum, Ocr], Modo.Literal),
+        ["soat_expedicion"] = new([Verifik, Kyverum, Ocr], Modo.Literal),
+
+        // rtm_numero y rtm_expedicion pasan a Kyverum + OCR. Verifik SALE de la lista: la HU #11303
+        // retiró su resolución por nombres candidatos sobre JsonExtensionData, que en la medición de
+        // base de datos nunca produjo una sola fila. Cuando haya una captura real de Verifik con
+        // sección RTM se declararán los campos con su nombre verdadero y volverá a la lista.
+        ["rtm_numero"] = new([Kyverum, Ocr], Modo.Literal),
+        ["rtm_expedicion"] = new([Kyverum, Ocr], Modo.Literal),
+
+        // rtm_vigencia queda SOLO en el OCR: ningún proveedor manda el inicio de vigencia de la
+        // revisión, y no se deduce de la fecha de expedición.
+        ["rtm_vigencia"] = new(Ocr, Modo.Literal),
 
         // Fecha de la consulta al RUNT (HU #10974): dato de la EJECUCIÓN, no de la respuesta.
         ["runt_consulta_fecha"] = new(RunConsulta, Modo.Literal),

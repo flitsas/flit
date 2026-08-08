@@ -42,7 +42,7 @@ public sealed class CertificationPrecedenceTests
     }
 
     [Theory]
-    [InlineData(CertificationSourceKind.Consultation, CertificationSourceKind.User, true)]
+    // Consultation → User NO va aquí: es la excepción de D2, con su propia prueba abajo.
     [InlineData(CertificationSourceKind.Consultation, CertificationSourceKind.Ocr, true)]
     [InlineData(CertificationSourceKind.User, CertificationSourceKind.Ocr, true)]
     [InlineData(CertificationSourceKind.Ocr, CertificationSourceKind.System, true)]
@@ -55,10 +55,10 @@ public sealed class CertificationPrecedenceTests
     }
 
     [Fact]
-    public void CorreccionManualPosteriorALaConsulta_SeConserva()
+    public void CorreccionManual_SobreviveALaReconsulta()
     {
-        // D2 — excepción deliberada al peso. Si un operador arregló el dato DESPUÉS de la última
-        // consulta, sabía algo que el proveedor no. Hoy esa corrección se pierde en silencio.
+        // D2 — excepción deliberada al peso. Si un operador arregló el dato a mano, sabía algo que el
+        // proveedor no. Hoy esa corrección se pierde en silencio en la siguiente consulta.
         CertificationPrecedence.Wins(
                 From(CertificationSourceKind.Consultation, Ayer),
                 From(CertificationSourceKind.User, Hoy))
@@ -66,13 +66,31 @@ public sealed class CertificationPrecedenceTests
     }
 
     [Fact]
-    public void CorreccionManualAnteriorALaConsulta_SiLaPisaLaConsulta()
+    public void CorreccionManualVieja_TambienSobreviveAUnaConsultaNueva()
     {
-        // La excepción de D2 es acotada: solo protege lo corregido después. Una consulta nueva sobre
-        // una corrección vieja sí manda — es información más fresca de la fuente oficial.
+        // El plan enuncia D2 como "user con observed_at posterior prevalece". Comparar fechas dejaría
+        // la excepción INERTE: una consulta nueva siempre llega con observed_at más reciente que la
+        // corrección que pretende proteger, así que la corrección se perdería igual — que es el
+        // defecto que D2 venía a cerrar. Se implementa la intención enunciada por el PO.
         CertificationPrecedence.Wins(
                 From(CertificationSourceKind.Consultation, Hoy),
                 From(CertificationSourceKind.User, Ayer))
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void LaExcepcionEsSoloParaConsultaSobreCorreccion()
+    {
+        // No es "el usuario gana siempre": un OCR posterior no desplaza una corrección manual, y una
+        // corrección manual sí desplaza un OCR. Solo se acota el par consulta → corrección.
+        CertificationPrecedence.Wins(
+                From(CertificationSourceKind.Ocr, Hoy),
+                From(CertificationSourceKind.User, Ayer))
+            .Should().BeFalse();
+
+        CertificationPrecedence.Wins(
+                From(CertificationSourceKind.User, Hoy),
+                From(CertificationSourceKind.Ocr, Ayer))
             .Should().BeTrue();
     }
 
