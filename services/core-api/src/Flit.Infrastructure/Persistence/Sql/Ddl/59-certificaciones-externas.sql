@@ -1,7 +1,7 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- HU #11302 (Feature #11301) — Certificaciones externas en modelo canónico
--- persistido. Materializa ADR-0041 (Propuesto; database-agent materializa, NO
--- aprueba). Ver docs/plan-fix-definitivo-tablas-certificadoras.md §4.
+-- persistido. Materializa ADR-0041 (Aceptado 2026-08-08 por el Líder Técnico).
+-- Ver docs/plan-fix-definitivo-tablas-certificadoras.md §4.
 --
 -- POR QUÉ TABLAS PROPIAS Y NO MÁS LLAVES EN procedure_instance_field_values:
 --   1. field_values es INMUTABLE fuera de borrador (tr_..._immutable). Un mapeo

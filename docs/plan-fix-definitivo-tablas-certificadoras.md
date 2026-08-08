@@ -3,7 +3,7 @@
 > Generado: 2026-08-07 · Rama `develop` @ `0d1277b4`
 > **Actualizado 2026-08-08: IMPLEMENTADO** en `feature/AB-11301-certificaciones-externas`, un commit
 > por HU (#11302 → #11308). Ver §12 para lo que se desvió del plan al implementarlo.
-> Decisión de arquitectura: [ADR-0041](../services/core-api/docs/adr/ADR-0041-certificaciones-externas-modelo-canonico-persistido.md) (`Propuesto`).
+> Decisión de arquitectura: [ADR-0041](../services/core-api/docs/adr/ADR-0041-certificaciones-externas-modelo-canonico-persistido.md) — **`Aceptado` por el Líder Técnico el 2026-08-08**.
 >
 > **Origen:** bug reportado por el PO — *"no se ven los datos de SOAT, RTM y RUES en las tablas
 > certificadoras"*. Requisitos textuales: persistir esa información en base de datos para generar el
@@ -441,7 +441,7 @@ un rollback deja el sistema exactamente como está hoy.
 
 ## 11. Documentos relacionados
 
-- `services/core-api/docs/adr/ADR-0041-…` — la decisión de arquitectura (`Propuesto`)
+- `services/core-api/docs/adr/ADR-0041-…` — la decisión de arquitectura (`Aceptado`, 2026-08-08)
 - `docs/tablas-certificadoras-consolidado-soat-rtm-rues.md` — qué espera cada celda
 - `docs/consulta-runt-nzs920-procesamiento.md` — tres consultas reales al proveedor primario
 - `docs/consulta-rues-nits-procesamiento.md` — capturas reales del RUES
@@ -492,10 +492,11 @@ sobrecarga con la fecha ya interpretada, para no volver a parsear texto en el pu
 
 ### 12.5 Pendientes que NO cubre esta rama
 
+> **ADR-0041 pasó a `Aceptado` el 2026-08-08** (Líder Técnico). Ya no es un pendiente.
+
 | # | Pendiente | Responsable |
 |---|---|---|
-| 1 | **ADR-0041 sigue en `Propuesto`.** Su paso a `Aceptado` es exclusivo del Líder Técnico humano. | Líder Técnico |
-| 2 | **Visto bueno de seguridad sobre la retención indefinida del payload crudo** (D6, Ley 1581): PII del RUES sin plazo. | `security-agent` |
-| 3 | **Medir el riesgo R6** tras desplegar: cuántos expedientes quedan sin certificado RUES por D1. No lo cubre ninguna de las 7 HUs. | PO |
-| 4 | **Validación del DDL contra `checklist-validacion-schema.md`** (excepciones A6 y A11 documentadas en el propio SQL). | `database-agent` |
-| 5 | `DocumentBatchClassifierTests.Prompt_descarta_tipos_sin_soporte_ocr` **falla desde `develop` @ `0d1277b4`** — preexistente y ajeno a esta rama. | — |
+| 1 | **Visto bueno de seguridad sobre la retención indefinida del payload crudo** (D6, Ley 1581): PII del RUES sin plazo. | `security-agent` |
+| 2 | **Medir el riesgo R6** tras desplegar: cuántos expedientes quedan sin certificado RUES por D1. No lo cubre ninguna de las 7 HUs. | PO |
+| 3 | **Validación del DDL contra `checklist-validacion-schema.md`** (excepciones A6 y A11 documentadas en el propio SQL). | `database-agent` |
+| 4 | `DocumentBatchClassifierTests.Prompt_descarta_tipos_sin_soporte_ocr` **falla desde `develop` @ `0d1277b4`** — preexistente y ajeno a esta rama. | — |

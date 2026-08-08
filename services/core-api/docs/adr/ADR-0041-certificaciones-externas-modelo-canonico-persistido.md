@@ -1,8 +1,10 @@
 # ADR-0041: Las certificaciones externas (SOAT, RTM, RUES) se persisten como modelo canónico propio, independiente del proveedor
 
 **Fecha**: 2026-08-07
-**Status**: Propuesto
-**Deciders**: Product Owner (origen del requisito), Líder Técnico FLIT (pendiente de aceptación)
+**Status**: Aceptado
+**Fecha de aceptación**: 2026-08-08
+**Status previo**: Propuesto (2026-08-07)
+**Deciders**: Líder Técnico FLIT (aceptado), Product Owner (origen del requisito y las 9 decisiones)
 **Tags**: arquitectura, backend, base-de-datos, modulo-tramites, documental, consultas-externas, habeas-data
 
 **Supersedes parcialmente**: [ADR-0037] — snapshot RUES congelado por trámite. Se conserva **íntegra la
