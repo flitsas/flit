@@ -21,6 +21,12 @@ internal static class MatriculaConsolidadoOrdering
         "certificado_identidad",
         // HU #10589 — certificado RUES de la persona jurídica, tras el de identidad.
         "certificado_rues",
+        // HU #11307 — el certificado RUES del VENDEDOR y el de vigencia SOAT/RTM faltaban en esta
+        // lista: caían al final por defecto (rank = Precedence.Length + 1), mezclados con "otro" y
+        // ordenados solo por fecha de carga. El expediente que ve el organismo de tránsito los
+        // presentaba en un sitio arbitrario que además cambiaba entre regeneraciones.
+        "certificado_rues_vendedor",
+        "certificado_soat_rtm",
         // HU #10762 — certificado RNMC (medidas correctivas), junto a los demás certificados generados.
         "certificado_rnmc",
         // HU #10926 — escritura de la compañía (NIT) del actor, tras los certificados generados.

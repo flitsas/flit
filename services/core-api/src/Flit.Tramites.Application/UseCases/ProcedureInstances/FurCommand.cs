@@ -380,6 +380,22 @@ public sealed class GenerarFurHandler(
                     FuenteRtm: aplicaRtm ? Fuente(certs.RtmFrom) : null);
                 generated.Add(soatRtmGenerator.GenerateSoatRtmCertificate(soatRtmData));
             }
+            else
+            {
+                // HU #11307 — limpieza del huérfano. Este documento era el ÚNICO de los seis
+                // generados que no la tenía: si una regeneración dejaba de cumplir la condición de
+                // emisión (p. ej. el trámite cambió de tipología, o el dato de SOAT/RTM desapareció),
+                // el certificado anterior se quedaba adjunto y el consolidado seguía arrastrando una
+                // vigencia que ya nadie estaba afirmando.
+                foreach (var prev in instance.Attachments
+                             .Where(a => string.Equals(a.Tipo, "certificado_soat_rtm", StringComparison.OrdinalIgnoreCase))
+                             .ToList())
+                {
+                    storage.Delete(prev.StoragePath);
+                    instance.Attachments.Remove(prev);
+                    repo.RemoveAttachment(prev);
+                }
+            }
         }
 
         // HU #10926 — Escrituras: por cada actor persona jurídica (NIT) con una escritura activa y

@@ -435,6 +435,39 @@ public sealed class ConsolidadoHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_Traspaso_ElCertificadoSoatRtmVaEntreLosCertificadosYNoAlFinal()
+    {
+        // HU #11307 — `certificado_soat_rtm` y `certificado_rues_vendedor` no estaban en la lista de
+        // prelación: caían al final por defecto (rank = Precedence.Length + 1), mezclados con "otro" y
+        // ordenados solo por fecha de carga. El expediente que ve el organismo de tránsito los
+        // presentaba en un sitio arbitrario que además podía cambiar entre regeneraciones.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        AddAttachment(instance, "certificado_soat_rtm", "soat_rtm_cert.pdf", "%PDF-soatrtmcert");
+        AddAttachment(instance, "otro", "otro.pdf", "%PDF-otro");
+
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>())
+            .Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        var idxIdentidad = content.IndexOf("cert.pdf", StringComparison.Ordinal);
+        var idxSoatRtm = content.IndexOf("soat_rtm_cert.pdf", StringComparison.Ordinal);
+        var idxCompraventa = content.IndexOf("compraventa.pdf", StringComparison.Ordinal);
+        var idxOtro = content.IndexOf("otro.pdf", StringComparison.Ordinal);
+
+        idxSoatRtm.Should().BeGreaterThan(idxIdentidad, "va con los certificados generados");
+        idxSoatRtm.Should().BeLessThan(idxCompraventa, "y antes de los documentos del checklist");
+        idxSoatRtm.Should().BeLessThan(idxOtro, "ya no cae al final junto a los no clasificados");
+    }
+
+    [Fact]
     public async Task HandleAsync_Traspaso_IncluyeAmbosCertificadosEnOrden()
     {
         // El certificado de identidad del vendedor se fusiona tras el del comprador y antes de la
