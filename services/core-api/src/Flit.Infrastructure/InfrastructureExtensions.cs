@@ -106,6 +106,10 @@ public static class InfrastructureExtensions
         // + gate de consentimiento Habeas Data para el reúso de datos de persona (ADR-0031).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IExternalQueryCacheRepository, ExternalQueryCacheRepository>();
         services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonDataConsentRepository, PersonDataConsentRepository>();
+        // HU #11302 (Feature #11301, ADR-0041) — almacén propio de certificaciones externas
+        // (SOAT, RTM y registro mercantil) en modelo canónico, con payload crudo para reprocesar.
+        services.AddScoped<Flit.Tramites.Application.UseCases.Certifications.ICertificationRepository,
+            CertificationRepository>();
         // HU #10865 — entidad persona/sujeto a nivel tenant (Feature #10864, CF-00, ADR-0030).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonRepository, PersonRepository>();
         // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).
