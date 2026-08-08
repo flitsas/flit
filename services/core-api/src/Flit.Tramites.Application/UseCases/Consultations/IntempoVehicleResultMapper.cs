@@ -1,3 +1,5 @@
+using Flit.Tramites.Application.UseCases.Certifications;
+using Flit.Tramites.Domain.Certifications;
 using Flit.Tramites.Domain.Tramites.Services;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -22,7 +24,16 @@ public static class IntempoVehicleResultMapper
     private const string Yellow = "yellow";
     private const string Red = "red";
 
-    public static ConsultationResult Map(IntempoVehicleResponse response)
+    /// <summary>Versión del mapeo; se persiste con cada fila certificada (HU #11303, ADR-0041).</summary>
+    public const string MapperVersion = "intempo-v2";
+
+    private static readonly TimeSpan ColombiaOffset = TimeSpan.FromHours(-5);
+
+    public static ConsultationResult Map(IntempoVehicleResponse response) =>
+        Map(response, DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaOffset).Date));
+
+    /// <summary>Sobrecarga con la fecha inyectada, para que las pruebas no dependan del reloj.</summary>
+    public static ConsultationResult Map(IntempoVehicleResponse response, DateOnly today)
     {
         // codigoResultado="Error" → error de negocio (VIN/placa no encontrado).
         if (string.Equals(response.CodigoResultado, "Error", StringComparison.OrdinalIgnoreCase))
@@ -43,8 +54,31 @@ public static class IntempoVehicleResultMapper
 
         var hydrated = MapHydratedFields(response);
         var overall = ComputeOverall(checks);
+        var certifications = MapCertifications(response, today);
 
-        return new ConsultationResult(Provider, overall, checks, hydrated);
+        return new ConsultationResult(Provider, overall, checks, hydrated, Certifications: certifications);
+    }
+
+    /// <summary>
+    /// Traduce la respuesta al vocabulario canónico (HU #11303, ADR-0041). Intempo <b>no tiene bloque
+    /// de revisión técnico-mecánica</b> en su contrato: el bundle sale sin RTM y no se declara una
+    /// inventada. Sí aporta las seis celdas del SOAT y la fecha de matrícula.
+    /// </summary>
+    private static CertificationBundle? MapCertifications(IntempoVehicleResponse response, DateOnly today)
+    {
+        var soat = (response.SoatNacionales ?? [])
+            .Where(s => s is not null)
+            .Select(s => CertificationFactory.Soat(
+                s.NoPoliza,
+                s.EntidadExpideSoat,
+                s.FechaExpedicion,
+                s.FechaVigencia,
+                s.FechaVencimiento,
+                s.Estado));
+
+        var vehicle = CertificationFactory.Vehicle(response.FechaMatricula);
+
+        return CertificationFactory.VehicleBundle(soat, [], vehicle, today);
     }
 
     private static ConsultationCheck MapEstadoVehiculo(string? estado)

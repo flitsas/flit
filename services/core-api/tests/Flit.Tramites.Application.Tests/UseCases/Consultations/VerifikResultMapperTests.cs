@@ -379,37 +379,24 @@ public sealed class VerifikResultMapperTests
         return VerifikResultMapper.MapVehicle(response!);
     }
 
-    [Theory]
-    [InlineData("noCertificado")]
-    [InlineData("numeroCertificado")]
-    [InlineData("nroCertificado")]
-    public void Rtm_NumeroDeCertificado_SeResuelvePorCualquieraDeLosNombresCandidatos(string nombre)
-    {
-        // No hay muestra real que documente cómo se llama este campo: las respuestas capturadas traen
-        // la lista de RTM vacía. En vez de fijar un nombre inventado, se aceptan los candidatos.
-        var result = MapearRtm($$"""{ "vigente": "SI", "{{nombre}}": "CDA-99887" }""");
-
-        result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_numero" && f.ValueText == "CDA-99887");
-    }
-
     [Fact]
-    public void Rtm_FechasDeVigenciaYExpedicion_SeResuelvenDeLosCamposNoModelados()
+    public void Rtm_NumeroYFechasDeLaRevision_YaNoSeAdivinanPorNombresCandidatos()
     {
+        // HU #11303 — se retiró la resolución por nombres candidatos que introdujo la HU #11135. No es
+        // una decisión de estilo: la medición en base de datos mostró CERO filas de rtm_numero y
+        // rtm_expedicion en todo el ambiente, así que la lista nunca acertó un nombre. Lo único que
+        // producía era cobertura aparente sobre un hueco real, que es el mecanismo que originó el
+        // Feature #11301. La evidencia de qué manda el proveedor vive ahora en el payload crudo.
         var result = MapearRtm("""
-            { "vigente": "SI", "cdaExpide": "CDA NORTE", "fechaVigencia": "01/02/2026", "fechaExpedicion": "31/01/2026" }
+            { "vigente": "SI", "cdaExpide": "CDA NORTE", "noCertificado": "CDA-99887", "fechaExpedicion": "31/01/2026" }
             """);
 
-        result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_vigencia" && f.ValueText == "01/02/2026");
-        result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_expedicion" && f.ValueText == "31/01/2026");
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "rtm_numero");
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "rtm_expedicion");
+        result.HydratedFields.Should().NotContain(f => f.FieldKey == "rtm_vigencia");
+
+        // Lo que el modelo SÍ declara se sigue leyendo igual.
         result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_entidad" && f.ValueText == "CDA NORTE");
-    }
-
-    [Fact]
-    public void Rtm_NumeroComoNumeroJson_TambienSeLee()
-    {
-        var result = MapearRtm("""{ "vigente": "SI", "noCertificado": 99887 }""");
-
-        result.HydratedFields.Should().Contain(f => f.FieldKey == "rtm_numero" && f.ValueText == "99887");
     }
 
     [Fact]

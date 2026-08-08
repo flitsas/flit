@@ -148,10 +148,13 @@ public sealed class VerifikSoat
 /// que originó este Feature: quedarían en null y el hueco volvería a esconderse tras un modelo que
 /// aparenta cubrirlo.</para>
 ///
-/// <para>En vez de adivinar, se conserva <b>todo</b> lo que mande el proveedor en
-/// <see cref="CamposNoModelados"/> y se resuelven esos tres valores probando los nombres candidatos
-/// documentados en <c>VerifikResultMapper</c>. Si el proveedor usa cualquiera de ellos, el dato entra
-/// hoy; si usa otro, queda capturado y visible en vez de perdido, y el OCR del PDF sigue de respaldo.</para>
+/// <para><b>HU #11303 (Feature #11301) — se retiró la resolución por nombres candidatos.</b> La
+/// medición en base de datos mostró CERO filas de <c>rtm_numero</c> y <c>rtm_expedicion</c> en todo
+/// el ambiente: la lista de candidatos nunca acertó un nombre. Lo único que producía era cobertura
+/// aparente sobre un hueco real. <see cref="CamposNoModelados"/> se conserva porque sigue evitando
+/// que lo no declarado se descarte en silencio, pero ya no alimenta ninguna celda del certificado:
+/// esa evidencia vive ahora en el payload crudo persistido, que permite ver qué manda el proveedor
+/// sin una sonda manual y corregir el modelo sin volver a pagar la consulta.</para>
 /// </summary>
 public sealed class VerifikTecnomecanica
 {
