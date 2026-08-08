@@ -29,6 +29,19 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 /// comprueba que el fichero declarado la mencione; no puede demostrar que la escritura ocurra en
 /// tiempo de ejecución. Su valor es que añadir un consumidor sin productor deja de ser silencioso y
 /// pasa a ser una decisión explícita y revisable.</para>
+///
+/// <para><b>HU #11308 — ese límite resultó ser el agujero, y ya no se cubre desde aquí.</b> Este
+/// guardián es un <c>grep</c>: le basta con que <i>algún</i> productor declarado mencione la llave
+/// como literal en su código. Declaró durante meses que Verifik producía <c>rtm_numero</c> y
+/// <c>rtm_expedicion</c> —y las mencionaba, en una búsqueda por nombres candidatos que nunca acertó—
+/// mientras esas dos llaves tenían CERO filas en toda la base. Pasó en verde el Feature entero
+/// dedicado a llenarlas.</para>
+///
+/// <para>La cobertura de las certificaciones pasa a
+/// <c>CertificationCoverageGuardTests</c>, que recorre la cadena completa —respuesta real del
+/// proveedor → mapper → ingesta → lector documental— y exige que las celdas lleguen no vacías al
+/// final. Con el DTO anterior de Kyverum, esa prueba falla. Esta se conserva para lo que sí sabe
+/// hacer y la otra no cubre: detectar que un documento empiece a leer una llave que nadie escribe.</para>
 /// </summary>
 public sealed class FieldValueContractGuardTests
 {
