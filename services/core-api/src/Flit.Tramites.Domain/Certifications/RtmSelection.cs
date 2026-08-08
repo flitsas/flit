@@ -11,12 +11,6 @@ namespace Flit.Tramites.Domain.Certifications;
 /// </remarks>
 public static class RtmSelection
 {
-    /// <summary>
-    /// Meses desde la matrícula durante los cuales un vehículo nuevo no debe revisión
-    /// técnico-mecánica. Es el criterio que ya aplica el generador del certificado.
-    /// </summary>
-    public const int GraceMonthsForNewVehicles = 24;
-
     public static RtmCertification? PickCurrent(
         IReadOnlyList<RtmCertification> history, DateOnly today)
     {
@@ -43,17 +37,14 @@ public static class RtmSelection
     }
 
     /// <summary>
-    /// ¿Le aplica RTM al vehículo? Un vehículo dentro del periodo de gracia desde su matrícula no la
-    /// debe todavía, y el certificado debe decir "no aplica" en vez de dejar la tabla en blanco.
-    /// Sin fecha de matrícula no se puede afirmar: se asume exigible, que es el lado seguro.
+    /// ¿Le aplica RTM al vehículo? Delega en <see cref="Tramites.Services.RtmCertificado"/>, que es
+    /// donde vive la regla de negocio (más de cinco años desde la matrícula, y sin fecha se asume
+    /// exigible por fallo seguro). <b>No se reimplementa aquí</b>: duplicar el umbral es la forma más
+    /// silenciosa de que el certificado y el resto del sistema empiecen a discrepar.
     /// </summary>
-    public static bool Applies(VehicleRegistrationFacts vehicle, DateOnly today)
-    {
-        if (vehicle.FechaMatricula.Value is not { } registered)
-            return true;
-
-        return registered.AddMonths(GraceMonthsForNewVehicles) <= today;
-    }
+    public static bool Applies(VehicleRegistrationFacts vehicle, DateOnly today) =>
+        Tramites.Services.RtmCertificado.Aplica(
+            esTraspaso: true, vehicle.FechaMatricula.Value, today);
 
     public static VigencyStatus DeriveStatus(RtmCertification inspection, DateOnly today)
     {

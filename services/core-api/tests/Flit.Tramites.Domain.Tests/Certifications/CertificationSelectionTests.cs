@@ -100,7 +100,7 @@ public sealed class CertificationSelectionTests
     }
 
     [Fact]
-    public void Rtm_VehiculoNuevo_NoDebeRevisionTodavia()
+    public void Rtm_VehiculoConMenosDeCincoAnios_NoDebeRevisionTodavia()
     {
         var reciente = new VehicleRegistrationFacts(new CertifiedDate(new DateOnly(2026, 1, 15), null));
 
@@ -108,11 +108,22 @@ public sealed class CertificationSelectionTests
     }
 
     [Fact]
-    public void Rtm_VehiculoFueraDelPeriodoDeGracia_SiLaDebe()
+    public void Rtm_VehiculoConMasDeCincoAnios_SiLaDebe()
     {
         var antiguo = new VehicleRegistrationFacts(new CertifiedDate(new DateOnly(2020, 1, 15), null));
 
         RtmSelection.Applies(antiguo, Hoy).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Rtm_EnElQuintoAniversarioTodaviaNoAplica()
+    {
+        // La regla es "MÁS de cinco años": en el aniversario los cumple, no los supera. Se delega en
+        // RtmCertificado para no duplicar el umbral — duplicarlo es la forma más silenciosa de que el
+        // certificado y el resto del sistema empiecen a discrepar.
+        var aniversario = new VehicleRegistrationFacts(new CertifiedDate(Hoy.AddYears(-5), null));
+
+        RtmSelection.Applies(aniversario, Hoy).Should().BeFalse();
     }
 
     [Fact]

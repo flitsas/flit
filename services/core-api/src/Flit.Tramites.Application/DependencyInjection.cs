@@ -43,7 +43,11 @@ public static class DependencyInjection
         // HU #10975 (Feature #10972) — persiste en field_values lo que el OCR semántico ya extrae.
         services.AddScoped<PersistOcrFieldsHandler>();
         // HU #10990 (Feature #10972) — resuelve el RUES por actor al generar el expediente.
-        services.AddScoped<IRuesActorDataResolver, RuesActorDataResolver>();
+        // HU #11305 (Feature #11301, ADR-0041) — lector documental de certificaciones. Sustituye a
+        // IRuesActorDataResolver, que consultaba el RUES EN VIVO al generar el expediente. Generar un
+        // documento pasa a costar cero llamadas externas (D4).
+        services.AddScoped<UseCases.Certifications.ICertificationReader,
+            UseCases.Certifications.CertificationReader>();
         services.AddScoped<SubmitProcedureInstanceHandler>();
         // ICT (paridad v1) — pausar/reanudar trámites ICT desde la UI de FLIT (individual + masivo).
         services.AddScoped<PauseProcedureInstanceHandler>();

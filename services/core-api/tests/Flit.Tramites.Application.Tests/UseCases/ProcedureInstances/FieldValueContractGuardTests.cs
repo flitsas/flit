@@ -70,8 +70,20 @@ public sealed class FieldValueContractGuardTests
     /// <summary>P6 del wizard — observaciones del trámite (antes vivían en FirmaFurStep).</summary>
     private const string WizardTramite = "frontend/components/operacion/TramiteWizard.tsx";
 
-    /// <summary>Fichero que se lee para extraer las llaves CONSUMIDAS por los documentos.</summary>
-    private const string Consumidor = App + "UseCases/ProcedureInstances/FurCommand.cs";
+    /// <summary>
+    /// Ficheros que se leen para extraer las llaves CONSUMIDAS por los documentos.
+    /// </summary>
+    /// <remarks>
+    /// HU #11305 — dejó de ser uno solo. El expediente ya no lee <c>field_values</c> directamente para
+    /// las certificaciones: lo hace el lector documental, que resuelve tabla canónica → respaldo sobre
+    /// <c>field_values</c> → nada. <c>FurCommand</c> conserva el resto (placa, organismo,
+    /// transformaciones, prenda) y los campos <c>rues_*</c> que el certificado imprime.
+    /// </remarks>
+    private static readonly string[] Consumidores =
+    [
+        App + "UseCases/ProcedureInstances/FurCommand.cs",
+        App + "UseCases/Certifications/CertificationReader.cs",
+    ];
 
     /// <summary>
     /// Registro declarativo: llave de <c>field_values</c> → quién la escribe.
@@ -224,9 +236,14 @@ public sealed class FieldValueContractGuardTests
     /// </summary>
     private static HashSet<string> LlavesConsumidas()
     {
-        var fuente = Leer(Consumidor);
+        var fuente = string.Join('\n', Consumidores.Select(Leer));
         var regex = new Regex("(?:Get\\(fv|Val\\(datos),\\s*\"([a-z0-9_]+)\"", RegexOptions.CultureInvariant);
         var llaves = regex.Matches(fuente).Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
+
+        // HU #11305 — las llaves `rues_*` que el lector enumera para el respaldo también son consumo,
+        // aunque no aparezcan bajo la forma Get(fv, "…").
+        foreach (Match m in Regex.Matches(fuente, "\"(rues_[a-z0-9_]+)\"", RegexOptions.CultureInvariant))
+            llaves.Add(m.Groups[1].Value);
 
         foreach (var (llave, expresion) in ConsumidasPorConstante)
         {

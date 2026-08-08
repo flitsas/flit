@@ -55,8 +55,8 @@ public sealed class GenerarFurHandler(
     GetSuggestedCommercialValueHandler? avaluoHandler = null,
     IFurTemplateResolver? templateResolver = null,
     IProcedureDeedResolver? deedResolver = null,
-    IRuesActorDataResolver? ruesResolver = null,
-    IRepresentanteLegalDirectory? representanteDirectory = null)
+    IRepresentanteLegalDirectory? representanteDirectory = null,
+    Certifications.ICertificationReader? certificationReader = null)
     : IExpedienteHotDocumentsRegenerator
 {
     // HU #11198 (AC3) — respaldo del directorio para el nombre del representante cuando el trámite no lo
@@ -65,10 +65,13 @@ public sealed class GenerarFurHandler(
     private readonly IRepresentanteLegalDirectory _representanteDirectory =
         representanteDirectory ?? NullRepresentanteLegalDirectory.Instance;
 
-    // HU #10990 (Feature #10972) — resuelve el RUES por NIT cuando field_values no lo tiene para ese
-    // actor. Default seguro (NUNCA resuelve) en tests que no lo ejercitan: sin él, el certificado se
-    // emite solo si el wizard dejó las rues_* del actor, que es el comportamiento previo.
-    private readonly IRuesActorDataResolver _ruesResolver = ruesResolver ?? NullRuesActorDataResolver.Instance;
+    // HU #11305 (Feature #11301, ADR-0041) — lector documental de certificaciones. Sustituye al
+    // IRuesActorDataResolver, que consultaba el RUES EN VIVO al generar el PDF: una llamada saliente,
+    // cobrada, en cada regeneración, que además dejaba el documento a merced de que el proveedor
+    // estuviera arriba. Ahora todo sale de base de datos y generar el expediente cuesta cero llamadas
+    // externas (D4). Default nulo en los tests que no lo ejercitan: se cae al respaldo sobre
+    // field_values, que es el comportamiento previo menos la consulta.
+    private readonly Certifications.ICertificationReader? _certificationReader = certificationReader;
 
     // ADR-0025 §4 / HU #10645 — baúl de firmas: cubre la identidad de un actor NIT y alimenta la
     // IMAGEN real de la firma en el FUR. Default seguro (NUNCA resuelve) en tests que no lo ejercitan.
@@ -150,6 +153,14 @@ public sealed class GenerarFurHandler(
         // Gating organismo de tránsito: requiere transit_office_code no vacío en field_values.
         if (string.IsNullOrWhiteSpace(Get(fv, "transit_office_code")))
             return (null, "organismo_requerido");
+
+        // HU #11305 (Feature #11301, ADR-0041) — TODO lo certificado del expediente se resuelve aquí,
+        // de una vez y CONTRA BASE DE DATOS. A partir de este punto generar el expediente no hace ni
+        // una llamada saliente: la consulta en vivo al RUES que corría por cada regeneración —cobrada,
+        // y capaz de dejar sin certificado un documento si el proveedor estaba caído— desaparece.
+        var certs = _certificationReader is null
+            ? Certifications.CertificationView.Empty
+            : await _certificationReader.ForDocumentsAsync(instance.Id, tenantId, fv, ct);
 
         // HU #10488 — sello de identidad (texto) por parte para el espacio de firma del FUR. Solo cuando la
         // identidad está validada (si no, el mapper pinta "NO FIRMADO"). Se resuelve la validación aprobada+
@@ -296,8 +307,8 @@ public sealed class GenerarFurHandler(
         // se fusione en el consolidado. Independiente de la biométrica (una persona jurídica no valida
         // identidad biométrica).
         // HU #10990 — deja de emitirse UNO por trámite desde las rues_* de instancia: se resuelve POR
-        // ACTOR (ver TryGenerateRuesCertificatesAsync). Los tipos que ya no aplican se retiran abajo.
-        var certificadosRues = await TryGenerateRuesCertificatesAsync(instance, fv, ct);
+        // ACTOR (ver TryGenerateRuesCertificates). Los tipos que ya no aplican se retiran abajo.
+        var certificadosRues = TryGenerateRuesCertificates(instance, certs);
         generated.AddRange(certificadosRues);
 
         var tiposRues = certificadosRues
@@ -344,39 +355,29 @@ public sealed class GenerarFurHandler(
         // Source=system (tipo certificado_soat_rtm). Valores ausentes en la consulta → EN BLANCO.
         if (soatRtmGenerator is not null)
         {
-            var soatVenc = Get(fv, "soat_vencimiento");
-            var rtmVenc = Get(fv, "rtm_vencimiento");
             AvaluoInfo? avaluo = esTraspaso ? await BuildAvaluoAsync(instance.Id, tenantId, ct) : null;
 
-            if (!string.IsNullOrWhiteSpace(soatVenc) || !string.IsNullOrWhiteSpace(rtmVenc) || avaluo is not null)
+            // D8 — se emite si hay AL MENOS UNA celda de SOAT o RTM con dato. El avalúo solo no basta:
+            // ese bloque ya va en el FUR, y un certificado con las doce casillas en blanco no
+            // certifica nada. Antes bastaba con tener una fecha de vencimiento.
+            if (certs.HasSoatOrRtmData)
             {
+                // HU #11136 — la RTM aplica solo en traspaso Y solo si el vehículo lleva matriculado
+                // más que el periodo de gracia. Antes se pintaba en todo traspaso sin mirar antigüedad.
+                var aplicaRtm = esTraspaso
+                    && Domain.Certifications.RtmSelection.Applies(certs.Vehicle, HoyEnColombia())
+                    && certs.Rtm is not null;
+
                 var soatRtmData = new SoatRtmCertificateData(
                     instance.Id,
                     instance.ReferenceNumber,
                     Get(fv, "plate"),
                     Get(fv, "runt_consulta_fecha"),
-                    new SoatRtmBlock(
-                        Poliza: Get(fv, "soat_poliza"),
-                        FechaVigencia: Get(fv, "soat_vigencia"),
-                        FechaVencimiento: soatVenc,
-                        FechaExpedicion: Get(fv, "soat_expedicion"),
-                        Entidad: Get(fv, "soat_aseguradora"),
-                        Estado: EstadoSoatDisplay(Get(fv, SoatGate.FieldKey))),
-                    // HU #11136 — la RTM aplica solo en traspaso Y solo si el vehículo tiene más de 5
-                    // años de matriculado. Antes se pintaba en todo traspaso sin mirar la antigüedad.
-                    !RtmCertificado.Aplica(
-                        esTraspaso: !esMatricula,
-                        fechaMatricula: Get(fv, RtmCertificado.FieldKeyFechaMatricula),
-                        hoy: DateTimeOffset.UtcNow)
-                        ? null
-                        : new SoatRtmBlock(
-                            Poliza: Get(fv, "rtm_numero"),
-                            FechaVigencia: Get(fv, "rtm_vigencia"),
-                            FechaVencimiento: rtmVenc,
-                            FechaExpedicion: Get(fv, "rtm_expedicion"),
-                            Entidad: Get(fv, "rtm_entidad"),
-                            Estado: Get(fv, "rtm_estado")),
-                    avaluo);
+                    Bloque(certs.Soat, EstadoSoatDisplay(Get(fv, SoatGate.FieldKey))),
+                    aplicaRtm ? Bloque(certs.Rtm, null) : null,
+                    avaluo,
+                    FuenteSoat: Fuente(certs.SoatFrom),
+                    FuenteRtm: aplicaRtm ? Fuente(certs.RtmFrom) : null);
                 generated.Add(soatRtmGenerator.GenerateSoatRtmCertificate(soatRtmData));
             }
         }
@@ -887,10 +888,12 @@ public sealed class GenerarFurHandler(
     /// <summary>
     /// HU #10589 / HU #10990 — Genera UN certificado RUES por cada actor persona jurídica del trámite.
     ///
-    /// <para><b>Resolución de datos, en orden:</b> (1) las <c>rues_*</c> de <c>field_values</c>, pero
-    /// SOLO si <c>rues_nit</c> corresponde a ESE actor — esas llaves son de instancia, así que en un
-    /// traspaso PJ → PJ la segunda consulta pisó a la primera y usarlas a ciegas mezclaba la razón
-    /// social de una compañía con la matrícula de la otra; (2) consulta en vivo al RUES.</para>
+    /// <para><b>HU #11305 (Feature #11301, ADR-0041) — se retira la consulta en vivo (D4).</b> Todo sale
+    /// del lector documental: tabla canónica → respaldo sobre <c>field_values</c> (snapshot congelado y,
+    /// si no, las <c>rues_*</c> de instancia, que son de instancia y solo sirven a UNA compañía) → nada.
+    /// Sin dato persistido <b>no se emite el certificado</b>, y esa es la contrapartida que el PO aceptó
+    /// a sabiendas: las compañías precargadas del directorio de representantes legales dejan de tener
+    /// este anexo, que hoy consiguen por una llamada saliente en cada regeneración.</para>
     ///
     /// <para><b>No se emite un certificado sin datos de registro.</b> Antes se emitía siempre que
     /// hubiera un actor NIT, aunque saliera con la razón social y 19 casillas en blanco. Un
@@ -900,8 +903,62 @@ public sealed class GenerarFurHandler(
     /// de roles llevan sufijo (<c>certificado_rues_vendedor</c>), mismo patrón que
     /// <c>certificado_identidad</c>, de modo que ambos coexistan en el expediente.</para>
     /// </summary>
-    private async Task<List<GeneratedDocument>> TryGenerateRuesCertificatesAsync(
-        ProcedureInstance instance, Dictionary<string, string?> fv, CancellationToken ct)
+    /// <summary>Día calendario colombiano. No se usa UTC: un certificado imprime un día civil.</summary>
+    private static DateOnly HoyEnColombia() =>
+        DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).DateTime);
+
+    /// <summary>
+    /// Traduce una certificación canónica al bloque del documento. Solo formato: el parsing ya ocurrió
+    /// una vez, al persistir. Valor ausente ⇒ celda en blanco (regla HU #10856).
+    /// </summary>
+    private static SoatRtmBlock Bloque(
+        Domain.Certifications.SoatCertification? soat, string? estadoOverride) =>
+        soat is null
+            ? new SoatRtmBlock()
+            : new SoatRtmBlock(
+                Poliza: soat.PolicyNumber.ToDocumentText(),
+                FechaVigencia: soat.ValidFrom.ToDocumentText(),
+                FechaVencimiento: soat.ValidUntil.ToDocumentText(),
+                FechaExpedicion: soat.IssuedOn.ToDocumentText(),
+                Entidad: soat.Insurer.ToDocumentText(),
+                // El estado del SOAT lo sigue mandando la llave del gate: es la que ve el OT y la que
+                // el frontend compara estricto. No se deriva aquí para no abrir dos verdades.
+                Estado: estadoOverride ?? soat.Status.ToDocumentText());
+
+    private static SoatRtmBlock Bloque(
+        Domain.Certifications.RtmCertification? rtm, string? estadoOverride) =>
+        rtm is null
+            ? new SoatRtmBlock()
+            : new SoatRtmBlock(
+                Poliza: rtm.CertificateNumber.ToDocumentText(),
+                FechaVigencia: rtm.ValidFrom.ToDocumentText(),
+                FechaVencimiento: rtm.ValidUntil.ToDocumentText(),
+                FechaExpedicion: rtm.IssuedOn.ToDocumentText(),
+                Entidad: rtm.Cda.ToDocumentText(),
+                Estado: estadoOverride ?? rtm.Status.ToDocumentText());
+
+    /// <summary>
+    /// Pie de procedencia del bloque. El texto fijo del certificado afirma una consulta al RUNT que
+    /// puede no haber ocurrido: hay celdas que salen del OCR de un PDF cargado por el operador.
+    /// </summary>
+    private static string? Fuente(Domain.Certifications.CertificationProvenance? provenance)
+    {
+        if (provenance is null || provenance.ObservedAt == DateTimeOffset.MinValue)
+            return null;
+
+        var etiqueta = provenance.Source switch
+        {
+            Domain.Certifications.CertificationSourceKind.Consultation => "RUNT 2.0",
+            Domain.Certifications.CertificationSourceKind.Ocr => "documento cargado",
+            Domain.Certifications.CertificationSourceKind.User => "registro manual",
+            _ => "registro del trámite",
+        };
+
+        return provenance.ToDocumentFooter(etiqueta);
+    }
+
+    private List<GeneratedDocument> TryGenerateRuesCertificates(
+        ProcedureInstance instance, Certifications.CertificationView certs)
     {
         var docs = new List<GeneratedDocument>(2);
 
@@ -911,27 +968,16 @@ public sealed class GenerarFurHandler(
             if (string.IsNullOrEmpty(nit))
                 continue;
 
-            // HU #11133 — orden de resolución. Primero el SNAPSHOT congelado al registrar el trámite:
-            // es la fuente de verdad del certificado y no cuesta una llamada al proveedor. Después las
-            // llaves `rues_*` de instancia (trámites anteriores al snapshot, y solo sirven a UNA
-            // compañía). La consulta EN VIVO queda como último recurso y se deja registrada, para
-            // poder medir cuántos trámites siguen dependiendo de ella y apagarla cuando sean cero.
-            IReadOnlyDictionary<string, string?>? datos =
-                RuesSnapshots.Read(Get(fv, RuesSnapshots.FieldKey), nit)
-                ?? DatosRuesDeLaInstancia(fv, nit);
-
-            if (datos is null)
-            {
-                GenerarFurLog.CertificadoRuesConsultaEnVivo(logger, instance.Id);
-                datos = await _ruesResolver.ResolveAsync(instance.Id, instance.TenantId, nit, ct);
-            }
-
-            var razonSocial = Val(datos, "rues_razon_social");
-            if (datos is null || string.IsNullOrWhiteSpace(razonSocial))
+            // El lector ya resolvió tabla → respaldo. Aquí no hay ninguna llamada saliente.
+            var merchant = certs.Merchant(nit);
+            if (merchant is null || !merchant.CanBeCertified)
             {
                 GenerarFurLog.CertificadoRuesSinDatos(logger, instance.Id);
                 continue;
             }
+
+            var datos = merchant.Fields;
+            var razonSocial = Val(datos, "rues_razon_social")!;   // CanBeCertified ya lo garantizó.
 
             var data = new RuesCertificateData(
                 instance.Id,
@@ -1367,10 +1413,8 @@ internal static partial class GenerarFurLog
         Message = "Sin datos de registro del RUES para un actor jurídico (instancia {InstanceId}); se omite su certificado en vez de emitirlo en blanco.")]
     public static partial void CertificadoRuesSinDatos(ILogger logger, Guid instanceId);
 
-    // HU #11133 — el camino normal es el snapshot congelado al registrar. Esta traza marca los
-    // trámites que todavía obligan a pagar una consulta al proveedor: cuando deje de aparecer, el
-    // respaldo en vivo se puede retirar.
-    [LoggerMessage(Level = LogLevel.Information,
-        Message = "Sin snapshot del RUES para un actor jurídico (instancia {InstanceId}); se consulta en vivo como respaldo.")]
-    public static partial void CertificadoRuesConsultaEnVivo(ILogger logger, Guid instanceId);
+    // HU #11305 — se retiró CertificadoRuesConsultaEnVivo junto con la consulta que registraba. Esa
+    // traza existía para medir cuántos trámites obligaban a pagar una consulta al generar el PDF y
+    // poder apagarla al llegar a cero; el PO decidió apagarla sin esperar (D4), porque el contador no
+    // iba a bajar: lo alimentaba el caso de la precarga del directorio, que se conserva (D1).
 }
