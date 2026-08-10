@@ -18,6 +18,14 @@ import { formatDurationMs, formatInt, formatPct } from "../format";
 import { KpiCard } from "../KpiCard";
 import { PeakHoursHeatmap } from "../PeakHoursHeatmap";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
+import {
+  CARDLIST_CELL,
+  CARDLIST_HEAD_ROW,
+  CARDLIST_ROW,
+  CARDLIST_SCROLL,
+  CARDLIST_TABLE,
+  CARDLIST_TH,
+} from "@/components/atom/table-cardlist";
 
 export interface UsoTabProps {
   filters: ReportFilters;
@@ -85,25 +93,25 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
             {usage.data.current.wizardSteps.length === 0 ? (
               <p className="text-xs opacity-60">Aún no hay telemetría del wizard.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs" data-testid="wizard-steps-table">
+              <div className={CARDLIST_SCROLL}>
+                <table className={CARDLIST_TABLE} data-testid="wizard-steps-table">
                   <thead>
-                    <tr className="text-[10px] uppercase text-left opacity-70">
-                      <th className="px-2 py-2 font-semibold">Paso</th>
-                      <th className="px-2 py-2 font-semibold">Vistas</th>
-                      <th className="px-2 py-2 font-semibold">Completados</th>
-                      <th className="px-2 py-2 font-semibold">Abandono</th>
-                      <th className="px-2 py-2 font-semibold">Tiempo promedio</th>
-                      <th className="px-2 py-2 font-semibold">Tiempo mediano</th>
+                    <tr className={CARDLIST_HEAD_ROW}>
+                      <th className={CARDLIST_TH}>Paso</th>
+                      <th className={CARDLIST_TH}>Vistas</th>
+                      <th className={CARDLIST_TH}>Completados</th>
+                      <th className={CARDLIST_TH}>Abandono</th>
+                      <th className={CARDLIST_TH}>Tiempo promedio</th>
+                      <th className={CARDLIST_TH}>Tiempo mediano</th>
                     </tr>
                   </thead>
                   <tbody>
                     {usage.data.current.wizardSteps.map((step) => (
-                      <tr key={step.stepKey} className="border-t">
-                        <td className="px-2 py-2 font-medium">{step.stepKey}</td>
-                        <td className="px-2 py-2">{formatInt(step.views)}</td>
-                        <td className="px-2 py-2">{formatInt(step.completions)}</td>
-                        <td className="px-2 py-2">
+                      <tr key={step.stepKey} className={CARDLIST_ROW}>
+                        <td className={`${CARDLIST_CELL} font-medium`}>{step.stepKey}</td>
+                        <td className={CARDLIST_CELL}>{formatInt(step.views)}</td>
+                        <td className={CARDLIST_CELL}>{formatInt(step.completions)}</td>
+                        <td className={CARDLIST_CELL}>
                           <span className="inline-flex items-center gap-2">
                             <span
                               className="font-semibold"
@@ -119,8 +127,8 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
                             </span>
                           </span>
                         </td>
-                        <td className="px-2 py-2 opacity-80">{formatDurationMs(step.avgDurationMs)}</td>
-                        <td className="px-2 py-2 opacity-80">{formatDurationMs(step.medianDurationMs)}</td>
+                        <td className={`${CARDLIST_CELL} opacity-80`}>{formatDurationMs(step.avgDurationMs)}</td>
+                        <td className={`${CARDLIST_CELL} opacity-80`}>{formatDurationMs(step.medianDurationMs)}</td>
                       </tr>
                     ))}
                   </tbody>

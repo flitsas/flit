@@ -30,6 +30,14 @@ import {
   type SavedQuery,
 } from "@/lib/api/queries";
 import { XLSX_MIME } from "@/lib/xlsx";
+import {
+  CARDLIST_CELL,
+  CARDLIST_HEAD_ROW,
+  CARDLIST_ROW,
+  CARDLIST_SCROLL,
+  CARDLIST_TABLE,
+  CARDLIST_TH,
+} from "@/components/atom/table-cardlist";
 import { ColumnPicker } from "./ColumnPicker";
 import {
   activePreset,
@@ -696,15 +704,15 @@ export function QueryConsole<TRow>({
             </Empty>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[48rem] border-collapse text-xs">
+              <div className={CARDLIST_SCROLL}>
+                <table className={`min-w-[48rem] ${CARDLIST_TABLE}`}>
                   <thead>
-                    <tr className="border-b border-[#DFE5ED] text-left dark:border-white/10">
+                    <tr className={CARDLIST_HEAD_ROW}>
                       {columns.map((column) => (
                         <th
                           key={column.id}
                           scope="col"
-                          className={`px-2 py-2 font-semibold ${column.numeric ? "text-right" : ""}`}
+                          className={`${CARDLIST_TH} ${column.numeric ? "text-right" : ""}`}
                         >
                           {column.label}
                         </th>
@@ -713,14 +721,11 @@ export function QueryConsole<TRow>({
                   </thead>
                   <tbody>
                     {result.filas.map((fila) => (
-                      <tr
-                        key={rowKey(fila)}
-                        className="border-b border-[#EEF1F5] last:border-0 dark:border-white/5"
-                      >
+                      <tr key={rowKey(fila)} className={CARDLIST_ROW}>
                         {columns.map((column) => (
                           <td
                             key={column.id}
-                            className={`px-2 py-1.5 ${column.numeric ? "text-right tabular-nums" : ""}`}
+                            className={`${CARDLIST_CELL} ${column.numeric ? "text-right tabular-nums" : ""}`}
                           >
                             {renderCell?.(column.id, fila) ?? column.value(fila)}
                           </td>

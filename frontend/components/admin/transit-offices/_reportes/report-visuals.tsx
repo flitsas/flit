@@ -23,6 +23,14 @@ import {
 import type { OtReportSeriesPoint, OtReportSummary, OtReportTimeBucket } from "@/lib/api/ot-metrics";
 import { ESTADO_ORDER, estadoMeta, formatInt } from "./report-columns";
 import { Empty } from "./shared";
+import {
+  CARDLIST_CELL,
+  CARDLIST_HEAD_ROW,
+  CARDLIST_ROW,
+  CARDLIST_SCROLL,
+  CARDLIST_TABLE,
+  CARDLIST_TH,
+} from "@/components/atom/table-cardlist";
 
 // ── Composición por estado ─────────────────────────────────────────────────────
 
@@ -289,21 +297,21 @@ export function TrendChart({
         <summary className="cursor-pointer text-[11px] font-semibold text-[#557EFF]">
           Ver los valores periodo a periodo
         </summary>
-        <div className="mt-2 overflow-x-auto">
-          <table className="w-full min-w-[28rem] text-xs">
+        <div className={`mt-2 ${CARDLIST_SCROLL}`}>
+          <table className={`min-w-[28rem] ${CARDLIST_TABLE}`}>
             <thead>
-              <tr className="border-b border-[#DFE5ED] text-left text-[11px] uppercase tracking-wide text-[#6B7280] dark:border-white/10 dark:text-white/50">
-                <th className="py-1.5 pr-3 font-semibold">Periodo</th>
-                <th className="py-1.5 pr-3 font-semibold">Radicados</th>
-                <th className="py-1.5 pr-3 font-semibold">Aprobados</th>
-                <th className="py-1.5 pr-3 font-semibold">Rechazados</th>
-                <th className="py-1.5 pr-3 font-semibold">Acumulado</th>
+              <tr className={CARDLIST_HEAD_ROW}>
+                <th className={CARDLIST_TH}>Periodo</th>
+                <th className={CARDLIST_TH}>Radicados</th>
+                <th className={CARDLIST_TH}>Aprobados</th>
+                <th className={CARDLIST_TH}>Rechazados</th>
+                <th className={CARDLIST_TH}>Acumulado</th>
               </tr>
             </thead>
             <tbody>
               {data.map((point) => (
-                <tr key={point.bucket} className="border-b border-[#EEF1F5] dark:border-white/5">
-                  <td className="py-1.5 pr-3">
+                <tr key={point.bucket} className={CARDLIST_ROW}>
+                  <td className={CARDLIST_CELL}>
                     {onZoom ? (
                       <button
                         type="button"
@@ -317,10 +325,10 @@ export function TrendChart({
                       point.label
                     )}
                   </td>
-                  <td className="py-1.5 pr-3 tabular-nums">{formatInt(point.radicados)}</td>
-                  <td className="py-1.5 pr-3 tabular-nums">{formatInt(point.aprobados)}</td>
-                  <td className="py-1.5 pr-3 tabular-nums">{formatInt(point.rechazados)}</td>
-                  <td className="py-1.5 pr-3 tabular-nums">{formatInt(point.acumulado)}</td>
+                  <td className={`${CARDLIST_CELL} tabular-nums`}>{formatInt(point.radicados)}</td>
+                  <td className={`${CARDLIST_CELL} tabular-nums`}>{formatInt(point.aprobados)}</td>
+                  <td className={`${CARDLIST_CELL} tabular-nums`}>{formatInt(point.rechazados)}</td>
+                  <td className={`${CARDLIST_CELL} tabular-nums`}>{formatInt(point.acumulado)}</td>
                 </tr>
               ))}
             </tbody>

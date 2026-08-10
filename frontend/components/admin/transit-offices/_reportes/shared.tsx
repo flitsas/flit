@@ -8,6 +8,14 @@
 // medio módulo. Una pieza con dos definiciones acaba con dos aspectos, y son el mismo producto.
 
 import type { ReactNode } from "react";
+import {
+  CARDLIST_CELL,
+  CARDLIST_HEAD_ROW,
+  CARDLIST_ROW,
+  CARDLIST_SCROLL,
+  CARDLIST_TABLE,
+  CARDLIST_TH,
+} from "@/components/atom/table-cardlist";
 
 export {
   CSV_EXPORT_VISIBLE,
@@ -172,12 +180,12 @@ export function Table({
   rows: { key: string; cells: string[] }[];
 }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[34rem] text-xs">
+    <div className={CARDLIST_SCROLL}>
+      <table className={`min-w-[34rem] ${CARDLIST_TABLE}`}>
         <thead>
-          <tr className="border-b border-[#DFE5ED] text-left text-[11px] uppercase tracking-wide text-[#6B7280] dark:border-white/10 dark:text-white/50">
+          <tr className={CARDLIST_HEAD_ROW}>
             {headers.map((h) => (
-              <th key={h} className="py-2 pr-3 font-semibold">
+              <th key={h} className={CARDLIST_TH}>
                 {h}
               </th>
             ))}
@@ -185,9 +193,12 @@ export function Table({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.key} className="border-b border-[#EEF1F5] dark:border-white/5">
+            <tr key={row.key} className={CARDLIST_ROW}>
               {row.cells.map((cell, i) => (
-                <td key={headers[i]} className={`py-2 pr-3 ${i === 0 ? "" : "tabular-nums"}`}>
+                <td
+                  key={headers[i]}
+                  className={`${CARDLIST_CELL} ${i === 0 ? "" : "tabular-nums"}`}
+                >
                   {cell}
                 </td>
               ))}

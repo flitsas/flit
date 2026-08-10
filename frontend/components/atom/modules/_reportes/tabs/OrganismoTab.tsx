@@ -12,6 +12,14 @@ import { toMetricsParams, type ReportFilters } from "../filters";
 import { formatHours, formatInt, formatNumber, formatPct } from "../format";
 import { KpiCard } from "../KpiCard";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
+import {
+  CARDLIST_CELL,
+  CARDLIST_HEAD_ROW,
+  CARDLIST_ROW,
+  CARDLIST_SCROLL,
+  CARDLIST_TABLE,
+  CARDLIST_TH,
+} from "@/components/atom/table-cardlist";
 
 export interface OrganismoTabProps {
   filters: ReportFilters;
@@ -229,27 +237,27 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
               {metrics.data.current.officeRanking.length === 0 ? (
                 <p className="text-xs opacity-60">Sin organismos con decisiones en el periodo.</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs" data-testid="ranking-ot">
+                <div className={CARDLIST_SCROLL}>
+                  <table className={CARDLIST_TABLE} data-testid="ranking-ot">
                     <thead>
-                      <tr className="text-[10px] uppercase text-left opacity-70">
-                        <th className="px-2 py-2 font-semibold">#</th>
-                        <th className="px-2 py-2 font-semibold">Organismo</th>
-                        <th className="px-2 py-2 font-semibold">p50</th>
-                        <th className="px-2 py-2 font-semibold">Rechazo</th>
-                        <th className="px-2 py-2 font-semibold">Volumen</th>
+                      <tr className={CARDLIST_HEAD_ROW}>
+                        <th className={CARDLIST_TH}>#</th>
+                        <th className={CARDLIST_TH}>Organismo</th>
+                        <th className={CARDLIST_TH}>p50</th>
+                        <th className={CARDLIST_TH}>Rechazo</th>
+                        <th className={CARDLIST_TH}>Volumen</th>
                       </tr>
                     </thead>
                     <tbody>
                       {metrics.data.current.officeRanking.map((o) => (
-                        <tr key={o.transitOfficeId} className="border-t">
-                          <td className="px-2 py-2 font-bold" style={{ color: o.rank <= 3 ? "#8CC63F" : undefined }}>
+                        <tr key={o.transitOfficeId} className={CARDLIST_ROW}>
+                          <td className={`${CARDLIST_CELL} font-bold`} style={{ color: o.rank <= 3 ? "#8CC63F" : undefined }}>
                             {o.rank}
                           </td>
-                          <td className="px-2 py-2 font-medium">{o.transitOfficeName}</td>
-                          <td className="px-2 py-2">{formatHours(o.p50Hours)}</td>
-                          <td className="px-2 py-2">{formatPct(o.rejectionRatePct)}</td>
-                          <td className="px-2 py-2 opacity-80">{formatInt(o.volumen)}</td>
+                          <td className={`${CARDLIST_CELL} font-medium`}>{o.transitOfficeName}</td>
+                          <td className={CARDLIST_CELL}>{formatHours(o.p50Hours)}</td>
+                          <td className={CARDLIST_CELL}>{formatPct(o.rejectionRatePct)}</td>
+                          <td className={`${CARDLIST_CELL} opacity-80`}>{formatInt(o.volumen)}</td>
                         </tr>
                       ))}
                     </tbody>
