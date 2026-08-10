@@ -1,3 +1,4 @@
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 
@@ -38,12 +39,14 @@ public sealed record MandatoApprovalDecision(MandatoApprovalOutcome Outcome, Gui
 public sealed class MandatoApprovalHandler(
     IProcedureInstanceRepository repo,
     IMandateSignerDirectory directory,
-    ISignatureVaultPolicy? vaultPolicy = null)
+    ISignatureVaultPolicy? vaultPolicy = null,
+    IMandateRequirementPolicy? mandatePolicy = null)
 {
     // El mandatario firma igual que cualquier otra parte: con la firma del baúl si la tiene, y si no con
     // el sello de su validación de identidad (misma precedencia que aplica el generador del mandato).
     // Default inerte ⇒ sin baúl configurado el gate se comporta como antes.
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+    private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
 
     public async Task<MandatoApprovalDecision> CheckAsync(
         Guid instanceId,
@@ -73,6 +76,18 @@ public sealed class MandatoApprovalHandler(
             && !string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase));
         if (!exigeMandato || instance.TransitOfficeId is not { } transitOfficeId)
             return new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null);
+
+        var officeCode = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase))?.ValueText;
+        var mandateConfig = string.IsNullOrWhiteSpace(officeCode)
+            ? null
+            : await _mandatePolicy.ResolveAsync(officeCode, clientTenantId, ct).ConfigureAwait(false);
+
+        // Abierto / institucional: aprobar sin firmante persona (tipo por compañía×OT).
+        if (MandatoAssignmentModeCodes.SkipsPersonSigner(mandateConfig?.AssignmentMode))
+        {
+            return new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null);
+        }
 
         var candidates = await directory
             .GetCandidatesAsync(

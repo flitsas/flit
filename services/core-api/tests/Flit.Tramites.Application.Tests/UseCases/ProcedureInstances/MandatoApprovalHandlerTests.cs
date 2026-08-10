@@ -205,4 +205,35 @@ public sealed class MandatoApprovalHandlerTests
 
         decision.Outcome.Should().Be(MandatoApprovalOutcome.Resolved);
     }
+
+    // ---- develop (PR #241) — modo de asignación abierta del mandato --------------------------------
+
+    [Fact]
+    public async Task OpenAssignmentMode_SkipsSignerEvenWithCandidates()
+    {
+        var instance = SeedInstance();
+        instance.FieldValues =
+        [
+            new ProcedureInstanceFieldValue { FieldKey = "transit_office_code", ValueText = "05001000" },
+        ];
+        Candidates(Signer(), Signer(userId: Guid.NewGuid()));
+
+        var policy = Substitute.For<IMandateRequirementPolicy>();
+        policy.ResolveAsync("05001000", Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(new MandateOtConfig(
+                Office,
+                "generico",
+                RequiresForNaturalPerson: true,
+                null,
+                null,
+                AssignmentMode: "open"));
+
+        var handler = new MandatoApprovalHandler(_repo, _directory, mandatePolicy: policy);
+        var decision = await handler.CheckAsync(
+            instance.Id, Tenant, Guid.NewGuid(), null, TestContext.Current.CancellationToken);
+
+        decision.Outcome.Should().Be(MandatoApprovalOutcome.NotApplicable);
+        await _directory.DidNotReceive().GetCandidatesAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
 }

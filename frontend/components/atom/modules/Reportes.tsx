@@ -22,8 +22,9 @@ import { OrganismoTab } from "./_reportes/tabs/OrganismoTab";
 import { ProductividadTab } from "./_reportes/tabs/ProductividadTab";
 import { ResumenTab } from "./_reportes/tabs/ResumenTab";
 import { UsoTab } from "./_reportes/tabs/UsoTab";
+import { ConsultasTab } from "./_reportes/tabs/ConsultasTab";
 
-type TabId = "resumen" | "operacion" | "ot" | "uso" | "productividad";
+type TabId = "resumen" | "operacion" | "ot" | "uso" | "productividad" | "consultas";
 
 /** Pestañas + slug RBAC que las hace visibles (§3). SuperAdmin las ve todas. */
 const TAB_DEFS: ReadonlyArray<{ id: TabId; label: string; slug: string }> = [
@@ -32,6 +33,7 @@ const TAB_DEFS: ReadonlyArray<{ id: TabId; label: string; slug: string }> = [
   { id: "ot", label: "Organismo de Tránsito", slug: "reportes.ot.read" },
   { id: "uso", label: "Uso del aplicativo", slug: "reportes.uso.read" },
   { id: "productividad", label: "Productividad", slug: "reportes.productividad.read" },
+  { id: "consultas", label: "Consultas", slug: "reportes.consultas.read" },
 ];
 
 /** Slug legado: hace visible al menos "Resumen general" (compatibilidad §3). */
@@ -132,7 +134,7 @@ export function Reportes() {
           <p className="text-sm font-medium">No tienes permisos para ver reportes.</p>
           <p className="text-xs opacity-70 max-w-md">
             Pide a tu administrador que te asigne acceso a alguna pestaña de reportes
-            (Resumen general, Operación, Organismo de Tránsito, Uso o Productividad).
+            (Resumen general, Operación, Organismo de Tránsito, Uso, Productividad o Consultas).
           </p>
         </div>
       </div>
@@ -148,7 +150,13 @@ export function Reportes() {
 
       {/* Filtros globales (persisten entre pestañas) + exportaciones */}
       <div className="flex flex-wrap items-end gap-3 shrink-0">
-        <GlobalFilters filters={filters} onChange={setFilters} isSuper={isSuper} companies={companies} />
+        <GlobalFilters
+          filters={filters}
+          onChange={setFilters}
+          isSuper={isSuper}
+          companies={companies}
+          onlyCompany={activeTab === "consultas"}
+        />
         {canManageScheduling && (
           <button
             type="button"
@@ -180,7 +188,7 @@ export function Reportes() {
         ariaLabel="Pestañas de reportes"
       />
 
-      {!rangeValid ? (
+      {!rangeValid && activeTab !== "consultas" ? (
         <div
           role="alert"
           className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
@@ -204,6 +212,9 @@ export function Reportes() {
           {activeTab === "ot" && <OrganismoTab filters={filters} needsCompany={needsCompany} />}
           {activeTab === "uso" && <UsoTab filters={filters} needsCompany={needsCompany} />}
           {activeTab === "productividad" && <ProductividadTab filters={filters} />}
+          {activeTab === "consultas" && (
+            <ConsultasTab tenantId={filters.tenantId || undefined} needsCompany={needsCompany} />
+          )}
         </div>
       )}
 

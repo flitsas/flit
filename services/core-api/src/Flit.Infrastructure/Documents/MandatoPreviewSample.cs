@@ -28,6 +28,7 @@ public static class MandatoPreviewSample
         {
             MandatoTemplateResolver.Sabaneta => ("5631000", "STRIA MOVILIDAD SABANETA", "Sabaneta"),
             MandatoTemplateResolver.Bello => ("5088000", "STRIA MOVILIDAD BELLO", "Bello"),
+            MandatoTemplateResolver.Municipio => ("5266000", "STRIA TTEyTTO ENVIGADO", "Envigado"),
             _ => ("05001000", "SECRETARIA DE MOVILIDAD DE MEDELLIN", "Medellín"),
         };
 
@@ -83,6 +84,17 @@ public static class MandatoPreviewSample
                 PhCamara,
                 null,
                 ModoFirmaMandatario: MandatarioFirmaModo.Manual),
+
+            MandatoTemplateResolver.Municipio => new MandatoData(
+                tramite,
+                MandatoTemplateResolver.Municipio,
+                null,
+                null,
+                firmante,
+                MandatoFamilia.Individuo,
+                PhCamara,
+                null,
+                ModoFirmaMandatario: MandatarioFirmaModo.Estampada),
 
             _ => new MandatoData(
                 tramite,

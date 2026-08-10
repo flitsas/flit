@@ -976,6 +976,7 @@ public static class DevelopmentAuthSeeder
             ("reportes.ot.read",             "Ver pestaña Organismo de Tránsito",  "/api/v1/analytics/ot-metrics"),
             ("reportes.uso.read",            "Ver pestaña Uso del aplicativo",     "/api/v1/analytics/usage"),
             ("reportes.productividad.read",  "Ver pestaña Productividad",          "/api/v1/analytics/productivity/top"),
+            ("reportes.consultas.read",      "Ver pestaña Consultas",              "/api/v1/analytics/queries/run"),
             ("reportes.programacion.manage", "Administrar informes programados y alertas", "/api/v1/analytics/report-schedules"),
         };
 

@@ -55,12 +55,6 @@ beforeEach(() => {
   mocks.lookupLegalRepresentativeByNit.mockResolvedValue(null);
 });
 
-async function fillRequiredComprador(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(await screen.findByLabelText('Número de documento'), '12345');
-  await user.type(screen.getByLabelText(/Nombre completo/), 'Juan Perez');
-  await user.type(screen.getByLabelText(/Correo electrónico/), 'juan@example.com');
-}
-
 describe('ActorsForm — AC1 (HU #10956) el check de Habeas Data ya no se ofrece', () => {
   it('matrícula (SPLIT, persona natural): no muestra el checkbox de reutilización', async () => {
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);

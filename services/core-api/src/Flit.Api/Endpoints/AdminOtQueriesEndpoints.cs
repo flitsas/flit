@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flit.Admin.Application.OtQueries;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.OtQueries;
+using Flit.Queries.Domain;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -35,7 +36,7 @@ public static class AdminOtQueriesEndpoints
             .WithDescription("El constructor de filtros se pinta a partir de esta respuesta, así que "
                 + "un campo nuevo aparece en pantalla sin tocar el frontend. Las opciones de "
                 + "'empresa' y 'revisor' vienen resueltas para este organismo.")
-            .Produces<IReadOnlyList<OtQueryFieldDto>>(StatusCodes.Status200OK)
+            .Produces<IReadOnlyList<QueryFieldDto>>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
@@ -58,7 +59,7 @@ public static class AdminOtQueriesEndpoints
             .WithSummary("Consultas guardadas del usuario, más las de fábrica")
             .WithDescription("Las de fábrica van al final y con 'deFabrica' en true: no se persisten, "
                 + "no se pueden editar y guardarlas las duplica.")
-            .Produces<IReadOnlyList<OtSavedQueryDto>>(StatusCodes.Status200OK)
+            .Produces<IReadOnlyList<SavedQueryDto>>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
@@ -66,7 +67,7 @@ public static class AdminOtQueriesEndpoints
         group.MapPost("/saved", SaveAsync)
             .WithName("AdminOtQuerySave")
             .WithSummary("Guarda una consulta nueva o actualiza una propia")
-            .Produces<OtSavedQueryDto>(StatusCodes.Status200OK)
+            .Produces<SavedQueryDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -85,14 +86,14 @@ public static class AdminOtQueriesEndpoints
     }
 
     /// <summary>Cuerpo de la ejecución: la definición más la página que se quiere ver.</summary>
-    public sealed record RunRequest(OtQueryDefinition? Definition, int? Page, int? PageSize);
+    public sealed record RunRequest(QueryDefinition? Definition, int? Page, int? PageSize);
 
     /// <summary>Cuerpo del guardado. <c>Id</c> nulo crea; con id actualiza la del propio usuario.</summary>
     public sealed record SaveRequest(
         Guid? Id,
         string? Nombre,
         string? Descripcion,
-        OtQueryDefinition? Definition);
+        QueryDefinition? Definition);
 
     private static async Task<IResult> RunAsync(
         HttpContext httpContext,
@@ -191,11 +192,11 @@ public static class AdminOtQueriesEndpoints
 
             return result is null ? NoTransitOffice() : Results.Ok(result);
         }
-        catch (OtSavedQueryNameTakenException ex)
+        catch (SavedQueryNameTakenException ex)
         {
             return Results.Conflict(new { error = ex.Message, code = "NOMBRE_REPETIDO" });
         }
-        catch (OtSavedQueryLimitException ex)
+        catch (SavedQueryLimitException ex)
         {
             return Results.Conflict(new { error = ex.Message, code = "LIMITE_CONSULTAS" });
         }

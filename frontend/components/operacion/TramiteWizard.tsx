@@ -293,10 +293,8 @@ function ReadOnlyStateNotice({ estado }: { estado: InstanceStatus | null }) {
  */
 export function TramiteWizard(props: Props) {
   const {
-    configuration,
     procedureTypeId,
     modalidad: entryModalidad,
-    title,
     existingInstanceId,
     onCreated,
     seedVin,
@@ -2765,6 +2763,7 @@ function StepBody({
               </span>
             </div>
           )}
+          {/* Mandatario (Persona/RL): disclosure dentro de MatriculaResumen (FirmaFurStep). */}
           <FirmaFurStep
             key={`${instanceId ?? 'new'}-${instanceStatus ?? 'borrador'}`}
             instanceId={instanceId}

@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Flit.Api.Endpoints;
 
 /// <summary>
-/// SuperAdmin — Plataforma → Mandatos: preview, CRUD de config por OT y extract OCR de referencia.
+/// SuperAdmin — Plataforma → Mandatos: preview, CRUD de config por OT, plantilla propia y OCR.
 /// </summary>
 public static class AdminPlataformaMandatosEndpoints
 {
@@ -18,6 +18,7 @@ public static class AdminPlataformaMandatosEndpoints
         MandatoTemplateResolver.Generico,
         MandatoTemplateResolver.Sabaneta,
         MandatoTemplateResolver.Bello,
+        MandatoTemplateResolver.Municipio,
     };
 
     public static IEndpointRouteBuilder MapAdminPlataformaMandatosEndpoints(this IEndpointRouteBuilder app)
@@ -50,6 +51,25 @@ public static class AdminPlataformaMandatosEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapPost("/ot/{officeId:guid}/template", UploadTemplateAsync)
+            .WithName("AdminPlataformaMandatosUploadTemplate")
+            .DisableAntiforgery()
+            .Produces<MandateOtConfigView>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPut("/ot/{officeId:guid}/template/editor", SaveEditorAsync)
+            .WithName("AdminPlataformaMandatosSaveEditor")
+            .Produces<MandateOtConfigView>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        group.MapDelete("/ot/{officeId:guid}/template", DeleteTemplateAsync)
+            .WithName("AdminPlataformaMandatosDeleteTemplate")
+            .Produces<MandateOtConfigView>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
         group.MapGet("/{templateCode}/preview", PreviewTemplateAsync)
             .WithName("AdminPlataformaMandatosPreview")
             .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
@@ -65,6 +85,22 @@ public static class AdminPlataformaMandatosEndpoints
             .DisableAntiforgery()
             .Produces<MandateConfigExtractResult>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest);
+
+        group.MapGet("/ot/{officeId:guid}/company-rules", ListCompanyRulesAsync)
+            .WithName("AdminPlataformaMandatosListCompanyRules")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPut("/ot/{officeId:guid}/company-rules/{companyTenantId:guid}", UpsertCompanyRuleAsync)
+            .WithName("AdminPlataformaMandatosUpsertCompanyRule")
+            .Produces<CompanyOtMandateRuleView>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapDelete("/ot/{officeId:guid}/company-rules/{companyTenantId:guid}", DeleteCompanyRuleAsync)
+            .WithName("AdminPlataformaMandatosDeleteCompanyRule")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound);
 
         return app;
     }
@@ -97,17 +133,7 @@ public static class AdminPlataformaMandatosEndpoints
             .UpsertAsync(officeId, request, ResolveUserId(user), ct)
             .ConfigureAwait(false);
 
-        return status switch
-        {
-            MandateConfigWriteStatus.Ok => Results.Ok(view),
-            MandateConfigWriteStatus.OfficeNotFound => Results.NotFound(),
-            MandateConfigWriteStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
-            MandateConfigWriteStatus.InvalidTemplate => Results.BadRequest(new { error = "template_code_invalido" }),
-            MandateConfigWriteStatus.InvalidFamily => Results.BadRequest(new { error = "mandatary_family_invalida" }),
-            MandateConfigWriteStatus.InstitutionalRequired =>
-                Results.BadRequest(new { error = "mandatario_institucional_requerido" }),
-            _ => Results.BadRequest(),
-        };
+        return MapWrite(status, view);
     }
 
     private static async Task<IResult> DeleteAsync(
@@ -119,6 +145,56 @@ public static class AdminPlataformaMandatosEndpoints
         return status == MandateConfigWriteStatus.Ok
             ? Results.NoContent()
             : Results.NotFound();
+    }
+
+    private static async Task<IResult> UploadTemplateAsync(
+        Guid officeId,
+        HttpRequest http,
+        ClaimsPrincipal user,
+        [FromServices] IMandateConfigAdminService service,
+        CancellationToken ct)
+    {
+        if (!http.HasFormContentType)
+            return Results.BadRequest(new { error = "multipart_requerido" });
+
+        var form = await http.ReadFormAsync(ct).ConfigureAwait(false);
+        var file = form.Files.GetFile("file") ?? (form.Files.Count > 0 ? form.Files[0] : null);
+        if (file is null || file.Length == 0)
+            return Results.BadRequest(new { error = "archivo_requerido" });
+
+        await using var stream = file.OpenReadStream();
+        var (status, view) = await service
+            .UploadPdfTemplateAsync(officeId, stream, file.FileName, ResolveUserId(user), ct)
+            .ConfigureAwait(false);
+
+        return MapWrite(status, view);
+    }
+
+    private static async Task<IResult> SaveEditorAsync(
+        Guid officeId,
+        [FromBody] SaveMandateEditorBodyRequest request,
+        ClaimsPrincipal user,
+        [FromServices] IMandateConfigAdminService service,
+        CancellationToken ct)
+    {
+        var (status, view) = await service
+            .SaveEditorBodyAsync(officeId, request, ResolveUserId(user), ct)
+            .ConfigureAwait(false);
+
+        return MapWrite(status, view);
+    }
+
+    private static async Task<IResult> DeleteTemplateAsync(
+        Guid officeId,
+        ClaimsPrincipal user,
+        [FromServices] IMandateConfigAdminService service,
+        CancellationToken ct)
+    {
+        var (status, view) = await service
+            .DeleteCustomTemplateAsync(officeId, ResolveUserId(user), ct)
+            .ConfigureAwait(false);
+
+        return MapWrite(status, view);
     }
 
     private static IResult PreviewTemplateAsync(
@@ -147,6 +223,10 @@ public static class AdminPlataformaMandatosEndpoints
         if (view is null) return Results.NotFound();
 
         var sample = MandatoPreviewSample.Build(view.TemplateCode);
+        byte[]? customPdf = null;
+        if (view.CustomTemplateKind == MandatoCustomTemplateKindCodes.Pdf)
+            customPdf = await service.OpenCustomPdfAsync(officeId, ct).ConfigureAwait(false);
+
         var data = sample with
         {
             InstitutionalMandataryName = view.InstitutionalMandataryName ?? sample.InstitutionalMandataryName,
@@ -154,6 +234,19 @@ public static class AdminPlataformaMandatosEndpoints
             Familia = MandatoFamiliaCodes.Resolve(view.MandataryFamily),
             ChamberCity = view.ChamberCity ?? sample.ChamberCity,
             MandatarySigla = view.MandatarySigla ?? sample.MandatarySigla,
+            // Abierto: bloque con líneas (Manual) y sin firmante en el sample.
+            // Institucional: SinBloque (solo mandante).
+            Mandatario = MandatoAssignmentModeCodes.IsOpen(view.AssignmentMode)
+                ? null
+                : sample.Mandatario,
+            ModoFirmaMandatario = MandatoAssignmentModeCodes.IsInstitutional(view.AssignmentMode)
+                ? MandatarioFirmaModo.SinBloque
+                : MandatoAssignmentModeCodes.IsOpen(view.AssignmentMode)
+                    ? MandatarioFirmaModo.Manual
+                    : sample.ModoFirmaMandatario,
+            CustomTemplateKind = view.CustomTemplateKind,
+            CustomTemplateBody = view.CustomTemplateBody,
+            CustomTemplatePdf = customPdf,
         };
 
         var doc = generator.GenerateMandato(data);
@@ -193,6 +286,79 @@ public static class AdminPlataformaMandatosEndpoints
         var result = await service.ExtractAsync(ms.ToArray(), mediaType, ct).ConfigureAwait(false);
         return Results.Ok(result);
     }
+
+    private static async Task<IResult> ListCompanyRulesAsync(
+        Guid officeId,
+        [FromServices] IMandateConfigAdminService service,
+        CancellationToken ct)
+    {
+        if (await service.GetAsync(officeId, ct).ConfigureAwait(false) is null)
+            return Results.NotFound();
+
+        var items = await service.ListCompanyRulesAsync(officeId, ct).ConfigureAwait(false);
+        return Results.Ok(new { items });
+    }
+
+    private static async Task<IResult> UpsertCompanyRuleAsync(
+        Guid officeId,
+        Guid companyTenantId,
+        [FromBody] UpsertCompanyOtMandateRuleRequest request,
+        ClaimsPrincipal user,
+        [FromServices] IMandateConfigAdminService service,
+        CancellationToken ct)
+    {
+        var (status, view) = await service
+            .UpsertCompanyRuleAsync(officeId, companyTenantId, request, ResolveUserId(user), ct)
+            .ConfigureAwait(false);
+
+        return status switch
+        {
+            MandateConfigWriteStatus.Ok => Results.Ok(view),
+            MandateConfigWriteStatus.OfficeNotFound or MandateConfigWriteStatus.CompanyNotFound =>
+                Results.NotFound(),
+            MandateConfigWriteStatus.InvalidAssignmentMode =>
+                Results.BadRequest(new { error = "assignment_mode_invalido" }),
+            MandateConfigWriteStatus.InvalidFamily =>
+                Results.BadRequest(new { error = "mandatary_family_invalida" }),
+            MandateConfigWriteStatus.InstitutionalRequired =>
+                Results.BadRequest(new { error = "mandatario_institucional_requerido" }),
+            MandateConfigWriteStatus.InvalidDefaultSigner =>
+                Results.BadRequest(new { error = "mandatario_default_invalido" }),
+            _ => Results.BadRequest(),
+        };
+    }
+
+    private static async Task<IResult> DeleteCompanyRuleAsync(
+        Guid officeId,
+        Guid companyTenantId,
+        [FromServices] IMandateConfigAdminService service,
+        CancellationToken ct)
+    {
+        var status = await service.DeleteCompanyRuleAsync(officeId, companyTenantId, ct).ConfigureAwait(false);
+        return status == MandateConfigWriteStatus.Ok
+            ? Results.NoContent()
+            : Results.NotFound();
+    }
+
+    private static IResult MapWrite(MandateConfigWriteStatus status, MandateOtConfigView? view) =>
+        status switch
+        {
+            MandateConfigWriteStatus.Ok => Results.Ok(view),
+            MandateConfigWriteStatus.OfficeNotFound => Results.NotFound(),
+            MandateConfigWriteStatus.CompanyNotFound => Results.NotFound(),
+            MandateConfigWriteStatus.Conflict => Results.Conflict(new { error = "row_version_conflict" }),
+            MandateConfigWriteStatus.InvalidTemplate => Results.BadRequest(new { error = "template_code_invalido" }),
+            MandateConfigWriteStatus.InvalidFamily => Results.BadRequest(new { error = "mandatary_family_invalida" }),
+            MandateConfigWriteStatus.InvalidAssignmentMode =>
+                Results.BadRequest(new { error = "assignment_mode_invalido" }),
+            MandateConfigWriteStatus.InstitutionalRequired =>
+                Results.BadRequest(new { error = "mandatario_institucional_requerido" }),
+            MandateConfigWriteStatus.InvalidTemplateFile =>
+                Results.BadRequest(new { error = "plantilla_pdf_invalida" }),
+            MandateConfigWriteStatus.InvalidEditorBody =>
+                Results.BadRequest(new { error = "editor_cuerpo_invalido" }),
+            _ => Results.BadRequest(),
+        };
 
     private static Guid? ResolveUserId(ClaimsPrincipal user)
     {

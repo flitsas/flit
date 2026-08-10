@@ -12,6 +12,7 @@ import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { formatDateOnly } from '@/lib/format/date-only';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { BiometricStep } from './BiometricStep';
+import { MandatarioSection } from './MandatarioSection';
 import { openAttachmentInNewTab } from './ExpedienteVisor';
 import { WizardReadOnlyProvider } from './WizardReadOnlyContext';
 
@@ -628,6 +629,14 @@ export default function MatriculaResumen({
             </p>
           )}
         </ResumenDisclosure>
+      ) : null}
+
+      {instanceId ? (
+        <MandatarioSection
+          instanceId={instanceId}
+          onChanged={onBiometricRefresh}
+          asDisclosure
+        />
       ) : null}
 
       {hasExtras ? (

@@ -70,6 +70,8 @@ const mocks = vi.hoisted(() => ({
   generarImpronta: vi.fn(),
   generarConsolidado: vi.fn(),
   getPrenda: vi.fn(),
+  listMandateSigners: vi.fn(),
+  setMandateSigner: vi.fn(),
 }));
 
 // AC1 (HU #10882) — el wizard también importa `getDuplicateActiveProcedureId` de este módulo; se
@@ -273,6 +275,8 @@ beforeEach(() => {
     hash: 'h',
   });
   mocks.getPrenda.mockResolvedValue(null);
+  mocks.listMandateSigners.mockResolvedValue({ opciones: [], elegidoId: null, editable: true });
+  mocks.setMandateSigner.mockResolvedValue(undefined);
   mocks.generarConsolidado.mockResolvedValue({
     document: { attachmentId: 'c-1', tipo: 'consolidado', filename: 'c.pdf', sha256: 'abc' },
     regenerado: true,

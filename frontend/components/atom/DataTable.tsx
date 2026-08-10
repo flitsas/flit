@@ -41,6 +41,11 @@ export interface DataTableProps<T> {
   onRetry?: () => void;
   /** Ancho mínimo (px) antes de activar el scroll horizontal. */
   minWidth?: number;
+  /**
+   * Si es `false`, la tabla ocupa el 100% del contenedor sin scroll horizontal
+   * (paneles laterales / drawers). Default: `true` (listados anchos).
+   */
+  allowHorizontalScroll?: boolean;
   pagination?: DataTablePagination;
   ariaLabel?: string;
   /** Contenido expandible bajo una fila (p. ej. permisos de un módulo RBAC). Si
@@ -64,6 +69,7 @@ export function DataTable<T>({
   errorMessage,
   onRetry,
   minWidth,
+  allowHorizontalScroll = true,
   pagination,
   ariaLabel,
   renderExpanded,
@@ -86,10 +92,12 @@ export function DataTable<T>({
         onRetry={onRetry}
         skeletonRows={6}
       >
-        <div className="overflow-x-auto">
+        <div className={allowHorizontalScroll ? "overflow-x-auto" : "overflow-x-hidden"}>
           <table
-            className="w-full border-separate border-spacing-y-2 text-xs"
-            style={minWidth ? { minWidth } : undefined}
+            className={`w-full border-separate border-spacing-y-2 text-xs ${
+              allowHorizontalScroll ? "" : "table-fixed"
+            }`}
+            style={allowHorizontalScroll && minWidth ? { minWidth } : undefined}
             aria-label={ariaLabel}
           >
             <thead>

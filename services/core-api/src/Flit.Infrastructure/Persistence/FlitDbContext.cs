@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Persistence.Entities.Admin;
+using Flit.Infrastructure.Persistence.Entities.Analytics;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Quipux;
@@ -98,6 +99,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<TransitOfficeMandateConfigEntity> TransitOfficeMandateConfigs =>
         Set<TransitOfficeMandateConfigEntity>();
 
+    /// <summary>Tipo de mandato (3) por compañía gestora × OT.</summary>
+    public DbSet<CompanyOtMandateRuleEntity> CompanyOtMandateRules =>
+        Set<CompanyOtMandateRuleEntity>();
+
     // ── Admin Compañías — baúl de firmas precargadas (HU #10642, ADR-0025) ─────────
     public DbSet<SignatureVaultEntity> SignatureVault => Set<SignatureVaultEntity>();
 
@@ -149,6 +154,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // Consultas que cada usuario del organismo arma y guarda sobre los trámites.
     public DbSet<OtSavedQueryEntity> OtSavedQueries => Set<OtSavedQueryEntity>();
+
+    // Lo mismo, del otro lado del trámite: las que guarda un usuario de la empresa gestora.
+    public DbSet<CompanySavedQueryEntity> CompanySavedQueries => Set<CompanySavedQueryEntity>();
 
     // HU #10545 — requisitos configurables por OT (RNMC, ruta de placa, validación de identidad).
     public DbSet<OtRequirementsEntity> OtRequirements => Set<OtRequirementsEntity>();

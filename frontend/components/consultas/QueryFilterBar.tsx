@@ -14,12 +14,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   OPERATOR_LABEL,
   UNARY_OPERATORS,
-  type OtQueryCondition,
-  type OtQueryField,
-  type OtQueryOperator,
-} from "@/lib/api/ot-queries";
-import { FIELD_CLS } from "./shared";
-import { plural } from "./report-columns";
+  type QueryCondition,
+  type QueryField,
+  type QueryOperator,
+} from "@/lib/api/queries";
+import { FIELD_CLS, plural } from "./ui";
 
 /**
  * Trocea lo que el usuario pegó. Acepta saltos de línea, comas, punto y coma y tabuladores porque
@@ -37,7 +36,7 @@ export function parseValueList(raw: string): string[] {
   ];
 }
 
-export function describeCondition(condition: OtQueryCondition, fields: OtQueryField[]): string {
+export function describeCondition(condition: QueryCondition, fields: QueryField[]): string {
   const field = fields.find((f) => f.id === condition.fieldId);
   const label = field?.label ?? condition.fieldId;
   const operador = OPERATOR_LABEL[condition.operator] ?? condition.operator;
@@ -63,11 +62,14 @@ export function QueryFilterBar({
   conditions,
   onChange,
   disabled,
+  testIdPrefix,
 }: {
-  fields: OtQueryField[];
-  conditions: OtQueryCondition[];
-  onChange: (conditions: OtQueryCondition[]) => void;
+  fields: QueryField[];
+  conditions: QueryCondition[];
+  onChange: (conditions: QueryCondition[]) => void;
   disabled?: boolean;
+  /** Las dos consolas usan esta barra; el prefijo las hace distinguibles en las pruebas. */
+  testIdPrefix: string;
 }) {
   // `null` = cerrado; una cadena = editando ese campo; "" = eligiendo cuál añadir.
   const [editing, setEditing] = useState<string | null>(null);
@@ -94,7 +96,7 @@ export function QueryFilterBar({
     };
   }, [editing]);
 
-  function upsert(condition: OtQueryCondition) {
+  function upsert(condition: QueryCondition) {
     const rest = conditions.filter((c) => c.fieldId !== condition.fieldId);
     onChange([...rest, condition]);
     setEditing(null);
@@ -109,7 +111,7 @@ export function QueryFilterBar({
   const grupos = [...new Set(disponibles.map((f) => f.group))];
 
   return (
-    <div className="flex flex-wrap items-center gap-2" ref={containerRef} data-testid="ot-query-filtros">
+    <div className="flex flex-wrap items-center gap-2" ref={containerRef} data-testid={`${testIdPrefix}-filtros`}>
       {conditions.map((condition) => (
         <span
           key={condition.fieldId}
@@ -119,7 +121,7 @@ export function QueryFilterBar({
             type="button"
             onClick={() => setEditing(editing === condition.fieldId ? null : condition.fieldId)}
             className="max-w-[22rem] truncate"
-            data-testid={`ot-query-chip-${condition.fieldId}`}
+            data-testid={`${testIdPrefix}-chip-${condition.fieldId}`}
           >
             {describeCondition(condition, fields)}
           </button>
@@ -138,6 +140,7 @@ export function QueryFilterBar({
               value={condition}
               onApply={upsert}
               onRemove={() => remove(condition.fieldId)}
+              testIdPrefix={testIdPrefix}
             />
           )}
         </span>
@@ -149,7 +152,7 @@ export function QueryFilterBar({
           disabled={disabled || disponibles.length === 0}
           onClick={() => setEditing(editing === "" ? null : "")}
           className="rounded-full border border-dashed border-[#DFE5ED] px-3 py-1 text-xs font-semibold text-[#6B7280] hover:border-[#557EFF] hover:text-[#557EFF] disabled:opacity-40 dark:border-white/20 dark:text-white/60"
-          data-testid="ot-query-agregar-filtro"
+          data-testid={`${testIdPrefix}-agregar-filtro`}
         >
           + Filtro
         </button>
@@ -157,7 +160,7 @@ export function QueryFilterBar({
         {editing === "" && (
           <div
             className="absolute left-0 z-50 mt-2 max-h-[24rem] w-64 overflow-y-auto rounded-2xl border border-[#DFE5ED] bg-white p-2 shadow-2xl dark:border-white/10 dark:bg-[#0B0F14]"
-            data-testid="ot-query-campos"
+            data-testid={`${testIdPrefix}-campos`}
           >
             {grupos.map((grupo) => (
               <div key={grupo} className="mb-1">
@@ -190,6 +193,7 @@ export function QueryFilterBar({
             value={null}
             onApply={upsert}
             onRemove={() => setEditing(null)}
+            testIdPrefix={testIdPrefix}
           />
         </div>
       )}
@@ -202,13 +206,15 @@ function ConditionEditor({
   value,
   onApply,
   onRemove,
+  testIdPrefix,
 }: {
-  field: OtQueryField;
-  value: OtQueryCondition | null;
-  onApply: (condition: OtQueryCondition) => void;
+  field: QueryField;
+  value: QueryCondition | null;
+  onApply: (condition: QueryCondition) => void;
   onRemove: () => void;
+  testIdPrefix: string;
 }) {
-  const [operator, setOperator] = useState<OtQueryOperator>(
+  const [operator, setOperator] = useState<QueryOperator>(
     value?.operator ?? field.operators[0] ?? "es_alguno",
   );
   const [texto, setTexto] = useState(value?.values.join("\n") ?? "");
@@ -232,14 +238,14 @@ function ConditionEditor({
   return (
     <div
       className="absolute left-0 top-full z-50 mt-2 w-80 rounded-2xl border border-[#DFE5ED] bg-white p-3 text-left shadow-2xl dark:border-white/10 dark:bg-[#0B0F14]"
-      data-testid={`ot-query-editor-${field.id}`}
+      data-testid={`${testIdPrefix}-editor-${field.id}`}
     >
       <p className="mb-2 text-xs font-semibold text-[#0B1F33] dark:text-white">{field.label}</p>
 
       {field.operators.length > 1 && (
         <select
           value={operator}
-          onChange={(e) => setOperator(e.target.value as OtQueryOperator)}
+          onChange={(e) => setOperator(e.target.value as QueryOperator)}
           aria-label="Operador"
           className={`${FIELD_CLS} mb-2 w-full`}
         >
@@ -262,7 +268,7 @@ function ConditionEditor({
             }
             aria-label={`Valores de ${field.label}`}
             className={`${FIELD_CLS} w-full resize-y`}
-            data-testid={`ot-query-valores-${field.id}`}
+            data-testid={`${testIdPrefix}-valores-${field.id}`}
           />
           {operator !== "contiene" && valores.length > 0 && (
             <p className="mt-1 text-[11px] text-[#6B7280] dark:text-white/50">
@@ -326,7 +332,7 @@ function ConditionEditor({
           onClick={aplicar}
           disabled={!esUnario && valores.length === 0}
           className="rounded-lg bg-[#557EFF] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
-          data-testid={`ot-query-aplicar-${field.id}`}
+          data-testid={`${testIdPrefix}-aplicar-${field.id}`}
         >
           Aplicar
         </button>
