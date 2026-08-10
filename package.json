@@ -130,7 +130,8 @@
   "pnpm": {
     "overrides": {
       "sharp": "0.35.3",
-      "postcss": "8.5.22"
+      "postcss": "8.5.23",
+      "nanoid": "3.3.17"
     }
   },
   "engines": {

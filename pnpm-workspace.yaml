@@ -7,8 +7,15 @@ allowBuilds:
   esbuild: true
   '@biomejs/biome': true
 
+# ATENCION: estos overrides son los EFECTIVOS. `package.json` declara los mismos y pnpm 11 no los
+# usa: si cambias uno, cambia los dos o quedaran en desacuerdo silencioso.
+#
 # next@16.2.x pinnea sharp ^0.34.5 (CVE libvips). Forzar parche hasta que Next actualice.
-# next@16.2.x pinnea postcss 8.4.31 (GHSA-6g55-p6wh-862q). Forzar >=8.5.12.
+# next@16.2.x pinnea postcss 8.4.31 (GHSA-6g55-p6wh-862q). El aviso se amplio: la correccion de esa
+#   serie era incompleta y exige >=8.5.23, asi que el pin anterior en 8.5.22 dejaba el CI en rojo.
+# postcss arrastra nanoid; <3.3.17 tiene GHSA-2v37-7h3g-55p8 (alta), que es la que rompe
+#   `dependency-audit` porque el umbral del workflow es `high`.
 overrides:
   sharp: 0.35.3
-  postcss: 8.5.22
+  postcss: 8.5.23
+  nanoid: 3.3.17
