@@ -56,7 +56,8 @@ public sealed class GenerarFurHandler(
     IFurTemplateResolver? templateResolver = null,
     IProcedureDeedResolver? deedResolver = null,
     IRepresentanteLegalDirectory? representanteDirectory = null,
-    Certifications.ICertificationReader? certificationReader = null)
+    Certifications.ICertificationReader? certificationReader = null,
+    IPersonalizedDocumentResolver? personalizedDocumentResolver = null)
     : IExpedienteHotDocumentsRegenerator
 {
     // HU #11198 (AC3) — respaldo del directorio para el nombre del representante cuando el trámite no lo
@@ -103,6 +104,12 @@ public sealed class GenerarFurHandler(
     // HU #10926 (ADR-0033) — resolutor de escrituras vigentes de las compañías (NIT) de los actores,
     // para adjuntarlas al consolidado. Default nulo (no resuelve) en tests que no lo ejercitan.
     private readonly IProcedureDeedResolver _deedResolver = deedResolver ?? NullProcedureDeedResolver.Instance;
+
+    // HU #11316 (Feature #11309, ADR-0042) — ÚNICO puerto de sustitución por documento personalizado de
+    // compañía. Default seguro (NUNCA sustituye) en tests/DI que no lo ejercitan, mismo patrón que el
+    // resto de puertos opcionales del handler.
+    private readonly IPersonalizedDocumentResolver _personalizedDocumentResolver =
+        personalizedDocumentResolver ?? NullPersonalizedDocumentResolver.Instance;
 
     /// <summary>
     /// HU #10860 (cascada β) — regenera el FUR y sus documentos en caliente (con fecha vigente) para
@@ -263,14 +270,13 @@ public sealed class GenerarFurHandler(
         }
         else
         {
-            foreach (var prev in instance.Attachments
-                         .Where(a => string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase))
-                         .ToList())
-            {
-                storage.Delete(prev.StoragePath);
-                instance.Attachments.Remove(prev);
-                repo.RemoveAttachment(prev);
-            }
+            // DT-3 (HU #11316) — guarda compartida: solo se retira el 'mandato' GENERADO POR EL
+            // SISTEMA. Antes esta rama borraba por Tipo sin mirar el origen y destruía también el
+            // documento personalizado de la compañía (Source='company', HU #11313) y su archivo. El
+            // mandato personalizado sobrevive a esta limpieza; volver a aplicarse cuando el trámite
+            // vuelva a exigir mandato es el bucle de persistencia de más abajo.
+            AttachmentCleanup.RetirarGenerados(instance, repo, storage,
+                a => string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase));
         }
 
         if (identidadValidada)
@@ -440,6 +446,54 @@ public sealed class GenerarFurHandler(
             }
         }
 
+        // HU #11316 (Feature #11309, ADR-0042) — ÚNICO punto de sustitución por documento personalizado
+        // de compañía (DT-1b). `generated` ya está COMPLETA: la aplicabilidad de cada documento la
+        // decidió la lógica de arriba (si el mandato no aplica, ya salió por la rama `else` de arriba y
+        // no hay nada que sustituir — restricción 6). Se resuelve una sola vez, contra los tipos
+        // realmente presentes; en producción la lista de tipos habilitados está VACÍA hasta las HUs
+        // #11317/#11318 (ver PersonalizedDocumentResolver), así que hoy esto nunca sustituye nada.
+        var personalizedByTipo = new Dictionary<string, ResolvedPersonalizedDocument>(StringComparer.OrdinalIgnoreCase);
+        var personalizedResolution = await _personalizedDocumentResolver.ResolveAsync(
+            tenantId, generated.Select(d => d.Tipo), ct);
+        foreach (var resolved in personalizedResolution.Resolved)
+        {
+            personalizedByTipo[resolved.Tipo] = resolved;
+        }
+        for (var i = 0; i < generated.Count; i++)
+        {
+            if (!personalizedByTipo.TryGetValue(generated[i].Tipo, out var resolved))
+                continue;
+
+            // Conserva el Tipo: el pie de página (DocumentLabels.Display), la matriz documental y el
+            // orden del expediente se heredan gratis (DT-2/CF-03). El PDF entra COMPLETO al compositor
+            // (DT-5) — sin inyectar ningún dato del trámite ni ninguna firma dentro del contenido.
+            generated[i] = new GeneratedDocument(resolved.Tipo, resolved.Filename, "application/pdf", resolved.Content);
+        }
+
+        // DT-6 — aislamiento del fallo: el personalizado no se pudo leer/abrir. `generated` ya conserva
+        // el documento del SISTEMA para ese tipo (nunca se tocó arriba); solo queda registrar el hecho,
+        // sin datos personales.
+        foreach (var unavailable in personalizedResolution.Unavailable)
+        {
+            var eventoNoDisponible = new ProcedureInstanceEvent
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ProcedureInstanceId = id,
+                Tipo = "documento_personalizado_no_disponible",
+                Payload = JsonSerializer.Serialize(new
+                {
+                    tipo = unavailable.Tipo,
+                    company_personalized_document_id = unavailable.PersonalizedDocumentId,
+                    tenant_id = tenantId,
+                    motivo = unavailable.Motivo,
+                }),
+                CreatedAt = now,
+            };
+            instance.Events.Add(eventoNoDisponible);
+            repo.Add(eventoNoDisponible);
+        }
+
         // (Re)generar el FUR SIEMPRE reemplaza el adjunto 'fur' (y, en traspaso, la compraventa) y puede
         // cambiar certificados/escrituras del expediente. Como el consolidado maestro (#10701) cachea su
         // copia con este flag (se pone true al generarlo en ConsolidadoMaestroCommand), hay que invalidarlo
@@ -450,12 +504,15 @@ public sealed class GenerarFurHandler(
 
         foreach (var doc in generated)
         {
-            // Idempotencia: re-generar reemplaza el adjunto previo del mismo tipo GENERADO por el sistema.
-            // Nunca se sobrescribe un documento cargado por el usuario (Source="user"), p. ej. una
-            // compraventa autenticada (HU #10859, ADR-0031 — corrige el clobber).
+            // Idempotencia: re-generar reemplaza el adjunto previo del mismo tipo GENERADO por el sistema
+            // o SUSTITUIDO por la compañía (HU #11316 amplía a 'company': sin esto, una fila 'company'
+            // previa sobreviviría junto a la nueva y quedarían DOS filas del mismo Tipo — la carrera de
+            // DT-4/CF-09). Nunca se sobrescribe un documento cargado por el usuario (Source="user"), p.
+            // ej. una compraventa autenticada (HU #10859, ADR-0031 — corrige el clobber).
             foreach (var prev in instance.Attachments.Where(a =>
                          string.Equals(a.Tipo, doc.Tipo, StringComparison.OrdinalIgnoreCase)
-                         && string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)).ToList())
+                         && (string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase))).ToList())
             {
                 storage.Delete(prev.StoragePath);
                 instance.Attachments.Remove(prev);
@@ -463,6 +520,7 @@ public sealed class GenerarFurHandler(
             }
 
             var stored = await storage.SaveAsync(id, doc.Tipo, doc.Filename, new MemoryStream(doc.Content), ct);
+            var esPersonalizado = personalizedByTipo.TryGetValue(doc.Tipo, out var personalizado);
             var attachment = new ProcedureInstanceAttachment
             {
                 Id = Guid.NewGuid(),
@@ -474,15 +532,41 @@ public sealed class GenerarFurHandler(
                 SizeBytes = stored.SizeBytes,
                 Sha256 = stored.Sha256,
                 StoragePath = stored.StoragePath,
-                Source = "system",
+                // DT-2 (HU #11316) — el adjunto sustituido por la compañía se distingue con Source
+                // "company" (barato de leer en cada guarda futura); el resto conserva "system".
+                Source = esPersonalizado ? "company" : "system",
                 UploadedAt = now,
                 // HU #10936 — traza la escritura usada en las escrituras de sistema; null en el resto.
                 SourceDeedId = deedIdPorTipo.TryGetValue(doc.Tipo, out var deedId) ? deedId : null,
+                // HU #11316 — traza la versión personalizada usada; null en cualquier otro adjunto.
+                SourcePersonalizedDocumentId = esPersonalizado ? personalizado!.PersonalizedDocumentId : null,
             };
             instance.Attachments.Add(attachment);
             repo.Add(attachment);
 
             docs.Add(new FurDocumentDto(attachment.Id, doc.Tipo, doc.Filename, stored.Sha256));
+
+            if (esPersonalizado)
+            {
+                var eventoEmitido = new ProcedureInstanceEvent
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ProcedureInstanceId = id,
+                    Tipo = "documento_personalizado_emitido",
+                    Payload = JsonSerializer.Serialize(new
+                    {
+                        tipo = doc.Tipo,
+                        company_personalized_document_id = personalizado!.PersonalizedDocumentId,
+                        version = personalizado.Version,
+                        sha256 = stored.Sha256,
+                        paginas = personalizado.PageCount,
+                    }),
+                    CreatedAt = now,
+                };
+                instance.Events.Add(eventoEmitido);
+                repo.Add(eventoEmitido);
+            }
         }
 
         // Bitácora: evento append-only de generación del FUR.

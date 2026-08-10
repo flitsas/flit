@@ -193,6 +193,9 @@ public static class InfrastructureExtensions
         // HU #10926 (ADR-0033) — resolutor de escrituras vigentes por actor NIT para adjuntarlas al
         // consolidado. Scoped: depende de los readers de escrituras/directorio (DbContext) + storage.
         services.AddScoped<Flit.Tramites.Application.Documents.IProcedureDeedResolver, Documents.ProcedureDeedResolver>();
+        // HU #11316 (Feature #11309, ADR-0042) — ÚNICO punto de sustitución por documento personalizado
+        // de compañía. Lista de tipos habilitados VACÍA hasta las HUs #11317/#11318 (ver la clase).
+        services.AddScoped<Flit.Tramites.Application.Documents.IPersonalizedDocumentResolver, Documents.PersonalizedDocumentResolver>();
         // HU #10762 — certificado RNMC suelto (PDF real) con el resultado de medidas correctivas por parte.
         services.AddSingleton<IRnmcCertificateGenerator, Documents.RnmcCertificatePdfGenerator>();
         // ADR-0036 (HU #10914) — Solicitud de trámite de forma virtual (PDF real, siempre).

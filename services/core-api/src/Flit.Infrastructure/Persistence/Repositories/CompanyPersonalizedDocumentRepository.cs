@@ -252,6 +252,24 @@ internal sealed class CompanyPersonalizedDocumentRepository : ICompanyPersonaliz
             },
             cancellationToken);
 
+    public Task<CompanyPersonalizedDocumentRecord?> GetActiveAsync(
+        Guid tenantId, string documentType, CancellationToken cancellationToken = default) =>
+        TenantRlsScope.ExecuteAsync(
+            _context,
+            tenantId,
+            async () =>
+            {
+                var entity = await _context.CompanyPersonalizedDocuments
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(
+                        d => d.TenantId == tenantId && d.DocumentType == documentType && d.IsActive,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                return entity is null ? null : Map(entity);
+            },
+            cancellationToken);
+
     public Task<bool> DeactivateActiveAsync(
         Guid tenantId,
         string documentType,

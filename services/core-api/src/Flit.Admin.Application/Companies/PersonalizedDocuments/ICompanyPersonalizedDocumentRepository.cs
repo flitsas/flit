@@ -76,6 +76,16 @@ public interface ICompanyPersonalizedDocumentRepository
     Task<IReadOnlyList<CompanyPersonalizedDocumentRecord>> ListByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// HU #11316 — la versión ACTIVA de <paramref name="documentType"/> para <paramref name="tenantId"/>,
+    /// o <c>null</c> si no hay ninguna (comportamiento actual: se genera el documento del sistema). Es la
+    /// consulta que consume el pipeline de generación (<c>IPersonalizedDocumentResolver</c>), llaveada por
+    /// <c>instance.TenantId</c> — nunca por el tenant del usuario autenticado. <c>WHERE tenant_id</c>
+    /// explícito, igual que el resto del repositorio.
+    /// </summary>
+    Task<CompanyPersonalizedDocumentRecord?> GetActiveAsync(
+        Guid tenantId, string documentType, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Activa la versión <paramref name="id"/> (status → <c>activo</c>) y retira a <c>historico</c> la
     /// activa previa del mismo <c>document_type</c>, si existe. Nunca borra filas (restricción 9).
     /// </summary>
