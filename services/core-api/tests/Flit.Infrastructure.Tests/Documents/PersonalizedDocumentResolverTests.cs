@@ -9,11 +9,10 @@ using Xunit;
 namespace Flit.Infrastructure.Tests.Documents;
 
 /// <summary>
-/// <see cref="PersonalizedDocumentResolver"/> (HU #11316, Feature #11309, ADR-0042) — adaptador de
-/// <see cref="IPersonalizedDocumentResolver"/>. La garantía de PRODUCCIÓN de esta HU: aunque una
-/// compañía tenga una versión ACTIVA de un tipo, el resolutor no la usa mientras ese tipo no esté en
-/// <c>EnabledTypes</c> (vacío hasta las HUs #11317/#11318) — es la base del oráculo CF-01
-/// (invisibilidad total con el canal actual).
+/// <see cref="PersonalizedDocumentResolver"/> (HU #11316/#11317, Feature #11309, ADR-0042) — adaptador
+/// de <see cref="IPersonalizedDocumentResolver"/>. <c>mandato</c> se habilitó en la HU #11317: el
+/// resolutor SÍ lo sustituye cuando hay versión activa. <c>tramite_virtual</c> sigue sin habilitar
+/// (HU #11318 pendiente) — es la base del oráculo CF-01 (invisibilidad total mientras no se habilite).
 /// </summary>
 public sealed class PersonalizedDocumentResolverTests
 {
@@ -33,13 +32,12 @@ public sealed class PersonalizedDocumentResolverTests
 
     private const string CompanyPersonalizedDocumentStatusForTest = "activo";
 
-    [Theory]
-    [InlineData("mandato")]
-    [InlineData("tramite_virtual")]
-    public async Task ResolveAsync_ConVersionActiva_PeroTipoNoHabilitado_NoSustituyeNada(string tipo)
+    [Fact]
+    public async Task ResolveAsync_ConVersionActiva_TramiteVirtualAunNoHabilitado_NoSustituyeNada()
     {
-        // Aunque el repositorio SÍ tenga una versión activa, EnabledTypes está vacío en esta HU: el
-        // pipeline nunca debe leerla ni tocar storage.
+        // tramite_virtual queda pendiente para la HU #11318: aunque el repositorio SÍ tenga una versión
+        // activa, el resolutor nunca debe leerla ni tocar storage mientras no esté en EnabledTypes.
+        const string tipo = "tramite_virtual";
         _repo.GetActiveAsync(Tenant, tipo, Arg.Any<CancellationToken>())
             .Returns(ActiveRecord(tipo));
 
@@ -52,6 +50,31 @@ public sealed class PersonalizedDocumentResolverTests
             .GetActiveAsync(default, default!, TestContext.Current.CancellationToken);
         await _storage.DidNotReceiveWithAnyArgs()
             .OpenReadAsync(default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_Mandato_HabilitadoDesdeHU11317_ConVersionActiva_Sustituye()
+    {
+        // HU #11317 — mandato SÍ está habilitado: con una versión activa y legible, el resolutor
+        // devuelve el documento de la compañía listo para sustituir.
+        const string tipo = "mandato";
+        var active = ActiveRecord(tipo);
+        var contenido = "%PDF MANDATO DE LA COMPAÑÍA"u8.ToArray();
+        _repo.GetActiveAsync(Tenant, tipo, Arg.Any<CancellationToken>()).Returns(active);
+        _storage.OpenReadAsync(active.StoragePath, Arg.Any<CancellationToken>())
+            .Returns(new MemoryStream(contenido));
+        _inspector.Inspect(Arg.Any<byte[]>())
+            .Returns(new PdfInspectionResult(IsParseable: true, IsEncrypted: false, PageCount: active.PageCount!.Value));
+
+        var resolver = NewResolver();
+        var result = await resolver.ResolveAsync(Tenant, [tipo], TestContext.Current.CancellationToken);
+
+        result.Unavailable.Should().BeEmpty();
+        var resolved = result.Resolved.Should().ContainSingle().Subject;
+        resolved.Tipo.Should().Be(tipo);
+        resolved.PersonalizedDocumentId.Should().Be(active.Id);
+        resolved.Version.Should().Be(active.Version);
+        resolved.Content.Should().BeEquivalentTo(contenido);
     }
 
     [Fact]

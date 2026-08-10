@@ -11,11 +11,11 @@ namespace Flit.Infrastructure.Documents;
 /// bajar los bytes de la versión activa, sin acoplar el módulo de Trámites al de Admin. Vive en
 /// Infrastructure por el mismo motivo que <c>ProcedureDeedResolver</c>.
 ///
-/// <para><b>Lista de tipos habilitados: VACÍA a propósito.</b> El mecanismo de sustitución queda
-/// completo en esta HU, pero NINGÚN tipo se sustituye todavía en producción: <c>mandato</c> se habilita
-/// en la HU #11317 y <c>tramite_virtual</c> en la HU #11318 (ampliando <see cref="EnabledTypes"/>, sin
-/// tocar <c>FurCommand.cs</c> de nuevo). Antes de esas HUs, <see cref="ResolveAsync"/> siempre devuelve
-/// vacío, aunque exista una versión activa — es la garantía de "invisibilidad" del oráculo CF-01.</para>
+/// <para><b>Lista de tipos habilitados.</b> El mecanismo de sustitución quedó completo en la HU #11316;
+/// <c>mandato</c> se habilita en ESTA HU (#11317) y <c>tramite_virtual</c> queda pendiente para la HU
+/// #11318 (ampliando <see cref="EnabledTypes"/>, sin tocar <c>FurCommand.cs</c> de nuevo). Para los
+/// tipos NO habilitados, <see cref="ResolveAsync"/> sigue devolviendo vacío aunque exista una versión
+/// activa — es la garantía de "invisibilidad" del oráculo CF-01 para lo que aún no se habilita.</para>
 /// </summary>
 internal sealed partial class PersonalizedDocumentResolver(
     ICompanyPersonalizedDocumentRepository repository,
@@ -25,11 +25,15 @@ internal sealed partial class PersonalizedDocumentResolver(
     : IPersonalizedDocumentResolver
 {
     /// <summary>
-    /// Vocabulario de tipos que el pipeline puede sustituir HOY en producción. VACÍO en esta HU: ver
-    /// nota de clase. Ampliar esta colección (no <c>FurCommand.cs</c>) es todo lo que necesitan las
-    /// HUs #11317/#11318 para habilitar cada tipo.
+    /// Vocabulario de tipos que el pipeline puede sustituir HOY en producción. <c>mandato</c> se
+    /// habilita en la HU #11317 (Feature #11309, ADR-0042 §supersede parcial): con esto, el pipeline
+    /// SÍ sustituye el mandato del sistema cuando la compañía tiene una versión personalizada activa.
+    /// <c>tramite_virtual</c> queda para la HU #11318 — ampliar esta colección es todo lo que necesita.
     /// </summary>
-    private static readonly HashSet<string> EnabledTypes = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> EnabledTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "mandato",
+    };
 
     public async Task<PersonalizedDocumentResolution> ResolveAsync(
         Guid tenantId,

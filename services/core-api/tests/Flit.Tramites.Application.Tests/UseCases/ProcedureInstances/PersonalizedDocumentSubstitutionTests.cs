@@ -323,4 +323,67 @@ public sealed class PersonalizedDocumentSubstitutionTests
         evento.Payload.Should().NotContain("comprador");
         instance.Events.Should().NotContain(e => e.Tipo == "documento_personalizado_emitido");
     }
+
+    // ---- HU #11317 — el mandato personalizado NO lleva bloques de firma del mandatario ---------
+
+    [Fact]
+    public async Task ElMandatoPersonalizado_NoLlevaBloquesDeFirmaDelMandatario()
+    {
+        // El PDF de la compañía es un reemplazo ESTÁTICO (ADR-0042 §Decisión, restricción del PO): el
+        // contenido persistido es EXACTAMENTE el que devolvió el resolutor, byte a byte — el pipeline
+        // no le inyecta ni estampa ningún bloque de firma antes de guardarlo.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = NewInstance();
+        _repo.GetByIdWithFurGraphAsync(InstanceId, TenantId, ct).Returns(instance);
+
+        var contenidoPersonalizado = Encoding.UTF8.GetBytes("%PDF MANDATO SIN BLOQUES DE FIRMA");
+        var resolver = new ScriptedResolver(new PersonalizedDocumentResolution(
+            [new ResolvedPersonalizedDocument("mandato", "mandato.pdf", contenidoPersonalizado, Guid.NewGuid(), 1, "sha", 1)],
+            []));
+        var handler = NewHandler(resolver, _mandatoGenerator);
+
+        var (_, error) = await handler.HandleAsync(InstanceId, TenantId, ct);
+
+        error.Should().BeNull();
+        var mandato = instance.Attachments.Single(a => a.Tipo == "mandato");
+        // Byte a byte: ni un sello del baúl, ni una marca de identidad, ni ningún dato del trámite
+        // estampado — es el mismo arreglo de bytes que subió la compañía.
+        _storage.SavedContentByPath[mandato.StoragePath].Should().BeEquivalentTo(contenidoPersonalizado);
+    }
+
+    // ---- HU #11317 — volver al documento del sistema restaura el mandato de FLIT ----------------
+
+    [Fact]
+    public async Task CuandoLaCompaniaVuelveAlSistema_LaSiguienteRegeneracionRestauraElMandatoDeFlit()
+    {
+        // Primera regeneración: la compañía tiene un mandato personalizado activo ⇒ se sustituye.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = NewInstance();
+        _repo.GetByIdWithFurGraphAsync(InstanceId, TenantId, ct).Returns(instance);
+
+        var versionId = Guid.NewGuid();
+        var resolverConPersonalizado = new ScriptedResolver(new PersonalizedDocumentResolution(
+            [new ResolvedPersonalizedDocument("mandato", "mandato.pdf", "%PDF COMPAÑÍA"u8.ToArray(), versionId, 1, "sha", 1)],
+            []));
+        var handlerConPersonalizado = NewHandler(resolverConPersonalizado, _mandatoGenerator);
+        await handlerConPersonalizado.HandleAsync(InstanceId, TenantId, ct);
+
+        instance.Attachments.Single(a => a.Tipo == "mandato").Source.Should().Be("company");
+
+        // La compañía "vuelve al documento del sistema" (HU #11314 — desactiva su versión): el
+        // resolutor ya no tiene nada que ofrecer para 'mandato' en la SIGUIENTE regeneración.
+        var resolverSinPersonalizado = new ScriptedResolver(PersonalizedDocumentResolution.Empty);
+        var handlerSinPersonalizado = NewHandler(resolverSinPersonalizado, _mandatoGenerator);
+
+        var (_, error) = await handlerSinPersonalizado.HandleAsync(InstanceId, TenantId, ct);
+
+        error.Should().BeNull();
+        var mandato = instance.Attachments.Single(a => a.Tipo == "mandato");
+        // El mandato de FLIT queda restaurado: Source vuelve a 'system' y el contenido es el del
+        // generador (no queda ningún rastro del PDF de la compañía).
+        mandato.Source.Should().Be("system");
+        mandato.SourcePersonalizedDocumentId.Should().BeNull();
+        _storage.SavedContentByPath[mandato.StoragePath]
+            .Should().BeEquivalentTo(Encoding.UTF8.GetBytes("%PDF MANDATO SISTEMA"));
+    }
 }
