@@ -148,6 +148,17 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Companies.LegalRepresentatives.IRepresentativeIdentityLookup,
             RepresentativeIdentityLookup>();
 
+        // HU #11313 (Feature #11309, ADR-0042) — documentos personalizados por compañía: repositorio
+        // tenant-scoped (WHERE tenant_id explícito, RLS decorativo), custodia del PDF en storage
+        // (delega en IAttachmentStorage) e inspector de PDF (PdfSharpCore) para el validador de
+        // integridad del confirm.
+        services.AddScoped<Flit.Admin.Application.Companies.PersonalizedDocuments.ICompanyPersonalizedDocumentRepository,
+            Flit.Infrastructure.Persistence.Repositories.CompanyPersonalizedDocumentRepository>();
+        services.AddScoped<Flit.Admin.Application.Companies.PersonalizedDocuments.ICompanyPersonalizedDocumentStorage,
+            Flit.Infrastructure.Storage.CompanyPersonalizedDocumentStorage>();
+        services.AddScoped<Flit.Admin.Application.Companies.PersonalizedDocuments.IPdfDocumentInspector,
+            Flit.Infrastructure.Documents.PdfSharpDocumentInspector>();
+
         // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
         // correo: persistencia tenant-scoped, adaptador Kyverum DESACOPLADO (reutiliza IKyverumVerifyClient
         // + cifra el secreto del webhook) y linker que ancla la identidad aprobada al sujeto

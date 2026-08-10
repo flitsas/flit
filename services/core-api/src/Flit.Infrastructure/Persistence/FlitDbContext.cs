@@ -118,6 +118,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<CompanyDeedCompanyEntity> CompanyDeedCompanies => Set<CompanyDeedCompanyEntity>();
 
+    // HU #11313 (Feature #11309, ADR-0042) — versiones de documento personalizado por compañía.
+    public DbSet<CompanyPersonalizedDocumentEntity> CompanyPersonalizedDocuments => Set<CompanyPersonalizedDocumentEntity>();
+
     // ── Admin Compañías — validación de identidad administrativa desacoplada (HU #10907, ADR-0034) ──
     public DbSet<AdminIdentityValidationEntity> AdminIdentityValidations =>
         Set<AdminIdentityValidationEntity>();
