@@ -14,6 +14,7 @@ public sealed class MandatoPreviewSampleTests
     [InlineData("generico")]
     [InlineData("sabaneta")]
     [InlineData("bello")]
+    [InlineData("municipio")]
     public void Build_ProducesValidPdf(string templateCode)
     {
         var data = MandatoPreviewSample.Build(templateCode);

@@ -34,6 +34,13 @@ internal sealed class TransitOfficeMandateConfigConfiguration : IEntityTypeConfi
         builder.Property(x => x.MandataryFamily).HasMaxLength(30).IsRequired().HasDefaultValue("individuo");
         builder.Property(x => x.ChamberCity).HasMaxLength(120);
         builder.Property(x => x.MandatarySigla).HasMaxLength(60);
+        builder.Property(x => x.AssignmentMode).HasMaxLength(20).IsRequired().HasDefaultValue("signer");
+        builder.Property(x => x.CustomTemplateKind).HasMaxLength(20).IsRequired().HasDefaultValue("none");
+        builder.Property(x => x.CustomTemplateStoragePath).HasMaxLength(1000);
+        builder.Property(x => x.CustomTemplateSha256).HasMaxLength(64);
+        builder.Property(x => x.CustomTemplateFileName).HasMaxLength(260);
+        builder.Property(x => x.CustomTemplateBody);
+        builder.Property(x => x.CustomFieldManifest).HasColumnType("jsonb");
         builder.Property(x => x.RowVersion).HasDefaultValue(0L).IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).IsRequired();
 

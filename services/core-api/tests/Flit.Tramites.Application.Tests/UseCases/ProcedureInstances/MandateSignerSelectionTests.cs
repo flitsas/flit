@@ -135,6 +135,75 @@ public sealed class MandateSignerSelectionTests
         result!.ElegidoId.Should().BeNull();
     }
 
+    [Fact]
+    public async Task TipoInstitucional_NoOfreceCandidatosPersona()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instancia();
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            FieldKey = "transit_office_code",
+            ValueText = "5631000",
+            Source = "user",
+        });
+
+        var policy = Substitute.For<IMandateRequirementPolicy>();
+        policy.ResolveAsync("5631000", Tenant, Arg.Any<CancellationToken>())
+            .Returns(new MandateOtConfig(
+                Ot,
+                "sabaneta",
+                RequiresForNaturalPerson: true,
+                "UT-SETSA",
+                "900273813-7",
+                AssignmentMode: "institutional"));
+
+        var handler = new ListMandateSignerOptionsHandler(
+            _repo,
+            new Directorio(Candidato(Ana, "Ana Restrepo"), Candidato(Carlos, "Carlos Pérez")),
+            mandatePolicy: policy);
+
+        var (result, error) = await handler.HandleAsync(instance.Id, Tenant, ct);
+
+        error.Should().BeNull();
+        result!.Opciones.Should().BeEmpty();
+        result.ElegidoId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DefaultParametrizado_SePreseleccionaSiEstaEntreOpciones()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instancia();
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            FieldKey = "transit_office_code",
+            ValueText = "05001",
+            Source = "user",
+        });
+
+        var policy = Substitute.For<IMandateRequirementPolicy>();
+        policy.ResolveAsync("05001", Tenant, Arg.Any<CancellationToken>())
+            .Returns(new MandateOtConfig(
+                Ot,
+                "generico",
+                RequiresForNaturalPerson: false,
+                InstitutionalMandataryName: null,
+                InstitutionalMandataryNit: null,
+                AssignmentMode: "signer",
+                DefaultMandateSignerId: Carlos));
+
+        var handler = new ListMandateSignerOptionsHandler(
+            _repo,
+            new Directorio(Candidato(Ana, "Ana Restrepo"), Candidato(Carlos, "Carlos Pérez")),
+            mandatePolicy: policy);
+
+        var (result, error) = await handler.HandleAsync(instance.Id, Tenant, ct);
+
+        error.Should().BeNull();
+        result!.Opciones.Should().HaveCount(2);
+        result.ElegidoId.Should().Be(Carlos);
+    }
+
     // ── AC4 — cambio en borrador ──────────────────────────────────────────────
 
     [Fact]

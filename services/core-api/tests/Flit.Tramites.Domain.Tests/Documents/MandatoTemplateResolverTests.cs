@@ -15,6 +15,7 @@ public sealed class MandatoTemplateResolverTests
     [InlineData("sabaneta", MandatoVariante.Sabaneta)]
     [InlineData("SABANETA", MandatoVariante.Sabaneta)]
     [InlineData("  bello  ", MandatoVariante.Bello)]
+    [InlineData("municipio", MandatoVariante.Municipio)]
     [InlineData("generico", MandatoVariante.Generico)]
     public void Resolve_MapsKnownCodes(string code, MandatoVariante expected) =>
         MandatoTemplateResolver.Resolve(code).Should().Be(expected);

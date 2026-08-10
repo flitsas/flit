@@ -1,3 +1,4 @@
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -36,16 +37,20 @@ public sealed record MandateSignerSelectionDto(
     bool Editable);
 
 /// <summary>
-/// HU #11203 — mandatarios habilitados para el organismo del trámite en la compañía gestora. Adelanta
-/// al registro lo que hasta ahora se resolvía al aprobar: el gestor sabe desde el principio quién va a
-/// firmar, en vez de descubrirlo (o tener que decidirlo el OT) al final.
+/// HU #11203 — mandatarios habilitados para el organismo del trámite en la compañía gestora.
+/// Se muestra en el wizard (paso FUR / radicación) para que el gestor pueda elegir quién firma
+/// el mandato junto a los documentos del expediente. No es obligatorio elegir.
+/// Institucional / abierto (regla compañía×OT): no se ofrecen candidatos persona.
 /// </summary>
 public sealed class ListMandateSignerOptionsHandler(
     IProcedureInstanceRepository repo,
     IMandateSignerDirectory directory,
-    ISignatureVaultPolicy? vaultPolicy = null)
+    ISignatureVaultPolicy? vaultPolicy = null,
+    IMandateRequirementPolicy? mandatePolicy = null)
 {
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
+    private readonly IMandateRequirementPolicy _mandatePolicy =
+        mandatePolicy ?? NullMandateRequirementPolicy.Instance;
 
     public async Task<(MandateSignerSelectionDto? Result, string? Error)> HandleAsync(
         Guid instanceId,
@@ -63,6 +68,19 @@ public sealed class ListMandateSignerOptionsHandler(
         // vehículo y en matrícula lo elige el gestor en el primer paso (HU #11199/#11200).
         if (transitOfficeId is not { } officeId)
             return (new MandateSignerSelectionDto([], instance.MandateSignerId, editable), null);
+
+        // Tipo institucional / abierto: el mandato no lleva firmante persona — no mostrar selector.
+        var officeCode = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase))?.ValueText;
+        MandateOtConfig? mandateConfig = null;
+        if (!string.IsNullOrWhiteSpace(officeCode))
+        {
+            mandateConfig = await _mandatePolicy
+                .ResolveAsync(officeCode, tenantId, ct)
+                .ConfigureAwait(false);
+            if (MandatoAssignmentModeCodes.SkipsPersonSigner(mandateConfig?.AssignmentMode))
+                return (new MandateSignerSelectionDto([], null, editable), null);
+        }
 
         var candidatos = await directory
             .GetCandidatesAsync(officeId, tenantId, MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
@@ -88,9 +106,19 @@ public sealed class ListMandateSignerOptionsHandler(
                 c.FirmaFisica));
         }
 
-        // AC3 — con un único mandatario habilitado no hay nada que decidir: queda elegido.
-        var elegido = instance.MandateSignerId
-            ?? (opciones.Count == 1 ? opciones[0].Id : null);
+        // Prioridad: ya elegido en el trámite → default parametrizado (módulo Mandatos) → único candidato.
+        var defaultFromRule = mandateConfig?.DefaultMandateSignerId;
+        Guid? elegido = instance.MandateSignerId;
+        if (elegido is null
+            && defaultFromRule is { } pref
+            && opciones.Exists(o => o.Id == pref))
+        {
+            elegido = pref;
+        }
+        else if (elegido is null && opciones.Count == 1)
+        {
+            elegido = opciones[0].Id;
+        }
 
         return (new MandateSignerSelectionDto(opciones, elegido, editable), null);
     }

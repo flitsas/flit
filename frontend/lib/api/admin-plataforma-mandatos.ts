@@ -1,11 +1,15 @@
-// Cliente SuperAdmin — Plataforma → Mandatos (config por OT + preview + extract).
+// Cliente SuperAdmin — Plataforma → Mandatos (config por OT + plantilla propia + preview + extract).
 import { API_BASE_URL, apiFetch, getToken } from "./client";
 import { ApiError } from "./types";
-import type { MandatoTemplateCode } from "@/lib/plataforma/mandato-templates";
+import type {
+  MandateAssignmentMode,
+  MandatoTemplateCode,
+} from "@/lib/plataforma/mandato-templates";
 
 const base = "/api/v1/admin/plataforma/mandatos";
 
 export type MandataryFamilyCode = "individuo" | "organismo_transito";
+export type CustomTemplateKind = "none" | "pdf" | "editor";
 
 export interface MandateOtConfigView {
   officeId: string;
@@ -14,18 +18,24 @@ export interface MandateOtConfigView {
   templateCode: MandatoTemplateCode | string;
   requiresForNaturalPerson: boolean;
   mandataryFamily: MandataryFamilyCode | string;
+  assignmentMode: MandateAssignmentMode | string;
   institutionalMandataryName: string | null;
   institutionalMandataryNit: string | null;
   chamberCity: string | null;
   mandatarySigla: string | null;
   hasExplicitConfig: boolean;
   rowVersion: number | null;
+  customTemplateKind: CustomTemplateKind | string;
+  customTemplateFileName: string | null;
+  customTemplateBody: string | null;
+  hasCustomTemplate: boolean;
 }
 
 export interface UpsertMandateOtConfigBody {
   templateCode: string;
   requiresForNaturalPerson: boolean;
   mandataryFamily: string;
+  assignmentMode: string;
   institutionalMandataryName?: string | null;
   institutionalMandataryNit?: string | null;
   chamberCity?: string | null;
@@ -37,6 +47,7 @@ export interface MandateConfigExtractResult {
   suggestedTemplateCode: string;
   requiresForNaturalPerson: boolean;
   mandataryFamily: string;
+  assignmentMode: string;
   institutionalMandataryName: string | null;
   institutionalMandataryNit: string | null;
   chamberCity: string | null;
@@ -52,6 +63,7 @@ function mapView(raw: Record<string, unknown>): MandateOtConfigView {
     templateCode: String(raw.templateCode ?? raw.TemplateCode ?? "generico"),
     requiresForNaturalPerson: Boolean(raw.requiresForNaturalPerson ?? raw.RequiresForNaturalPerson),
     mandataryFamily: String(raw.mandataryFamily ?? raw.MandataryFamily ?? "individuo"),
+    assignmentMode: String(raw.assignmentMode ?? raw.AssignmentMode ?? "signer"),
     institutionalMandataryName:
       (raw.institutionalMandataryName as string | null | undefined) ??
       (raw.InstitutionalMandataryName as string | null | undefined) ??
@@ -69,10 +81,17 @@ function mapView(raw: Record<string, unknown>): MandateOtConfigView {
       (raw.MandatarySigla as string | null | undefined) ??
       null,
     hasExplicitConfig: Boolean(raw.hasExplicitConfig ?? raw.HasExplicitConfig),
-    rowVersion:
-      (raw.rowVersion as number | null | undefined) ??
-      (raw.RowVersion as number | null | undefined) ??
+    rowVersion: parseRowVersion(raw.rowVersion ?? raw.RowVersion),
+    customTemplateKind: String(raw.customTemplateKind ?? raw.CustomTemplateKind ?? "none"),
+    customTemplateFileName:
+      (raw.customTemplateFileName as string | null | undefined) ??
+      (raw.CustomTemplateFileName as string | null | undefined) ??
       null,
+    customTemplateBody:
+      (raw.customTemplateBody as string | null | undefined) ??
+      (raw.CustomTemplateBody as string | null | undefined) ??
+      null,
+    hasCustomTemplate: Boolean(raw.hasCustomTemplate ?? raw.HasCustomTemplate),
   };
 }
 
@@ -82,14 +101,6 @@ export async function listMandateOtConfigs(signal?: AbortSignal): Promise<Mandat
   });
   const rows = Array.isArray(data) ? data : (data?.items ?? []);
   return rows.map((r) => mapView(r as unknown as Record<string, unknown>));
-}
-
-export async function getMandateOtConfig(
-  officeId: string,
-  signal?: AbortSignal,
-): Promise<MandateOtConfigView> {
-  const data = await apiFetch<MandateOtConfigView>(`${base}/ot/${officeId}`, { signal });
-  return mapView(data as unknown as Record<string, unknown>);
 }
 
 export async function upsertMandateOtConfig(
@@ -109,6 +120,59 @@ export async function deleteMandateOtConfig(officeId: string, signal?: AbortSign
   await apiFetch<void>(`${base}/ot/${officeId}`, { method: "DELETE", signal });
 }
 
+export async function uploadMandateOtPdfTemplate(
+  officeId: string,
+  file: File,
+  signal?: AbortSignal,
+): Promise<MandateOtConfigView> {
+  const baseUrl =
+    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+  const url = new URL(`${base}/ot/${officeId}/template`, baseUrl);
+  const token = getToken();
+  const form = new FormData();
+  form.append("file", file);
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(url.toString(), { method: "POST", headers, body: form, signal });
+  if (!response.ok) {
+    let detail: unknown = null;
+    try {
+      detail = await response.json();
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(response.status, `Error ${response.status} al subir plantilla`, detail);
+  }
+  const raw = (await response.json()) as Record<string, unknown>;
+  return mapView(raw);
+}
+
+export async function saveMandateOtEditorBody(
+  officeId: string,
+  body: string,
+  rowVersion?: number | null,
+  signal?: AbortSignal,
+): Promise<MandateOtConfigView> {
+  const data = await apiFetch<MandateOtConfigView>(`${base}/ot/${officeId}/template/editor`, {
+    method: "PUT",
+    body: { body, rowVersion },
+    signal,
+  });
+  return mapView(data as unknown as Record<string, unknown>);
+}
+
+export async function deleteMandateOtCustomTemplate(
+  officeId: string,
+  signal?: AbortSignal,
+): Promise<MandateOtConfigView> {
+  const data = await apiFetch<MandateOtConfigView>(`${base}/ot/${officeId}/template`, {
+    method: "DELETE",
+    signal,
+  });
+  return mapView(data as unknown as Record<string, unknown>);
+}
+
 export async function fetchMandatoTemplatePreview(
   templateCode: MandatoTemplateCode | string,
   signal?: AbortSignal,
@@ -118,6 +182,96 @@ export async function fetchMandatoTemplatePreview(
 
 export async function fetchMandateOtPreview(officeId: string, signal?: AbortSignal): Promise<Blob> {
   return fetchPdf(`${base}/ot/${encodeURIComponent(officeId)}/preview`, signal);
+}
+
+export interface CompanyOtMandateRuleView {
+  companyTenantId: string;
+  companyName: string;
+  assignmentMode: MandateAssignmentMode | string;
+  mandataryFamily: MandataryFamilyCode | string;
+  institutionalMandataryName: string | null;
+  institutionalMandataryNit: string | null;
+  chamberCity: string | null;
+  mandatarySigla: string | null;
+  hasExplicitRule: boolean;
+  /** Mandatario persona preferido (solo Persona/RL). */
+  defaultMandateSignerId: string | null;
+}
+
+export interface UpsertCompanyOtMandateRuleBody {
+  assignmentMode: string;
+  mandataryFamily?: string;
+  institutionalMandataryName?: string | null;
+  institutionalMandataryNit?: string | null;
+  chamberCity?: string | null;
+  mandatarySigla?: string | null;
+  defaultMandateSignerId?: string | null;
+}
+
+function mapCompanyRule(raw: Record<string, unknown>): CompanyOtMandateRuleView {
+  const defaultId =
+    (raw.defaultMandateSignerId as string | null | undefined) ??
+    (raw.DefaultMandateSignerId as string | null | undefined) ??
+    null;
+  return {
+    companyTenantId: String(raw.companyTenantId ?? raw.CompanyTenantId ?? ""),
+    companyName: String(raw.companyName ?? raw.CompanyName ?? ""),
+    assignmentMode: String(raw.assignmentMode ?? raw.AssignmentMode ?? "signer"),
+    mandataryFamily: String(raw.mandataryFamily ?? raw.MandataryFamily ?? "individuo"),
+    institutionalMandataryName:
+      (raw.institutionalMandataryName as string | null | undefined) ??
+      (raw.InstitutionalMandataryName as string | null | undefined) ??
+      null,
+    institutionalMandataryNit:
+      (raw.institutionalMandataryNit as string | null | undefined) ??
+      (raw.InstitutionalMandataryNit as string | null | undefined) ??
+      null,
+    chamberCity:
+      (raw.chamberCity as string | null | undefined) ??
+      (raw.ChamberCity as string | null | undefined) ??
+      null,
+    mandatarySigla:
+      (raw.mandatarySigla as string | null | undefined) ??
+      (raw.MandatarySigla as string | null | undefined) ??
+      null,
+    hasExplicitRule: Boolean(raw.hasExplicitRule ?? raw.HasExplicitRule),
+    defaultMandateSignerId: defaultId ? String(defaultId) : null,
+  };
+}
+
+export async function listCompanyOtMandateRules(
+  officeId: string,
+  signal?: AbortSignal,
+): Promise<CompanyOtMandateRuleView[]> {
+  const data = await apiFetch<
+    CompanyOtMandateRuleView[] | { items: CompanyOtMandateRuleView[] }
+  >(`${base}/ot/${officeId}/company-rules`, { signal });
+  const rows = Array.isArray(data) ? data : (data?.items ?? []);
+  return rows.map((r) => mapCompanyRule(r as unknown as Record<string, unknown>));
+}
+
+export async function upsertCompanyOtMandateRule(
+  officeId: string,
+  companyTenantId: string,
+  body: UpsertCompanyOtMandateRuleBody,
+  signal?: AbortSignal,
+): Promise<CompanyOtMandateRuleView> {
+  const data = await apiFetch<CompanyOtMandateRuleView>(
+    `${base}/ot/${officeId}/company-rules/${companyTenantId}`,
+    { method: "PUT", body, signal },
+  );
+  return mapCompanyRule(data as unknown as Record<string, unknown>);
+}
+
+export async function deleteCompanyOtMandateRule(
+  officeId: string,
+  companyTenantId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await apiFetch<void>(`${base}/ot/${officeId}/company-rules/${companyTenantId}`, {
+    method: "DELETE",
+    signal,
+  });
 }
 
 export async function extractMandateConfigFromFile(
@@ -152,6 +306,7 @@ export async function extractMandateConfigFromFile(
       raw.requiresForNaturalPerson ?? raw.RequiresForNaturalPerson,
     ),
     mandataryFamily: String(raw.mandataryFamily ?? raw.MandataryFamily ?? "individuo"),
+    assignmentMode: String(raw.assignmentMode ?? raw.AssignmentMode ?? "signer"),
     institutionalMandataryName:
       (raw.institutionalMandataryName as string | null) ??
       (raw.InstitutionalMandataryName as string | null) ??
@@ -190,4 +345,10 @@ async function fetchPdf(path: string, signal?: AbortSignal): Promise<Blob> {
 
   const blob = await response.blob();
   return blob.type === "application/pdf" ? blob : new Blob([blob], { type: "application/pdf" });
+}
+
+function parseRowVersion(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
 }

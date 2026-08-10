@@ -122,6 +122,10 @@ public static class AdminInfrastructureExtensions
         // Plataforma → Mandatos: CRUD SuperAdmin de config por OT + extract OCR de referencia.
         services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateConfigAdminService,
             Flit.Infrastructure.OtRules.MandateConfigAdminService>();
+        services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateTemplateStorage,
+            Flit.Infrastructure.Storage.MandateTemplateStorage>();
+        services.AddScoped<Flit.Tramites.Domain.Integration.IMandateCustomTemplateBlobReader,
+            Flit.Infrastructure.Storage.MandateCustomTemplateBlobReader>();
 
         // Convenio comercial compañía↔organismo + firma física del mandatario: deciden si el contrato de
         // mandato lleva bloque de firma del mandatario y de qué forma.

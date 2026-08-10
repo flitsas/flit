@@ -252,11 +252,10 @@ public sealed class TramiteLifecycleService(
             string.Equals(f.FieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase))?.ValueText;
         var config = string.IsNullOrWhiteSpace(code)
             ? null
-            : await _mandatePolicy.ResolveAsync(code, ct).ConfigureAwait(false);
+            : await _mandatePolicy.ResolveAsync(code, instance.TenantId, ct).ConfigureAwait(false);
 
-        // Sabaneta (mandatario institucional UT-SETSA): solo firma el mandante ⇒ no hay firmante persona
-        // que resolver. Cualquier otra plantilla (genérica/Bello) necesita un mandatario persona.
-        if (MandatoTemplateResolver.Resolve(config?.TemplateCode) == MandatoVariante.Sabaneta)
+        // Institucional u abierto (regla compañía×OT): no hay firmante persona que resolver.
+        if (MandatoAssignmentModeCodes.SkipsPersonSigner(config?.AssignmentMode))
             return null;
 
         // El OT debe estar promovido (se hizo en la entrega). Sin él no podemos consultar el directorio.
