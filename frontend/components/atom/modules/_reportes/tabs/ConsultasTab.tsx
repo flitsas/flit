@@ -42,7 +42,10 @@ export function ConsultasTab({ tenantId, needsCompany = false }: ConsultasTabPro
       dateFields: COMPANY_DATE_FIELDS,
       defaultDateField: "creacion",
       columnsStorageKey: "flit-empresa-consultas-columnas",
-      exportPrefix: "consulta",
+      // Distinto del «consulta» del organismo a propósito: los dos módulos exportan el mismo
+      // rango de fechas, así que con el mismo prefijo los dos archivos se llaman igual y en la
+      // carpeta de descargas quedan como «consulta… (1)», sin forma de saber cuál es cuál.
+      exportPrefix: "consulta-empresa",
       rowNoun: ["trámite", "trámites"],
       fetchFields: (signal) => fetchCompanyQueryFields(tenantId, signal),
       run: (definition, options) => runCompanyQuery(definition, { ...options, tenantId }),
