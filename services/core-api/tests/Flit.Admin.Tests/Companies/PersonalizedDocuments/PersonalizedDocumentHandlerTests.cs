@@ -11,6 +11,7 @@ using Flit.Infrastructure.Persistence.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using PdfSharpCore.Pdf;
 using Xunit;
 
@@ -456,10 +457,11 @@ public sealed class PersonalizedDocumentHandlerTests
         var storage = new FakePersonalizedDocumentStorage();
         var inspector = new PdfSharpDocumentInspector(NullLogger<PdfSharpDocumentInspector>.Instance);
         var validator = new PdfIntegrityValidator(inspector);
+        var auditWriter = Substitute.For<IAdminAuditWriter>();
 
         return (
-            new CreatePersonalizedDocumentVersionHandler(storage, repository, settingsRepository),
-            new ConfirmPersonalizedDocumentVersionHandler(storage, repository, settingsRepository, validator),
+            new CreatePersonalizedDocumentVersionHandler(storage, repository, settingsRepository, auditWriter, NullAuditContextAccessor.Instance),
+            new ConfirmPersonalizedDocumentVersionHandler(storage, repository, settingsRepository, validator, auditWriter, NullAuditContextAccessor.Instance),
             storage);
     }
 

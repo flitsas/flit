@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Domain.Companies.PersonalizedDocuments;
 using Flit.Admin.Domain.Companies.Settings;
 
@@ -10,21 +11,31 @@ namespace Flit.Admin.Application.Companies.PersonalizedDocuments.Create;
 /// (422), y solo entonces registra el ticket de subida en storage y persiste la fila en
 /// <c>pendiente</c> (AC2: ninguna carga borra la anterior — la versión es siempre la siguiente para
 /// <c>(tenant, tipo)</c>).
+///
+/// HU #11320 — auditoría a nivel de aplicación (complementa el trigger de BD sobre la tabla nueva):
+/// cada intento de carga deja fila en <c>IAdminAuditWriter</c> con actor, tenant operado y resultado.
+/// Nunca se registra el contenido del PDF ni el nombre de archivo (puede llevar razón social).
 /// </summary>
 public sealed class CreatePersonalizedDocumentVersionHandler
 {
     private readonly ICompanyPersonalizedDocumentStorage _storage;
     private readonly ICompanyPersonalizedDocumentRepository _repository;
     private readonly ITenantSettingsRepository _settingsRepository;
+    private readonly IAdminAuditWriter _auditWriter;
+    private readonly IAuditContextAccessor _auditContext;
 
     public CreatePersonalizedDocumentVersionHandler(
         ICompanyPersonalizedDocumentStorage storage,
         ICompanyPersonalizedDocumentRepository repository,
-        ITenantSettingsRepository settingsRepository)
+        ITenantSettingsRepository settingsRepository,
+        IAdminAuditWriter auditWriter,
+        IAuditContextAccessor auditContext)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _settingsRepository = settingsRepository ?? throw new ArgumentNullException(nameof(settingsRepository));
+        _auditWriter = auditWriter ?? throw new ArgumentNullException(nameof(auditWriter));
+        _auditContext = auditContext ?? throw new ArgumentNullException(nameof(auditContext));
     }
 
     public async Task<CreatePersonalizedDocumentVersionResult> HandleAsync(
@@ -35,6 +46,8 @@ public sealed class CreatePersonalizedDocumentVersionHandler
 
         if (!PersonalizedDocumentTypes.IsValid(command.DocumentType))
         {
+            await AuditAsync(command, null, AuditVocabulary.Results.Failure, "tipo_documento_invalido", cancellationToken)
+                .ConfigureAwait(false);
             return CreatePersonalizedDocumentVersionResult.InvalidType(new PersonalizedDocumentValidationError(
                 "documentType", "tipo_documento_invalido",
                 "El tipo de documento debe ser 'mandato' o 'tramite_virtual'."));
@@ -45,12 +58,16 @@ public sealed class CreatePersonalizedDocumentVersionHandler
             .ConfigureAwait(false);
         if (!channelEnabled)
         {
+            await AuditAsync(command, null, AuditVocabulary.Results.Failure, "canal_no_habilitado", cancellationToken)
+                .ConfigureAwait(false);
             return CreatePersonalizedDocumentVersionResult.ChannelNotEnabled();
         }
 
         var errors = Validate(command);
         if (errors.Count > 0)
         {
+            await AuditAsync(command, null, AuditVocabulary.Results.Failure, errors[0].Code, cancellationToken)
+                .ConfigureAwait(false);
             return CreatePersonalizedDocumentVersionResult.Invalid(errors);
         }
 
@@ -74,8 +91,34 @@ public sealed class CreatePersonalizedDocumentVersionHandler
                 command.CreatedBy),
             cancellationToken).ConfigureAwait(false);
 
+        await AuditAsync(command, id, AuditVocabulary.Results.Success, null, cancellationToken).ConfigureAwait(false);
+
         return CreatePersonalizedDocumentVersionResult.Created(id, version, ticket);
     }
+
+    // HU #11320 — sin nombre de archivo ni sha256 en el rastro: solo tenant operado, tipo, actor y
+    // resultado. El superadmin que opera un tenant ajeno queda registrado con su propio ActorUserId.
+    private async Task AuditAsync(
+        CreatePersonalizedDocumentVersionCommand command,
+        Guid? documentId,
+        string result,
+        string? errorCode,
+        CancellationToken cancellationToken) =>
+        await _auditWriter.WriteAsync(
+            new AdminAuditEntry(
+                command.TenantId,
+                TenantType: null,
+                AuditVocabulary.Modules.Companies,
+                EntityName: "personalized_document",
+                AuditVocabulary.Operations.Create,
+                result,
+                errorCode,
+                ActorUserId: command.CreatedBy,
+                TargetEntityType: "PERSONALIZED_DOCUMENT",
+                TargetEntityId: documentId,
+                _auditContext.ClientIp,
+                UserAgent: null),
+            cancellationToken).ConfigureAwait(false);
 
     private static List<PersonalizedDocumentValidationError> Validate(CreatePersonalizedDocumentVersionCommand command)
     {

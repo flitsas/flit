@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Domain.Companies.Settings;
 
 namespace Flit.Admin.Application.Companies.PersonalizedDocuments.Confirm;
@@ -9,6 +10,9 @@ namespace Flit.Admin.Application.Companies.PersonalizedDocuments.Confirm;
 /// anterior a <c>historico</c> (AC2); si algo falla, la versión queda en <c>rechazado</c> (AC3) y NO
 /// se toca la activa previa. <c>GetByIdAsync</c> filtra <c>tenant_id</c> explícitamente: un id de otro
 /// tenant devuelve <see cref="ConfirmPersonalizedDocumentVersionOutcome.NotFound"/> (aislamiento, AC5).
+///
+/// HU #11320 — auditoría a nivel de aplicación de la activación (complementa el trigger de BD). Nunca
+/// se registra el contenido del PDF, el sha256 ni la URL firmada.
 /// </summary>
 public sealed class ConfirmPersonalizedDocumentVersionHandler
 {
@@ -16,17 +20,23 @@ public sealed class ConfirmPersonalizedDocumentVersionHandler
     private readonly ICompanyPersonalizedDocumentRepository _repository;
     private readonly ITenantSettingsRepository _settingsRepository;
     private readonly PdfIntegrityValidator _validator;
+    private readonly IAdminAuditWriter _auditWriter;
+    private readonly IAuditContextAccessor _auditContext;
 
     public ConfirmPersonalizedDocumentVersionHandler(
         ICompanyPersonalizedDocumentStorage storage,
         ICompanyPersonalizedDocumentRepository repository,
         ITenantSettingsRepository settingsRepository,
-        PdfIntegrityValidator validator)
+        PdfIntegrityValidator validator,
+        IAdminAuditWriter auditWriter,
+        IAuditContextAccessor auditContext)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _settingsRepository = settingsRepository ?? throw new ArgumentNullException(nameof(settingsRepository));
         _validator = validator ?? throw new ArgumentNullException(nameof(validator));
+        _auditWriter = auditWriter ?? throw new ArgumentNullException(nameof(auditWriter));
+        _auditContext = auditContext ?? throw new ArgumentNullException(nameof(auditContext));
     }
 
     public async Task<ConfirmPersonalizedDocumentVersionResult> HandleAsync(
@@ -40,6 +50,8 @@ public sealed class ConfirmPersonalizedDocumentVersionHandler
             .ConfigureAwait(false);
         if (!channelEnabled)
         {
+            await AuditAsync(command, AuditVocabulary.Results.Failure, "canal_no_habilitado", cancellationToken)
+                .ConfigureAwait(false);
             return ConfirmPersonalizedDocumentVersionResult.ChannelNotEnabled();
         }
 
@@ -49,6 +61,8 @@ public sealed class ConfirmPersonalizedDocumentVersionHandler
             .ConfigureAwait(false);
         if (record is null)
         {
+            await AuditAsync(command, AuditVocabulary.Results.Failure, "not_found", cancellationToken)
+                .ConfigureAwait(false);
             return ConfirmPersonalizedDocumentVersionResult.NotFound();
         }
 
@@ -78,6 +92,8 @@ public sealed class ConfirmPersonalizedDocumentVersionHandler
             new ConfirmCompanyPersonalizedDocumentData(check.Sha256!, bytes.LongLength, check.PageCount, command.ConfirmedBy),
             cancellationToken).ConfigureAwait(false);
 
+        await AuditAsync(command, AuditVocabulary.Results.Success, null, cancellationToken).ConfigureAwait(false);
+
         return ConfirmPersonalizedDocumentVersionResult.Activated(record.Version, check.Sha256!, check.PageCount);
     }
 
@@ -89,6 +105,29 @@ public sealed class ConfirmPersonalizedDocumentVersionHandler
         CancellationToken cancellationToken)
     {
         await _repository.RejectAsync(command.TenantId, command.Id, cancellationToken).ConfigureAwait(false);
+        await AuditAsync(command, AuditVocabulary.Results.Failure, code, cancellationToken).ConfigureAwait(false);
         return ConfirmPersonalizedDocumentVersionResult.Rejected([new PersonalizedDocumentValidationError(field, code, message)]);
     }
+
+    // HU #11320 — actor + resultado, sin sha256 ni contenido del PDF en el rastro.
+    private async Task AuditAsync(
+        ConfirmPersonalizedDocumentVersionCommand command,
+        string result,
+        string? errorCode,
+        CancellationToken cancellationToken) =>
+        await _auditWriter.WriteAsync(
+            new AdminAuditEntry(
+                command.TenantId,
+                TenantType: null,
+                AuditVocabulary.Modules.Companies,
+                EntityName: "personalized_document",
+                AuditVocabulary.Operations.Confirm,
+                result,
+                errorCode,
+                ActorUserId: command.ConfirmedBy,
+                TargetEntityType: "PERSONALIZED_DOCUMENT",
+                TargetEntityId: command.Id,
+                _auditContext.ClientIp,
+                UserAgent: null),
+            cancellationToken).ConfigureAwait(false);
 }

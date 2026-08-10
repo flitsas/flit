@@ -10,6 +10,7 @@ using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Repositories;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 using Xunit;
 
 namespace Flit.Admin.Tests.Companies.PersonalizedDocuments;
@@ -582,10 +583,11 @@ public sealed class PersonalizedDocumentLifecycleHandlerTests
         var repository = new CompanyPersonalizedDocumentRepository(ctx);
         var settingsRepository = new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance);
         var storage = new FakePersonalizedDocumentViewStorage();
+        var auditWriter = Substitute.For<IAdminAuditWriter>();
 
         return (
-            new ActivatePersonalizedDocumentVersionHandler(repository, settingsRepository),
-            new DeactivatePersonalizedDocumentHandler(repository, settingsRepository),
+            new ActivatePersonalizedDocumentVersionHandler(repository, settingsRepository, auditWriter, NullAuditContextAccessor.Instance),
+            new DeactivatePersonalizedDocumentHandler(repository, settingsRepository, auditWriter, NullAuditContextAccessor.Instance),
             new GetPersonalizedDocumentViewHandler(repository, storage),
             storage);
     }
