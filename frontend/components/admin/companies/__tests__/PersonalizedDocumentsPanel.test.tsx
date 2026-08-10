@@ -34,6 +34,7 @@ vi.mock("@/components/admin/Toast", () => ({
 
 import {
   fetchPersonalizedDocuments,
+  getPersonalizedDocumentView,
   uploadAndConfirmPersonalizedDocument,
 } from "@/lib/api/admin-personalized-documents";
 
@@ -180,6 +181,75 @@ describe("PersonalizedDocumentsPanel (HU #11315)", () => {
 
     // Solo la histórica ofrece reactivar; la vigente no.
     expect(screen.getByRole("button", { name: /reactivar/i })).toBeInTheDocument();
+  });
+
+  it("(regresión) la vista previa se pinta en el modal y NO dispara descarga del archivo", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchPersonalizedDocuments).mockResolvedValue([
+      {
+        documentType: "mandato",
+        active: {
+          id: "v1",
+          version: 1,
+          status: "activo",
+          isActive: true,
+          filename: "mandato-v1.pdf",
+          sha256: "hash1",
+          pageCount: 2,
+          createdAt: "2026-08-01T10:00:00Z",
+          createdBy: "11111111-2222-3333-4444-555555555555",
+          activatedAt: "2026-08-01T10:00:00Z",
+          activatedBy: "11111111-2222-3333-4444-555555555555",
+          deactivatedAt: null,
+          deactivatedBy: null,
+        },
+        history: [],
+      },
+      { documentType: "tramite_virtual", active: null, history: [] },
+    ]);
+    const presignedUrl = "https://s3.example.com/objeto?firma=abc";
+    vi.mocked(getPersonalizedDocumentView).mockResolvedValue({
+      url: presignedUrl,
+      expiresAt: "2026-08-10T18:00:00Z",
+    });
+
+    // El file-manager sirve el objeto como binary/octet-stream y sin Content-Disposition: si el
+    // iframe apuntara a la URL presignada, el navegador DESCARGARÍA el PDF en vez de pintarlo. La
+    // corrección descarga los bytes y los re-empaqueta como Blob con el mimetype real.
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(new Blob(["%PDF-1.4"]), { status: 200 }));
+    const createObjectURL = vi.fn(() => "blob:objeto-tipado");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL });
+
+    try {
+      render(<PersonalizedDocumentsPanel tenantId={TENANT} enrutamientoSMTP="TENANT_API" />);
+      await screen.findByRole("heading", { name: /documentos personalizados/i });
+
+      await user.click(screen.getByRole("button", { name: /vista previa/i }));
+
+      const iframe = await waitFor(() => {
+        const el = document.querySelector("iframe");
+        if (!el) throw new Error("sin iframe");
+        return el;
+      });
+
+      // Se descargaron los bytes de la URL presignada...
+      expect(fetchSpy).toHaveBeenCalledWith(presignedUrl);
+      // ...y se re-empaquetaron con el mimetype real.
+      expect(createObjectURL).toHaveBeenCalledWith(expect.objectContaining({ type: "application/pdf" }));
+      // El iframe apunta al blob tipado, NUNCA a la URL presignada (que fuerza descarga).
+      expect(iframe.getAttribute("src")).toBe("blob:objeto-tipado");
+      expect(iframe.getAttribute("src")).not.toBe(presignedUrl);
+
+      // Al cerrar se libera el object URL: sin esto cada vista previa filtra memoria.
+      await user.click(screen.getByRole("button", { name: /cerrar/i }));
+      await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith("blob:objeto-tipado"));
+    } finally {
+      fetchSpy.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 
   it("(d) el error de validación (422) se muestra con su motivo concreto", async () => {

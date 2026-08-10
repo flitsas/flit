@@ -251,18 +251,41 @@ function PersonalizedDocumentSection({
   };
 
   const openPreview = async (version: PersonalizedDocumentVersion) => {
-    setPreview({ label: `${meta.title} · v${version.version}`, url: null, loading: true, error: null });
+    const label = `${meta.title} · v${version.version}`;
+    // Revoca el object URL anterior antes de abrir otro: si no, cada vista previa filtra memoria
+    // mientras el panel siga montado.
+    setPreview((prev) => {
+      if (prev?.url) URL.revokeObjectURL(prev.url);
+      return { label, url: null, loading: true, error: null };
+    });
     try {
       const result = await getPersonalizedDocumentView(tenantId, version.id);
-      setPreview({ label: `${meta.title} · v${version.version}`, url: result.url, loading: false, error: null });
+      // El file-manager sirve el objeto como binary/octet-stream y sin Content-Disposition, así que
+      // un <iframe> apuntando a la URL presignada FUERZA LA DESCARGA en vez de renderizar — pese a
+      // que la URL se pide con `disposition=inline` (el supuesto de ADR-0029 no se cumple con este
+      // gestor de archivos). Se re-empaquetan los bytes como Blob con el mimetype real para que el
+      // navegador lo pinte en el modal. Mismo remedio que ya aplica OtDocumentosTab.
+      const blob = await fetch(result.url).then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.blob();
+      });
+      const typed = new Blob([blob], { type: "application/pdf" });
+      setPreview({ label, url: URL.createObjectURL(typed), loading: false, error: null });
     } catch {
       setPreview({
-        label: `${meta.title} · v${version.version}`,
+        label,
         url: null,
         loading: false,
         error: "No se pudo generar la vista previa. Intenta de nuevo.",
       });
     }
+  };
+
+  const closePreview = () => {
+    setPreview((prev) => {
+      if (prev?.url) URL.revokeObjectURL(prev.url);
+      return null;
+    });
   };
 
   const onDialogConfirm = () => {
@@ -469,7 +492,7 @@ function PersonalizedDocumentSection({
       {preview && (
         <Modal
           open
-          onClose={() => setPreview(null)}
+          onClose={closePreview}
           title={`Vista previa · ${preview.label}`}
           size="lg"
           icon={Eye}
