@@ -28,6 +28,8 @@ import { ConsultasTab } from "@/components/atom/modules/_reportes/tabs/Consultas
 import {
   buildCompanyQueryXlsx,
   COMPANY_QUERY_COLUMNS,
+  COMPANY_QUERY_PRESETS,
+  defaultCompanyQueryColumns,
 } from "@/components/atom/modules/_reportes/consultas/company-columns";
 
 const FIELDS: QueryField[] = [
@@ -331,6 +333,22 @@ describe("Columnas de la empresa", () => {
     expect(columna.value(row({ modalidad: "matricula_inicial", tipoTraspaso: "" }))).toBe("—");
     expect(columna.raw!(row({ modalidad: "matricula_inicial", tipoTraspaso: "" }))).toBeNull();
     expect(columna.value(row({ tipoTraspaso: "unilateral" }))).toBe("Unilateral");
+  });
+
+  it("enseña el tipo de trámite en todas las vistas y el de traspaso en ninguna", () => {
+    // Sin el tipo de trámite, una matrícula y un traspaso son dos filas indistinguibles. El tipo de
+    // traspaso es lo contrario: viene vacío en todo lo que no sea un traspaso, así que de salida
+    // ocupa una columna que en media tabla no dice nada. Queda a un clic en el selector.
+    expect(defaultCompanyQueryColumns()).toContain("tipo");
+    expect(defaultCompanyQueryColumns()).not.toContain("tipo_traspaso");
+
+    for (const preset of COMPANY_QUERY_PRESETS) {
+      expect(preset.columns, `preset «${preset.label}»`).toContain("tipo");
+      expect(preset.columns, `preset «${preset.label}»`).not.toContain("tipo_traspaso");
+    }
+
+    // Y sigue estando disponible para quien la quiera.
+    expect(COMPANY_QUERY_COLUMNS.some((c) => c.id === "tipo_traspaso")).toBe(true);
   });
 
   it("el Excel lleva los números como números, no como texto", () => {

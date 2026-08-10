@@ -299,6 +299,14 @@ export function defaultCompanyQueryColumns(): string[] {
  *
  * No son un atajo estético: quien abre el selector de columnas por primera vez ve veinticinco
  * casillas y lo cierra. Un preset enseña de golpe para qué sirven, y a partir de ahí se editan.
+ *
+ * <p><b>«Tipo de trámite» va en TODOS.</b> Es lo que dice qué se está mirando: sin esa columna, una
+ * matrícula y un traspaso son dos filas indistinguibles, y varias de las demás columnas —el tipo de
+ * traspaso, sin ir más lejos— solo significan algo en una de las dos.</p>
+ *
+ * <p><b>«Tipo de traspaso» no va en ninguno.</b> Queda a un clic en el selector para quien la
+ * quiera, como cualquier otra: viene vacía en todo lo que no sea un traspaso, así que de salida
+ * ocupa una columna que en media tabla no dice nada.</p>
  */
 export const COMPANY_QUERY_PRESETS: ColumnPreset[] = [
   {
@@ -315,6 +323,7 @@ export const COMPANY_QUERY_PRESETS: ColumnPreset[] = [
       "referencia",
       "placa",
       "organismo",
+      "tipo",
       "estado",
       "enviado_en",
       "dias_en_organismo",
@@ -329,6 +338,7 @@ export const COMPANY_QUERY_PRESETS: ColumnPreset[] = [
     columns: [
       "referencia",
       "placa",
+      "tipo",
       "vin",
       "prenda",
       "acreedor_prenda",
@@ -339,16 +349,8 @@ export const COMPANY_QUERY_PRESETS: ColumnPreset[] = [
   {
     id: "comercial",
     label: "Comercial",
-    hint: "Leasing, método de pago y tipo de traspaso, con las personas.",
-    columns: [
-      "referencia",
-      "placa",
-      "comprador",
-      "vendedor",
-      "leasing",
-      "metodo_pago",
-      "tipo_traspaso",
-    ],
+    hint: "Leasing, método de pago y las personas de la operación.",
+    columns: ["referencia", "placa", "tipo", "comprador", "vendedor", "leasing", "metodo_pago"],
   },
 ];
 
