@@ -58,6 +58,30 @@ const PAGE_SIZE = 25;
 /** Tope de filas del export. Se AVISA cuando recorta: un archivo truncado en silencio se firma. */
 const MAX_EXPORT_ROWS = 5000;
 
+/**
+ * La huella de la PREGUNTA: fechas y condiciones, no columnas ni orden.
+ *
+ * Es lo que decide si lo de pantalla se apartó de la consulta guardada. Incluir las columnas
+ * marcaría «modificada» por enseñar una columna más, que no cambia ni una fila del resultado.
+ *
+ * <p>Se compara campo a campo y en ARRAYS, no serializando los objetos tal cual. Los dos lados de
+ * la comparación no vienen del mismo sitio: el de pantalla se arma aquí y omite `from`/`to` cuando
+ * hay preajuste, mientras que el del servidor los devuelve explícitos en `null`. `JSON.stringify`
+ * los veía distintos —y también se habría tragado un cambio de orden de claves— y marcaba
+ * «modificada» nada más guardar, con la consulta recién guardada y sin tocar nada.</p>
+ */
+function huellaPregunta(definition: QueryDefinition): string {
+  return JSON.stringify([
+    [
+      definition.fechas.campo,
+      definition.fechas.preset,
+      definition.fechas.from ?? null,
+      definition.fechas.to ?? null,
+    ],
+    definition.condiciones.map((c) => [c.fieldId, c.operator, c.values]),
+  ]);
+}
+
 export interface QueryConsoleProps<TRow> {
   source: QuerySource<TRow>;
   columns: DataColumn<TRow>[];
@@ -217,15 +241,7 @@ export function QueryConsole<TRow>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [definitionKey]);
 
-  /**
-   * La huella de la PREGUNTA: fechas y condiciones, no columnas ni orden.
-   *
-   * Es lo que decide si lo de pantalla se apartó de la consulta guardada. Incluir las columnas
-   * marcaría «modificada» por enseñar una columna más, que no cambia ni una fila del resultado —
-   * y, peor, la marcaría nada más guardar, porque el servidor devuelve la definición con los
-   * huecos ya rellenos.
-   */
-  const preguntaKey = JSON.stringify([definition.fechas, definition.condiciones]);
+  const preguntaKey = huellaPregunta(definition);
 
   const load = useCallback(
     async (signal?: AbortSignal, targetPage = 1) => {
@@ -280,7 +296,7 @@ export function QueryConsole<TRow>({
     (query: SavedQuery) => {
       setDefinition(query.definition);
       setActiveId(query.id);
-      setActiveSnapshot(JSON.stringify([query.definition.fechas, query.definition.condiciones]));
+      setActiveSnapshot(huellaPregunta(query.definition));
       setNotice(null);
       if (query.definition.columnas.length > 0) {
         setVisibleColumns(
@@ -309,9 +325,7 @@ export function QueryConsole<TRow>({
 
         setSaved((prev) => [guardada, ...prev.filter((q) => q.id !== guardada.id)]);
         setActiveId(guardada.id);
-        setActiveSnapshot(
-          JSON.stringify([guardada.definition.fechas, guardada.definition.condiciones]),
-        );
+        setActiveSnapshot(huellaPregunta(guardada.definition));
         setNombrando(null);
         setNotice(`Consulta «${guardada.nombre}» guardada.`);
       } catch (e: unknown) {

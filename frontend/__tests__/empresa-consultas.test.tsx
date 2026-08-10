@@ -281,6 +281,38 @@ describe("Guardar y exportar", () => {
     expect(input.definition.columnas.length).toBeGreaterThan(0);
   });
 
+  it("no marca «modificada» la consulta recién guardada", async () => {
+    // El servidor devuelve la definición con los huecos RELLENOS —`from` y `to` explícitos en
+    // `null`— mientras que la de pantalla los omite mientras haya preajuste. Comparando los dos
+    // objetos tal cual, la consulta quedaba marcada «modificada» nada más guardarla y sin que
+    // nadie tocara un filtro; un aviso que miente justo al guardar enseña a ignorarlo.
+    mocks.saveCompanyQuery.mockResolvedValue({
+      ...SAVED[0],
+      id: "s9",
+      nombre: "Flota de agosto",
+      definition: {
+        fechas: { campo: "creacion", preset: "ultimos_30", from: null, to: null },
+        condiciones: [],
+        columnas: ["referencia", "placa"],
+        sortBy: "creado",
+        descending: true,
+      },
+    });
+
+    renderTab({ tenantId: "emp-1" });
+    await screen.findByTestId("empresa-query-resultado");
+
+    await userEvent.click(screen.getByRole("button", { name: "Guardar consulta" }));
+    await userEvent.type(screen.getByTestId("empresa-query-nombre-input"), "Flota de agosto");
+    await userEvent.click(screen.getByTestId("empresa-query-guardar-confirmar"));
+
+    await waitFor(() => expect(mocks.saveCompanyQuery).toHaveBeenCalled());
+    // El nombre sale dos veces —en el aviso y en la tarjeta—, así que se espera por la tarjeta ya
+    // pintada antes de comprobar que NO lleva la marca.
+    await waitFor(() => expect(screen.getAllByText(/Flota de agosto/).length).toBeGreaterThan(0));
+    expect(screen.queryByText("modificada")).not.toBeInTheDocument();
+  });
+
   it("no ofrece la descarga en CSV", async () => {
     renderTab();
     await screen.findByTestId("empresa-query-resultado");
