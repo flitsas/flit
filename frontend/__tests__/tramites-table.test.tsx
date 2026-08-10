@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
   completePlateFlow: vi.fn(),
+  // La tabla consulta la config del tenant al montar (bloqueo de creación por familia y
+  // "solo vehículos propios"); sin este mock el efecto revienta y tumba todo el archivo.
+  getConsultationConfig: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -96,6 +99,13 @@ async function abrirAcciones(referenceNumber = 'TR-0001') {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks borra la implementación: sin re-armarla el efecto de config recibe undefined
+  // y encadena .then sobre él. Por defecto, ninguna familia bloqueada.
+  mocks.getConsultationConfig.mockResolvedValue({
+    vehiclePlate: 'kyverum_runt',
+    onlyOwnVehicles: false,
+    blockProcedureFamily: { matriculas: false, traspaso: false, otros: false },
+  });
 });
 
 describe('TramitesTable — paginación', () => {

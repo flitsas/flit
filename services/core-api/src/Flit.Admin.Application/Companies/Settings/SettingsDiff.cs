@@ -22,6 +22,10 @@ internal static class SettingsDiff
         AddBool(changes, "allow_initial_registration", previous.AllowInitialRegistration, updated.AllowInitialRegistration);
         AddBool(changes, "allow_misc_new_vehicles", previous.AllowMiscNewVehicles, updated.AllowMiscNewVehicles);
         AddBool(changes, "only_own_vehicles", previous.OnlyOwnVehicles, updated.OnlyOwnVehicles);
+        AddBool(changes, "only_own_vehicles_matriculas", previous.OnlyOwnVehiclesMatriculas, updated.OnlyOwnVehiclesMatriculas);
+        AddBool(changes, "only_own_vehicles_otros", previous.OnlyOwnVehiclesOtros, updated.OnlyOwnVehiclesOtros);
+        AddBool(changes, "block_procedure_family_traspaso", previous.BlockProcedureFamilyTraspaso, updated.BlockProcedureFamilyTraspaso);
+        AddBool(changes, "block_procedure_family_otros", previous.BlockProcedureFamilyOtros, updated.BlockProcedureFamilyOtros);
         AddBool(changes, "signature_vault_enabled", previous.SignatureVaultEnabled, updated.SignatureVaultEnabled);
         AddBool(changes, "plate_preassign_enabled", previous.PlatePreassignEnabled, updated.PlatePreassignEnabled);
         AddBool(changes, "validate_soat_with_runt", previous.ValidateSoatWithRunt, updated.ValidateSoatWithRunt);

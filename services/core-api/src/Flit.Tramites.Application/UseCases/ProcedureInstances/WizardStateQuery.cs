@@ -296,6 +296,7 @@ public sealed class GetWizardStateHandler(
         {
             VehiculoConsultado = HasVehiculoConsulta(fv),
             PreflightProviderError = preflight?.ProviderError == true,
+            PreflightVehiculoNoEncontrado = preflight?.VehiculoNoEncontrado == true,
             DocumentosCompletos = DocumentosObligatoriosCompletos(instance),
             HasBuyer = comprador is not null,
             BuyerRuntConsultado = runtComprador?.Consultado == true,
@@ -995,7 +996,12 @@ public sealed class GetWizardStateHandler(
             c.Key.Contains("impuesto", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(c.Status, "unknown", StringComparison.OrdinalIgnoreCase));
         var providerError = checks.Any(c => string.Equals(c.Status, "error", StringComparison.OrdinalIgnoreCase));
-        return new PreflightSnapshot(latest.Overall, impuestoUnknown, providerError);
+        // El vehículo no existe en el RUNT: la fuente respondió, pero no hay vehículo que tramitar.
+        // Bloqueo DURO igual que providerError (ver PreflightSnapshot).
+        var vehiculoNoEncontrado = checks.Any(c =>
+            string.Equals(c.Key, "vehiculo", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(c.Status, "fail", StringComparison.OrdinalIgnoreCase));
+        return new PreflightSnapshot(latest.Overall, impuestoUnknown, providerError, vehiculoNoEncontrado);
     }
 
     /// <summary>Checks del último preflight (por fecha); lista vacía si aún no se ha corrido.</summary>

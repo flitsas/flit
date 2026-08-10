@@ -49,6 +49,26 @@ public sealed class DynamicGateEvaluatorTests
     }
 
     [Fact]
+    public void Evaluate_VehiculoNoEncontrado_VehicleQueryIncompleto_YBloqueaRadicacion()
+    {
+        // Paridad con el camino estático (Matricula/TraspasoGates): el RUNT respondió y el vehículo
+        // NO existe → bloqueo DURO, aunque la consulta se haya realizado (VehiculoConsultado=true).
+        var ctx = new DynamicWizardContext
+        {
+            VehiculoConsultado = true,
+            PreflightVehiculoNoEncontrado = true,
+        };
+
+        var state = DynamicGateEvaluator.Evaluate(MatriculaProfile(), MatriculaSteps(), ctx);
+
+        state.Steps[0].SectionType.Should().Be("vehicle_query");
+        state.Steps[0].Status.Should().Be("incomplete");
+        state.Steps[0].Reasons.Should().Contain(DynamicGateEvaluator.VehiculoNoEncontrado);
+        state.CanSubmit.Should().BeFalse();
+        state.Blockers.Should().Contain(DynamicGateEvaluator.VehiculoNoEncontrado);
+    }
+
+    [Fact]
     public void Evaluate_DataCompleteButNoBiometricNorFur_CannotSubmit()
     {
         var ctx = new DynamicWizardContext

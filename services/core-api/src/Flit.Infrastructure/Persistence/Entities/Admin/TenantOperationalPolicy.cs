@@ -12,9 +12,21 @@ public sealed class TenantOperationalPolicy
 
     public bool AllowInitialRegistration { get; set; }
 
+    /// <summary>Bloquea creación de trámites familia TRASPASO.</summary>
+    public bool BlockProcedureFamilyTraspaso { get; set; }
+
+    /// <summary>Bloquea creación de trámites familia OTROS.</summary>
+    public bool BlockProcedureFamilyOtros { get; set; }
+
     public bool AllowMiscNewVehicles { get; set; } = true;
 
     public bool OnlyOwnVehicles { get; set; }
+
+    /// <summary>Solo vehículos propios — familia MATRICULAS.</summary>
+    public bool OnlyOwnVehiclesMatriculas { get; set; }
+
+    /// <summary>Solo vehículos propios — familia OTROS.</summary>
+    public bool OnlyOwnVehiclesOtros { get; set; }
 
     public bool SignatureVaultEnabled { get; set; }
 

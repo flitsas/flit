@@ -112,6 +112,32 @@ public sealed class MatriculaGatesTests
         TraspasoGatesShared(ctx, 1, "preflight_provider_error");
     }
 
+    [Fact]
+    public void Paso1_VehiculoNoEncontrado_BloqueaDuroNoSubsanable()
+    {
+        // El RUNT respondió y el vehículo NO existe: sin vehículo verificado no hay trámite. Es
+        // bloqueo DURO — ni forzar ni "aceptar riesgo" lo levantan; hay que corregir el VIN.
+        var ctx = BaseCtx() with
+        {
+            Preflight = new PreflightSnapshot("red", false, VehiculoNoEncontrado: true),
+            ForzarContinuar = true,
+            RiesgoPreflightAceptado = true,
+        };
+        TraspasoGatesShared(ctx, 1, "vehiculo_no_encontrado");
+    }
+
+    [Fact]
+    public void Paso3_VehiculoNoEncontrado_BloqueaDuroNoSubsanable()
+    {
+        var ctx = BaseCtx() with
+        {
+            Preflight = new PreflightSnapshot("red", false, VehiculoNoEncontrado: true),
+            RiesgoPreflightAceptado = true,
+            ForzarContinuar = true,
+        };
+        TraspasoGatesShared(ctx, 3, "vehiculo_no_encontrado");
+    }
+
     [Fact] // HU #10935 — el comprador ahora es el paso 2 (antes del de documentos).
     public void Paso2_CompradorIncompleto_Bloquea()
     {

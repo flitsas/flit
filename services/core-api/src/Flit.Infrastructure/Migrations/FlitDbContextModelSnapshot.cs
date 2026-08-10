@@ -1880,6 +1880,18 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("allow_initial_registration");
 
+                    b.Property<bool>("BlockProcedureFamilyOtros")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("block_procedure_family_otros");
+
+                    b.Property<bool>("BlockProcedureFamilyTraspaso")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("block_procedure_family_traspaso");
+
                     b.Property<bool>("AllowMiscNewVehicles")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1936,6 +1948,18 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("only_own_vehicles");
+
+                    b.Property<bool>("OnlyOwnVehiclesMatriculas")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("only_own_vehicles_matriculas");
+
+                    b.Property<bool>("OnlyOwnVehiclesOtros")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("only_own_vehicles_otros");
 
                     b.Property<string>("PaymentMethods")
                         .IsRequired()

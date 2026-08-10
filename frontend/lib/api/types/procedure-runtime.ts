@@ -357,9 +357,20 @@ export interface ConsultationProvidersConfig {
   vehicleVin: string;
   vehiclePlate: string;
   conductor: string;
-  // FEATURE 02 — política "solo vehículos propios" del tenant. Cuando es true, el wizard autorrellena
-  // el documento del tenant (NIT) en la consulta de traspaso y bloquea la consulta si se edita a otro.
+  // FEATURE 02 — legado: espejo de onlyOwnVehiclesByFamily.traspaso.
   onlyOwnVehicles: boolean;
+  /** Solo vehículos propios por familia de trámite. */
+  onlyOwnVehiclesByFamily?: {
+    matriculas: boolean;
+    traspaso: boolean;
+    otros: boolean;
+  };
+  /** Bloqueo de creación por familia (`true` = no permitir crear). */
+  blockProcedureFamily?: {
+    matriculas: boolean;
+    traspaso: boolean;
+    otros: boolean;
+  };
 }
 
 /**

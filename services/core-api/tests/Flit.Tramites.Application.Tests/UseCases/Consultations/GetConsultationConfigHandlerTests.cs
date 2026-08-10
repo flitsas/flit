@@ -63,6 +63,25 @@ public sealed class GetConsultationConfigHandlerTests
         result.OnlyOwnVehicles.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task ConBlockProcedureFamily_SeReflejaEnElResultado()
+    {
+        var tenantOverride = new ConsultationTenantOverride(
+            Chains: null,
+            FailoverTimeoutMs: null,
+            BlockProcedureFamilyMatriculas: true,
+            BlockProcedureFamilyTraspaso: true,
+            BlockProcedureFamilyOtros: false);
+
+        var result = await Handler(tenantOverride).HandleAsync(Guid.NewGuid(), Ct());
+
+        result.BlockProcedureFamily.Should().NotBeNull();
+        result.BlockProcedureFamily!.Matriculas.Should().BeTrue();
+        result.BlockProcedureFamily.Traspaso.Should().BeTrue();
+        result.BlockProcedureFamily.Otros.Should().BeFalse();
+        result.OnlyOwnVehiclesByFamily.Should().NotBeNull();
+    }
+
     private sealed class StubOverrideProvider(ConsultationTenantOverride? value)
         : IConsultationTenantOverrideProvider
     {

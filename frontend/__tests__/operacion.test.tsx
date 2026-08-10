@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   getAttachments: vi.fn(),
   // Slice M6 — listado de instancias para la tabla "Trámites en curso".
   listInstances: vi.fn(),
+  getConsultationConfig: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -92,6 +93,14 @@ beforeEach(() => {
   mocks.getAttachments.mockResolvedValue([]);
   // Por defecto la tabla de "Trámites en curso" está vacía.
   mocks.listInstances.mockResolvedValue([]);
+  mocks.getConsultationConfig.mockResolvedValue({
+    vehicleVin: 'kyverum_runt',
+    vehiclePlate: 'kyverum_runt',
+    conductor: 'kyverum_runt_conductor',
+    onlyOwnVehicles: false,
+    onlyOwnVehiclesByFamily: { matriculas: false, traspaso: false, otros: false },
+    blockProcedureFamily: { matriculas: false, traspaso: false, otros: false },
+  });
 });
 
 const INSTANCE_DRAFT: InstanceSummary = {
@@ -157,12 +166,11 @@ describe('M6 — tabla de trámites en curso', () => {
     const rows = within(list).getAllByRole('listitem');
     expect(rows).toHaveLength(2);
 
-    // Fila borrador: placa real, comprador, VIN, vehículo concatenado, paso, chip ámbar (N 03).
+    // Fila borrador: placa, comprador, vehículo (si columna visible), paso, chip ámbar (N 03).
+    // VIN no está en DEFAULT_TRAMITES_VISIBLE_COLUMNS — se activa con "Columnas".
     expect(within(rows[0]).getByText('ABC123')).toBeInTheDocument();
     expect(within(rows[0]).getByText('TR-001')).toBeInTheDocument();
     expect(within(rows[0]).getByText('Carlos Mendoza')).toBeInTheDocument();
-    expect(within(rows[0]).getByText('VIN-XYZ-001')).toBeInTheDocument();
-    expect(within(rows[0]).getByText('Toyota Corolla')).toBeInTheDocument();
     expect(within(rows[0]).getByText('2/6')).toBeInTheDocument();
     expect(within(rows[0]).getByText('Borrador')).toBeInTheDocument();
 

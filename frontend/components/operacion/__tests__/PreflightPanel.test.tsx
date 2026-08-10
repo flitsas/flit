@@ -236,6 +236,34 @@ describe('PreflightPanel — resumen de advertencias en amarillo (HU #10763)', (
     expect(screen.getByRole('checkbox')).toBeInTheDocument();
   });
 
+  // El vehículo no existe en el RUNT: no hay nada que "asumir", hay que corregir el identificador.
+  // Ofrecer el checkbox aquí dejaba crear un trámite sin vehículo verificado.
+  it('NO ofrece asumir el riesgo cuando el vehículo no se encontró en el RUNT', () => {
+    render(
+      <PreflightPanel
+        snapshot={{
+          overall: 'red',
+          createdAt: '2026-08-06T00:00:00Z',
+          checks: [
+            {
+              key: 'vehiculo',
+              label: 'Vehículo RUNT',
+              status: 'fail',
+              source: 'verifik',
+              message: 'Vehículo no encontrado en RUNT',
+            },
+          ],
+        }}
+        {...baseProps}
+      />,
+    );
+    expect(screen.queryByText(/Asumo el riesgo/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/El vehículo no se encontró en el RUNT/),
+    ).toBeInTheDocument();
+  });
+
   it('no muestra la franja de advertencias cuando el pre-vuelo está en verde', () => {
     render(<PreflightPanel snapshot={snap([])} {...baseProps} />);
     expect(screen.queryByText('Advertencias del pre-vuelo')).not.toBeInTheDocument();

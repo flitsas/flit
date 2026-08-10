@@ -1,8 +1,9 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { notFound, useParams, useRouter, useSearchParams } from 'next/navigation';
 import { TramiteWizard } from '@/components/operacion/TramiteWizard';
+import { tramitesClient } from '@/lib/api/tramites-client';
 import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
 
 /**
@@ -11,6 +12,8 @@ import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
  * contra el preview desacoplado y, al pulsar "Continuar", el wizard crea el trámite y esta página
  * navega a /tramites/[instanceId] (replace: el back del navegador no vuelve a este paso ya
  * consumido). Modalidad inválida → notFound().
+ *
+ * Si la compañía tiene bloqueada la familia del trámite, se muestra el aviso y no se abre el wizard.
  */
 export default function NuevoTramitePage() {
   const params = useParams<{ modalidad: string }>();
@@ -32,12 +35,64 @@ export default function NuevoTramitePage() {
 function PasoConsulta({ modalidad }: { modalidad: WizardModalidad }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [gate, setGate] = useState<'loading' | 'allowed' | 'blocked'>('loading');
 
-  // R3 (HU #10539) — "Iniciar traspaso" siembra el vehículo del trámite de origen. Ya no se
-  // persiste al crear (no hay instancia todavía): solo prellena el campo del paso 1, y el valor
-  // definitivo lo fija la consulta que el operador dispare.
   const seedVin = searchParams.get('seedVin')?.trim() || undefined;
   const seedPlaca = searchParams.get('seedPlaca')?.trim() || undefined;
+
+  useEffect(() => {
+    let active = true;
+    void tramitesClient
+      .getConsultationConfig()
+      .then((cfg) => {
+        if (!active) return;
+        const block = cfg.blockProcedureFamily;
+        const blocked =
+          modalidad === 'matricula_inicial'
+            ? (block?.matriculas ?? false)
+            : (block?.traspaso ?? false);
+        setGate(blocked ? 'blocked' : 'allowed');
+      })
+      .catch(() => {
+        // Si no se puede leer la config, no bloqueamos el flujo (el backend sí corta al crear).
+        if (active) setGate('allowed');
+      });
+    return () => {
+      active = false;
+    };
+  }, [modalidad]);
+
+  if (gate === 'loading') {
+    return (
+      <div className="rounded-2xl border px-4 py-6 text-sm opacity-70" role="status">
+        Verificando permisos de la compañía…
+      </div>
+    );
+  }
+
+  if (gate === 'blocked') {
+    const label =
+      modalidad === 'traspaso' ? 'trámites de traspaso' : 'trámites de matrículas';
+    return (
+      <div className="space-y-4 rounded-2xl border px-4 py-6" role="alert">
+        <p className="text-sm font-semibold text-[#162744] dark:text-white">
+          No se puede iniciar este trámite
+        </p>
+        <p className="text-xs opacity-70">
+          La compañía tiene bloqueada la creación de {label}. Contacta al administrador para
+          habilitarla en la configuración de la compañía.
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push('/tramites')}
+          className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
+          style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+        >
+          Volver a trámites
+        </button>
+      </div>
+    );
+  }
 
   return (
     <TramiteWizard
@@ -46,10 +101,6 @@ function PasoConsulta({ modalidad }: { modalidad: WizardModalidad }) {
       seedVin={seedVin}
       seedPlaca={seedPlaca}
       onCreated={(summary) => {
-        // Propaga el tenant REAL de la instancia recién creada (?t=) para que la página destino
-        // fije activeTramitesTenant y las llamadas per-instance usen el MISMO tenant que la
-        // creación. Sin esto, el SuperAdmin cae en jwtTenantId() (su propio tenant) ≠ el de la
-        // instancia → 404 "Procedure instance not found." hasta re-entrar desde la tabla.
         router.replace(`/tramites/${summary.id}?t=${summary.tenantId}`);
       }}
       onExit={() => router.push('/tramites')}

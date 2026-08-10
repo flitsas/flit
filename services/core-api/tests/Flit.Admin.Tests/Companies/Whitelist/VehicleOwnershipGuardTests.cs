@@ -138,6 +138,62 @@ public sealed class VehicleOwnershipGuardTests
         result.IsAllowed.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task Family_MatriculasFlag_BlocksWhenOnlyOwnOnMatriculas()
+    {
+        var guard = new VehicleOwnershipGuard(
+            new FakeOwnershipChecker(isOwned: false),
+            new FakeWhitelistRepository());
+
+        var policy = new TenantSettings
+        {
+            TenantId = TenantId,
+            AllowInitialRegistration = true,
+            AllowMiscNewVehicles = true,
+            OnlyOwnVehicles = false,
+            OnlyOwnVehiclesMatriculas = true,
+            SignatureVaultEnabled = false,
+            NotificationChannel = NotificationChannel.FlitSmtp,
+            NotificationTarget = NotificationTarget.Radicador,
+            PaymentMethods = [],
+        };
+
+        var context = new VehicleOwnershipCheckContext(
+            TenantId, "VIN123", "operador@empresa.com", policy, "MATRICULAS");
+
+        var result = await guard.ValidateTransferStartAsync(context, TestContext.Current.CancellationToken);
+
+        result.IsAllowed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Family_MatriculasFlag_DoesNotAffectTraspasoWhenTraspasoOff()
+    {
+        var guard = new VehicleOwnershipGuard(
+            new FakeOwnershipChecker(isOwned: false),
+            new FakeWhitelistRepository());
+
+        var policy = new TenantSettings
+        {
+            TenantId = TenantId,
+            AllowInitialRegistration = true,
+            AllowMiscNewVehicles = true,
+            OnlyOwnVehicles = false,
+            OnlyOwnVehiclesMatriculas = true,
+            SignatureVaultEnabled = false,
+            NotificationChannel = NotificationChannel.FlitSmtp,
+            NotificationTarget = NotificationTarget.Radicador,
+            PaymentMethods = [],
+        };
+
+        var context = new VehicleOwnershipCheckContext(
+            TenantId, "ABC123", "operador@empresa.com", policy, "TRASPASO");
+
+        var result = await guard.ValidateTransferStartAsync(context, TestContext.Current.CancellationToken);
+
+        result.IsAllowed.Should().BeTrue();
+    }
+
     // ---------- Helpers / dobles ----------
 
     private static TenantSettings PolicyWithOnlyOwnVehicles(bool onlyOwn) => new()

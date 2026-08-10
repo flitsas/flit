@@ -147,8 +147,12 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
     private static void ApplyTo(TenantOperationalPolicy policy, TenantSettings settings)
     {
         policy.AllowInitialRegistration = settings.AllowInitialRegistration;
+        policy.BlockProcedureFamilyTraspaso = settings.BlockProcedureFamilyTraspaso;
+        policy.BlockProcedureFamilyOtros = settings.BlockProcedureFamilyOtros;
         policy.AllowMiscNewVehicles = settings.AllowMiscNewVehicles;
         policy.OnlyOwnVehicles = settings.OnlyOwnVehicles;
+        policy.OnlyOwnVehiclesMatriculas = settings.OnlyOwnVehiclesMatriculas;
+        policy.OnlyOwnVehiclesOtros = settings.OnlyOwnVehiclesOtros;
         policy.SignatureVaultEnabled = settings.SignatureVaultEnabled;
         policy.PlatePreassignEnabled = settings.PlatePreassignEnabled;
         policy.PlateFlowSkipToTerminado = settings.PlateFlowSkipToTerminado;
@@ -166,8 +170,12 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
     {
         TenantId = entity.TenantId,
         AllowInitialRegistration = entity.AllowInitialRegistration,
+        BlockProcedureFamilyTraspaso = entity.BlockProcedureFamilyTraspaso,
+        BlockProcedureFamilyOtros = entity.BlockProcedureFamilyOtros,
         AllowMiscNewVehicles = entity.AllowMiscNewVehicles,
         OnlyOwnVehicles = entity.OnlyOwnVehicles,
+        OnlyOwnVehiclesMatriculas = entity.OnlyOwnVehiclesMatriculas,
+        OnlyOwnVehiclesOtros = entity.OnlyOwnVehiclesOtros,
         SignatureVaultEnabled = entity.SignatureVaultEnabled,
         PlatePreassignEnabled = entity.PlatePreassignEnabled,
         ValidateSoatWithRunt = entity.ValidateSoatWithRunt,

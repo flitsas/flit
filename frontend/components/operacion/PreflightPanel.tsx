@@ -220,6 +220,12 @@ export function PreflightPanel({
   // Un check "error" = consulta no verificable (proveedor caído/timeout): bloqueo DURO. NO se
   // ofrece "aceptar riesgo" (no es subsanable); el gestor debe reintentar la consulta.
   const hasProviderError = checks.some((c) => c.status === 'error');
+  // El RUNT respondió y el vehículo NO existe: bloqueo DURO igual que el error de proveedor, pero
+  // por otro motivo (la fuente sí contestó). Sin vehículo verificado no hay trámite que radicar, así
+  // que tampoco se ofrece "aceptar riesgo": lo accionable es corregir el identificador.
+  const vehiculoNoEncontrado = checks.some(
+    (c) => c.key === 'vehiculo' && c.status === 'fail',
+  );
   // R3 (HU #10539) — señal server-driven de "VIN ya matriculado": el backend agrega el check
   // `vin_matricula` (warn, con secretaría + fecha del registro previo). Cuando está presente y el
   // wizard proveyó la navegación, se ofrece iniciar el traspaso del vehículo en vez de una matrícula.
@@ -450,7 +456,21 @@ export function PreflightPanel({
         </div>
       )}
 
-      {overall === 'red' && !hasProviderError && (
+      {vehiculoNoEncontrado && !hasProviderError && (
+        <div
+          className="mt-3 flex items-start gap-2.5 rounded-xl p-3"
+          style={{ background: 'rgba(255,78,0,0.08)', border: '1px solid rgba(255,78,0,0.30)' }}
+          role="alert"
+        >
+          <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>
+            El vehículo no se encontró en el RUNT. Verifica el identificador y el
+            documento del propietario, y vuelve a consultar; no es posible
+            avanzar sin un vehículo verificado.
+          </span>
+        </div>
+      )}
+
+      {overall === 'red' && !hasProviderError && !vehiculoNoEncontrado && (
         <label
           className="mt-3 flex items-start gap-2.5 rounded-xl p-3"
           style={{ background: 'rgba(255,78,0,0.08)', border: '1px solid rgba(255,78,0,0.30)' }}

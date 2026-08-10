@@ -31,6 +31,10 @@ public static class MatriculaGates
                 // avanza con un dato vital sin verificar; hay que reejecutar la consulta.
                 if (ctx.Preflight?.ProviderError == true)
                     return GateResult.Block("preflight_provider_error", "No fue posible verificar la información del vehículo en el RUNT. Vuelve a ejecutar la consulta antes de continuar");
+                // Bloqueo DURO: el RUNT respondió y el vehículo NO existe. Sin vehículo no hay trámite,
+                // así que no se subsana con "aceptar riesgo" ni forzando; hay que corregir el VIN.
+                if (ctx.Preflight?.VehiculoNoEncontrado == true)
+                    return GateResult.Block("vehiculo_no_encontrado", "El vehículo no se encontró en el RUNT. Verifica el VIN antes de continuar");
                 return GateResult.Allowed;
 
             case 2:
@@ -47,6 +51,9 @@ public static class MatriculaGates
                 // información es vital y NO se puede continuar ni "aceptando el riesgo" ni forzando.
                 if (ctx.Preflight?.ProviderError == true)
                     return GateResult.Block("preflight_provider_error", "No fue posible verificar la información en el RUNT. Vuelve a ejecutar la consulta antes de continuar");
+                // Mismo bloqueo DURO del paso 1: sin vehículo verificado no se avanza a documentos.
+                if (ctx.Preflight?.VehiculoNoEncontrado == true)
+                    return GateResult.Block("vehiculo_no_encontrado", "El vehículo no se encontró en el RUNT. Verifica el VIN antes de continuar");
                 if (!forzar && !ctx.RiesgoPreflightAceptado && ctx.Preflight?.Overall == "red")
                     return GateResult.Block("preflight_red", "Hay bloqueos críticos en los documentos. Subsana antes de continuar");
                 if (!ctx.DocumentosObligatoriosCompletos)

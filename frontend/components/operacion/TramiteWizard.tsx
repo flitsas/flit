@@ -131,6 +131,15 @@ type PendingConsulta = {
   ownerDocumentNumber?: string;
   /** HU #11199 — secretaría elegida en el paso 1 (solo matrícula inicial). */
   transitOfficeId?: string;
+  /**
+   * Resultado del pre-vuelo de ESTA consulta, para que el shell pueda gatear "Continuar" sin
+   * trámite creado (sin instancia no hay gates de backend que evaluar).
+   * - `hardBlocked`: el vehículo no existe en el RUNT o la consulta no se pudo verificar. No es
+   *   subsanable con "asumo el riesgo": sin vehículo verificado no hay trámite.
+   * - `red`: bloqueos críticos subsanables (SOAT/RTM/comparendos) que sí admiten aceptar el riesgo.
+   */
+  hardBlocked?: boolean;
+  red?: boolean;
 };
 
 /**
@@ -309,12 +318,26 @@ export function TramiteWizard(props: Props) {
   // salvo, riesgo aceptado, transformaciones). Se persisten en el mismo acto de la creación, para
   // que el paso 1 ofrezca lo MISMO que antes y solo cambie el momento del guardado.
   const pendingFieldValuesRef = useRef<Map<string, string>>(new Map());
+  // El riesgo aceptado además vive en estado (no solo en el ref) porque el gate de "Continuar" del
+  // paso 1 depende de él: con ref puro el botón no se re-evaluaría al marcar el checkbox.
+  const [pendingRiesgoAceptado, setPendingRiesgoAceptado] = useState(false);
   const collectPendingFieldValues = useCallback(
     (items: { fieldKey: string; valueText: string }[]) => {
       for (const item of items) pendingFieldValuesRef.current.set(item.fieldKey, item.valueText);
+      const riesgo = items.find((i) => i.fieldKey === 'riesgo_aceptado');
+      if (riesgo) setPendingRiesgoAceptado(riesgo.valueText === 'true');
     },
     [],
   );
+  // Editar el identificador invalida la consulta (onPreviewDone(null)); la aceptación de riesgo se
+  // refiere a ESA consulta, así que no puede sobrevivir a la siguiente.
+  const handlePreviewDone = useCallback((consulta: PendingConsulta | null) => {
+    setPendingConsulta(consulta);
+    if (!consulta) {
+      setPendingRiesgoAceptado(false);
+      pendingFieldValuesRef.current.delete('riesgo_aceptado');
+    }
+  }, []);
 
   // Estado de la instancia existente + sello de borrador finalizado (HU #10350). Se derivan
   // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
@@ -774,8 +797,15 @@ export function TramiteWizard(props: Props) {
     (isPrendaStep && !prendaDocGateOk) ||
     // CF-02 — sin trámite creado, "Continuar" es justamente lo que lo crea: se habilita en cuanto la
     // consulta del vehículo salió bien (sin bloqueos), que es el único requisito del paso 1.
+    // Sin instancia no hay gates de backend que evaluar (WizardStateQuery necesita la instancia), así
+    // que el mismo bloqueo se replica aquí: de lo contrario se crearía el trámite y quedaría atascado
+    // en el paso 1, que es peor que impedirlo antes de crearlo.
     (deferredCreation
-      ? !pendingConsulta
+      ? !pendingConsulta ||
+        // Vehículo inexistente en RUNT o consulta no verificable: bloqueo DURO, sin escape.
+        pendingConsulta.hardBlocked === true ||
+        // Rojo subsanable (SOAT/RTM/comparendos): solo se avanza aceptando el riesgo.
+        (pendingConsulta.red === true && !pendingRiesgoAceptado)
       : !isSavableStep && activeStep.status !== 'complete' && !nextStepNavigable);
 
   // "Guardar y continuar" para pasos con form embebido: valida + persiste (vía
@@ -1145,7 +1175,7 @@ export function TramiteWizard(props: Props) {
                 deferredModalidad={deferredCreation ? entryModalidad : undefined}
                 seedVin={seedVin}
                 seedPlaca={seedPlaca}
-                onPreviewDone={setPendingConsulta}
+                onPreviewDone={handlePreviewDone}
                 onPendingFieldValues={collectPendingFieldValues}
                 paqueteDocsStatus={paqueteDocsStatus}
                 onPaqueteStatusChange={setPaqueteDocsStatus}
@@ -1708,14 +1738,20 @@ function ConsultaStep({
     };
   }, [eligeSecretaria]);
 
-  // FEATURE 02 — política "solo vehículos propios" del tenant y NIT de la compañía (del JWT). Cuando la
-  // política está activa, en traspaso se autorrellena el documento del propietario con el NIT del tenant
-  // y, si el gestor lo edita a otro, se bloquea la consulta al RUNT con un mensaje claro.
+  // FEATURE 02 — política "solo vehículos propios" por familia (MATRICULAS | TRASPASO) y NIT del tenant.
+  // En traspaso (placa) se autorrellena el documento del propietario con el NIT y, si se edita a otro,
+  // se bloquea la consulta al RUNT. En matrícula (VIN) el flag aplica si el flujo de placa entra en juego.
   const [onlyOwnVehicles, setOnlyOwnVehicles] = useState(false);
+  const [familyBlocked, setFamilyBlocked] = useState(false);
   const tenantNitDigits = normalizeNitDigits(
     (decodeJwtPayload(getToken())?.company_nit as string | undefined) ?? '',
   );
   const ownershipAutofilled = useRef(false);
+  // Con la política activa el propietario NO es un dato que el gestor decida: es la compañía. El
+  // campo queda de solo lectura durante todo el trámite (antes se dejaba editar y solo se rechazaba
+  // al consultar, lo que invitaba a escribir un NIT ajeno para descubrir después que no se podía).
+  // La regla la sigue imponiendo el backend (VehicleOwnershipGuard); esto evita el intento.
+  const ownerDocLocked = !isVin && onlyOwnVehicles && !!tenantNitDigits;
 
   // Carga (o recarga) la instancia y rehidrata inputs + field_values.
   const loadInstance = async () => {
@@ -1743,18 +1779,28 @@ function ConsultaStep({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instanceId]);
 
-  // HU #10478 — resuelve el proveedor de consulta por placa del tenant (solo traspaso) para decidir si
-  // se pide el tipo de documento del propietario. Silencioso ante fallo: deja el campo visible.
+  // HU #10478 + config de compañía (bloqueo / solo propios por familia).
   useEffect(() => {
-    if (isVin) return;
+    let active = true;
     void tramitesClient
       .getConsultationConfig()
       .then((cfg) => {
+        if (!active) return;
         setPlatePrimaryProvider(cfg.vehiclePlate);
-        // FEATURE 02 — flag para adaptar la captura del propietario en traspaso.
-        setOnlyOwnVehicles(cfg.onlyOwnVehicles);
+        const byFamily = cfg.onlyOwnVehiclesByFamily;
+        const block = cfg.blockProcedureFamily;
+        if (isVin) {
+          setOnlyOwnVehicles(byFamily?.matriculas ?? false);
+          setFamilyBlocked(block?.matriculas ?? false);
+        } else {
+          setOnlyOwnVehicles(byFamily?.traspaso ?? cfg.onlyOwnVehicles);
+          setFamilyBlocked(block?.traspaso ?? false);
+        }
       })
       .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, [isVin]);
 
   // FEATURE 02 — autorrelleno del documento del tenant (NIT) cuando la política está activa. Una sola
@@ -1835,6 +1881,15 @@ function ConsultaStep({
       setError(SECRETARIA_REQUERIDA);
       return;
     }
+    // Familia bloqueada en config de compañía: no consultar ni crear.
+    if (familyBlocked) {
+      setError(
+        isVin
+          ? 'La compañía tiene bloqueada la creación de trámites de matrículas. Contacta al administrador.'
+          : 'La compañía tiene bloqueada la creación de trámites de traspaso. Contacta al administrador.',
+      );
+      return;
+    }
     // FEATURE 02 — "solo vehículos propios": en traspaso, si el documento del propietario no es el NIT
     // del tenant, se bloquea ANTES de consultar el RUNT con un mensaje claro (no se gasta la consulta).
     if (!isVin && onlyOwnVehicles &&
@@ -1869,6 +1924,9 @@ function ConsultaStep({
         });
         setPreviewSnapshot(result.preflight);
         setFieldValues(result.vehicleFields);
+        // Un 200 con el semáforo en rojo NO es una excepción: sin esto el shell solo sabría que
+        // "hay consulta" y habilitaría Continuar aunque el vehículo no exista en el RUNT.
+        const previewChecks = result.preflight?.checks ?? [];
         onPreviewDone?.({
           previewToken: result.previewToken,
           vin: isVin ? vin.trim() : undefined,
@@ -1876,6 +1934,10 @@ function ConsultaStep({
           ownerDocumentType: isVin ? undefined : ownerDocType,
           ownerDocumentNumber: isVin ? undefined : ownerDocNumber.trim(),
           transitOfficeId: eligeSecretaria ? transitOfficeId : undefined,
+          hardBlocked:
+            previewChecks.some((c) => c.status === 'error') ||
+            previewChecks.some((c) => c.key === 'vehiculo' && c.status === 'fail'),
+          red: result.preflight?.overall === 'red',
         });
         return;
       }
@@ -2097,10 +2159,10 @@ function ConsultaStep({
       type="button"
       onClick={() => void handleRun()}
       // HU #11199 (AC2) — sin secretaría la consulta no se habilita.
-      disabled={loading || (eligeSecretaria && !transitOfficeId)}
+      disabled={loading || familyBlocked || (eligeSecretaria && !transitOfficeId)}
       className="flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
       style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-      aria-label="Consultar RUNT"
+      aria-label={familyBlocked ? 'Consulta no permitida para esta compañía' : 'Consultar RUNT'}
     >
       <Search className="h-3.5 w-3.5" />
       {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
@@ -2177,8 +2239,13 @@ function ConsultaStep({
         <div
           className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
         >
-          <div className="grid max-w-xl gap-4 sm:grid-cols-2">
-            <div>
+          {/* Una sola fila de consulta (mismo patrón que la rama VIN de arriba): cada campo ocupa
+              el ancho que pide su dato —placa 6 caracteres, tipo de documento una sigla— y el
+              número toma el resto, con el CTA cerrando la línea. Antes la placa ocupaba media
+              rejilla y el número la fila entera, lo que dejaba anchos dispares y un hueco grande
+              a la derecha. */}
+          <div className="flex max-w-4xl flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="sm:w-36">
               <label htmlFor="consulta-plate" className="mb-1.5 block text-xs font-semibold">
                 Placa
               </label>
@@ -2191,12 +2258,14 @@ function ConsultaStep({
                   invalidatePreview();
                 }}
                 disabled={readOnly}
-                className={`${inputClass} disabled:opacity-60`}
+                // Prototipo FLIT: la placa se lee como código —mayúscula y espaciada—.
+                // El placeholder vuelve a texto normal para no leerse como un valor cargado.
+                className={`${inputClass} uppercase tracking-[0.14em] font-semibold placeholder:normal-case placeholder:tracking-normal placeholder:font-normal disabled:opacity-60`}
                 placeholder="Ej. ABC123"
               />
             </div>
             {!hideOwnerDocType && (
-              <div>
+              <div className="sm:w-48">
                 <label
                   htmlFor="consulta-owner-doc-type"
                   className="mb-1.5 block text-xs font-semibold"
@@ -2213,7 +2282,9 @@ function ConsultaStep({
                     setOwnerDocNumber((n) => sanitizeDocNumber(n, next));
                     invalidatePreview();
                   }}
-                  disabled={readOnly}
+                  // Un <select> no admite readOnly: con la política activa se deshabilita,
+                  // el valor (NIT) igual viaja porque vive en estado de React, no en un submit.
+                  disabled={readOnly || ownerDocLocked}
                   className={`${inputClass} disabled:opacity-60`}
                 >
                   {DOC_TYPES.map((t) => (
@@ -2222,15 +2293,9 @@ function ConsultaStep({
                     </option>
                   ))}
                 </select>
-                {ownerDocTypeSuggested && (
-                  <p className="mt-1 text-[11px] leading-tight opacity-70">
-                    No se encontró el vehículo en RUNT. Si es maquinaria o remolque, verifica el tipo de
-                    documento del propietario (p. ej. NIT) y vuelve a consultar.
-                  </p>
-                )}
               </div>
             )}
-            <div className="sm:col-span-2">
+            <div className="sm:min-w-56 sm:flex-1">
               <label
                 htmlFor="consulta-owner-doc-number"
                 className="mb-1.5 block text-xs font-semibold"
@@ -2246,12 +2311,37 @@ function ConsultaStep({
                   invalidatePreview();
                 }}
                 disabled={readOnly}
-                className={`${inputClass} disabled:opacity-60`}
+                // readOnly (no disabled): el gestor debe poder ver, enfocar y copiar el NIT, y
+                // el campo sigue en el orden de tabulación y se anuncia como de solo lectura.
+                readOnly={ownerDocLocked}
+                aria-describedby={ownerDocLocked ? 'consulta-owner-doc-locked' : undefined}
+                className={`${inputClass} disabled:opacity-60 ${
+                  ownerDocLocked ? 'cursor-not-allowed bg-[#F4F6FA] dark:bg-[#131A22]' : ''
+                }`}
                 placeholder="Ej. 1020304050"
               />
             </div>
+            {!readOnly && <div className="sm:shrink-0">{consultButton}</div>}
           </div>
-          {!readOnly && <div className="mt-4">{consultButton}</div>}
+          {/* El fondo gris por sí solo no comunica "no editable": se dice con texto, y este párrafo
+              es además el nombre accesible del estado (aria-describedby del campo). */}
+          {ownerDocLocked && (
+            <p
+              id="consulta-owner-doc-locked"
+              className="mt-3 max-w-4xl text-[11px] leading-tight opacity-70"
+            >
+              Tu compañía solo tramita vehículos propios, así que el propietario queda fijo en su
+              NIT y no se puede editar durante el trámite.
+            </p>
+          )}
+          {/* La sugerencia habla de la consulta completa, no solo del selector: fuera de la fila
+              se lee en una línea y deja de descuadrar la altura de esa columna. */}
+          {!hideOwnerDocType && ownerDocTypeSuggested && (
+            <p className="mt-3 max-w-4xl text-[11px] leading-tight opacity-70">
+              No se encontró el vehículo en RUNT. Si es maquinaria o remolque, verifica el tipo de
+              documento del propietario (p. ej. NIT) y vuelve a consultar.
+            </p>
+          )}
         </div>
       )}
 

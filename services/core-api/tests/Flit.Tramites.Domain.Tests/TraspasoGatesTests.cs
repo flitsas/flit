@@ -100,6 +100,47 @@ public sealed class TraspasoGatesTests
     }
 
     [Fact]
+    public void Paso1_VehiculoNoEncontrado_BloqueaDuroNoSubsanable()
+    {
+        // El RUNT respondió y el vehículo NO existe: sin vehículo verificado no hay trámite. Es
+        // bloqueo DURO — ni forzar ni "aceptar riesgo" lo levantan; hay que corregir el identificador.
+        var ctx = BaseCtx() with
+        {
+            Preflight = new PreflightSnapshot("red", ImpuestoVehicularUnknown: false, VehiculoNoEncontrado: true),
+            ForzarContinuar = true,
+            RiesgoPreflightAceptado = true,
+        };
+        var r = TraspasoGates.PasoCompleto(1, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("vehiculo_no_encontrado");
+    }
+
+    [Fact]
+    public void Paso4_VehiculoNoEncontrado_BloqueaDuroNoSubsanable()
+    {
+        var ctx = BaseCtx() with
+        {
+            Preflight = new PreflightSnapshot("red", false, VehiculoNoEncontrado: true),
+            RiesgoPreflightAceptado = true,
+            ForzarContinuar = true,
+        };
+        var r = TraspasoGates.PasoCompleto(4, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("vehiculo_no_encontrado");
+    }
+
+    [Fact]
+    public void MaxPasoAlcanzable_VehiculoNoEncontrado_Es1()
+    {
+        // El bloqueo duro del paso 1 debe impedir alcanzar cualquier paso posterior.
+        var ctx = BaseCtx() with
+        {
+            Preflight = new PreflightSnapshot("red", false, VehiculoNoEncontrado: true),
+        };
+        TraspasoGates.MaxPasoAlcanzable(ctx).Should().Be(1);
+    }
+
+    [Fact]
     public void MaxPasoAlcanzable_SinConsultaVehiculo_Es1()
     {
         var ctx = BaseCtx() with { VehiculoConsultado = false };

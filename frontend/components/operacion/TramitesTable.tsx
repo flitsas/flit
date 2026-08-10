@@ -223,6 +223,11 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
   const [items, setItems] = useState<InstanceSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Bloqueo de creación por modalidad (config compañía → Trámites). */
+  const [blockNew, setBlockNew] = useState<{ matricula: boolean; traspaso: boolean }>({
+    matricula: false,
+    traspaso: false,
+  });
 
   // Filtros client-side.
   const [search, setSearch] = useState('');
@@ -300,6 +305,25 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
   const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
   // ICT (paridad v1 pause-unpause-massive) — selección de trámites ICT para pausar/reanudar en lote.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+
+  // Config compañía: qué modalidades no se pueden iniciar (No permitir trámites…).
+  useEffect(() => {
+    let active = true;
+    void tramitesClient
+      .getConsultationConfig()
+      .then((cfg) => {
+        if (!active) return;
+        const block = cfg.blockProcedureFamily;
+        setBlockNew({
+          matricula: block?.matriculas ?? false,
+          traspaso: block?.traspaso ?? false,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   /** Modal Procesar (Asignado → Terminado) desde la tabla. */
   const [processTarget, setProcessTarget] = useState<InstanceSummary | null>(null);
@@ -701,19 +725,32 @@ export function TramitesTable({ refreshKey = 0, onStartTramite }: TramitesTableP
             modalidad + búsqueda desplegable, en la misma línea y con el mismo estilo
             (píldora con gradiente). La búsqueda queda oculta hasta pulsar "Buscar". */}
         <div className="flex flex-wrap items-center gap-2" aria-label="Acciones de trámites">
-          {NEW_TRAMITE_ACTIONS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onStartTramite?.(id)}
-              className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white transition hover:opacity-95"
-              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-              aria-label={`Iniciar ${label}`}
-            >
-              <Icon className="h-4 w-4" aria-hidden="true" />
-              {label}
-            </button>
-          ))}
+          {NEW_TRAMITE_ACTIONS.map(({ id, label, icon: Icon }) => {
+            const blocked =
+              id === 'matricula_inicial' ? blockNew.matricula : blockNew.traspaso;
+            return (
+              <button
+                key={id}
+                type="button"
+                disabled={blocked}
+                title={
+                  blocked
+                    ? 'La compañía tiene bloqueada la creación de este tipo de trámite.'
+                    : undefined
+                }
+                onClick={() => {
+                  if (blocked) return;
+                  onStartTramite?.(id);
+                }}
+                className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-45"
+                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                aria-label={blocked ? `${label} (no permitido)` : `Iniciar ${label}`}
+              >
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                {label}
+              </button>
+            );
+          })}
           {searchOpen ? (
             <div className="relative min-w-[220px] flex-1">
               <Search

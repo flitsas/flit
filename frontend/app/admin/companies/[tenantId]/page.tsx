@@ -161,6 +161,8 @@ function defaultSettings(tenantId: string): TenantSettings {
       allowInitialRegistration: false,
       allowMiscNewVehicles: false,
       onlyOwnVehicles: false,
+      onlyOwnVehiclesByFamily: { matriculas: false, traspaso: false, otros: false },
+      blockProcedureFamily: { matriculas: true, traspaso: false, otros: false },
     },
     baulFirmasActivo: false,
     preasignacionPlacaActiva: false,

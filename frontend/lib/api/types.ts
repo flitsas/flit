@@ -96,7 +96,29 @@ export interface UpdateCompanyRequest {
 export interface SwitchesMatricula {
   allowInitialRegistration: boolean;
   allowMiscNewVehicles: boolean;
+  /** Legado: espejo de `onlyOwnVehiclesByFamily.traspaso`. */
   onlyOwnVehicles: boolean;
+  /** Solo vehículos propios por familia de trámite. */
+  onlyOwnVehiclesByFamily?: OnlyOwnVehiclesByFamily;
+  /**
+   * Bloqueo de creación por familia. `true` = no permitir crear trámites de esa familia.
+   * Matrículas = invertido de `allowInitialRegistration`.
+   */
+  blockProcedureFamily?: BlockProcedureFamily;
+}
+
+/** Flags por familia (`MATRICULAS` | `TRASPASO` | `OTROS`). */
+export interface OnlyOwnVehiclesByFamily {
+  matriculas: boolean;
+  traspaso: boolean;
+  otros: boolean;
+}
+
+/** Bloqueo de creación por familia (`true` = no crear). */
+export interface BlockProcedureFamily {
+  matriculas: boolean;
+  traspaso: boolean;
+  otros: boolean;
 }
 
 export type EnrutamientoSMTP = "FLIT_SMTP" | "TENANT_API";
