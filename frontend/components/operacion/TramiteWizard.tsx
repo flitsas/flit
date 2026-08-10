@@ -293,10 +293,8 @@ function ReadOnlyStateNotice({ estado }: { estado: InstanceStatus | null }) {
  */
 export function TramiteWizard(props: Props) {
   const {
-    configuration,
     procedureTypeId,
     modalidad: entryModalidad,
-    title,
     existingInstanceId,
     onCreated,
     seedVin,

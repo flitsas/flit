@@ -230,7 +230,8 @@ function normalizeActors(actors: ProcedureActor[]): ProcedureActor[] {
   return actors.map((a) => {
     // HU #10956 (AC1) — el check de reutilización desapareció: el campo NUNCA viaja en el PUT,
     // ni siquiera si un actor persistido ANTES de esta HU lo trae en `true` desde el backend.
-    const { autorizaReutilizacionDatos: _legacyConsent, ...rest } = a;
+    const rest = { ...a };
+    delete rest.autorizaReutilizacionDatos;
     return {
       ...rest,
       telefono: blankToUndef(a.telefono),
@@ -816,7 +817,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       isRazonSocialLocked(prevActor, index) &&
       !opts?.preserveConsultation
     ) {
-      const { nombreCompleto: _ignored, ...rest } = patch;
+      const rest = { ...patch };
+      delete rest.nombreCompleto;
       patch = rest;
       if (Object.keys(patch).length === 0 && !identityChanged) return;
     }

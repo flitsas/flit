@@ -139,6 +139,7 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
   }, [office.officeId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API
     void loadCompanyRules();
   }, [loadCompanyRules]);
 
