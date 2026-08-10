@@ -14,6 +14,7 @@ import {
   fetchSignatureVaultByDocument,
 } from "@/lib/api/admin-signature-vault";
 import { formatFecha } from "@/lib/format/date";
+import { ApiError, ApiValidationError } from "@/lib/api/types";
 
 export interface SignatureVaultSelectorProps {
   tenantId: string;
@@ -123,6 +124,14 @@ export function SignatureVaultSelector({
 
   const guardarFirma = async () => {
     if (!artefacto || desde === "" || hasta === "" || !fullName) return;
+    if (hasta < desde) {
+      setSaveError("La vigencia hasta no puede ser anterior a la vigencia desde.");
+      return;
+    }
+    if (documentType.trim() === "" || documentNumber.trim().length < 3) {
+      setSaveError("Completa el tipo y número de documento del mandatario antes de guardar la firma.");
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     try {
@@ -144,8 +153,8 @@ export function SignatureVaultSelector({
       // AC3 — la firma recién capturada queda elegida; el guardado del representante la persiste.
       onChange(creada.id);
       cerrarCaptura();
-    } catch {
-      setSaveError("No se pudo registrar la firma. Revisa la vigencia y vuelve a intentarlo.");
+    } catch (err) {
+      setSaveError(messageFromSignatureSaveError(err));
     } finally {
       setSaving(false);
     }
@@ -346,4 +355,26 @@ export function SignatureVaultSelector({
       {capturing && bloqueCaptura}
     </div>
   );
+}
+
+function messageFromSignatureSaveError(err: unknown): string {
+  if (err instanceof ApiValidationError) {
+    const conflict = err.errors.find((e) => (e as { code?: string }).code === "firma_activa_existente");
+    if (conflict) {
+      return (
+        "No se pudo sustituir la firma activa de esta persona. Vuelve a intentarlo; si persiste, " +
+        "anúlala desde el Baúl de firmas y regístrala de nuevo."
+      );
+    }
+    const first = err.errors.find((e) => e.message?.trim())?.message;
+    if (first) return first;
+    return "Revisa los datos de la firma: hay valores inválidos.";
+  }
+  if (err instanceof ApiError) {
+    if (err.status >= 500) {
+      return "Error del servidor al guardar la firma (almacenamiento o base de datos). Intenta de nuevo.";
+    }
+    return err.message || "No se pudo registrar la firma.";
+  }
+  return "No se pudo registrar la firma. Revisa la vigencia y vuelve a intentarlo.";
 }

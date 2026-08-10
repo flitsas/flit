@@ -350,6 +350,8 @@ public sealed class IniciarPrevalidacionHandler(
             && !string.IsNullOrWhiteSpace(person.LegalRepDocumentType)
             && !string.IsNullOrWhiteSpace(person.LegalRepDocumentNumber))
         {
+            // Misma regla que IdentitySubjectResolver: en jurídica el correo es SOLO el del RL.
+            // Sin LegalRepEmail no se cae al correo de la empresa (person.Email).
             return new IdentitySubjectStandalone(
                 Nombre: !string.IsNullOrWhiteSpace(person.LegalRepName)
                     ? person.LegalRepName
@@ -357,8 +359,8 @@ public sealed class IniciarPrevalidacionHandler(
                 TipoDocumento: person.LegalRepDocumentType,
                 NumeroDocumento: person.LegalRepDocumentNumber,
                 Email: !string.IsNullOrWhiteSpace(person.LegalRepEmail)
-                    ? person.LegalRepEmail
-                    : person.Email);
+                    ? person.LegalRepEmail!
+                    : string.Empty);
         }
 
         return new IdentitySubjectStandalone(

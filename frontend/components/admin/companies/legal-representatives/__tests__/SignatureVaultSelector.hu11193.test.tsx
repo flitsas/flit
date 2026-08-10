@@ -144,6 +144,27 @@ describe("SignatureVaultSelector — HU #11193 (captura desde el formulario)", (
     expect(screen.getByTestId("sig-capture-block")).toBeInTheDocument();
   });
 
+  it("muestra el mensaje del backend cuando el alta falla por validación", async () => {
+    const { ApiValidationError } = await import("@/lib/api/types");
+    vi.mocked(fetchSignatureVaultByDocument).mockResolvedValue([]);
+    vi.mocked(createSignatureVaultEntry).mockRejectedValue(
+      new ApiValidationError(
+        [{ field: "vigenciaHasta", message: "La vigencia hasta no puede ser anterior a la vigencia desde." }],
+        422,
+      ),
+    );
+    const user = userEvent.setup();
+    render(<SignatureVaultSelector {...PROPS} onChange={vi.fn()} />);
+
+    await user.click(await screen.findByTestId("sig-capture-open"));
+    await user.click(screen.getByRole("button", { name: /Dibujar firma/i }));
+    await user.type(screen.getByLabelText("Vigencia desde"), "2026-08-01");
+    await user.type(screen.getByLabelText("Vigencia hasta"), "2027-08-01");
+    await user.click(screen.getByRole("button", { name: /Guardar firma/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/vigencia hasta no puede ser anterior/i);
+  });
+
   it("AC5 con firmas vigentes se elige de la lista, no se pide capturar una primera", async () => {
     vi.mocked(fetchSignatureVaultByDocument).mockResolvedValue([VIGENTE_SIN_HASH]);
     render(<SignatureVaultSelector {...PROPS} onChange={vi.fn()} />);
