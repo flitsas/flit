@@ -22,6 +22,19 @@ export interface OtHubLayoutProps {
   transitOfficeId: string;
   activeTab: OtHubTabId;
   moduleTitle: string;
+  /**
+   * Sobre qué se monta el contenido del módulo.
+   *
+   * <p><b>panel</b> (el de siempre): una tarjeta blanca que envuelve pestañas y contenido. Es lo
+   * que quieren los módulos que son UN formulario o UNA tabla — la tarjeta les da el marco.</p>
+   *
+   * <p><b>plano</b>: el contenido se monta directamente sobre el fondo tintado de la página. Lo
+   * piden los módulos que ya traen sus propias tarjetas, como Reportes: una tarjeta blanca dentro
+   * de otra tarjeta blanca no se ve como dos cajas, se ve como una sola superficie con unas rayas
+   * dentro, porque entre tarjeta y tarjeta no queda fondo que las separe. El mismo módulo en la
+   * empresa gestora se monta sobre el fondo y por eso allí sí se distinguen.</p>
+   */
+  surface?: "panel" | "plano";
   children: ReactNode;
 }
 
@@ -30,6 +43,7 @@ export function OtHubLayout({
   transitOfficeId,
   activeTab,
   moduleTitle,
+  surface = "panel",
   children,
 }: OtHubLayoutProps) {
   const router = useRouter();
@@ -135,7 +149,13 @@ export function OtHubLayout({
         </div>
       )}
 
-      <div className="mt-4 rounded-2xl border bg-card p-4 md:p-6">
+      <div
+        className={
+          surface === "plano" ? "mt-4" : "mt-4 rounded-2xl border bg-card p-4 md:p-6"
+        }
+        data-testid="ot-hub-superficie"
+        data-surface={surface}
+      >
         {showTabBar && (
           <OtTabBar
             tabs={OT_HUB_TABS.map((t) => ({ id: t.id, label: t.label }))}

@@ -14,6 +14,14 @@ import { formatInt, formatNumber, formatPct } from "../format";
 import { FunnelChart } from "../FunnelChart";
 import { KpiCard } from "../KpiCard";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
+import {
+  CARDLIST_CELL,
+  CARDLIST_HEAD_ROW,
+  CARDLIST_ROW,
+  CARDLIST_SCROLL,
+  CARDLIST_TABLE,
+  CARDLIST_TH,
+} from "@/components/atom/table-cardlist";
 
 export interface OperacionTabProps {
   filters: ReportFilters;
@@ -150,22 +158,22 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
               {metrics.data.current.stuck.items.length === 0 ? (
                 <p className="text-xs opacity-60">No hay trámites atascados. ¡Buen ritmo!</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs" data-testid="stuck-table">
+                <div className={CARDLIST_SCROLL}>
+                  <table className={CARDLIST_TABLE} data-testid="stuck-table">
                     <thead>
-                      <tr className="text-[10px] uppercase text-left opacity-70">
-                        <th className="px-2 py-2 font-semibold">Referencia</th>
-                        <th className="px-2 py-2 font-semibold">Estado</th>
-                        <th className="px-2 py-2 font-semibold">Días detenido</th>
-                        <th className="px-2 py-2 font-semibold">Organismo</th>
-                        <th className="px-2 py-2 font-semibold">Tipo</th>
-                        <th className="px-2 py-2 font-semibold">Radicador</th>
+                      <tr className={CARDLIST_HEAD_ROW}>
+                        <th className={CARDLIST_TH}>Referencia</th>
+                        <th className={CARDLIST_TH}>Estado</th>
+                        <th className={CARDLIST_TH}>Días detenido</th>
+                        <th className={CARDLIST_TH}>Organismo</th>
+                        <th className={CARDLIST_TH}>Tipo</th>
+                        <th className={CARDLIST_TH}>Radicador</th>
                       </tr>
                     </thead>
                     <tbody>
                       {metrics.data.current.stuck.items.map((item) => (
-                        <tr key={item.instanceId} className="border-t">
-                          <td className="px-2 py-2 font-medium">
+                        <tr key={item.instanceId} className={CARDLIST_ROW}>
+                          <td className={`${CARDLIST_CELL} font-medium`}>
                             <a
                               href={`/tramites/${item.instanceId}`}
                               className="text-[#557EFF] hover:underline"
@@ -174,13 +182,13 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
                               {item.referenceNumber}
                             </a>
                           </td>
-                          <td className="px-2 py-2">{statusLabel(item.status)}</td>
-                          <td className="px-2 py-2 font-semibold" style={{ color: "#F9AC00" }}>
+                          <td className={CARDLIST_CELL}>{statusLabel(item.status)}</td>
+                          <td className={`${CARDLIST_CELL} font-semibold`} style={{ color: "#F9AC00" }}>
                             {formatNumber(item.daysInStatus)}
                           </td>
-                          <td className="px-2 py-2 opacity-80">{item.transitOfficeName}</td>
-                          <td className="px-2 py-2 opacity-80">{item.procedureTypeName}</td>
-                          <td className="px-2 py-2 opacity-80">{item.createdByDisplayName}</td>
+                          <td className={`${CARDLIST_CELL} opacity-80`}>{item.transitOfficeName}</td>
+                          <td className={`${CARDLIST_CELL} opacity-80`}>{item.procedureTypeName}</td>
+                          <td className={`${CARDLIST_CELL} opacity-80`}>{item.createdByDisplayName}</td>
                         </tr>
                       ))}
                     </tbody>

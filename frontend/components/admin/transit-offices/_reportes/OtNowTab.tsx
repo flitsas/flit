@@ -91,13 +91,19 @@ export function OtNowTab({ transitOfficeId, companies }: OtNowTabProps) {
 
   return (
     <div className="flex flex-col gap-6" data-testid="ot-now-tab">
-      <div className="flex flex-wrap items-end gap-3">
-        <ModalidadSelect value={modalidad} onChange={setModalidad} />
-        <EmpresaSelect value={clientTenantId} companies={companies} onChange={setClientTenantId} />
-        <PrimaryButton onClick={() => void load()} disabled={busy}>
-          {busy ? "Cargando…" : "Actualizar"}
-        </PrimaryButton>
-      </div>
+      <Section
+        title="Parámetros"
+        testId="ot-now-filters"
+        hint="Esta pestaña no lleva rango de fechas: siempre enseña el estado de este momento."
+      >
+        <div className="flex flex-wrap items-end gap-3">
+          <ModalidadSelect value={modalidad} onChange={setModalidad} />
+          <EmpresaSelect value={clientTenantId} companies={companies} onChange={setClientTenantId} />
+          <PrimaryButton onClick={() => void load()} disabled={busy}>
+            {busy ? "Cargando…" : "Actualizar"}
+          </PrimaryButton>
+        </div>
+      </Section>
 
       {error && <ErrorNotice message={error} />}
 

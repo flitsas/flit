@@ -11,6 +11,14 @@ import { toMetricsParams, type ReportFilters } from "../filters";
 import { formatInt, formatPct } from "../format";
 import { ProductivityCards } from "../ProductivityCards";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
+import {
+  CARDLIST_CELL,
+  CARDLIST_HEAD_ROW,
+  CARDLIST_ROW,
+  CARDLIST_SCROLL,
+  CARDLIST_TABLE,
+  CARDLIST_TH,
+} from "@/components/atom/table-cardlist";
 
 const DETAIL_LIMIT = 100;
 const CHART_LIMIT = 10;
@@ -95,16 +103,16 @@ export function ProductividadTab({ filters }: ProductividadTabProps) {
             >
               Detalle por operador ({formatInt(items.length)})
             </h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs" data-testid="operadores-table">
+            <div className={CARDLIST_SCROLL}>
+              <table className={CARDLIST_TABLE} data-testid="operadores-table">
                 <thead>
-                  <tr className="text-[10px] uppercase text-left opacity-70">
-                    <th className="px-2 py-2 font-semibold">#</th>
-                    <th className="px-2 py-2 font-semibold">Operador</th>
-                    <th className="px-2 py-2 font-semibold">Enviados</th>
-                    <th className="px-2 py-2 font-semibold">Aprobados</th>
-                    <th className="px-2 py-2 font-semibold">Rechazados</th>
-                    <th className="px-2 py-2 font-semibold">% aprobación</th>
+                  <tr className={CARDLIST_HEAD_ROW}>
+                    <th className={CARDLIST_TH}>#</th>
+                    <th className={CARDLIST_TH}>Operador</th>
+                    <th className={CARDLIST_TH}>Enviados</th>
+                    <th className={CARDLIST_TH}>Aprobados</th>
+                    <th className={CARDLIST_TH}>Rechazados</th>
+                    <th className={CARDLIST_TH}>% aprobación</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -112,16 +120,16 @@ export function ProductividadTab({ filters }: ProductividadTabProps) {
                     const decided = p.approvedCount + p.rejectedCount;
                     const approvalPct = decided > 0 ? (p.approvedCount / decided) * 100 : null;
                     return (
-                      <tr key={p.userId} className="border-t">
-                        <td className="px-2 py-2 opacity-60">{i + 1}</td>
-                        <td className="px-2 py-2 font-medium">{p.displayName}</td>
-                        <td className="px-2 py-2">{formatInt(p.submittedCount)}</td>
-                        <td className="px-2 py-2" style={{ color: "#8CC63F" }}>{formatInt(p.approvedCount)}</td>
-                        <td className="px-2 py-2" style={{ color: p.rejectedCount > 0 ? "#FF4E00" : undefined }}>
+                      <tr key={p.userId} className={CARDLIST_ROW}>
+                        <td className={`${CARDLIST_CELL} opacity-60`}>{i + 1}</td>
+                        <td className={`${CARDLIST_CELL} font-medium`}>{p.displayName}</td>
+                        <td className={CARDLIST_CELL}>{formatInt(p.submittedCount)}</td>
+                        <td className={CARDLIST_CELL} style={{ color: "#8CC63F" }}>{formatInt(p.approvedCount)}</td>
+                        <td className={CARDLIST_CELL} style={{ color: p.rejectedCount > 0 ? "#FF4E00" : undefined }}>
                           {formatInt(p.rejectedCount)}
                         </td>
                         <td
-                          className="px-2 py-2"
+                          className={CARDLIST_CELL}
                           title="Aprobados / (aprobados + rechazados) × 100; — si aún no hay decisiones."
                         >
                           {formatPct(approvalPct)}

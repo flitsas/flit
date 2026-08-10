@@ -44,6 +44,14 @@ import {
 import { XLSX_MIME } from "@/lib/xlsx";
 import { EstadoComposition, TimeHistogram, TrendChart, granularidadLabel } from "./report-visuals";
 import { CSV_EXPORT_VISIBLE, Empty, ErrorNotice, PrimaryButton, Section, Tile } from "./shared";
+import {
+  CARDLIST_CELL,
+  CARDLIST_HEAD_ROW,
+  CARDLIST_ROW,
+  CARDLIST_SCROLL,
+  CARDLIST_TABLE,
+  CARDLIST_TH,
+} from "@/components/atom/table-cardlist";
 
 const PAGE_SIZE = 25;
 
@@ -498,12 +506,12 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
           </Empty>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[40rem] text-xs" data-testid="ot-report-table">
+            <div className={CARDLIST_SCROLL}>
+              <table className={`min-w-[40rem] ${CARDLIST_TABLE}`} data-testid="ot-report-table">
                 <thead>
-                  <tr className="border-b border-[#DFE5ED] text-left text-[11px] uppercase tracking-wide text-[#6B7280] dark:border-white/10 dark:text-white/50">
+                  <tr className={CARDLIST_HEAD_ROW}>
                     {columns.map((column) => (
-                      <th key={column.id} className="py-2 pr-3 font-semibold">
+                      <th key={column.id} className={CARDLIST_TH}>
                         {column.sort ? (
                           <button
                             type="button"
@@ -527,12 +535,12 @@ export function OtReportBuilder({ transitOfficeId, companies }: OtReportBuilderP
                   {report.filas.map((row) => (
                     <tr
                       key={row.procedureInstanceId}
-                      className="border-b border-[#EEF1F5] dark:border-white/5"
+                      className={CARDLIST_ROW}
                     >
                       {columns.map((column) => (
                         <td
                           key={column.id}
-                          className={`py-2 pr-3 ${column.numeric ? "tabular-nums" : ""}`}
+                          className={`${CARDLIST_CELL} ${column.numeric ? "tabular-nums" : ""}`}
                         >
                           {column.id === "estado" ? (
                             <EstadoChip estado={row.estadoOt} />

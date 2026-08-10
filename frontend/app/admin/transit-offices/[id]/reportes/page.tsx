@@ -28,6 +28,9 @@ function OtReportesPageInner() {
       transitOfficeId={params.id}
       activeTab="reportes"
       moduleTitle="Administración OT — Reportes"
+      // Reportes ya trae sus propias tarjetas: sin el panel blanco de fondo, entre una y otra se ve
+      // la página y se leen como piezas separadas, igual que en la empresa gestora.
+      surface="plano"
     >
       <OtReportsConsole transitOfficeId={params.id} />
     </OtHubLayout>

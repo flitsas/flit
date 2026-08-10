@@ -43,6 +43,14 @@ import {
   reviewersFileName,
 } from "./reviewer-columns";
 import { CSV_EXPORT_VISIBLE, Empty, ErrorNotice, PrimaryButton, Section, Tile } from "./shared";
+import {
+  CARDLIST_CELL,
+  CARDLIST_HEAD_ROW,
+  CARDLIST_ROW,
+  CARDLIST_SCROLL,
+  CARDLIST_TABLE,
+  CARDLIST_TH,
+} from "@/components/atom/table-cardlist";
 
 const COLUMNS_STORAGE_KEY = "flit-ot-revisores-columnas";
 
@@ -356,12 +364,12 @@ export function OtReviewersTab({ transitOfficeId, companies, reviewers }: OtRevi
                 : "Nadie decidió trámites en el periodo y con los filtros seleccionados."}
           </Empty>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-xs" data-testid="ot-reviewers-table">
+          <div className={CARDLIST_SCROLL}>
+            <table className={`min-w-[40rem] ${CARDLIST_TABLE}`} data-testid="ot-reviewers-table">
               <thead>
-                <tr className="border-b border-[#DFE5ED] text-left text-[11px] uppercase tracking-wide text-[#6B7280] dark:border-white/10 dark:text-white/50">
+                <tr className={CARDLIST_HEAD_ROW}>
                   {columns.map((column) => (
-                    <th key={column.id} className="py-2 pr-3 font-semibold">
+                    <th key={column.id} className={CARDLIST_TH}>
                       {column.sort ? (
                         <button
                           type="button"
@@ -381,11 +389,11 @@ export function OtReviewersTab({ transitOfficeId, companies, reviewers }: OtRevi
               </thead>
               <tbody>
                 {report!.filas.map((row) => (
-                  <tr key={row.userId} className="border-b border-[#EEF1F5] dark:border-white/5">
+                  <tr key={row.userId} className={CARDLIST_ROW}>
                     {columns.map((column) => (
                       <td
                         key={column.id}
-                        className={`py-2 pr-3 ${column.numeric ? "tabular-nums" : ""}`}
+                        className={`${CARDLIST_CELL} ${column.numeric ? "tabular-nums" : ""}`}
                       >
                         {column.value(row)}
                       </td>
