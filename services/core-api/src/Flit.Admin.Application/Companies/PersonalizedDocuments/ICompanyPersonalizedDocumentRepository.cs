@@ -15,8 +15,27 @@ public sealed record CompanyPersonalizedDocumentRecord(
     int? PageCount,
     string? Notes,
     DateTimeOffset CreatedAt,
+    Guid? CreatedBy,
     DateTimeOffset? ActivatedAt,
-    DateTimeOffset? DeactivatedAt);
+    Guid? ActivatedBy,
+    DateTimeOffset? DeactivatedAt,
+    Guid? DeactivatedBy);
+
+/// <summary>Desenlace de <see cref="ICompanyPersonalizedDocumentRepository.ReactivateAsync"/> (HU #11314).</summary>
+public enum PersonalizedDocumentReactivationOutcome
+{
+    /// <summary>La versión quedó (o ya estaba) activa.</summary>
+    Reactivated,
+
+    /// <summary>No existe (o es de otro tenant — negativo de aislamiento).</summary>
+    NotFound,
+
+    /// <summary>La versión está en <c>pendiente</c> o <c>rechazado</c>: no se puede activar (409).</summary>
+    InvalidStatus,
+}
+
+/// <summary>Resultado de reactivar una versión: el desenlace + la versión numérica (para la respuesta 200).</summary>
+public sealed record ReactivateCompanyPersonalizedDocumentResult(PersonalizedDocumentReactivationOutcome Outcome, int? Version);
 
 /// <summary>Datos para crear una versión nueva (nace en <c>pendiente</c>).</summary>
 public sealed record SaveCompanyPersonalizedDocumentData(
@@ -64,4 +83,23 @@ public interface ICompanyPersonalizedDocumentRepository
 
     /// <summary>Marca la versión como <c>rechazado</c> (validación de servidor fallida en el confirm).</summary>
     Task RejectAsync(Guid tenantId, Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reactiva una versión <c>historico</c> (HU #11314): pasa a <c>activo</c> y retira a
+    /// <c>historico</c> la activa previa del mismo <c>document_type</c>, si existe y es distinta.
+    /// Repetible en cualquier orden — reactivar la ya activa es un no-op idempotente. Nunca borra
+    /// filas (restricción 9). <c>WHERE tenant_id</c> explícito: un id de otro tenant es
+    /// <see cref="PersonalizedDocumentReactivationOutcome.NotFound"/>.
+    /// </summary>
+    Task<ReactivateCompanyPersonalizedDocumentResult> ReactivateAsync(
+        Guid tenantId, Guid id, Guid? reactivatedBy, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Desactiva la versión activa de <paramref name="documentType"/> («volver al documento del
+    /// sistema», HU #11314): ninguna versión queda <c>activo</c> y NINGUNA fila ni archivo se borra
+    /// (restricción 9). Idempotente: <c>true</c> si retiró una fila activa, <c>false</c> si ya no
+    /// había ninguna (no-op).
+    /// </summary>
+    Task<bool> DeactivateActiveAsync(
+        Guid tenantId, string documentType, Guid? deactivatedBy, CancellationToken cancellationToken = default);
 }

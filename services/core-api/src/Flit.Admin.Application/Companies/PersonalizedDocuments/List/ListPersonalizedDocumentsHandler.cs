@@ -37,5 +37,18 @@ public sealed class ListPersonalizedDocumentsHandler
     }
 
     private static PersonalizedDocumentVersionResponse Map(CompanyPersonalizedDocumentRecord r) =>
-        new(r.Id, r.Version, r.Status, r.Filename, r.StorageSha256, r.PageCount, r.CreatedAt, r.ActivatedAt, r.DeactivatedAt);
+        new(
+            r.Id,
+            r.Version,
+            r.Status,
+            r.IsActive,
+            r.Filename,
+            r.StorageSha256,
+            r.PageCount,
+            r.CreatedAt,
+            r.CreatedBy,
+            r.ActivatedAt,
+            r.ActivatedBy,
+            r.DeactivatedAt,
+            r.DeactivatedBy);
 }

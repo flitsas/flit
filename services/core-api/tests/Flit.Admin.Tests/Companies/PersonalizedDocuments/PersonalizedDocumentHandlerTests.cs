@@ -553,5 +553,19 @@ public sealed class PersonalizedDocumentHandlerTests
 
             return Task.FromResult<Stream?>(new MemoryStream(bytes, writable: false));
         }
+
+        public int GetViewUrlCalls { get; private set; }
+
+        public Task<PersonalizedDocumentView?> GetViewUrlAsync(string storagePath, CancellationToken cancellationToken = default)
+        {
+            GetViewUrlCalls++;
+            if (!_objects.ContainsKey(storagePath))
+            {
+                return Task.FromResult<PersonalizedDocumentView?>(null);
+            }
+
+            return Task.FromResult<PersonalizedDocumentView?>(
+                new PersonalizedDocumentView($"https://s3.example/view/{storagePath}", DateTimeOffset.UtcNow.AddMinutes(10)));
+        }
     }
 }

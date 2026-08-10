@@ -13,6 +13,13 @@ public sealed record PersonalizedDocumentUploadTicket(
     IReadOnlyDictionary<string, string> Fields);
 
 /// <summary>
+/// Presigned GET URL de vida corta (HU #11314, ADR-0029-preview-presigned-get-inline) para
+/// previsualizar el PDF inline en el navegador sin activarlo. TTL ≈ 10 min. No loguear la URL
+/// completa (lleva firma HMAC).
+/// </summary>
+public sealed record PersonalizedDocumentView(string Url, DateTimeOffset ExpiresAt);
+
+/// <summary>
 /// Puerto acotado para custodiar el PDF personalizado de una compañía (HU #11313, ADR-0042), espejo de
 /// <c>IDeedDocumentStorage</c> (ADR-0033). La implementación (Infrastructure) delega en
 /// <c>IAttachmentStorage</c> (S3 vía presigned URLs), agrupando por <c>tenantId</c> igual que el baúl y
@@ -35,6 +42,15 @@ public interface ICompanyPersonalizedDocumentStorage
     /// oportunidad de ver los bytes). <c>null</c> si el objeto no existe en storage.
     /// </summary>
     Task<Stream?> OpenReadAsync(
+        string storagePath,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Presigned GET URL con <c>Content-Disposition: inline</c> para previsualizar el PDF sin
+    /// activarlo (HU #11314, AC3). <c>null</c> si el binario no existe o el backend no soporta
+    /// presigned view.
+    /// </summary>
+    Task<PersonalizedDocumentView?> GetViewUrlAsync(
         string storagePath,
         CancellationToken cancellationToken = default);
 }

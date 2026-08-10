@@ -182,6 +182,113 @@ internal sealed class CompanyPersonalizedDocumentRepository : ICompanyPersonaliz
             },
             cancellationToken);
 
+    public Task<ReactivateCompanyPersonalizedDocumentResult> ReactivateAsync(
+        Guid tenantId,
+        Guid id,
+        Guid? reactivatedBy,
+        CancellationToken cancellationToken = default) =>
+        TenantRlsScope.ExecuteAsync(
+            _context,
+            tenantId,
+            async () =>
+            {
+                var entity = await _context.CompanyPersonalizedDocuments
+                    .FirstOrDefaultAsync(d => d.TenantId == tenantId && d.Id == id, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (entity is null)
+                {
+                    return new ReactivateCompanyPersonalizedDocumentResult(
+                        PersonalizedDocumentReactivationOutcome.NotFound, null);
+                }
+
+                if (entity.Status is not (CompanyPersonalizedDocumentStatus.Historico or CompanyPersonalizedDocumentStatus.Activo))
+                {
+                    // pendiente | rechazado — nunca se reactivan (409 version_no_activable).
+                    return new ReactivateCompanyPersonalizedDocumentResult(
+                        PersonalizedDocumentReactivationOutcome.InvalidStatus, null);
+                }
+
+                if (entity.IsActive)
+                {
+                    // Reactivar la ya activa: no-op idempotente (AC — repetible en cualquier orden).
+                    return new ReactivateCompanyPersonalizedDocumentResult(
+                        PersonalizedDocumentReactivationOutcome.Reactivated, entity.Version);
+                }
+
+                var now = DateTimeOffset.UtcNow;
+
+                // Retira (a histórico) la activa previa del mismo tipo — nunca se borra (restricción 9).
+                var previousActive = await _context.CompanyPersonalizedDocuments
+                    .Where(d => d.TenantId == tenantId
+                        && d.DocumentType == entity.DocumentType
+                        && d.IsActive
+                        && d.Id != id)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                foreach (var previous in previousActive)
+                {
+                    previous.IsActive = false;
+                    previous.Status = CompanyPersonalizedDocumentStatus.Historico;
+                    previous.DeactivatedAt = now;
+                    previous.DeactivatedBy = reactivatedBy;
+                    previous.UpdatedAt = now;
+                    previous.UpdatedBy = reactivatedBy;
+                }
+
+                entity.Status = CompanyPersonalizedDocumentStatus.Activo;
+                entity.IsActive = true;
+                entity.ActivatedAt = now;
+                entity.ActivatedBy = reactivatedBy;
+                entity.DeactivatedAt = null;
+                entity.DeactivatedBy = null;
+                entity.UpdatedAt = now;
+                entity.UpdatedBy = reactivatedBy;
+
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return new ReactivateCompanyPersonalizedDocumentResult(
+                    PersonalizedDocumentReactivationOutcome.Reactivated, entity.Version);
+            },
+            cancellationToken);
+
+    public Task<bool> DeactivateActiveAsync(
+        Guid tenantId,
+        string documentType,
+        Guid? deactivatedBy,
+        CancellationToken cancellationToken = default) =>
+        TenantRlsScope.ExecuteAsync(
+            _context,
+            tenantId,
+            async () =>
+            {
+                var actives = await _context.CompanyPersonalizedDocuments
+                    .Where(d => d.TenantId == tenantId && d.DocumentType == documentType && d.IsActive)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (actives.Count == 0)
+                {
+                    // Ya no había ninguna versión activa — idempotente (AC: "volver al sistema" repetible).
+                    return false;
+                }
+
+                var now = DateTimeOffset.UtcNow;
+                foreach (var active in actives)
+                {
+                    active.IsActive = false;
+                    active.Status = CompanyPersonalizedDocumentStatus.Historico;
+                    active.DeactivatedAt = now;
+                    active.DeactivatedBy = deactivatedBy;
+                    active.UpdatedAt = now;
+                    active.UpdatedBy = deactivatedBy;
+                }
+
+                await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                return true;
+            },
+            cancellationToken);
+
     private static CompanyPersonalizedDocumentRecord Map(CompanyPersonalizedDocumentEntity e) => new(
         e.Id,
         e.TenantId,
@@ -196,6 +303,9 @@ internal sealed class CompanyPersonalizedDocumentRepository : ICompanyPersonaliz
         e.PageCount,
         e.Notes,
         e.CreatedAt,
+        e.CreatedBy,
         e.ActivatedAt,
-        e.DeactivatedAt);
+        e.ActivatedBy,
+        e.DeactivatedAt,
+        e.DeactivatedBy);
 }

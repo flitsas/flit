@@ -45,4 +45,18 @@ internal sealed class CompanyPersonalizedDocumentStorage : ICompanyPersonalizedD
 
         return _storage.OpenReadAsync(storagePath, cancellationToken);
     }
+
+    public async Task<PersonalizedDocumentView?> GetViewUrlAsync(string storagePath, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(storagePath))
+        {
+            return null;
+        }
+
+        var view = await _storage
+            .GetPresignedViewUrlAsync(storagePath, cancellationToken)
+            .ConfigureAwait(false);
+
+        return view is { } v ? new PersonalizedDocumentView(v.Url, v.ExpiresAt) : null;
+    }
 }

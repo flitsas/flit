@@ -1,6 +1,9 @@
 using System.Security.Claims;
+using Flit.Admin.Application.Companies.PersonalizedDocuments.Activate;
 using Flit.Admin.Application.Companies.PersonalizedDocuments.Confirm;
 using Flit.Admin.Application.Companies.PersonalizedDocuments.Create;
+using Flit.Admin.Application.Companies.PersonalizedDocuments.Deactivate;
+using Flit.Admin.Application.Companies.PersonalizedDocuments.GetView;
 using Flit.Admin.Application.Companies.PersonalizedDocuments.List;
 using Flit.Api.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -56,6 +59,32 @@ public static class AdminPersonalizedDocumentsEndpoints
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict)
             .Produces(StatusCodes.Status422UnprocessableEntity);
+
+        // HU #11314 — ciclo de vida: reactivar, volver al sistema y vista previa sin activar.
+        group.MapPost("/{id:guid}/activate", ActivateAsync)
+            .WithName("AdminPersonalizedDocumentsActivate")
+            .WithSummary("Reactiva una versión histórica; repetible en cualquier orden")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
+        group.MapDelete("/{documentType}", DeactivateAsync)
+            .WithName("AdminPersonalizedDocumentsDeactivate")
+            .WithSummary("Vuelve al documento del sistema; conserva el histórico completo, idempotente")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status409Conflict);
+
+        group.MapGet("/{id:guid}/view", ViewAsync)
+            .WithName("AdminPersonalizedDocumentsView")
+            .WithSummary("Presigned GET inline para previsualizar una versión SIN activarla")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
 
         return app;
     }
@@ -141,6 +170,83 @@ public static class AdminPersonalizedDocumentsEndpoints
                 new { error = $"No existe la versión {id} en esta compañía." }),
             ConfirmPersonalizedDocumentVersionOutcome.ChannelNotEnabled => ChannelNotEnabledResult(),
             _ => ValidationProblem(result.Errors),
+        };
+    }
+
+    private static async Task<IResult> ActivateAsync(
+        Guid tenantId,
+        Guid id,
+        HttpContext httpContext,
+        [FromServices] ActivatePersonalizedDocumentVersionHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(
+                new ActivatePersonalizedDocumentVersionCommand
+                {
+                    TenantId = tenantId,
+                    Id = id,
+                    ActivatedBy = ResolveUserId(httpContext.User),
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            ActivatePersonalizedDocumentVersionOutcome.Activated => Results.Ok(new
+            {
+                id,
+                version = result.Version,
+                status = "activo",
+            }),
+            ActivatePersonalizedDocumentVersionOutcome.NotFound => Results.NotFound(
+                new { error = $"No existe la versión {id} en esta compañía." }),
+            ActivatePersonalizedDocumentVersionOutcome.ChannelNotEnabled => ChannelNotEnabledResult(),
+            _ => Results.Json(
+                new { error = "version_no_activable", message = "La versión no está en un estado que se pueda activar." },
+                statusCode: StatusCodes.Status409Conflict),
+        };
+    }
+
+    private static async Task<IResult> DeactivateAsync(
+        Guid tenantId,
+        string documentType,
+        HttpContext httpContext,
+        [FromServices] DeactivatePersonalizedDocumentHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(
+                new DeactivatePersonalizedDocumentCommand
+                {
+                    TenantId = tenantId,
+                    DocumentType = documentType,
+                    DeactivatedBy = ResolveUserId(httpContext.User),
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            DeactivatePersonalizedDocumentOutcome.Deactivated => Results.NoContent(),
+            _ => ChannelNotEnabledResult(),
+        };
+    }
+
+    private static async Task<IResult> ViewAsync(
+        Guid tenantId,
+        Guid id,
+        [FromServices] GetPersonalizedDocumentViewHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler
+            .HandleAsync(new GetPersonalizedDocumentViewCommand { TenantId = tenantId, Id = id }, cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Outcome switch
+        {
+            GetPersonalizedDocumentViewOutcome.Found => Results.Ok(new { url = result.Url, expiresAt = result.ExpiresAt }),
+            _ => Results.NotFound(new { error = $"No existe la versión {id} en esta compañía." }),
         };
     }
 
