@@ -52,9 +52,29 @@ interface SelectedSegment {
   status?: string;
 }
 
+/**
+ * La compañía elegida viaja en la dirección, junto a la pestaña y a la consulta.
+ *
+ * <p>Sin esto, un enlace copiado desde Consultas llega incompleto a quien lo abre: lleva los
+ * filtros de la consulta pero no sobre qué compañía se preguntaba, así que un Super Admin lo abre
+ * en «Todas las compañías» y ve el aviso de que falta elegir una — con la consulta cargada y sin un
+ * solo dato. Al organismo no le pasa porque su identificador va en la ruta.</p>
+ *
+ * <p>Es el identificador interno del tenant, el mismo que ya viaja en las llamadas a la API; no
+ * lleva nada de la persona que abre el enlace.</p>
+ */
+const COMPANY_QUERY_PARAM = "compania";
+
 function initialTab(): string {
   if (typeof window === "undefined") return "";
   return new URLSearchParams(window.location.search).get(TAB_QUERY_PARAM) ?? "";
+}
+
+function initialFilters(): ReportFilters {
+  const base = defaultFilters();
+  if (typeof window === "undefined") return base;
+  const tenantId = new URLSearchParams(window.location.search).get(COMPANY_QUERY_PARAM);
+  return tenantId ? { ...base, tenantId } : base;
 }
 
 export function Reportes() {
@@ -89,7 +109,21 @@ export function Reportes() {
   }, []);
 
   // Filtros globales persistentes: se conservan al cambiar de pestaña.
-  const [filters, setFilters] = useState<ReportFilters>(() => defaultFilters());
+  const [filters, setFiltersState] = useState<ReportFilters>(() => initialFilters());
+
+  // La compañía se refleja en la dirección con `replaceState`, igual que la pestaña: con
+  // `pushState`, cambiar de compañía tres veces obligaría a tres «atrás» para salir del módulo.
+  const setFilters = useCallback((next: ReportFilters) => {
+    setFiltersState(next);
+    try {
+      const url = new URL(window.location.href);
+      if (next.tenantId) url.searchParams.set(COMPANY_QUERY_PARAM, next.tenantId);
+      else url.searchParams.delete(COMPANY_QUERY_PARAM);
+      window.history.replaceState(window.history.state, "", url);
+    } catch {
+      /* entorno sin history (tests/SSR): el estado local basta */
+    }
+  }, []);
   const rangeValid = isValidRange(filters.range);
 
   // Los 4 endpoints nuevos EXIGEN tenantId para SuperAdmin (§4): sin compañía
