@@ -123,6 +123,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<CompanyDeedCompanyEntity> CompanyDeedCompanies => Set<CompanyDeedCompanyEntity>();
 
+    // HU #11313 (Feature #11309, ADR-0042) — versiones de documento personalizado por compañía.
+    public DbSet<CompanyPersonalizedDocumentEntity> CompanyPersonalizedDocuments => Set<CompanyPersonalizedDocumentEntity>();
+
     // ── Admin Compañías — validación de identidad administrativa desacoplada (HU #10907, ADR-0034) ──
     public DbSet<AdminIdentityValidationEntity> AdminIdentityValidations =>
         Set<AdminIdentityValidationEntity>();
@@ -243,6 +246,16 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // (HU #10878, Feature #10862, CF-04, ADR-0030/ADR-0031).
     public DbSet<ExternalQueryCacheEntry> ExternalQueryCache => Set<ExternalQueryCacheEntry>();
     public DbSet<PersonDataConsent> PersonDataConsents => Set<PersonDataConsent>();
+
+    // Trámites — certificaciones externas en modelo canónico persistido (HU #11302, Feature #11301,
+    // ADR-0041). Almacén propio para SOAT, RTM y registro mercantil: reemplaza las llaves sueltas de
+    // field_values, que son inmutables fuera de borrador y por tanto irreparables, y admite el
+    // histórico que el RUNT ya entrega. El payload crudo habilita reprocesar un mapeo corregido sin
+    // volver a pagar la consulta.
+    public DbSet<ExternalQueryPayload> ExternalQueryPayloads => Set<ExternalQueryPayload>();
+    public DbSet<VehicleSoatPolicy> VehicleSoatPolicies => Set<VehicleSoatPolicy>();
+    public DbSet<VehicleRtmInspection> VehicleRtmInspections => Set<VehicleRtmInspection>();
+    public DbSet<CompanyRegistration> CompanyRegistrations => Set<CompanyRegistration>();
 
     // Trámites — entidad persona/sujeto a nivel tenant para prevalidaciones de identidad
     // (HU #10865, Feature #10864, CF-00, ADR-0030).

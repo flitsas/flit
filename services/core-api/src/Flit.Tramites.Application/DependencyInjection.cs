@@ -43,7 +43,11 @@ public static class DependencyInjection
         // HU #10975 (Feature #10972) — persiste en field_values lo que el OCR semántico ya extrae.
         services.AddScoped<PersistOcrFieldsHandler>();
         // HU #10990 (Feature #10972) — resuelve el RUES por actor al generar el expediente.
-        services.AddScoped<IRuesActorDataResolver, RuesActorDataResolver>();
+        // HU #11305 (Feature #11301, ADR-0041) — lector documental de certificaciones. Sustituye a
+        // IRuesActorDataResolver, que consultaba el RUES EN VIVO al generar el expediente. Generar un
+        // documento pasa a costar cero llamadas externas (D4).
+        services.AddScoped<UseCases.Certifications.ICertificationReader,
+            UseCases.Certifications.CertificationReader>();
         services.AddScoped<SubmitProcedureInstanceHandler>();
         // ICT (paridad v1) — pausar/reanudar trámites ICT desde la UI de FLIT (individual + masivo).
         services.AddScoped<PauseProcedureInstanceHandler>();
@@ -222,6 +226,12 @@ public static class DependencyInjection
         services.AddScoped<FinalizarPortalHandler>();
         services.AddScoped<GetFirmaUrlPortalHandler>();
         services.AddScoped<SimularFirmaPortalHandler>();
+
+        // HU #11304 (Feature #11301, ADR-0041) — único punto de escritura del almacén canónico de
+        // certificaciones. Lo consumen los escritores de SOAT/RTM/RUES (consulta, OCR y validación
+        // del OT) para que la precedencia entre fuentes sea una sola regla y no una por escritor.
+        services.AddScoped<UseCases.Certifications.ICertificationIngestionService,
+            UseCases.Certifications.CertificationIngestionService>();
 
         // HU #10878 (Feature #10862, CF-04, ADR-0030/ADR-0031) — cache-aside cross-trámite de
         // consultas externas, consumido por los 3 handlers de consulta de abajo.

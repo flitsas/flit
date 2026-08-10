@@ -59,11 +59,21 @@ public sealed class MandatoApprovalHandler(
         if (instance is null)
             return new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null);
 
-        // El mandato aplica sii ya se generó su adjunto (en preparado, cuando ExigeMandato). Sin él, no se
-        // exige firmante — evita el 409 espurio en trámites que no requieren mandato pero cuyo OT sí tiene
-        // mandatarios registrados.
+        // El mandato aplica sii ya se generó su adjunto DEL SISTEMA (en preparado, cuando ExigeMandato).
+        // Sin él, no se exige firmante — evita el 409 espurio en trámites que no requieren mandato pero
+        // cuyo OT sí tiene mandatarios registrados.
+        //
+        // HU #11317 (Feature #11309, ADR-0042 §supersede parcial) — excluye los adjuntos de mandato con
+        // Source="company": ese PDF es un documento ESTÁTICO de la compañía (sin bloques de firma del
+        // mandatario, sin consultar directorio ni política de firma), así que su sola presencia NO
+        // implica que el trámite exija un mandatario que firme. Si el gate lo mirara sin distinguir el
+        // origen, un mandato personalizado bloquearía SIEMPRE la aprobación con 409
+        // mandatario_requerido/mandatario_identidad_requerida, aunque nadie vaya a firmarlo. Cuando el
+        // adjunto es del sistema (Source="system", el caso de siempre) el gate exige mandatario
+        // exactamente como antes.
         var exigeMandato = instance.Attachments.Any(a =>
-            string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase));
+            string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase));
         if (!exigeMandato || instance.TransitOfficeId is not { } transitOfficeId)
             return new MandatoApprovalDecision(MandatoApprovalOutcome.NotApplicable, null);
 

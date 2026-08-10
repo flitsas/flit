@@ -23,14 +23,16 @@ public sealed class MandatoApprovalHandlerTests
 
     private MandatoApprovalHandler Handler() => new(_repo, _directory);
 
-    private ProcedureInstance SeedInstance(bool hasMandato = true, Guid? transitOffice = null)
+    private ProcedureInstance SeedInstance(bool hasMandato = true, Guid? transitOffice = null, string? mandatoSource = null)
     {
         var instance = new ProcedureInstance
         {
             Id = Guid.NewGuid(),
             TenantId = Tenant,
             TransitOfficeId = transitOffice ?? Office,
-            Attachments = hasMandato ? [new ProcedureInstanceAttachment { Tipo = "mandato" }] : [],
+            Attachments = hasMandato
+                ? [new ProcedureInstanceAttachment { Tipo = "mandato", Source = mandatoSource ?? "user" }]
+                : [],
         };
         _repo.GetByIdWithFurGraphAsync(instance.Id, Tenant, Arg.Any<CancellationToken>()).Returns(instance);
         return instance;
@@ -145,6 +147,66 @@ public sealed class MandatoApprovalHandlerTests
         // Sabaneta (mandatario institucional, sin firmante persona): aprobar sin firmante, sin 409.
         decision.Outcome.Should().Be(MandatoApprovalOutcome.NotApplicable);
     }
+
+    // ---- HU #11317 (Feature #11309, ADR-0042 §supersede parcial) — el gate no exige mandatario cuando
+    // el único adjunto de mandato es un documento personalizado (Source="company") ---------------------
+
+    [Fact]
+    public async Task MandatoOrigenCompany_IsNotApplicable_AndSkipsDirectory()
+    {
+        // El PDF de la compañía es estático (sin bloques de firma del mandatario): su sola presencia no
+        // debe exigir un firmante que el documento no usa.
+        var instance = SeedInstance(mandatoSource: "company");
+
+        var decision = await Handler().CheckAsync(
+            instance.Id, Tenant, Guid.NewGuid(), null, TestContext.Current.CancellationToken);
+
+        decision.Outcome.Should().Be(MandatoApprovalOutcome.NotApplicable);
+        decision.MandateSignerId.Should().BeNull();
+        await _directory.DidNotReceive().GetCandidatesAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task MandatoOrigenSystem_SigueExigiendoMandatarioComoAntes()
+    {
+        // Contraparte explícita: cuando el adjunto de mandato es del SISTEMA, el gate se comporta
+        // exactamente igual que antes de la HU #11317 (varios candidatos sin cotejo ⇒ 409).
+        var instance = SeedInstance(mandatoSource: "system");
+        Candidates(Signer(userId: Guid.NewGuid()), Signer(userId: Guid.NewGuid()));
+
+        var decision = await Handler().CheckAsync(
+            instance.Id, Tenant, Guid.NewGuid(), null, TestContext.Current.CancellationToken);
+
+        decision.Outcome.Should().Be(MandatoApprovalOutcome.RequiereSeleccion);
+    }
+
+    [Fact]
+    public async Task MandatoOrigenCompanyYSystemAmbos_ExigeMandatarioPorElDelSistema()
+    {
+        // Caso límite (no debería darse por la idempotencia de FurCommand, pero el gate debe ser robusto
+        // igual): si CUALQUIER adjunto de mandato no es "company", sigue exigiendo mandatario.
+        var instance = new ProcedureInstance
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Tenant,
+            TransitOfficeId = Office,
+            Attachments =
+            [
+                new ProcedureInstanceAttachment { Tipo = "mandato", Source = "company" },
+                new ProcedureInstanceAttachment { Tipo = "mandato", Source = "system" },
+            ],
+        };
+        _repo.GetByIdWithFurGraphAsync(instance.Id, Tenant, Arg.Any<CancellationToken>()).Returns(instance);
+        Candidates(Signer());
+
+        var decision = await Handler().CheckAsync(
+            instance.Id, Tenant, Guid.NewGuid(), null, TestContext.Current.CancellationToken);
+
+        decision.Outcome.Should().Be(MandatoApprovalOutcome.Resolved);
+    }
+
+    // ---- develop (PR #241) — modo de asignación abierta del mandato --------------------------------
 
     [Fact]
     public async Task OpenAssignmentMode_SkipsSignerEvenWithCandidates()

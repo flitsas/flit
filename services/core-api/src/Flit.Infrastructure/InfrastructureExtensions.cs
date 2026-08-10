@@ -106,6 +106,10 @@ public static class InfrastructureExtensions
         // + gate de consentimiento Habeas Data para el reúso de datos de persona (ADR-0031).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IExternalQueryCacheRepository, ExternalQueryCacheRepository>();
         services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonDataConsentRepository, PersonDataConsentRepository>();
+        // HU #11302 (Feature #11301, ADR-0041) — almacén propio de certificaciones externas
+        // (SOAT, RTM y registro mercantil) en modelo canónico, con payload crudo para reprocesar.
+        services.AddScoped<Flit.Tramites.Application.UseCases.Certifications.ICertificationRepository,
+            CertificationRepository>();
         // HU #10865 — entidad persona/sujeto a nivel tenant (Feature #10864, CF-00, ADR-0030).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IPersonRepository, PersonRepository>();
         // HU #10520 — catálogo de tipos de documento para validación de carga por tipo (MIME/tamaño).
@@ -190,6 +194,9 @@ public static class InfrastructureExtensions
         // HU #10926 (ADR-0033) — resolutor de escrituras vigentes por actor NIT para adjuntarlas al
         // consolidado. Scoped: depende de los readers de escrituras/directorio (DbContext) + storage.
         services.AddScoped<Flit.Tramites.Application.Documents.IProcedureDeedResolver, Documents.ProcedureDeedResolver>();
+        // HU #11316 (Feature #11309, ADR-0042) — ÚNICO punto de sustitución por documento personalizado
+        // de compañía. Lista de tipos habilitados VACÍA hasta las HUs #11317/#11318 (ver la clase).
+        services.AddScoped<Flit.Tramites.Application.Documents.IPersonalizedDocumentResolver, Documents.PersonalizedDocumentResolver>();
         // HU #10762 — certificado RNMC suelto (PDF real) con el resultado de medidas correctivas por parte.
         services.AddSingleton<IRnmcCertificateGenerator, Documents.RnmcCertificatePdfGenerator>();
         // ADR-0036 (HU #10914) — Solicitud de trámite de forma virtual (PDF real, siempre).

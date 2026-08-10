@@ -1,5 +1,6 @@
 using Flit.Infrastructure.KyverumRunt;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Domain.Certifications;
 
 namespace Flit.Infrastructure.Consultations;
 
@@ -43,8 +44,20 @@ internal sealed class KyverumRuntVehicleConsultationProvider(KyverumRuntApiClien
 
         try
         {
-            var response = await client.ConsultarVehiculoAsync(query, ct);
-            return KyverumRuntVehicleResultMapper.MapVehicle(response);
+            var (response, raw) = await client.ConsultarVehiculoConCrudoAsync(query, ct);
+            var result = KyverumRuntVehicleResultMapper.MapVehicle(response);
+
+            // HU #11304 — se adjunta la respuesta cruda para que la ingesta la persista (sanitizada).
+            // Es lo que permite corregir un mapeo y reprocesar sin volver a pagar la consulta.
+            return result with
+            {
+                RawPayload = new RawProviderPayload(
+                    ProviderKey: Key,
+                    SubjectKind: RawProviderPayload.VehicleSubject,
+                    SubjectKey: query.Vin ?? query.Placa,
+                    PayloadJson: raw,
+                    QueriedAt: DateTimeOffset.UtcNow),
+            };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

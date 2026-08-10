@@ -27,7 +27,8 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 public sealed class RuesPersonLookupHandler(
     IProcedureInstanceRepository repo,
     IConsultationProviderRegistry registry,
-    ExternalQueryCacheService cacheService)
+    ExternalQueryCacheService cacheService,
+    Certifications.ICertificationIngestionService? certificationIngestion = null)
 {
     private const string ConsultationSource = "consultation";
 
@@ -90,6 +91,13 @@ public sealed class RuesPersonLookupHandler(
             await repo.SaveChangesAsync(ct);
         }
 
+        // HU #11306 (Feature #11301, ADR-0041) — el registro mercantil entra al almacén canónico.
+        // Va FUERA del gate de edición de arriba a propósito: ese gate existe porque el trigger de
+        // inmutabilidad bloquea field_values fuera de borrador, y la tabla canónica no tiene esa
+        // restricción (el congelamiento es explícito, por frozen_at). Así, una consulta hecha con el
+        // trámite ya avanzado deja de tirarse a la basura.
+        await IngestCertificationsAsync(instanceId, tenantId, result, now, ct);
+
         var dto = BuildDtoFromFields(result.HydratedFields, nit, ResolveMode());
 
         // HU #10878 (AC2): cachea el resultado fresco para reúsos futuros dentro del TTL de la fuente.
@@ -97,6 +105,32 @@ public sealed class RuesPersonLookupHandler(
             tenantId, RuesSourceCode, DocumentTypeNit, nit, instanceId, result.HydratedFields, now, ct);
 
         return (dto, null);
+    }
+
+    /// <summary>
+    /// Entrega el registro mercantil al almacén canónico. Best-effort: la consulta ya se respondió y
+    /// el asistente ya tiene sus datos.
+    /// </summary>
+    private async Task IngestCertificationsAsync(
+        Guid instanceId, Guid tenantId, ConsultationResult result, DateTimeOffset now, CancellationToken ct)
+    {
+        if (certificationIngestion is null || result.Certifications is null)
+            return;
+
+        var provenance = new Domain.Certifications.CertificationProvenance(
+            Domain.Certifications.CertificationSourceKind.Consultation,
+            result.Provider,
+            result.QueriedAt ?? now);
+
+        try
+        {
+            await certificationIngestion.IngestAsync(
+                instanceId, tenantId, result.Certifications, provenance, result.RawPayload, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Silencio acotado: ver RunConsultationHandler.IngestCertificationsAsync.
+        }
     }
 
     // Upsert de los campos hidratados en field_values (mismo patrón que RunConsultationCommand, HU #10856).

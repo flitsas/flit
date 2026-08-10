@@ -217,6 +217,22 @@ public static class DependencyInjection
         services.AddScoped<Companies.Deeds.ListActiveDeeds.ListActiveDeedsForTenantHandler>();
         services.AddScoped<Companies.LegalRepresentatives.FindByNit.FindRepresentativeByNitHandler>();
 
+        // HU #11313 (Feature #11309, ADR-0042) — documentos personalizados por compañía: alta de
+        // versión, confirmación (validación de integridad del PDF) y listado del historial.
+        // ICompanyPersonalizedDocumentRepository/Storage e IPdfDocumentInspector se registran en
+        // AddAdminInfrastructure.
+        services.AddScoped<Companies.PersonalizedDocuments.PdfIntegrityValidator>();
+        services.AddScoped<Companies.PersonalizedDocuments.Create.CreatePersonalizedDocumentVersionHandler>();
+        services.AddScoped<Companies.PersonalizedDocuments.Confirm.ConfirmPersonalizedDocumentVersionHandler>();
+        services.AddScoped<Companies.PersonalizedDocuments.List.ListPersonalizedDocumentsHandler>();
+
+        // HU #11314 (Feature #11309, ADR-0042) — ciclo de vida del documento personalizado:
+        // reactivar una versión histórica, «volver al documento del sistema» (sin borrar nada) y
+        // vista previa sin activar (presigned GET inline, ADR-0029).
+        services.AddScoped<Companies.PersonalizedDocuments.Activate.ActivatePersonalizedDocumentVersionHandler>();
+        services.AddScoped<Companies.PersonalizedDocuments.Deactivate.DeactivatePersonalizedDocumentHandler>();
+        services.AddScoped<Companies.PersonalizedDocuments.GetView.GetPersonalizedDocumentViewHandler>();
+
         // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
         // correo (agnóstico del sujeto). Proveedor/repositorio/linker se registran en
         // AddAdminInfrastructure; el reloj se toma de TimeProvider.System (vigencia determinista).

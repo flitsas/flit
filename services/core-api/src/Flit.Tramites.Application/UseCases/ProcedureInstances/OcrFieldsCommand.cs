@@ -1,3 +1,5 @@
+using Flit.Tramites.Application.UseCases.Certifications;
+using Flit.Tramites.Domain.Certifications;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -37,7 +39,9 @@ public sealed record PersistOcrFieldsResult(
 /// <para><b>Estado:</b> solo <c>borrador</c> y <c>subsanacion</c>, mismo criterio que
 /// <see cref="PatchFieldValuesHandler"/> y que el trigger <c>trg_field_value_immutable</c>.</para>
 /// </summary>
-public sealed class PersistOcrFieldsHandler(IProcedureInstanceRepository repo)
+public sealed class PersistOcrFieldsHandler(
+    IProcedureInstanceRepository repo,
+    Certifications.ICertificationIngestionService? certificationIngestion = null)
 {
     /// <summary>Origen de los valores escritos por esta ruta. Lo consume la regla de precedencia.</summary>
     public const string OcrSource = "ocr";
@@ -160,7 +164,61 @@ public sealed class PersistOcrFieldsHandler(IProcedureInstanceRepository repo)
         if (persistidos > 0)
             await repo.SaveChangesAsync(ct);
 
+        // HU #11304 — lo que el OCR extrajo también entra al almacén canónico, con procedencia `ocr`.
+        // Importa más de lo que parece: hoy `soat_poliza` y `soat_vigencia` SOLO existen en los
+        // trámites que pasaron por aquí, así que el OCR es la única fuente real de esas dos celdas en
+        // buena parte del ambiente. La precedencia hace que una consulta posterior lo mejore sin
+        // borrarlo, y que un OCR posterior no pise un dato de la fuente oficial.
+        if (persistidos > 0)
+            await IngestCertificationsAsync(id, tenantId, request.Tipo!, instance, now, ct);
+
         return (new PersistOcrFieldsResult(persistidos, omitidos, ignorados), null);
+    }
+
+    /// <summary>
+    /// Traslada al almacén canónico lo que acaba de quedar en <c>field_values</c> por esta ruta.
+    /// </summary>
+    /// <remarks>
+    /// Se lee de la instancia y no del request para que la fuente sea exactamente lo persistido: si un
+    /// campo se omitió por precedencia, aquí tampoco entra. Best-effort — el OCR ya respondió.
+    /// </remarks>
+    private async Task IngestCertificationsAsync(
+        Guid instanceId, Guid tenantId, string tipo, ProcedureInstance instance,
+        DateTimeOffset now, CancellationToken ct)
+    {
+        if (certificationIngestion is null)
+            return;
+
+        string? Valor(string key) => instance.FieldValues
+            .FirstOrDefault(f => string.Equals(f.FieldKey, key, StringComparison.OrdinalIgnoreCase))
+            ?.ValueText;
+
+        var bundle = string.Equals(tipo, "soat", StringComparison.OrdinalIgnoreCase)
+            ? CertificationBundle.ForVehicle(
+                [CertificationFactory.Soat(
+                    Valor("soat_poliza"), Valor("soat_aseguradora"), Valor("soat_expedicion"),
+                    Valor("soat_vigencia"), Valor("soat_vencimiento"), Valor(SoatGate.FieldKey))],
+                [])
+            : CertificationBundle.ForVehicle(
+                [],
+                [CertificationFactory.Rtm(
+                    Valor("rtm_numero"), Valor("rtm_entidad"), Valor("rtm_expedicion"),
+                    Valor("rtm_vigencia"), Valor("rtm_vencimiento"), Valor("rtm_estado"))]);
+
+        if (!bundle.HasAnyValue)
+            return;
+
+        var provenance = new CertificationProvenance(
+            CertificationSourceKind.Ocr, OcrSource, now, MapperVersion: "ocr-v1");
+
+        try
+        {
+            await certificationIngestion.IngestAsync(instanceId, tenantId, bundle, provenance, null, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Silencio acotado: ver RunConsultationHandler.IngestCertificationsAsync.
+        }
     }
 
     /// <summary>

@@ -3,7 +3,9 @@ using System.Text.Json;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Application.UseCases.Certifications;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Domain.Certifications;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -53,7 +55,12 @@ public sealed class FurHandlerTests
                 return new GeneratedDocument("certificado_rnmc", $"certificado_rnmc_{d.ReferenceNumber}.pdf",
                     "application/pdf", Encoding.UTF8.GetBytes($"%PDF RNMC {d.Entradas.Count}"));
             });
-        _handler = new GenerarFurHandler(_repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+        // HU #11305 — el lector documental va en el handler por defecto, con el almacén canónico
+        // VACÍO: así estas pruebas ejercitan el respaldo real sobre field_values, que es el camino de
+        // los trámites anteriores al despliegue. Sin lector no habría certificaciones en absoluto.
+        _handler = new GenerarFurHandler(_repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
+            NullLogger<GenerarFurHandler>.Instance,
+            certificationReader: new CertificationReader(new AlmacenCertificacionesVacio()));
     }
 
     /// <summary>
@@ -308,7 +315,8 @@ public sealed class FurHandlerTests
         var fakeSoatRtm = new FakeSoatRtmGenerator();
         var handler = new GenerarFurHandler(
             _repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
-            NullLogger<GenerarFurHandler>.Instance, soatRtmGenerator: fakeSoatRtm);
+            NullLogger<GenerarFurHandler>.Instance, soatRtmGenerator: fakeSoatRtm,
+            certificationReader: new CertificationReader(new AlmacenCertificacionesVacio()));
 
         var (result, error) = await handler.HandleAsync(id, tenant, ct);
 
@@ -338,7 +346,8 @@ public sealed class FurHandlerTests
         var fake = new FakeSoatRtmGenerator();
         var handler = new GenerarFurHandler(
             _repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
-            NullLogger<GenerarFurHandler>.Instance, soatRtmGenerator: fake);
+            NullLogger<GenerarFurHandler>.Instance, soatRtmGenerator: fake,
+            certificationReader: new CertificationReader(new AlmacenCertificacionesVacio()));
 
         var (_, error) = await handler.HandleAsync(id, tenant, ct);
         error.Should().BeNull();
@@ -351,7 +360,8 @@ public sealed class FurHandlerTests
         var fake = await GenerarTraspasoConFechaMatricula("15/03/2015");
 
         fake.LastData!.Rtm.Should().NotBeNull();
-        fake.LastData.Rtm!.FechaVencimiento.Should().Be("2027-03-20");
+        fake.LastData.Rtm!.FechaVencimiento.Should().Be("2027/03/20",
+            "HU #11305 — el certificado imprime el día normalizado; antes salía el crudo del proveedor");
     }
 
     [Fact]
@@ -361,7 +371,7 @@ public sealed class FurHandlerTests
         var fake = await GenerarTraspasoConFechaMatricula("15/03/2025");
 
         fake.LastData!.Rtm.Should().BeNull();
-        fake.LastData.Soat.FechaVencimiento.Should().Be("2027-01-15", "el bloque SOAT no cambia");
+        fake.LastData.Soat.FechaVencimiento.Should().Be("2027/01/15", "el bloque SOAT no cambia");
     }
 
     [Fact]
@@ -587,32 +597,44 @@ public sealed class FurHandlerTests
 
     // ── HU #10990 — certificado RUES resuelto POR ACTOR ──────────────────────
 
-    /// <summary>Resolutor de prueba: devuelve datos de registro por NIT y cuenta las llamadas.</summary>
-    private sealed class FakeRuesResolver(params (string Nit, string RazonSocial)[] companias) : IRuesActorDataResolver
+    /// <summary>
+    /// Almacén canónico VACÍO: obliga al lector a caer en el respaldo sobre <c>field_values</c>, que
+    /// es el camino de los trámites anteriores al despliegue de la HU #11302.
+    /// </summary>
+    private sealed class AlmacenCertificacionesVacio : ICertificationRepository
     {
-        public List<string> NitsConsultados { get; } = [];
+        public Task<CertificationSnapshot> LoadAsync(Guid tenantId, Guid instanceId, CancellationToken ct) =>
+            Task.FromResult(CertificationSnapshot.Empty);
 
-        public Task<IReadOnlyDictionary<string, string?>?> ResolveAsync(
-            Guid instanceId, Guid tenantId, string nit, CancellationToken ct = default)
-        {
-            NitsConsultados.Add(nit);
-            var match = companias.FirstOrDefault(c => c.Nit == nit);
-            if (match.Nit is null)
-                return Task.FromResult<IReadOnlyDictionary<string, string?>?>(null);
+        public Task<Guid?> SaveRawPayloadAsync(
+            Guid tenantId, Guid instanceId, RawProviderPayload? payload, CancellationToken ct) =>
+            Task.FromResult<Guid?>(null);
 
-            return Task.FromResult<IReadOnlyDictionary<string, string?>?>(
-                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["rues_nit"] = match.Nit,
-                    ["rues_razon_social"] = match.RazonSocial,
-                    ["rues_matricula_mercantil"] = $"MM-{match.Nit}",
-                });
-        }
+        public Task UpsertSoatPoliciesAsync(
+            Guid tenantId, Guid instanceId, IReadOnlyList<StoredSoatPolicy> policies, CancellationToken ct) =>
+            Task.CompletedTask;
+
+        public Task UpsertRtmInspectionsAsync(
+            Guid tenantId, Guid instanceId, IReadOnlyList<StoredRtmInspection> inspections, CancellationToken ct) =>
+            Task.CompletedTask;
+
+        public Task UpsertMerchantRegistrationsAsync(
+            Guid tenantId, Guid instanceId, IReadOnlyList<StoredMerchantRegistration> registrations, CancellationToken ct) =>
+            Task.CompletedTask;
+
+        public Task<int> FreezeAsync(Guid tenantId, Guid instanceId, DateTimeOffset frozenAt, CancellationToken ct) =>
+            Task.FromResult(0);
     }
 
-    private GenerarFurHandler HandlerConRues(IRuesActorDataResolver resolver) =>
+    /// <summary>
+    /// HU #11305 — handler con el lector documental real. No hay resolutor que inyectar: la consulta
+    /// en vivo al RUES desapareció (D4), así que estas pruebas ya no pueden "simular el proveedor".
+    /// Lo que se ejercita es el respaldo real sobre lo persistido.
+    /// </summary>
+    private GenerarFurHandler HandlerConRues() =>
         new(_repo, _generator, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage,
-            NullLogger<GenerarFurHandler>.Instance, ruesResolver: resolver);
+            NullLogger<GenerarFurHandler>.Instance,
+            certificationReader: new CertificationReader(new AlmacenCertificacionesVacio()));
 
     // ── Bug #11146 — una parte firma de UNA sola manera ──────────────────────
 
@@ -759,10 +781,8 @@ public sealed class FurHandlerTests
         };
 
     [Fact]
-    public async Task Generar_TraspasoEntreDosPersonasJuridicas_EmiteUnCertificadoPorNit()
+    public async Task Generar_TraspasoEntreDosPersonasJuridicasSinDatosPersistidos_NoEmiteCertificado()
     {
-        // Antes se emitía UNO solo, con las rues_* de instancia: la razón social de una compañía podía
-        // salir junto a la matrícula de la otra.
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
@@ -772,23 +792,25 @@ public sealed class FurHandlerTests
         instance.Actors.Add(ActorJuridicoVendedor(instance));  // vendedor,  NIT 800555444
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
-        var resolver = new FakeRuesResolver(
-            ("900123456", "EMPRESA DEMO S.A.S."),
-            ("800555444", "VENDEDORA S.A.S."));
-
-        var (result, error) = await HandlerConRues(resolver).HandleAsync(id, tenant, ct);
+        // HU #11305 (D1/D4) — CONTRAPARTIDA ACEPTADA POR EL PO. Sin dato persistido ya no se emite
+        // certificado: antes esta misma situación disparaba una consulta en vivo al RUES por cada NIT,
+        // cobrada y repetida en cada regeneración del expediente. A cambio, generar el expediente
+        // cuesta cero llamadas externas. Las compañías precargadas del directorio de representantes
+        // legales pierden este anexo, y ese es el riesgo a medir tras el despliegue.
+        var (result, error) = await HandlerConRues().HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
         var tipos = result!.Documents.Select(d => d.Tipo).ToList();
-        tipos.Should().Contain("certificado_rues");           // comprador (retrocompatible)
-        tipos.Should().Contain("certificado_rues_vendedor");  // vendedor (sufijo de rol)
-        resolver.NitsConsultados.Should().BeEquivalentTo(["900123456", "800555444"]);
+        tipos.Should().NotContain("certificado_rues");
+        tipos.Should().NotContain("certificado_rues_vendedor");
+        tipos.Should().Contain("fur", "el expediente se genera igual");
     }
 
     [Fact]
-    public async Task Generar_ConRuesEnFieldValuesDelMismoNit_NoConsultaAlProveedor()
+    public async Task Generar_ConRuesEnFieldValuesDelMismoNit_EmiteElCertificadoDesdeElRespaldo()
     {
-        // El camino normal no debe pagar una llamada externa por trámite.
+        // HU #11305 — respaldo para trámites anteriores al despliegue: las `rues_*` de instancia siguen
+        // sirviendo cuando corresponden al NIT del actor.
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
@@ -799,18 +821,16 @@ public sealed class FurHandlerTests
         AddFieldValue(instance, "rues_razon_social", "EMPRESA DEMO S.A.S.");
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
-        var resolver = new FakeRuesResolver();
-        var (result, error) = await HandlerConRues(resolver).HandleAsync(id, tenant, ct);
+        var (result, error) = await HandlerConRues().HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
         result!.Documents.Select(d => d.Tipo).Should().Contain("certificado_rues");
-        resolver.NitsConsultados.Should().BeEmpty();
     }
 
     // ── HU #11133 — snapshot congelado al registrar ──────────────────────────
 
     [Fact]
-    public async Task Generar_ConSnapshotDeAmbasCompanias_NoConsultaAlProveedorNiUnaVez()
+    public async Task Generar_ConSnapshotDeAmbasCompanias_EmiteAmbosCertificadosSinLlamadasSalientes()
     {
         // El objetivo del negocio: regenerar el expediente no puede costar consultas al RUES. Con dos
         // personas jurídicas el camino anterior siempre pagaba al menos una, porque las llaves
@@ -834,14 +854,12 @@ public sealed class FurHandlerTests
         AddFieldValue(instance, RuesSnapshots.FieldKey, snapshot!);
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
-        var resolver = new FakeRuesResolver();
-        var (result, error) = await HandlerConRues(resolver).HandleAsync(id, tenant, ct);
+        var (result, error) = await HandlerConRues().HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
         var tipos = result!.Documents.Select(d => d.Tipo).ToList();
         tipos.Should().Contain("certificado_rues");
         tipos.Should().Contain("certificado_rues_vendedor");
-        resolver.NitsConsultados.Should().BeEmpty("el snapshot congelado al registrar es la fuente del certificado");
     }
 
     [Fact]
@@ -863,19 +881,18 @@ public sealed class FurHandlerTests
             DateTimeOffset.UtcNow)!);
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
-        var resolver = new FakeRuesResolver();
-        var (result, error) = await HandlerConRues(resolver).HandleAsync(id, tenant, ct);
+        var (result, error) = await HandlerConRues().HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
         _ruesGenerator.Received().GenerateRuesCertificate(
             Arg.Is<RuesCertificateData>(d => d.RazonSocial == "NOMBRE DEL SNAPSHOT"));
-        resolver.NitsConsultados.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task Generar_ConProveedorRuesCaido_GeneraElFurIgualSinCertificado()
+    public async Task Generar_SinDatosDeRuesPersistidos_GeneraElFurIgualSinCertificado()
     {
-        // Best-effort estricto: el RUES nunca puede tumbar el expediente.
+        // HU #11305 — ya no hay proveedor que se pueda caer al generar: el expediente no hace llamadas
+        // salientes. Sin dato persistido, el certificado sencillamente no se emite y el FUR sale igual.
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
         var tenant = Guid.NewGuid();
@@ -884,8 +901,7 @@ public sealed class FurHandlerTests
         instance.Actors.Add(ActorJuridico(instance));
         _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
 
-        // Resolutor sin compañías: simula "no se pudo obtener el dato".
-        var (result, error) = await HandlerConRues(new FakeRuesResolver()).HandleAsync(id, tenant, ct);
+        var (result, error) = await HandlerConRues().HandleAsync(id, tenant, ct);
 
         error.Should().BeNull();
         result!.Documents.Select(d => d.Tipo).Should().Contain("fur");

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
@@ -357,9 +358,25 @@ public sealed class GenerarConsolidadoHandler(
     }
 
     /// <summary>
+    /// Tipos documentales PERSONALIZABLES por compañía (Feature #11309, ADR-0042): son los únicos a
+    /// los que se les aplica <see cref="AttachmentSourcePrecedence"/> (DT-4) en vez del criterio de
+    /// "fecha de carga más reciente". Decisión del PO (2026-08-10): la <c>compraventa</c> queda
+    /// EXCLUIDA a propósito y conserva su comportamiento actual — aplicarle la precedencia declarada
+    /// invertiría quién gana (pasaría a ganar siempre la del usuario) y contradiría
+    /// <c>ADR-0035-compraventa-autogenerada-siempre-y-sin-membrete</c> (Aceptado), que exige que la
+    /// compraventa del sistema, con su sello de formato oficial e identidad, esté siempre en el
+    /// expediente. Todos los demás tipos —incluida la compraventa— NO se tocan por este Feature.
+    /// </summary>
+    private static readonly HashSet<string> TiposConPrecedenciaDeclarada =
+        new(StringComparer.OrdinalIgnoreCase) { "mandato", "tramite_virtual" };
+
+    /// <summary>
     /// Evita el bug de expediente duplicado: ningún PDF cuyo tipo contenga "consolidado" puede
     /// ser PARTE del merge (anidaría el paquete completo otra vez). Además, si hay varias filas
-    /// del mismo tipo (reemplazos / doble carga), solo se conserva la más reciente.
+    /// del mismo tipo (reemplazos / doble carga), se conserva una sola: para <c>mandato</c> y
+    /// <c>tramite_virtual</c> por la precedencia declarada de <see cref="AttachmentSourcePrecedence"/>
+    /// (DT-4); para CUALQUIER OTRO tipo —incluida la <c>compraventa</c>— por el criterio de siempre,
+    /// la más reciente por <c>UploadedAt</c>, SIN cambios de comportamiento.
     /// </summary>
     internal static IReadOnlyList<ProcedureInstanceAttachment> SanitizeConsolidadoParts(
         IReadOnlyList<ProcedureInstanceAttachment> ordered)
@@ -369,7 +386,9 @@ public sealed class GenerarConsolidadoHandler(
             .GroupBy(a => a.Tipo, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 g => g.Key,
-                g => g.OrderByDescending(x => x.UploadedAt).First(),
+                g => TiposConPrecedenciaDeclarada.Contains(g.Key)
+                    ? AttachmentSourcePrecedence.SelectWinner(g, a => a.Source, a => a.UploadedAt)
+                    : g.OrderByDescending(x => x.UploadedAt).First(),
                 StringComparer.OrdinalIgnoreCase);
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

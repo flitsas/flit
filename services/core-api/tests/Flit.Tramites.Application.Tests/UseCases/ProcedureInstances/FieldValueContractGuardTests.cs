@@ -29,6 +29,19 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 /// comprueba que el fichero declarado la mencione; no puede demostrar que la escritura ocurra en
 /// tiempo de ejecución. Su valor es que añadir un consumidor sin productor deja de ser silencioso y
 /// pasa a ser una decisión explícita y revisable.</para>
+///
+/// <para><b>HU #11308 — ese límite resultó ser el agujero, y ya no se cubre desde aquí.</b> Este
+/// guardián es un <c>grep</c>: le basta con que <i>algún</i> productor declarado mencione la llave
+/// como literal en su código. Declaró durante meses que Verifik producía <c>rtm_numero</c> y
+/// <c>rtm_expedicion</c> —y las mencionaba, en una búsqueda por nombres candidatos que nunca acertó—
+/// mientras esas dos llaves tenían CERO filas en toda la base. Pasó en verde el Feature entero
+/// dedicado a llenarlas.</para>
+///
+/// <para>La cobertura de las certificaciones pasa a
+/// <c>CertificationCoverageGuardTests</c>, que recorre la cadena completa —respuesta real del
+/// proveedor → mapper → ingesta → lector documental— y exige que las celdas lleguen no vacías al
+/// final. Con el DTO anterior de Kyverum, esa prueba falla. Esta se conserva para lo que sí sabe
+/// hacer y la otra no cubre: detectar que un documento empiece a leer una llave que nadie escribe.</para>
 /// </summary>
 public sealed class FieldValueContractGuardTests
 {
@@ -70,8 +83,20 @@ public sealed class FieldValueContractGuardTests
     /// <summary>P6 del wizard — observaciones del trámite (antes vivían en FirmaFurStep).</summary>
     private const string WizardTramite = "frontend/components/operacion/TramiteWizard.tsx";
 
-    /// <summary>Fichero que se lee para extraer las llaves CONSUMIDAS por los documentos.</summary>
-    private const string Consumidor = App + "UseCases/ProcedureInstances/FurCommand.cs";
+    /// <summary>
+    /// Ficheros que se leen para extraer las llaves CONSUMIDAS por los documentos.
+    /// </summary>
+    /// <remarks>
+    /// HU #11305 — dejó de ser uno solo. El expediente ya no lee <c>field_values</c> directamente para
+    /// las certificaciones: lo hace el lector documental, que resuelve tabla canónica → respaldo sobre
+    /// <c>field_values</c> → nada. <c>FurCommand</c> conserva el resto (placa, organismo,
+    /// transformaciones, prenda) y los campos <c>rues_*</c> que el certificado imprime.
+    /// </remarks>
+    private static readonly string[] Consumidores =
+    [
+        App + "UseCases/ProcedureInstances/FurCommand.cs",
+        App + "UseCases/Certifications/CertificationReader.cs",
+    ];
 
     /// <summary>
     /// Registro declarativo: llave de <c>field_values</c> → quién la escribe.
@@ -106,10 +131,10 @@ public sealed class FieldValueContractGuardTests
         // HU #10673 (A4/B4) — carrocería se suma al mismo patrón de transformación.
         ["vehicle_body_type_runt"] = new(Preflight, Modo.Dinamico, "RuntSnapshotSuffix"),
 
-        // HU #11136 — fecha de matrícula del vehículo: insumo de la regla de antigüedad de la RTM.
-        // OJO: solo la reporta Verifik. Las respuestas capturadas de Kyverum no traen fecha alguna de
-        // matrícula, así que con ese proveedor la regla cae al lado seguro (mostrar la tabla).
-        ["vehicle_registration_date"] = new(Verifik, Modo.Literal),
+        // HU #11136 / #11303 — fecha de matrícula del vehículo: insumo de la regla de antigüedad de la
+        // RTM. Se creía exclusiva de Verifik porque Kyverum manda `fechaMatricula` en null; la fecha
+        // real viaja en `vehiculo.fechaRegistro`, que ahora sí se lee.
+        ["vehicle_registration_date"] = new([Verifik, Kyverum], Modo.Literal),
 
         // SOAT y RTM — parte del RUNT, parte del OCR del documento (HU #10975/#10976/#10977).
         ["soat_vencimiento"] = new(Verifik, Modo.Literal),
@@ -118,14 +143,24 @@ public sealed class FieldValueContractGuardTests
         ["rtm_vencimiento"] = new(Verifik, Modo.Literal),
         ["rtm_estado"] = new(Verifik, Modo.Literal),
         ["rtm_entidad"] = new(Verifik, Modo.Literal),
-        // HU #11134 / #11135 — doble productor: el RUNT es el primario y el OCR del PDF el respaldo
-        // (PersistOcrFieldsHandler nunca pisa un valor de consulta). Ambos deben seguir existiendo.
-        ["soat_poliza"] = new([Verifik, Ocr], Modo.Literal),
-        ["soat_vigencia"] = new([Verifik, Ocr], Modo.Literal),
-        ["soat_expedicion"] = new([Verifik, Ocr], Modo.Literal),
-        ["rtm_numero"] = new([Verifik, Ocr], Modo.Literal),
-        ["rtm_vigencia"] = new([Verifik, Ocr], Modo.Literal),
-        ["rtm_expedicion"] = new([Verifik, Ocr], Modo.Literal),
+        // HU #11134 / #11135 / #11303 — doble productor: el RUNT es el primario y el OCR del PDF el
+        // respaldo (PersistOcrFieldsHandler nunca pisa un valor de consulta). Ambos deben existir.
+        // La HU #11303 suma Kyverum a las tres del SOAT: el proveedor primario SÍ manda numSoat,
+        // fechaExpediSoat y fechaInicioPoliza, y el DTO afirmaba lo contrario.
+        ["soat_poliza"] = new([Verifik, Kyverum, Ocr], Modo.Literal),
+        ["soat_vigencia"] = new([Verifik, Kyverum, Ocr], Modo.Literal),
+        ["soat_expedicion"] = new([Verifik, Kyverum, Ocr], Modo.Literal),
+
+        // rtm_numero y rtm_expedicion pasan a Kyverum + OCR. Verifik SALE de la lista: la HU #11303
+        // retiró su resolución por nombres candidatos sobre JsonExtensionData, que en la medición de
+        // base de datos nunca produjo una sola fila. Cuando haya una captura real de Verifik con
+        // sección RTM se declararán los campos con su nombre verdadero y volverá a la lista.
+        ["rtm_numero"] = new([Kyverum, Ocr], Modo.Literal),
+        ["rtm_expedicion"] = new([Kyverum, Ocr], Modo.Literal),
+
+        // rtm_vigencia queda SOLO en el OCR: ningún proveedor manda el inicio de vigencia de la
+        // revisión, y no se deduce de la fecha de expedición.
+        ["rtm_vigencia"] = new(Ocr, Modo.Literal),
 
         // Fecha de la consulta al RUNT (HU #10974): dato de la EJECUCIÓN, no de la respuesta.
         ["runt_consulta_fecha"] = new(RunConsulta, Modo.Literal),
@@ -214,9 +249,14 @@ public sealed class FieldValueContractGuardTests
     /// </summary>
     private static HashSet<string> LlavesConsumidas()
     {
-        var fuente = Leer(Consumidor);
+        var fuente = string.Join('\n', Consumidores.Select(Leer));
         var regex = new Regex("(?:Get\\(fv|Val\\(datos),\\s*\"([a-z0-9_]+)\"", RegexOptions.CultureInvariant);
         var llaves = regex.Matches(fuente).Select(m => m.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
+
+        // HU #11305 — las llaves `rues_*` que el lector enumera para el respaldo también son consumo,
+        // aunque no aparezcan bajo la forma Get(fv, "…").
+        foreach (Match m in Regex.Matches(fuente, "\"(rues_[a-z0-9_]+)\"", RegexOptions.CultureInvariant))
+            llaves.Add(m.Groups[1].Value);
 
         foreach (var (llave, expresion) in ConsumidasPorConstante)
         {

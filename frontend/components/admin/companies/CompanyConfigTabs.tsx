@@ -283,6 +283,8 @@ export function CompanyConfigTabs({
             onChange={patch}
             otSlot={otSlot}
             fieldErrors={fieldErrors}
+            tenantId={settings.tenantId}
+            canalPersistido={settings.enrutamientoSMTP}
           />
         )}
         {activeTabId === "documentos" && documentosSlot}
