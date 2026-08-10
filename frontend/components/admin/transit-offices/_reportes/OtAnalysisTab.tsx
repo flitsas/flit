@@ -75,7 +75,11 @@ export function OtAnalysisTab({ transitOfficeId, companies }: OtAnalysisTabProps
 
   return (
     <div className="flex flex-col gap-6" data-testid="ot-analysis-tab">
-      <div className="flex flex-col gap-3">
+      <Section
+        title="Parámetros del análisis"
+        testId="ot-analysis-filters"
+        hint="Mira los rechazos y la calidad de lo que llega dentro del rango elegido."
+      >
         <RangePresets range={range} onChange={setRange} />
         <div className="flex flex-wrap items-end gap-3">
           <DateRangeFields range={range} onChange={setRange} />
@@ -85,7 +89,7 @@ export function OtAnalysisTab({ transitOfficeId, companies }: OtAnalysisTabProps
             {busy ? "Cargando…" : "Actualizar"}
           </PrimaryButton>
         </div>
-      </div>
+      </Section>
 
       {error && <ErrorNotice message={error} />}
 
