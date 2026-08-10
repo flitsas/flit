@@ -14,6 +14,10 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    // El producto vive en Bogotá y varios cálculos de fecha dependen del huso. Sin fijarlo, cada
+    // quien corre las pruebas en el suyo: en UTC un fallo de «hoy corrido un día» no se manifiesta
+    // —UTC y la hora local coinciden— y la prueba que debía cazarlo pasa sin haber comprobado nada.
+    env: { TZ: "America/Bogota" },
     setupFiles: ["./vitest.setup.ts"],
     include: ["**/*.test.{ts,tsx}"],
     exclude: ["node_modules", ".next"],

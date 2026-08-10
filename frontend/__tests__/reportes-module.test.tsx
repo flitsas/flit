@@ -106,6 +106,9 @@ function basePermissions() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // jsdom conserva la dirección entre pruebas del mismo archivo: sin reiniciarla, la que escribe
+  // `?compania=` deja a la siguiente abriendo con esa compañía ya elegida.
+  window.history.replaceState(null, "", "/");
   mocks.usePermissions.mockReturnValue(permissionsState());
   mocks.fetchAnalyticsOverview.mockResolvedValue(FULL);
   mocks.fetchMonthlyTrend.mockResolvedValue({ items: [] });
@@ -213,6 +216,47 @@ describe("Reportes — AC1 acceso por rol", () => {
       const lastCall = mocks.fetchAnalyticsOverview.mock.calls.at(-1);
       expect(lastCall?.[0]).toMatchObject({ tenantId: COMPANY.id });
     });
+  });
+});
+
+describe("Reportes — la compañía viaja en la dirección", () => {
+  // Un enlace copiado desde Consultas lleva la consulta pero no sobre qué compañía se preguntaba.
+  // Sin esto, quien lo abre ve el aviso de «elige una compañía» con la consulta cargada y cero datos.
+  it("al elegir compañía la escribe en la dirección", async () => {
+    mocks.usePermissions.mockReturnValue(permissionsState({ isSuperAdmin: true }));
+
+    render(<Reportes />);
+    const selector = await screen.findByLabelText("Compañía");
+    fireEvent.change(selector, { target: { value: COMPANY.id } });
+
+    await waitFor(() =>
+      expect(new URLSearchParams(window.location.search).get("compania")).toBe(COMPANY.id),
+    );
+  });
+
+  it("abre con la compañía que traiga la dirección", async () => {
+    mocks.usePermissions.mockReturnValue(permissionsState({ isSuperAdmin: true }));
+    window.history.replaceState(null, "", `/?compania=${COMPANY.id}`);
+
+    render(<Reportes />);
+
+    await waitFor(() => {
+      const lastCall = mocks.fetchAnalyticsOverview.mock.calls.at(-1);
+      expect(lastCall?.[0]).toMatchObject({ tenantId: COMPANY.id });
+    });
+  });
+
+  it("al volver a «todas las compañías» la quita de la dirección", async () => {
+    mocks.usePermissions.mockReturnValue(permissionsState({ isSuperAdmin: true }));
+    window.history.replaceState(null, "", `/?compania=${COMPANY.id}`);
+
+    render(<Reportes />);
+    const selector = await screen.findByLabelText("Compañía");
+    fireEvent.change(selector, { target: { value: "" } });
+
+    await waitFor(() =>
+      expect(new URLSearchParams(window.location.search).has("compania")).toBe(false),
+    );
   });
 });
 
