@@ -2206,6 +2206,62 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("tenant_transit_office_grants", "admin");
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.TenantTransitOfficePrendaDocumentPolicy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<bool>("DocumentOptional")
+                        .HasColumnType("boolean")
+                        .HasColumnName("document_optional");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("TransitOfficeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transit_office_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tenant_transit_office_prenda_document_policies");
+
+                    b.HasIndex("TenantId", "TransitOfficeId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_tenant_transit_office_prenda_document_policies");
+
+                    b.ToTable("tenant_transit_office_prenda_document_policies", "admin", t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.TenantWhitelistUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2693,6 +2749,58 @@ namespace Flit.Infrastructure.Migrations
                         .HasDatabaseName("ix_app_usage_events_tenant_type_occurred");
 
                     b.ToTable("app_usage_events", "analytics");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Analytics.CompanySavedQueryEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Definicion")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("definicion");
+
+                    b.Property<string>("Descripcion")
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)")
+                        .HasColumnName("descripcion");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("nombre");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_company_saved_queries");
+
+                    b.HasIndex("TenantId", "UserId")
+                        .HasDatabaseName("ix_company_saved_queries_tenant_user");
+
+                    b.ToTable("company_saved_queries", "analytics", t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Analytics.ReportSchedule", b =>

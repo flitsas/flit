@@ -3,6 +3,7 @@
     <Project Path="src/Flit.Admin.Domain/Flit.Admin.Domain.csproj" />
     <Project Path="src/Flit.Admin.Application/Flit.Admin.Application.csproj" />
     <Project Path="src/Flit.Analytics.Application/Flit.Analytics.Application.csproj" />
+    <Project Path="src/Flit.Queries.Domain/Flit.Queries.Domain.csproj" />
     <Project Path="src/Flit.Api/Flit.Api.csproj" />
     <Project Path="src/Flit.Gateway/Flit.Gateway.csproj" />
     <Project Path="src/Flit.Infrastructure/Flit.Infrastructure.csproj" />

@@ -1,3 +1,5 @@
+using Flit.Queries.Domain;
+
 namespace Flit.Admin.Domain.OtQueries;
 
 /// <summary>
@@ -9,7 +11,7 @@ namespace Flit.Admin.Domain.OtQueries;
 /// preguntas del organismo — pretenden ser el punto de partida para escribir las suyas.</para>
 ///
 /// <para>No se persisten: se sirven junto a las guardadas y se distinguen por
-/// <see cref="OtSavedQueryDto.DeFabrica"/>. Así no se pueden romper, no ocupan la cuota del usuario
+/// <see cref="SavedQueryDto.DeFabrica"/>. Así no se pueden romper, no ocupan la cuota del usuario
 /// y cambian cuando cambia el código. Guardar una es duplicarla.</para>
 /// </summary>
 public static class OtFactoryQueries
@@ -20,18 +22,18 @@ public static class OtFactoryQueries
     private static readonly Guid RechazadosDelMesId = new("f0000000-0000-4000-8000-000000000002");
     private static readonly Guid PrioritariosEnRevisionId = new("f0000000-0000-4000-8000-000000000003");
 
-    private static readonly OtSavedQueryDto[] All =
+    private static readonly SavedQueryDto[] All =
     [
         new(
             ConPrendaSinLtId,
             "Con prenda y sin licencia de tránsito",
             "Trámites con prenda vigente a los que todavía no se les ha cargado la LT.",
             DeFabrica: true,
-            new OtQueryDefinition(
-                new OtQueryDateFilter(OtQueryDateField.Radicacion, OtQueryRangePreset.Ultimos90),
+            new QueryDefinition(
+                new QueryDateFilter(OtQueryDateField.Radicacion, QueryRangePreset.Ultimos90),
                 [
-                    new OtQueryCondition(OtQueryFieldCatalog.Prenda, OtQueryOperator.EsAlguno, ["true"]),
-                    new OtQueryCondition(OtQueryFieldCatalog.LicenciaTransito, OtQueryOperator.EsAlguno, ["false"]),
+                    new QueryCondition(OtQueryFieldCatalog.Prenda, QueryOperator.EsAlguno, ["true"]),
+                    new QueryCondition(OtQueryFieldCatalog.LicenciaTransito, QueryOperator.EsAlguno, ["false"]),
                 ],
                 ["referencia", "placa", "empresa", "estado", "acreedor_prenda", "radicado_en"],
                 OtQuerySort.Radicado,
@@ -44,10 +46,10 @@ public static class OtFactoryQueries
             "Rechazados este mes",
             "Lo devuelto en el mes en curso, contado por la fecha en que se rechazó.",
             DeFabrica: true,
-            new OtQueryDefinition(
-                new OtQueryDateFilter(OtQueryDateField.Decision, OtQueryRangePreset.MesActual),
+            new QueryDefinition(
+                new QueryDateFilter(OtQueryDateField.Decision, QueryRangePreset.MesActual),
                 [
-                    new OtQueryCondition(OtQueryFieldCatalog.Estado, OtQueryOperator.EsAlguno, ["rechazado"]),
+                    new QueryCondition(OtQueryFieldCatalog.Estado, QueryOperator.EsAlguno, ["rechazado"]),
                 ],
                 ["referencia", "placa", "empresa", "decidido_por", "decidido_en", "causales"],
                 OtQuerySort.Decidido,
@@ -60,13 +62,13 @@ public static class OtFactoryQueries
             "Prioritarios sin decidir",
             "Los marcados como prioritarios que siguen en la bandeja del organismo.",
             DeFabrica: true,
-            new OtQueryDefinition(
-                new OtQueryDateFilter(OtQueryDateField.Radicacion, OtQueryRangePreset.Ultimos90),
+            new QueryDefinition(
+                new QueryDateFilter(OtQueryDateField.Radicacion, QueryRangePreset.Ultimos90),
                 [
-                    new OtQueryCondition(OtQueryFieldCatalog.Prioritario, OtQueryOperator.EsAlguno, ["true"]),
-                    new OtQueryCondition(
+                    new QueryCondition(OtQueryFieldCatalog.Prioritario, QueryOperator.EsAlguno, ["true"]),
+                    new QueryCondition(
                         OtQueryFieldCatalog.Estado,
-                        OtQueryOperator.EsAlguno,
+                        QueryOperator.EsAlguno,
                         ["en_revision", "esperando_placa", "en_subsanacion"]),
                 ],
                 ["referencia", "placa", "empresa", "estado", "radicado_en", "dias_en_organismo"],
@@ -76,9 +78,9 @@ public static class OtFactoryQueries
             null),
     ];
 
-    public static IReadOnlyList<OtSavedQueryDto> Queries => All;
+    public static IReadOnlyList<SavedQueryDto> Queries => All;
 
     public static bool IsFactory(Guid id) => All.Any(q => q.Id == id);
 
-    public static OtSavedQueryDto? Find(Guid id) => All.FirstOrDefault(q => q.Id == id);
+    public static SavedQueryDto? Find(Guid id) => All.FirstOrDefault(q => q.Id == id);
 }
