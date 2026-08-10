@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Flit.Admin.Application.Companies.PersonalizedDocuments;
 using Flit.Tramites.Application.Documents;
 using Microsoft.Extensions.Logging;
@@ -89,14 +90,31 @@ internal sealed partial class PersonalizedDocumentResolver(
                 }
 
                 // DT-6 — la versión ya se validó al confirmarla (HU #11313), pero el pipeline vuelve a
-                // abrirla aquí: es la única forma de garantizar que el objeto que hoy vive en storage
-                // sigue siendo un PDF legible en el momento exacto de generar, sin confiar en un estado
-                // de hace semanas.
+                // recalcular el SHA-256 del objeto que hoy vive en storage y lo compara contra el hash
+                // custodiado en la fila (active.StorageSha256) ANTES de inspeccionarlo: es la única
+                // forma de garantizar que lo que se adjunta es EL PDF validado, no cualquier PDF que
+                // haya quedado en esa ruta (mutación post-confirmación, ventana de política presignada,
+                // compromiso del gestor de archivos), sin confiar en un estado de hace semanas.
+                var actualSha256 = Convert.ToHexStringLower(SHA256.HashData(content));
+                if (!string.Equals(actualSha256, active.StorageSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    (unavailable ??= []).Add(new PersonalizedDocumentUnavailable(tipo, active.Id, "hash_mismatch"));
+                    LogNoDisponible(logger, tenantId, tipo, "hash_mismatch");
+                    continue;
+                }
+
                 var inspection = inspector.Inspect(content);
                 if (!inspection.IsParseable)
                 {
                     (unavailable ??= []).Add(new PersonalizedDocumentUnavailable(tipo, active.Id, "pdf_ilegible"));
                     LogNoDisponible(logger, tenantId, tipo, "pdf_ilegible");
+                    continue;
+                }
+
+                if (inspection.PageCount > PdfIntegrityValidator.MaxPages)
+                {
+                    (unavailable ??= []).Add(new PersonalizedDocumentUnavailable(tipo, active.Id, "excede_paginas"));
+                    LogNoDisponible(logger, tenantId, tipo, "excede_paginas");
                     continue;
                 }
 
