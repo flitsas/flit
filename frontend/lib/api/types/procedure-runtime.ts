@@ -691,8 +691,37 @@ export interface ProcedureAttachment {
   mimetype: string;
   sizeBytes: number;
   sha256: string;
+  /**
+   * Origen del adjunto. NO es un catálogo cerrado (el backend puede sumar valores sin romper el
+   * contrato): usar {@link ATTACHMENT_SOURCE_LABELS} para la etiqueta, con fallback al valor crudo.
+   * `'company'` (Feature #11309/#11313, ADR-0042) — versión activa de un documento personalizado de
+   * la compañía (mandato | tramite_virtual), sustituida en el único punto del pipeline de
+   * generación. Se distingue así de `'system'` (generado por FLIT) y de `'user'`/`'ot'` (cargado por
+   * una persona).
+   */
   source: string;
   uploadedAt: string;
+}
+
+/**
+ * Etiqueta legible del origen de un adjunto (HU #11315). Un valor no listado aquí no es un error: se
+ * muestra su texto crudo (`source`) en vez de asumir el conjunto cerrado — el backend no promete una
+ * lista fija.
+ */
+export const ATTACHMENT_SOURCE_LABELS: Partial<Record<string, string>> = {
+  system: 'Generado por FLIT',
+  company: 'Documento de la compañía',
+  user: 'Cargado por el usuario',
+  ot: 'Cargado por el organismo',
+  ocr: 'Cargado (OCR)',
+  portal: 'Cargado desde el portal',
+  consultation: 'Consulta automática',
+  ict: 'Integración (ICT)',
+};
+
+/** Etiqueta de un `source` de adjunto, con fallback al valor crudo si no está en el mapa. */
+export function attachmentSourceLabel(source: string): string {
+  return ATTACHMENT_SOURCE_LABELS[source] ?? source;
 }
 
 /** Respuesta de GET /instances/{id}/attachments. */

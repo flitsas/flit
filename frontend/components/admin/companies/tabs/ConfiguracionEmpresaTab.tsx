@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { ToggleSwitch } from "../ToggleSwitch";
 import { ConsultaProvidersSection } from "../ConsultaProvidersSection";
 import { AvaluoProvidersSection } from "../AvaluoProvidersSection";
+import { PersonalizedDocumentsPanel } from "../PersonalizedDocumentsPanel";
 import {
   FINES_QUERY_SOURCE_LABELS,
   FINES_QUERY_SOURCES,
@@ -29,6 +30,19 @@ export interface ConfiguracionEmpresaTabProps {
   /** Tabla consolidada de Organismos de Tránsito (grant + bloqueos + restricciones). */
   otSlot?: ReactNode;
   fieldErrors?: Record<string, string>;
+  /**
+   * HU #11315 (Feature #11309) — compañía en configuración. El panel de documentos
+   * personalizados vive AQUÍ, justo debajo del selector de canal del que depende su
+   * visibilidad (CF-01 del Feature #11309): quien cambia el canal ve de inmediato qué habilita.
+   */
+  tenantId: string;
+  /**
+   * Canal **persistido** del tenant, no el del formulario. La visibilidad del panel se decide
+   * con la política operativa guardada (CF-01: fuente única de verdad), porque el backend
+   * responde 409 `canal_no_habilitado` leyendo esa misma política: si la compuerta usara el
+   * borrador, cambiar el selector sin guardar mostraría una sección cuyas cargas fallarían.
+   */
+  canalPersistido: EnrutamientoSMTP;
 }
 
 export function ConfiguracionEmpresaTab({
@@ -36,6 +50,8 @@ export function ConfiguracionEmpresaTab({
   onChange,
   otSlot,
   fieldErrors,
+  tenantId,
+  canalPersistido,
 }: ConfiguracionEmpresaTabProps) {
   const toggleMetodo = (metodo: string, on: boolean) => {
     const next = on
@@ -114,6 +130,9 @@ export function ConfiguracionEmpresaTab({
           </p>
         )}
       </div>
+
+      {/* HU #11315 — condicionado al MISMO canal de arriba; con FLIT_SMTP no se renderiza nada. */}
+      <PersonalizedDocumentsPanel tenantId={tenantId} enrutamientoSMTP={canalPersistido} />
 
       <div>
         <label htmlFor="notificationTarget" className="mb-1 block text-xs font-semibold">
