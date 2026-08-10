@@ -11,16 +11,37 @@
 // el resultado ya lo dice. El aviso solo aparece cuando hay algo que explicar.
 
 import { useState } from "react";
-import type { OtQueryCoverageItem } from "@/lib/api/ot-queries";
-import { plural } from "./report-columns";
+import type { QueryCoverageItem, QueryField } from "@/lib/api/queries";
+import { plural } from "./ui";
 
-const CAMPO_LABEL: Record<string, string> = {
+/**
+ * Cómo se nombra el campo en el aviso. Sale del catálogo del servidor cuando está disponible: si
+ * aquí hubiera una lista fija, un campo nuevo aparecería en el aviso con su identificador crudo
+ * («radicado_por») justo en la pantalla que existe para dar explicaciones.
+ */
+function campoLabel(campo: string, fields: QueryField[]): string {
+  return fields.find((f) => f.id === campo)?.label ?? FALLBACK[campo] ?? campo;
+}
+
+const FALLBACK: Record<string, string> = {
   placa: "Placa",
   vin: "VIN",
   radicado: "Radicado",
 };
 
-export function CoverageNotice({ cobertura }: { cobertura: OtQueryCoverageItem[] }) {
+export function CoverageNotice({
+  cobertura,
+  fields = [],
+  ambito,
+  testIdPrefix,
+}: {
+  cobertura: QueryCoverageItem[];
+  /** El catálogo, para nombrar los campos como se llaman en pantalla. */
+  fields?: QueryField[];
+  /** Dónde no está lo que no salió: «este organismo», «su empresa». */
+  ambito: string;
+  testIdPrefix: string;
+}) {
   const [abierto, setAbierto] = useState(false);
 
   const faltantes = cobertura.filter((c) => c.resultado !== "encontrado");
@@ -34,7 +55,7 @@ export function CoverageNotice({ cobertura }: { cobertura: OtQueryCoverageItem[]
   return (
     <div
       className="rounded-2xl border border-[#E5A50A]/40 bg-[#FFF8E6] p-3 text-xs dark:border-[#E5A50A]/30 dark:bg-[#E5A50A]/10"
-      data-testid="ot-query-cobertura"
+      data-testid={`${testIdPrefix}-cobertura`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-semibold text-[#8A6100] dark:text-[#F2C14E]">
@@ -45,7 +66,7 @@ export function CoverageNotice({ cobertura }: { cobertura: OtQueryCoverageItem[]
           type="button"
           onClick={() => setAbierto((v) => !v)}
           className="text-[11px] font-semibold text-[#8A6100] underline dark:text-[#F2C14E]"
-          data-testid="ot-query-cobertura-detalle"
+          data-testid={`${testIdPrefix}-cobertura-detalle`}
         >
           {abierto ? "Ocultar el detalle" : "Ver por qué"}
         </button>
@@ -63,17 +84,17 @@ export function CoverageNotice({ cobertura }: { cobertura: OtQueryCoverageItem[]
         {excluidos.length > 0 && noExisten.length > 0 && " "}
         {noExisten.length > 0 && (
           <>
-            {noExisten.length} no {noExisten.length === 1 ? "está" : "están"} en este organismo.
+            {noExisten.length} no {noExisten.length === 1 ? "está" : "están"} en {ambito}.
           </>
         )}
       </p>
 
       {abierto && (
-        <ul className="mt-2 space-y-1" data-testid="ot-query-cobertura-lista">
+        <ul className="mt-2 space-y-1" data-testid={`${testIdPrefix}-cobertura-lista`}>
           {faltantes.map((item) => (
             <li key={`${item.campo}-${item.valor}`} className="flex flex-wrap gap-x-2">
               <span className="font-mono font-semibold text-[#8A6100] dark:text-[#F2C14E]">
-                {CAMPO_LABEL[item.campo] ?? item.campo} {item.valor}
+                {campoLabel(item.campo, fields)} {item.valor}
               </span>
               <span className="text-[#6B7280] dark:text-white/60">{item.motivo}</span>
             </li>
@@ -91,8 +112,11 @@ export function CoverageNotice({ cobertura }: { cobertura: OtQueryCoverageItem[]
  * justo lo que se reenvía por correo a quien no ejecutó la consulta. Sin esto, la persona que lo
  * recibe cuenta las filas y llega exactamente a la conclusión equivocada.
  */
-export function coverageLines(cobertura: OtQueryCoverageItem[]): string[] {
+export function coverageLines(
+  cobertura: QueryCoverageItem[],
+  fields: QueryField[] = [],
+): string[] {
   return cobertura
     .filter((c) => c.resultado !== "encontrado")
-    .map((c) => `${CAMPO_LABEL[c.campo] ?? c.campo} ${c.valor}: ${c.motivo ?? "no salió"}`);
+    .map((c) => `${campoLabel(c.campo, fields)} ${c.valor}: ${c.motivo ?? "no salió"}`);
 }

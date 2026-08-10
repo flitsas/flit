@@ -19,7 +19,7 @@ import {
   type OtReportRow,
   type OtReportSort,
 } from "@/lib/api/ot-metrics";
-import { ColumnPicker } from "./ColumnPicker";
+import { ColumnPicker } from "@/components/consultas/ColumnPicker";
 import {
   DateRangeFields,
   EmpresaSelect,

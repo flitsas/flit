@@ -16,12 +16,27 @@ export interface GlobalFiltersProps {
   onChange: (next: ReportFilters) => void;
   isSuper: boolean;
   companies: CompanyListItem[];
+  /**
+   * Deja solo el selector de compañía.
+   *
+   * «Consultas» lleva su propio periodo dentro, sobre la fecha que el usuario elige. Dejar aquí
+   * arriba un rango que no cambia ni un número es exactamente la promesa falsa que obligó a partir
+   * la consola del organismo en pestañas: un selector de fechas presidiendo algo que no gobierna
+   * enseña a desconfiar de todos los filtros de la pantalla.
+   */
+  onlyCompany?: boolean;
 }
 
 const inputClass =
   "h-10 rounded-[10px] border bg-white px-3 text-xs font-medium text-[#162744] outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14] dark:text-white";
 
-export function GlobalFilters({ filters, onChange, isSuper, companies }: GlobalFiltersProps) {
+export function GlobalFilters({
+  filters,
+  onChange,
+  isSuper,
+  companies,
+  onlyCompany = false,
+}: GlobalFiltersProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   function patch(partial: Partial<ReportFilters>) {
@@ -31,7 +46,9 @@ export function GlobalFilters({ filters, onChange, isSuper, companies }: GlobalF
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-end gap-3">
-        <DateRangeFilter value={filters.range} onChange={(range) => patch({ range })} />
+        {!onlyCompany && (
+          <DateRangeFilter value={filters.range} onChange={(range) => patch({ range })} />
+        )}
 
         {isSuper && (
           <CompanySelector
@@ -42,6 +59,7 @@ export function GlobalFilters({ filters, onChange, isSuper, companies }: GlobalF
           />
         )}
 
+        {!onlyCompany && (
         <div className="flex flex-col gap-1">
           <label htmlFor="reportes-comparar" className="text-[10px] font-semibold uppercase opacity-60">
             Comparar con
@@ -58,7 +76,9 @@ export function GlobalFilters({ filters, onChange, isSuper, companies }: GlobalF
             <option value="previous_year">Año anterior</option>
           </select>
         </div>
+        )}
 
+        {!onlyCompany && (
         <button
           type="button"
           onClick={() => setShowAdvanced((v) => !v)}
@@ -68,9 +88,10 @@ export function GlobalFilters({ filters, onChange, isSuper, companies }: GlobalF
           <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
           {showAdvanced ? "Ocultar filtros" : "Más filtros"}
         </button>
+        )}
       </div>
 
-      {showAdvanced && (
+      {showAdvanced && !onlyCompany && (
         <div className="flex flex-wrap items-end gap-3" data-testid="reportes-filtros-avanzados">
           <AdvancedInput
             id="reportes-filtro-ot"

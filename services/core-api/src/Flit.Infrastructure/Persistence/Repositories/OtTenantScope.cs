@@ -106,26 +106,10 @@ internal sealed class OtTenantScope
         }).ConfigureAwait(false);
     }
 
-    /// <summary>Hoy en Bogotá. Los rangos del usuario son días de negocio, no días UTC.</summary>
-    public static DateOnly TodayInBogota() =>
-        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, Bogota).DateTime);
+    /// <inheritdoc cref="BogotaDays.Today"/>
+    public static DateOnly TodayInBogota() => BogotaDays.Today();
 
-    /// <summary>
-    /// Convierte un rango de días de negocio (Bogotá) al intervalo UTC correspondiente. El día
-    /// «hasta» se incluye entero.
-    ///
-    /// <para>El resultado se normaliza a UTC: son el mismo instante, pero Npgsql rechaza un
-    /// <c>DateTimeOffset</c> con offset distinto de cero contra una columna <c>timestamptz</c>, y
-    /// estos valores viajan como parámetros. Sin esto la consulta revienta contra PostgreSQL aunque
-    /// pase sobre InMemory.</para>
-    /// </summary>
-    public static (DateTimeOffset From, DateTimeOffset To) DayRange(DateOnly from, DateOnly to)
-    {
-        var offset = Bogota.GetUtcOffset(DateTime.SpecifyKind(
-            from.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified));
-
-        return (
-            new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), offset).ToUniversalTime(),
-            new DateTimeOffset(to.ToDateTime(TimeOnly.MaxValue), offset).ToUniversalTime());
-    }
+    /// <inheritdoc cref="BogotaDays.Range"/>
+    public static (DateTimeOffset From, DateTimeOffset To) DayRange(DateOnly from, DateOnly to) =>
+        BogotaDays.Range(from, to);
 }

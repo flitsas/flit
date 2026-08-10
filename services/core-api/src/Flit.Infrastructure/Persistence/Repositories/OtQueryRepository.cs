@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Flit.Admin.Domain.OtQueries;
 using Flit.Infrastructure.Persistence.Entities.Admin;
+using Flit.Queries.Domain;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.EntityFrameworkCore;
@@ -26,13 +27,19 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// se cubren estos reportes con pruebas. Aquí además hay una razón propia: el aviso de cobertura
 /// necesita saber QUÉ condición dejó fuera cada placa, y eso solo se puede responder evaluándolas
 /// una a una. Si el volumen lo pidiera, el salto natural es una vista materializada.</para>
+///
+/// <para>Los operadores, la normalización y el aviso de cobertura NO están escritos aquí: los pone
+/// <see cref="QueryEngine{TRow}"/>, compartido con las consultas de la empresa gestora. Este
+/// repositorio solo aporta lo suyo — de dónde salen las filas, cómo se accede a cada campo y qué
+/// fecha corresponde a cada opción del rango.</para>
 /// </summary>
 internal sealed class OtQueryRepository : IOtQueryRepository
 {
-    /// <summary>Trámites que se traen cuando la consulta no acota por identificador. Tope de cordura.</summary>
-    private const int MaxUniverso = 20_000;
-
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    /// <summary>El motor, amarrado al catálogo del organismo y a la forma de su fila.</summary>
+    private static readonly QueryEngine<QueryRow> Engine =
+        new(OtQueryFieldCatalog.Instance, Accessor, DateOf);
 
     private readonly FlitDbContext _context;
     private readonly OtTenantScope _scope;
@@ -47,7 +54,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
 
     public Task<OtQueryResultDto?> ExecuteAsync(
         Guid otTenantId,
-        OtQueryRequest request,
+        QueryRequest request,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default)
     {
@@ -60,20 +67,20 @@ internal sealed class OtQueryRepository : IOtQueryRepository
             {
                 var definition = OtQueryFieldCatalog.Normalize(request.Definition);
                 var today = OtTenantScope.TodayInBogota();
-                var (desde, hasta) = OtQueryRangePreset.Resolve(definition.Fechas, today);
+                var (desde, hasta) = QueryRangePreset.Resolve(definition.Fechas, today);
 
                 var rows = await LoadRowsAsync(
                     transitOfficeId, tenantIds, definition, cancellationToken).ConfigureAwait(false);
 
                 var condiciones = definition.Condiciones
-                    .Select(c => (Condition: c, Predicate: BuildPredicate(c)))
+                    .Select(c => (Condition: c, Predicate: Engine.BuildPredicate(c)))
                     .ToList();
 
                 bool PasaCondiciones(QueryRow row) => condiciones.All(c => c.Predicate(row));
 
                 var (from, to) = OtTenantScope.DayRange(desde, hasta);
                 var matched = rows
-                    .Where(r => InRange(r, definition.Fechas.Campo, from, to) && PasaCondiciones(r))
+                    .Where(r => Engine.InRange(r, definition.Fechas.Campo, from, to) && PasaCondiciones(r))
                     .ToList();
 
                 // Periodo anterior de IGUAL ancho, pegado al inicio del actual. Sirve para decir «12 %
@@ -81,10 +88,11 @@ internal sealed class OtQueryRepository : IOtQueryRepository
                 var dias = hasta.DayNumber - desde.DayNumber + 1;
                 var (prevFrom, prevTo) = OtTenantScope.DayRange(desde.AddDays(-dias), desde.AddDays(-1));
                 var anterior = rows
-                    .Count(r => InRange(r, definition.Fechas.Campo, prevFrom, prevTo) && PasaCondiciones(r));
+                    .Count(r => Engine.InRange(r, definition.Fechas.Campo, prevFrom, prevTo)
+                        && PasaCondiciones(r));
 
                 var page = Math.Max(1, request.Page);
-                var pageSize = Math.Clamp(request.PageSize, 1, OtQueryLimits.MaxPageSize);
+                var pageSize = Math.Clamp(request.PageSize, 1, QueryLimits.MaxPageSize);
 
                 var ordered = Sort(matched, definition.SortBy, definition.Descending)
                     .Skip((page - 1) * pageSize)
@@ -105,7 +113,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
                 var causales = await ResolveLastRejectionReasonsAsync(ordered, cancellationToken)
                     .ConfigureAwait(false);
 
-                var cobertura = BuildCoverage(
+                var cobertura = Engine.BuildCoverage(
                     definition, rows, matched, condiciones, from, to);
 
                 return new OtQueryResultDto(
@@ -121,120 +129,12 @@ internal sealed class OtQueryRepository : IOtQueryRepository
             cancellationToken);
     }
 
-    // ── Cobertura ─────────────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Qué pasó con cada placa, VIN o radicado que el usuario pidió por nombre.
-    ///
-    /// <para>Es el requisito que hace que el resultado se pueda leer sin desconfiar. Si alguien pega
-    /// dos placas, marca «tiene LT» y le sale una fila, la pregunta inmediata es si se perdió un
-    /// dato. Aquí la respuesta viene con el resultado: o la otra no existe en este organismo, o
-    /// existe y la dejó fuera exactamente esta condición.</para>
-    ///
-    /// <para>Se evalúan las condiciones una a una y en el orden en que el usuario las escribió, y se
-    /// reporta la PRIMERA que falla. Reportar todas las que fallan sería más completo y menos útil:
-    /// lo accionable es el filtro que hay que aflojar primero.</para>
-    /// </summary>
-    private static List<OtQueryCoverageItemDto> BuildCoverage(
-        OtQueryDefinition definition,
-        List<QueryRow> universo,
-        List<QueryRow> matched,
-        List<(OtQueryCondition Condition, Func<QueryRow, bool> Predicate)> condiciones,
-        DateTimeOffset from,
-        DateTimeOffset to)
-    {
-        var listados = definition.Condiciones
-            .Where(c => c.Operator == OtQueryOperator.EsAlguno && IsIdentifier(c.FieldId))
-            .ToList();
-
-        if (listados.Count == 0)
-        {
-            return [];
-        }
-
-        var items = new List<OtQueryCoverageItemDto>();
-
-        foreach (var condicion in listados)
-        {
-            var accessor = Accessor(condicion.FieldId);
-            var normalizer = Normalizer(condicion.FieldId);
-
-            foreach (var pedido in condicion.Values)
-            {
-                var objetivo = normalizer(pedido);
-
-                bool Coincide(QueryRow row) =>
-                    accessor(row).Any(v => normalizer(v) == objetivo);
-
-                if (matched.Any(Coincide))
-                {
-                    items.Add(new OtQueryCoverageItemDto(
-                        condicion.FieldId, pedido, OtQueryCoverageResult.Encontrado, null, null));
-                    continue;
-                }
-
-                var candidato = universo.FirstOrDefault(Coincide);
-                if (candidato is null)
-                {
-                    items.Add(new OtQueryCoverageItemDto(
-                        condicion.FieldId,
-                        pedido,
-                        OtQueryCoverageResult.NoExiste,
-                        null,
-                        "No hay ningún trámite con este valor en el organismo."));
-                    continue;
-                }
-
-                // Existe: alguna condición lo dejó fuera. La fecha se mira primero porque es la que
-                // el usuario tiene menos presente — está en la barra de arriba, no entre los chips.
-                if (!InRange(candidato, definition.Fechas.Campo, from, to))
-                {
-                    var etiqueta = OtQueryDateField.Options
-                        .FirstOrDefault(o => o.Value == definition.Fechas.Campo)?.Label ?? "la fecha";
-
-                    items.Add(new OtQueryCoverageItemDto(
-                        condicion.FieldId,
-                        pedido,
-                        OtQueryCoverageResult.Excluido,
-                        definition.Fechas.Campo,
-                        $"Existe, pero su {etiqueta.ToLowerInvariant()} queda fuera del rango."));
-                    continue;
-                }
-
-                var culpable = condiciones
-                    .Where(c => c.Condition.FieldId != condicion.FieldId)
-                    .FirstOrDefault(c => !c.Predicate(candidato));
-
-                items.Add(new OtQueryCoverageItemDto(
-                    condicion.FieldId,
-                    pedido,
-                    OtQueryCoverageResult.Excluido,
-                    culpable.Condition?.FieldId,
-                    culpable.Condition is null
-                        // Puede pasar si el mismo valor aparece en varios trámites y ninguno pasa por
-                        // razones distintas; decir «otro filtro» es más honesto que señalar uno al azar.
-                        ? "Existe, pero ningún trámite con este valor cumple todos los filtros."
-                        : $"Existe, pero lo dejó fuera el filtro «{OtQueryFieldCatalog.LabelOf(culpable.Condition.FieldId)}»."));
-            }
-        }
-
-        return items;
-    }
-
-    /// <summary>
-    /// Campos por los que tiene sentido rendir cuentas uno a uno. Son los que el usuario escribe o
-    /// pega esperando ver cada valor de vuelta; avisar de que «traspaso» no salió en un filtro por
-    /// tipo de trámite sería ruido, no información.
-    /// </summary>
-    private static bool IsIdentifier(string fieldId) => fieldId is
-        OtQueryFieldCatalog.Placa or OtQueryFieldCatalog.Vin or OtQueryFieldCatalog.Radicado;
-
     // ── Carga ─────────────────────────────────────────────────────────────────────────────────
 
     private async Task<List<QueryRow>> LoadRowsAsync(
         Guid transitOfficeId,
         IReadOnlyList<Guid> tenantIds,
-        OtQueryDefinition definition,
+        QueryDefinition definition,
         CancellationToken cancellationToken)
     {
         var query = _context.ProcedureInstances
@@ -248,7 +148,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
         // la empresa nunca llegaría a memoria y se reportaría como «no existe» en vez de «la dejó
         // fuera este filtro», que es justo el error que este informe existe para no cometer.
         var identificador = definition.Condiciones.FirstOrDefault(c =>
-            c.Operator == OtQueryOperator.EsAlguno && IsIdentifier(c.FieldId));
+            c.Operator == QueryOperator.EsAlguno && OtQueryFieldCatalog.IsIdentifier(c.FieldId));
 
         if (identificador is not null)
         {
@@ -256,7 +156,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
             // comparara en crudo, pedir «ABC-123» no encontraría «ABC123» y la cobertura lo
             // reportaría como «no existe» — un falso negativo que enseña a desconfiar del aviso.
             // Renuncia al índice de placa a cambio de que las dos comparaciones digan lo mismo.
-            var valores = identificador.Values.Select(Separadores).ToList();
+            var valores = identificador.Values.Select(QueryEngine<QueryRow>.SinSeparadores).ToList();
 
             query = identificador.FieldId switch
             {
@@ -286,7 +186,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
                 p.VendedorNombre,
                 p.CreatedAt,
                 p.UpdatedAt))
-            .Take(MaxUniverso)
+            .Take(QueryLimits.MaxUniverso)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -474,74 +374,24 @@ internal sealed class OtQueryRepository : IOtQueryRepository
     };
 
     /// <summary>
-    /// Cómo se compara cada campo. Los identificadores ignoran guiones, puntos y espacios porque una
-    /// lista pegada desde Excel trae «ABC-123» tan a menudo como «ABC123», y que la consulta dependa
-    /// de eso convertiría el aviso de cobertura en una lista de falsos «no existe».
+    /// Qué instante mira el rango, según la fecha elegida.
     ///
-    /// <para>Esta regla está escrita DOS veces —aquí y como expresión sobre el motor en
-    /// <see cref="LoadRowsAsync"/>— y las dos tienen que decir lo mismo. Si se cambia una hay que
-    /// cambiar la otra: una consulta que filtra distinto según dónde se evalúe pierde filas en
-    /// silencio.</para>
+    /// <para>Devolver <c>null</c> deja la fila fuera, y es lo correcto: un trámite sin decidir no
+    /// aparece en una consulta filtrada por fecha de decisión, porque la pregunta era qué se decidió
+    /// en esas fechas. La alternativa —colarlos— haría que el mismo filtro significara cosas
+    /// distintas según la fila.</para>
     /// </summary>
-    private static Func<string, string> Normalizer(string fieldId) => fieldId switch
+    private static DateTimeOffset? DateOf(QueryRow row, string campo) => campo switch
     {
-        OtQueryFieldCatalog.Placa or OtQueryFieldCatalog.Vin or OtQueryFieldCatalog.Radicado =>
-            Separadores,
-        _ => v => v.Trim().ToUpperInvariant(),
+        OtQueryDateField.Decision => row.DecididoEn,
+        OtQueryDateField.Actualizacion => row.Instance.UpdatedAt ?? row.Instance.CreatedAt,
+        _ => row.RadicadoEn,
     };
-
-    private static Func<QueryRow, bool> BuildPredicate(OtQueryCondition condition)
-    {
-        var accessor = Accessor(condition.FieldId);
-        var normalize = Normalizer(condition.FieldId);
-        var objetivos = condition.Values.Select(normalize).ToHashSet(StringComparer.Ordinal);
-
-        return condition.Operator switch
-        {
-            OtQueryOperator.EsAlguno => row =>
-                accessor(row).Any(v => objetivos.Contains(normalize(v))),
-            OtQueryOperator.NoEsNinguno => row =>
-                !accessor(row).Any(v => objetivos.Contains(normalize(v))),
-            OtQueryOperator.Contiene => row =>
-                accessor(row).Any(v => normalize(v).Contains(objetivos.First(), StringComparison.Ordinal)),
-            OtQueryOperator.EstaVacio => row =>
-                accessor(row).All(string.IsNullOrWhiteSpace),
-            OtQueryOperator.NoEstaVacio => row =>
-                accessor(row).Any(v => !string.IsNullOrWhiteSpace(v)),
-            _ => _ => true,
-        };
-    }
-
-    /// <summary>
-    /// ¿Cae el trámite en el rango, según la fecha elegida?
-    ///
-    /// <para>Sin esa fecha, NO cae. Un trámite sin decidir no aparece en una consulta filtrada por
-    /// fecha de decisión, y es lo correcto: la pregunta era qué se decidió en esas fechas. La
-    /// alternativa —colarlos— haría que el mismo filtro significara cosas distintas según la fila.</para>
-    /// </summary>
-    private static bool InRange(QueryRow row, string campo, DateTimeOffset from, DateTimeOffset to)
-    {
-        var fecha = campo switch
-        {
-            OtQueryDateField.Decision => row.DecididoEn,
-            OtQueryDateField.Actualizacion => row.Instance.UpdatedAt ?? row.Instance.CreatedAt,
-            _ => row.RadicadoEn,
-        };
-
-        return fecha is not null && fecha >= from && fecha <= to;
-    }
 
     private static IReadOnlyList<string> Single(string? value) =>
         string.IsNullOrWhiteSpace(value) ? [] : [value];
 
     private static string Bool(bool value) => value ? "true" : "false";
-
-    /// <summary>Quita los separadores con los que la gente escribe placas y radicados, y sube a mayúsculas.</summary>
-    private static string Separadores(string value) => value
-        .ToUpperInvariant()
-        .Replace("-", string.Empty, StringComparison.Ordinal)
-        .Replace(" ", string.Empty, StringComparison.Ordinal)
-        .Replace(".", string.Empty, StringComparison.Ordinal);
 
     private static bool IsDecision(string status) =>
         status == TramiteEstado.Aprobado || status == TramiteEstado.Rechazado;
@@ -613,11 +463,11 @@ internal sealed class OtQueryRepository : IOtQueryRepository
 
     // ── Catálogo de campos ────────────────────────────────────────────────────────────────────
 
-    public Task<IReadOnlyList<OtQueryFieldDto>?> GetFieldsAsync(
+    public Task<IReadOnlyList<QueryFieldDto>?> GetFieldsAsync(
         Guid otTenantId,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default) =>
-        _scope.ExecuteAsync<IReadOnlyList<OtQueryFieldDto>>(
+        _scope.ExecuteAsync<IReadOnlyList<QueryFieldDto>>(
             otTenantId,
             transitOfficeIdOverride,
             async (transitOfficeId, tenantIds) =>
@@ -631,7 +481,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
 
                 var empresaOptions = empresas
                     .OrderBy(t => t.LegalName, StringComparer.OrdinalIgnoreCase)
-                    .Select(t => new OtQueryFieldOptionDto(t.Id.ToString(), t.LegalName))
+                    .Select(t => new QueryFieldOptionDto(t.Id.ToString(), t.LegalName))
                     .ToList();
 
                 var instanceIds = _context.ProcedureInstances
@@ -655,7 +505,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
                     .ConfigureAwait(false);
 
                 var revisorOptions = revisorIds
-                    .Select(id => new OtQueryFieldOptionDto(
+                    .Select(id => new QueryFieldOptionDto(
                         id.ToString(), nombres.GetValueOrDefault(id, "(usuario retirado)")))
                     .OrderBy(o => o.Label, StringComparer.OrdinalIgnoreCase)
                     .ToList();
@@ -673,12 +523,12 @@ internal sealed class OtQueryRepository : IOtQueryRepository
 
     // ── Consultas guardadas ───────────────────────────────────────────────────────────────────
 
-    public Task<IReadOnlyList<OtSavedQueryDto>?> ListSavedAsync(
+    public Task<IReadOnlyList<SavedQueryDto>?> ListSavedAsync(
         Guid otTenantId,
         Guid userId,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default) =>
-        _scope.ExecuteAsync<IReadOnlyList<OtSavedQueryDto>>(
+        _scope.ExecuteAsync<IReadOnlyList<SavedQueryDto>>(
             otTenantId,
             transitOfficeIdOverride,
             async (transitOfficeId, _) =>
@@ -700,17 +550,17 @@ internal sealed class OtQueryRepository : IOtQueryRepository
             },
             cancellationToken);
 
-    public Task<OtSavedQueryDto?> SaveAsync(
+    public Task<SavedQueryDto?> SaveAsync(
         Guid otTenantId,
         Guid userId,
         Guid? id,
-        OtSavedQueryInput input,
+        SavedQueryInput input,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        return _scope.ExecuteAsync<OtSavedQueryDto>(
+        return _scope.ExecuteAsync<SavedQueryDto>(
             otTenantId,
             transitOfficeIdOverride,
             async (transitOfficeId, _) =>
@@ -744,9 +594,9 @@ internal sealed class OtQueryRepository : IOtQueryRepository
 
                     // El tope se avisa, no se traga en silencio: guardar y que no aparezca en la
                     // lista es peor que no dejar guardar.
-                    if (cuantas >= OtQueryLimits.MaxConsultasGuardadas)
+                    if (cuantas >= QueryLimits.MaxConsultasGuardadas)
                     {
-                        throw new OtSavedQueryLimitException(OtQueryLimits.MaxConsultasGuardadas);
+                        throw new SavedQueryLimitException(QueryLimits.MaxConsultasGuardadas);
                     }
 
                     entity = new OtSavedQueryEntity
@@ -778,7 +628,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
 
                 if (repetido)
                 {
-                    throw new OtSavedQueryNameTakenException(nombre);
+                    throw new SavedQueryNameTakenException(nombre);
                 }
 
                 entity.Nombre = nombre;
@@ -826,12 +676,12 @@ internal sealed class OtQueryRepository : IOtQueryRepository
         return result == "si";
     }
 
-    private static OtSavedQueryDto ToSavedDto(OtSavedQueryEntity entity)
+    private static SavedQueryDto ToSavedDto(OtSavedQueryEntity entity)
     {
-        OtQueryDefinition? definition = null;
+        QueryDefinition? definition = null;
         try
         {
-            definition = JsonSerializer.Deserialize<OtQueryDefinition>(entity.Definicion, JsonOptions);
+            definition = JsonSerializer.Deserialize<QueryDefinition>(entity.Definicion, JsonOptions);
         }
         catch (JsonException)
         {
@@ -840,7 +690,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
             definition = null;
         }
 
-        return new OtSavedQueryDto(
+        return new SavedQueryDto(
             entity.Id,
             entity.Nombre,
             entity.Descripcion,
