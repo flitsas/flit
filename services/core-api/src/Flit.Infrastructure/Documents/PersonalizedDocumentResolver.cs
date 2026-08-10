@@ -12,10 +12,16 @@ namespace Flit.Infrastructure.Documents;
 /// Infrastructure por el mismo motivo que <c>ProcedureDeedResolver</c>.
 ///
 /// <para><b>Lista de tipos habilitados.</b> El mecanismo de sustitución quedó completo en la HU #11316;
-/// <c>mandato</c> se habilita en ESTA HU (#11317) y <c>tramite_virtual</c> queda pendiente para la HU
-/// #11318 (ampliando <see cref="EnabledTypes"/>, sin tocar <c>FurCommand.cs</c> de nuevo). Para los
-/// tipos NO habilitados, <see cref="ResolveAsync"/> sigue devolviendo vacío aunque exista una versión
-/// activa — es la garantía de "invisibilidad" del oráculo CF-01 para lo que aún no se habilita.</para>
+/// <c>mandato</c> se habilitó en la HU #11317 y <c>tramite_virtual</c> se habilita en ESTA HU (#11318),
+/// que cierra el Feature #11309: es la sustitución de mayor radio de impacto porque la solicitud de
+/// trámite virtual se genera SIEMPRE (persona natural y jurídica, matrícula y traspaso), a diferencia
+/// del mandato que es condicional. Ningún otro tipo documental es personalizable — <see
+/// cref="Flit.Admin.Application.Companies.PersonalizedDocuments.Create.CreatePersonalizedDocumentVersionHandler"/>
+/// solo acepta <c>mandato</c> | <c>tramite_virtual</c> al dar de alta una versión, así que <see
+/// cref="EnabledTypes"/> es, a partir de esta HU, el vocabulario COMPLETO y definitivo del Feature. Para
+/// cualquier otro tipo (fur, compraventa, certificados, escrituras, licencia de tránsito, consolidados),
+/// <see cref="ResolveAsync"/> sigue devolviendo vacío SIEMPRE, sin tocar repositorio ni storage — es la
+/// garantía de "invisibilidad" del oráculo CF-01 para lo que el Feature nunca sustituye.</para>
 /// </summary>
 internal sealed partial class PersonalizedDocumentResolver(
     ICompanyPersonalizedDocumentRepository repository,
@@ -25,14 +31,16 @@ internal sealed partial class PersonalizedDocumentResolver(
     : IPersonalizedDocumentResolver
 {
     /// <summary>
-    /// Vocabulario de tipos que el pipeline puede sustituir HOY en producción. <c>mandato</c> se
-    /// habilita en la HU #11317 (Feature #11309, ADR-0042 §supersede parcial): con esto, el pipeline
-    /// SÍ sustituye el mandato del sistema cuando la compañía tiene una versión personalizada activa.
-    /// <c>tramite_virtual</c> queda para la HU #11318 — ampliar esta colección es todo lo que necesita.
+    /// Vocabulario COMPLETO de tipos que el pipeline puede sustituir en producción (Feature #11309,
+    /// ADR-0042). <c>mandato</c> se habilitó en la HU #11317; <c>tramite_virtual</c> se habilita en
+    /// ESTA HU (#11318). No hay un tercer tipo pendiente: cualquier otro valor devuelto por
+    /// <c>generated.Select(d =&gt; d.Tipo)</c> en <c>FurCommand</c> sigue la rama <c>continue</c> de
+    /// <see cref="ResolveAsync"/> sin excepción.
     /// </summary>
     private static readonly HashSet<string> EnabledTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "mandato",
+        "tramite_virtual",
     };
 
     public async Task<PersonalizedDocumentResolution> ResolveAsync(

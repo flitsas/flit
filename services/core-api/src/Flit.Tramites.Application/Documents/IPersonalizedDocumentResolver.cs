@@ -49,9 +49,9 @@ public interface IPersonalizedDocumentResolver
 
 /// <summary>
 /// Implementación nula (nunca resuelve). Default seguro para tests/DI que no ejercitan la
-/// personalización, espejo de <c>NullProcedureDeedResolver</c>. Es también el comportamiento de
-/// PRODUCCIÓN mientras la lista de tipos habilitados esté vacía (mandato → HU #11317, tramite_virtual →
-/// HU #11318): el mecanismo existe, pero nada se sustituye todavía.
+/// personalización, espejo de <c>NullProcedureDeedResolver</c>. Con <c>mandato</c> (HU #11317) y
+/// <c>tramite_virtual</c> (HU #11318) ya habilitados en <c>PersonalizedDocumentResolver.EnabledTypes</c>,
+/// esta implementación solo se usa en tests/DI que deliberadamente no inyectan personalización.
 /// </summary>
 public sealed class NullPersonalizedDocumentResolver : IPersonalizedDocumentResolver
 {

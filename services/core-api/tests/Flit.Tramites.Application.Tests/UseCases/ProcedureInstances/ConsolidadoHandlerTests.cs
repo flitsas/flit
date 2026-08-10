@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text.Json;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -1189,6 +1191,91 @@ public sealed class ConsolidadoHandlerTests
         var evento = instance.Events.Should().ContainSingle(e => e.Tipo == "consolidado_generado").Subject;
         evento.Payload.Should().Contain("mandato");
         result.Should().NotBeNull();
+    }
+
+    // ---- HU #11318, AC3 — oráculo de NO REGRESIÓN, literal y end-to-end (cierra el pendiente de la
+    // HU #11316: aquí NO se argumenta "el comando no se tocó" — SÍ se tocó, en #11319, con la rama
+    // TiposConPrecedenciaDeclarada de SanitizeConsolidadoParts). ------------------------------------
+
+    /// <summary>
+    /// Técnica y su límite, explícitos (exigido por la HU #11318): <see cref="FakeStorage.SaveAsync"/>
+    /// devuelve <c>$"sha-{tipo}"</c> — un hash DETERMINISTA POR TIPO, no por contenido — así que
+    /// comparar <c>stored.Sha256</c> (o el <c>sha256</c> del evento <c>consolidado_generado</c>) NO
+    /// demuestra nada sobre el CONTENIDO del PDF fusionado. Por eso este oráculo calcula el SHA-256
+    /// REAL (<see cref="SHA256.HashData"/>) sobre los bytes que <see cref="FakeMerger.Merge"/>
+    /// efectivamente concatenó — la misma técnica de comparación byte a byte que ya usan los golden de
+    /// esta suite (<c>ConsolidadoContent()</c>/<c>PosicionesEnConsolidado</c>) — y la contrasta contra
+    /// un SHA-256 calculado de forma INDEPENDIENTE a partir del contenido esperado.
+    /// </summary>
+    [Fact]
+    public async Task HU11318_AC3_OraculoDeNoRegresion_Sha256YOrdenDePaginasIdenticosAAntesDelFeature()
+    {
+        // Escenario de un tenant SIN documentos personalizados activos (equivalente a un canal
+        // FLIT_SMTP: por AC del Feature, ese canal no puede dar de alta versiones personalizadas —
+        // PersonalizedDocumentHandlerTests AC4 — así que para este tenant el resultado DEBE ser
+        // exactamente el de antes del Feature #11309, con las siete HUs igual de integradas).
+        //
+        // Prueba matemática de por qué el argumento transitivo de la HU #11316 YA NO APLICA pero el
+        // resultado sigue siendo idéntico: SanitizeConsolidadoParts (tocado en la HU #11319) añadió una
+        // rama nueva para 'mandato'/'tramite_virtual' que llama a AttachmentSourcePrecedence.SelectWinner
+        // en vez de OrderByDescending(UploadedAt).First(). Ninguno de los dos tipos aparece en este
+        // trámite (TraspasoInstance() no genera ni mandato ni tramite_virtual), y aunque apareciera con
+        // una SOLA fila por tipo (el caso normal, sin personalización), ambas ramas devuelven el ÚNICO
+        // elemento del grupo — son observacionalmente idénticas para un grupo de un solo elemento. La
+        // rama nueva es, para este escenario, una función identidad: no hay forma de que cambie el
+        // resultado. Lo que sigue no es esa prueba de escritorio: es la ejecución real, byte a byte.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+
+        // Orden esperado: resuelto por TraspasoConsolidadoOrdering.Precedence (fur=0, ..., certificado_
+        // identidad=4, certificado_identidad_vendedor=5, compraventa=10, impronta=15, soat=16; rtm,
+        // paz_salvo y cedulas NO están en la tabla de precedencia ⇒ empatan al final y se desempatan por
+        // UploadedAt, que es el orden en que TraspasoInstance() los agrega). Es EL MISMO orden que ya
+        // prueba (con 'BeInAscendingOrder', sin fijar la lista completa) el golden HU11183_AC3/HU11319_AC5:
+        // aquí se declara la lista EXACTA y completa, no solo la relación de orden.
+        string[] tiposEsperados =
+        [
+            "fur", "certificado_identidad", "certificado_identidad_vendedor",
+            "compraventa", "impronta", "soat", "rtm", "paz_salvo", "cedulas",
+        ];
+        string[] filenamesEsperados =
+        [
+            "fur.pdf", "cert.pdf", "cert_vend.pdf",
+            "compraventa.pdf", "impronta.pdf", "soat.pdf", "rtm.pdf", "paz_salvo.pdf", "cedulas.pdf",
+        ];
+
+        // 1) paginas_incluidas del evento consolidado_generado: CONJUNTO y ORDEN, literal.
+        var evento = instance.Events.Should().ContainSingle(e => e.Tipo == "consolidado_generado").Subject;
+        using var payloadJson = JsonDocument.Parse(evento.Payload);
+        var paginasIncluidas = payloadJson.RootElement.GetProperty("paginas_incluidas")
+            .EnumerateArray().Select(e => e.GetString()).ToArray();
+        paginasIncluidas.Should().Equal(tiposEsperados,
+            "el conjunto Y el orden de paginas_incluidas deben ser idénticos a los de antes del Feature");
+
+        // 2) Contenido REAL fusionado (lo que el organismo de tránsito termina viendo), byte a byte,
+        // contra el contenido esperado construido de forma INDEPENDIENTE (misma técnica de concatenación
+        // que usa FakeMerger.Merge, aplicada aquí a mano sobre la lista esperada).
+        var rutaGuardada = _storage.Saved.Last();
+        var bytesReales = _storage.Files[rutaGuardada];
+        var bytesEsperados = filenamesEsperados
+            .SelectMany(System.Text.Encoding.UTF8.GetBytes)
+            .ToArray();
+        bytesReales.Should().Equal(bytesEsperados, "el PDF fusionado debe ser byte a byte idéntico al de antes del Feature");
+
+        // 3) SHA-256 REAL (no el 'sha-{tipo}' fijo del doble de storage) de ambos lados, para que quede
+        // registrado un hash comparable y no solo una igualdad de arreglos de bytes.
+        var sha256Real = Convert.ToHexStringLower(SHA256.HashData(bytesReales));
+        var sha256Esperado = Convert.ToHexStringLower(SHA256.HashData(bytesEsperados));
+        sha256Real.Should().Be(sha256Esperado);
     }
 
     private static int Ocurrencias(string texto, string aguja)
