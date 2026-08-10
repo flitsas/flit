@@ -72,9 +72,10 @@ public sealed class ListMandateSignerOptionsHandler(
         // Tipo institucional / abierto: el mandato no lleva firmante persona — no mostrar selector.
         var officeCode = instance.FieldValues.FirstOrDefault(f =>
             string.Equals(f.FieldKey, "transit_office_code", StringComparison.OrdinalIgnoreCase))?.ValueText;
+        MandateOtConfig? mandateConfig = null;
         if (!string.IsNullOrWhiteSpace(officeCode))
         {
-            var mandateConfig = await _mandatePolicy
+            mandateConfig = await _mandatePolicy
                 .ResolveAsync(officeCode, tenantId, ct)
                 .ConfigureAwait(false);
             if (MandatoAssignmentModeCodes.SkipsPersonSigner(mandateConfig?.AssignmentMode))
@@ -105,9 +106,19 @@ public sealed class ListMandateSignerOptionsHandler(
                 c.FirmaFisica));
         }
 
-        // Con un único mandatario habilitado se preselecciona (sigue siendo editable / opcional cambiar).
-        var elegido = instance.MandateSignerId
-            ?? (opciones.Count == 1 ? opciones[0].Id : null);
+        // Prioridad: ya elegido en el trámite → default parametrizado (módulo Mandatos) → único candidato.
+        var defaultFromRule = mandateConfig?.DefaultMandateSignerId;
+        Guid? elegido = instance.MandateSignerId;
+        if (elegido is null
+            && defaultFromRule is { } pref
+            && opciones.Exists(o => o.Id == pref))
+        {
+            elegido = pref;
+        }
+        else if (elegido is null && opciones.Count == 1)
+        {
+            elegido = opciones[0].Id;
+        }
 
         return (new MandateSignerSelectionDto(opciones, elegido, editable), null);
     }

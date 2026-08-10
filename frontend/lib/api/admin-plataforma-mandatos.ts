@@ -81,10 +81,7 @@ function mapView(raw: Record<string, unknown>): MandateOtConfigView {
       (raw.MandatarySigla as string | null | undefined) ??
       null,
     hasExplicitConfig: Boolean(raw.hasExplicitConfig ?? raw.HasExplicitConfig),
-    rowVersion:
-      (raw.rowVersion as number | null | undefined) ??
-      (raw.RowVersion as number | null | undefined) ??
-      null,
+    rowVersion: parseRowVersion(raw.rowVersion ?? raw.RowVersion),
     customTemplateKind: String(raw.customTemplateKind ?? raw.CustomTemplateKind ?? "none"),
     customTemplateFileName:
       (raw.customTemplateFileName as string | null | undefined) ??
@@ -197,6 +194,8 @@ export interface CompanyOtMandateRuleView {
   chamberCity: string | null;
   mandatarySigla: string | null;
   hasExplicitRule: boolean;
+  /** Mandatario persona preferido (solo Persona/RL). */
+  defaultMandateSignerId: string | null;
 }
 
 export interface UpsertCompanyOtMandateRuleBody {
@@ -206,9 +205,14 @@ export interface UpsertCompanyOtMandateRuleBody {
   institutionalMandataryNit?: string | null;
   chamberCity?: string | null;
   mandatarySigla?: string | null;
+  defaultMandateSignerId?: string | null;
 }
 
 function mapCompanyRule(raw: Record<string, unknown>): CompanyOtMandateRuleView {
+  const defaultId =
+    (raw.defaultMandateSignerId as string | null | undefined) ??
+    (raw.DefaultMandateSignerId as string | null | undefined) ??
+    null;
   return {
     companyTenantId: String(raw.companyTenantId ?? raw.CompanyTenantId ?? ""),
     companyName: String(raw.companyName ?? raw.CompanyName ?? ""),
@@ -231,6 +235,7 @@ function mapCompanyRule(raw: Record<string, unknown>): CompanyOtMandateRuleView 
       (raw.MandatarySigla as string | null | undefined) ??
       null,
     hasExplicitRule: Boolean(raw.hasExplicitRule ?? raw.HasExplicitRule),
+    defaultMandateSignerId: defaultId ? String(defaultId) : null,
   };
 }
 
@@ -340,4 +345,10 @@ async function fetchPdf(path: string, signal?: AbortSignal): Promise<Blob> {
 
   const blob = await response.blob();
   return blob.type === "application/pdf" ? blob : new Blob([blob], { type: "application/pdf" });
+}
+
+function parseRowVersion(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
 }

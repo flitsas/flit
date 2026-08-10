@@ -1,30 +1,39 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { UserCheck } from 'lucide-react';
+import { useCallback, useEffect, useId, useState } from 'react';
+import { ChevronDown, UserCheck } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { formatFecha } from '@/lib/format/date';
 import type { MandateSignerSelection } from '@/lib/api/types/procedure-runtime';
 
+const BORDER = '#DFE5ED';
+const BLUE = '#557EFF';
+
 /**
- * Quién firma el mandato se elige al registrar el trámite (paso FUR / documentos del expediente),
- * no como pregunta principal en la aprobación del OT.
+ * Quién firma el mandato — paso resumen del trámite (FUR), en disclosure como Vehículo/Comprador.
  *
- * La elección es opcional: si hay varios mandatarios se muestran para que el gestor escoja;
- * si no elige, al preparar/aprobar aplica la resolución automática de respaldo.
+ * Opcional: si hay varios mandatarios se muestran para elegir; si no elige, el sistema puede
+ * resolverlo después. Institucional/abierto o sin candidatos ⇒ no se pinta.
  */
 export function MandatarioSection({
   instanceId,
   tenantId,
   onChanged,
+  /** Desplegable al estilo MatriculaResumen (default). */
+  asDisclosure = true,
+  defaultOpen = true,
 }: {
   instanceId: string;
   tenantId?: string;
   onChanged?: () => void;
+  asDisclosure?: boolean;
+  defaultOpen?: boolean;
 }) {
   const [seleccion, setSeleccion] = useState<MandateSignerSelection | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(defaultOpen);
+  const panelId = useId();
 
   const load = useCallback(async () => {
     try {
@@ -62,16 +71,13 @@ export function MandatarioSection({
 
   const { opciones, elegidoId, editable } = seleccion;
 
-  return (
-    <section className="space-y-3" aria-label="Mandatario que firma" data-testid="mandatario-section">
-      <div>
-        <h4 className="text-sm font-bold">Mandatario que firma</h4>
-        <p className="text-xs opacity-70">
-          {editable
-            ? 'Opcional. Quien firmará el contrato de mandato en el expediente (junto al FUR). Si no eliges, el sistema puede resolverlo después.'
-            : 'El trámite ya salió de borrador: el mandatario no puede cambiarse.'}
-        </p>
-      </div>
+  const body = (
+    <div className="space-y-3" data-testid="mandatario-section-body">
+      <p className="text-xs opacity-70">
+        {editable
+          ? 'Opcional. Quien firmará el contrato de mandato en el expediente. Si no eliges, el sistema puede resolverlo después.'
+          : 'El trámite ya salió de borrador: el mandatario no puede cambiarse.'}
+      </p>
 
       <div className="space-y-2">
         {opciones.map((o) => {
@@ -80,7 +86,11 @@ export function MandatarioSection({
             <label
               key={o.id}
               className="flex items-start gap-3 rounded-xl border p-3"
-              style={seleccionado ? { borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' } : undefined}
+              style={
+                seleccionado
+                  ? { borderColor: BLUE, background: 'rgba(85,126,255,0.06)' }
+                  : { borderColor: BORDER }
+              }
             >
               <input
                 type="radio"
@@ -98,9 +108,6 @@ export function MandatarioSection({
                 <span className="block text-[11px] opacity-70">
                   {o.tipoDocumento} {o.documento}
                 </span>
-                {/* Tres vías ALTERNATIVAS, no requisitos acumulativos. Quien firma a mano no necesita
-                    ninguna de las otras dos: el documento le deja la línea. Antes solo se nombraba la
-                    identidad, así que quien podía firmar por otra vía se anunciaba como incompleto. */}
                 {o.firmaFisica ? (
                   <span className="block text-[11px]" style={{ color: '#5B8A1F' }}>
                     Firma de forma física
@@ -126,11 +133,59 @@ export function MandatarioSection({
         })}
       </div>
 
-      {error && (
+      {error ? (
         <p className="text-[11px] leading-tight" style={{ color: '#E5484D' }} role="alert">
           {error}
         </p>
-      )}
-    </section>
+      ) : null}
+    </div>
+  );
+
+  if (!asDisclosure) {
+    return (
+      <section className="space-y-3" aria-label="Mandatario que firma" data-testid="mandatario-section">
+        <h4 className="text-sm font-bold">Mandatario que firma</h4>
+        {body}
+      </section>
+    );
+  }
+
+  return (
+    <div
+      className="overflow-hidden rounded-xl border bg-white dark:bg-[#0B0F14]"
+      style={{ borderColor: BORDER }}
+      data-testid="mandatario-section"
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+        aria-expanded={open}
+        aria-controls={panelId}
+      >
+        <span className="flex items-center gap-2">
+          <span className="h-4 w-1 rounded-full" style={{ background: BLUE }} aria-hidden="true" />
+          <span className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: BLUE }}>
+            Mandatario
+          </span>
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          style={{ color: '#9AA5B1' }}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div
+          id={panelId}
+          className="border-t px-4 py-3"
+          style={{ borderColor: BORDER }}
+          role="region"
+          aria-label="Mandatario que firma"
+        >
+          {body}
+        </div>
+      ) : null}
+    </div>
   );
 }

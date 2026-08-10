@@ -4,7 +4,7 @@
  * assignment_mode Plataforma tres tipos).
  */
 
-export type MandatoTemplateCode = "generico" | "sabaneta" | "bello";
+export type MandatoTemplateCode = "generico" | "sabaneta" | "bello" | "municipio";
 
 export type MandatoFamiliaCode = "individuo" | "organismo_transito";
 
@@ -35,7 +35,7 @@ export const MANDATO_TIPOS: readonly {
     value: "abierto",
     label: "Abierto (sin asumir)",
     summary:
-      "El contrato se genera sin mandatario asignado (campos en blanco). No se exige firmante persona al aprobar.",
+      "El contrato se genera sin mandatario asignado: nombre, cédula, firma y hash en líneas abiertas. No se exige firmante persona al aprobar.",
   },
 ] as const;
 
@@ -107,7 +107,7 @@ export const MANDATO_TEMPLATES: readonly MandatoTemplateDefinition[] = [
     code: "generico",
     label: "Genérico",
     summary:
-      "Redacción por defecto. Suele usarse con tipo Persona/RL o Abierto. Firman mandante y mandatario (o placeholders si está abierto).",
+      "Plantilla por defecto del sistema. Aplica a cualquier organismo que no tenga una plantilla propia. Firman mandante y mandatario (o líneas en blanco si el tipo es Abierto).",
     familia: "individuo",
     familiaLabel: "Individuo",
     tipoTipico: "persona_rl",
@@ -116,16 +116,16 @@ export const MANDATO_TEMPLATES: readonly MandatoTemplateDefinition[] = [
     bindings: [
       {
         officeCode: "*",
-        officeName: "Cualquier OT sin fila en transit_office_mandate_config",
+        officeName: "Cualquier OT sin plantilla propia del sistema",
         hasExplicitConfig: false,
       },
     ],
   },
   {
     code: "sabaneta",
-    label: "Sabaneta (UT-SETSA)",
+    label: "Sabaneta",
     summary:
-      "Redacción institucional: mandatario = unión temporal. Solo firma el mandante. Tipo típico: Institucional.",
+      "Plantilla del sistema para el organismo de Sabaneta. Mandatario institucional UT-SETSA; solo firma el mandante.",
     familia: "organismo_transito",
     familiaLabel: "Organismo de tránsito",
     tipoTipico: "institucional",
@@ -146,9 +146,9 @@ export const MANDATO_TEMPLATES: readonly MandatoTemplateDefinition[] = [
   },
   {
     code: "bello",
-    label: "Bello (UT-MAB)",
+    label: "Bello",
     summary:
-      "Redacción con RL de la unión temporal. Tipo típico: Persona/RL. Firman ambas partes.",
+      "Plantilla del sistema para el organismo de Bello. El mandatario es el representante legal de la UT-MAB; firman ambas partes.",
     familia: "organismo_transito",
     familiaLabel: "Organismo de tránsito",
     tipoTipico: "persona_rl",
@@ -161,6 +161,37 @@ export const MANDATO_TEMPLATES: readonly MandatoTemplateDefinition[] = [
         hasExplicitConfig: true,
         institutionalMandataryName: "UNION TEMPORAL MOVILIDAD AVANZADA DE BELLO MAB",
         institutionalMandataryNit: "901783814-6",
+        chamberCity: "Medellín",
+      },
+    ],
+  },
+  {
+    code: "municipio",
+    label: "Envigado, Funza y Medellín",
+    summary:
+      "Misma plantilla del sistema para estos tres organismos. Redacción corta; firman mandante y mandatario. La ciudad del cierre cambia según el OT del trámite.",
+    familia: "individuo",
+    familiaLabel: "Individuo",
+    tipoTipico: "persona_rl",
+    requiresForNaturalPerson: true,
+    mandatarioFirma: "Mandante y mandatario",
+    bindings: [
+      {
+        officeCode: "5266000",
+        officeName: "Envigado",
+        hasExplicitConfig: true,
+        chamberCity: "Envigado",
+      },
+      {
+        officeCode: "25286000",
+        officeName: "Funza",
+        hasExplicitConfig: true,
+        chamberCity: "Funza",
+      },
+      {
+        officeCode: "5001000",
+        officeName: "Medellín",
+        hasExplicitConfig: true,
         chamberCity: "Medellín",
       },
     ],

@@ -838,9 +838,12 @@ public sealed class GenerarFurHandler(
         // Producto: el mandato se emite siempre (PN y PJ). La plantilla/familia vienen de la config del OT.
 
         // HU #10916 — firmante resuelto al aprobar (instance.MandateSignerId). En preparado va null ⇒ el
-        // PDF pinta placeholders y se regenera al aprobar. Sabaneta (institucional) no lleva firmante persona.
+        // PDF pinta placeholders y se regenera al aprobar.
+        // Abierto / institucional: no se asigna firmante persona (aunque hubiera MandateSignerId).
         MandatarioFirmante? mandatario = null;
-        if (mandateSignerId is { } signerId)
+        var assignmentMode = config?.AssignmentMode;
+        if (mandateSignerId is { } signerId
+            && !MandatoAssignmentModeCodes.SkipsPersonSigner(assignmentMode))
         {
             var signer = await _mandateDirectory.GetByIdAsync(signerId, ct).ConfigureAwait(false);
             if (signer is not null)
@@ -871,13 +874,16 @@ public sealed class GenerarFurHandler(
                 .ConfigureAwait(false);
         }
 
-        // Abierto / institucional: sin bloque de firmante persona (placeholders / solo mandante).
-        var skipsPerson = MandatoAssignmentModeCodes.SkipsPersonSigner(config?.AssignmentMode);
-        var modoFirmaMandatario = skipsPerson || modoFirma.TieneConvenio
-            ? MandatarioFirmaModo.SinBloque
-            : modoFirma.FirmaFisica
-                ? MandatarioFirmaModo.Manual
-                : MandatarioFirmaModo.Estampada;
+        // Institucional / convenio: sin bloque MANDATARIO.
+        // Abierto: bloque con líneas (Manual) y mandatario null ⇒ ___ en cuerpo y pie.
+        // Persona/RL: estampa o manual según firma física.
+        MandatarioFirmaModo modoFirmaMandatario;
+        if (MandatoAssignmentModeCodes.IsInstitutional(assignmentMode) || modoFirma.TieneConvenio)
+            modoFirmaMandatario = MandatarioFirmaModo.SinBloque;
+        else if (MandatoAssignmentModeCodes.IsOpen(assignmentMode) || modoFirma.FirmaFisica)
+            modoFirmaMandatario = MandatarioFirmaModo.Manual;
+        else
+            modoFirmaMandatario = MandatarioFirmaModo.Estampada;
 
         var mandatoData = new MandatoData(
             data,

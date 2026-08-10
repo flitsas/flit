@@ -35,8 +35,9 @@ describe("mandato-templates tipos de negocio", () => {
 
   it("etiqueta la redacción del sistema para el badge", () => {
     expect(systemTemplateLabel("generico")).toBe("Genérico");
-    expect(systemTemplateLabel("sabaneta")).toMatch(/Sabaneta/i);
-    expect(systemTemplateLabel("bello")).toMatch(/Bello/i);
+    expect(systemTemplateLabel("sabaneta")).toBe("Sabaneta");
+    expect(systemTemplateLabel("bello")).toBe("Bello");
+    expect(systemTemplateLabel("municipio")).toMatch(/Envigado.*Funza.*Medellín/i);
     expect(systemTemplateLabel(null)).toBe("Genérico");
   });
 });

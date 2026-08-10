@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Integration;
 using Microsoft.EntityFrameworkCore;
@@ -6,7 +7,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Infrastructure.OtRules;
 
 /// <summary>
-/// Resuelve plantilla/custom del OT + assignment_mode de la regla compañía×OT (default signer).
+/// Resuelve plantilla/custom del OT + assignment_mode / default signer de la regla compañía×OT.
+/// Prioridad de plantilla: propia cargada → builtin Sabaneta/Bello → config de otro OT → genérica.
 /// </summary>
 internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
 {
@@ -51,7 +53,6 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        // Sin fila de OT: aún podemos resolver solo el tipo si hay office id por código + regla compañía.
         Guid officeId;
         if (otRow is null)
         {
@@ -62,63 +63,80 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
                 return null;
 
             officeId = office.Id;
-            var modeOnly = await ResolveAssignmentModeAsync(officeId, companyTenantId, cancellationToken)
+            var ruleOnly = await LoadCompanyRuleAsync(officeId, companyTenantId, cancellationToken)
                 .ConfigureAwait(false);
+            var builtin = MandatoSystemOfficeTemplates.TryGetByOfficeCode(code);
 
             return new MandateOtConfig(
                 officeId,
-                MandatoTemplateResolver.Generico,
-                RequiresForNaturalPerson: false,
-                InstitutionalMandataryName: null,
-                InstitutionalMandataryNit: null,
-                MandataryFamily: MandatoFamiliaCodes.Individuo,
-                ChamberCity: null,
-                MandatarySigla: null,
-                AssignmentMode: modeOnly);
+                MandatoSystemOfficeTemplates.ResolveTemplateCode(code, null, null),
+                builtin?.RequiresForNaturalPerson ?? false,
+                builtin?.InstitutionalMandataryName,
+                builtin?.InstitutionalMandataryNit,
+                builtin?.MandataryFamily ?? MandatoFamiliaCodes.Individuo,
+                builtin?.ChamberCity,
+                builtin?.MandatarySigla,
+                MandatoAssignmentModeCodes.Resolve(ruleOnly?.AssignmentMode),
+                DefaultMandateSignerId: SignerDefaultOrNull(ruleOnly));
         }
 
         officeId = otRow.TransitOfficeId;
-        var assignmentMode = await ResolveAssignmentModeAsync(officeId, companyTenantId, cancellationToken)
+        var rule = await LoadCompanyRuleAsync(officeId, companyTenantId, cancellationToken)
             .ConfigureAwait(false);
+        var hasCustom = MandatoCustomTemplateKindCodes.HasCustom(otRow.CustomTemplateKind);
+        var builtinForOffice = MandatoSystemOfficeTemplates.TryGetByOfficeCode(code);
+        var templateCode = MandatoSystemOfficeTemplates.ResolveTemplateCode(
+            code, otRow.TemplateCode, otRow.CustomTemplateKind);
 
-        var rule = companyTenantId is { } companyId
-            ? await _context.CompanyOtMandateRules.AsNoTracking()
-                .FirstOrDefaultAsync(
-                    r => r.TransitOfficeId == officeId && r.CompanyTenantId == companyId,
-                    cancellationToken)
-                .ConfigureAwait(false)
-            : null;
+        // Metadatos institucionales: fila > builtin sistema (Sabaneta/Bello) > null.
+        var family = !string.IsNullOrWhiteSpace(rule?.MandataryFamily)
+            ? rule!.MandataryFamily
+            : !string.IsNullOrWhiteSpace(otRow.MandataryFamily)
+                ? otRow.MandataryFamily
+                : builtinForOffice?.MandataryFamily ?? MandatoFamiliaCodes.Individuo;
 
         return new MandateOtConfig(
             otRow.TransitOfficeId,
-            otRow.TemplateCode,
-            otRow.RequiresForNaturalPerson,
-            rule?.InstitutionalMandataryName ?? otRow.InstitutionalMandataryName,
-            rule?.InstitutionalMandataryNit ?? otRow.InstitutionalMandataryNit,
-            rule?.MandataryFamily ?? otRow.MandataryFamily,
-            rule?.ChamberCity ?? otRow.ChamberCity,
-            rule?.MandatarySigla ?? otRow.MandatarySigla,
-            assignmentMode,
-            otRow.CustomTemplateKind,
-            otRow.CustomTemplateBody,
-            otRow.CustomTemplateStoragePath,
-            otRow.CustomTemplateFileName);
+            templateCode,
+            otRow.RequiresForNaturalPerson || (builtinForOffice?.RequiresForNaturalPerson ?? false),
+            rule?.InstitutionalMandataryName
+                ?? otRow.InstitutionalMandataryName
+                ?? builtinForOffice?.InstitutionalMandataryName,
+            rule?.InstitutionalMandataryNit
+                ?? otRow.InstitutionalMandataryNit
+                ?? builtinForOffice?.InstitutionalMandataryNit,
+            family,
+            rule?.ChamberCity ?? otRow.ChamberCity ?? builtinForOffice?.ChamberCity,
+            rule?.MandatarySigla ?? otRow.MandatarySigla ?? builtinForOffice?.MandatarySigla,
+            MandatoAssignmentModeCodes.Resolve(rule?.AssignmentMode),
+            hasCustom ? otRow.CustomTemplateKind : MandatoCustomTemplateKindCodes.None,
+            hasCustom ? otRow.CustomTemplateBody : null,
+            hasCustom ? otRow.CustomTemplateStoragePath : null,
+            hasCustom ? otRow.CustomTemplateFileName : null,
+            SignerDefaultOrNull(rule));
     }
 
-    private async Task<string> ResolveAssignmentModeAsync(
+    private async Task<CompanyOtMandateRuleEntity?> LoadCompanyRuleAsync(
         Guid officeId,
         Guid? companyTenantId,
         CancellationToken cancellationToken)
     {
         if (companyTenantId is not { } companyId)
-            return MandatoAssignmentModeCodes.Signer;
+            return null;
 
-        var mode = await _context.CompanyOtMandateRules.AsNoTracking()
-            .Where(r => r.TransitOfficeId == officeId && r.CompanyTenantId == companyId)
-            .Select(r => r.AssignmentMode)
-            .FirstOrDefaultAsync(cancellationToken)
+        return await _context.CompanyOtMandateRules.AsNoTracking()
+            .FirstOrDefaultAsync(
+                r => r.TransitOfficeId == officeId && r.CompanyTenantId == companyId,
+                cancellationToken)
             .ConfigureAwait(false);
+    }
 
-        return MandatoAssignmentModeCodes.Resolve(mode);
+    private static Guid? SignerDefaultOrNull(CompanyOtMandateRuleEntity? rule)
+    {
+        if (rule is null)
+            return null;
+        if (MandatoAssignmentModeCodes.SkipsPersonSigner(rule.AssignmentMode))
+            return null;
+        return rule.DefaultMandateSignerId;
     }
 }

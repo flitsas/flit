@@ -10,14 +10,9 @@ namespace Flit.Infrastructure.Tests.Documents;
 /// <summary>
 /// Cómo aparece el MANDATARIO en el recuadro de firmas del contrato de mandato.
 ///
-/// <para>Tres modos y una precedencia deliberada: <b>Sabaneta</b> nunca lleva bloque —su mandatario es
-/// la propia unión temporal, no una persona—; el <b>convenio</b> comercial entre la compañía y el
-/// organismo también lo quita; el mandatario que es el propio organismo, o el marcado como firmante
-/// físico, conserva el bloque con la línea; el resto estampa.</para>
-///
-/// <para>Se afirma sobre la decisión de política y no sobre los bytes del PDF: un test que solo
-/// comprobara que sale un PDF no distinguiría un contrato con bloque de mandatario de uno sin él, que
-/// es justo lo que estas reglas cambian.</para>
+/// <para>Precedencia: el modo que trae el caller gana (<c>SinBloque</c> institucional/convenio,
+/// <c>Manual</c> abierto o firma física). Plantilla Sabaneta sin modo Manual/Estampada explícito →
+/// sin bloque. Familia organismo (Bello) → línea manual. El resto estampa.</para>
 /// </summary>
 public sealed class MandatoFirmaPorConvenioTests
 {
@@ -43,16 +38,21 @@ public sealed class MandatoFirmaPorConvenioTests
     }
 
     [Theory]
-    [InlineData(MandatarioFirmaModo.Estampada)]
-    [InlineData(MandatarioFirmaModo.Manual)]
-    [InlineData(MandatarioFirmaModo.SinBloque)]
-    public void C_Sabaneta_NuncaLlevaBloqueDeMandatario_ConOSinConvenio(MandatarioFirmaModo resuelto)
+    [InlineData(MandatarioFirmaModo.Estampada, MandatarioFirmaModo.SinBloque)]
+    [InlineData(MandatarioFirmaModo.SinBloque, MandatarioFirmaModo.SinBloque)]
+    public void C_Sabaneta_SinModoManual_NoLlevaBloque(MandatarioFirmaModo resuelto, MandatarioFirmaModo esperado)
     {
-        // Su mandatario es la propia unión temporal: el contrato la nombra a ella, no a una persona, así
-        // que no hay a quién dejarle espacio de firma. Es incondicional — ni el convenio ni la marca de
-        // firma física la mueven.
+        // Institucional / default Sabaneta: el mandatario es la UT, no una persona.
         Resolver(Mandato(resuelto, MandatoFamilia.OrganismoTransito, MandatoTemplateResolver.Sabaneta))
-            .Should().Be(MandatarioFirmaModo.SinBloque);
+            .Should().Be(esperado);
+    }
+
+    [Fact]
+    public void C2_Sabaneta_ConModoManual_Abierto_ConservaBloqueConLineas()
+    {
+        // Tipo Abierto sobre plantilla sabaneta: el caller pide Manual → líneas abiertas, no SinBloque.
+        Resolver(Mandato(MandatarioFirmaModo.Manual, MandatoFamilia.OrganismoTransito, MandatoTemplateResolver.Sabaneta))
+            .Should().Be(MandatarioFirmaModo.Manual);
     }
 
     [Fact]
@@ -116,6 +116,45 @@ public sealed class MandatoFirmaPorConvenioTests
         var pdf = new MandatoPdfGenerator().GenerateMandato(data);
 
         pdf.Content.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void Abierto_Generico_CuerpoConPlaceholdersDePersona()
+    {
+        var build = typeof(MandatoPdfGenerator)
+            .GetMethod("BuildParrafos", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var data = Mandato(MandatarioFirmaModo.Manual) with { Mandatario = null };
+        var parte = data.Tramite.Partes[0];
+        var parrafos = (List<string>)build.Invoke(
+            null,
+            [
+                data, parte, false, MandatoVariante.Generico,
+                "TRASPASO", "PJS615", "ENVIGADO", "ENVIGADO", "5 de agosto de 2026",
+            ])!;
+        var texto = string.Join("\n", parrafos);
+        texto.Should().Contain("Y de ___ identificado con la cédula de ciudadanía No ___");
+        texto.Should().NotContain("Carlos Ruiz");
+    }
+
+    [Fact]
+    public void Abierto_Bello_CuerpoConPlaceholdersDePersona()
+    {
+        var build = typeof(MandatoPdfGenerator)
+            .GetMethod("BuildParrafos", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var data = Mandato(
+                MandatarioFirmaModo.Manual,
+                MandatoFamilia.OrganismoTransito,
+                MandatoTemplateResolver.Bello) with
+            { Mandatario = null };
+        var parte = data.Tramite.Partes[0];
+        var parrafos = (List<string>)build.Invoke(
+            null,
+            [
+                data, parte, false, MandatoVariante.Bello,
+                "MATRICULA", "QXU635", "BELLO", "Bello", "5 de agosto de 2026",
+            ])!;
+        var texto = string.Join("\n", parrafos);
+        texto.Should().Contain("Y de la otra parte, ___ identificado con la cédula de ciudadanía No ___");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

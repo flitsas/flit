@@ -14,9 +14,10 @@ namespace Flit.Infrastructure.Documents;
 /// <c>mandated/*.hbs</c> de FLIT 1.0 a QuestPDF (tipo <c>mandato</c>), fusionable al Expediente
 /// Consolidado (mismo patrón que <see cref="SolicitudVirtualPdfGenerator"/>). La variante la decide
 /// <see cref="MandatoTemplateResolver"/> por el <c>template_code</c> del OT: <b>genérica</b> (mandatario
-/// persona, ambos firman electrónicamente), <b>Sabaneta</b> (mandatario institucional UT-SETSA) y
-/// <b>Bello</b> (mandatario persona, representante legal de la UT-MAB). Dentro de cada variante, el texto
-/// del MANDANTE cambia según sea persona natural (a nombre propio) o jurídica (su representante legal).
+/// persona, ambos firman electrónicamente), <b>Sabaneta</b> (mandatario institucional UT-SETSA),
+/// <b>Bello</b> (mandatario persona, representante legal de la UT-MAB) y <b>municipio</b> (redacción
+/// corta PN/PJ de Envigado/Funza/Medellín). Dentro de cada variante, el texto del MANDANTE cambia según
+/// sea persona natural (a nombre propio) o jurídica (su representante legal).
 /// <para><b>HU #11205 — quién firma electrónicamente.</b> Cuando el OT tiene una EMPRESA RELACIONADA como
 /// mandatario (familia <c>organismo_transito</c>), su firma es MANUAL: no se plasma su validación de
 /// identidad, solo queda la línea sobre la razón social y el NIT. Aplica a Sabaneta <b>y a Bello</b>: los
@@ -261,6 +262,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         {
             MandatoVariante.Sabaneta => Sabaneta(data, parte, esJuridica, nombreTramite, placa, ciudad, fecha),
             MandatoVariante.Bello => Bello(data, parte, esJuridica, nombreTramite, placa, ot, ciudad, fecha),
+            MandatoVariante.Municipio => Municipio(data, parte, esJuridica, nombreTramite, placa, ciudad, fecha),
             _ => Generico(data, parte, esJuridica, nombreTramite, placa, ot, ciudad, fecha),
         };
 
@@ -298,10 +300,18 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     }
 
     // ---- Sabaneta: mandatario institucional UT-SETSA. Solo firma el MANDANTE. ----
+    // Tipo Abierto (Manual + sin firmante): el cuerpo usa la redacción genérica con placeholders,
+    // para no rellenar la UT cuando el negocio pide líneas abiertas.
     private static List<string> Sabaneta(
         MandatoData data, DocumentParte? parte, bool esJuridica,
         string nombreTramite, string placa, string ciudad, string fecha)
     {
+        if (data.ModoFirmaMandatario == MandatarioFirmaModo.Manual && data.Mandatario is null)
+        {
+            var ot = Val(data.Tramite.Organismo.Nombre, "___");
+            return Generico(data, parte, esJuridica, nombreTramite, placa, ot, ciudad, fecha);
+        }
+
         var inst = Val(data.InstitutionalMandataryName, SetsaNombre);
         var nit = Val(data.InstitutionalMandataryNit, SetsaNit);
         var intro = esJuridica
@@ -373,6 +383,39 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         ];
     }
 
+    // ---- Municipio (Envigado / Funza / Medellín): redacción corta PN; PJ con RL. Ambos firman. ----
+    private static List<string> Municipio(
+        MandatoData data, DocumentParte? parte, bool esJuridica,
+        string nombreTramite, string placa, string ciudad, string fecha)
+    {
+        var mandatario = MandatarioTexto(data.Mandatario);
+        var intro = esJuridica
+            ? $"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} número No {RlDoc(parte)}, " +
+              $"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, quien para los efectos " +
+              "del presente contrato se denominará EL MANDANTE. " +
+              $"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, " +
+              "quien para los efectos del presente contrato se denominará EL MANDATARIO, hemos acordado " +
+              "suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace cargo de la " +
+              $"radicación y reclamación del trámite de {nombreTramite} vehículo de placa: {placa}, por " +
+              "cuenta y riesgo del mandante."
+            : $"Yo, {PnNombre(parte)}, mayor de edad, identificado con {PnTipo(parte)} número No {PnDoc(parte)}, " +
+              "quien para los efectos del presente contrato se denominará EL MANDANTE. " +
+              $"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, " +
+              "quien para los efectos del presente contrato se denominará EL MANDATARIO, hemos acordado " +
+              "suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace cargo de la " +
+              $"radicación y reclamación del trámite de {nombreTramite} vehículo de placa: {placa}, por " +
+              "cuenta y riesgo del mandante.";
+
+        return
+        [
+            intro,
+            "OBLIGACIONES DEL MANDANTE: EL MANDANTE declara que la información contenida en los documentos que se " +
+            "anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante la " +
+            "autoridad competente de cualquier irregularidad que los mismos puedan contener.",
+            CierreFirma(fecha, ciudad),
+        ];
+    }
+
     private static string ResolucionesCc() =>
         "el siguiente contrato de mandato cumpliendo con la Resolución 12379 expedida por el Ministerio de " +
         "Transporte el 28 de diciembre de 2012 (Art. 5), así como la Resolución 20233040017145 de 2023 \"por la " +
@@ -441,29 +484,32 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     /// <summary>
     /// Cómo aparece el MANDATARIO en el recuadro de firmas. Orden deliberado:
     /// <list type="number">
-    ///   <item><b>Sabaneta: sin bloque SIEMPRE</b>, con o sin convenio. Su mandatario es la propia unión
-    ///   temporal —el contrato la nombra a ella, no a una persona—, así que no hay nadie a quien dejarle
-    ///   un espacio de firma. Es la única variante con esta regla incondicional.</item>
-    ///   <item><b>Sin bloque</b> si el modo ya viene resuelto así desde la aplicación (convenio
-    ///   comercial compañía↔organismo).</item>
-    ///   <item><b>Manual</b> si el mandatario es el propio organismo (familia <c>organismo_transito</c>,
-    ///   HU #11205): ahí firma la empresa a mano sobre la línea. Es el caso de <b>Bello</b>, cuya
-    ///   plantilla sí nombra al representante legal de la unión temporal: hay una persona que puede
-    ///   firmar, y por eso conserva la línea en vez de perder el bloque.</item>
-    ///   <item>Lo que diga el modo resuelto fuera — <b>manual</b> también cuando el mandatario está
-    ///   marcado como firmante físico en ese organismo.</item>
+    ///   <item><b>Modo resuelto por el caller</b> (<see cref="MandatoData.ModoFirmaMandatario"/>):
+    ///   institucional/convenio → <c>SinBloque</c>; abierto / firma física → <c>Manual</c> (líneas);
+    ///   persona/RL → <c>Estampada</c>. El caller gana para no pisar el tipo Abierto.</item>
+    ///   <item><b>Sabaneta sin modo explícito Manual/Estampada:</b> sin bloque — su mandatario es la UT,
+    ///   no una persona. Si el caller pidió <c>Manual</c> (p. ej. tipo Abierto sobre plantilla sabaneta),
+    ///   se respeta el bloque con líneas.</item>
+    ///   <item><b>Familia organismo</b> (p. ej. Bello): línea manual si el modo no vino ya resuelto.</item>
     /// </list>
-    /// La variante y la familia se comprueban aquí y no fuera porque son datos del propio documento (la
-    /// plantilla del OT), no del convenio ni del mandatario.
     /// </summary>
-    private static MandatarioFirmaModo ModoFirmaMandatario(MandatoData data) =>
-        MandatoTemplateResolver.Resolve(data.TemplateCode) == MandatoVariante.Sabaneta
-            ? MandatarioFirmaModo.SinBloque
-            : data.ModoFirmaMandatario == MandatarioFirmaModo.SinBloque
-                ? MandatarioFirmaModo.SinBloque
-                : MandatarioEsEmpresa(data)
-                    ? MandatarioFirmaModo.Manual
-                    : data.ModoFirmaMandatario;
+    private static MandatarioFirmaModo ModoFirmaMandatario(MandatoData data)
+    {
+        // Caller explícito (Abierto=Manual, Institucional/convenio=SinBloque, Persona=Estampada/Manual).
+        if (data.ModoFirmaMandatario == MandatarioFirmaModo.SinBloque)
+            return MandatarioFirmaModo.SinBloque;
+        if (data.ModoFirmaMandatario == MandatarioFirmaModo.Manual)
+            return MandatarioFirmaModo.Manual;
+
+        // Plantilla Sabaneta histórica: sin bloque salvo que el caller haya pedido Manual/Estampada.
+        if (MandatoTemplateResolver.Resolve(data.TemplateCode) == MandatoVariante.Sabaneta)
+            return MandatarioFirmaModo.SinBloque;
+
+        if (MandatarioEsEmpresa(data))
+            return MandatarioFirmaModo.Manual;
+
+        return data.ModoFirmaMandatario;
+    }
 
     /// <summary>
     /// HU #11205 (D4) — ¿el mandatario del OT es una empresa relacionada? La señal explícita es la

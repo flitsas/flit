@@ -18,6 +18,7 @@ public static class AdminPlataformaMandatosEndpoints
         MandatoTemplateResolver.Generico,
         MandatoTemplateResolver.Sabaneta,
         MandatoTemplateResolver.Bello,
+        MandatoTemplateResolver.Municipio,
     };
 
     public static IEndpointRouteBuilder MapAdminPlataformaMandatosEndpoints(this IEndpointRouteBuilder app)
@@ -233,9 +234,16 @@ public static class AdminPlataformaMandatosEndpoints
             Familia = MandatoFamiliaCodes.Resolve(view.MandataryFamily),
             ChamberCity = view.ChamberCity ?? sample.ChamberCity,
             MandatarySigla = view.MandatarySigla ?? sample.MandatarySigla,
-            ModoFirmaMandatario = MandatoAssignmentModeCodes.SkipsPersonSigner(view.AssignmentMode)
+            // Abierto: bloque con líneas (Manual) y sin firmante en el sample.
+            // Institucional: SinBloque (solo mandante).
+            Mandatario = MandatoAssignmentModeCodes.IsOpen(view.AssignmentMode)
+                ? null
+                : sample.Mandatario,
+            ModoFirmaMandatario = MandatoAssignmentModeCodes.IsInstitutional(view.AssignmentMode)
                 ? MandatarioFirmaModo.SinBloque
-                : sample.ModoFirmaMandatario,
+                : MandatoAssignmentModeCodes.IsOpen(view.AssignmentMode)
+                    ? MandatarioFirmaModo.Manual
+                    : sample.ModoFirmaMandatario,
             CustomTemplateKind = view.CustomTemplateKind,
             CustomTemplateBody = view.CustomTemplateBody,
             CustomTemplatePdf = customPdf,
@@ -314,6 +322,8 @@ public static class AdminPlataformaMandatosEndpoints
                 Results.BadRequest(new { error = "mandatary_family_invalida" }),
             MandateConfigWriteStatus.InstitutionalRequired =>
                 Results.BadRequest(new { error = "mandatario_institucional_requerido" }),
+            MandateConfigWriteStatus.InvalidDefaultSigner =>
+                Results.BadRequest(new { error = "mandatario_default_invalido" }),
             _ => Results.BadRequest(),
         };
     }

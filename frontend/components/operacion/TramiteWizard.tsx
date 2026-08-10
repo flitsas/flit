@@ -42,7 +42,6 @@ import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
 import { VehicleTransformationsCard } from './VehicleTransformationsCard';
 import { EstadoAcciones } from './EstadoAcciones';
-import { MandatarioSection } from './MandatarioSection';
 import { WizardStepTracker } from './WizardStepTracker';
 import {
   isTraspasoActorStepKey,
@@ -2766,11 +2765,7 @@ function StepBody({
               </span>
             </div>
           )}
-          {/* Mandatario (Persona/RL): elección opcional al ver FUR/documentos, antes de Preparar/Radicar.
-              Institucional/abierto o sin candidatos ⇒ la sección no se pinta. */}
-          {instanceId ? (
-            <MandatarioSection instanceId={instanceId} onChanged={onRefresh} />
-          ) : null}
+          {/* Mandatario (Persona/RL): disclosure dentro de MatriculaResumen (FirmaFurStep). */}
           <FirmaFurStep
             key={`${instanceId ?? 'new'}-${instanceStatus ?? 'borrador'}`}
             instanceId={instanceId}

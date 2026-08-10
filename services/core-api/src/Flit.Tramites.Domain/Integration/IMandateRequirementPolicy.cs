@@ -19,7 +19,9 @@ public sealed record MandateOtConfig(
     string? CustomTemplateKind = null,
     string? CustomTemplateBody = null,
     string? CustomTemplateStoragePath = null,
-    string? CustomTemplateFileName = null);
+    string? CustomTemplateFileName = null,
+    /// <summary>Mandatario persona preferido (regla compañía×OT, solo signer).</summary>
+    Guid? DefaultMandateSignerId = null);
 
 /// <summary>
 /// Puerto para resolver la configuración de mandato del OT del trámite. La plantilla se llavea por

@@ -28,4 +28,24 @@ public sealed class MandatoAssignmentModeCodesTests
     {
         MandatoAssignmentModeCodes.SkipsPersonSigner(mode).Should().Be(expected);
     }
+
+    [Theory]
+    [InlineData("open", true)]
+    [InlineData("OPEN", true)]
+    [InlineData("institutional", false)]
+    [InlineData("signer", false)]
+    [InlineData(null, false)]
+    public void IsOpen_OnlyOpen(string? mode, bool expected)
+    {
+        MandatoAssignmentModeCodes.IsOpen(mode).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("institutional", true)]
+    [InlineData("open", false)]
+    [InlineData("signer", false)]
+    public void IsInstitutional_OnlyInstitutional(string? mode, bool expected)
+    {
+        MandatoAssignmentModeCodes.IsInstitutional(mode).Should().Be(expected);
+    }
 }

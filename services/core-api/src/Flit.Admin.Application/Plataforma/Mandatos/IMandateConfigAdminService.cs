@@ -58,6 +58,7 @@ public enum MandateConfigWriteStatus
     InvalidTemplateFile,
     InvalidEditorBody,
     CompanyNotFound,
+    InvalidDefaultSigner,
 }
 
 public sealed record CompanyOtMandateRuleView(
@@ -69,7 +70,8 @@ public sealed record CompanyOtMandateRuleView(
     string? InstitutionalMandataryNit,
     string? ChamberCity,
     string? MandatarySigla,
-    bool HasExplicitRule);
+    bool HasExplicitRule,
+    Guid? DefaultMandateSignerId = null);
 
 public sealed record UpsertCompanyOtMandateRuleRequest(
     string AssignmentMode,
@@ -77,10 +79,15 @@ public sealed record UpsertCompanyOtMandateRuleRequest(
     string? InstitutionalMandataryName = null,
     string? InstitutionalMandataryNit = null,
     string? ChamberCity = null,
-    string? MandatarySigla = null);
+    string? MandatarySigla = null,
+    Guid? DefaultMandateSignerId = null);
 
 public interface IMandateConfigAdminService
 {
+    /// <summary>
+    /// Configuración por OT activos en FLIT (tenant OT dado de alta y <c>is_active</c>).
+    /// No lista el catálogo RUNT completo.
+    /// </summary>
     Task<IReadOnlyList<MandateOtConfigView>> ListAsync(CancellationToken ct = default);
 
     Task<MandateOtConfigView?> GetAsync(Guid officeId, CancellationToken ct = default);

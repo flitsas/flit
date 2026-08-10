@@ -2,6 +2,7 @@ using Flit.Infrastructure.OtRules;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
+using Flit.Tramites.Domain.Documents;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -88,6 +89,43 @@ public sealed class MandateRequirementPolicyTests
     }
 
     [Fact]
+    public async Task ResolveAsync_ExposesDefaultMandateSigner_WhenSignerMode()
+    {
+        await using var ctx = NewContext();
+        var signerId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        ctx.TransitOffices.Add(new TransitOffice
+        {
+            Id = Sabaneta, Code = "5631000", Name = "SABANETA",
+            DepartmentCode = "05", CityCode = "05631", IsActive = true,
+        });
+        ctx.TransitOfficeMandateConfigs.Add(new TransitOfficeMandateConfigEntity
+        {
+            Id = Guid.NewGuid(), TransitOfficeId = Sabaneta, TemplateCode = "generico",
+            RequiresForNaturalPerson = false,
+            MandataryFamily = "individuo",
+            AssignmentMode = "signer",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        ctx.CompanyOtMandateRules.Add(new CompanyOtMandateRuleEntity
+        {
+            Id = Guid.NewGuid(),
+            CompanyTenantId = CompanyA,
+            TransitOfficeId = Sabaneta,
+            AssignmentMode = "signer",
+            MandataryFamily = "individuo",
+            DefaultMandateSignerId = signerId,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await ctx.SaveChangesAsync(Ct);
+
+        var policy = new MandateRequirementPolicy(ctx);
+        var config = await policy.ResolveAsync("5631000", CompanyA, Ct);
+
+        config!.AssignmentMode.Should().Be("signer");
+        config.DefaultMandateSignerId.Should().Be(signerId);
+    }
+
+    [Fact]
     public async Task ResolveAsync_ReturnsNull_WhenOfficeUnknown()
     {
         await using var ctx = NewContext();
@@ -124,6 +162,119 @@ public sealed class MandateRequirementPolicyTests
         config.Should().NotBeNull();
         config!.TemplateCode.Should().Be("generico");
         config.AssignmentMode.Should().Be("open");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_SabanetaSinConfig_UsaPlantillaDeSistema()
+    {
+        await using var ctx = NewContext();
+        ctx.TransitOffices.Add(new TransitOffice
+        {
+            Id = Sabaneta, Code = "5631000", Name = "SABANETA",
+            DepartmentCode = "05", CityCode = "05631", IsActive = true,
+        });
+        await ctx.SaveChangesAsync(Ct);
+
+        var config = await new MandateRequirementPolicy(ctx).ResolveAsync("5631000", CompanyA, Ct);
+
+        config!.TemplateCode.Should().Be("sabaneta");
+        config.InstitutionalMandataryNit.Should().Be("900273813-7");
+        MandatoCustomTemplateKindCodes.HasCustom(config.CustomTemplateKind).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ResolveAsync_BelloSinConfig_UsaPlantillaDeSistema()
+    {
+        await using var ctx = NewContext();
+        var belloId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        ctx.TransitOffices.Add(new TransitOffice
+        {
+            Id = belloId, Code = "5088000", Name = "BELLO",
+            DepartmentCode = "05", CityCode = "05088", IsActive = true,
+        });
+        await ctx.SaveChangesAsync(Ct);
+
+        var config = await new MandateRequirementPolicy(ctx).ResolveAsync("5088000", CompanyA, Ct);
+
+        config!.TemplateCode.Should().Be("bello");
+        config.InstitutionalMandataryNit.Should().Be("901783814-6");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_EnvigadoSinConfig_UsaPlantillaMunicipio()
+    {
+        await using var ctx = NewContext();
+        var envigadoId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        ctx.TransitOffices.Add(new TransitOffice
+        {
+            Id = envigadoId, Code = "5266000", Name = "ENVIGADO",
+            DepartmentCode = "05", CityCode = "05266", IsActive = true,
+        });
+        await ctx.SaveChangesAsync(Ct);
+
+        var config = await new MandateRequirementPolicy(ctx).ResolveAsync("5266000", CompanyA, Ct);
+
+        config!.TemplateCode.Should().Be("municipio");
+        config.MandataryFamily.Should().Be("individuo");
+        MandatoCustomTemplateKindCodes.HasCustom(config.CustomTemplateKind).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ResolveAsync_SabanetaConPlantillaPropia_PriorizaCustom()
+    {
+        await using var ctx = NewContext();
+        ctx.TransitOffices.Add(new TransitOffice
+        {
+            Id = Sabaneta, Code = "5631000", Name = "SABANETA",
+            DepartmentCode = "05", CityCode = "05631", IsActive = true,
+        });
+        ctx.TransitOfficeMandateConfigs.Add(new TransitOfficeMandateConfigEntity
+        {
+            Id = Guid.NewGuid(),
+            TransitOfficeId = Sabaneta,
+            TemplateCode = "sabaneta",
+            RequiresForNaturalPerson = true,
+            MandataryFamily = "organismo_transito",
+            CustomTemplateKind = "pdf",
+            CustomTemplateFileName = "propia.pdf",
+            CustomTemplateStoragePath = "mandatos/sabaneta.pdf",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await ctx.SaveChangesAsync(Ct);
+
+        var config = await new MandateRequirementPolicy(ctx).ResolveAsync("5631000", CompanyA, Ct);
+
+        config!.CustomTemplateKind.Should().Be("pdf");
+        config.CustomTemplateFileName.Should().Be("propia.pdf");
+        config.TemplateCode.Should().Be("sabaneta");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_SabanetaConConfigGenerico_IgualUsaSistema()
+    {
+        // Sin plantilla propia, el código RUNT manda sobre un template_code erróneo en fila.
+        await using var ctx = NewContext();
+        ctx.TransitOffices.Add(new TransitOffice
+        {
+            Id = Sabaneta, Code = "5631000", Name = "SABANETA",
+            DepartmentCode = "05", CityCode = "05631", IsActive = true,
+        });
+        ctx.TransitOfficeMandateConfigs.Add(new TransitOfficeMandateConfigEntity
+        {
+            Id = Guid.NewGuid(),
+            TransitOfficeId = Sabaneta,
+            TemplateCode = "generico",
+            RequiresForNaturalPerson = false,
+            MandataryFamily = "individuo",
+            CustomTemplateKind = "none",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await ctx.SaveChangesAsync(Ct);
+
+        var config = await new MandateRequirementPolicy(ctx).ResolveAsync("5631000", CompanyA, Ct);
+
+        config!.TemplateCode.Should().Be("sabaneta");
+        config.CustomTemplateKind.Should().Be("none");
     }
 
     private static FlitDbContext NewContext() =>

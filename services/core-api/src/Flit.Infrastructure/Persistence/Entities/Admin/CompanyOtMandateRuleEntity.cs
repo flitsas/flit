@@ -19,6 +19,12 @@ public sealed class CompanyOtMandateRuleEntity
     public string? ChamberCity { get; set; }
     public string? MandatarySigla { get; set; }
 
+    /// <summary>
+    /// Mandatario persona preferido cuando <see cref="AssignmentMode"/> es <c>signer</c>.
+    /// Preselección en el wizard; no aplica a institucional/abierto.
+    /// </summary>
+    public Guid? DefaultMandateSignerId { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public Guid? CreatedBy { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }

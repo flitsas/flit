@@ -57,6 +57,7 @@ public sealed class MandatoPdfGeneratorTests
     [InlineData("generico")]
     [InlineData("sabaneta")]
     [InlineData("bello")]
+    [InlineData("municipio")]
     public void ProducesMandatoPdf_ForNaturalAndJuridica(string template)
     {
         var firmante = new MandatarioFirmante("Carlos Ruiz", "70111222");
@@ -101,7 +102,7 @@ public sealed class MandatoPdfGeneratorTests
         };
         var mandatario = new MandatarioFirmante("Carlos Ruiz", "70111222", FirmaPng, null, meta);
 
-        foreach (var template in new[] { "generico", "sabaneta", "bello" })
+        foreach (var template in new[] { "generico", "sabaneta", "bello", "municipio" })
         {
             var doc = Generator.GenerateMandato(
                 new MandatoData(tramite, template, "UT-SETSA", "900111222", mandatario));
@@ -127,7 +128,7 @@ public sealed class MandatoPdfGeneratorTests
     public void DoesNotThrow_WithoutSignerOrRadicador()
     {
         // Sin parte radicadora: usa placeholders, no lanza (las tres variantes).
-        foreach (var template in new[] { "generico", "sabaneta", "bello" })
+        foreach (var template in new[] { "generico", "sabaneta", "bello", "municipio" })
             Generator.GenerateMandato(Mandato(null, template)).Content.Should().NotBeEmpty();
     }
 }

@@ -36,6 +36,7 @@ internal sealed class CompanyOtMandateRuleConfiguration
             .HasMaxLength(30);
         builder.Property(x => x.ChamberCity).HasColumnName("chamber_city").HasMaxLength(120);
         builder.Property(x => x.MandatarySigla).HasColumnName("mandatary_sigla").HasMaxLength(40);
+        builder.Property(x => x.DefaultMandateSignerId).HasColumnName("default_mandate_signer_id");
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(x => x.CreatedBy).HasColumnName("created_by");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
