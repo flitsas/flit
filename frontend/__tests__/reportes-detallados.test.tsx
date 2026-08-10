@@ -24,6 +24,18 @@ describe("detailed report filters", () => {
     expect(params.pageSize).toBe(50);
     expect(params.procedureTypeId).toBe("abc");
   });
+
+  it("no adelanta el rango un día por la tarde", () => {
+    // 9 de la noche del 10 de agosto. Con `toISOString()` esto caía en el 11 en UTC, así que el
+    // filtro abría diciendo «hasta mañana» y corría el inicio el mismo día. La hora se construye
+    // con los componentes locales para que la prueba diga lo mismo en cualquier máquina.
+    const nocheDelDiez = new Date(2026, 7, 10, 21, 0, 0);
+
+    const { range } = defaultDetailedFilters(nocheDelDiez);
+
+    expect(range.to).toBe("2026-08-10");
+    expect(range.from).toBe("2026-07-11");
+  });
 });
 
 describe("groupProcedureTypes", () => {

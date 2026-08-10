@@ -1,5 +1,5 @@
 import type { ProcedureFamily, ProcedureTypeSummary } from "@/lib/api/types/procedure-parametrization";
-import type { DateRange } from "../_reportes/range";
+import { toIsoDate, type DateRange } from "../_reportes/range";
 
 export type TriState = "" | "true" | "false";
 
@@ -17,12 +17,21 @@ export interface DetailedReportFiltersState {
   isLeasing: TriState;
 }
 
-export function defaultDetailedFilters(): DetailedReportFiltersState {
-  const to = new Date();
-  const from = new Date(to);
+/**
+ * Rango por defecto: los últimos 30 días. `reference` se inyecta en pruebas para no depender del
+ * reloj del sistema.
+ *
+ * <p>Las fechas se arman con <c>toIsoDate</c>, que lee los componentes locales de la fecha, y no
+ * con <c>toISOString()</c>, que devuelve UTC. Bogotá va cinco horas por detrás: con UTC, a partir
+ * de las 7 de la tarde el «hasta» por defecto ya era el día siguiente y el «desde» se corría igual.
+ * No fallaba nada — enseñaba un rango que parecía razonable y estaba movido un día—, que es peor.
+ * Es además el ayudante que ya usa el resto del módulo de reportes, así que los dos coinciden.</p>
+ */
+export function defaultDetailedFilters(reference: Date = new Date()): DetailedReportFiltersState {
+  const from = new Date(reference);
   from.setDate(from.getDate() - 30);
   return {
-    range: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) },
+    range: { from: toIsoDate(from), to: toIsoDate(reference) },
     hasTransformation: "",
     isLeasing: "",
   };
