@@ -34,5 +34,12 @@ internal sealed class MandateSignerRepresentedCompanyConfiguration
 
         builder.HasIndex(x => new { x.TransitOfficeId, x.RepresentedCompanyId, x.IsActive })
             .HasDatabaseName("ix_msrc_office_company");
+
+        // Sin HasOne, EF no conoce la dependencia y puede INSERT'ar el puente ANTES que
+        // mandate_signers → 23503 fk_msrc_mandate_signer (mismo patrón que MandateSignerCompany).
+        builder.HasOne<MandateSigner>()
+            .WithMany()
+            .HasForeignKey(x => x.MandateSignerId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

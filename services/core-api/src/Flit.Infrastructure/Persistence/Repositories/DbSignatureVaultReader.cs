@@ -62,10 +62,12 @@ internal sealed class DbSignatureVaultReader : ISignatureVaultReader
                 var entity = await _context.SignatureVault
                     .AsNoTracking()
                     .Where(s => s.TenantId == tenantId
-                        && s.DocumentType == type
                         && s.DocumentNumber == number
                         && s.Estado == SignatureVaultEstadoMapping.Activa)
-                    .OrderByDescending(s => s.CreatedAt)
+                    // El índice único es (tenant, document_number); el tipo se usa solo para preferir
+                    // la fila del mismo tipo cuando hay datos históricos inconsistentes.
+                    .OrderByDescending(s => s.DocumentType == type)
+                    .ThenByDescending(s => s.CreatedAt)
                     .FirstOrDefaultAsync(cancellationToken)
                     .ConfigureAwait(false);
 

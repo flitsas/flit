@@ -227,6 +227,24 @@ public sealed class SignatureVaultHandlerTests
     }
 
     [Fact]
+    public async Task FindActiveByDocument_EncuentraActivaAunqueElTipoNoCoincida()
+    {
+        // uq_signature_vault_activa es (tenant, document_number): si el finder exigía también el
+        // tipo, un 23505 no se podía resolver (HU #11193) y el alta devolvía firma_activa_existente.
+        await using var ctx = NewContext();
+        var (create, _, _, _) = Handlers(ctx, out _);
+        var reader = new DbSignatureVaultReader(ctx);
+
+        var created = await create.HandleAsync(NewCreate(documentNumber: "1193552679"), Ct);
+        created.IsValid.Should().BeTrue();
+
+        var found = await reader.FindActiveByDocumentAsync(Tenant, "CE", "1193552679", Ct);
+
+        found.Should().NotBeNull();
+        found!.Id.Should().Be(created.SignatureVaultId!.Value);
+    }
+
+    [Fact]
     public async Task FindActiveByDocument_FindsByPerson_IgnoringNit()
     {
         // HU #10930: el consumo por persona resuelve la firma activa por (tenant, tipo + documento).

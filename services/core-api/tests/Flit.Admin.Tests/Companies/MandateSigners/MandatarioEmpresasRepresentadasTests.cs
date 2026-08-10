@@ -26,6 +26,59 @@ public sealed class MandatarioEmpresasRepresentadasTests
     private const string NitBeta = "900222222";
 
     [Fact]
+    public async Task AltaConEmpresasRepresentadas_PersisteElPuenteEnUnSoloSaveChanges()
+    {
+        // Reproduce el camino del configurador de compañía (officeCompanies en el alta).
+        // En Postgres, sin HasOne al mandatario este SaveChanges fallaba con 23503.
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        var acme = SeedEmpresa(ctx, NitAcme, "ACME SAS");
+        var repo = new MandateSignerRepository(ctx);
+
+        var signerId = await repo.CreateAsync(
+            new CreateMandateSignerData(
+                TransitOfficeId: Ot,
+                OtTenantId: Guid.NewGuid(),
+                FullName: "Daniel Amado",
+                DocumentNumber: "1193552679",
+                IntegrityHash: new string('b', 64),
+                RegisteredAt: DateTimeOffset.UtcNow,
+                CompanyTenantIds: [Gestora],
+                CreatedBy: null,
+                CorrelationId: null,
+                DocumentType: "CC",
+                Email: "daniel@ejemplo.com",
+                TransitOfficeIds: [Ot],
+                OfficeCompanies:
+                [
+                    new MandateSignerOfficeCompanies(Ot, [acme]),
+                ]),
+            ct);
+
+        var filas = await ctx.MandateSignerRepresentedCompanies
+            .Where(x => x.MandateSignerId == signerId && x.IsActive)
+            .ToListAsync(ct);
+
+        filas.Should().ContainSingle();
+        filas[0].RepresentedCompanyId.Should().Be(acme);
+        filas[0].TransitOfficeId.Should().Be(Ot);
+    }
+
+    [Fact]
+    public void ElModeloEfDeclaraFkAlMandatario_ParaOrdenarElInsertDelPuente()
+    {
+        // Sin HasOne(MandateSigner), EF puede insertar mandate_signer_represented_companies
+        // antes que mandate_signers y Postgres responde 23503 fk_msrc_mandate_signer.
+        using var ctx = NewContext();
+        var entity = ctx.Model.FindEntityType(typeof(MandateSignerRepresentedCompany));
+        entity.Should().NotBeNull();
+        var fk = entity!.GetForeignKeys()
+            .SingleOrDefault(f => f.PrincipalEntityType.ClrType == typeof(MandateSigner));
+        fk.Should().NotBeNull();
+        fk!.Properties.Select(p => p.Name).Should().Equal(nameof(MandateSignerRepresentedCompany.MandateSignerId));
+    }
+
+    [Fact]
     public async Task ElTramiteSoloOfreceLosMandatariosDeLaEmpresaQueOtorga()
     {
         await using var ctx = NewContext();

@@ -103,12 +103,27 @@ internal sealed class SignatureVaultRepository : ISignatureVaultRepository
         catch (DbUpdateException ex) when (IsActiveUniqueViolation(ex))
         {
             // Índice único parcial uq_signature_vault_activa: a lo sumo UNA firma 'activa' por
-            // (tenant, NIT, documento). Se traduce el 23505 a una excepción de dominio (checklist
+            // (tenant, documento). Se traduce el 23505 a una excepción de dominio (checklist
             // §B12); el handler la mapea a 422 (firma_activa_existente). Sin PII en el mensaje.
+            //
+            // Tras el 23505 la entidad queda en Added en el ChangeTracker: el revoke+reintento del
+            // handler (HU #11193) volvería a intentar el INSERT y fallaría otra vez. Hay que
+            // desprenderla antes de propagar.
+            DetachAddedSignatureVaultEntries();
             throw new SignatureVaultActiveConflictException();
         }
 
         return entity.Id;
+    }
+
+    private void DetachAddedSignatureVaultEntries()
+    {
+        foreach (var entry in _context.ChangeTracker.Entries<SignatureVaultEntity>()
+                     .Where(e => e.State == EntityState.Added)
+                     .ToList())
+        {
+            entry.State = EntityState.Detached;
+        }
     }
 
     private const string ActiveUniqueIndex = "uq_signature_vault_activa";
