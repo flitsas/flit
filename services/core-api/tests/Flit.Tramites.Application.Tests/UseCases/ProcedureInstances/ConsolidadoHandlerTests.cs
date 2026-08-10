@@ -157,6 +157,32 @@ public sealed class ConsolidadoHandlerTests
         });
     }
 
+    /// <summary>
+    /// Variante de <see cref="AddAttachment"/> con <c>Source</c> y <c>UploadedAt</c> explícitos —
+    /// necesaria para ejercitar la precedencia declarada de <c>AttachmentSourcePrecedence</c> (DT-4,
+    /// HU #11319), que decide por origen y no solo por fecha de carga.
+    /// </summary>
+    private static void AddAttachmentWithSource(
+        ProcedureInstance instance, string tipo, string filename, string contentMarker,
+        string source, DateTimeOffset uploadedAt)
+    {
+        var path = $"{instance.Id:D}/{tipo}_{source}_{Guid.NewGuid():N}";
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            Tipo = tipo,
+            Filename = filename,
+            Mimetype = "application/pdf",
+            SizeBytes = 10,
+            Sha256 = $"sha-{tipo}-{source}",
+            StoragePath = path,
+            Source = source,
+            UploadedAt = uploadedAt,
+        });
+    }
+
     private string ConsolidadoContent()
     {
         var path = _storage.Saved.Last();
@@ -947,6 +973,222 @@ public sealed class ConsolidadoHandlerTests
         var generado = ConsolidadoContent();
         generado.Should().NotContain("maestro.pdf");
         Ocurrencias(generado, "fur.pdf").Should().Be(1);
+    }
+
+    // ── HU #11319 (Feature #11309, DT-4) — precedencia declarada SOLO para mandato/tramite_virtual ──
+    //
+    // Decisión de producto del PO (2026-08-10): la precedencia declarada aplica ÚNICAMENTE a
+    // `mandato` y `tramite_virtual`. La `compraventa` y CUALQUIER OTRO tipo conservan el criterio de
+    // siempre (la fila más reciente por `UploadedAt`), por ADR-0035 y para no cambiar el expediente
+    // de tenants que no pidieron esta funcionalidad.
+
+    [Fact]
+    public async Task HU11319_AC1_Mandato_GanaElDeOrigenUser_AunqueElDeCompanySeaMasReciente()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        var ayer = DateTimeOffset.UtcNow.AddDays(-1);
+        var hoy = DateTimeOffset.UtcNow;
+        // El de "company" es el MÁS RECIENTE, pero "user" (hecho del trámite) debe ganar igual: el
+        // desempate viejo era "la fecha de carga más reciente", que aquí daría "company" — el bug que
+        // esta HU cierra.
+        AddAttachmentWithSource(instance, "mandato", "mandato_company.pdf", "%PDF-mandato-company", "company", hoy);
+        AddAttachmentWithSource(instance, "mandato", "mandato_user.pdf", "%PDF-mandato-user", "user", ayer);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        content.Should().Contain("mandato_user.pdf");
+        content.Should().NotContain("mandato_company.pdf");
+    }
+
+    [Fact]
+    public async Task HU11319_AC1_ElResultadoEsElMismoConIndependenciaDelOrdenDeEscritura()
+    {
+        // Mismo escenario que AC1, pero escribiendo los adjuntos en el orden inverso: el ganador no
+        // puede depender de cuál se agregó primero a la colección.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        var ayer = DateTimeOffset.UtcNow.AddDays(-1);
+        var hoy = DateTimeOffset.UtcNow;
+        AddAttachmentWithSource(instance, "mandato", "mandato_user.pdf", "%PDF-mandato-user", "user", ayer);
+        AddAttachmentWithSource(instance, "mandato", "mandato_company.pdf", "%PDF-mandato-company", "company", hoy);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        ConsolidadoContent().Should().Contain("mandato_user.pdf");
+    }
+
+    [Fact]
+    public async Task HU11319_AC2_TramiteVirtual_ConFechasIdenticas_SiemprePicaElDeOrigenUser()
+    {
+        // Los tres se escriben con LA MISMA fecha (el bug original: el bucle de persistencia escribe
+        // todo con el mismo `now`). Sin la precedencia declarada, el desempate por fecha es no
+        // determinista; con ella, el grado decide y "user" gana siempre.
+        for (var i = 0; i < 5; i++)
+        {
+            var id = Guid.NewGuid();
+            var tenantId = Guid.NewGuid();
+            var instance = TraspasoInstance(id, tenantId);
+            var mismaFecha = DateTimeOffset.UtcNow;
+            AddAttachmentWithSource(instance, "tramite_virtual", "tv_system.pdf", "%PDF-tv-system", "system", mismaFecha);
+            AddAttachmentWithSource(instance, "tramite_virtual", "tv_company.pdf", "%PDF-tv-company", "company", mismaFecha);
+            AddAttachmentWithSource(instance, "tramite_virtual", "tv_user.pdf", "%PDF-tv-user", "user", mismaFecha);
+            foreach (var att in instance.Attachments)
+                _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+            _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+            var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+            error.Should().BeNull();
+            var content = ConsolidadoContent();
+            content.Should().Contain("tv_user.pdf", $"ejecución #{i}");
+            content.Should().NotContain("tv_system.pdf", $"ejecución #{i}");
+            content.Should().NotContain("tv_company.pdf", $"ejecución #{i}");
+        }
+    }
+
+    [Fact]
+    public async Task HU11319_AC3_Mandato_OrigenNoDeclarado_NoDesplazaAlDeOrigenUser()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        var ayer = DateTimeOffset.UtcNow.AddDays(-1);
+        var hoy = DateTimeOffset.UtcNow;
+        // El origen desconocido es el MÁS RECIENTE, pero cae en grado 2 (configuración de compañía):
+        // no puede desplazar al de "user" (grado 1, hecho del trámite).
+        AddAttachmentWithSource(
+            instance, "mandato", "mandato_desconocido.pdf", "%PDF-mandato-x", "un_origen_inventado", hoy);
+        AddAttachmentWithSource(instance, "mandato", "mandato_user.pdf", "%PDF-mandato-user", "user", ayer);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        content.Should().Contain("mandato_user.pdf");
+        content.Should().NotContain("mandato_desconocido.pdf");
+    }
+
+    [Fact]
+    public async Task HU11319_AC4_Compraventa_NoCambiaDeComportamiento_SigueGanandoLaDelSistemaMasReciente()
+    {
+        // La compraventa queda EXCLUIDA de la precedencia declarada (decisión del PO 2026-08-10,
+        // ADR-0035): sigue ganando la fila más reciente por UploadedAt, sea cual sea su Source. Si la
+        // precedencia se aplicara aquí por error, "user" (grado 1) ganaría — y ese es justo el cambio
+        // de comportamiento que el PO rechazó.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "compraventa"));
+        var ayer = DateTimeOffset.UtcNow.AddDays(-1);
+        var hoy = DateTimeOffset.UtcNow;
+        // La del usuario se cargó primero; el sistema la REGENERÓ después (fecha posterior).
+        AddAttachmentWithSource(
+            instance, "compraventa", "compraventa_user.pdf", "%PDF-cv-user", "user", ayer);
+        AddAttachmentWithSource(
+            instance, "compraventa", "compraventa_system.pdf", "%PDF-cv-system", "system", hoy);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        content.Should().Contain("compraventa_system.pdf", "sigue ganando la del sistema, como antes de esta HU");
+        content.Should().NotContain("compraventa_user.pdf");
+        result!.Document.Sha256.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task HU11319_AC5_OtroTipoNoPersonalizable_NoCambiaDeComportamiento_SigueGanandoElMasReciente()
+    {
+        // "rtm" no es ni mandato ni tramite_virtual: debe seguir eligiéndose por fecha, sin mirar el
+        // Source. Aquí el más reciente es "system" (grado 3, el que PERDERÍA si se aplicara la
+        // precedencia declarada) — y debe ganar igual, porque a este tipo la regla nueva no le aplica.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "rtm"));
+        var ayer = DateTimeOffset.UtcNow.AddDays(-1);
+        var hoy = DateTimeOffset.UtcNow;
+        AddAttachmentWithSource(instance, "rtm", "rtm_user.pdf", "%PDF-rtm-user", "user", ayer);
+        AddAttachmentWithSource(instance, "rtm", "rtm_system.pdf", "%PDF-rtm-system", "system", hoy);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        content.Should().Contain("rtm_system.pdf", "es el más reciente; este tipo no usa la precedencia por origen");
+        content.Should().NotContain("rtm_user.pdf");
+    }
+
+    [Fact]
+    public async Task HU11319_AC5_GoldenDeTraspaso_ProduceElMismoOrdenYContenidoQueAntesDeLaHU()
+    {
+        // Mismo escenario del golden existente HU11183_AC3 (sin ningún tipo personalizable de por
+        // medio): el conjunto y orden de `paginas_incluidas` no cambia por este Feature.
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (_, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var posiciones = PosicionesEnConsolidado(
+            "fur.pdf", "cert.pdf", "cert_vend.pdf", "compraventa.pdf", "impronta.pdf",
+            "soat.pdf", "rtm.pdf", "paz_salvo.pdf", "cedulas.pdf");
+        posiciones.Should().NotContain(-1);
+        posiciones.Should().BeInAscendingOrder();
+    }
+
+    [Fact]
+    public async Task HU11319_AC6_Mandato_ConTresOrigenes_QuedaExactamenteUnaVezEnElConsolidado()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = TraspasoInstance(id, tenantId);
+        var hace2Dias = DateTimeOffset.UtcNow.AddDays(-2);
+        var ayer = DateTimeOffset.UtcNow.AddDays(-1);
+        var hoy = DateTimeOffset.UtcNow;
+        AddAttachmentWithSource(instance, "mandato", "mandato_system.pdf", "%PDF-mandato-system", "system", hace2Dias);
+        AddAttachmentWithSource(instance, "mandato", "mandato_company.pdf", "%PDF-mandato-company", "company", ayer);
+        AddAttachmentWithSource(instance, "mandato", "mandato_user.pdf", "%PDF-mandato-user", "user", hoy);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var (result, error) = await _handler.HandleAsync(id, tenantId, CancellationToken.None);
+
+        error.Should().BeNull();
+        var content = ConsolidadoContent();
+        Ocurrencias(content, "mandato_").Should().Be(1, "las tres filas de 'mandato' colapsan a exactamente una");
+        content.Should().Contain("mandato_user.pdf");
+        content.Should().NotContain("mandato_system.pdf");
+        content.Should().NotContain("mandato_company.pdf");
+        var evento = instance.Events.Should().ContainSingle(e => e.Tipo == "consolidado_generado").Subject;
+        evento.Payload.Should().Contain("mandato");
+        result.Should().NotBeNull();
     }
 
     private static int Ocurrencias(string texto, string aguja)
