@@ -8,8 +8,8 @@ import { ToastProvider } from "@/components/admin/Toast";
 
 /**
  * SuperAdmin — Plataforma → Notificaciones (HU #11370, Feature #11349).
- * Banco de pruebas: canal, compañía, catálogo de 6 filas (5 plantillas FLIT + Kyverum) y
- * remitente resuelto. Solo SuperAdmin · lectura (ver en vivo / enviar prueba: HU #11371).
+ * Banco de pruebas: canal, compañía, catálogo de plantillas FLIT (+ Kyverum) y
+ * remitente resuelto. Solo SuperAdmin · lectura / envío de prueba.
  */
 export default function AdminNotificacionesPage() {
   const router = useRouter();

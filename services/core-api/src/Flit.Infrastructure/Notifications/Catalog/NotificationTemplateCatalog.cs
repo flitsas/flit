@@ -6,7 +6,7 @@ namespace Flit.Infrastructure.Notifications.Catalog;
 /// <remarks>
 /// <para>
 /// Vive en <c>Flit.Infrastructure</c> por decisión de Líder Técnico (no reabrir): es el único
-/// proyecto que ve las 5 plantillas — <c>Flit.Admin.Application</c> no referencia ni a
+/// proyecto que ve las plantillas — <c>Flit.Admin.Application</c> no referencia ni a
 /// <c>Security.Application</c> ni a <c>Analytics.Application</c>, y
 /// <c>SchedulerEmailComposer</c> es <c>internal</c>. El corte fija la DIRECCIÓN de la
 /// dependencia, no la ubicación: este catálogo CONSUME a los composers de cada módulo; ningún
@@ -29,13 +29,15 @@ public static class NotificationTemplateCatalog
         public const string Invitation = "security.invitation";
         public const string ForgotPassword = "security.forgot-password";
         public const string AdminResetPassword = "security.admin-reset-password";
+        public const string WelcomeRegistration = "security.welcome-registration";
         public const string ScheduledReport = "analytics.scheduled-report";
         public const string Alert = "analytics.alert";
+        public const string TramiteRechazado = "tramites.rechazado";
+        public const string TramiteAprobado = "tramites.aprobado";
     }
 
     /// <summary>
-    /// AC1 — exactamente 5 entradas. AC2 — invitación declara los DOS disparadores que comparten
-    /// la plantilla (crear invitación y reenviar invitación): 5 plantillas, 6 disparadores.
+    /// Catálogo enumerable. Invitación declara DOS disparadores que comparten la plantilla.
     /// </summary>
     public static IReadOnlyList<NotificationTemplateDescriptor> All { get; } =
     [
@@ -55,6 +57,11 @@ public static class NotificationTemplateCatalog
             NotificationModule.Security,
             [NotificationTrigger.AdminResetPassword]),
         new NotificationTemplateDescriptor(
+            TemplateIds.WelcomeRegistration,
+            "Gracias por registrarte",
+            NotificationModule.Security,
+            [NotificationTrigger.WelcomeRegistration]),
+        new NotificationTemplateDescriptor(
             TemplateIds.ScheduledReport,
             "Informe programado",
             NotificationModule.Analytics,
@@ -64,6 +71,16 @@ public static class NotificationTemplateCatalog
             "Alerta de analítica",
             NotificationModule.Analytics,
             [NotificationTrigger.Alert]),
+        new NotificationTemplateDescriptor(
+            TemplateIds.TramiteAprobado,
+            "Trámite Aprobado",
+            NotificationModule.Tramites,
+            [NotificationTrigger.ProcedureStatusChanged]),
+        new NotificationTemplateDescriptor(
+            TemplateIds.TramiteRechazado,
+            "Trámite Rechazado",
+            NotificationModule.Tramites,
+            [NotificationTrigger.ProcedureStatusChanged]),
     ];
 
     /// <summary>

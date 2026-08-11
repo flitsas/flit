@@ -14,6 +14,7 @@ using Flit.Infrastructure.Messaging;
 using Flit.Infrastructure.Notifications.DeliveryLog;
 using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Notifications.Routing;
+using Flit.Infrastructure.Notifications;
 using Flit.Infrastructure.Ocr;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -273,6 +274,13 @@ public static class InfrastructureExtensions
             .GetSection(EmailSettings.SectionName)
             .Get<EmailSettings>() ?? new EmailSettings();
         services.AddSingleton(emailSettings);
+
+        var emailAssets = configuration
+            .GetSection(NotificationEmailAssetsOptions.SectionName)
+            .Get<NotificationEmailAssetsOptions>() ?? new NotificationEmailAssetsOptions();
+        services.AddSingleton(Options.Create(emailAssets));
+        services.Configure<NotificationEmailAssetsOptions>(
+            configuration.GetSection(NotificationEmailAssetsOptions.SectionName));
 
         // SMTP real, o consola en Development cuando no hay host configurado.
         // HU #11358 AC5 — Scoped (no Singleton): todos los AddHttpClient<T> del repo son

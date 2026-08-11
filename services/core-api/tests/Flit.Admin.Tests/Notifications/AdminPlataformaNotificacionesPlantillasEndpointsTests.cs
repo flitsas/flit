@@ -69,7 +69,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
     // ── AC1 — listado del catálogo ──────────────────────────────────────────
 
     [Fact]
-    public async Task AC1_List_Returns200With5TemplatesIdModuleAndTriggers()
+    public async Task AC1_List_Returns200With8TemplatesIdModuleAndTriggers()
     {
         var client = SuperAdminClient();
 
@@ -78,7 +78,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<ListDto>(TestContext.Current.CancellationToken);
         body.Should().NotBeNull();
-        body!.Items.Should().HaveCount(5);
+        body!.Items.Should().HaveCount(8);
         body.Items.Select(i => i.Id).Should().OnlyHaveUniqueItems();
         body.Items.Should().Contain(i =>
             i.Id == "security.invitation"
@@ -86,7 +86,44 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
             && i.Triggers.Contains("CreateInvitation")
             && i.Triggers.Contains("ResendInvitation"));
         body.Items.Should().Contain(i =>
+            i.Id == "security.welcome-registration"
+            && i.Module == "Security"
+            && i.Triggers.Contains("WelcomeRegistration"));
+        body.Items.Should().Contain(i =>
             i.Id == "analytics.alert" && i.Module == "Analytics" && i.Triggers.Contains("Alert"));
+        body.Items.Should().Contain(i =>
+            i.Id == "tramites.aprobado"
+            && i.Module == "Tramites"
+            && i.Triggers.Contains("ProcedureStatusChanged"));
+        body.Items.Should().Contain(i =>
+            i.Id == "tramites.rechazado"
+            && i.Module == "Tramites"
+            && i.Triggers.Contains("ProcedureStatusChanged"));
+    }
+
+    [Theory]
+    [InlineData("tramites.aprobado", "FLIT_SMTP", "APROBADO")]
+    [InlineData("tramites.aprobado", "TENANT_API", "¡Buenas Noticias!")]
+    [InlineData("tramites.rechazado", "FLIT_SMTP", "RECHAZADO")]
+    [InlineData("tramites.rechazado", "TENANT_API", "¡Es un gusto saludarte!")]
+    public async Task GetSample_TramitesAprobadoYRechazado_RespectsChannelVariant(
+        string templateId, string channel, string expectedMarker)
+    {
+        var client = SuperAdminClient();
+
+        var response = await client.GetAsync(
+            $"{GroupUrl}/{templateId}/muestra?channel={channel}",
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<SampleDto>(TestContext.Current.CancellationToken);
+        body.Should().NotBeNull();
+        System.Net.WebUtility.HtmlDecode(body!.Html).Should().Contain(expectedMarker);
+        body.Html.Should().Contain("<img");
+        if (channel == "FLIT_SMTP")
+            body.Html.Should().Contain("tramite-cambio-estado-header.png");
+        else
+            body.Html.Should().Contain("tramite-cambio-estado-renting-header.png");
     }
 
     // ── AC2 — render de muestra por id ──────────────────────────────────────

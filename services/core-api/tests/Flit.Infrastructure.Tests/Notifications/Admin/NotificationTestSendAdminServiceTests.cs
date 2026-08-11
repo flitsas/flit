@@ -1,6 +1,7 @@
 using Flit.Admin.Application.Plataforma.Notificaciones;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Infrastructure.Email;
+using Flit.Infrastructure.Notifications;
 using Flit.Infrastructure.Notifications.Admin;
 using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Notifications.Routing;
@@ -360,6 +361,7 @@ public sealed class NotificationTestSendAdminServiceTests
         foreach (var templateId in new[]
                  {
                      "security.invitation", "security.forgot-password", "security.admin-reset-password",
+                     "security.welcome-registration",
                      "analytics.scheduled-report", "analytics.alert",
                  })
         {
@@ -580,6 +582,7 @@ public sealed class NotificationTestSendAdminServiceTests
             explicitChannelSender,
             emailSettings,
             Options.Create(rentingOptions ?? new RentingChannelOptions()),
+            Options.Create(new NotificationEmailAssetsOptions()),
             new EmailTransportDescriptor(isConsoleTransport),
             timeProvider,
             NullLogger<NotificationTestSendAdminService>.Instance);

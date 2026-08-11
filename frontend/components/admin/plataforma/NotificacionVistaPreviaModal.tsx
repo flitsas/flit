@@ -4,34 +4,33 @@ import { useEffect, useState } from "react";
 import { Eye } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
-import { getNotificationSample, type NotificationSample } from "@/lib/api/admin-plataforma-notificaciones";
+import {
+  getNotificationSample,
+  type NotificationSample,
+  type NotificationTestChannel,
+} from "@/lib/api/admin-plataforma-notificaciones";
 
 export interface NotificacionVistaPreviaModalProps {
   open: boolean;
   onClose: () => void;
   templateId: string;
   templateName: string;
+  /** Variante HTML cuando la plantilla difiere por canal (p. ej. Trámite Aprobado/Rechazado). */
+  channel?: NotificationTestChannel;
+  /** Etiqueta corta para el título (p. ej. "FLIT" / "Renting"). */
+  formatLabel?: string;
 }
 
 /**
  * SuperAdmin — Plataforma → Notificaciones → "Ver en vivo" (HU #11371, AC1/AC2).
- *
- * Decisión de diseño (no es detalle de implementación, ver la HU): el render de muestra se
- * pinta en un `<iframe srcDoc>` con `sandbox` restringido, SIN `allow-scripts` y SIN
- * `allow-same-origin`. Se descartó inyectar el HTML en el árbol de la aplicación (el CSS del
- * correo y el de la app se contaminan en ambas direcciones) y abrir una pestaña con `blob:`/
- * `data:` (ese esquema hereda el origen de quien lo crea, así que el correo tendría acceso a la
- * sesión). Coste asumido: sin acceso al mismo origen no se puede medir el contenido del iframe,
- * así que la altura queda fija a mano — no usar `postMessage` ni quitar `sandbox` para medirla.
- *
- * Uso de ejemplo:
- * <NotificacionVistaPreviaModal open={open} onClose={close} templateId="security.invitation" templateName="Invitación a la plataforma" />
  */
 export function NotificacionVistaPreviaModal({
   open,
   onClose,
   templateId,
   templateName,
+  channel,
+  formatLabel,
 }: NotificacionVistaPreviaModalProps) {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [sample, setSample] = useState<NotificationSample | null>(null);
@@ -39,7 +38,7 @@ export function NotificacionVistaPreviaModal({
   const load = () => {
     setStatus("loading");
     setSample(null);
-    getNotificationSample(templateId)
+    getNotificationSample(templateId, channel ? { channel } : undefined)
       .then((data) => {
         setSample(data);
         setStatus(data.html.trim().length === 0 ? "empty" : "ready");
@@ -52,13 +51,15 @@ export function NotificacionVistaPreviaModal({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga al abrir el modal
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, templateId]);
+  }, [open, templateId, channel]);
+
+  const titleSuffix = formatLabel ? ` (${formatLabel})` : "";
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={`Ver en vivo — ${templateName}`}
+      title={`Ver en vivo — ${templateName}${titleSuffix}`}
       icon={Eye}
       size="xl"
     >
@@ -83,7 +84,7 @@ export function NotificacionVistaPreviaModal({
               Este render es una muestra aislada. No se envía ningún correo al mostrarla.
             </p>
             <iframe
-              title={`Vista previa aislada de ${templateName}`}
+              title={`Vista previa aislada de ${templateName}${titleSuffix}`}
               srcDoc={sample.html}
               sandbox=""
               className="h-[520px] w-full rounded-xl border border-[#DFE5ED] bg-white dark:border-white/10"

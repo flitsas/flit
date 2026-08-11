@@ -56,7 +56,7 @@ internal interface IExplicitChannelEmailSender
 /// <para>
 /// <b>AC3 — los correos de cuenta ignoran el canal.</b> Los cuatro disparadores de cuenta
 /// (invitación, reenvío de invitación, recuperación de contraseña, reset administrativo) comparten
-/// las tres plantillas del <see cref="NotificationModule.Security"/> del catálogo
+/// las plantillas del <see cref="NotificationModule.Security"/> del catálogo
 /// (<see cref="NotificationTemplateCatalog"/>) y SIEMPRE salen por <see cref="_flitTransport"/> (el
 /// SMTP/consola de FLIT), sin importar el canal del tenant: es decisión de producto — elimina el
 /// punto único de fallo de un tercero en la ruta de acceso a la plataforma. Cualquier plantilla que
@@ -192,8 +192,8 @@ internal sealed partial class TenantChannelEmailRouter(
     }
 
     /// <summary>
-    /// AC3 — los 3 templates de <see cref="NotificationModule.Security"/> (invitación —que cubre
-    /// crear y reenviar—, recuperación de contraseña, reset administrativo) son los "correos de
+    /// AC3 — los templates de <see cref="NotificationModule.Security"/> (invitación —que cubre
+    /// crear y reenviar—, recuperación, reset administrativo y bienvenida) son los "correos de
     /// cuenta". Una plantilla no catalogada (id desconocido) NO se trata como cuenta: sigue la
     /// resolución por canal — el bypass de AC3 es una excepción explícita, no el comportamiento por
     /// defecto.

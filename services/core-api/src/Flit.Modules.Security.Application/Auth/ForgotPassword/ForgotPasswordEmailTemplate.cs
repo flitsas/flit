@@ -21,20 +21,27 @@ public static class ForgotPasswordEmailTemplate
     /// (<paramref name="link"/> ya calculado con <see cref="BuildResetLink"/>). Sin E/S, sin
     /// reloj, sin aleatoriedad, sin estado.
     /// </summary>
-    public static ComposedEmail Compose(string displayName, string link, int lifetimeMinutes) =>
-        new(Subject, BuildHtmlBody(displayName, link, lifetimeMinutes));
+    public static ComposedEmail Compose(
+        string displayName, string link, int lifetimeMinutes, string? assetsBaseUrl = null) =>
+        new(Subject, BuildHtmlBody(displayName, link, lifetimeMinutes, assetsBaseUrl));
 
-    private static string BuildHtmlBody(string displayName, string link, int lifetimeMinutes)
+    private static string BuildHtmlBody(
+        string displayName, string link, int lifetimeMinutes, string? assetsBaseUrl)
     {
         var greetingName = string.IsNullOrWhiteSpace(displayName) ? "usuario" : displayName;
-        return $"""
-            <p>Hola {System.Net.WebUtility.HtmlEncode(greetingName)},</p>
-            <p>Recibimos una solicitud para restablecer tu contraseña en FLIT.
-            Haz clic en el siguiente enlace para crear una nueva contraseña:</p>
-            <p><a href="{link}">Restablecer mi contraseña</a></p>
-            <p>El enlace caduca en {lifetimeMinutes} minutos. Si no solicitaste este cambio,
-            puedes ignorar este mensaje; tu contraseña seguirá siendo la misma.</p>
-            <p>— Equipo FLIT</p>
-            """;
+        var name = System.Net.WebUtility.HtmlEncode(greetingName);
+        var body =
+            FlitBrandedEmailLayout.ParagraphHtml($"Hola {name},")
+            + FlitBrandedEmailLayout.Paragraph(
+                "Recibimos una solicitud para restablecer tu contraseña en FLIT. Haz clic en el siguiente enlace para crear una nueva contraseña:")
+            + FlitBrandedEmailLayout.ActionLink(link, "Restablecer mi contraseña")
+            + FlitBrandedEmailLayout.Paragraph(
+                $"El enlace caduca en {lifetimeMinutes} minutos. Si no solicitaste este cambio, puedes ignorar este mensaje; tu contraseña seguirá siendo la misma.");
+
+        return FlitBrandedEmailLayout.Wrap(
+            headline: "¡RECUPERACIÓN DE CONTRASEÑA!",
+            bodyInnerHtml: body,
+            closingHeadline: null,
+            assetsBaseUrl: assetsBaseUrl);
     }
 }

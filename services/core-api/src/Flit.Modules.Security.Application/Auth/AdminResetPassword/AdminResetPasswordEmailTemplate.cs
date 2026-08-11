@@ -22,18 +22,29 @@ public static class AdminResetPasswordEmailTemplate
     /// llamante). Sin E/S, sin reloj, sin aleatoriedad, sin estado — la misma entrada produce
     /// siempre la misma salida.
     /// </summary>
-    public static ComposedEmail Compose(string displayName, string temporaryPassword) =>
-        new(Subject, BuildBody(displayName, temporaryPassword));
+    public static ComposedEmail Compose(
+        string displayName, string temporaryPassword, string? assetsBaseUrl = null) =>
+        new(Subject, BuildBody(displayName, temporaryPassword, assetsBaseUrl));
 
-    private static string BuildBody(string displayName, string temporaryPassword)
+    private static string BuildBody(
+        string displayName, string temporaryPassword, string? assetsBaseUrl)
     {
-        var name = string.IsNullOrWhiteSpace(displayName) ? "usuario" : displayName;
-        return $"""
-            <p>Hola {System.Net.WebUtility.HtmlEncode(name)},</p>
-            <p>Un administrador restableció tu contraseña en FLIT. Tu contraseña temporal es:</p>
-            <p><strong>{System.Net.WebUtility.HtmlEncode(temporaryPassword)}</strong></p>
-            <p>Por seguridad, deberás definir una nueva contraseña la próxima vez que inicies sesión.</p>
-            <p>— Equipo FLIT</p>
-            """;
+        var nameRaw = string.IsNullOrWhiteSpace(displayName) ? "usuario" : displayName;
+        var name = System.Net.WebUtility.HtmlEncode(nameRaw);
+        var password = System.Net.WebUtility.HtmlEncode(temporaryPassword);
+        var body =
+            FlitBrandedEmailLayout.ParagraphHtml($"Hola {name},")
+            + FlitBrandedEmailLayout.Paragraph(
+                "Un administrador restableció tu contraseña en FLIT. Tu contraseña temporal es:")
+            + FlitBrandedEmailLayout.ParagraphHtml(
+                $"<strong style=\"font-size:18px;letter-spacing:0.04em;\">{password}</strong>")
+            + FlitBrandedEmailLayout.Paragraph(
+                "Por seguridad, deberás definir una nueva contraseña la próxima vez que inicies sesión.");
+
+        return FlitBrandedEmailLayout.Wrap(
+            headline: "¡CONTRASEÑA RESTABLECIDA!",
+            bodyInnerHtml: body,
+            closingHeadline: null,
+            assetsBaseUrl: assetsBaseUrl);
     }
 }
