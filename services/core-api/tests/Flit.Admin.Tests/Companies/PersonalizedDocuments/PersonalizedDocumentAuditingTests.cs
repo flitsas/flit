@@ -296,6 +296,9 @@ public sealed class PersonalizedDocumentAuditingTests
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             NotificationChannel = channel,
+            // HU #11357/#11362 (ADR-0043) — el guard ya no lee el canal; se deriva aquí solo para no
+            // reescribir cada fixture preexistente a esta HU.
+            PersonalizedDocumentsEnabled = string.Equals(channel, "tenant_api", StringComparison.Ordinal),
             CreatedAt = DateTimeOffset.UtcNow,
         });
         ctx.SaveChanges();

@@ -334,8 +334,10 @@ public sealed class PersonalizedDocumentLifecycleHandlerTests
     }
 
     [Fact]
-    public async Task AC4_SwitchingBackToTenantApi_SameActiveVersionAppliesAgain_WithoutReupload()
+    public async Task AC4_SwitchingBackOn_SameActiveVersionAppliesAgain_WithoutReupload()
     {
+        // HU #11362/ADR-0043 — reescrito: el interruptor de esta capacidad ya no es el canal (la
+        // expectativa de prueba de ADR-0042 queda sustituida). Se apaga/enciende el booleano propio.
         var dbName = NewDbName();
         Guid v1;
         await using (var seed = NewContext(dbName))
@@ -344,25 +346,25 @@ public sealed class PersonalizedDocumentLifecycleHandlerTests
             v1 = SeedVersion(seed, TenantA, PersonalizedDocumentTypes.Mandato, version: 1, status: "activo", isActive: true);
         }
 
-        // Cambia a FLIT_SMTP: no toca filas ni activo/inactivo — es un interruptor de resolución, no de datos.
-        await using (var switchToSmtp = NewContext(dbName))
+        // Apaga el interruptor: no toca filas ni activo/inactivo — es un interruptor de resolución, no de datos.
+        await using (var switchOff = NewContext(dbName))
         {
-            var policy = await switchToSmtp.TenantOperationalPolicies.SingleAsync(p => p.TenantId == TenantA, Ct);
-            policy.NotificationChannel = "flit_smtp";
-            await switchToSmtp.SaveChangesAsync(Ct);
+            var policy = await switchOff.TenantOperationalPolicies.SingleAsync(p => p.TenantId == TenantA, Ct);
+            policy.PersonalizedDocumentsEnabled = false;
+            await switchOff.SaveChangesAsync(Ct);
         }
 
-        await using (var verifyDuringSmtp = NewContext(dbName))
+        await using (var verifyDuringOff = NewContext(dbName))
         {
-            var row = await verifyDuringSmtp.CompanyPersonalizedDocuments.SingleAsync(d => d.Id == v1, Ct);
+            var row = await verifyDuringOff.CompanyPersonalizedDocuments.SingleAsync(d => d.Id == v1, Ct);
             row.IsActive.Should().BeTrue(); // el flag no se tocó — no hay booleano paralelo (§8, "fuente única")
         }
 
-        // Vuelve a TENANT_API: la MISMA versión sigue activa, sin recargarla.
+        // Vuelve a encenderlo: la MISMA versión sigue activa, sin recargarla.
         await using (var switchBack = NewContext(dbName))
         {
             var policy = await switchBack.TenantOperationalPolicies.SingleAsync(p => p.TenantId == TenantA, Ct);
-            policy.NotificationChannel = "tenant_api";
+            policy.PersonalizedDocumentsEnabled = true;
             await switchBack.SaveChangesAsync(Ct);
         }
 
@@ -613,6 +615,9 @@ public sealed class PersonalizedDocumentLifecycleHandlerTests
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             NotificationChannel = channel,
+            // HU #11357/#11362 (ADR-0043) — el guard ya no lee el canal; se deriva aquí solo para no
+            // reescribir cada fixture AC1-AC5 preexistente a esta HU.
+            PersonalizedDocumentsEnabled = string.Equals(channel, "tenant_api", StringComparison.Ordinal),
             CreatedAt = DateTimeOffset.UtcNow,
         });
         ctx.SaveChanges();

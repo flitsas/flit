@@ -297,12 +297,27 @@ public static class InfrastructureExtensions
         services.AddScoped<INotificationDeliveryLogWriter, NotificationDeliveryLogWriter>();
         services.AddScoped<IEmailSender>(sp =>
         {
-            IEmailSender concreteSender = useConsoleEmailSender
+            IEmailSender flitTransport = useConsoleEmailSender
                 ? sp.GetRequiredService<ConsoleEmailSender>()
                 : sp.GetRequiredService<SmtpEmailSender>();
 
+            // HU #11362 (Feature #11348, cierra Bug #11311) — el enrutamiento por canal se intercala
+            // AQUÍ, como el "concreteSender" que envuelve el decorador de bitácora (HU #11363): así
+            // NotificationDeliveryLoggingEmailSender sigue midiendo/registrando el intento completo
+            // (enrutamiento + envío real) sin que ninguno de los 6 puntos de llamada de IEmailSender
+            // cambie. IRentingEmailApiSender solo está registrado cuando AddRentingChannel lo habilitó
+            // (RENTING_API_ENABLED=true); sp.GetService (no GetRequiredService) lo resuelve como null
+            // en cualquier otro ambiente — el router trata ese null como "canal no disponible" y
+            // responde ConfigurationIncomplete en vez de fallar al resolver el árbol de DI.
+            IEmailSender router = new TenantChannelEmailRouter(
+                flitTransport,
+                sp.GetRequiredService<ITenantSettingsRepository>(),
+                sp.GetService<IRentingEmailApiSender>(),
+                sp.GetRequiredService<IOptions<RentingChannelOptions>>(),
+                sp.GetRequiredService<ILogger<TenantChannelEmailRouter>>());
+
             return new NotificationDeliveryLoggingEmailSender(
-                concreteSender,
+                router,
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 sp.GetRequiredService<ILogger<NotificationDeliveryLoggingEmailSender>>());
         });

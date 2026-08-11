@@ -83,6 +83,15 @@ public sealed class TenantSettings
     /// <summary>Canal de enrutamiento de notificaciones (<c>notification_channel</c>).</summary>
     public required NotificationChannel NotificationChannel { get; init; }
 
+    /// <summary>
+    /// Interruptor propio de elegibilidad de documentos personalizados (<c>personalized_documents_enabled</c>,
+    /// HU #11357/#11362, ADR-0043). Gobierna si el tenant puede OPERAR las rutas de escritura de
+    /// documentos personalizados (crear/confirmar/activar/desactivar versión); desacoplado de
+    /// <see cref="NotificationChannel"/> — cambiar el canal ya NO enciende ni apaga esta capacidad.
+    /// No <c>required</c>: default false para no romper construcciones existentes.
+    /// </summary>
+    public bool PersonalizedDocumentsEnabled { get; init; }
+
     /// <summary>Destinatario de notificaciones (<c>notification_target</c>).</summary>
     public required NotificationTarget NotificationTarget { get; init; }
 
@@ -136,6 +145,7 @@ public sealed class TenantSettings
         PlateFlowSkipToTerminado = false,
         ValidateSoatWithRunt = false,
         NotificationChannel = NotificationChannel.FlitSmtp,
+        PersonalizedDocumentsEnabled = false,
         NotificationTarget = NotificationTarget.Radicador,
         PaymentMethods = [],
         RuntFailoverTimeoutMs = 60_000,

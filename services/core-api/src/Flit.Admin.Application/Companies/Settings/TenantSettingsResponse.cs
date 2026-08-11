@@ -23,4 +23,6 @@ public sealed record TenantSettingsResponse(
     bool ValidarSoatConRunt,
     AvaluoProviderConfigDto AvaluoProviderConfig,
     // FEATURE 02 — fuente de comparendos (internal | external).
-    string FinesQuerySource);
+    string FinesQuerySource,
+    // HU #11357/#11362 (ADR-0043) — elegibilidad de documentos personalizados, desacoplada del canal.
+    bool DocumentosPersonalizadosActivo);

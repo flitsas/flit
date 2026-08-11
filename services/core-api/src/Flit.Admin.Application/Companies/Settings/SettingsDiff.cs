@@ -30,6 +30,8 @@ internal static class SettingsDiff
         AddBool(changes, "plate_preassign_enabled", previous.PlatePreassignEnabled, updated.PlatePreassignEnabled);
         AddBool(changes, "validate_soat_with_runt", previous.ValidateSoatWithRunt, updated.ValidateSoatWithRunt);
         AddBool(changes, "plate_flow_skip_to_terminado", previous.PlateFlowSkipToTerminado, updated.PlateFlowSkipToTerminado);
+        // HU #11357/#11362 (ADR-0043) — elegibilidad de documentos personalizados, campo propio.
+        AddBool(changes, "personalized_documents_enabled", previous.PersonalizedDocumentsEnabled, updated.PersonalizedDocumentsEnabled);
 
         // FEATURE 02 — fuente de comparendos (internal | external).
         AddString(changes, "fines_query_source", previous.FinesQuerySource, updated.FinesQuerySource);

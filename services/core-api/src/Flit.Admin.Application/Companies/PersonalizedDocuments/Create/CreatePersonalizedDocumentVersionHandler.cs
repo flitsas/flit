@@ -53,7 +53,7 @@ public sealed class CreatePersonalizedDocumentVersionHandler
                 "El tipo de documento debe ser 'mandato' o 'tramite_virtual'."));
         }
 
-        var channelEnabled = await PersonalizedDocumentChannelGuard
+        var channelEnabled = await PersonalizedDocumentEligibilityGuard
             .IsWriteEnabledAsync(_settingsRepository, command.TenantId, cancellationToken)
             .ConfigureAwait(false);
         if (!channelEnabled)

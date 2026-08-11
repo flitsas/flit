@@ -256,12 +256,13 @@ public sealed class PersonalizedDocumentHandlerTests
             storage.Seed(created.Upload!.StoragePath, ValidPdf(pages: 1));
         }
 
-        // El tenant cambia a FLIT_SMTP DESPUÉS del alta (restricción 9: el historial no se pierde,
-        // solo se deshabilitan las rutas de escritura).
+        // El tenant apaga el interruptor propio DESPUÉS del alta (restricción 9: el historial no se
+        // pierde, solo se deshabilitan las rutas de escritura). HU #11362/ADR-0043: ya no se simula
+        // apagando el canal — el canal dejó de gobernar esta capacidad.
         await using (var switchChannel = NewContext(dbName))
         {
             var policy = await switchChannel.TenantOperationalPolicies.SingleAsync(p => p.TenantId == TenantA, Ct);
-            policy.NotificationChannel = "flit_smtp";
+            policy.PersonalizedDocumentsEnabled = false;
             await switchChannel.SaveChangesAsync(Ct);
         }
 
@@ -492,6 +493,11 @@ public sealed class PersonalizedDocumentHandlerTests
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             NotificationChannel = channel,
+            // HU #11357/#11362 (ADR-0043) — el guard ya no lee el canal: se sigue derivando aquí de
+            // "tenant_api" solo para conservar el fixture existente sin reescribir cada test AC1-AC5
+            // de esta clase (que preceden a la HU #11362). La cobertura de que el canal YA NO gobierna
+            // esta capacidad vive en PersonalizedDocumentEligibilityGuardTests / TenantChannelEmailRouterTests.
+            PersonalizedDocumentsEnabled = string.Equals(channel, "tenant_api", StringComparison.Ordinal),
             CreatedAt = DateTimeOffset.UtcNow,
         });
         ctx.SaveChanges();
