@@ -10,6 +10,7 @@ using Flit.Infrastructure.KyverumRunt;
 using Flit.Infrastructure.Rues;
 using Flit.Infrastructure.Kyverum;
 using Flit.Infrastructure.Messaging;
+using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Ocr;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -210,6 +211,7 @@ public static class InfrastructureExtensions
         AddIdentityValidation(services, configuration);
         AddImprontas(services, configuration);
         AddRues(services, configuration);
+        AddRentingChannel(services, configuration);
         AddOcr(services, configuration);
         AddQuipux(services);
 
@@ -688,6 +690,185 @@ public static class InfrastructureExtensions
             var o = sp.GetRequiredService<IOptions<RuesOptions>>().Value;
             c.BaseAddress = new Uri(o.BaseUrl);
             c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds);
+        });
+    }
+
+    /// <summary>
+    /// HU #11359 — canal de API del cliente Renting (envío de correo por API externa con mTLS).
+    /// OPT-IN por <see cref="RentingChannelOptions.Enabled"/> (AC2): sin el interruptor en
+    /// <c>true</c> se registra únicamente <c>IOptions&lt;RentingChannelOptions&gt;</c> con
+    /// <c>Enabled = false</c> — para que la HU #11362 (enrutamiento, AC6) pueda consultarlo sin
+    /// saber de antemano si el canal está habilitado — y NADA MÁS se valida ni se registra: ni el
+    /// material TLS, ni el <see cref="System.Net.Http.HttpClient"/>.
+    /// <para>
+    /// Habilitado, valida la presencia de TODAS las variables obligatorias (AC1) y registra un
+    /// <see cref="RentingClientCertificateProvider"/> <c>Singleton</c> cuyo <c>factory</c> carga y
+    /// valida el certificado (<see cref="RentingClientCertificateLoader"/>). Con
+    /// <c>ValidateOnBuild</c> —patrón vigente del repo, ver
+    /// <see cref="Security.JwtKeyMaterialLoader"/>— esa carga corre AL CONSTRUIR el
+    /// <see cref="IServiceProvider"/>, o sea en el arranque: un certificado inexistente, una
+    /// passphrase que no abre el archivo o una identidad de login que no coincide con el Subject
+    /// del certificado (AC4/AC5) tumban el arranque completo, no solo el primer envío.
+    /// </para>
+    /// </summary>
+    private static void AddRentingChannel(IServiceCollection services, IConfiguration configuration)
+    {
+        // Env var CRUDA primero (a diferencia de Fasecolda, que va config primero): este es un
+        // canal 100% de despliegue (12-factor), sin defaults propios de negocio en appsettings.json
+        // que deban ganarle a la variable del contenedor — mismo orden y motivo que Rues/Kyverum.
+        string? Cfg(string key, string env)
+        {
+            var fromEnv = Environment.GetEnvironmentVariable(env);
+            return !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : configuration[key];
+        }
+
+        var enabled = string.Equals(
+            Cfg("Notifications:Renting:Enabled", "RENTING_API_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
+
+        if (!enabled)
+        {
+            // AC2 — el canal nace deshabilitado: no se exige ninguna variable del canal ni el
+            // material TLS. El servicio arranca con normalidad.
+            services.Configure<RentingChannelOptions>(o => o.Enabled = false);
+            return;
+        }
+
+        static string Require(string? value, string envName)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new InvalidOperationException(
+                    $"Canal Renting habilitado (RENTING_API_ENABLED=true) pero falta la variable de "
+                    + $"configuración '{envName}'.");
+            }
+
+            return value;
+        }
+
+        static int RequireInt(string? value, string envName)
+        {
+            if (!int.TryParse(value, out var result))
+            {
+                throw new InvalidOperationException(
+                    $"Canal Renting habilitado (RENTING_API_ENABLED=true) pero la variable de "
+                    + $"configuración '{envName}' es obligatoria y debe ser un entero (segundos).");
+            }
+
+            return result;
+        }
+
+        // AC1 — se valida la presencia de TODAS las variables requeridas: ruta del certificado,
+        // passphrase, URL base, ruta de envío, ruta de login, tiempos de espera y datos del
+        // remitente. Las variables de caché de login (uso de la HU #11360), las del "otro proxy"
+        // que comparte bloque de configuración (DEFAULT_SENDER_*) y las del desvío en no-producción
+        // (uso de la HU #11364) se modelan pero NO se exigen aquí — quedan fuera del alcance de
+        // esta HU (ver comentarios en RentingChannelOptions).
+        var options = new RentingChannelOptions
+        {
+            Enabled = true,
+            BaseUrl = Require(Cfg("Notifications:Renting:BaseUrl", "RENTING_API_BASE_URL"), "RENTING_API_BASE_URL"),
+            ApiKeyName = Require(
+                Cfg("Notifications:Renting:ApiKeyName", "RENTING_API_KEY_NAME"), "RENTING_API_KEY_NAME"),
+            ApiKeyValue = Require(
+                Cfg("Notifications:Renting:ApiKeyValue", "RENTING_API_KEY_VALUE"), "RENTING_API_KEY_VALUE"),
+            PfxCertificatePath = Require(
+                Cfg("Notifications:Renting:PfxCertificatePath", "RENTING_API_PFX_CERTIFICATE_PATH"),
+                "RENTING_API_PFX_CERTIFICATE_PATH"),
+            Passphrase = Require(
+                Cfg("Notifications:Renting:Passphrase", "RENTING_API_PASSPHRASE"), "RENTING_API_PASSPHRASE"),
+            SecondsTimeout = RequireInt(
+                Cfg("Notifications:Renting:SecondsTimeout", "RENTING_API_SECONDS_TIMEOUT"),
+                "RENTING_API_SECONDS_TIMEOUT"),
+            LoginPath = Require(
+                Cfg("Notifications:Renting:LoginPath", "RENTING_API_LOGIN_PATH"), "RENTING_API_LOGIN_PATH"),
+            LoginSecondsTimeout = RequireInt(
+                Cfg("Notifications:Renting:LoginSecondsTimeout", "RENTING_API_LOGIN_SECONDS_TIMEOUT"),
+                "RENTING_API_LOGIN_SECONDS_TIMEOUT"),
+            LoginSubject = Require(
+                Cfg("Notifications:Renting:LoginSubject", "RENTING_API_LOGIN_SUBJECT"), "RENTING_API_LOGIN_SUBJECT"),
+            SendEmailPath = Require(
+                Cfg("Notifications:Renting:SendEmailPath", "RENTING_API_SEND_EMAIL_PATH"),
+                "RENTING_API_SEND_EMAIL_PATH"),
+            SendEmailSecondsTimeout = RequireInt(
+                Cfg("Notifications:Renting:SendEmailSecondsTimeout", "RENTING_API_SEND_EMAIL_SECONDS_TIMEOUT"),
+                "RENTING_API_SEND_EMAIL_SECONDS_TIMEOUT"),
+            SendEmailSenderEmail = Require(
+                Cfg("Notifications:Renting:SendEmailSenderEmail", "RENTING_API_SEND_EMAIL_SENDER_EMAIL"),
+                "RENTING_API_SEND_EMAIL_SENDER_EMAIL"),
+            SendEmailSenderUsername = Require(
+                Cfg("Notifications:Renting:SendEmailSenderUsername", "RENTING_API_SEND_EMAIL_SENDER_USERNAME"),
+                "RENTING_API_SEND_EMAIL_SENDER_USERNAME"),
+
+            // No exigidas por esta HU (ver comentario arriba): se modelan si están presentes.
+            LoginCacheKey = Cfg("Notifications:Renting:LoginCacheKey", "RENTING_API_LOGIN_CACHE_KEY") ?? "",
+            LoginCacheSecondsTtl = int.TryParse(
+                Cfg("Notifications:Renting:LoginCacheSecondsTtl", "RENTING_API_LOGIN_CACHE_SECONDS_TTL"),
+                out var cacheTtl)
+                ? cacheTtl
+                : 3600,
+            LoginSecretName = Cfg("Notifications:Renting:LoginSecretName", "RENTING_API_LOGIN_SECRET_NAME") ?? "",
+            DefaultSenderEmail = Cfg(
+                "Notifications:Renting:DefaultSenderEmail", "RENTING_API_SEND_EMAIL_DEFAULT_SENDER_EMAIL") ?? "",
+            DefaultSenderUsername = Cfg(
+                "Notifications:Renting:DefaultSenderUsername", "RENTING_API_SEND_EMAIL_DEFAULT_SENDER_USERNAME") ?? "",
+            SendEmailDevelopmentRecipientEmail = Cfg(
+                "Notifications:Renting:SendEmailDevelopmentRecipientEmail",
+                "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL") ?? "",
+            SendEmailDevelopmentRecipientUsername = Cfg(
+                "Notifications:Renting:SendEmailDevelopmentRecipientUsername",
+                "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME") ?? "",
+        };
+
+        services.Configure<RentingChannelOptions>(o =>
+        {
+            o.Enabled = options.Enabled;
+            o.BaseUrl = options.BaseUrl;
+            o.ApiKeyName = options.ApiKeyName;
+            o.ApiKeyValue = options.ApiKeyValue;
+            o.PfxCertificatePath = options.PfxCertificatePath;
+            o.Passphrase = options.Passphrase;
+            o.SecondsTimeout = options.SecondsTimeout;
+            o.LoginPath = options.LoginPath;
+            o.LoginSecondsTimeout = options.LoginSecondsTimeout;
+            o.LoginCacheKey = options.LoginCacheKey;
+            o.LoginCacheSecondsTtl = options.LoginCacheSecondsTtl;
+            o.LoginSecretName = options.LoginSecretName;
+            o.LoginSubject = options.LoginSubject;
+            o.SendEmailPath = options.SendEmailPath;
+            o.SendEmailSecondsTimeout = options.SendEmailSecondsTimeout;
+            o.SendEmailSenderEmail = options.SendEmailSenderEmail;
+            o.SendEmailSenderUsername = options.SendEmailSenderUsername;
+            o.DefaultSenderEmail = options.DefaultSenderEmail;
+            o.DefaultSenderUsername = options.DefaultSenderUsername;
+            o.SendEmailDevelopmentRecipientEmail = options.SendEmailDevelopmentRecipientEmail;
+            o.SendEmailDevelopmentRecipientUsername = options.SendEmailDevelopmentRecipientUsername;
+        });
+
+        // AC3/AC4/AC5 — Singleton cuyo factory carga y valida el certificado. Con ValidateOnBuild
+        // esto se ejecuta al construir el IServiceProvider (arranque), no en el primer uso.
+        services.AddSingleton(sp =>
+        {
+            var logger = sp.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("Flit.Infrastructure.Notifications.Renting");
+            var certificate = RentingClientCertificateLoader.Load(options, logger);
+            return new RentingClientCertificateProvider(certificate);
+        });
+
+        // Cliente HTTP de transporte con el certificado cliente adjunto (mTLS) y verificación del
+        // servidor ACTIVA (no se toca la validación por defecto). Solo transporte: el adaptador de
+        // envío/multipart es de la HU #11361 y el login es de la HU #11360.
+        services.AddHttpClient(RentingChannelOptions.HttpClientName, (sp, c) =>
+        {
+            var o = sp.GetRequiredService<IOptions<RentingChannelOptions>>().Value;
+            c.BaseAddress = new Uri(o.BaseUrl);
+            c.Timeout = TimeSpan.FromSeconds(o.SecondsTimeout);
+            if (!string.IsNullOrWhiteSpace(o.ApiKeyName))
+                c.DefaultRequestHeaders.TryAddWithoutValidation(o.ApiKeyName, o.ApiKeyValue);
+        })
+        .ConfigurePrimaryHttpMessageHandler(sp =>
+        {
+            var certificateProvider = sp.GetRequiredService<RentingClientCertificateProvider>();
+            return RentingHttpMessageHandlerFactory.Create(certificateProvider.Certificate);
         });
     }
 
