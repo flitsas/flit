@@ -168,6 +168,13 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Companies.PersonalizedDocuments.IPdfDocumentInspector,
             Flit.Infrastructure.Documents.PdfSharpDocumentInspector>();
 
+        // HU #11363 (Feature #11348) — bitácora consultable de intentos de envío: repositorio
+        // tenant-scoped (WHERE tenant_id explícito, RLS decorativo). El escritor
+        // (INotificationDeliveryLogWriter) se registra en InfrastructureExtensions.AddPostgresInfrastructure,
+        // junto al decorador de IEmailSender.
+        services.AddScoped<Flit.Admin.Application.Companies.NotificationDeliveryLogs.INotificationDeliveryLogRepository,
+            Flit.Infrastructure.Persistence.Repositories.NotificationDeliveryLogRepository>();
+
         // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
         // correo: persistencia tenant-scoped, adaptador Kyverum DESACOPLADO (reutiliza IKyverumVerifyClient
         // + cifra el secreto del webhook) y linker que ancla la identidad aprobada al sujeto

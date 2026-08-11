@@ -226,6 +226,10 @@ public static class DependencyInjection
         services.AddScoped<Companies.PersonalizedDocuments.Confirm.ConfirmPersonalizedDocumentVersionHandler>();
         services.AddScoped<Companies.PersonalizedDocuments.List.ListPersonalizedDocumentsHandler>();
 
+        // HU #11363 (Feature #11348) — bitácora consultable de intentos de envío. El repositorio
+        // (INotificationDeliveryLogRepository) se registra en AddAdminInfrastructure.
+        services.AddScoped<Companies.NotificationDeliveryLogs.List.ListNotificationDeliveryLogsHandler>();
+
         // HU #11314 (Feature #11309, ADR-0042) — ciclo de vida del documento personalizado:
         // reactivar una versión histórica, «volver al documento del sistema» (sin borrar nada) y
         // vista previa sin activar (presigned GET inline, ADR-0029).

@@ -72,7 +72,9 @@ public sealed partial class AdminResetPasswordHandler(
             target.UserId, hash, DateTimeOffset.UtcNow, mustChangePassword: true, cancellationToken);
 
         var composed = AdminResetPasswordEmailTemplate.Compose(target.DisplayName, temporaryPassword);
-        var message = new EmailMessage(target.TenantId, target.Email, target.DisplayName, composed.Subject, composed.HtmlBody);
+        // HU #11363 AC1 — id estable del catálogo (TemplateIds.AdminResetPassword en Flit.Infrastructure).
+        var message = new EmailMessage(
+            target.TenantId, "security.admin-reset-password", target.Email, target.DisplayName, composed.Subject, composed.HtmlBody);
 
         var sendResult = await emailSender.SendAsync(message, cancellationToken);
         if (!sendResult.Success)

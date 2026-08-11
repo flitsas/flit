@@ -194,7 +194,7 @@ public sealed class AnalyticsEmailPreviewSampleTests
     }
 
     private static EmailMessage ToMessage(string subject, string html) =>
-        new(TenantId: null, "preview@flit.test", "Vista previa", subject, html);
+        new(TenantId: null, "preview.golden", "preview@flit.test", "Vista previa", subject, html);
 
     private static string LocateSourceFile()
     {

@@ -13,7 +13,17 @@ namespace Flit.Modules.Security.Domain.Auth;
 /// <see cref="PasswordRecoveryUser"/>) — el valor null sigue siendo "suministrado
 /// explícitamente", solo que no hay tenant que suministrar.
 /// </param>
-public sealed record EmailMessage(Guid? TenantId, string ToEmail, string ToName, string Subject, string HtmlBody);
+/// <param name="TemplateKey">
+/// HU #11363 AC1 — id ESTABLE de la plantilla usada (mismo vocabulario que
+/// <c>NotificationTemplateCatalog.TemplateIds</c> en <c>Flit.Infrastructure</c>, p. ej.
+/// <c>"security.forgot-password"</c>). Se repite como literal escrito a mano en cada llamador
+/// en vez de referenciar el catálogo — este proyecto (Domain) no puede depender de
+/// Infrastructure, y el catálogo mismo declara sus ids como "literales estables" a propósito.
+/// Lo consume el decorador de bitácora (<c>NotificationDeliveryLoggingEmailSender</c>); ninguna
+/// implementación de transporte lo usa para enviar.
+/// </param>
+public sealed record EmailMessage(
+    Guid? TenantId, string TemplateKey, string ToEmail, string ToName, string Subject, string HtmlBody);
 
 /// <summary>
 /// HU #11358 AC2 — catálogo CERRADO de causas de un intento de envío. <see cref="Sent"/> es la

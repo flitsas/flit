@@ -225,8 +225,9 @@ internal sealed class AnalyticsSchedulerProcessor(
             {
                 // HU #11358 AC2/AC3 — el puerto ya no lanza por un fallo de transporte conocido;
                 // el resultado tipado reemplaza la interpretación "no lanzó == se envió".
+                // HU #11363 AC1 — id estable del catálogo (TemplateIds.ScheduledReport).
                 var result = await emailSender.SendAsync(
-                    new EmailMessage(schedule.TenantId, recipient, recipient, subject, html), ct);
+                    new EmailMessage(schedule.TenantId, "analytics.scheduled-report", recipient, recipient, subject, html), ct);
                 if (!result.Success)
                     SchedulerLog.ScheduleEmailFailed(logger, schedule.Id, recipient, result.Outcome);
             }
@@ -391,8 +392,9 @@ internal sealed class AnalyticsSchedulerProcessor(
             {
                 // HU #11358 AC2/AC3 — igual que en el informe programado: el resultado tipado
                 // decide anySent, no la ausencia de excepción.
+                // HU #11363 AC1 — id estable del catálogo (TemplateIds.Alert).
                 var result = await emailSender.SendAsync(
-                    new EmailMessage(rule.TenantId, recipient, recipient, subject, html), ct);
+                    new EmailMessage(rule.TenantId, "analytics.alert", recipient, recipient, subject, html), ct);
                 if (result.Success)
                     anySent = true;
                 else

@@ -58,7 +58,9 @@ public sealed partial class CreateInvitationHandler(
 
         var link = InvitationEmailTemplate.BuildActivateLink(options.ActivateUrlBase, token.RawToken);
         var composed = InvitationEmailTemplate.Compose(command.FullName, link);
-        var message = new EmailMessage(command.TenantId, email, email, composed.Subject, composed.HtmlBody);
+        // HU #11363 AC1 — id estable del catálogo (TemplateIds.Invitation en Flit.Infrastructure);
+        // comparte plantilla con ResendInvitationHandler (dos disparadores, una sola entrada).
+        var message = new EmailMessage(command.TenantId, "security.invitation", email, email, composed.Subject, composed.HtmlBody);
 
         LogActivationLinkDev(logger, link);
 

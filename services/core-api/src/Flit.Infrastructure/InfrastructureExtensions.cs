@@ -10,6 +10,7 @@ using Flit.Infrastructure.KyverumRunt;
 using Flit.Infrastructure.Rues;
 using Flit.Infrastructure.Kyverum;
 using Flit.Infrastructure.Messaging;
+using Flit.Infrastructure.Notifications.DeliveryLog;
 using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Ocr;
 using Flit.Infrastructure.Persistence;
@@ -274,10 +275,29 @@ public static class InfrastructureExtensions
         // HU #11358 AC5 — Scoped (no Singleton): todos los AddHttpClient<T> del repo son
         // Transient, así que un adaptador HTTP debajo de IEmailSender (HU #11361) sería una
         // dependencia cautiva si el puerto siguiera siendo instancia única.
-        if (environment.IsDevelopment() && string.IsNullOrWhiteSpace(emailSettings.Host))
-            services.AddScoped<IEmailSender, ConsoleEmailSender>();
+        var useConsoleEmailSender = environment.IsDevelopment() && string.IsNullOrWhiteSpace(emailSettings.Host);
+        if (useConsoleEmailSender)
+            services.AddScoped<ConsoleEmailSender>();
         else
-            services.AddScoped<IEmailSender, SmtpEmailSender>();
+            services.AddScoped<SmtpEmailSender>();
+
+        // HU #11363 (Feature #11348) — decorador que envuelve el sender real y escribe la bitácora
+        // append-only admin.notification_delivery_logs SIN tocar los 6 puntos de llamada de
+        // IEmailSender: mide duración con Stopwatch, delega el envío y registra el intento en un
+        // scope PROPIO (aislado del DbContext ambiente de la petición). Un fallo al escribir la
+        // bitácora NUNCA cambia el resultado del envío (AC6) — ver NotificationDeliveryLoggingEmailSender.
+        services.AddScoped<INotificationDeliveryLogWriter, NotificationDeliveryLogWriter>();
+        services.AddScoped<IEmailSender>(sp =>
+        {
+            IEmailSender concreteSender = useConsoleEmailSender
+                ? sp.GetRequiredService<ConsoleEmailSender>()
+                : sp.GetRequiredService<SmtpEmailSender>();
+
+            return new NotificationDeliveryLoggingEmailSender(
+                concreteSender,
+                sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetRequiredService<ILogger<NotificationDeliveryLoggingEmailSender>>());
+        });
 
         services.AddSecurityApplication();
 

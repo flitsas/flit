@@ -287,6 +287,11 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     internal DbSet<Entities.Admin.NotificationTestSettingsRow> NotificationTestSettings =>
         Set<Entities.Admin.NotificationTestSettingsRow>();
 
+    // Bitácora append-only de intentos de envío de notificación (HU #11363, esquema de la
+    // HU #11357). tenant_id NOT NULL en BD — ver NotificationDeliveryLoggingEmailSender.
+    internal DbSet<Entities.Admin.NotificationDeliveryLogEntity> NotificationDeliveryLogs =>
+        Set<Entities.Admin.NotificationDeliveryLogEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

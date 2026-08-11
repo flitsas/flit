@@ -46,7 +46,9 @@ public sealed partial class ResendInvitationHandler(
 
         var link = InvitationEmailTemplate.BuildActivateLink(options.ActivateUrlBase, token.RawToken);
         var composed = InvitationEmailTemplate.Compose(invitation.FullName, link);
-        var message = new EmailMessage(invitation.TenantId, invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody);
+        // HU #11363 AC1 — mismo id que CreateInvitationHandler: es la misma plantilla, dos disparadores.
+        var message = new EmailMessage(
+            invitation.TenantId, "security.invitation", invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody);
 
         LogActivationLinkDev(logger, link);
 

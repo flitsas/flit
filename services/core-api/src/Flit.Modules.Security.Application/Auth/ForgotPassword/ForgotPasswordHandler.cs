@@ -43,7 +43,10 @@ public sealed partial class ForgotPasswordHandler(
 
         var link = ForgotPasswordEmailTemplate.BuildResetLink(options.ResetUrlBase, token.RawToken);
         var composed = ForgotPasswordEmailTemplate.Compose(user.DisplayName, link, options.TokenLifetimeMinutes);
-        var message = new EmailMessage(user.TenantId, user.Email, user.DisplayName, composed.Subject, composed.HtmlBody);
+        // HU #11363 AC1 — id estable del catálogo (NotificationTemplateCatalog.TemplateIds.ForgotPassword
+        // en Flit.Infrastructure); literal a mano porque este proyecto no depende de Infrastructure.
+        var message = new EmailMessage(
+            user.TenantId, "security.forgot-password", user.Email, user.DisplayName, composed.Subject, composed.HtmlBody);
 
         var sendResult = await emailSender.SendAsync(message, cancellationToken);
         if (!sendResult.Success)
