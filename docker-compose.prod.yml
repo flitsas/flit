@@ -255,9 +255,11 @@ services:
       # ATENCIÓN — este servicio corre con ASPNETCORE_ENVIRONMENT=Development en DEV, QA **y
       # PDN** (ver arriba, línea del bloque environment). Para el guardarraíl del canal eso
       # significa que NINGÚN ambiente es "producción": el desvío de destinatario es
-      # OBLIGATORIO en los tres, y con él activo TODO correo de este canal va a la cuenta de
+      # OBLIGATORIO en los tres, y con él activo el correo de este canal va a la cuenta de
       # desvío y NUNCA al cliente final. Es decir: hoy este canal NO puede entregar correo
-      # real en PDN sin resolver antes esa colisión. Ver .env.renting.example.
+      # real en PDN sin resolver antes esa colisión. Única excepción al desvío: los envíos del
+      # banco de pruebas de notificaciones, que van a su buzón configurado (decisión del PO
+      # 2026-08-11) — no aplica a los envíos reales. Ver .env.renting.example.
       RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED: ${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED:-true}
       RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL: ${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL:-}
       RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME: "${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME:-Equipo de desarrollo FLIT}"

@@ -348,6 +348,66 @@ public sealed class RentingEmailApiSenderTests
         result.RecipientDiverted.Should().BeTrue();
     }
 
+    // ── HU #11372 — sobrecarga exenta del desvío (ControlledMailboxRecipient) ──────
+
+    [Fact]
+    public async Task SendAsync_ConControlledMailboxRecipient_NoInvocaElDesvioYElDestinatarioViajaSinCambios()
+    {
+        // El desvío está ACTIVO (como en cualquier ambiente no productivo real): si la sobrecarga
+        // exenta lo consultara igual, este test lo detectaría porque el destinatario efectivo
+        // cambiaría al de desvío.
+        var ct = TestContext.Current.CancellationToken;
+        var recipientOverride = Substitute.For<IRentingRecipientOverride>();
+        recipientOverride.Apply(Arg.Any<RentingSendEmailRequest>()).Returns(_ =>
+            throw new InvalidOperationException(
+                "La sobrecarga exenta (ControlledMailboxRecipient) NUNCA debe consultar IRentingRecipientOverride."));
+
+        var (sender, handler) = NewSender(
+            (_, _) => Task.FromResult(Json(HttpStatusCode.OK, """{"statusCode":200,"isSuccessStatusCode":true}""")),
+            recipientOverride: recipientOverride);
+
+        var result = await sender.SendAsync(OneRecipientRequest(), ControlledMailboxRecipient.Instance, ct);
+
+        result.Success.Should().BeTrue();
+        result.RecipientDiverted.Should().BeFalse("el buzón ya es un destinatario controlado: no hubo desvío");
+        handler.LastRequestParts!.Should().ContainKey("Recipients[0].Email").WhoseValue.Should().Be("destinatario@example.test");
+    }
+
+    [Fact]
+    public async Task SendAsync_SinControlledMailboxRecipient_SigueAplicandoElDesvioSiEstaActivo()
+    {
+        // Guardarraíl inverso: la sobrecarga de 2 parámetros (camino de producción) sigue
+        // consultando IRentingRecipientOverride igual que antes de la HU #11372.
+        var ct = TestContext.Current.CancellationToken;
+        var options = NewOptions();
+        options.SendEmailDevelopmentRecipientOverrideEnabled = true;
+        options.SendEmailDevelopmentRecipientEmail = "desvio@example.test";
+        options.SendEmailDevelopmentRecipientUsername = "Desvío QA";
+        var recipientOverride = new RentingRecipientOverride(
+            Microsoft.Extensions.Options.Options.Create(options), NullLogger<RentingRecipientOverride>.Instance);
+        var (sender, handler) = NewSender(
+            (_, _) => Task.FromResult(Json(HttpStatusCode.OK, """{"statusCode":200,"isSuccessStatusCode":true}""")),
+            options,
+            recipientOverride: recipientOverride);
+
+        var result = await sender.SendAsync(OneRecipientRequest(), ct);
+
+        result.RecipientDiverted.Should().BeTrue();
+        handler.LastRequestParts!.Should().ContainKey("Recipients[0].Email").WhoseValue.Should().Be("desvio@example.test");
+    }
+
+    [Fact]
+    public async Task SendAsync_ConControlledMailboxRecipientNulo_Lanza()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (sender, _) = NewSender((_, _) =>
+            Task.FromResult(Json(HttpStatusCode.OK, """{"statusCode":200,"isSuccessStatusCode":true}""")));
+
+        var act = async () => await sender.SendAsync(OneRecipientRequest(), null!, ct);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
     private static async Task<Dictionary<string, string>> ReadPartsAsync(MultipartFormDataContent content)

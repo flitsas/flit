@@ -105,6 +105,10 @@ internal sealed partial class TenantChannelEmailRouter(
         }
 
         var channel = await ResolveChannelAsync(message.TenantId, cancellationToken).ConfigureAwait(false);
+        // HU #11372 — camino de producción: NUNCA propaga la exención de buzón controlado. No hay
+        // parámetro ni rama por la que pudiera colarse — este método sencillamente llama a
+        // SendViaChannelAsync sin ese argumento, así que el desvío de la HU #11364 sigue aplicando
+        // siempre para los 6 puntos de envío reales.
         return await SendViaChannelAsync(channel, message, cancellationToken).ConfigureAwait(false);
     }
 
@@ -113,10 +117,17 @@ internal sealed partial class TenantChannelEmailRouter(
     /// solicitado, sin resolver la política del tenant ni aplicar el bypass de correos de cuenta (AC3
     /// no aplica aquí a propósito).
     /// </summary>
+    /// <remarks>
+    /// HU #11372 (decisión del PO 2026-08-11) — ÚNICO camino que propaga
+    /// <see cref="ControlledMailboxRecipient"/>: el destinatario de <paramref name="message"/> no es
+    /// dato de un cliente final, es el buzón único que un SuperAdmin configuró explícitamente en la
+    /// UI del banco de pruebas de notificaciones. Ver <see cref="ControlledMailboxRecipient"/> para
+    /// la explicación completa de por qué esto no debilita el desvío obligatorio de la HU #11364.
+    /// </remarks>
     public Task<EmailSendResult> SendAsync(NotificationChannel channel, EmailMessage message, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
-        return SendViaChannelAsync(channel, message, cancellationToken);
+        return SendViaChannelAsync(channel, message, cancellationToken, ControlledMailboxRecipient.Instance);
     }
 
     /// <summary>
@@ -128,7 +139,10 @@ internal sealed partial class TenantChannelEmailRouter(
         channel != NotificationChannel.TenantApi || rentingEmailApiSender is not null;
 
     private async Task<EmailSendResult> SendViaChannelAsync(
-        NotificationChannel channel, EmailMessage message, CancellationToken cancellationToken)
+        NotificationChannel channel,
+        EmailMessage message,
+        CancellationToken cancellationToken,
+        ControlledMailboxRecipient? recipientExemption = null)
     {
         if (channel != NotificationChannel.TenantApi)
         {
@@ -151,7 +165,13 @@ internal sealed partial class TenantChannelEmailRouter(
             new RentingEmailAddress(options.SendEmailSenderEmail, options.SendEmailSenderUsername),
             new RentingEmailAddress(message.ToEmail, message.ToName));
 
-        return await rentingEmailApiSender.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        // HU #11372 — solo el camino del banco de pruebas (SendAsync(NotificationChannel, ...))
+        // suministra recipientExemption; el camino de producción (SendAsync(EmailMessage, ...)) lo
+        // deja en null, así que el desvío de la HU #11364 sigue aplicando siempre para los 6 puntos
+        // de envío reales.
+        return recipientExemption is not null
+            ? await rentingEmailApiSender.SendAsync(request, recipientExemption, cancellationToken).ConfigureAwait(false)
+            : await rentingEmailApiSender.SendAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

@@ -90,6 +90,40 @@ public sealed class TenantChannelEmailRouterTests
             Arg.Is<RentingSendEmailRequest>(r =>
                 r.Sender.Email == "canal@renting.test" && r.Sender.UserName == "Canal Renting"),
             Ct);
+
+        // HU #11372 — el camino de producción (SendAsync(EmailMessage, ...)) NUNCA propaga la
+        // exención de buzón controlado: solo debe llamarse la sobrecarga de 2 parámetros.
+        await rentingSender.DidNotReceive().SendAsync(
+            Arg.Any<RentingSendEmailRequest>(), Arg.Any<ControlledMailboxRecipient>(), Arg.Any<CancellationToken>());
+    }
+
+    // ---------- HU #11372: solo el camino explícito (banco de pruebas) propaga la exención ----------
+
+    [Fact]
+    public async Task ExplicitChannelSendAsync_ConTenantApi_PropagaLaExencionDeBuzonControlado()
+    {
+        var settingsRepo = Substitute.For<ITenantSettingsRepository>();
+        var flitTransport = Substitute.For<IEmailSender>();
+        var rentingSender = Substitute.For<IRentingEmailApiSender>();
+        rentingSender.SendAsync(
+            Arg.Any<RentingSendEmailRequest>(), Arg.Any<ControlledMailboxRecipient>(), Ct).Returns(EmailSendResult.Sent);
+
+        var router = NewRouter(
+            flitTransport, settingsRepo, rentingSender, RentingOptions("canal@renting.test", "Canal Renting"));
+
+        var message = new EmailMessage(
+            TenantId: null, "analytics.alert", "buzon-pruebas@example.test", "Banco de pruebas", "Asunto", "<p>Cuerpo</p>");
+
+        // Camino explícito del banco de pruebas (HU #11371): SendAsync(NotificationChannel, ...).
+        var result = await router.SendAsync(NotificationChannel.TenantApi, message, Ct);
+
+        result.Success.Should().BeTrue();
+        await rentingSender.Received(1).SendAsync(
+            Arg.Any<RentingSendEmailRequest>(), Arg.Any<ControlledMailboxRecipient>(), Ct);
+        // Nunca debe caer en la sobrecarga sin exención: eso volvería a exponer el buzón al desvío.
+        await rentingSender.DidNotReceive().SendAsync(Arg.Any<RentingSendEmailRequest>(), Arg.Any<CancellationToken>());
+        // La política del tenant no se consulta (AC de la HU #11371: canal explícito, no resuelto).
+        await settingsRepo.DidNotReceive().GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     // ---------- AC2: tenant con canal FlitSmtp sale por SMTP ----------

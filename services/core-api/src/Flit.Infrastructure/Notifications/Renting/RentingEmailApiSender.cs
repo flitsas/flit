@@ -18,6 +18,16 @@ internal sealed record RentingSendEmailResponseBody(int? StatusCode, bool? IsSuc
 public interface IRentingEmailApiSender
 {
     Task<EmailSendResult> SendAsync(RentingSendEmailRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// HU #11372 — variante EXENTA del desvío de destinatario (HU #11364), para el ÚNICO caso donde
+    /// el destinatario ya es un buzón controlado y no dato de un cliente final (ver
+    /// <see cref="ControlledMailboxRecipient"/> para la explicación completa de por qué existe y por
+    /// qué no debilita la barrera). Solo alcanzable desde
+    /// <c>Routing.IExplicitChannelEmailSender.SendAsync(Routing.NotificationChannel, Flit.Modules.Security.Domain.Auth.EmailMessage, CancellationToken)</c>.
+    /// </summary>
+    Task<EmailSendResult> SendAsync(
+        RentingSendEmailRequest request, ControlledMailboxRecipient recipient, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -37,12 +47,44 @@ internal sealed class RentingEmailApiSender(
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public async Task<EmailSendResult> SendAsync(RentingSendEmailRequest request, CancellationToken cancellationToken)
+    public Task<EmailSendResult> SendAsync(RentingSendEmailRequest request, CancellationToken cancellationToken) =>
+        SendCoreAsync(request, exemption: null, cancellationToken);
+
+    /// <summary>
+    /// HU #11372 — variante exenta del desvío (ver <see cref="ControlledMailboxRecipient"/>): el
+    /// destinatario de <paramref name="request"/> ya es un buzón controlado, así que
+    /// <see cref="IRentingRecipientOverride"/> NUNCA se invoca en esta rama y
+    /// <see cref="EmailSendResult.RecipientDiverted"/> del resultado siempre es <c>false</c> — no
+    /// hubo desvío que reportar.
+    /// </summary>
+    public Task<EmailSendResult> SendAsync(
+        RentingSendEmailRequest request, ControlledMailboxRecipient recipient, CancellationToken cancellationToken)
     {
-        // HU #11364 — desvío de destinatario fuera de producción. Por defecto
-        // (PassthroughRentingRecipientOverride) no cambia nada y Diverted es siempre false.
-        var overrideResult = recipientOverride.Apply(request);
-        var effective = overrideResult.Request;
+        ArgumentNullException.ThrowIfNull(recipient);
+        return SendCoreAsync(request, exemption: recipient, cancellationToken);
+    }
+
+    private async Task<EmailSendResult> SendCoreAsync(
+        RentingSendEmailRequest request, ControlledMailboxRecipient? exemption, CancellationToken cancellationToken)
+    {
+        RentingSendEmailRequest effective;
+        bool diverted;
+        if (exemption is not null)
+        {
+            // HU #11372 — buzón ya controlado: el desvío no aplica y por eso NUNCA se llama a
+            // IRentingRecipientOverride.Apply en esta rama (ni siquiera para decidir "no desviar" —
+            // sencillamente no se consulta).
+            effective = request;
+            diverted = false;
+        }
+        else
+        {
+            // HU #11364 — desvío de destinatario fuera de producción. Por defecto
+            // (PassthroughRentingRecipientOverride) no cambia nada y Diverted es siempre false.
+            var overrideResult = recipientOverride.Apply(request);
+            effective = overrideResult.Request;
+            diverted = overrideResult.Diverted;
+        }
 
         string? tokenUsed = null;
         var outcome = await executor.ExecuteAsync(
@@ -60,7 +102,7 @@ internal sealed class RentingEmailApiSender(
         // HU #11364 AC2 — el resultado del envío es el único vehículo que atraviesa el decorador de
         // bitácora (HU #11363, NotificationDeliveryLoggingEmailSender): sin importar si el intento
         // desviado terminó en éxito o en fallo, la marca de desvío tiene que viajar en él.
-        return overrideResult.Diverted ? result with { RecipientDiverted = true } : result;
+        return diverted ? result with { RecipientDiverted = true } : result;
     }
 
     private async Task<EmailSendResult> MapResponseAsyncWithDisposal(

@@ -109,3 +109,38 @@ internal static partial class RentingRecipientOverrideLog
             + "Copia oculta original: {OriginalBcc}.")]
     public static partial void RecipientDiverted(ILogger logger, string originalRecipients, string originalBcc);
 }
+
+/// <summary>
+/// HU #11372 (decisión del PO 2026-08-11) — marca que el destinatario de la petición YA es un buzón
+/// CONTROLADO: no dato de un cliente final, sino el correo único que un SuperAdmin configuró
+/// explícitamente en la UI del banco de pruebas de notificaciones
+/// (<c>admin.notification_test_settings.test_recipient_email</c>). El desvío OBLIGATORIO de
+/// <see cref="RentingRecipientOverride"/> (HU #11364) existe para impedir que un envío de
+/// desarrollo/QA alcance a un CLIENTE FINAL real, porque el endpoint de Renting es el de
+/// PRODUCCIÓN (no hay ambiente de pruebas de Renting). Ese riesgo no existe para el banco de
+/// pruebas: desviar su buzón no protege a nadie y rompe el propósito del módulo (probar de verdad
+/// el canal TENANT_API).
+///
+/// <para>
+/// <b>Por qué esta exención NO debilita la barrera de la HU #11364.</b> Es alcanzable ÚNICAMENTE
+/// desde <see cref="Routing.IExplicitChannelEmailSender.SendAsync(Routing.NotificationChannel, Flit.Modules.Security.Domain.Auth.EmailMessage, CancellationToken)"/>
+/// — el único camino que construye esta instancia y la propaga hasta
+/// <see cref="IRentingEmailApiSender.SendAsync(RentingSendEmailRequest, ControlledMailboxRecipient, CancellationToken)"/>.
+/// El camino de producción (<see cref="Flit.Modules.Security.Domain.Auth.IEmailSender.SendAsync"/>,
+/// los 6 puntos de envío reales, resuelto internamente por
+/// <c>Routing.TenantChannelEmailRouter.SendAsync(Flit.Modules.Security.Domain.Auth.EmailMessage, CancellationToken)</c>)
+/// NUNCA construye ni recibe esta marca: no existe un parámetro, un flag ni una rama por la que
+/// pudiera colarse. No es una convención que alguien pueda invertir por error — es que el método de
+/// una vía del router sencillamente no la propaga, así que el envío sigue pasando SIEMPRE por
+/// <see cref="RentingRecipientOverride"/> con la misma regla de la HU #11364 (AC3/AC4/AC5).
+/// </para>
+/// </summary>
+public sealed class ControlledMailboxRecipient
+{
+    /// <summary>Única instancia: no hay estado que transportar, solo la marca de tipo.</summary>
+    public static readonly ControlledMailboxRecipient Instance = new();
+
+    private ControlledMailboxRecipient()
+    {
+    }
+}
