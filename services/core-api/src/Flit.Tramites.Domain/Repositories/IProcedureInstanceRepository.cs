@@ -150,6 +150,19 @@ public interface IProcedureInstanceRepository
             CancellationToken ct = default);
 
     /// <summary>
+    /// Cuenta PERSONAS (tenant + documento Trim+Upper) agrupadas por el estado de su validación más
+    /// reciente, sobre el mismo conjunto filtrado que
+    /// <see cref="ListBiometricValidationsGroupedByPersonAsync"/>. Alimenta los KPIs de la grilla
+    /// agrupada, que cuenta personas — no validaciones — para que los contadores cuadren con las filas
+    /// que el gestor tiene delante. Solo lectura.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, int>> CountBiometricPersonsByEstadoAsync(
+        Guid tenantId,
+        BiometricPersonGroupFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// HU #11270 — candidatos para calcular la peor alerta de las personas de una página:
     /// validaciones no terminales o creadas/actualizadas en los últimos <paramref name="alertWindowDays"/> días.
     /// Clave de documento ya normalizada (Trim+Upper). Solo lectura.

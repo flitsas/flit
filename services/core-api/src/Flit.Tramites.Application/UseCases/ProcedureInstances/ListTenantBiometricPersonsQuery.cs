@@ -33,8 +33,10 @@ public sealed record TenantBiometricPersonDto(
     DateTimeOffset? LinkExpiresAt);
 
 /// <summary>
-/// Respuesta del listado agrupado. <see cref="Stats"/> sigue contando VALIDACIONES (D7/KPI),
-/// no personas. <see cref="Total"/> es el total de personas del conjunto filtrado (paginador).
+/// Respuesta del listado agrupado. <see cref="Stats"/> cuenta PERSONAS por el estado de su validación
+/// más reciente — la grilla muestra una fila por documento, así que los KPIs deben cuadrar con ella
+/// (antes contaban validaciones, D7, y no coincidían con las filas). <see cref="Total"/> es el total de
+/// personas del conjunto filtrado (paginador) y equivale a <c>Stats.Total</c>.
 /// </summary>
 public sealed record TenantBiometricPersonsResponse(
     IReadOnlyList<TenantBiometricPersonDto> Persons,
@@ -145,13 +147,11 @@ public sealed class ListTenantBiometricPersonsHandler(
         var pageSize = query.SafePageSize();
         var now = DateTimeOffset.UtcNow;
 
-        // KPIs = validaciones (plano), no personas — D7.
+        // KPIs = PERSONAS, no validaciones: esta grilla pinta una fila por documento, así que los
+        // contadores tienen que cuadrar con lo que el gestor ve. Cada persona aporta el estado de su
+        // validación más reciente, sobre el mismo conjunto filtrado que la página.
         var stats = ListTenantBiometricValidationsHandler.BuildStats(
-            await repo.CountBiometricValidationsByEstadoAsync(
-                tenantId,
-                ToFlatFilter(activeFilter),
-                now,
-                ct));
+            await repo.CountBiometricPersonsByEstadoAsync(tenantId, activeFilter, now, ct));
 
         var (rows, totalPersons) = await repo.ListBiometricValidationsGroupedByPersonAsync(
             tenantId, (page - 1) * pageSize, pageSize, activeFilter, now, ct);

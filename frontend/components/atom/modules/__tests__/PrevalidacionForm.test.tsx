@@ -9,20 +9,39 @@ import userEvent from '@testing-library/user-event';
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 const mocks = vi.hoisted(() => ({
   createPrevalidacion: vi.fn(),
-  listTenantBiometricValidations: vi.fn(),
+  editPrevalidacion: vi.fn(),
+  resendPrevalidacion: vi.fn(),
+  listTenantBiometricPersons: vi.fn(),
+  listPersonBiometricValidations: vi.fn(),
   listStuckIdentityValidations: vi.fn(),
   requeueStuckIdentityValidation: vi.fn(),
   requeueAllStuckIdentityValidations: vi.fn(),
+  setActiveTramitesTenant: vi.fn(),
+}));
+
+// El módulo de Identidad resuelve el rol desde el JWT para decidir si pinta el selector de empresa.
+// Aquí siempre es usuario de compañía: sin selector, sin listado de empresas.
+vi.mock('@/lib/api/superadmin-client', () => ({
+  superadminClient: { listCompanies: vi.fn().mockResolvedValue({ data: [] }) },
+}));
+vi.mock('@/lib/api/client', () => ({ getToken: () => null }));
+vi.mock('@/lib/auth/jwt', () => ({
+  decodeJwtPayload: () => null,
+  isSuperAdmin: () => false,
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
     createPrevalidacion: mocks.createPrevalidacion,
-    listTenantBiometricValidations: mocks.listTenantBiometricValidations,
+    editPrevalidacion: mocks.editPrevalidacion,
+    resendPrevalidacion: mocks.resendPrevalidacion,
+    listTenantBiometricPersons: mocks.listTenantBiometricPersons,
+    listPersonBiometricValidations: mocks.listPersonBiometricValidations,
     listStuckIdentityValidations: mocks.listStuckIdentityValidations,
     requeueStuckIdentityValidation: mocks.requeueStuckIdentityValidation,
     requeueAllStuckIdentityValidations: mocks.requeueAllStuckIdentityValidations,
   },
+  setActiveTramitesTenant: mocks.setActiveTramitesTenant,
   TramitesApiError: class TramitesApiError extends Error {
     constructor(
       public status: number,
@@ -54,8 +73,9 @@ vi.mock('@/lib/api/tramites-client', () => ({
 import { PrevalidacionForm } from '@/components/atom/modules/PrevalidacionForm';
 import { Validaciones } from '@/components/atom/modules/Validaciones';
 import type {
+  TenantBiometricPerson,
+  TenantBiometricPersonsResponse,
   TenantBiometricValidation,
-  TenantBiometricValidationsResponse,
 } from '@/lib/api/types/procedure-runtime';
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -106,13 +126,42 @@ const RESULT_TRAMITE: TenantBiometricValidation = {
   email: null, // CF-05 (HU #11006) — BE aún no lo envía para esta fila (fixture de borde)
 };
 
-const EMPTY_RESPONSE: TenantBiometricValidationsResponse = {
-  validations: [],
-  stats: { total: 0, aprobadas: 0, enProceso: 0, rechazadas: 0, expiradas: 0 },
-  page: 1,
-  pageSize: 20,
-  total: 0,
-};
+/** La grilla del módulo unificado es agrupada por persona: se proyectan los fixtures a ese DTO. */
+function toPerson(v: TenantBiometricValidation): TenantBiometricPerson {
+  return {
+    documentType: v.documentType,
+    documentNumber: v.documentNumber,
+    name: v.name,
+    status: v.status,
+    validationCount: 1,
+    worstAlertKind: null,
+    latestValidationId: v.id,
+    instanceId: v.instanceId,
+    referenceNumber: v.referenceNumber,
+    modalidad: v.modalidad,
+    partyRole: v.partyRole,
+    email: v.email ?? '',
+    provider: v.provider as TenantBiometricPerson['provider'],
+    score: v.score,
+    captureUrl: v.captureUrl,
+    expired: v.expired,
+    createdAt: v.createdAt,
+    validatedAt: v.validatedAt,
+    validUntil: v.validUntil,
+    daysRemaining: v.daysRemaining,
+    linkExpiresAt: v.linkExpiresAt,
+  };
+}
+
+function personsResponse(rows: TenantBiometricValidation[]): TenantBiometricPersonsResponse {
+  return {
+    persons: rows.map(toPerson),
+    stats: { total: rows.length, aprobadas: 0, enProceso: 0, rechazadas: 0, expiradas: 0 },
+    page: 1,
+    pageSize: 20,
+    total: rows.length,
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. FORM — HU #10868
@@ -191,7 +240,7 @@ describe('PrevalidacionForm (HU #10868)', () => {
     });
   });
 
-  it('muestra error de API 409 (prevalidación activa ya existe)', async () => {
+  it('409 sin cuerpo informativo: avisa que el documento ya tiene validación en el tenant', async () => {
     const user = userEvent.setup();
     const { TramitesApiError } = await import('@/lib/api/tramites-client');
     mocks.createPrevalidacion.mockRejectedValueOnce(
@@ -207,7 +256,9 @@ describe('PrevalidacionForm (HU #10868)', () => {
     await user.click(screen.getByRole('button', { name: /confirmar y enviar/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(/ya existe una prevalidación activa/i);
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        /ya existe una validación activa o pendiente para este documento en este tenant/i,
+      );
     });
     expect(onSuccess).not.toHaveBeenCalled();
   });
@@ -251,6 +302,165 @@ describe('PrevalidacionForm (HU #10868)', () => {
     expect(screen.queryByLabelText(/nombre completo del rl/i)).not.toBeInTheDocument();
   });
 
+  /**
+   * Regla del módulo unificado: un documento no puede tener dos validaciones en vuelo en el mismo
+   * tenant. Si ya existe, NO se crea otra fila — se reutiliza la existente y se reenvía el correo,
+   * actualizándolo antes cuando el operador escribió uno distinto al registrado.
+   */
+  describe('documento ya existente en el tenant (no se crea, se reenvía)', () => {
+    const onReused = vi.fn();
+
+    /** 409 informativo por validación en vuelo, con el id de la validación existente. */
+    async function conflictoEnVuelo(motivo = 'validacion_en_vuelo') {
+      const { TramitesApiError } = await import('@/lib/api/tramites-client');
+      return new TramitesApiError(409, 'Conflict', {
+        motivo,
+        status: 'enviado',
+        validationId: 'val-existente',
+        origen: 'standalone',
+      });
+    }
+
+    async function enviarFormulario(email: string) {
+      const user = userEvent.setup();
+      render(
+        <PrevalidacionForm onClose={onClose} onSuccess={onSuccess} onReused={onReused} />,
+      );
+      await user.type(screen.getByLabelText(/número de documento/i), '9876543210');
+      await user.type(screen.getByLabelText(/nombre completo/i), 'Juan Repetido');
+      await user.type(screen.getByLabelText(/correo electrónico/i), email);
+      await user.click(screen.getByRole('button', { name: /crear prevalidación/i }));
+      await user.click(screen.getByRole('button', { name: /confirmar y enviar/i }));
+    }
+
+    it('correo distinto al registrado: actualiza el correo y reenvía, sin crear una validación nueva', async () => {
+      mocks.createPrevalidacion.mockRejectedValueOnce(await conflictoEnVuelo());
+      // El backend detecta el cambio de correo y reenvía en la misma operación (resent=true).
+      mocks.editPrevalidacion.mockResolvedValueOnce({
+        validation: { id: 'val-existente', email: 'nuevo@correo.co' },
+        captureUrl: 'https://capture.kyverum.co/nuevo',
+        resent: true,
+      });
+
+      await enviarFormulario('nuevo@correo.co');
+
+      await waitFor(() =>
+        expect(mocks.editPrevalidacion).toHaveBeenCalledWith(
+          'val-existente',
+          expect.objectContaining({ email: 'nuevo@correo.co', name: 'Juan Repetido' }),
+        ),
+      );
+      // Al reenviar el PATCH no hace falta el reenvío manual, y NUNCA se crea una segunda fila.
+      expect(mocks.resendPrevalidacion).not.toHaveBeenCalled();
+      expect(onSuccess).not.toHaveBeenCalled();
+      await waitFor(() =>
+        expect(onReused).toHaveBeenCalledWith(
+          expect.objectContaining({
+            kind: 'email_actualizado',
+            validationId: 'val-existente',
+            email: 'nuevo@correo.co',
+          }),
+        ),
+      );
+    });
+
+    it('mismo correo: no actualiza nada y solo reenvía el enlace', async () => {
+      mocks.createPrevalidacion.mockRejectedValueOnce(await conflictoEnVuelo());
+      // Sin cambio de correo el PATCH no reenvía (resent=false) → se dispara el reenvío explícito.
+      mocks.editPrevalidacion.mockResolvedValueOnce({
+        validation: { id: 'val-existente', email: 'mismo@correo.co' },
+        captureUrl: null,
+        resent: false,
+      });
+      mocks.resendPrevalidacion.mockResolvedValueOnce({
+        validation: { id: 'val-existente', email: 'mismo@correo.co' },
+        captureUrl: 'https://capture.kyverum.co/reenvio',
+        queued: false,
+      });
+
+      await enviarFormulario('mismo@correo.co');
+
+      await waitFor(() => expect(mocks.resendPrevalidacion).toHaveBeenCalledWith('val-existente'));
+      expect(mocks.createPrevalidacion).toHaveBeenCalledTimes(1);
+      await waitFor(() =>
+        expect(onReused).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'reenviado', email: 'mismo@correo.co' }),
+        ),
+      );
+    });
+
+    it('enlace vencido: también reutiliza la validación existente en vez de crear otra', async () => {
+      mocks.createPrevalidacion.mockRejectedValueOnce(
+        await conflictoEnVuelo('enlace_vencido_reenvio'),
+      );
+      mocks.editPrevalidacion.mockResolvedValueOnce({
+        validation: { id: 'val-existente', email: 'otro@correo.co' },
+        captureUrl: 'https://capture.kyverum.co/nuevo',
+        resent: true,
+      });
+
+      await enviarFormulario('otro@correo.co');
+
+      await waitFor(() => expect(mocks.editPrevalidacion).toHaveBeenCalled());
+      expect(onReused).toHaveBeenCalled();
+    });
+
+    it('tope de reenvíos agotado: informa que ya existe y que no se pudo reenviar', async () => {
+      const { TramitesApiError } = await import('@/lib/api/tramites-client');
+      mocks.createPrevalidacion.mockRejectedValueOnce(await conflictoEnVuelo());
+      mocks.editPrevalidacion.mockRejectedValueOnce(
+        new TramitesApiError(429, 'Se agotaron los reenvíos disponibles.', null),
+      );
+
+      await enviarFormulario('nuevo@correo.co');
+
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          /ya existe una validación para este documento en este tenant.*no se pudo reenviar/i,
+        ),
+      );
+      expect(onReused).not.toHaveBeenCalled();
+    });
+
+    it('identidad aprobada y vigente: no reenvía nada, solo remite al proceso existente', async () => {
+      const { TramitesApiError } = await import('@/lib/api/tramites-client');
+      mocks.createPrevalidacion.mockRejectedValueOnce(
+        new TramitesApiError(409, 'Conflict', {
+          motivo: 'identidad_vigente',
+          status: 'aprobado',
+          validUntil: '2026-08-31T00:00:00Z',
+          validationId: 'val-vigente',
+          origen: 'standalone',
+        }),
+      );
+
+      await enviarFormulario('cualquiera@correo.co');
+
+      expect(await screen.findByText(/ya validada/i)).toBeInTheDocument();
+      expect(mocks.editPrevalidacion).not.toHaveBeenCalled();
+      expect(mocks.resendPrevalidacion).not.toHaveBeenCalled();
+      expect(onReused).not.toHaveBeenCalled();
+    });
+
+    it('validación de un trámite: no la toca; indica gestionarla desde el trámite', async () => {
+      const { TramitesApiError } = await import('@/lib/api/tramites-client');
+      mocks.createPrevalidacion.mockRejectedValueOnce(
+        new TramitesApiError(409, 'Conflict', {
+          motivo: 'validacion_en_vuelo',
+          status: 'enviado',
+          validationId: 'val-de-tramite',
+          origen: 'tramite',
+        }),
+      );
+
+      await enviarFormulario('quien.sea@correo.co');
+
+      expect(await screen.findByText(/gestiónala desde ese trámite/i)).toBeInTheDocument();
+      expect(mocks.editPrevalidacion).not.toHaveBeenCalled();
+      expect(mocks.resendPrevalidacion).not.toHaveBeenCalled();
+    });
+  });
+
   it('invoca onClose al pulsar Cancelar', async () => {
     const user = userEvent.setup();
     render(<PrevalidacionForm onClose={onClose} onSuccess={onSuccess} />);
@@ -275,11 +485,7 @@ describe('Validaciones null-safety (HU #10869)', () => {
   });
 
   it('renderiza una prevalidación standalone (instanceId null) sin crash', async () => {
-    mocks.listTenantBiometricValidations.mockResolvedValueOnce({
-      ...EMPTY_RESPONSE,
-      validations: [RESULT_STANDALONE],
-      total: 1,
-    } satisfies TenantBiometricValidationsResponse);
+    mocks.listTenantBiometricPersons.mockResolvedValueOnce(personsResponse([RESULT_STANDALONE]));
 
     render(<Validaciones />);
 
@@ -295,12 +501,8 @@ describe('Validaciones null-safety (HU #10869)', () => {
     expect(screen.queryByRole('link', { name: /abrir trámite/i })).toBeNull();
   });
 
-  it('renderiza una fila con trámite (instanceId != null) como enlace al trámite', async () => {
-    mocks.listTenantBiometricValidations.mockResolvedValueOnce({
-      ...EMPTY_RESPONSE,
-      validations: [RESULT_TRAMITE],
-      total: 1,
-    } satisfies TenantBiometricValidationsResponse);
+  it('renderiza una fila con trámite (instanceId != null) mostrando su referencia', async () => {
+    mocks.listTenantBiometricPersons.mockResolvedValueOnce(personsResponse([RESULT_TRAMITE]));
 
     render(<Validaciones />);
 
@@ -312,12 +514,10 @@ describe('Validaciones null-safety (HU #10869)', () => {
     expect(screen.getByText('TRM-2026-000099')).toBeInTheDocument();
   });
 
-  it('mezcla de standalone y con trámite no produce crash', async () => {
-    mocks.listTenantBiometricValidations.mockResolvedValueOnce({
-      ...EMPTY_RESPONSE,
-      validations: [RESULT_STANDALONE, RESULT_TRAMITE],
-      total: 2,
-    } satisfies TenantBiometricValidationsResponse);
+  it('la lista mezcla prevalidaciones standalone y validaciones de trámite en una sola grilla', async () => {
+    mocks.listTenantBiometricPersons.mockResolvedValueOnce(
+      personsResponse([RESULT_STANDALONE, RESULT_TRAMITE]),
+    );
 
     render(<Validaciones />);
 
@@ -329,5 +529,59 @@ describe('Validaciones null-safety (HU #10869)', () => {
     // Standalone muestra badge "Prevalidación"; trámite muestra referenceNumber
     expect(screen.getByText('Prevalidación')).toBeInTheDocument();
     expect(screen.getByText('TRM-2026-000099')).toBeInTheDocument();
+  });
+
+  it('el botón "Nueva prevalidación" vive en la pantalla principal de Identidad', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricPersons.mockResolvedValue(personsResponse([RESULT_STANDALONE]));
+
+    render(<Validaciones />);
+    await screen.findByText('Juan Prevalidado');
+
+    await user.click(
+      screen.getByRole('button', { name: /crear nueva prevalidación de identidad/i }),
+    );
+
+    // El formulario se abre en el mismo módulo: ya no hay pantalla ni pestaña aparte.
+    expect(
+      await screen.findByRole('dialog', { name: /nueva prevalidación de identidad/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('documento repetido desde el módulo: avisa que ya existía y confirma el reenvío', async () => {
+    const user = userEvent.setup();
+    const { TramitesApiError } = await import('@/lib/api/tramites-client');
+    mocks.listTenantBiometricPersons.mockResolvedValue(personsResponse([RESULT_STANDALONE]));
+    mocks.createPrevalidacion.mockRejectedValueOnce(
+      new TramitesApiError(409, 'Conflict', {
+        motivo: 'validacion_en_vuelo',
+        status: 'enviado',
+        validationId: 'pv-1',
+        origen: 'standalone',
+      }),
+    );
+    mocks.editPrevalidacion.mockResolvedValueOnce({
+      validation: { id: 'pv-1', email: 'nuevo@correo.co' },
+      captureUrl: 'https://capture.kyverum.co/nuevo',
+      resent: true,
+    });
+
+    render(<Validaciones />);
+    await screen.findByText('Juan Prevalidado');
+
+    await user.click(
+      screen.getByRole('button', { name: /crear nueva prevalidación de identidad/i }),
+    );
+    await user.type(screen.getByLabelText(/número de documento/i), '9876543210');
+    await user.type(screen.getByLabelText(/nombre completo/i), 'Juan Prevalidado');
+    await user.type(screen.getByLabelText(/correo electrónico/i), 'nuevo@correo.co');
+    await user.click(screen.getByRole('button', { name: /crear prevalidación/i }));
+    await user.click(screen.getByRole('button', { name: /confirmar y enviar/i }));
+
+    // El aviso sale visible en el panel y también anunciado a lectores de pantalla (sr-only).
+    expect(
+      await screen.findAllByText(/ya existía una validación para este documento en este tenant/i),
+    ).toHaveLength(2);
+    expect(screen.getByText(/se envió un enlace nuevo a nuevo@correo\.co/i)).toBeInTheDocument();
   });
 });

@@ -21,9 +21,11 @@ public sealed class ListTenantBiometricPersonsHandlerTests
     {
         _outbox.ListStuckAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([]);
-        _repo.CountBiometricValidationsByEstadoAsync(
-                Arg.Any<Guid>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
-            .Returns(new Dictionary<string, int> { [BiometricEstados.Aprobado] = 7 });
+        // Los KPIs de esta grilla cuentan PERSONAS (una fila por documento), no validaciones: 7
+        // validaciones de la misma persona son 1 persona aprobada.
+        _repo.CountBiometricPersonsByEstadoAsync(
+                Arg.Any<Guid>(), Arg.Any<BiometricPersonGroupFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(new Dictionary<string, int> { [BiometricEstados.Aprobado] = 1 });
     }
 
     [Fact]
@@ -64,7 +66,9 @@ public sealed class ListTenantBiometricPersonsHandlerTests
         result!.Persons.Should().HaveCount(1);
         result.Persons[0].ValidationCount.Should().Be(7);
         result.Persons[0].LatestValidationId.Should().Be(latestId);
-        result.Stats.Total.Should().Be(7);
+        // 7 validaciones, 1 sola persona: el KPI cuadra con la única fila de la grilla.
+        result.Stats.Total.Should().Be(1);
+        result.Stats.Aprobadas.Should().Be(1);
         result.Total.Should().Be(1);
     }
 

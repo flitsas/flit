@@ -207,10 +207,10 @@ describe("Reportes — AC1 acceso por rol", () => {
 
     render(<Reportes />);
 
-    const selector = await screen.findByLabelText("Compañía");
-    expect(await screen.findByRole("option", { name: "Transportes Andinos S.A.S." })).toBeInTheDocument();
-
-    fireEvent.change(selector, { target: { value: COMPANY.id } });
+    // El selector es un combobox con buscador: se abre y se elige la opción de la lista.
+    const selector = await screen.findByRole("combobox", { name: "Compañía" });
+    fireEvent.focus(selector);
+    fireEvent.click(await screen.findByRole("option", { name: /Transportes Andinos S\.A\.S\./ }));
 
     await waitFor(() => {
       const lastCall = mocks.fetchAnalyticsOverview.mock.calls.at(-1);
@@ -226,8 +226,8 @@ describe("Reportes — la compañía viaja en la dirección", () => {
     mocks.usePermissions.mockReturnValue(permissionsState({ isSuperAdmin: true }));
 
     render(<Reportes />);
-    const selector = await screen.findByLabelText("Compañía");
-    fireEvent.change(selector, { target: { value: COMPANY.id } });
+    fireEvent.focus(await screen.findByRole("combobox", { name: "Compañía" }));
+    fireEvent.click(await screen.findByRole("option", { name: /Transportes Andinos S\.A\.S\./ }));
 
     await waitFor(() =>
       expect(new URLSearchParams(window.location.search).get("compania")).toBe(COMPANY.id),
@@ -251,8 +251,9 @@ describe("Reportes — la compañía viaja en la dirección", () => {
     window.history.replaceState(null, "", `/?compania=${COMPANY.id}`);
 
     render(<Reportes />);
-    const selector = await screen.findByLabelText("Compañía");
-    fireEvent.change(selector, { target: { value: "" } });
+    // "Todas las compañías" es la opción por defecto del combobox (valor vacío).
+    fireEvent.focus(await screen.findByRole("combobox", { name: "Compañía" }));
+    fireEvent.click(await screen.findByRole("option", { name: /todas las compañías/i }));
 
     await waitFor(() =>
       expect(new URLSearchParams(window.location.search).has("compania")).toBe(false),

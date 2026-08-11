@@ -88,7 +88,9 @@ describe("HU #10497 — AC1: botones sin icono '+' (iconografía superflua)", ()
     // ("Cargar escritura", "Asociar escritura", "Agregar empresa") viven ahora en el acordeón.
     "components/admin/companies/legal-representatives/RepresentativeCompaniesAccordion.tsx",
     "components/admin/companies/legal-representatives/LegalRepresentativesFormPanel.tsx",
-    "components/atom/modules/PrevalidacionesModule.tsx",
+    // El botón "Nueva prevalidación" vive ahora en el módulo unificado de Identidad
+    // (PrevalidacionesModule.tsx se retiró al fusionar validaciones y prevalidaciones).
+    "components/atom/modules/Validaciones.tsx",
   ];
 
   it("ninguno renderiza ya el icono <Plus /> ni lo importa", () => {
@@ -109,7 +111,7 @@ describe("HU #10497 — AC1: botones sin icono '+' (iconografía superflua)", ()
       .toMatch(/Asociar escritura/);
     expect(read("components/admin/companies/legal-representatives/RepresentativeCompaniesAccordion.tsx"))
       .toMatch(/Agregar empresa/);
-    expect(read("components/atom/modules/PrevalidacionesModule.tsx"))
+    expect(read("components/atom/modules/Validaciones.tsx"))
       .toMatch(/Nueva prevalidación/);
   });
 

@@ -82,7 +82,9 @@ describe("InviteUserModal — SuperAdmin", () => {
     renderModal();
 
     await user.click(await screen.findByRole("radio", { name: /Gestor/i }));
-    await user.selectOptions(await screen.findByLabelText(/compañía destino/i), "company-1");
+    // El destino es un combobox con buscador: se abre y se elige la opción.
+    await user.click(await screen.findByLabelText(/compañía destino/i));
+    await user.click(await screen.findByRole("option", { name: /Compañía Demo/ }));
     await fillIdentity(user);
     await user.click(await screen.findByRole("radio", { name: "Radicador" }));
     await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
@@ -167,7 +169,9 @@ describe("InviteUserModal — SuperAdmin", () => {
     renderModal();
 
     await user.click(await screen.findByRole("radio", { name: /Gestor/i }));
-    await user.selectOptions(await screen.findByLabelText(/compañía destino/i), "company-1");
+    // El destino es un combobox con buscador: se abre y se elige la opción.
+    await user.click(await screen.findByLabelText(/compañía destino/i));
+    await user.click(await screen.findByRole("option", { name: /Compañía Demo/ }));
     await fillIdentity(user);
     await user.click(await screen.findByRole("radio", { name: "Radicador" }));
     await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));

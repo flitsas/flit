@@ -4,95 +4,68 @@ import { useState, type ReactNode } from 'react';
 import { RefreshCw, Search, SlidersHorizontal, X } from 'lucide-react';
 import type {
   BiometricEstado,
-  BiometricProvider,
-  BiometricParte,
   BiometricVigenciaEstado,
-  WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import { digitsOnly } from '@/lib/format/currency';
 import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from '@/lib/validation/fieldRules';
 
 /**
- * Barra de filtros del submódulo "Validaciones de Identidad" (HU #10348). Presentacional: el estado de
- * los filtros vive en el contenedor (Validaciones.tsx), que delega el filtrado al backend vía query
- * params (HU #10347) — NO se filtra client-side sobre el cap de 500 filas. Compacta para no robarle alto
- * a la grilla: dropdowns en vez de chips y los filtros secundarios (documento, score, fechas) plegados
- * tras "Más filtros". WCAG 2.1 AA: cada control tiene etiqueta asociada, el toggle expone aria-expanded
- * y el contador es aria-live.
+ * Barra de filtros del módulo de Identidad (HU #10348). Presentacional: el estado de los filtros vive
+ * en el contenedor (Validaciones.tsx), que delega el filtrado al backend vía query params (HU #10347).
+ *
+ * La grilla agrupa POR PERSONA (HU #11271 / ADR-0040), así que aquí solo hay filtros con semántica de
+ * persona. Los criterios propios de UNA validación —número de trámite, modalidad, parte, proveedor,
+ * score, motivo de rechazo— se retiraron: no describen a la persona y viven en su detalle.
+ *
+ * Compacta para no robarle alto a la grilla: los filtros secundarios (fechas de registro y vigencia)
+ * van plegados tras "Más filtros". WCAG 2.1 AA: cada control tiene etiqueta asociada, el toggle expone
+ * aria-expanded y el contador es aria-live.
  */
 
 /** Filtros de la UI (controlados). Los numéricos/fechas se guardan como string para el input. */
 export interface ValidacionesUiFilters {
-  referenceNumber: string;
   name: string;
-  documentType: string;
   documentNumber: string;
-  modalidad: '' | WizardModalidad;
-  partyRole: '' | BiometricParte;
   status: '' | BiometricEstado;
-  provider: '' | BiometricProvider;
   vigenciaEstado: '' | BiometricVigenciaEstado;
-  scoreMin: string;
-  scoreMax: string;
   createdFrom: string;
   createdTo: string;
   expiraDesde: string;
   expiraHasta: string;
   /** "Vence en ≤ N días" (string para el input numérico; vacío = sin filtro). */
   venceEnDias: string;
-  rejectionReason: string;
 }
 
 export const EMPTY_VALIDACIONES_FILTERS: ValidacionesUiFilters = {
-  referenceNumber: '',
   name: '',
-  documentType: '',
   documentNumber: '',
-  modalidad: '',
-  partyRole: '',
   status: '',
-  provider: '',
   vigenciaEstado: '',
-  scoreMin: '',
-  scoreMax: '',
   createdFrom: '',
   createdTo: '',
   expiraDesde: '',
   expiraHasta: '',
   venceEnDias: '',
-  rejectionReason: '',
 };
 
 /** True si hay al menos un criterio de filtrado informado. */
 export function hasActiveValidacionesFilters(f: ValidacionesUiFilters): boolean {
   return (
-    f.referenceNumber.trim() !== '' ||
     f.name.trim() !== '' ||
-    f.documentType.trim() !== '' ||
     f.documentNumber.trim() !== '' ||
-    f.modalidad !== '' ||
-    f.partyRole !== '' ||
     f.status !== '' ||
-    f.provider !== '' ||
     f.vigenciaEstado !== '' ||
-    f.scoreMin.trim() !== '' ||
-    f.scoreMax.trim() !== '' ||
     f.createdFrom !== '' ||
     f.createdTo !== '' ||
     f.expiraDesde !== '' ||
     f.expiraHasta !== '' ||
-    f.venceEnDias.trim() !== '' ||
-    f.rejectionReason.trim() !== ''
+    f.venceEnDias.trim() !== ''
   );
 }
 
 /** True si hay algún filtro AVANZADO informado (para abrir el panel automáticamente). */
 function hasActiveAdvanced(f: ValidacionesUiFilters): boolean {
   return (
-    f.documentType.trim() !== '' ||
-    f.documentNumber.trim() !== '' ||
-    f.scoreMin.trim() !== '' ||
-    f.scoreMax.trim() !== '' ||
     f.createdFrom !== '' ||
     f.createdTo !== '' ||
     f.expiraDesde !== '' ||
@@ -109,26 +82,9 @@ interface Props {
   onClearFilters: () => void;
   loading?: boolean;
   resultCount: number;
-  /**
-   * HU #11271 / ADR-0040 — modo agrupado por persona: deshabilita filtros de semántica de validación
-   * (trámite, modalidad, parte, proveedor, score, motivo) e indica por qué.
-   */
-  groupedMode?: boolean;
-  /** Etiqueta del contador (p.ej. "12 personas" en modo agrupado). */
+  /** Etiqueta del contador (p.ej. "12 personas"). */
   resultCountLabel?: string;
 }
-
-const MODALIDAD_OPTIONS: { value: '' | WizardModalidad; label: string }[] = [
-  { value: '', label: 'Todas' },
-  { value: 'matricula_inicial', label: 'Matrícula inicial' },
-  { value: 'traspaso', label: 'Traspaso' },
-];
-
-const PARTE_OPTIONS: { value: '' | BiometricParte; label: string }[] = [
-  { value: '', label: 'Todas' },
-  { value: 'comprador', label: 'Comprador' },
-  { value: 'vendedor', label: 'Vendedor' },
-];
 
 const ESTADO_OPTIONS: { value: '' | BiometricEstado; label: string }[] = [
   { value: '', label: 'Todos' },
@@ -139,13 +95,6 @@ const ESTADO_OPTIONS: { value: '' | BiometricEstado; label: string }[] = [
   { value: 'expirado', label: 'Expirado' },
   { value: 'pendiente_envio', label: 'Pendiente de envío' },
   { value: 'error_envio', label: 'Error de envío' },
-];
-
-const PROVIDER_OPTIONS: { value: '' | BiometricProvider; label: string }[] = [
-  { value: '', label: 'Todos' },
-  { value: 'mock', label: 'Simulado' },
-  { value: 'kyverum', label: 'Kyverum' },
-  { value: 'migracion_v1', label: 'Migrada de V1' },
 ];
 
 const VIGENCIA_OPTIONS: { value: '' | BiometricVigenciaEstado; label: string }[] = [
@@ -174,25 +123,18 @@ function FilterSelect<T extends string>({
   value,
   options,
   onSelect,
-  disabled = false,
-  disabledTitle,
 }: {
   label: string;
   value: T;
   options: { value: T; label: string }[];
   onSelect: (v: T) => void;
-  disabled?: boolean;
-  disabledTitle?: string;
 }) {
   return (
     <Field label={label}>
       <select
         value={value}
-        disabled={disabled}
-        title={disabled ? disabledTitle : undefined}
-        aria-disabled={disabled || undefined}
         onChange={(e) => onSelect(e.target.value as T)}
-        className={`${CONTROL_CLASS}${disabled ? ' opacity-50 cursor-not-allowed' : ''}`}
+        className={CONTROL_CLASS}
       >
         {options.map((o) => (
           <option key={o.value || 'todos'} value={o.value}>
@@ -211,35 +153,21 @@ export function ValidacionesFilterToolbar({
   onClearFilters,
   loading = false,
   resultCount,
-  groupedMode = false,
   resultCountLabel,
 }: Props) {
   const hasActiveFilters = hasActiveValidacionesFilters(filters);
   // Panel avanzado plegado por defecto para dejarle alto a la grilla; se abre si ya hay filtros avanzados.
   const [showAdvanced, setShowAdvanced] = useState(() => hasActiveAdvanced(filters));
 
-  const validationOnlyTitle =
-    'No aplica en vista por persona: este filtro es de una validación concreta, no de la persona.';
-
   const counterLabel =
     resultCountLabel ??
     (resultCount === 0
       ? 'Sin resultados'
-      : `${resultCount} validación${resultCount === 1 ? '' : 'es'}`);
+      : `${resultCount} persona${resultCount === 1 ? '' : 's'}`);
 
   return (
     <div className="rounded-2xl border bg-white p-3 dark:bg-[#0B0F14] shrink-0">
-      {groupedMode && (
-        <p
-          className="mb-2 rounded-lg px-2 py-1.5 text-[11px]"
-          style={{ background: 'rgba(85,126,255,0.08)', color: '#162744' }}
-          role="status"
-        >
-          Vista por persona: los filtros de trámite, modalidad, parte, proveedor, score y motivo de
-          rechazo están deshabilitados porque aplican a una validación concreta, no a la persona.
-        </p>
-      )}
-      {/* Trámite (búsqueda) + Actualizar */}
+      {/* Persona (búsqueda) + Actualizar */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search
@@ -248,14 +176,12 @@ export function ValidacionesFilterToolbar({
           />
           <input
             type="search"
-            value={filters.referenceNumber}
-            onChange={(e) => onChange({ referenceNumber: sanitizeNoAngleBrackets(e.target.value) })}
+            value={filters.name}
+            onChange={(e) => onChange({ name: sanitizeNoAngleBrackets(e.target.value) })}
             maxLength={SEARCH_TEXT_MAX_LENGTH}
-            placeholder="Buscar por número de trámite…"
-            aria-label="Filtrar por número de trámite"
-            disabled={groupedMode}
-            title={groupedMode ? validationOnlyTitle : undefined}
-            className={`${CONTROL_CLASS} pl-9${groupedMode ? ' opacity-50 cursor-not-allowed' : ''}`}
+            placeholder="Buscar por nombre de la persona…"
+            aria-label="Filtrar por nombre de la persona"
+            className={`${CONTROL_CLASS} pl-9`}
           />
         </div>
         <button
@@ -271,24 +197,9 @@ export function ValidacionesFilterToolbar({
         </button>
       </div>
 
-      {/* Filtros principales: dropdowns + persona (siempre visibles) */}
-      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        <FilterSelect
-          label="Modalidad"
-          value={filters.modalidad}
-          options={MODALIDAD_OPTIONS}
-          onSelect={(v) => onChange({ modalidad: v }, true)}
-          disabled={groupedMode}
-          disabledTitle={validationOnlyTitle}
-        />
-        <FilterSelect
-          label="Parte"
-          value={filters.partyRole}
-          options={PARTE_OPTIONS}
-          onSelect={(v) => onChange({ partyRole: v }, true)}
-          disabled={groupedMode}
-          disabledTitle={validationOnlyTitle}
-        />
+      {/* Filtros principales: estado, vigencia y número de documento (siempre visibles). El tipo de
+          documento no filtra: el número ya identifica a la persona dentro del tenant. */}
+      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
         <FilterSelect
           label="Estado"
           value={filters.status}
@@ -301,92 +212,22 @@ export function ValidacionesFilterToolbar({
           options={VIGENCIA_OPTIONS}
           onSelect={(v) => onChange({ vigenciaEstado: v }, true)}
         />
-        <FilterSelect
-          label="Proveedor"
-          value={filters.provider}
-          options={PROVIDER_OPTIONS}
-          onSelect={(v) => onChange({ provider: v }, true)}
-          disabled={groupedMode}
-          disabledTitle={validationOnlyTitle}
-        />
-        <Field label="Persona">
+        <Field label="Documento">
           <input
             type="text"
-            value={filters.name}
-            onChange={(e) => onChange({ name: sanitizeNoAngleBrackets(e.target.value) })}
+            inputMode="numeric"
+            value={filters.documentNumber}
+            onChange={(e) => onChange({ documentNumber: digitsOnly(e.target.value) })}
             maxLength={SEARCH_TEXT_MAX_LENGTH}
-            placeholder="Nombre…"
+            placeholder="Número…"
             className={CONTROL_CLASS}
           />
         </Field>
       </div>
 
-      {/* Motivo de rechazo: contextual (visible solo cuando se filtra por estado=rechazado) */}
-      {filters.status === 'rechazado' && !groupedMode && (
-        <div className="mt-2">
-          <Field label="Motivo de rechazo">
-            <input
-              type="text"
-              value={filters.rejectionReason}
-              onChange={(e) => onChange({ rejectionReason: sanitizeNoAngleBrackets(e.target.value) })}
-              maxLength={SEARCH_TEXT_MAX_LENGTH}
-              placeholder="Texto del motivo…"
-              className={CONTROL_CLASS}
-            />
-          </Field>
-        </div>
-      )}
-
-      {/* Filtros avanzados (plegables): documento, score, fechas */}
+      {/* Filtros avanzados (plegables): fechas de registro y de vigencia */}
       {showAdvanced && (
-        <div id="validaciones-filtros-avanzados" className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          <Field label="Tipo doc.">
-            <input
-              type="text"
-              value={filters.documentType}
-              onChange={(e) => onChange({ documentType: sanitizeNoAngleBrackets(e.target.value) })}
-              maxLength={SEARCH_TEXT_MAX_LENGTH}
-              placeholder="CC, CE…"
-              className={CONTROL_CLASS}
-            />
-          </Field>
-          <Field label="Documento">
-            <input
-              type="text"
-              inputMode="numeric"
-              value={filters.documentNumber}
-              onChange={(e) => onChange({ documentNumber: digitsOnly(e.target.value) })}
-              maxLength={SEARCH_TEXT_MAX_LENGTH}
-              placeholder="Número…"
-              className={CONTROL_CLASS}
-            />
-          </Field>
-          <Field label="Score mín.">
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              autoComplete="off"
-              value={filters.scoreMin}
-              onChange={(e) => onChange({ scoreMin: digitsOnly(e.target.value) })}
-              disabled={groupedMode}
-              title={groupedMode ? validationOnlyTitle : undefined}
-              className={`${CONTROL_CLASS}${groupedMode ? ' opacity-50 cursor-not-allowed' : ''}`}
-            />
-          </Field>
-          <Field label="Score máx.">
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              autoComplete="off"
-              value={filters.scoreMax}
-              onChange={(e) => onChange({ scoreMax: digitsOnly(e.target.value) })}
-              disabled={groupedMode}
-              title={groupedMode ? validationOnlyTitle : undefined}
-              className={`${CONTROL_CLASS}${groupedMode ? ' opacity-50 cursor-not-allowed' : ''}`}
-            />
-          </Field>
+        <div id="validaciones-filtros-avanzados" className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           <Field label="Registro desde">
             <input
               type="date"
