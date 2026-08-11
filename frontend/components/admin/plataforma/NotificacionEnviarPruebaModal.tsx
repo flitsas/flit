@@ -61,7 +61,7 @@ export function NotificacionEnviarPruebaModal({
       return;
     }
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- inicio del envío al abrir
+     
     setPhase("sending");
     setOutcome(null);
     setFailure(null);
@@ -75,7 +75,7 @@ export function NotificacionEnviarPruebaModal({
         setFailure(mapSendTestApiError(err));
         setPhase("failure");
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [open, mailboxConfigured, templateId, channel]);
 
   return (

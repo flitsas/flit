@@ -142,7 +142,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
             "el 400 no debe variar según si el identificador colado existiría o no (AC3)");
 
         _factory.PasswordGenerator.DidNotReceiveWithAnyArgs().Generate();
-        _ = _factory.EmailSender.DidNotReceiveWithAnyArgs().SendAsync(default!, default);
+        _ = _factory.EmailSender.DidNotReceiveWithAnyArgs().SendAsync(default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -194,8 +194,8 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
         // Ni se generó, ni se hasheó, ni se escribió auditoría ni se envió correo.
         _factory.PasswordGenerator.DidNotReceiveWithAnyArgs().Generate();
         _factory.PasswordHasher.DidNotReceiveWithAnyArgs().Hash(default!);
-        _ = _factory.AuditWriter.DidNotReceiveWithAnyArgs().WriteAsync(default!, default);
-        _ = _factory.EmailSender.DidNotReceiveWithAnyArgs().SendAsync(default!, default);
+        _ = _factory.AuditWriter.DidNotReceiveWithAnyArgs().WriteAsync(default!, TestContext.Current.CancellationToken);
+        _ = _factory.EmailSender.DidNotReceiveWithAnyArgs().SendAsync(default!, TestContext.Current.CancellationToken);
     }
 
     // ── AC6 — sin efectos observables en ninguna plantilla ──────────────────
@@ -213,8 +213,8 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
         var response = await client.GetAsync($"{GroupUrl}/{templateId}/muestra", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        _ = _factory.EmailSender.DidNotReceiveWithAnyArgs().SendAsync(default!, default);
-        _ = _factory.AuditWriter.DidNotReceiveWithAnyArgs().WriteAsync(default!, default);
+        _ = _factory.EmailSender.DidNotReceiveWithAnyArgs().SendAsync(default!, TestContext.Current.CancellationToken);
+        _ = _factory.AuditWriter.DidNotReceiveWithAnyArgs().WriteAsync(default!, TestContext.Current.CancellationToken);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

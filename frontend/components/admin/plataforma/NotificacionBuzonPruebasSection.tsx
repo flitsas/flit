@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Inbox, Pencil, RefreshCw, TriangleAlert } from "lucide-react";
 import { ApiError } from "@/lib/api/types";
 import {
@@ -36,12 +36,10 @@ export function NotificacionBuzonPruebasSection({
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!editing) {
-      setEmail(mailbox?.testRecipientEmail ?? "");
-    }
-  }, [mailbox, editing]);
-
+  // Sin efecto de sincronización: `email` solo se lee dentro del formulario, y el formulario solo
+  // existe mientras se edita. `startEditing` lo siembra desde el buzón vigente en ese momento, así
+  // que espejar el prop en estado fuera de la edición no aportaba nada y provocaba renders en
+  // cascada (react-hooks/set-state-in-effect).
   const startEditing = () => {
     setFormError(null);
     setEmail(mailbox?.testRecipientEmail ?? "");
