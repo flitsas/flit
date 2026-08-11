@@ -65,11 +65,8 @@ public sealed class AdminResetPasswordHandler(
         await userAccountRepository.UpdatePasswordHashAsync(
             target.UserId, hash, DateTimeOffset.UtcNow, mustChangePassword: true, cancellationToken);
 
-        var message = new EmailMessage(
-            target.Email,
-            target.DisplayName,
-            "Tu contraseña fue restablecida — FLIT",
-            BuildBody(target.DisplayName, temporaryPassword));
+        var composed = AdminResetPasswordEmailTemplate.Compose(target.DisplayName, temporaryPassword);
+        var message = new EmailMessage(target.Email, target.DisplayName, composed.Subject, composed.HtmlBody);
 
         await emailSender.SendAsync(message, cancellationToken);
 
@@ -122,15 +119,4 @@ public sealed class AdminResetPasswordHandler(
             throw new AdminScopeException();
     }
 
-    private static string BuildBody(string displayName, string temporaryPassword)
-    {
-        var name = string.IsNullOrWhiteSpace(displayName) ? "usuario" : displayName;
-        return $"""
-            <p>Hola {System.Net.WebUtility.HtmlEncode(name)},</p>
-            <p>Un administrador restableció tu contraseña en FLIT. Tu contraseña temporal es:</p>
-            <p><strong>{System.Net.WebUtility.HtmlEncode(temporaryPassword)}</strong></p>
-            <p>Por seguridad, deberás definir una nueva contraseña la próxima vez que inicies sesión.</p>
-            <p>— Equipo FLIT</p>
-            """;
-    }
 }

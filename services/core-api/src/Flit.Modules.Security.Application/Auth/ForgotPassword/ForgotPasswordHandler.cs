@@ -36,12 +36,9 @@ public sealed class ForgotPasswordHandler(
 
         await tokenRepository.CreateAsync(user.UserId, token.TokenHash, Purpose, expiresAt, cancellationToken);
 
-        var link = BuildResetLink(options.ResetUrlBase, token.RawToken);
-        var message = new EmailMessage(
-            user.Email,
-            user.DisplayName,
-            "Recuperación de contraseña — FLIT",
-            BuildHtmlBody(user.DisplayName, link, options.TokenLifetimeMinutes));
+        var link = ForgotPasswordEmailTemplate.BuildResetLink(options.ResetUrlBase, token.RawToken);
+        var composed = ForgotPasswordEmailTemplate.Compose(user.DisplayName, link, options.TokenLifetimeMinutes);
+        var message = new EmailMessage(user.Email, user.DisplayName, composed.Subject, composed.HtmlBody);
 
         await emailSender.SendAsync(message, cancellationToken);
 
@@ -63,23 +60,4 @@ public sealed class ForgotPasswordHandler(
             cancellationToken).ConfigureAwait(false);
     }
 
-    private static string BuildResetLink(string resetUrlBase, string rawToken)
-    {
-        var separator = resetUrlBase.Contains('?', StringComparison.Ordinal) ? '&' : '?';
-        return $"{resetUrlBase}{separator}token={Uri.EscapeDataString(rawToken)}";
-    }
-
-    private static string BuildHtmlBody(string displayName, string link, int lifetimeMinutes)
-    {
-        var greetingName = string.IsNullOrWhiteSpace(displayName) ? "usuario" : displayName;
-        return $"""
-            <p>Hola {System.Net.WebUtility.HtmlEncode(greetingName)},</p>
-            <p>Recibimos una solicitud para restablecer tu contraseña en FLIT.
-            Haz clic en el siguiente enlace para crear una nueva contraseña:</p>
-            <p><a href="{link}">Restablecer mi contraseña</a></p>
-            <p>El enlace caduca en {lifetimeMinutes} minutos. Si no solicitaste este cambio,
-            puedes ignorar este mensaje; tu contraseña seguirá siendo la misma.</p>
-            <p>— Equipo FLIT</p>
-            """;
-    }
 }

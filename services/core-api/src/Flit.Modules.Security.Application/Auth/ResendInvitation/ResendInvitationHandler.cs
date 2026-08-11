@@ -45,11 +45,8 @@ public sealed partial class ResendInvitationHandler(
             invitation.InvitationId, token.TokenHash, now, command.ResentBy, cancellationToken);
 
         var link = InvitationEmailTemplate.BuildActivateLink(options.ActivateUrlBase, token.RawToken);
-        var message = new EmailMessage(
-            invitation.Email,
-            invitation.Email,
-            InvitationEmailTemplate.Subject,
-            InvitationEmailTemplate.BuildHtmlBody(invitation.FullName, link));
+        var composed = InvitationEmailTemplate.Compose(invitation.FullName, link);
+        var message = new EmailMessage(invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody);
 
         LogActivationLinkDev(logger, link);
 

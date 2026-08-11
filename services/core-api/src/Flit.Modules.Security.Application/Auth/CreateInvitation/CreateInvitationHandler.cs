@@ -57,11 +57,8 @@ public sealed partial class CreateInvitationHandler(
             cancellationToken);
 
         var link = InvitationEmailTemplate.BuildActivateLink(options.ActivateUrlBase, token.RawToken);
-        var message = new EmailMessage(
-            email,
-            email,
-            InvitationEmailTemplate.Subject,
-            InvitationEmailTemplate.BuildHtmlBody(command.FullName, link));
+        var composed = InvitationEmailTemplate.Compose(command.FullName, link);
+        var message = new EmailMessage(email, email, composed.Subject, composed.HtmlBody);
 
         LogActivationLinkDev(logger, link);
 
