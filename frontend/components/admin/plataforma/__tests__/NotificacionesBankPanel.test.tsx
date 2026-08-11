@@ -6,10 +6,18 @@ import { NotificacionesBankPanel } from "@/components/admin/plataforma/Notificac
 const listNotificationTemplates = vi.fn();
 const listNotificationChannels = vi.fn();
 const fetchCompaniesIndex = vi.fn();
+const getTestMailbox = vi.fn();
+const updateTestMailbox = vi.fn();
+const getNotificationSample = vi.fn();
+const sendNotificationTest = vi.fn();
 
 vi.mock("@/lib/api/admin-plataforma-notificaciones", () => ({
   listNotificationTemplates: (...a: unknown[]) => listNotificationTemplates(...a),
   listNotificationChannels: (...a: unknown[]) => listNotificationChannels(...a),
+  getTestMailbox: (...a: unknown[]) => getTestMailbox(...a),
+  updateTestMailbox: (...a: unknown[]) => updateTestMailbox(...a),
+  getNotificationSample: (...a: unknown[]) => getNotificationSample(...a),
+  sendNotificationTest: (...a: unknown[]) => sendNotificationTest(...a),
 }));
 
 vi.mock("@/lib/api/admin-companies", () => ({
@@ -97,10 +105,18 @@ const sampleCompanies = {
   pageSize: 50,
 };
 
+const sampleMailboxConfigured = {
+  isConfigured: true,
+  testRecipientEmail: "pruebas@flit.com.co",
+  lastTestSentAt: null,
+  rowVersion: 1,
+};
+
 function mockHappyPath() {
   listNotificationTemplates.mockResolvedValue(sampleTemplates);
   listNotificationChannels.mockResolvedValue(sampleChannels);
   fetchCompaniesIndex.mockResolvedValue(sampleCompanies);
+  getTestMailbox.mockResolvedValue(sampleMailboxConfigured);
 }
 
 describe("NotificacionesBankPanel", () => {
@@ -108,6 +124,13 @@ describe("NotificacionesBankPanel", () => {
     listNotificationTemplates.mockReset();
     listNotificationChannels.mockReset();
     fetchCompaniesIndex.mockReset();
+    getTestMailbox.mockReset();
+    updateTestMailbox.mockReset();
+    getNotificationSample.mockReset();
+    sendNotificationTest.mockReset();
+    // HU #11371 — buzón configurado por defecto salvo que el test lo sobrescriba; evita que la
+    // sección del buzón quede en error/loading en tests que no la ejercitan directamente.
+    getTestMailbox.mockResolvedValue(sampleMailboxConfigured);
   });
 
   // ── Estados de carga (4 estados obligatorios) ────────────────────────────
@@ -222,11 +245,11 @@ describe("NotificacionesBankPanel", () => {
       scoped.getByText(/el correo lo emite el proveedor; flit no controla su contenido/i),
     ).toBeInTheDocument();
 
-    // Las filas de plantilla sí muestran los botones (deshabilitados — HU #11371).
+    // Las filas de plantilla sí muestran los botones, ya cableados (HU #11371).
     const invitacionRow = screen.getByText("Invitación a la plataforma").closest("tr");
     const scopedInvitacion = within(invitacionRow as HTMLElement);
-    expect(scopedInvitacion.getByRole("button", { name: /ver en vivo/i })).toBeDisabled();
-    expect(scopedInvitacion.getByRole("button", { name: /enviar prueba/i })).toBeDisabled();
+    expect(scopedInvitacion.getByRole("button", { name: /ver en vivo/i })).toBeEnabled();
+    expect(scopedInvitacion.getByRole("button", { name: /enviar prueba/i })).toBeEnabled();
   });
 
   // ── AC4 ───────────────────────────────────────────────────────────────────

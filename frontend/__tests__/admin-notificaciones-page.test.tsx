@@ -11,6 +11,15 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/api/admin-plataforma-notificaciones", () => ({
   listNotificationTemplates: vi.fn().mockResolvedValue([]),
   listNotificationChannels: vi.fn().mockResolvedValue([]),
+  getTestMailbox: vi.fn().mockResolvedValue({
+    isConfigured: false,
+    testRecipientEmail: null,
+    lastTestSentAt: null,
+    rowVersion: 0,
+  }),
+  updateTestMailbox: vi.fn(),
+  getNotificationSample: vi.fn(),
+  sendNotificationTest: vi.fn(),
 }));
 
 vi.mock("@/lib/api/admin-companies", () => ({

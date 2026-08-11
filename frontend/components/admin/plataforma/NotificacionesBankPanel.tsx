@@ -1,17 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Building2, Eye, Info, Mail, Send, TriangleAlert } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
+  getTestMailbox,
   listNotificationChannels,
   listNotificationTemplates,
   type NotificationChannelItem,
   type NotificationTemplateItem,
+  type NotificationTestMailbox,
 } from "@/lib/api/admin-plataforma-notificaciones";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import type { CompanyListItem } from "@/lib/api/types";
+import { NotificacionBuzonPruebasSection } from "./NotificacionBuzonPruebasSection";
+import { NotificacionVistaPreviaModal } from "./NotificacionVistaPreviaModal";
+import { NotificacionEnviarPruebaModal } from "./NotificacionEnviarPruebaModal";
 
 /**
  * Fila del banco de pruebas. Las 5 primeras vienen del catálogo de plantillas propias de FLIT
@@ -42,8 +47,8 @@ type PanelStatus = "loading" | "error" | "ready";
  * Pantalla de lectura: selector de canal, selector de compañía, tabla de 6 filas (5 plantillas
  * FLIT + Kyverum), remitente resuelto por canal y aviso de disponibilidad del canal.
  *
- * Fuera de alcance a propósito (HU #11371): "ver en vivo" y "enviar prueba" quedan como botones
- * deshabilitados en las filas de plantilla; no se cablea ningún comportamiento de envío.
+ * HU #11371 añade el cableado de "ver en vivo" (render de muestra en `iframe` aislado) y
+ * "enviar prueba" (POST al buzón de pruebas configurado), más la sección visible del buzón.
  */
 export function NotificacionesBankPanel() {
   const [templates, setTemplates] = useState<NotificationTemplateItem[]>([]);
@@ -52,6 +57,16 @@ export function NotificacionesBankPanel() {
   const [status, setStatus] = useState<PanelStatus>("loading");
   const [selectedChannel, setSelectedChannel] = useState<string>("");
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
+
+  // HU #11371 — buzón de pruebas, cargado aparte porque su reintento es independiente de la
+  // carga principal (plantillas/canales/compañías).
+  const [mailbox, setMailbox] = useState<NotificationTestMailbox | null>(null);
+  const [mailboxStatus, setMailboxStatus] = useState<PanelStatus>("loading");
+  const buzonSectionRef = useRef<HTMLDivElement | null>(null);
+
+  // HU #11371 — modales "ver en vivo" / "enviar prueba", una fila a la vez.
+  const [previewRow, setPreviewRow] = useState<BankRow | null>(null);
+  const [sendRow, setSendRow] = useState<BankRow | null>(null);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -80,6 +95,29 @@ export function NotificacionesBankPanel() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API
     void load();
   }, [load]);
+
+  const loadMailbox = useCallback(async () => {
+    setMailboxStatus("loading");
+    try {
+      const data = await getTestMailbox();
+      setMailbox(data);
+      setMailboxStatus("ready");
+    } catch {
+      setMailboxStatus("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial vía API
+    void loadMailbox();
+  }, [loadMailbox]);
+
+  const focusBuzonSection = useCallback(() => {
+    // `scrollIntoView` no existe en algunos entornos de test (jsdom sin stub); no es crítico
+    // para la accesibilidad (el foco sí lo es), así que se protege con un guard.
+    buzonSectionRef.current?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    buzonSectionRef.current?.querySelector("button")?.focus();
+  }, []);
 
   const selectedChannelObj = useMemo(
     () => channels.find((c) => c.channel === selectedChannel) ?? channels[0],
@@ -172,26 +210,24 @@ export function NotificacionesBankPanel() {
             </span>
           );
         }
-        // Botones deshabilitados a propósito: "ver en vivo" y "enviar prueba" son la HU #11371.
-        // Se dejan visibles (no ocultos) para que el catálogo se lea completo desde ya.
+        // HU #11371 — "ver en vivo" abre el render de muestra aislado (AC1/AC2); "enviar
+        // prueba" dispara el envío honesto (AC3/AC4/AC5).
         return (
           <div className="inline-flex items-center justify-end gap-1.5">
             <button
               type="button"
-              disabled
-              aria-label={`Ver en vivo ${row.name} — disponible en la HU #11371`}
-              title="Disponible en la HU #11371"
-              className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold text-[#59677D] opacity-50 dark:border-white/10 dark:text-white/55"
+              onClick={() => setPreviewRow(row)}
+              aria-label={`Ver en vivo ${row.name}`}
+              className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold text-[#162244] transition-colors hover:bg-[#F4F7FC] dark:border-white/10 dark:text-white dark:hover:bg-white/5"
             >
               <Eye className="h-3 w-3" aria-hidden="true" />
               Ver en vivo
             </button>
             <button
               type="button"
-              disabled
-              aria-label={`Enviar prueba de ${row.name} — disponible en la HU #11371`}
-              title="Disponible en la HU #11371"
-              className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold text-[#59677D] opacity-50 dark:border-white/10 dark:text-white/55"
+              onClick={() => setSendRow(row)}
+              aria-label={`Enviar prueba de ${row.name}`}
+              className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold text-[#162244] transition-colors hover:bg-[#F4F7FC] dark:border-white/10 dark:text-white dark:hover:bg-white/5"
             >
               <Send className="h-3 w-3" aria-hidden="true" />
               Enviar prueba
@@ -270,7 +306,8 @@ export function NotificacionesBankPanel() {
             <p className="text-xs font-semibold text-[#162244] dark:text-white">Vista previa</p>
             <p className="mt-2 text-xs leading-relaxed text-[#59677D] dark:text-white/65">
               El contenido de la plantilla es fijo (lo compone el catálogo del backend) y no cambia
-              al cambiar de compañía. Ver el render completo en vivo es la HU #11371.
+              al cambiar de compañía. Usa “Ver en vivo” en cada fila para ver el render completo
+              en un marco aislado, sin enviar ningún correo.
             </p>
           </div>
 
@@ -321,6 +358,36 @@ export function NotificacionesBankPanel() {
           minWidth={860}
         />
       </section>
+
+      {/* HU #11371 (AC5/AC6) — buzón de pruebas visible y modificable. */}
+      <div ref={buzonSectionRef}>
+        <NotificacionBuzonPruebasSection
+          mailbox={mailbox}
+          status={mailboxStatus}
+          onRetry={() => void loadMailbox()}
+          onSaved={setMailbox}
+        />
+      </div>
+
+      {/* HU #11371 (AC1/AC2) — "ver en vivo" en marco aislado, sin enviar correo. */}
+      <NotificacionVistaPreviaModal
+        open={previewRow !== null}
+        onClose={() => setPreviewRow(null)}
+        templateId={previewRow?.id ?? ""}
+        templateName={previewRow?.name ?? ""}
+      />
+
+      {/* HU #11371 (AC3/AC4/AC5) — envío de prueba con resultado honesto. */}
+      <NotificacionEnviarPruebaModal
+        open={sendRow !== null}
+        onClose={() => setSendRow(null)}
+        templateId={sendRow?.id ?? ""}
+        templateName={sendRow?.name ?? ""}
+        channel={(selectedChannelObj?.channel as "FLIT_SMTP" | "TENANT_API") ?? "FLIT_SMTP"}
+        channelLabel={selectedChannelObj?.label ?? "canal seleccionado"}
+        mailboxConfigured={mailbox?.isConfigured ?? false}
+        onRequestConfigureMailbox={focusBuzonSection}
+      />
     </div>
   );
 }
