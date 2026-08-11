@@ -85,8 +85,8 @@ public sealed class NotificationTestSendAdminServiceTests
             new SendNotificationTestRequest("security.invitation", "FLIT_SMTP"), UserId, Ct);
         first.Success.Should().BeTrue();
 
-        // Segunda solicitud, DE OTRA PLANTILLA, 30 segundos después (ventana de 5 minutos vigente).
-        timeProvider.Advance(TimeSpan.FromSeconds(30));
+        // Segunda solicitud, DE OTRA PLANTILLA, 2 segundos después (ventana de 5 segundos vigente).
+        timeProvider.Advance(TimeSpan.FromSeconds(2));
         explicitSender.ClearReceivedCalls();
 
         var second = await service.SendAsync(
@@ -94,7 +94,7 @@ public sealed class NotificationTestSendAdminServiceTests
 
         second.Success.Should().BeFalse();
         second.Outcome.Should().Be(NotificationTestSendOutcome.RateLimited);
-        second.RetryAfterSeconds.Should().BeGreaterThan(0).And.BeLessOrEqualTo(300);
+        second.RetryAfterSeconds.Should().BeGreaterThan(0).And.BeLessOrEqualTo(5);
 
         await explicitSender.DidNotReceive().SendAsync(
             Arg.Any<NotificationChannel>(), Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
@@ -113,7 +113,7 @@ public sealed class NotificationTestSendAdminServiceTests
 
         await service.SendAsync(new SendNotificationTestRequest("security.invitation", "FLIT_SMTP"), UserId, Ct);
 
-        timeProvider.Advance(TimeSpan.FromMinutes(5).Add(TimeSpan.FromSeconds(1)));
+        timeProvider.Advance(TimeSpan.FromSeconds(5).Add(TimeSpan.FromSeconds(1)));
         var result = await service.SendAsync(
             new SendNotificationTestRequest("security.invitation", "FLIT_SMTP"), UserId, Ct);
 

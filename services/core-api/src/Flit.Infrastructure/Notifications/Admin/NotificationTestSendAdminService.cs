@@ -76,10 +76,20 @@ internal sealed partial class NotificationTestSendAdminService(
     TimeProvider timeProvider,
     ILogger<NotificationTestSendAdminService> logger) : INotificationTestSendAdminService
 {
-    // Ventana de enfriamiento entre envíos de prueba (AC2). Constante de producto: el banco de
-    // pruebas es de uso ocasional del SuperAdmin, no un canal operativo con SLA distinto por
-    // ambiente — no se modela como configuración.
-    private static readonly TimeSpan CooldownWindow = TimeSpan.FromMinutes(5);
+    // Ventana de enfriamiento entre envíos de prueba (AC2). Decisión del PO del 2026-08-11: baja de
+    // 5 minutos a 5 segundos. Sigue siendo global (una sola fila) y sigue sin ser configuración —
+    // constante de producto. El propósito YA NO es racionar el uso del SuperAdmin (con 5 minutos
+    // revisar las 5 plantillas del catálogo tomaba ~25 minutos); ahora es solo evitar el doble clic
+    // y las solicitudes solapadas mientras un envío está en curso.
+    //
+    // Consecuencia aceptada (no un descuido): con una ventana tan corta, si el transporte tarda más
+    // que ella (SMTP lento, o el canal TENANT_API con su login y su mTLS), una segunda solicitud
+    // puede entrar MIENTRAS la primera sigue en vuelo, porque la ventana ya expiró para cuando esa
+    // segunda solicitud llega. Con 5 minutos eso era virtualmente imposible. El sello previo (ver
+    // comentario de clase) sigue protegiendo contra solicitudes verdaderamente simultáneas —dos
+    // requests que llegan a la vez pierden la carrera de concurrencia optimista sobre
+    // row_version— pero ya no protege contra envíos que se solapan en el tiempo por ser lentos.
+    private static readonly TimeSpan CooldownWindow = TimeSpan.FromSeconds(5);
 
     public async Task<NotificationTestSendResult> SendAsync(
         SendNotificationTestRequest request, Guid? userId, CancellationToken ct = default)
