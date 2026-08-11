@@ -175,6 +175,13 @@ services:
       Smtp__DefaultSenderEmail: ${SMTP_FROM:-}
       Smtp__DefaultSenderPassword: ${SMTP_PASSWORD:-}
       Smtp__DefaultSenderName: ${SMTP_FROM_NAME:-FLIT Tramites}
+      # Comprobación de revocación (CRL/OCSP) del certificado del servidor SMTP. Default true:
+      # un despliegue que no defina la variable sigue comprobándola. Ponerla en false NO
+      # desactiva la validación TLS —cadena, emisor, host y vigencia se siguen verificando—,
+      # solo deja de consultarse si el certificado fue revocado antes de expirar. Se expone
+      # porque en redes con proxy o antivirus que inspecciona TLS la consulta de revocación no
+      # llega, y el handshake falla ANTES de autenticar (visto en local el 2026-08-11).
+      Smtp__CheckCertificateRevocation: ${SMTP_CHECK_CERT_REVOCATION:-true}
       # Biometría (HU #10233 — Kyverum Verify). Mismo patrón que Verifik: el código
       # lee env vars CRUDAS (BIOMETRICS_PROVIDER / KYVERUM_*), no `Kyverum__*`.
       # Default mock ⇒ no rompe regresión si el .env no define el proveedor.

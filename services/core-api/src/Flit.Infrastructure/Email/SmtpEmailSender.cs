@@ -49,6 +49,7 @@ public sealed partial class SmtpEmailSender(EmailSettings settings, ILogger<Smtp
 
         try
         {
+            client.CheckCertificateRevocation = settings.CheckCertificateRevocation;
             await client.ConnectAsync(settings.Host, settings.Port, socketOptions, cancellationToken);
 
             if (!settings.DisableAuthentication)
