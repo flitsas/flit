@@ -50,6 +50,7 @@ using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -890,6 +891,20 @@ public static class InfrastructureExtensions
             var certificateProvider = sp.GetRequiredService<RentingClientCertificateProvider>();
             return RentingHttpMessageHandlerFactory.Create(certificateProvider.Certificate);
         });
+
+        // HU #11360 — login, caché de token (anti-estampida, AC1/AC2/AC3) y el ejecutor que aplica
+        // la política de reintento ante 401 (AC4/AC5/AC6). El reloj es TimeProvider inyectado (no
+        // DateTimeOffset.UtcNow directo) para que las pruebas de TTL puedan adelantar el tiempo sin
+        // dormir el TTL real; TryAddSingleton porque otro punto de composición puede haberlo
+        // registrado ya. IRentingTokenCache DEBE ser Singleton: su estado (el token cacheado y el
+        // semáforo de anti-estampida) tiene que sobrevivir entre requests — si fuera Scoped, cada
+        // request vería la caché vacía y el AC1/AC2 dejarían de cumplirse. Que dependa de
+        // IRentingLoginClient (Transient) no es dependencia cautiva: .NET solo prohíbe que un
+        // Singleton dependa de un Scoped, no de un Transient.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddTransient<IRentingLoginClient, RentingLoginClient>();
+        services.AddSingleton<IRentingTokenCache, RentingTokenCache>();
+        services.AddScoped<RentingAuthenticatedRequestExecutor>();
     }
 
     /// <summary>
