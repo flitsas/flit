@@ -129,6 +129,9 @@ public sealed class UpdateTenantSettingsHandler
             ValidateSoatWithRunt = request.ValidarSoatConRunt,
             PlateFlowSkipToTerminado = request.PlateFlowSkipToTerminado,
             NotificationChannel = channel,
+            // HU #11357/#11362 (ADR-0043) — campo propio, ya no derivado del canal. Opcional: si el
+            // request no lo envía, se conserva el valor previo (ver UpdateTenantSettingsRequest).
+            PersonalizedDocumentsEnabled = request.DocumentosPersonalizadosActivo ?? previous.PersonalizedDocumentsEnabled,
             NotificationTarget = target,
             PaymentMethods = [.. methods],
             // Campos opcionales HU #10478: si el request los omite, se conserva el valor previo.

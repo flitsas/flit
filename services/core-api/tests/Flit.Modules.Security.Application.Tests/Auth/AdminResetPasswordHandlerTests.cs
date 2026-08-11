@@ -2,6 +2,7 @@ using Flit.Admin.Application.Auditing;
 using Flit.Modules.Security.Application.Auth.AdminResetPassword;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
 
@@ -19,9 +20,15 @@ public sealed class AdminResetPasswordHandlerTests
 
     public AdminResetPasswordHandlerTests()
     {
-        _handler = new AdminResetPasswordHandler(_repo, _tempGen, _hasher, _email, _auditWriter, _auditContext);
+        _handler = new AdminResetPasswordHandler(
+            _repo, _tempGen, _hasher, _email, _auditWriter, _auditContext,
+            NullLogger<AdminResetPasswordHandler>.Instance);
         _tempGen.Generate().Returns("Temp23xy!Kp9Qr");
         _hasher.Hash(Arg.Any<string>()).Returns("hashed-temp");
+        // HU #11358 — por defecto el sender simula éxito (antes lo hacía implícitamente un Task
+        // no configurado).
+        _email.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
     }
 
     private AdminTargetUser ArrangeTarget(Guid tenantId)
@@ -42,6 +49,37 @@ public sealed class AdminResetPasswordHandlerTests
         await _repo.Received(1).UpdatePasswordHashAsync(
             target.UserId, "hashed-temp", Arg.Any<DateTimeOffset>(), true, Arg.Any<CancellationToken>());
         await _email.Received(1).SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    // HU #11358 AC1 — el tenant del usuario objetivo (no el del caller) viaja explícito en la
+    // solicitud de envío.
+    [Fact]
+    public async Task HandleAsync_SendsMessageWithTargetTenantId()
+    {
+        var target = ArrangeTarget(Guid.NewGuid());
+        var command = new AdminResetPasswordCommand(Guid.NewGuid(), "SuperAdmin", [], "user@flit.local");
+
+        await _handler.HandleAsync(command, CancellationToken.None);
+
+        await _email.Received(1).SendAsync(
+            Arg.Is<EmailMessage>(m => m.TenantId == target.TenantId), Arg.Any<CancellationToken>());
+    }
+
+    // HU #11358 AC3 — un fallo tipado del transporte NO se propaga como excepción: la contraseña
+    // ya quedó actualizada y el handler termina con normalidad.
+    [Fact]
+    public async Task HandleAsync_EmailTransportFails_DoesNotThrowAndPasswordStaysUpdated()
+    {
+        var target = ArrangeTarget(Guid.NewGuid());
+        var command = new AdminResetPasswordCommand(Guid.NewGuid(), "SuperAdmin", [], "user@flit.local");
+        _email.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Failed(EmailSendOutcome.AuthenticationFailed)));
+
+        var act = () => _handler.HandleAsync(command, CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+        await _repo.Received(1).UpdatePasswordHashAsync(
+            target.UserId, "hashed-temp", Arg.Any<DateTimeOffset>(), true, Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -1,6 +1,6 @@
 // Dock del Shell: FAB centrado, Ayuda universal, agrupadores menú/submenú.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setDevSuperAdminToken } from "@/lib/api/client";
 import { TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
@@ -131,13 +131,38 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     expect(screen.getByRole("button", { name: "Causales de rechazo" })).toBeInTheDocument();
   });
 
-  it("muestra Mandatos dentro de Administradores → Plataforma", async () => {
+  it("muestra Mandatos y Notificaciones dentro de Administradores → Plataforma, en ese orden (HU #11369 AC1)", async () => {
     setDevSuperAdminToken();
     renderShell();
     expect(screen.queryByRole("button", { name: "Plataforma" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Administradores" }));
     await userEvent.click(screen.getByRole("button", { name: "Plataforma" }));
-    expect(screen.getByRole("button", { name: "Mandatos" })).toBeInTheDocument();
+
+    // Se acota al panel del dock para no confundir con el icono genérico de
+    // notificaciones del topbar (aria-label="Notificaciones", ajeno a esta HU).
+    const dockNav = screen.getByRole("navigation", { name: "Navegación principal" });
+    const mandatosBtn = within(dockNav).getByRole("button", { name: "Mandatos" });
+    const notificacionesBtn = within(dockNav).getByRole("button", { name: "Notificaciones" });
+    expect(mandatosBtn).toBeInTheDocument();
+    expect(notificacionesBtn).toBeInTheDocument();
+
+    // AC1: Mandatos y Notificaciones, EN ESE ORDEN.
+    expect(
+      mandatosBtn.compareDocumentPosition(notificacionesBtn) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("un usuario sin sesión SuperAdmin no ve Plataforma ni Notificaciones (HU #11369 AC2)", () => {
+    renderShell();
+    expect(screen.queryByRole("button", { name: "Administradores" })).not.toBeInTheDocument();
+
+    // Se acota al dock: el topbar tiene un icono genérico "Notificaciones"
+    // (campana de alertas) ajeno a esta HU y siempre presente.
+    const dockNav = screen.getByRole("navigation", { name: "Navegación principal" });
+    expect(within(dockNav).queryByRole("button", { name: "Plataforma" })).not.toBeInTheDocument();
+    expect(
+      within(dockNav).queryByRole("button", { name: "Notificaciones" }),
+    ).not.toBeInTheDocument();
   });
 
   it("muestra Log QX y Log ICT en el agrupador Integraciones", async () => {

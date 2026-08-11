@@ -24,4 +24,12 @@ public static class InvitationEmailTemplate
         <p>Si no esperabas esta invitación, puedes ignorar este mensaje.</p>
         <p>— Equipo FLIT</p>
         """;
+
+    /// <summary>
+    /// HU #11351 — composición pura: asunto y cuerpo a partir únicamente de <paramref name="fullName"/>
+    /// y <paramref name="link"/> (ya calculado con <see cref="BuildActivateLink"/>). Sin E/S, sin reloj,
+    /// sin aleatoriedad, sin estado.
+    /// </summary>
+    public static ComposedEmail Compose(string fullName, string link) =>
+        new(Subject, BuildHtmlBody(fullName, link));
 }

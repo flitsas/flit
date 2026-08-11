@@ -11,18 +11,28 @@ using Xunit;
 namespace Flit.Admin.Tests.Companies.Settings;
 
 /// <summary>
-/// HU #11320, AC1 (segunda mitad) — «cero entradas en el diff de configuración del tenant»: los
-/// documentos personalizados por compañía (Feature #11309, ADR-0042) NO son campos escalares del
-/// formulario de configuración (<c>UpdateTenantSettingsRequest</c>/<c>SettingsDiff</c>) y un archivo no
-/// cabe ahí — su ciclo de vida vive por completo en <c>admin.company_personalized_documents</c> con su
-/// propio trigger + <see cref="IAdminAuditWriter"/> (ver HU #11320, ítem 1).
+/// HU #11320, AC1 (segunda mitad) — «cero entradas en el diff de configuración del tenant» PARA EL
+/// ARCHIVO: los documentos personalizados por compañía (Feature #11309, ADR-0042) —su versión, su
+/// PDF, su hash— NO son campos escalares del formulario de configuración
+/// (<c>UpdateTenantSettingsRequest</c>/<c>SettingsDiff</c>); su ciclo de vida vive por completo en
+/// <c>admin.company_personalized_documents</c> con su propio trigger + <see cref="IAdminAuditWriter"/>
+/// (ver HU #11320, ítem 1).
+///
+/// <para>
+/// Excepción DELIBERADA (HU #11357/#11362, ADR-0043): la ELEGIBILIDAD de la funcionalidad —no el
+/// archivo— sí es, desde esa HU, un campo escalar propio del formulario:
+/// <c>personalized_documents_enabled</c>. El ADR lo declara explícitamente («Superficie de
+/// configuración del tenant: campo nuevo en el contrato de lectura y de actualización»), así que este
+/// test deja de tratarlo como fuga y lo verifica como el ÚNICO campo permitido con esa raíz de nombre.
+/// </para>
 ///
 /// Este test ejercita <see cref="UpdateTenantSettingsHandler"/> (que internamente llama a
 /// <c>SettingsDiff.Compute</c>, <c>internal</c>) con un cambio que toca la mayor cantidad de campos
 /// posible del formulario y verifica que NINGUNA fila de auditoría resultante en
-/// <c>admin.tenant_config_audit_logs</c> menciona <c>personalized_document</c>, <c>mandato</c> ni
-/// <c>tramite_virtual</c>: es un guardián de regresión — si alguien agrega un campo relacionado al
-/// formulario de configuración del tenant, este test debe fallar.
+/// <c>admin.tenant_config_audit_logs</c> menciona <c>mandato</c>, <c>tramite_virtual</c> ni ningún dato
+/// del archivo (storage/hash) — y que la ÚNICA fila relacionada con "personalized" es el interruptor de
+/// elegibilidad: es un guardián de regresión — si alguien agrega OTRO campo relacionado al formulario de
+/// configuración del tenant, este test debe fallar.
 /// </summary>
 public sealed class SettingsDiffPersonalizedDocumentsExclusionTests
 {
@@ -74,7 +84,8 @@ public sealed class SettingsDiffPersonalizedDocumentsExclusionTests
                     PreasignacionPlacaActiva: true,
                     PlateFlowSkipToTerminado: true,
                     ValidarSoatConRunt: true,
-                    FinesQuerySource: "internal"),
+                    FinesQuerySource: "internal",
+                    DocumentosPersonalizadosActivo: true),
             }, TestContext.Current.CancellationToken);
 
             result.IsValid.Should().BeTrue();
@@ -90,10 +101,16 @@ public sealed class SettingsDiffPersonalizedDocumentsExclusionTests
 
         audits.Should().OnlyContain(a => a.EntityName == "tenant_operational_policies");
         audits.Should().NotContain(a =>
-            a.FieldName.Contains("personalized", StringComparison.OrdinalIgnoreCase)
-            || a.FieldName.Contains("mandato", StringComparison.OrdinalIgnoreCase)
+            a.FieldName.Contains("mandato", StringComparison.OrdinalIgnoreCase)
             || a.FieldName.Contains("tramite_virtual", StringComparison.OrdinalIgnoreCase)
             || a.FieldName.Contains("documento", StringComparison.OrdinalIgnoreCase));
+
+        // Excepción deliberada (ADR-0043): el ÚNICO campo con raíz "personalized" permitido es el
+        // interruptor propio de elegibilidad — cualquier OTRO campo con esa raíz sigue siendo fuga.
+        audits.Should().NotContain(a =>
+            a.FieldName.Contains("personalized", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(a.FieldName, "personalized_documents_enabled", StringComparison.Ordinal));
+        audits.Should().ContainSingle(a => a.FieldName == "personalized_documents_enabled");
 
         // Ninguna fila lleva el valor nuevo/anterior de un documento personalizado (JSON o binario).
         audits.Should().NotContain(a =>

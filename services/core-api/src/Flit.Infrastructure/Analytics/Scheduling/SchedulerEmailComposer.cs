@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net;
 using System.Text;
 using Flit.Analytics.Application.Dtos;
@@ -61,8 +61,24 @@ internal static class SchedulerEmailComposer
     public static string OperatorLabel(string @operator) =>
         OperatorLabels.TryGetValue(@operator, out var label) ? label : @operator;
 
+    /// <summary>
+    /// Asunto + cuerpo del informe programado (HU #11352 — antes el asunto lo interpolaba
+    /// <c>AnalyticsSchedulerProcessor</c>; ahora la plantilla completa vive en un solo lugar).
+    /// </summary>
+    public static (string Subject, string Html) BuildScheduledReport(
+        string scheduleName,
+        string reportType,
+        string periodLabel,
+        IReadOnlyList<CategoryMetricsDto> overview,
+        IReadOnlyList<TopProducerDto> topProducers)
+    {
+        var subject = $"[FLIT] {scheduleName} — {periodLabel}";
+        var html = BuildScheduledReportHtml(scheduleName, reportType, periodLabel, overview, topProducers);
+        return (subject, html);
+    }
+
     /// <summary>Cuerpo del informe programado: KPIs por categoría + top de radicadores del periodo.</summary>
-    public static string BuildScheduledReportHtml(
+    private static string BuildScheduledReportHtml(
         string scheduleName,
         string reportType,
         string periodLabel,
@@ -121,8 +137,28 @@ internal static class SchedulerEmailComposer
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Asunto + cuerpo del correo de alerta (HU #11352 — mismo traslado que el informe
+    /// programado: el asunto deja de interpolarse en <c>AnalyticsSchedulerProcessor</c>).
+    /// </summary>
+    public static (string Subject, string Html) BuildAlert(
+        string ruleName,
+        string metric,
+        string @operator,
+        decimal threshold,
+        decimal value,
+        int windowMinutes,
+        DateTimeOffset triggeredAtUtc,
+        TimeZoneInfo timeZone)
+    {
+        var subject = $"[FLIT] Alerta: {ruleName}";
+        var html = BuildAlertHtml(
+            ruleName, metric, @operator, threshold, value, windowMinutes, triggeredAtUtc, timeZone);
+        return (subject, html);
+    }
+
     /// <summary>Cuerpo del correo de alerta: métrica, umbral, valor observado y ventana.</summary>
-    public static string BuildAlertHtml(
+    private static string BuildAlertHtml(
         string ruleName,
         string metric,
         string @operator,

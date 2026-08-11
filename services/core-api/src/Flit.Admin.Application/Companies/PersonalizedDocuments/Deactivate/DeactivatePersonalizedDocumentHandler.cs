@@ -37,7 +37,7 @@ public sealed class DeactivatePersonalizedDocumentHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var channelEnabled = await PersonalizedDocumentChannelGuard
+        var channelEnabled = await PersonalizedDocumentEligibilityGuard
             .IsWriteEnabledAsync(_settingsRepository, command.TenantId, cancellationToken)
             .ConfigureAwait(false);
         if (!channelEnabled)

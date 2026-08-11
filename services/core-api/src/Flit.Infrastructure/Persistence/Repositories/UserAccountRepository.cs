@@ -9,13 +9,26 @@ public sealed class UserAccountRepository(FlitDbContext db) : IUserAccountReposi
     {
         var normalizedEmail = email.Trim().ToLowerInvariant();
 
-        return await db.Users
+        var user = await db.Users
             .AsNoTracking()
             .Where(u => u.DeletedAt == null
                         && u.Status == "active"
                         && EF.Functions.ILike(u.Email, normalizedEmail))
-            .Select(u => new PasswordRecoveryUser(u.Id, u.Email, u.DisplayName))
+            .Select(u => new { u.Id, u.Email, u.DisplayName })
             .FirstOrDefaultAsync(cancellationToken);
+
+        if (user is null)
+            return null;
+
+        // HU #11358 — mismo criterio que FindActiveTargetByEmailAsync: el tenant se deriva de la
+        // asignación de rol (puede no existir).
+        var tenantId = await db.UserRoleAssignments
+            .AsNoTracking()
+            .Where(a => a.UserId == user.Id && a.DeletedAt == null)
+            .Select(a => (Guid?)a.TenantId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return new PasswordRecoveryUser(user.Id, user.Email, user.DisplayName, tenantId);
     }
 
     public async Task<AdminTargetUser?> FindActiveTargetByEmailAsync(string email, CancellationToken cancellationToken)

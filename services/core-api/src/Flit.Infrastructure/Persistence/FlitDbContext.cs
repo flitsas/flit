@@ -281,6 +281,17 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // el dominio los ve en claro, la BD solo cifrados.
     internal DbSet<QuipuxSettingsRow> QuipuxSettings => Set<QuipuxSettingsRow>();
 
+    // Banco de pruebas de notificaciones (HU #11365) — fila única y global de plataforma: buzón de
+    // pruebas y marca del último envío. Sin tenant_id (y por tanto sin RLS) a propósito: lo gestiona
+    // el SuperAdmin, no un cliente.
+    internal DbSet<Entities.Admin.NotificationTestSettingsRow> NotificationTestSettings =>
+        Set<Entities.Admin.NotificationTestSettingsRow>();
+
+    // Bitácora append-only de intentos de envío de notificación (HU #11363, esquema de la
+    // HU #11357). tenant_id NOT NULL en BD — ver NotificationDeliveryLoggingEmailSender.
+    internal DbSet<Entities.Admin.NotificationDeliveryLogEntity> NotificationDeliveryLogs =>
+        Set<Entities.Admin.NotificationDeliveryLogEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

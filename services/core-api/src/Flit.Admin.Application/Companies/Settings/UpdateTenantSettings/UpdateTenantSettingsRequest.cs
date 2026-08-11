@@ -24,4 +24,9 @@ public sealed record UpdateTenantSettingsRequest(
     // Feature #10707 — proveedores de avalúo (opcional: si llega null se conserva el valor previo).
     AvaluoProviderConfigDto? AvaluoProviderConfig = null,
     // FEATURE 02 — fuente de comparendos (internal | external); null conserva el valor previo.
-    string? FinesQuerySource = null);
+    string? FinesQuerySource = null,
+    // HU #11357/#11362 (ADR-0043) — elegibilidad de documentos personalizados, desacoplada del
+    // canal de notificaciones. Opcional (a diferencia de BaulFirmasActivo/PreasignacionPlacaActiva):
+    // null conserva el valor previo — así una actualización de OTRO switch (p. ej. el canal) nunca
+    // apaga esta capacidad por omisión, que es exactamente el riesgo que este ADR elimina.
+    bool? DocumentosPersonalizadosActivo = null);

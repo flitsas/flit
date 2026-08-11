@@ -175,6 +175,13 @@ services:
       Smtp__DefaultSenderEmail: ${SMTP_FROM:-}
       Smtp__DefaultSenderPassword: ${SMTP_PASSWORD:-}
       Smtp__DefaultSenderName: ${SMTP_FROM_NAME:-FLIT Tramites}
+      # Comprobación de revocación (CRL/OCSP) del certificado del servidor SMTP. Default true:
+      # un despliegue que no defina la variable sigue comprobándola. Ponerla en false NO
+      # desactiva la validación TLS —cadena, emisor, host y vigencia se siguen verificando—,
+      # solo deja de consultarse si el certificado fue revocado antes de expirar. Se expone
+      # porque en redes con proxy o antivirus que inspecciona TLS la consulta de revocación no
+      # llega, y el handshake falla ANTES de autenticar (visto en local el 2026-08-11).
+      Smtp__CheckCertificateRevocation: ${SMTP_CHECK_CERT_REVOCATION:-true}
       # Biometría (HU #10233 — Kyverum Verify). Mismo patrón que Verifik: el código
       # lee env vars CRUDAS (BIOMETRICS_PROVIDER / KYVERUM_*), no `Kyverum__*`.
       # Default mock ⇒ no rompe regresión si el .env no define el proveedor.
@@ -212,6 +219,59 @@ services:
       Ict__ServiceToken__Secret: ${ICT_SERVICE_TOKEN_SECRET:-}
       # Plano C: reflejo del estado del trámite hacia core-ict (callback gRPC).
       Ict__StateCallback__Address: http://core-ict:${CORE_ICT_PORT:-4020}
+      # ── Canal de notificaciones "API Renting cliente" (Feature #11348) ──────
+      # Mismo patrón CRUDO que Verifik/Kyverum/Fasecolda: el código lee
+      # Environment.GetEnvironmentVariable("RENTING_API_*"); pasar `Notifications__Renting__*`
+      # NO funciona. Plantilla completa y trampas en .env.renting.example.
+      # OPT-IN: con RENTING_API_ENABLED distinto de "true" no se exige ninguna de las demás
+      # ni el certificado, y el servicio arranca igual que hoy.
+      RENTING_API_ENABLED: ${RENTING_API_ENABLED:-false}
+      # NO se interpola: es la ruta DENTRO del contenedor, donde el volumen de abajo monta el
+      # .pfx. La variable del mismo nombre en el .env del VPS es la ruta en el HOST y solo la
+      # usa la sección volumes. Si alguien "corrige" esta línea a
+      # ${RENTING_API_PFX_CERTIFICATE_PATH} para seguir el patrón del resto del fichero, la
+      # app buscará la ruta del host dentro del contenedor y el arranque falla.
+      RENTING_API_PFX_CERTIFICATE_PATH: /run/secrets/renting-client.pfx
+      RENTING_API_PASSPHRASE: ${RENTING_API_PASSPHRASE:-}
+      RENTING_API_BASE_URL: ${RENTING_API_BASE_URL:-}
+      RENTING_API_KEY_NAME: ${RENTING_API_KEY_NAME:-Ocp-Apim-Subscription-Key}
+      RENTING_API_KEY_VALUE: ${RENTING_API_KEY_VALUE:-}
+      RENTING_API_SECONDS_TIMEOUT: ${RENTING_API_SECONDS_TIMEOUT:-30}
+      RENTING_API_LOGIN_PATH: ${RENTING_API_LOGIN_PATH:-}
+      RENTING_API_LOGIN_SECONDS_TIMEOUT: ${RENTING_API_LOGIN_SECONDS_TIMEOUT:-30}
+      # Debe coincidir CARÁCTER A CARÁCTER con el Subject del .pfx montado, o no arranca.
+      RENTING_API_LOGIN_SUBJECT: ${RENTING_API_LOGIN_SUBJECT:-}
+      # No se exige al arrancar (default vacío) pero el login la manda como "secretName":
+      # si falta, el servicio arranca sin quejarse y el login falla en caliente.
+      RENTING_API_LOGIN_SECRET_NAME: ${RENTING_API_LOGIN_SECRET_NAME:-}
+      RENTING_API_LOGIN_CACHE_KEY: ${RENTING_API_LOGIN_CACHE_KEY:-renting-api-login-token}
+      RENTING_API_LOGIN_CACHE_SECONDS_TTL: ${RENTING_API_LOGIN_CACHE_SECONDS_TTL:-3600}
+      RENTING_API_SEND_EMAIL_PATH: ${RENTING_API_SEND_EMAIL_PATH:-RentingNotification/emailNotification/sendEmailFile}
+      RENTING_API_SEND_EMAIL_SECONDS_TIMEOUT: ${RENTING_API_SEND_EMAIL_SECONDS_TIMEOUT:-30}
+      RENTING_API_SEND_EMAIL_SENDER_EMAIL: ${RENTING_API_SEND_EMAIL_SENDER_EMAIL:-}
+      RENTING_API_SEND_EMAIL_SENDER_USERNAME: "${RENTING_API_SEND_EMAIL_SENDER_USERNAME:-Tramites Renting}"
+      RENTING_API_SEND_EMAIL_DEFAULT_SENDER_EMAIL: ${RENTING_API_SEND_EMAIL_DEFAULT_SENDER_EMAIL:-}
+      RENTING_API_SEND_EMAIL_DEFAULT_SENDER_USERNAME: "${RENTING_API_SEND_EMAIL_DEFAULT_SENDER_USERNAME:-Tramites Vehiculos}"
+      # ATENCIÓN — este servicio corre con ASPNETCORE_ENVIRONMENT=Development en DEV, QA **y
+      # PDN** (ver arriba, línea del bloque environment). Para el guardarraíl del canal eso
+      # significa que NINGÚN ambiente es "producción": el desvío de destinatario es
+      # OBLIGATORIO en los tres, y con él activo el correo de este canal va a la cuenta de
+      # desvío y NUNCA al cliente final. Es decir: hoy este canal NO puede entregar correo
+      # real en PDN sin resolver antes esa colisión. Única excepción al desvío: los envíos del
+      # banco de pruebas de notificaciones, que van a su buzón configurado (decisión del PO
+      # 2026-08-11) — no aplica a los envíos reales. Ver .env.renting.example.
+      RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED: ${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED:-true}
+      RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL: ${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL:-}
+      RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME: "${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME:-Equipo de desarrollo FLIT}"
+    volumes:
+      # Certificado cliente mTLS del canal API Renting. Solo lectura; NUNCA dentro de la
+      # imagen ni en el repositorio. Se carga y valida AL ARRANCAR (no en el primer envío):
+      # si falta el archivo, si la passphrase no abre o si el Subject no coincide, el
+      # servicio no levanta. Vence el 2027-03-22.
+      # A la IZQUIERDA la ruta en el HOST (interpolada desde el .env del VPS); a la DERECHA
+      # la ruta dentro del contenedor, que es la que lee la app — ver el comentario de
+      # RENTING_API_PFX_CERTIFICATE_PATH arriba.
+      - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting-client.pfx}:/run/secrets/renting-client.pfx:ro
     ports:
       - "127.0.0.1:${CORE_API_PORT:-4003}:${CORE_API_PORT:-4003}"
     healthcheck:

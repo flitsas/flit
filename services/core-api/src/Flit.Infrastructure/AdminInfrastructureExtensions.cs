@@ -127,6 +127,23 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandateCustomTemplateBlobReader,
             Flit.Infrastructure.Storage.MandateCustomTemplateBlobReader>();
 
+        // HU #11366 (Feature #11349) — buzón de pruebas de notificaciones: lectura/actualización de
+        // la fila única admin.notification_test_settings sembrada por la HU #11365.
+        services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestMailboxAdminService,
+            Flit.Infrastructure.Notifications.Admin.NotificationTestMailboxAdminService>();
+
+        // HU #11367 (Feature #11349) — canales de notificación con su remitente resuelto por
+        // configuración (EmailSettings / RentingChannelOptions). Sin adaptador de envío: lee, no
+        // construye — mantiene el Feature #11349 independiente del #11348.
+        services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationChannelsAdminService,
+            Flit.Infrastructure.Notifications.Admin.NotificationChannelsAdminService>();
+
+        // HU #11368 (Feature #11349) — envío de prueba con límite de frecuencia persistido. Usa el
+        // IEmailSender del proceso (registrado en AddPostgresInfrastructure, ya decorado con
+        // bitácora) y EmailTransportDescriptor para declarar si el transporte fue de consola (AC8).
+        services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestSendAdminService,
+            Flit.Infrastructure.Notifications.Admin.NotificationTestSendAdminService>();
+
         // Convenio comercial compañía↔organismo + firma física del mandatario: deciden si el contrato de
         // mandato lleva bloque de firma del mandatario y de qué forma.
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandatoFirmaPolicy,
@@ -162,6 +179,13 @@ public static class AdminInfrastructureExtensions
             Flit.Infrastructure.Storage.CompanyPersonalizedDocumentStorage>();
         services.AddScoped<Flit.Admin.Application.Companies.PersonalizedDocuments.IPdfDocumentInspector,
             Flit.Infrastructure.Documents.PdfSharpDocumentInspector>();
+
+        // HU #11363 (Feature #11348) — bitácora consultable de intentos de envío: repositorio
+        // tenant-scoped (WHERE tenant_id explícito, RLS decorativo). El escritor
+        // (INotificationDeliveryLogWriter) se registra en InfrastructureExtensions.AddPostgresInfrastructure,
+        // junto al decorador de IEmailSender.
+        services.AddScoped<Flit.Admin.Application.Companies.NotificationDeliveryLogs.INotificationDeliveryLogRepository,
+            Flit.Infrastructure.Persistence.Repositories.NotificationDeliveryLogRepository>();
 
         // HU #10907 (ADR-0034) — bloque de validación de identidad administrativa desacoplada por
         // correo: persistencia tenant-scoped, adaptador Kyverum DESACOPLADO (reutiliza IKyverumVerifyClient

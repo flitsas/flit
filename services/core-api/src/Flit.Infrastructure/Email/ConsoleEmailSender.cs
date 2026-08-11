@@ -7,13 +7,15 @@ namespace Flit.Infrastructure.Email;
 /// Sender de desarrollo: registra el correo (incluido el enlace) en el log en lugar de
 /// enviarlo. Se usa en Development cuando no hay host SMTP configurado, igual que
 /// DevelopmentAuthSeeder auto-genera llaves en dev.
+/// HU #11358 AC1 — no lee <see cref="EmailMessage.TenantId"/> del contexto de request: lo
+/// recibe ya resuelto dentro del mensaje, igual que el resto de sus campos.
 /// </summary>
 public sealed partial class ConsoleEmailSender(ILogger<ConsoleEmailSender> logger) : IEmailSender
 {
-    public Task SendAsync(EmailMessage message, CancellationToken cancellationToken)
+    public Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
         LogDevEmail(logger, message.ToEmail, message.ToName, message.Subject, message.HtmlBody);
-        return Task.CompletedTask;
+        return Task.FromResult(EmailSendResult.Sent);
     }
 
     [LoggerMessage(

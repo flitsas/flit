@@ -37,6 +37,10 @@ internal sealed class TenantOperationalPolicyConfiguration
         builder.Property(x => x.NotificationTarget)
             .HasMaxLength(20).HasDefaultValue("submitter").IsRequired();
 
+        // HU #11357 — interruptor propio de documentos personalizados (default false = estado
+        // actual). Lo enciende el backfill 65 para quien venía en canal tenant_api.
+        builder.Property(x => x.PersonalizedDocumentsEnabled).HasDefaultValue(false);
+
         builder.Property(x => x.PaymentMethods)
             .HasColumnType("jsonb").HasDefaultValueSql("'[]'").IsRequired();
 

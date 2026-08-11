@@ -47,6 +47,15 @@ public sealed class TenantOperationalPolicy
 
     public string NotificationChannel { get; set; } = "flit_smtp";
 
+    /// <summary>
+    /// Interruptor propio de documentos personalizados por compañía (HU #11357, Feature #11348).
+    /// Sustituye el uso de <see cref="NotificationChannel"/> = <c>tenant_api</c> como interruptor de
+    /// facto. OJO: el ADR-0042 declara que el interruptor ES la versión activa por (tenant, tipo) y
+    /// que no hay booleano paralelo; la contradicción se resuelve en el ADR-0043 (HU #11362), no
+    /// aquí. Su consumo llega con la HU #11362.
+    /// </summary>
+    public bool PersonalizedDocumentsEnabled { get; set; }
+
     public string NotificationTarget { get; set; } = "submitter";
 
     /// <summary>Array JSON (jsonb) de métodos de recaudo. Ej: <c>["pse","efecty"]</c>.</summary>
