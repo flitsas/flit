@@ -58,8 +58,18 @@ public sealed class AdminPlataformaNotificacionesEnviosEndpointTests
         // ambiente real de pruebas (RENTING_API_ENABLED no definida).
         _factory.ExplicitChannelEmailSender.IsChannelAvailable(NotificationChannel.FlitSmtp).Returns(true);
         _factory.ExplicitChannelEmailSender.IsChannelAvailable(NotificationChannel.TenantApi).Returns(false);
+        // Reloj congelado a un instante fijo por test (el TimeProvider es un singleton compartido
+        // vía IClassFixture, igual que ExplicitChannelEmailSender): sin este reset, un test que
+        // avanzó el reloj (ninguno lo hace hoy, pero podría) dejaría el instante corrido para el
+        // siguiente. AC2 depende de que dos peticiones HTTP seguidas caigan en el MISMO instante
+        // (ver comentario de esa prueba) — de ahí que el reset viva aquí, junto al de la fila.
+        _factory.TimeProvider.Reset(FixedNow);
         ResetRow();
     }
+
+    // Instante de referencia para el reloj congelado de esta suite (no tiene significado más allá
+    // de ser fijo y determinista).
+    private static readonly DateTimeOffset FixedNow = new(2026, 8, 11, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
     public async Task WithoutToken_Returns401()
@@ -151,6 +161,10 @@ public sealed class AdminPlataformaNotificacionesEnviosEndpointTests
     [Fact]
     public async Task AC2_SegundaSolicitudDentroDeLaVentana_Returns429()
     {
+        // Determinista por construcción: el TimeProvider de _factory está congelado en FixedNow
+        // (constructor de esta clase) y NADA lo avanza entre ambas peticiones, así que "ahora" es
+        // idéntico para las dos — la ventana de 5s nunca puede vencer por lentitud del runner (CI
+        // frío, GC largo, etc.), a diferencia de cuando esto dependía del reloj real.
         SetMailbox("pruebas-envio-ac2@flit.co");
         _factory.ExplicitChannelEmailSender
             .SendAsync(NotificationChannel.FlitSmtp, Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
@@ -386,6 +400,16 @@ public sealed class EnviosTestFactory : WebApplicationFactory<Program>
     // menos accesible (CS0053).
     internal IExplicitChannelEmailSender ExplicitChannelEmailSender { get; } = Substitute.For<IExplicitChannelEmailSender>();
 
+    /// <summary>
+    /// Reloj controlable para <c>NotificationTestSendAdminService</c> (recibe <see cref="TimeProvider"/>
+    /// por inyección). <c>Flit.Infrastructure.Tests.Notifications.Admin.NotificationTestSendAdminServiceTests</c>
+    /// ya tiene un <c>TestTimeProvider</c> equivalente, pero es una clase privada anidada en OTRO
+    /// proyecto de tests (<c>Flit.Infrastructure.Tests</c>) — no accesible desde aquí, así que se
+    /// duplica la técnica (mínima: solo sobreescribe <see cref="System.TimeProvider.GetUtcNow"/>,
+    /// que es lo único que consume el servicio) en vez de intentar referenciarla.
+    /// </summary>
+    internal FakeTimeProvider TimeProvider { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -393,6 +417,7 @@ public sealed class EnviosTestFactory : WebApplicationFactory<Program>
         builder.ConfigureTestServices(services =>
         {
             services.AddScoped(_ => ExplicitChannelEmailSender);
+            services.AddSingleton<System.TimeProvider>(TimeProvider);
 
             // Remitente y transporte SMTP deterministas — EmailSettings se registra en Program.cs
             // como instancia YA MATERIALIZADA (AddSingleton de un objeto, no de un tipo resuelto en
@@ -418,4 +443,40 @@ public sealed class EnviosTestFactory : WebApplicationFactory<Program>
             });
         });
     }
+}
+
+/// <summary>
+/// <see cref="System.TimeProvider"/> mutable mínimo para test — mismo propósito que el
+/// <c>TestTimeProvider</c> privado de <c>NotificationTestSendAdminServiceTests</c>
+/// (<c>Flit.Infrastructure.Tests</c>), inaccesible desde este proyecto (clase privada en otro
+/// ensamblado de tests). Solo sobreescribe <see cref="System.TimeProvider.GetUtcNow"/>, que es lo
+/// único que consume <c>NotificationTestSendAdminService</c>.
+/// </summary>
+/// <remarks>
+/// Thread-safety: xUnit v3 puede correr los <c>[Fact]</c> de una misma clase en paralelo, y este
+/// reloj es un singleton compartido vía <see cref="EnviosTestFactory"/> (<c>IClassFixture</c>) —
+/// mismo régimen que <c>ExplicitChannelEmailSender</c> en esa factory. <see cref="Reset"/> se
+/// invoca al inicio de cada test (constructor de la clase de test), así que el instante nunca se
+/// lee y se escribe a la vez EN LA PRÁCTICA (ningún test corriente avanza el reloj de otro); se usa
+/// <c>Interlocked</c> igualmente para no depender de esa garantía si un test futuro llama
+/// <see cref="Advance"/>.
+/// </remarks>
+public sealed class FakeTimeProvider : System.TimeProvider
+{
+    private long _nowTicks;
+
+    public FakeTimeProvider() => _nowTicks = DateTimeOffset.UtcNow.UtcTicks;
+
+    public override DateTimeOffset GetUtcNow() =>
+        new(Interlocked.Read(ref _nowTicks), TimeSpan.Zero);
+
+    /// <summary>Congela el reloj en <paramref name="now"/> — se llama al inicio de cada test.</summary>
+    public void Reset(DateTimeOffset now) => Interlocked.Exchange(ref _nowTicks, now.UtcTicks);
+
+    /// <summary>
+    /// Avanza el reloj — para las pruebas que necesiten situarse DESPUÉS de la ventana de
+    /// enfriamiento (<c>NotificationTestSendAdminService.CooldownWindow</c>, hoy 5 segundos).
+    /// </summary>
+    public void Advance(TimeSpan delta) =>
+        Interlocked.Exchange(ref _nowTicks, GetUtcNow().Add(delta).UtcTicks);
 }
