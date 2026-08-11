@@ -60,8 +60,14 @@ internal sealed partial class NotificationDeliveryLoggingEmailSender(
 
         if (message.TenantId is not { } tenantId)
         {
-            // Decisión A documentada arriba: sin tenant resoluble, no hay fila que escribir.
-            LogSkippedNoTenant(logger, message.TemplateKey, message.ToEmail);
+            // Decisión A documentada arriba: sin tenant resoluble, no hay fila que escribir. El
+            // aviso SÍ deja el outcome/success del envío (antes se perdía) y NUNCA el destinatario
+            // (dato personal, Ley 1581).
+            if (result.Success)
+                LogSkippedNoTenantSuccess(logger, message.TemplateKey, result.Outcome, result.Success);
+            else
+                LogSkippedNoTenantFailure(logger, message.TemplateKey, result.Outcome, result.Success);
+
             return result;
         }
 
@@ -97,10 +103,20 @@ internal sealed partial class NotificationDeliveryLoggingEmailSender(
     }
 
     [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "No se registró el intento de envío en la bitácora de notificaciones: sin tenant "
+            + "resoluble (plantilla={TemplateKey}, resultado={Outcome}, éxito={Success}). AC1 no "
+            + "aplica a este envío.")]
+    private static partial void LogSkippedNoTenantSuccess(
+        ILogger logger, string templateKey, EmailSendOutcome outcome, bool success);
+
+    [LoggerMessage(
         Level = LogLevel.Warning,
         Message = "No se registró el intento de envío en la bitácora de notificaciones: sin tenant "
-            + "resoluble (plantilla={TemplateKey}, destinatario={Recipient}). AC1 no aplica a este envío.")]
-    private static partial void LogSkippedNoTenant(ILogger logger, string templateKey, string recipient);
+            + "resoluble (plantilla={TemplateKey}, resultado={Outcome}, éxito={Success}). AC1 no "
+            + "aplica a este envío.")]
+    private static partial void LogSkippedNoTenantFailure(
+        ILogger logger, string templateKey, EmailSendOutcome outcome, bool success);
 
     [LoggerMessage(
         Level = LogLevel.Error,

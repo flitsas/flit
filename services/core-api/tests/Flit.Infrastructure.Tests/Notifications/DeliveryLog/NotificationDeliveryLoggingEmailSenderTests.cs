@@ -111,10 +111,45 @@ public sealed class NotificationDeliveryLoggingEmailSenderTests
         (await ctx.NotificationDeliveryLogs.CountAsync(TestContext.Current.CancellationToken)).Should().Be(
             0, "AC1 NO se cumple literalmente para un envío sin tenant resoluble — Decisión A");
 
+        // El envío en sí fue exitoso (FakeEmailSender devuelve EmailSendResult.Sent) ⇒ el aviso va
+        // en Information (no Warning) e incluye el outcome; el destinatario NUNCA aparece (Ley 1581).
+        logger.Entries.Should().Contain(e =>
+            e.Level == LogLevel.Information
+            && e.Message.Contains("sin tenant", StringComparison.OrdinalIgnoreCase)
+            && e.Message.Contains("security.forgot-password", StringComparison.Ordinal)
+            && e.Message.Contains("Sent", StringComparison.Ordinal));
+
+        logger.Entries.Should().NotContain(e => e.Message.Contains("sin-tenant@flit.test", StringComparison.Ordinal));
+    }
+
+    // ── Sustitución del log de "sin tenant" — incluye outcome/success y nunca el destinatario ────
+
+    [Fact]
+    public async Task TenantNuloConEnvioFallido_RegistraAvisoWarningConOutcomeYSinDestinatario()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var provider = BuildProvider(dbName);
+        var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new CapturingLogger<NotificationDeliveryLoggingEmailSender>();
+        var failure = EmailSendResult.Failed(EmailSendOutcome.ProviderUnavailable);
+        var inner = new FakeEmailSender(failure);
+        var sender = new NotificationDeliveryLoggingEmailSender(inner, scopeFactory, logger);
+
+        var message = new EmailMessage(
+            TenantId: null, "security.forgot-password", "sin-tenant-fallo@flit.test", "Sin Tenant",
+            "Asunto", "<html>cuerpo</html>");
+
+        var result = await sender.SendAsync(message, TestContext.Current.CancellationToken);
+
+        result.Should().Be(failure);
+
         logger.Entries.Should().Contain(e =>
             e.Level == LogLevel.Warning
-            && e.Message.Contains("sin tenant", StringComparison.OrdinalIgnoreCase)
-            && e.Message.Contains("security.forgot-password", StringComparison.Ordinal));
+            && e.Message.Contains("security.forgot-password", StringComparison.Ordinal)
+            && e.Message.Contains("ProviderUnavailable", StringComparison.Ordinal)
+            && e.Message.Contains("False", StringComparison.OrdinalIgnoreCase));
+
+        logger.Entries.Should().NotContain(e => e.Message.Contains("sin-tenant-fallo@flit.test", StringComparison.Ordinal));
     }
 
     // ── AC2 — el vocabulario de resultado nunca afirma "entregado" ───────────────────────────────

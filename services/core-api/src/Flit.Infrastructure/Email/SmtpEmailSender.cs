@@ -2,6 +2,7 @@ using System.Net.Sockets;
 using Flit.Modules.Security.Domain.Auth;
 using MailKit.Net.Smtp;
 using MailKit.Security;
+using Microsoft.Extensions.Logging;
 using MimeKit;
 
 namespace Flit.Infrastructure.Email;
@@ -16,8 +17,12 @@ namespace Flit.Infrastructure.Email;
 /// mapea a una causa del catálogo cerrado <see cref="EmailSendOutcome"/> y el mensaje de vuelta
 /// es siempre el texto genérico de <see cref="EmailSendResult.Failed"/> (nunca host, puerto,
 /// credencial ni el texto crudo del proveedor).
+/// La excepción original SÍ se registra vía <see cref="ILogger"/> (nivel Error, con el
+/// <see cref="EmailSendOutcome"/> mapeado, host, puerto y remitente configurado — nunca la
+/// contraseña) en cada rama <c>catch</c>, incluido el retorno temprano por configuración
+/// incompleta: sin esto, un fallo de envío no dejaba ningún rastro diagnosticable en el servidor.
 /// </summary>
-public sealed class SmtpEmailSender(EmailSettings settings) : IEmailSender
+public sealed partial class SmtpEmailSender(EmailSettings settings, ILogger<SmtpEmailSender> logger) : IEmailSender
 {
     public async Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
@@ -25,6 +30,9 @@ public sealed class SmtpEmailSender(EmailSettings settings) : IEmailSender
             || string.IsNullOrWhiteSpace(settings.DefaultSenderEmail)
             || (!settings.DisableAuthentication && string.IsNullOrWhiteSpace(settings.DefaultSenderPassword)))
         {
+            // No se loguea settings.DefaultSenderPassword ni fragmento alguno — host/puerto/remitente
+            // sí, porque son datos de despliegue (no secretos) y son lo que hace falta para diagnosticar.
+            LogConfigurationIncomplete(logger, settings.Host, settings.Port, settings.DefaultSenderEmail);
             return EmailSendResult.Failed(EmailSendOutcome.ConfigurationIncomplete);
         }
 
@@ -56,32 +64,43 @@ public sealed class SmtpEmailSender(EmailSettings settings) : IEmailSender
 
             return EmailSendResult.Sent;
         }
-        catch (AuthenticationException)
+        catch (AuthenticationException ex)
         {
-            return EmailSendResult.Failed(EmailSendOutcome.AuthenticationFailed);
+            const EmailSendOutcome outcome = EmailSendOutcome.AuthenticationFailed;
+            LogSendFailed(logger, ex, outcome, settings.Host, settings.Port, settings.DefaultSenderEmail);
+            return EmailSendResult.Failed(outcome);
         }
         catch (SmtpCommandException ex)
         {
-            return EmailSendResult.Failed(MapCommandException(ex));
+            var outcome = MapCommandException(ex);
+            LogSendFailed(logger, ex, outcome, settings.Host, settings.Port, settings.DefaultSenderEmail);
+            return EmailSendResult.Failed(outcome);
         }
-        catch (SmtpProtocolException)
+        catch (SmtpProtocolException ex)
         {
-            return EmailSendResult.Failed(EmailSendOutcome.ProviderUnavailable);
+            const EmailSendOutcome outcome = EmailSendOutcome.ProviderUnavailable;
+            LogSendFailed(logger, ex, outcome, settings.Host, settings.Port, settings.DefaultSenderEmail);
+            return EmailSendResult.Failed(outcome);
         }
         catch (SocketException ex)
         {
-            return EmailSendResult.Failed(
-                ex.SocketErrorCode == SocketError.TimedOut
-                    ? EmailSendOutcome.TimedOut
-                    : EmailSendOutcome.ProviderUnavailable);
+            var outcome = ex.SocketErrorCode == SocketError.TimedOut
+                ? EmailSendOutcome.TimedOut
+                : EmailSendOutcome.ProviderUnavailable;
+            LogSendFailed(logger, ex, outcome, settings.Host, settings.Port, settings.DefaultSenderEmail);
+            return EmailSendResult.Failed(outcome);
         }
-        catch (TimeoutException)
+        catch (TimeoutException ex)
         {
-            return EmailSendResult.Failed(EmailSendOutcome.TimedOut);
+            const EmailSendOutcome outcome = EmailSendOutcome.TimedOut;
+            LogSendFailed(logger, ex, outcome, settings.Host, settings.Port, settings.DefaultSenderEmail);
+            return EmailSendResult.Failed(outcome);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
-            return EmailSendResult.Failed(EmailSendOutcome.ProviderUnavailable);
+            const EmailSendOutcome outcome = EmailSendOutcome.ProviderUnavailable;
+            LogSendFailed(logger, ex, outcome, settings.Host, settings.Port, settings.DefaultSenderEmail);
+            return EmailSendResult.Failed(outcome);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -89,9 +108,12 @@ public sealed class SmtpEmailSender(EmailSettings settings) : IEmailSender
             // arriba (p. ej. SslHandshakeException por un certificado que no valida, que MailKit
             // no deriva de AuthenticationException) cae aquí en vez de propagarse — el contrato
             // (AC2/AC3) es que este puerto NUNCA lanza por un fallo de transporte. La excepción
-            // real, con su mensaje técnico, solo queda en la traza de logs de la infraestructura
-            // (fuera de este método); el resultado que ve el llamador es siempre el genérico.
-            return EmailSendResult.Failed(EmailSendOutcome.ProviderUnavailable);
+            // real, con su mensaje técnico y su stack trace, SÍ queda registrada (LogSendFailed,
+            // primer argumento) en la traza de logs de esta clase; el EmailSendResult que ve el
+            // llamador sigue siendo siempre el genérico (AC4), nunca el texto técnico crudo.
+            const EmailSendOutcome outcome = EmailSendOutcome.ProviderUnavailable;
+            LogSendFailed(logger, ex, outcome, settings.Host, settings.Port, settings.DefaultSenderEmail);
+            return EmailSendResult.Failed(outcome);
         }
     }
 
@@ -116,4 +138,22 @@ public sealed class SmtpEmailSender(EmailSettings settings) : IEmailSender
         SmtpStatusCode.ExceededStorageAllocation => EmailSendOutcome.ContentRejected,
         _ => EmailSendOutcome.ProviderUnavailable,
     };
+
+    // NUNCA agregar settings.DefaultSenderPassword (ni un fragmento) a ninguno de estos mensajes.
+    // Host/puerto/remitente sí: son datos de despliegue, no secretos, y son lo que hace falta para
+    // diagnosticar un fallo de transporte SMTP. El destinatario (message.ToEmail) tampoco se loguea
+    // aquí — es dato personal (Ley 1581) y esta clase ni siquiera lo necesita en las ramas de fallo.
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "SMTP: configuración incompleta, no se intentó el envío (host={Host}, puerto={Port}, "
+            + "remitente={SenderEmail}).")]
+    private static partial void LogConfigurationIncomplete(ILogger logger, string host, int port, string senderEmail);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "SMTP: fallo al enviar el correo, causa={Outcome} (host={Host}, puerto={Port}, "
+            + "remitente={SenderEmail}).")]
+    private static partial void LogSendFailed(
+        ILogger logger, Exception exception, EmailSendOutcome outcome, string host, int port, string senderEmail);
 }
