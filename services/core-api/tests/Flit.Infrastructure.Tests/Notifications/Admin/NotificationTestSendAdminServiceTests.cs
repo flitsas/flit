@@ -1,7 +1,9 @@
 using Flit.Admin.Application.Plataforma.Notificaciones;
+using Flit.Admin.Domain.Companies.Settings;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Notifications.Admin;
 using Flit.Infrastructure.Notifications.Renting;
+using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Modules.Security.Domain.Auth;
@@ -16,16 +18,19 @@ namespace Flit.Infrastructure.Tests.Notifications.Admin;
 
 /// <summary>
 /// HU #11368 (Feature #11349) — envío de prueba de una plantilla del catálogo al buzón de pruebas,
-/// con límite de frecuencia persistido. Cubre los 8 AC de la HU.
+/// con límite de frecuencia persistido. HU #11371 conecta este servicio al enrutamiento por canal
+/// (<see cref="IExplicitChannelEmailSender"/>), cerrando el retorno-temprano fijo que respondía
+/// SIEMPRE "canal no disponible" para <c>TENANT_API</c>.
 /// </summary>
 /// <remarks>
 /// Uso de ejemplo:
 /// <code>
-/// var service = NewService(dbName, out var db, out var emailSender, out _);
-/// var result = await service.SendAsync(new SendNotificationTestRequest("security.invitation", "FLIT_SMTP"), userId);
+/// var explicitSender = NewExplicitSender(tenantApiAvailable: true);
+/// var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
+/// var result = await service.SendAsync(new SendNotificationTestRequest("analytics.alert", "TENANT_API"), userId);
 /// </code>
 /// Mismo patrón InMemory que <c>AnalyticsSchedulerProcessorTests</c>: un <see cref="FlitDbContext"/>
-/// por nombre de base, <c>IEmailSender</c> sustituido con NSubstitute.
+/// por nombre de base, <see cref="IExplicitChannelEmailSender"/> sustituido con NSubstitute.
 /// </remarks>
 public sealed class NotificationTestSendAdminServiceTests
 {
@@ -33,20 +38,19 @@ public sealed class NotificationTestSendAdminServiceTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    // ── AC1 — envío correcto ─────────────────────────────────────────────────
+    // ── AC1 — envío correcto (FLIT_SMTP) ─────────────────────────────────────
 
     [Fact]
     public async Task AC1_ConBuzonConfiguradoYSinPruebaPrevia_Devuelve200ConExitoYSellaElInstante()
     {
         var dbName = NewDbName();
         await SeedMailboxAsync(dbName, "pruebas@flit.co");
-        var emailSender = Substitute.For<IEmailSender>();
-        emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(EmailSendResult.Sent));
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+        SetupFlitSmtpSend(explicitSender, EmailSendResult.Sent);
         var now = new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero);
         var timeProvider = new TestTimeProvider(now);
 
-        var service = NewService(dbName, emailSender, timeProvider, isConsoleTransport: false);
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
         var result = await service.SendAsync(
             new SendNotificationTestRequest("security.invitation", "FLIT_SMTP"), UserId, Ct);
 
@@ -60,7 +64,8 @@ public sealed class NotificationTestSendAdminServiceTests
         row.LastTestSentAt.Should().Be(now, "AC1 — la marca del último envío queda sellada con el instante del intento");
         row.UpdatedBy.Should().Be(UserId);
 
-        await emailSender.Received(1).SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        await explicitSender.Received(1).SendAsync(
+            NotificationChannel.FlitSmtp, Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
     }
 
     // ── AC2 — límite de frecuencia ───────────────────────────────────────────
@@ -70,12 +75,11 @@ public sealed class NotificationTestSendAdminServiceTests
     {
         var dbName = NewDbName();
         await SeedMailboxAsync(dbName, "pruebas@flit.co");
-        var emailSender = Substitute.For<IEmailSender>();
-        emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(EmailSendResult.Sent));
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+        SetupFlitSmtpSend(explicitSender, EmailSendResult.Sent);
         var now = new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero);
         var timeProvider = new TestTimeProvider(now);
-        var service = NewService(dbName, emailSender, timeProvider, isConsoleTransport: false);
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
 
         var first = await service.SendAsync(
             new SendNotificationTestRequest("security.invitation", "FLIT_SMTP"), UserId, Ct);
@@ -83,7 +87,7 @@ public sealed class NotificationTestSendAdminServiceTests
 
         // Segunda solicitud, DE OTRA PLANTILLA, 30 segundos después (ventana de 5 minutos vigente).
         timeProvider.Advance(TimeSpan.FromSeconds(30));
-        emailSender.ClearReceivedCalls();
+        explicitSender.ClearReceivedCalls();
 
         var second = await service.SendAsync(
             new SendNotificationTestRequest("analytics.alert", "FLIT_SMTP"), UserId, Ct);
@@ -92,7 +96,8 @@ public sealed class NotificationTestSendAdminServiceTests
         second.Outcome.Should().Be(NotificationTestSendOutcome.RateLimited);
         second.RetryAfterSeconds.Should().BeGreaterThan(0).And.BeLessOrEqualTo(300);
 
-        await emailSender.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        await explicitSender.DidNotReceive().SendAsync(
+            Arg.Any<NotificationChannel>(), Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -100,12 +105,11 @@ public sealed class NotificationTestSendAdminServiceTests
     {
         var dbName = NewDbName();
         await SeedMailboxAsync(dbName, "pruebas@flit.co");
-        var emailSender = Substitute.For<IEmailSender>();
-        emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(EmailSendResult.Sent));
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+        SetupFlitSmtpSend(explicitSender, EmailSendResult.Sent);
         var now = new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero);
         var timeProvider = new TestTimeProvider(now);
-        var service = NewService(dbName, emailSender, timeProvider, isConsoleTransport: false);
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
 
         await service.SendAsync(new SendNotificationTestRequest("security.invitation", "FLIT_SMTP"), UserId, Ct);
 
@@ -132,9 +136,9 @@ public sealed class NotificationTestSendAdminServiceTests
             });
             await seed.SaveChangesAsync(Ct);
         }
-        var emailSender = Substitute.For<IEmailSender>();
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
         var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
-        var service = NewService(dbName, emailSender, timeProvider, isConsoleTransport: false);
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
 
         var result = await service.SendAsync(
             new SendNotificationTestRequest("security.invitation", "FLIT_SMTP"), UserId, Ct);
@@ -146,53 +150,190 @@ public sealed class NotificationTestSendAdminServiceTests
         var row = await verify.NotificationTestSettings.SingleAsync(Ct);
         row.LastTestSentAt.Should().BeNull("AC3 — el buzón no configurado no puede consumir el enfriamiento");
 
-        await emailSender.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        await explicitSender.DidNotReceive().SendAsync(
+            Arg.Any<NotificationChannel>(), Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
     }
 
-    // ── AC4 — canal API Renting (desviación deliberada) ──────────────────────
+    // ── AC4 — canal API Renting, ahora conectado al enrutamiento por canal (HU #11371) ───────
 
     [Fact]
-    public async Task AC4_ConCanalTenantApiYRentingDeshabilitado_DevuelveConfiguracionIncompletaYNoEnviaPorFlitSmtp()
+    public async Task AC4_PlantillaDeAnalitica_ConTenantApiNoDisponible_DevuelveConfiguracionIncompletaYNoConsumeElEnfriamiento()
     {
         var dbName = NewDbName();
         await SeedMailboxAsync(dbName, "pruebas@flit.co");
-        var emailSender = Substitute.For<IEmailSender>();
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
         var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
-        var service = NewService(
-            dbName, emailSender, timeProvider, isConsoleTransport: false,
-            rentingOptions: new RentingChannelOptions { Enabled = false });
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
 
         var result = await service.SendAsync(
-            new SendNotificationTestRequest("security.invitation", "TENANT_API"), UserId, Ct);
+            new SendNotificationTestRequest("analytics.alert", "TENANT_API"), UserId, Ct);
 
         result.Success.Should().BeFalse();
         result.Outcome.Should().Be(NotificationTestSendOutcome.ChannelNotConfigured);
 
         await using var verify = NewContext(dbName);
         var row = await verify.NotificationTestSettings.SingleAsync(Ct);
-        row.LastTestSentAt.Should().BeNull();
+        row.LastTestSentAt.Should().BeNull("un canal no disponible no puede consumir el enfriamiento");
 
-        await emailSender.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        await explicitSender.DidNotReceive().SendAsync(
+            Arg.Any<NotificationChannel>(), Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task AC4_ConCanalTenantApiYRentingHabilitado_SigueSinEnviarPorColasFlit()
+    public async Task AC4_PlantillaDeAnalitica_ConTenantApiDisponible_InvocaElAdaptadorRentingYNoElTransporteSmtp()
     {
-        // El enrutamiento por canal (HU #11362) no existe todavía: aunque el interruptor esté en
-        // true, ESTE banco de pruebas no tiene forma de invocar el adaptador Renting.
         var dbName = NewDbName();
         await SeedMailboxAsync(dbName, "pruebas@flit.co");
-        var emailSender = Substitute.For<IEmailSender>();
-        var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
-        var service = NewService(
-            dbName, emailSender, timeProvider, isConsoleTransport: false,
-            rentingOptions: new RentingChannelOptions { Enabled = true });
+        var explicitSender = NewExplicitSender(tenantApiAvailable: true);
+        var rentingOptions = new RentingChannelOptions
+        {
+            Enabled = true,
+            SendEmailSenderEmail = "canal@renting.test",
+            SendEmailSenderUsername = "Canal Renting",
+        };
+        SetupTenantApiSend(explicitSender, EmailSendResult.Sent);
+        var now = new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero);
+        var timeProvider = new TestTimeProvider(now);
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false, rentingOptions);
 
         var result = await service.SendAsync(
-            new SendNotificationTestRequest("security.invitation", "TENANT_API"), UserId, Ct);
+            new SendNotificationTestRequest("analytics.alert", "TENANT_API"), UserId, Ct);
 
-        result.Outcome.Should().Be(NotificationTestSendOutcome.ChannelNotConfigured);
-        await emailSender.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        result.Success.Should().BeTrue();
+        result.Outcome.Should().Be(NotificationTestSendOutcome.Sent);
+        result.SenderEmail.Should().Be("canal@renting.test", "el remitente de TENANT_API es el del canal Renting, no el de SMTP");
+        result.SenderName.Should().Be("Canal Renting");
+
+        await explicitSender.Received(1).SendAsync(
+            NotificationChannel.TenantApi, Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        await explicitSender.DidNotReceive().SendAsync(
+            NotificationChannel.FlitSmtp, Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+
+        await using var verify = NewContext(dbName);
+        var row = await verify.NotificationTestSettings.SingleAsync(Ct);
+        row.LastTestSentAt.Should().Be(now);
+    }
+
+    // ── HU #11371 — plantilla de cuenta + TENANT_API: error de entrada, no envía, no sella ────
+
+    [Theory]
+    [InlineData("security.invitation")]
+    [InlineData("security.forgot-password")]
+    [InlineData("security.admin-reset-password")]
+    public async Task HU11371_PlantillaDeCuentaConCanalTenantApi_DevuelveErrorDeEntrada_NoEnviaNiConsumeElEnfriamiento(string templateId)
+    {
+        var dbName = NewDbName();
+        await SeedMailboxAsync(dbName, "pruebas@flit.co");
+        // Adaptador disponible a propósito: la causa debe ser el mismatch plantilla/canal, NO la
+        // disponibilidad del canal — así se prueba que la comprobación ocurre ANTES y no depende de
+        // si TENANT_API está disponible.
+        var explicitSender = NewExplicitSender(tenantApiAvailable: true);
+        var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
+
+        var result = await service.SendAsync(
+            new SendNotificationTestRequest(templateId, "TENANT_API"), UserId, Ct);
+
+        result.Success.Should().BeFalse();
+        result.Outcome.Should().Be(NotificationTestSendOutcome.TemplateChannelMismatch);
+
+        await using var verify = NewContext(dbName);
+        var row = await verify.NotificationTestSettings.SingleAsync(Ct);
+        row.LastTestSentAt.Should().BeNull("plantilla de cuenta + TENANT_API es un error de entrada: no consume el enfriamiento");
+
+        await explicitSender.DidNotReceive().SendAsync(
+            Arg.Any<NotificationChannel>(), Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        // No necesita I/O — ni siquiera se llega a leer la fila de ajustes antes de fallar. Se
+        // verifica indirectamente: aunque la fila nunca se sembró con GetRowAsync antes de esta
+        // llamada, el resultado ya fue TemplateChannelMismatch, no MailboxNotConfigured.
+    }
+
+    [Theory]
+    [InlineData("security.invitation")]
+    [InlineData("security.forgot-password")]
+    [InlineData("security.admin-reset-password")]
+    public async Task HU11371_PlantillaDeCuentaConCanalFlitSmtp_SigueEnviandoNormal(string templateId)
+    {
+        // No hay regresión: las plantillas de cuenta siguen pudiendo probarse por FLIT_SMTP.
+        var dbName = NewDbName();
+        await SeedMailboxAsync(dbName, "pruebas@flit.co");
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+        SetupFlitSmtpSend(explicitSender, EmailSendResult.Sent);
+        var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
+
+        var result = await service.SendAsync(
+            new SendNotificationTestRequest(templateId, "FLIT_SMTP"), UserId, Ct);
+
+        result.Success.Should().BeTrue();
+        result.Outcome.Should().Be(NotificationTestSendOutcome.Sent);
+    }
+
+    // ── HU #11371 — RecipientDiverted se propaga tal cual llega del adaptador ─────────────────
+
+    [Fact]
+    public async Task HU11371_ConDesvioDeDestinatarioEnElAdaptador_LaRespuestaLoReflejaEnTrue()
+    {
+        var dbName = NewDbName();
+        await SeedMailboxAsync(dbName, "pruebas@flit.co");
+        var explicitSender = NewExplicitSender(tenantApiAvailable: true);
+        SetupTenantApiSend(explicitSender, EmailSendResult.Sent with { RecipientDiverted = true });
+        var rentingOptions = new RentingChannelOptions
+        {
+            Enabled = true,
+            SendEmailSenderEmail = "canal@renting.test",
+            SendEmailSenderUsername = "Canal Renting",
+        };
+        var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false, rentingOptions);
+
+        var result = await service.SendAsync(
+            new SendNotificationTestRequest("analytics.alert", "TENANT_API"), UserId, Ct);
+
+        result.Success.Should().BeTrue();
+        result.RecipientDiverted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task HU11371_SinDesvioDeDestinatario_LaRespuestaLoReflejaEnFalse()
+    {
+        var dbName = NewDbName();
+        await SeedMailboxAsync(dbName, "pruebas@flit.co");
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+        SetupFlitSmtpSend(explicitSender, EmailSendResult.Sent);
+        var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
+
+        var result = await service.SendAsync(
+            new SendNotificationTestRequest("security.invitation", "FLIT_SMTP"), UserId, Ct);
+
+        result.RecipientDiverted.Should().BeFalse();
+    }
+
+    // ── HU #11371 — isConsoleTransport nunca es true para TENANT_API ─────────────────────────
+
+    [Fact]
+    public async Task HU11371_ConTransporteDeConsolaYCanalTenantApi_IsConsoleTransportEsFalse()
+    {
+        var dbName = NewDbName();
+        await SeedMailboxAsync(dbName, "pruebas@flit.co");
+        var explicitSender = NewExplicitSender(tenantApiAvailable: true);
+        SetupTenantApiSend(explicitSender, EmailSendResult.Sent);
+        var rentingOptions = new RentingChannelOptions
+        {
+            Enabled = true,
+            SendEmailSenderEmail = "canal@renting.test",
+            SendEmailSenderUsername = "Canal Renting",
+        };
+        var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
+        // isConsoleTransport: true a propósito — el descriptor de consola SOLO aplica al camino
+        // FlitSmtp; con TENANT_API nunca debe heredarse.
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: true, rentingOptions);
+
+        var result = await service.SendAsync(
+            new SendNotificationTestRequest("analytics.alert", "TENANT_API"), UserId, Ct);
+
+        result.IsConsoleTransport.Should().BeFalse("el transporte de consola solo existe en el camino FLIT, nunca en TENANT_API");
     }
 
     // ── AC5 — fallo de render ────────────────────────────────────────────────
@@ -208,11 +349,10 @@ public sealed class NotificationTestSendAdminServiceTests
         // ANTES de llegar al render — este test documenta esa frontera.
         var dbName = NewDbName();
         await SeedMailboxAsync(dbName, "pruebas@flit.co");
-        var emailSender = Substitute.For<IEmailSender>();
-        emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(EmailSendResult.Sent));
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+        SetupFlitSmtpSend(explicitSender, EmailSendResult.Sent);
         var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
-        var service = NewService(dbName, emailSender, timeProvider, isConsoleTransport: false);
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
 
         // Ninguna de las 5 entradas reales del catálogo dispara RenderFailed: se confirma que
         // NINGUNA de ellas lanza y que, por construcción, el switch de RenderSample cubre el
@@ -239,11 +379,10 @@ public sealed class NotificationTestSendAdminServiceTests
     {
         var dbName = NewDbName();
         await SeedMailboxAsync(dbName, "pruebas@flit.co");
-        var emailSender = Substitute.For<IEmailSender>();
-        emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(EmailSendResult.Sent));
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+        SetupFlitSmtpSend(explicitSender, EmailSendResult.Sent);
         var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
-        var service = NewService(dbName, emailSender, timeProvider, isConsoleTransport: false);
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
 
         var result = await service.SendAsync(
             new SendNotificationTestRequest("plantilla.no-existe", "FLIT_SMTP"), UserId, Ct);
@@ -255,7 +394,8 @@ public sealed class NotificationTestSendAdminServiceTests
         var row = await verify.NotificationTestSettings.SingleAsync(Ct);
         row.LastTestSentAt.Should().BeNull("AC6 — la plantilla inexistente no puede consumir el enfriamiento");
 
-        await emailSender.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        await explicitSender.DidNotReceive().SendAsync(
+            Arg.Any<NotificationChannel>(), Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
 
         // Confirma que, tras el 404, un envío válido inmediatamente después SIGUE disponible
         // (el enfriamiento no arrancó).
@@ -272,11 +412,12 @@ public sealed class NotificationTestSendAdminServiceTests
         var dbName = NewDbName();
         await SeedMailboxAsync(dbName, "pruebas@flit.co");
         string? capturedHtml = null;
-        var emailSender = Substitute.For<IEmailSender>();
-        emailSender.SendAsync(Arg.Do<EmailMessage>(m => capturedHtml = m.HtmlBody), Arg.Any<CancellationToken>())
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+        explicitSender
+            .SendAsync(NotificationChannel.FlitSmtp, Arg.Do<EmailMessage>(m => capturedHtml = m.HtmlBody), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailSendResult.Sent));
         var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
-        var service = NewService(dbName, emailSender, timeProvider, isConsoleTransport: false);
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
 
         var result = await service.SendAsync(
             new SendNotificationTestRequest("security.admin-reset-password", "FLIT_SMTP"), UserId, Ct);
@@ -298,13 +439,12 @@ public sealed class NotificationTestSendAdminServiceTests
     {
         var dbName = NewDbName();
         await SeedMailboxAsync(dbName, "pruebas@flit.co");
-        var emailSender = Substitute.For<IEmailSender>();
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
         // Simula exactamente lo que hace ConsoleEmailSender: SIEMPRE Sent, sin importar el transporte.
-        emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(EmailSendResult.Sent));
+        SetupFlitSmtpSend(explicitSender, EmailSendResult.Sent);
         var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
 
-        var service = NewService(dbName, emailSender, timeProvider, isConsoleTransport: true);
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: true);
 
         var result = await service.SendAsync(
             new SendNotificationTestRequest("security.invitation", "FLIT_SMTP"), UserId, Ct);
@@ -321,12 +461,11 @@ public sealed class NotificationTestSendAdminServiceTests
     {
         var dbName = NewDbName();
         await SeedMailboxAsync(dbName, "pruebas@flit.co");
-        var emailSender = Substitute.For<IEmailSender>();
-        emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(EmailSendResult.Sent));
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+        SetupFlitSmtpSend(explicitSender, EmailSendResult.Sent);
         var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
 
-        var service = NewService(dbName, emailSender, timeProvider, isConsoleTransport: false);
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
 
         var result = await service.SendAsync(
             new SendNotificationTestRequest("security.invitation", "FLIT_SMTP"), UserId, Ct);
@@ -342,12 +481,11 @@ public sealed class NotificationTestSendAdminServiceTests
     {
         var dbName = NewDbName();
         await SeedMailboxAsync(dbName, "pruebas@flit.co");
-        var emailSender = Substitute.For<IEmailSender>();
-        emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(EmailSendResult.Failed(EmailSendOutcome.AuthenticationFailed)));
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
+        SetupFlitSmtpSend(explicitSender, EmailSendResult.Failed(EmailSendOutcome.AuthenticationFailed));
         var now = new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero);
         var timeProvider = new TestTimeProvider(now);
-        var service = NewService(dbName, emailSender, timeProvider, isConsoleTransport: false);
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
 
         var result = await service.SendAsync(
             new SendNotificationTestRequest("security.invitation", "FLIT_SMTP"), UserId, Ct);
@@ -367,15 +505,16 @@ public sealed class NotificationTestSendAdminServiceTests
     {
         var dbName = NewDbName();
         await SeedMailboxAsync(dbName, "pruebas@flit.co");
-        var emailSender = Substitute.For<IEmailSender>();
+        var explicitSender = NewExplicitSender(tenantApiAvailable: false);
         var timeProvider = new TestTimeProvider(new DateTimeOffset(2026, 8, 11, 12, 0, 0, TimeSpan.Zero));
-        var service = NewService(dbName, emailSender, timeProvider, isConsoleTransport: false);
+        var service = NewService(dbName, explicitSender, timeProvider, isConsoleTransport: false);
 
         var result = await service.SendAsync(
             new SendNotificationTestRequest("security.invitation", "CANAL_QUE_NO_EXISTE"), UserId, Ct);
 
         result.Outcome.Should().Be(NotificationTestSendOutcome.InvalidChannel);
-        await emailSender.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        await explicitSender.DidNotReceive().SendAsync(
+            Arg.Any<NotificationChannel>(), Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
 
         await using var verify = NewContext(dbName);
         var row = await verify.NotificationTestSettings.SingleAsync(Ct);
@@ -401,9 +540,30 @@ public sealed class NotificationTestSendAdminServiceTests
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    /// Doble de <see cref="IExplicitChannelEmailSender"/> con <c>IsChannelAvailable</c> ya
+    /// configurado — mismo criterio que el router real: <c>FlitSmtp</c> siempre disponible,
+    /// <c>TenantApi</c> según <paramref name="tenantApiAvailable"/>.
+    /// </summary>
+    private static IExplicitChannelEmailSender NewExplicitSender(bool tenantApiAvailable)
+    {
+        var sender = Substitute.For<IExplicitChannelEmailSender>();
+        sender.IsChannelAvailable(NotificationChannel.FlitSmtp).Returns(true);
+        sender.IsChannelAvailable(NotificationChannel.TenantApi).Returns(tenantApiAvailable);
+        return sender;
+    }
+
+    private static void SetupFlitSmtpSend(IExplicitChannelEmailSender sender, EmailSendResult result) =>
+        sender.SendAsync(NotificationChannel.FlitSmtp, Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(result));
+
+    private static void SetupTenantApiSend(IExplicitChannelEmailSender sender, EmailSendResult result) =>
+        sender.SendAsync(NotificationChannel.TenantApi, Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(result));
+
     private static NotificationTestSendAdminService NewService(
         string dbName,
-        IEmailSender emailSender,
+        IExplicitChannelEmailSender explicitChannelSender,
         TestTimeProvider timeProvider,
         bool isConsoleTransport,
         RentingChannelOptions? rentingOptions = null)
@@ -417,7 +577,7 @@ public sealed class NotificationTestSendAdminServiceTests
 
         return new NotificationTestSendAdminService(
             NewContext(dbName),
-            emailSender,
+            explicitChannelSender,
             emailSettings,
             Options.Create(rentingOptions ?? new RentingChannelOptions()),
             new EmailTransportDescriptor(isConsoleTransport),

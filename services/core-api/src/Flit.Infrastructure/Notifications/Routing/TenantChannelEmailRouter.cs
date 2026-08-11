@@ -8,6 +8,43 @@ using Microsoft.Extensions.Options;
 namespace Flit.Infrastructure.Notifications.Routing;
 
 /// <summary>
+/// HU #11371 (Feature #11349, cierra el retorno-temprano fijo del banco de pruebas de
+/// notificaciones) — capacidad de enviar por un canal EXPLÍCITO, sin resolver la política del
+/// tenant y SIN la excepción de correos de cuenta (AC3 de <see cref="TenantChannelEmailRouter"/>).
+/// </summary>
+/// <remarks>
+/// Único consumidor previsto: el banco de pruebas de notificaciones
+/// (<c>NotificationTestSendAdminService</c>) y el endpoint de canales
+/// (<c>NotificationChannelsAdminService</c>) — ver
+/// <c>ExplicitChannelEmailSenderRegistrationTests.IExplicitChannelEmailSender_HasNoConsumersOutsideTheKnownBaseline</c>,
+/// que falla si aparece un tercer consumidor en el ensamblado. Deliberadamente NO se añade un campo "canal forzado" a
+/// <see cref="EmailMessage"/>: ese contrato lo usan los 6 puntos de envío de producción, y un campo
+/// así sería una puerta trasera para saltarse la configuración del tenant sin querer. Esta interfaz
+/// vive aparte, y solo la implementa <see cref="TenantChannelEmailRouter"/> — el mismo enrutador,
+/// con la MISMA regla de disponibilidad que <see cref="IEmailSender.SendAsync"/> usa para el camino
+/// normal (ver <see cref="IsChannelAvailable"/>).
+/// </remarks>
+internal interface IExplicitChannelEmailSender
+{
+    /// <summary>
+    /// Envía por <paramref name="channel"/> SIN consultar la política del tenant y SIN el bypass de
+    /// correos de cuenta (AC3): quien llama ya decidió el canal explícitamente. <c>TenantApi</c> sin
+    /// adaptador registrado en este ambiente ⇒ <see cref="EmailSendOutcome.ConfigurationIncomplete"/> —
+    /// mismo criterio que el camino normal, nunca cae a SMTP en silencio.
+    /// </summary>
+    Task<EmailSendResult> SendAsync(NotificationChannel channel, EmailMessage message, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// <c>true</c> si <paramref name="channel"/> tiene lo necesario para enviar en este ambiente, con
+    /// la MISMA regla que usa <see cref="SendAsync(NotificationChannel, EmailMessage, CancellationToken)"/>
+    /// (no una copia divergente). <c>FlitSmtp</c> siempre está disponible (el transporte, consola o
+    /// SMTP real, siempre está registrado); <c>TenantApi</c> depende de si el adaptador Renting está
+    /// registrado en este ambiente (mismo interruptor que decide el <c>ConfigurationIncomplete</c>).
+    /// </summary>
+    bool IsChannelAvailable(NotificationChannel channel);
+}
+
+/// <summary>
 /// HU #11362 (Feature #11348, cierra Bug #11311) — enruta cada envío según el canal configurado del
 /// tenant (<c>admin.tenant_operational_policies.notification_channel</c>), ANTES de que
 /// <see cref="Flit.Infrastructure.Notifications.DeliveryLog.NotificationDeliveryLoggingEmailSender"/>
@@ -24,7 +61,10 @@ namespace Flit.Infrastructure.Notifications.Routing;
 /// SMTP/consola de FLIT), sin importar el canal del tenant: es decisión de producto — elimina el
 /// punto único de fallo de un tercero en la ruta de acceso a la plataforma. Cualquier plantilla que
 /// NO resuelva a <see cref="NotificationModule.Security"/> (hoy, las de
-/// <see cref="NotificationModule.Analytics"/>) se enruta por el canal (AC1/AC2/AC6).
+/// <see cref="NotificationModule.Analytics"/>) se enruta por el canal (AC1/AC2/AC6). Este bypass
+/// SOLO aplica al método de una vía (<see cref="SendAsync(EmailMessage, CancellationToken)"/>) —
+/// <see cref="SendAsync(NotificationChannel, EmailMessage, CancellationToken)"/> (HU #11371) no lo
+/// aplica NUNCA: el llamador ya decidió el canal a propósito.
 /// </para>
 /// <para>
 /// <b>AC1/AC2/AC6 — resolución por canal.</b> Sin tenant resoluble, o tenant sin política operativa,
@@ -39,13 +79,20 @@ namespace Flit.Infrastructure.Notifications.Routing;
 /// mandaría por FLIT un correo que el tenant pidió que saliera por su propia API (caso heredado de la
 /// HU #11359 AC6).
 /// </para>
+/// <para>
+/// <b>HU #11371 — registro en DI.</b> Esta clase se registra como servicio propio (<c>Scoped</c>,
+/// bajo su tipo concreto) en vez de construirse inline dentro de la fábrica de <see cref="IEmailSender"/>:
+/// así el banco de pruebas puede alcanzarla a través de <see cref="IExplicitChannelEmailSender"/> sin
+/// que el pipeline de producción cambie — <see cref="Flit.Infrastructure.Notifications.DeliveryLog.NotificationDeliveryLoggingEmailSender"/>
+/// sigue envolviendo esta misma instancia como su "inner" para los 6 puntos de envío de producción.
+/// </para>
 /// </remarks>
 internal sealed partial class TenantChannelEmailRouter(
     IEmailSender flitTransport,
     ITenantSettingsRepository tenantSettingsRepository,
     IRentingEmailApiSender? rentingEmailApiSender,
     IOptions<RentingChannelOptions> rentingOptions,
-    ILogger<TenantChannelEmailRouter> logger) : IEmailSender
+    ILogger<TenantChannelEmailRouter> logger) : IEmailSender, IExplicitChannelEmailSender
 {
     public async Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
@@ -58,6 +105,31 @@ internal sealed partial class TenantChannelEmailRouter(
         }
 
         var channel = await ResolveChannelAsync(message.TenantId, cancellationToken).ConfigureAwait(false);
+        return await SendViaChannelAsync(channel, message, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// HU #11371 — capacidad del banco de pruebas: envía por <paramref name="channel"/> tal cual fue
+    /// solicitado, sin resolver la política del tenant ni aplicar el bypass de correos de cuenta (AC3
+    /// no aplica aquí a propósito).
+    /// </summary>
+    public Task<EmailSendResult> SendAsync(NotificationChannel channel, EmailMessage message, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        return SendViaChannelAsync(channel, message, cancellationToken);
+    }
+
+    /// <summary>
+    /// HU #11371 — MISMA regla que decide <see cref="SendViaChannelAsync"/>: <c>FlitSmtp</c> siempre
+    /// disponible (transporte siempre registrado); <c>TenantApi</c> disponible únicamente cuando el
+    /// adaptador Renting está registrado en este ambiente.
+    /// </summary>
+    public bool IsChannelAvailable(NotificationChannel channel) =>
+        channel != NotificationChannel.TenantApi || rentingEmailApiSender is not null;
+
+    private async Task<EmailSendResult> SendViaChannelAsync(
+        NotificationChannel channel, EmailMessage message, CancellationToken cancellationToken)
+    {
         if (channel != NotificationChannel.TenantApi)
         {
             // AC2/AC6 — FlitSmtp explícito, o tenant sin política operativa (default).
@@ -66,10 +138,8 @@ internal sealed partial class TenantChannelEmailRouter(
 
         if (rentingEmailApiSender is null)
         {
-            // Caso heredado de la HU #11359 AC6 — canal solicitado por el tenant pero NO habilitado
-            // por configuración en este ambiente. Nunca se cae a SMTP en silencio. TenantId no puede
-            // ser null aquí: ResolveChannelAsync solo devuelve TenantApi cuando resolvió una fila de
-            // política para un tenant concreto.
+            // Caso heredado de la HU #11359 AC6 — canal solicitado pero NO habilitado por
+            // configuración en este ambiente. Nunca se cae a SMTP en silencio.
             LogTenantApiChannelNotAvailable(logger, message.TenantId ?? Guid.Empty, message.TemplateKey);
             return EmailSendResult.Failed(EmailSendOutcome.ConfigurationIncomplete);
         }

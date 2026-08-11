@@ -99,14 +99,19 @@ public sealed class AdminPlataformaNotificacionesCanalesEndpointsTests
 
         tenantApi.SenderEmail.Should().Be(expectedEmail);
         tenantApi.SenderName.Should().Be(expectedName);
-        tenantApi.IsConfigured.Should().Be(expectedEmail is not null && expectedName is not null);
 
-        // AC3 en este entorno de pruebas: sin las variables RENTING_API_SEND_EMAIL_SENDER_*
-        // definidas, el canal debe volver "sin configurar" — nunca un error (sigue siendo 200).
-        if (expectedEmail is null)
-        {
-            tenantApi.IsConfigured.Should().BeFalse();
-        }
+        // HU #11371 — IsConfigured sigue la MISMA regla de disponibilidad que decide el envío de
+        // prueba (adaptador Renting registrado en este ambiente), NO si el remitente está poblado.
+        // Deliberadamente no se asume aquí si el canal Renting está habilitado o no en este
+        // ambiente de pruebas (puede variar por máquina/CI vía RENTING_API_ENABLED) — lo único que
+        // se afirma es que ambas señales SIEMPRE coinciden.
+        using var scope = _factory.Services.CreateScope();
+        var rentingAdapterRegistered =
+            scope.ServiceProvider.GetService<IRentingEmailApiSender>() is not null;
+        tenantApi.IsConfigured.Should().Be(
+            rentingAdapterRegistered,
+            "IsConfigured refleja si el adaptador Renting está registrado en este ambiente, la MISMA regla que el envío de prueba");
+
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 

@@ -122,6 +122,10 @@ public static class AdminPlataformaNotificacionesEndpoints
                 new { error = "buzon_no_configurado", message = result.Message }),
             NotificationTestSendOutcome.ChannelNotConfigured => Results.BadRequest(
                 new { error = "configuracion_incompleta", message = result.Message }),
+            // HU #11371 — plantilla de cuenta + canal TENANT_API: esas plantillas ignoran el canal
+            // por diseño (AC3 de la HU #11362) y siempre salen por Colas FLIT en producción.
+            NotificationTestSendOutcome.TemplateChannelMismatch => Results.BadRequest(
+                new { error = "plantilla_sin_enrutamiento_por_canal", message = result.Message }),
             NotificationTestSendOutcome.RateLimited => Results.Json(
                 new { error = "limite_frecuencia", message = result.Message, retryAfterSeconds = result.RetryAfterSeconds },
                 statusCode: StatusCodes.Status429TooManyRequests),
@@ -144,7 +148,8 @@ public static class AdminPlataformaNotificacionesEndpoints
             result.SenderEmail,
             result.SenderName,
             result.SentAt,
-            result.IsConsoleTransport);
+            result.IsConsoleTransport,
+            result.RecipientDiverted);
 
     private static NotificationChannelResponseItem ToResponse(NotificationChannelView view) =>
         new(view.Channel, view.Label, view.IsDefault, view.IsConfigured, view.SenderEmail, view.SenderName);
@@ -190,9 +195,14 @@ public sealed record SendNotificationTestBodyRequest(string? TemplateId, string?
 
 /// <summary>
 /// Respuesta de <c>POST /api/v1/admin/plataforma/notificaciones/buzon-pruebas/envios</c> (HU #11368,
-/// AC1/AC8). <c>Outcome</c> es el literal del enum <c>NotificationTestSendOutcome</c>
-/// (<c>"Sent"</c> | <c>"TransportFailed"</c> en un 200; ver el cuerpo de error para las demás
-/// causas). <c>IsConsoleTransport</c> en <c>true</c> significa que NO salió un correo real (AC8).
+/// AC1/AC8; HU #11371 AC del enrutamiento por canal). <c>Outcome</c> es el literal del enum
+/// <c>NotificationTestSendOutcome</c> (<c>"Sent"</c> | <c>"TransportFailed"</c> en un 200; ver el
+/// cuerpo de error para las demás causas — incluida <c>"plantilla_sin_enrutamiento_por_canal"</c>,
+/// HU #11371). <c>IsConsoleTransport</c> en <c>true</c> significa que NO salió un correo real (AC8;
+/// para el canal <c>TENANT_API</c> siempre es <c>false</c>). <c>RecipientDiverted</c> en <c>true</c>
+/// significa que, fuera de producción, el adaptador del canal sustituyó el destinatario real por uno
+/// de desvío ANTES de enviar — NUNCA expone la dirección de desvío (dato personal, Ley 1581), solo
+/// el booleano.
 /// </summary>
 public sealed record NotificationTestSendResponse(
     bool Success,
@@ -203,4 +213,5 @@ public sealed record NotificationTestSendResponse(
     string? SenderEmail,
     string? SenderName,
     DateTimeOffset? SentAt,
-    bool IsConsoleTransport);
+    bool IsConsoleTransport,
+    bool RecipientDiverted);

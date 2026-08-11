@@ -5,6 +5,7 @@ using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Notifications.Catalog;
 using Flit.Infrastructure.Notifications.Preview;
 using Flit.Infrastructure.Notifications.Renting;
+using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Modules.Security.Domain.Auth;
@@ -16,44 +17,59 @@ namespace Flit.Infrastructure.Notifications.Admin;
 
 /// <summary>
 /// Envío de prueba de una plantilla del catálogo al buzón de pruebas, con límite de frecuencia
-/// persistido (HU #11368, Feature #11349, la de mayor riesgo del Feature).
+/// persistido (HU #11368, Feature #11349, la de mayor riesgo del Feature). Desde la HU #11371
+/// (Feature #11349, cierra el retorno-temprano fijo que impedía usar el canal API Renting) el envío
+/// SÍ se conecta al enrutador (<see cref="IExplicitChannelEmailSender"/>) — ver comentario de AC4
+/// más abajo.
 /// </summary>
 /// <remarks>
 /// <para>
 /// <b>Orden de validación (por qué):</b> plantilla (AC6) y buzón (AC3) se comprueban PRIMERO y
-/// NUNCA consumen el enfriamiento — son errores de entrada, no intentos de envío. El enfriamiento
-/// (AC2) se evalúa ANTES de resolver canal o renderizar: así CUALQUIER plantilla dentro de la
-/// ventana responde 429 sin tocar el transporte, sin importar si esa plantilla en particular
-/// habría renderizado bien o no. Canal (AC4) y render (AC5) se resuelven DESPUÉS del enfriamiento
-/// y TAMPOCO lo consumen: solo se sella <c>last_test_sent_at</c> justo ANTES de invocar
-/// <see cref="IEmailSender.SendAsync"/> — mismo patrón que
+/// NUNCA consumen el enfriamiento — son errores de entrada, no intentos de envío. HU #11371 añade
+/// una tercera comprobación de entrada, TAMBIÉN sin I/O y SIN consumir enfriamiento: plantilla de
+/// cuenta + canal <c>TENANT_API</c> (ver <see cref="NotificationTestSendOutcome.TemplateChannelMismatch"/>).
+/// El enfriamiento (AC2) se evalúa ANTES de resolver canal o renderizar: así CUALQUIER plantilla
+/// dentro de la ventana responde 429 sin tocar el transporte, sin importar si esa plantilla en
+/// particular habría renderizado bien o no. Disponibilidad del canal (AC4) y render (AC5) se
+/// resuelven DESPUÉS del enfriamiento y TAMPOCO lo consumen: solo se sella <c>last_test_sent_at</c>
+/// justo ANTES de invocar el envío — mismo patrón que
 /// <c>AnalyticsSchedulerProcessor.ClaimAndSealScheduleAsync</c> (sellar ANTES de enviar, dentro de
 /// la misma operación de guardado, para que una segunda solicitud concurrente pierda la carrera de
 /// concurrencia optimista sobre <c>row_version</c> en vez de colarse mientras el primer envío -lento-
 /// todavía no termina).
 /// </para>
 /// <para>
-/// <b>AC4 — desviación deliberada del literal:</b> el AC original pide causa "canal sin adaptador"
-/// para API Renting. Ese texto asumía que el Feature #11348 no se entregaría en esta ola; el
-/// adaptador SÍ entra en el mismo PR (HU #11361), así que esa causa sería falsa el día del
-/// despliegue. En su lugar: con <c>TENANT_API</c> seleccionado, este banco de pruebas responde
-/// SIEMPRE con causa de configuración incompleta — no solo cuando <see cref="RentingChannelOptions.Enabled"/>
-/// es <c>false</c> (que es como se despliega hoy), sino también si algún día se habilita, porque el
-/// enrutamiento por canal (HU #11362) todavía no existe: no hay forma de que ESTE servicio invoque
-/// el adaptador Renting aunque exista y esté habilitado. En ningún caso sale correo por Colas FLIT
-/// cuando el canal elegido es el otro.
+/// <b>AC4 — ya NO es una desviación deliberada del literal.</b> El AC original pedía causa "canal
+/// sin adaptador" para API Renting; hasta la HU #11371 este banco de pruebas respondía SIEMPRE con
+/// causa de configuración incompleta para <c>TENANT_API</c>, porque el enrutamiento por canal (HU
+/// #11362) todavía no existía como capacidad alcanzable. Esa HU #11362 SÍ se entregó, y la #11371
+/// conecta este servicio a ella a través de <see cref="IExplicitChannelEmailSender"/> — la MISMA
+/// interfaz cuya disponibilidad consulta <c>NotificationChannelsAdminService</c> (HU #11367) para
+/// <c>GET .../canales</c>, así que ambos endpoints nunca divergen sobre si el canal está disponible.
+/// Con <c>TENANT_API</c> seleccionado: si el adaptador Renting NO está registrado en este ambiente
+/// (así se despliega hoy), la causa sigue siendo configuración incompleta y AÚN NO consume
+/// enfriamiento; si SÍ está registrado, el envío se intenta de verdad por el adaptador — nunca por
+/// Colas FLIT como respaldo silencioso.
 /// </para>
 /// <para>
-/// <b>AC8 — cómo se detecta el transporte de consola:</b> el puerto <see cref="IEmailSender"/> NO
-/// sirve para esto (<c>ConsoleEmailSender</c> devuelve <c>Sent</c> igual que <c>SmtpEmailSender</c>,
-/// y el <c>IEmailSender</c> inyectado es el decorador de bitácora, no el transporte concreto). Se
-/// usa <see cref="EmailTransportDescriptor"/>, calculado UNA vez en el arranque con la MISMA
-/// condición que decide qué implementación registrar.
+/// <b>AC8 — cómo se detecta el transporte de consola.</b> El puerto <see cref="IEmailSender"/> NO
+/// sirve para esto (<c>ConsoleEmailSender</c> devuelve <c>Sent</c> igual que <c>SmtpEmailSender</c>).
+/// Se usa <see cref="EmailTransportDescriptor"/>, calculado UNA vez en el arranque con la MISMA
+/// condición que decide qué implementación registrar — y solo aplica al canal <c>FLIT_SMTP</c>: el
+/// canal <c>TENANT_API</c> nunca es transporte de consola (HU #11371), sin importar el ambiente.
+/// </para>
+/// <para>
+/// <b>HU #11371 — se salta el decorador de bitácora.</b> Este servicio llama a
+/// <see cref="IExplicitChannelEmailSender"/> (el enrutador) directamente, sin pasar por el
+/// <c>IEmailSender</c> decorado que usan los 6 puntos de envío de producción — así que el intento no
+/// queda en <c>admin.notification_delivery_logs</c>. Para no dejar este camino mudo, cada intento
+/// (exitoso o fallido) se registra con <see cref="ILogger"/> — plantilla, canal, causa y éxito, NUNCA
+/// el destinatario (dato personal, Ley 1581).
 /// </para>
 /// </remarks>
 internal sealed partial class NotificationTestSendAdminService(
     FlitDbContext db,
-    IEmailSender emailSender,
+    IExplicitChannelEmailSender explicitChannelSender,
     EmailSettings emailSettings,
     IOptions<RentingChannelOptions> rentingOptions,
     EmailTransportDescriptor transportDescriptor,
@@ -90,6 +106,22 @@ internal sealed partial class NotificationTestSendAdminService(
                 channel: request.Channel);
         }
 
+        // HU #11371 — plantilla de cuenta + canal TENANT_API: error de entrada, SIN I/O, SIN
+        // consumir enfriamiento. Las 3 plantillas de NotificationModule.Security ignoran el canal
+        // por diseño (AC3 de la HU #11362) y en producción SIEMPRE salen por Colas FLIT — forzar el
+        // envío por TENANT_API aquí haría creer que esos correos se enrutan, que es justo el
+        // Bug #11311 que esta ola cierra.
+        if (channel == NotificationChannel.TenantApi && descriptor.Module == NotificationModule.Security)
+        {
+            LogTemplateChannelMismatch(logger, descriptor.Id);
+            return NotificationTestSendResult.Failure(
+                NotificationTestSendOutcome.TemplateChannelMismatch,
+                "Esta plantilla es un correo de cuenta: ignora el canal por diseño y siempre sale "
+                    + "por Colas FLIT. Selecciona el canal FLIT_SMTP para probarla.",
+                templateId: descriptor.Id,
+                channel: SettingsWire.ToWire(channel));
+        }
+
         var row = await GetRowAsync(ct).ConfigureAwait(false);
 
         // AC3 — sin buzón configurado: 400, SIN tocar el enfriamiento.
@@ -121,11 +153,14 @@ internal sealed partial class NotificationTestSendAdminService(
             }
         }
 
-        // AC4 — ver comentario de clase: TENANT_API SIEMPRE cae en configuración incompleta en este
-        // banco de pruebas (el enrutamiento por canal, HU #11362, todavía no existe).
-        if (channel == NotificationChannel.TenantApi)
+        // AC4 — HU #11371: disponibilidad del canal consultada con la MISMA regla que usa el envío
+        // (IExplicitChannelEmailSender.IsChannelAvailable) — la misma que consume
+        // NotificationChannelsAdminService para GET .../canales. Se evalúa ANTES de sellar el
+        // enfriamiento: un problema de configuración no puede obligar a esperar 5 minutos para
+        // probar el otro canal.
+        if (!explicitChannelSender.IsChannelAvailable(channel))
         {
-            LogTenantApiNotAvailable(logger, rentingOptions.Value.Enabled);
+            LogChannelNotAvailable(logger, channel);
             return NotificationTestSendResult.Failure(
                 NotificationTestSendOutcome.ChannelNotConfigured,
                 "El canal API Renting no está disponible para el envío de prueba en este ambiente.",
@@ -133,13 +168,14 @@ internal sealed partial class NotificationTestSendAdminService(
                 channel: SettingsWire.ToWire(channel));
         }
 
-        var senderEmail = NullIfBlank(emailSettings.DefaultSenderEmail);
-        var senderName = NullIfBlank(emailSettings.DefaultSenderName);
+        // HU #11371 — remitente resuelto por canal: FlitSmtp usa la configuración SMTP; TenantApi
+        // usa el remitente propio del canal Renting (el que verá quien reciba el correo).
+        var (senderEmail, senderName) = ResolveSender(channel);
         if (senderEmail is null)
         {
             return NotificationTestSendResult.Failure(
                 NotificationTestSendOutcome.ChannelNotConfigured,
-                "El canal Colas FLIT no tiene remitente configurado.",
+                "El canal seleccionado no tiene remitente configurado.",
                 templateId: descriptor.Id,
                 channel: SettingsWire.ToWire(channel));
         }
@@ -191,22 +227,47 @@ internal sealed partial class NotificationTestSendAdminService(
             Subject: subject,
             HtmlBody: html);
 
-        var sendResult = await emailSender.SendAsync(message, ct).ConfigureAwait(false);
+        // HU #11371 — envía por el canal explícito elegido, SIN resolver política de tenant y SIN el
+        // bypass de correos de cuenta (ya se descartó ese caso arriba). Se salta el decorador de
+        // bitácora: por eso el registro propio de abajo.
+        var sendResult = await explicitChannelSender.SendAsync(channel, message, ct).ConfigureAwait(false);
+
+        // AC8 — solo el canal FlitSmtp puede ser transporte de consola; TenantApi nunca lo es.
+        var isConsoleTransport = channel == NotificationChannel.FlitSmtp && transportDescriptor.IsConsole;
+
+        var outcome = sendResult.Success
+            ? NotificationTestSendOutcome.Sent
+            : NotificationTestSendOutcome.TransportFailed;
+        LogSendAttempt(logger, descriptor.Id, channel, outcome, sendResult.Success);
 
         return new NotificationTestSendResult(
             Success: sendResult.Success,
-            Outcome: sendResult.Success
-                ? NotificationTestSendOutcome.Sent
-                : NotificationTestSendOutcome.TransportFailed,
-            Message: BuildMessage(sendResult, transportDescriptor.IsConsole),
+            Outcome: outcome,
+            Message: BuildMessage(sendResult, isConsoleTransport),
             TemplateId: descriptor.Id,
             Channel: SettingsWire.ToWire(channel),
             SenderEmail: senderEmail,
             SenderName: senderName,
             SentAt: now,
             RetryAfterSeconds: null,
-            IsConsoleTransport: transportDescriptor.IsConsole);
+            IsConsoleTransport: isConsoleTransport,
+            RecipientDiverted: sendResult.RecipientDiverted);
     }
+
+    /// <summary>
+    /// HU #11371 — remitente por canal: FlitSmtp lee <see cref="EmailSettings.DefaultSenderEmail"/> /
+    /// <see cref="EmailSettings.DefaultSenderName"/>; TenantApi lee
+    /// <see cref="RentingChannelOptions.SendEmailSenderEmail"/> /
+    /// <see cref="RentingChannelOptions.SendEmailSenderUsername"/> — el mismo remitente que usa el
+    /// camino normal del router para este canal (ver <c>TenantChannelEmailRouter.SendViaChannelAsync</c>).
+    /// </summary>
+    private (string? Email, string? Name) ResolveSender(NotificationChannel channel) => channel switch
+    {
+        NotificationChannel.TenantApi => (
+            NullIfBlank(rentingOptions.Value.SendEmailSenderEmail),
+            NullIfBlank(rentingOptions.Value.SendEmailSenderUsername)),
+        _ => (NullIfBlank(emailSettings.DefaultSenderEmail), NullIfBlank(emailSettings.DefaultSenderName)),
+    };
 
     private async Task<NotificationTestSettingsRow> GetRowAsync(CancellationToken ct)
     {
@@ -266,14 +327,28 @@ internal sealed partial class NotificationTestSendAdminService(
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "Banco de pruebas de notificaciones: canal API Renting solicitado pero no "
-            + "disponible en este servicio (RentingChannelOptions.Enabled={RentingEnabled}). AC4 — "
-            + "el enrutamiento por canal (HU #11362) todavía no existe.")]
-    private static partial void LogTenantApiNotAvailable(ILogger logger, bool rentingEnabled);
+        Message = "Banco de pruebas de notificaciones: la plantilla '{TemplateId}' es un correo de "
+            + "cuenta e ignora el canal por diseño (AC3). No se envía por TENANT_API.")]
+    private static partial void LogTemplateChannelMismatch(ILogger logger, string templateId);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Banco de pruebas de notificaciones: el canal {Channel} no está disponible en este "
+            + "ambiente.")]
+    private static partial void LogChannelNotAvailable(ILogger logger, NotificationChannel channel);
 
     [LoggerMessage(
         Level = LogLevel.Error,
         Message = "Banco de pruebas de notificaciones: falló el render de la muestra de la "
             + "plantilla '{TemplateId}'.")]
     private static partial void LogRenderFailed(ILogger logger, Exception exception, string templateId);
+
+    // HU #11371 — se salta el decorador de bitácora (llama al enrutador directamente): este es el
+    // único registro que queda del intento. NUNCA incluye el destinatario (dato personal, Ley 1581).
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Banco de pruebas de notificaciones: intento de envío (plantilla={TemplateId}, "
+            + "canal={Channel}, resultado={Outcome}, éxito={Success}).")]
+    private static partial void LogSendAttempt(
+        ILogger logger, string templateId, NotificationChannel channel, NotificationTestSendOutcome outcome, bool success);
 }

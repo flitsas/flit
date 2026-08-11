@@ -295,26 +295,37 @@ public static class InfrastructureExtensions
         // scope PROPIO (aislado del DbContext ambiente de la petición). Un fallo al escribir la
         // bitácora NUNCA cambia el resultado del envío (AC6) — ver NotificationDeliveryLoggingEmailSender.
         services.AddScoped<INotificationDeliveryLogWriter, NotificationDeliveryLogWriter>();
-        services.AddScoped<IEmailSender>(sp =>
+
+        // HU #11371 (Feature #11349, cierra el retorno-temprano fijo del banco de pruebas) —
+        // TenantChannelEmailRouter deja de construirse INLINE dentro de la fábrica de IEmailSender:
+        // se registra como servicio propio (Scoped) para que el banco de pruebas de notificaciones
+        // pueda alcanzarlo vía IExplicitChannelEmailSender y enviar por un canal explícito. El orden
+        // del pipeline de producción NO cambia: la fábrica de IEmailSender de abajo sigue resolviendo
+        // ESTA MISMA instancia como el "concreteSender" que NotificationDeliveryLoggingEmailSender
+        // envuelve — los 6 puntos de llamada de producción siguen viendo el mismo decorador
+        // envolviendo al mismo router. IRentingEmailApiSender solo está registrado cuando
+        // AddRentingChannel lo habilitó (RENTING_API_ENABLED=true); sp.GetService (no
+        // GetRequiredService) lo resuelve como null en cualquier otro ambiente — el router trata ese
+        // null como "canal no disponible" y responde ConfigurationIncomplete en vez de fallar al
+        // resolver el árbol de DI.
+        services.AddScoped(sp =>
         {
             IEmailSender flitTransport = useConsoleEmailSender
                 ? sp.GetRequiredService<ConsoleEmailSender>()
                 : sp.GetRequiredService<SmtpEmailSender>();
 
-            // HU #11362 (Feature #11348, cierra Bug #11311) — el enrutamiento por canal se intercala
-            // AQUÍ, como el "concreteSender" que envuelve el decorador de bitácora (HU #11363): así
-            // NotificationDeliveryLoggingEmailSender sigue midiendo/registrando el intento completo
-            // (enrutamiento + envío real) sin que ninguno de los 6 puntos de llamada de IEmailSender
-            // cambie. IRentingEmailApiSender solo está registrado cuando AddRentingChannel lo habilitó
-            // (RENTING_API_ENABLED=true); sp.GetService (no GetRequiredService) lo resuelve como null
-            // en cualquier otro ambiente — el router trata ese null como "canal no disponible" y
-            // responde ConfigurationIncomplete en vez de fallar al resolver el árbol de DI.
-            IEmailSender router = new TenantChannelEmailRouter(
+            return new TenantChannelEmailRouter(
                 flitTransport,
                 sp.GetRequiredService<ITenantSettingsRepository>(),
                 sp.GetService<IRentingEmailApiSender>(),
                 sp.GetRequiredService<IOptions<RentingChannelOptions>>(),
                 sp.GetRequiredService<ILogger<TenantChannelEmailRouter>>());
+        });
+        services.AddScoped<IExplicitChannelEmailSender>(sp => sp.GetRequiredService<TenantChannelEmailRouter>());
+
+        services.AddScoped<IEmailSender>(sp =>
+        {
+            TenantChannelEmailRouter router = sp.GetRequiredService<TenantChannelEmailRouter>();
 
             return new NotificationDeliveryLoggingEmailSender(
                 router,

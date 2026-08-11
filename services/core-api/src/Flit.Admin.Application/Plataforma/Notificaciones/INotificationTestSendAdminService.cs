@@ -46,6 +46,16 @@ public enum NotificationTestSendOutcome
     /// (ver el catálogo cerrado <c>EmailSendOutcome</c> del puerto <c>IEmailSender</c>).
     /// </summary>
     TransportFailed,
+
+    /// <summary>
+    /// HU #11371 — la plantilla resuelta es una de las 3 del <c>NotificationModule.Security</c>
+    /// ("correos de cuenta") y el canal solicitado es <c>TENANT_API</c>. Esas plantillas ignoran el
+    /// canal por diseño (AC3 de la HU #11362) y en producción SIEMPRE salen por Colas FLIT — el banco
+    /// de pruebas avisa y NO envía, para no sugerir un enrutamiento que no existe (decisión del PO
+    /// humano del 2026-08-11, cierra el Bug #11311 sin crear uno nuevo). Error de entrada: NO
+    /// consume el enfriamiento.
+    /// </summary>
+    TemplateChannelMismatch,
 }
 
 /// <summary>
@@ -62,7 +72,17 @@ public enum NotificationTestSendOutcome
 /// <param name="RetryAfterSeconds">AC2 — segundos restantes de la ventana de enfriamiento, solo con <see cref="NotificationTestSendOutcome.RateLimited"/>.</param>
 /// <param name="IsConsoleTransport">
 /// AC8 — <c>true</c> cuando el transporte activo fue de consola: ningún correo real salió del
-/// proceso, solo quedó una línea en el log del servidor.
+/// proceso, solo quedó una línea en el log del servidor. Para el canal <c>TENANT_API</c> este valor
+/// SIEMPRE es <c>false</c> (HU #11371) — el transporte de consola solo existe en el camino FLIT, no
+/// hereda el descriptor del canal FlitSmtp.
+/// </param>
+/// <param name="RecipientDiverted">
+/// HU #11371 — <c>true</c> cuando el adaptador del canal (hoy, únicamente Renting fuera de
+/// producción) sustituyó el destinatario real por uno de desvío ANTES de enviar (ver
+/// <c>EmailSendResult.RecipientDiverted</c>). Fuera de producción el desvío es obligatorio para el
+/// canal Renting: sin esta marca, quien prueba concluiría —erróneamente— que el módulo está roto
+/// porque el correo no llega al buzón de pruebas. NUNCA expone la dirección de desvío (dato
+/// personal, Ley 1581), solo el booleano.
 /// </param>
 public sealed record NotificationTestSendResult(
     bool Success,
@@ -74,7 +94,8 @@ public sealed record NotificationTestSendResult(
     string? SenderName,
     DateTimeOffset? SentAt,
     int? RetryAfterSeconds,
-    bool IsConsoleTransport)
+    bool IsConsoleTransport,
+    bool RecipientDiverted = false)
 {
     public static NotificationTestSendResult Failure(
         NotificationTestSendOutcome outcome,
@@ -92,7 +113,8 @@ public sealed record NotificationTestSendResult(
             SenderName: null,
             SentAt: null,
             RetryAfterSeconds: retryAfterSeconds,
-            IsConsoleTransport: false);
+            IsConsoleTransport: false,
+            RecipientDiverted: false);
 }
 
 /// <summary>
