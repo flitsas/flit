@@ -166,6 +166,21 @@ export function NotificacionEnviarPruebaModal({
                 {outcome.consoleTransportNotice}
               </p>
             ) : null}
+            {outcome.recipientDivertedNotice ? (
+              <p
+                role="alert"
+                className="inline-flex items-start gap-1.5 rounded-lg border p-2 font-semibold"
+                style={{
+                  background: "var(--badge-warning-bg)",
+                  color: "var(--badge-warning-fg)",
+                  borderColor: "var(--badge-warning-border)",
+                }}
+                data-testid="notificaciones-enviar-prueba-desvio"
+              >
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>{outcome.recipientDivertedNotice}</span>
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>

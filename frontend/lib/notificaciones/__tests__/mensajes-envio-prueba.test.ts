@@ -69,6 +69,25 @@ describe("mapSendTestApiError — AC4 (causa de lista cerrada)", () => {
     expect(result.cause).toBe("desconocida");
     expect(result.productMessage.length).toBeGreaterThan(0);
   });
+
+  it("mapea plantilla_sin_enrutamiento_por_canal (Feature #11348 — correos de cuenta con canal Renting) y NO cae en 'desconocida'", () => {
+    const result = mapSendTestApiError(
+      new ApiError(400, "Error 400", {
+        error: "plantilla_sin_enrutamiento_por_canal",
+        message: "detalle interno del enrutador",
+      }),
+    );
+    expect(result.cause).toBe("plantilla_sin_enrutamiento_por_canal");
+    expect(result.cause).not.toBe("desconocida");
+    expect(result.productMessage).not.toContain("detalle interno del enrutador");
+    // (a) declara que la plantilla no se enruta por canal
+    expect(result.productMessage).toMatch(/no se enruta por canal/i);
+    // (b) declara que en producción sale siempre por Colas FLIT
+    expect(result.productMessage).toMatch(/producci[oó]n/i);
+    expect(result.productMessage).toMatch(/colas flit/i);
+    // (c) indica qué hacer: seleccionar Colas FLIT para probarla
+    expect(result.productMessage).toMatch(/selecciona el canal colas flit/i);
+  });
 });
 
 describe("mapSendTestOutcome — AC3/AC4 (resultado 200: éxito o fallo de transporte)", () => {
@@ -83,10 +102,12 @@ describe("mapSendTestOutcome — AC3/AC4 (resultado 200: éxito o fallo de trans
       senderName: "FLIT",
       sentAt: "2026-08-10T12:00:00Z",
       isConsoleTransport: false,
+      recipientDiverted: false,
     });
     expect(outcome.kind).toBe("sent");
     expect(outcome.disclaimer).toMatch(/no garantiza/i);
     expect(outcome.consoleTransportNotice).toBeUndefined();
+    expect(outcome.recipientDivertedNotice).toBeUndefined();
   });
 
   it("outcome Sent con transporte de consola: declara honestamente que no hubo correo real (AC8)", () => {
@@ -100,9 +121,11 @@ describe("mapSendTestOutcome — AC3/AC4 (resultado 200: éxito o fallo de trans
       senderName: null,
       sentAt: "2026-08-10T12:00:00Z",
       isConsoleTransport: true,
+      recipientDiverted: false,
     });
     expect(outcome.kind).toBe("sent");
     expect(outcome.consoleTransportNotice).toMatch(/no se envió un correo real/i);
+    expect(outcome.recipientDivertedNotice).toBeUndefined();
   });
 
   it("edge case — success:false con outcome TransportFailed (200) es un fallo de transporte, no un error HTTP", () => {
@@ -116,9 +139,45 @@ describe("mapSendTestOutcome — AC3/AC4 (resultado 200: éxito o fallo de trans
       senderName: "FLIT",
       sentAt: null,
       isConsoleTransport: false,
+      recipientDiverted: false,
     });
     expect(outcome.kind).toBe("transport-failed");
     expect(outcome.productMessage).not.toContain("SMTP server rejected recipient");
     expect(outcome.disclaimer).toMatch(/no garantiza/i);
+  });
+
+  it("outcome Sent con recipientDiverted:true declara que el correo NO llegó al buzón de pruebas y por qué, sin exponer la dirección de desvío (Feature #11348)", () => {
+    const outcome = mapSendTestOutcome({
+      success: true,
+      outcome: "Sent",
+      message: "ok",
+      templateId: "analytics.report",
+      channel: "TENANT_API",
+      senderEmail: "no-reply@renting-cliente.com",
+      senderName: "Renting",
+      sentAt: "2026-08-10T12:00:00Z",
+      isConsoleTransport: false,
+      recipientDiverted: true,
+    });
+    expect(outcome.kind).toBe("sent");
+    expect(outcome.recipientDivertedNotice).toBeDefined();
+    expect(outcome.recipientDivertedNotice).toMatch(/no lleg[oó] al buz[oó]n de pruebas/i);
+    expect(outcome.recipientDivertedNotice).not.toMatch(/@/);
+  });
+
+  it("outcome recipientDiverted:false (feature apagada o canal sin desvío) NO produce el aviso", () => {
+    const outcome = mapSendTestOutcome({
+      success: true,
+      outcome: "Sent",
+      message: "ok",
+      templateId: "security.invitation",
+      channel: "FLIT_SMTP",
+      senderEmail: "no-reply@flit.com.co",
+      senderName: "FLIT",
+      sentAt: "2026-08-10T12:00:00Z",
+      isConsoleTransport: false,
+      recipientDiverted: false,
+    });
+    expect(outcome.recipientDivertedNotice).toBeUndefined();
   });
 });

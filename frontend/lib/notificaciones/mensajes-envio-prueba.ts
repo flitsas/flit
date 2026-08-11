@@ -1,9 +1,13 @@
 // HU #11371 (AC3/AC4) — traduce el resultado de `sendNotificationTest` a mensajes de producto.
 // El backend devuelve causas de lista cerrada (`buzon_no_configurado`, `limite_frecuencia`,
-// `fallo_render`, `configuracion_incompleta`, `canal_invalido`) y, en un 200, un resultado con
-// `success: false` / `outcome: "TransportFailed"`. Esta capa es la ÚNICA que decide qué texto ve
-// la persona: nunca se muestra `message`/`error` crudo del backend (puede traer detalle del
-// proveedor SMTP), salvo `retryAfterSeconds`, que sí es información honesta y útil.
+// `fallo_render`, `configuracion_incompleta`, `canal_invalido`,
+// `plantilla_sin_enrutamiento_por_canal`) y, en un 200, un resultado con
+// `success: false` / `outcome: "TransportFailed"` o `recipientDiverted: true` (Feature #11348 —
+// canal Renting: correos de cuenta no se enrutan por canal, y fuera de producción los envíos se
+// desvían obligatoriamente). Esta capa es la ÚNICA que decide qué texto ve la persona: nunca se
+// muestra `message`/`error` crudo del backend (puede traer detalle del proveedor SMTP), salvo
+// `retryAfterSeconds`, que sí es información honesta y útil. Nunca se muestra la dirección de
+// desvío del correo (dato personal, Ley 1581) aunque el backend la mande.
 import { ApiError } from "@/lib/api/types";
 import type { NotificationTestSendResult } from "@/lib/api/admin-plataforma-notificaciones";
 
@@ -15,6 +19,7 @@ export type SendTestFailureCause =
   | "plantilla_no_encontrada"
   | "limite_frecuencia"
   | "fallo_render"
+  | "plantilla_sin_enrutamiento_por_canal"
   | "transporte_fallido"
   | "desconocida";
 
@@ -34,6 +39,8 @@ const FAILURE_MESSAGES: Record<Exclude<SendTestFailureCause, "limite_frecuencia"
     "El canal seleccionado no tiene su configuración completa (remitente o credenciales) en este ambiente.",
   plantilla_no_encontrada: "La plantilla ya no existe en el catálogo de notificaciones.",
   fallo_render: "No fue posible generar el contenido del correo de prueba.",
+  plantilla_sin_enrutamiento_por_canal:
+    "Esta plantilla no se enruta por canal: es un correo de cuenta (invitación, recuperación o restablecimiento de contraseña) y, también en producción, sale siempre por Colas FLIT para no exponer el acceso a la plataforma a través de un tercero. Selecciona el canal Colas FLIT para probarla.",
   transporte_fallido:
     "El transporte de correo rechazó el envío. Es un fallo del proveedor, no de la plantilla ni del buzón.",
   desconocida: "No fue posible completar el envío de la prueba.",
@@ -53,6 +60,7 @@ const KNOWN_CAUSES = new Set<string>([
   "plantilla_no_encontrada",
   "limite_frecuencia",
   "fallo_render",
+  "plantilla_sin_enrutamiento_por_canal",
 ]);
 
 /**
@@ -93,6 +101,12 @@ export interface SendTestOutcome {
   disclaimer: string;
   /** AC8 (HU #11368) — declara honestamente que no hubo correo real, cuando aplica. */
   consoleTransportNotice?: string;
+  /**
+   * Declara honestamente que el correo NO llegó al buzón de pruebas configurado porque se
+   * desvió a una cuenta de control del equipo. Nunca incluye la dirección de desvío (dato
+   * personal, Ley 1581), aunque el backend la mande.
+   */
+  recipientDivertedNotice?: string;
 }
 
 const DELIVERY_DISCLAIMER =
@@ -100,6 +114,9 @@ const DELIVERY_DISCLAIMER =
 
 const CONSOLE_TRANSPORT_NOTICE =
   "No se envió un correo real: en este ambiente el transporte es de consola (sin conexión SMTP real).";
+
+const RECIPIENT_DIVERTED_NOTICE =
+  "Este correo NO llegó al buzón de pruebas configurado: fuera de producción, todo envío por este canal se desvía obligatoriamente a una cuenta de control del equipo. Es la única barrera que impide que una prueba nuestra alcance a un cliente final real del canal. Revisa la cuenta de desvío del equipo, no tu buzón de pruebas.";
 
 /**
  * Traduce un `NotificationTestSendResult` (200 OK, éxito o fallo de transporte) a un mensaje
@@ -124,6 +141,10 @@ export function mapSendTestOutcome(result: NotificationTestSendResult): SendTest
 
   if (result.isConsoleTransport) {
     base.consoleTransportNotice = CONSOLE_TRANSPORT_NOTICE;
+  }
+
+  if (result.recipientDiverted) {
+    base.recipientDivertedNotice = RECIPIENT_DIVERTED_NOTICE;
   }
 
   return base;

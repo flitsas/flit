@@ -354,4 +354,106 @@ describe("NotificacionesBankPanel — HU #11371", () => {
 
     expect(await within(section).findByRole("alert")).toHaveTextContent(/no es válido/i);
   });
+
+  // ── Feature #11348 — plantilla no enrutable por canal + desvío de destinatario ───────────
+
+  it("AC4 — con plantilla_sin_enrutamiento_por_canal explica que la plantilla no se enruta, que en producción sale por Colas FLIT y qué hacer", async () => {
+    getTestMailbox.mockResolvedValue(mailboxConfigured);
+    sendNotificationTest.mockRejectedValue(
+      new ApiError(400, "Bad request", {
+        error: "plantilla_sin_enrutamiento_por_canal",
+        message: "router-internal-detail",
+      }),
+    );
+    const user = userEvent.setup();
+    render(<NotificacionesBankPanel />);
+
+    const button = await openRowMenuButton("Invitación a la plataforma", /enviar prueba/i);
+    await user.click(button);
+
+    const errorBlock = await screen.findByTestId("notificaciones-enviar-prueba-error");
+    expect(errorBlock).toHaveTextContent(/no se enruta por canal/i);
+    expect(errorBlock).toHaveTextContent(/colas flit/i);
+    expect(errorBlock).toHaveTextContent(/selecciona el canal colas flit/i);
+    expect(errorBlock).not.toHaveTextContent("router-internal-detail");
+  });
+
+  it("Feature #11348 — recipientDiverted:true avisa que el correo no llegó al buzón de pruebas y por qué, sin exponer la dirección de desvío", async () => {
+    getTestMailbox.mockResolvedValue(mailboxConfigured);
+    sendNotificationTest.mockResolvedValue({
+      success: true,
+      outcome: "Sent",
+      message: "ok",
+      templateId: "security.invitation",
+      channel: "FLIT_SMTP",
+      senderEmail: "no-reply@renting-cliente.com",
+      senderName: "Renting",
+      sentAt: "2026-08-10T12:00:00Z",
+      isConsoleTransport: false,
+      recipientDiverted: true,
+    });
+    const user = userEvent.setup();
+    render(<NotificacionesBankPanel />);
+
+    const button = await openRowMenuButton("Invitación a la plataforma", /enviar prueba/i);
+    await user.click(button);
+
+    const notice = await screen.findByTestId("notificaciones-enviar-prueba-desvio");
+    expect(notice).toHaveTextContent(/no lleg[oó] al buz[oó]n de pruebas/i);
+    expect(notice.textContent ?? "").not.toMatch(/@/);
+  });
+
+  it("Feature #11348 — recipientDiverted:false NO muestra el aviso de desvío", async () => {
+    getTestMailbox.mockResolvedValue(mailboxConfigured);
+    sendNotificationTest.mockResolvedValue({
+      success: true,
+      outcome: "Sent",
+      message: "ok",
+      templateId: "security.invitation",
+      channel: "FLIT_SMTP",
+      senderEmail: "no-reply@flit.com.co",
+      senderName: "FLIT",
+      sentAt: "2026-08-10T12:00:00Z",
+      isConsoleTransport: false,
+      recipientDiverted: false,
+    });
+    const user = userEvent.setup();
+    render(<NotificacionesBankPanel />);
+
+    const button = await openRowMenuButton("Invitación a la plataforma", /enviar prueba/i);
+    await user.click(button);
+
+    await screen.findByTestId("notificaciones-enviar-prueba-resultado");
+    expect(screen.queryByTestId("notificaciones-enviar-prueba-desvio")).not.toBeInTheDocument();
+  });
+
+  it("Feature #11348 — el aviso de desvío convive con el aviso de transporte de consola y el disclaimer de entrega, sin perder ninguno", async () => {
+    getTestMailbox.mockResolvedValue(mailboxConfigured);
+    sendNotificationTest.mockResolvedValue({
+      success: true,
+      outcome: "Sent",
+      message: "ok",
+      templateId: "security.invitation",
+      channel: "TENANT_API",
+      senderEmail: null,
+      senderName: null,
+      sentAt: "2026-08-10T12:00:00Z",
+      isConsoleTransport: true,
+      recipientDiverted: true,
+    });
+    const user = userEvent.setup();
+    render(<NotificacionesBankPanel />);
+
+    const button = await openRowMenuButton("Invitación a la plataforma", /enviar prueba/i);
+    await user.click(button);
+
+    const result = await screen.findByTestId("notificaciones-enviar-prueba-resultado");
+    expect(within(result).getByText(/no garantiza/i)).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("notificaciones-enviar-prueba-consola"),
+    ).toHaveTextContent(/no se envió un correo real/i);
+    expect(
+      await screen.findByTestId("notificaciones-enviar-prueba-desvio"),
+    ).toHaveTextContent(/no lleg[oó] al buz[oó]n de pruebas/i);
+  });
 });

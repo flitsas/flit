@@ -121,6 +121,13 @@ export interface NotificationTestSendResult {
   sentAt: string | null;
   /** `true` = NO salió un correo real (transporte de consola de este ambiente). */
   isConsoleTransport: boolean;
+  /**
+   * `true` = el correo NO llegó al buzón de pruebas configurado: se desvió a una cuenta de
+   * desvío del equipo. Fuera de producción ese desvío es obligatorio para el canal Renting —
+   * es la única barrera contra alcanzar a un cliente final real. Nunca mostrar la dirección de
+   * desvío (dato personal, Ley 1581) aunque el backend llegue a enviarla.
+   */
+  recipientDiverted: boolean;
 }
 
 /** `POST /api/v1/admin/plataforma/notificaciones/buzon-pruebas/envios`. */
