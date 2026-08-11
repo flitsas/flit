@@ -33,6 +33,11 @@ internal sealed class NotificationDeliveryLogEntity
 
     public int DurationMs { get; set; }
 
+    /// <summary>HU #11364 AC2 — <c>true</c> cuando el adaptador de canal sustituyó el destinatario
+    /// real por uno de desvío (fuera de producción) antes de enviar. Con <c>true</c>, el envío NO
+    /// llegó a <see cref="Recipient"/> (que sigue guardando el destinatario ORIGINAL).</summary>
+    public bool RecipientDiverted { get; set; }
+
     public DateTimeOffset OccurredAt { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

@@ -14,7 +14,8 @@ internal sealed record NotificationDeliveryLogEntry(
     string Recipient,
     bool Success,
     string? FailureReason,
-    int DurationMs);
+    int DurationMs,
+    bool RecipientDiverted = false);
 
 /// <summary>
 /// Escribe una fila de la bitácora de envíos. Implementación única: <see cref="NotificationDeliveryLogWriter"/>.

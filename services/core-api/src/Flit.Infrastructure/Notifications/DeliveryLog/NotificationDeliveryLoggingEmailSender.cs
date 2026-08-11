@@ -79,7 +79,11 @@ internal sealed partial class NotificationDeliveryLoggingEmailSender(
                     message.ToEmail,
                     result.Success,
                     result.Success ? null : result.Message,
-                    (int)Math.Clamp(stopwatch.ElapsedMilliseconds, 0, int.MaxValue)),
+                    (int)Math.Clamp(stopwatch.ElapsedMilliseconds, 0, int.MaxValue),
+                    // HU #11364 AC2 — el destinatario ORIGINAL ya es message.ToEmail (arriba): esta
+                    // marca es lo único que faltaba para que la fila no afirme, falsamente, que el
+                    // correo llegó a ese destinatario.
+                    result.RecipientDiverted),
                 CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)

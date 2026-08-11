@@ -33,6 +33,7 @@ internal sealed class NotificationDeliveryLogWriter(FlitDbContext db) : INotific
                     Result = entry.Success ? "enviado" : "fallido",
                     FailureReason = entry.Success ? null : entry.FailureReason,
                     DurationMs = entry.DurationMs,
+                    RecipientDiverted = entry.RecipientDiverted,
                     OccurredAt = DateTimeOffset.UtcNow,
                     CreatedAt = DateTimeOffset.UtcNow,
                 });

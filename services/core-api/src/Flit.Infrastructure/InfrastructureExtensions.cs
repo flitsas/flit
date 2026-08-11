@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Companies.Settings;
 using Flit.Analytics.Application.Abstractions;
 using Flit.Infrastructure.Consultations;
 using Flit.Infrastructure.Consultations.Avaluos;
@@ -12,6 +13,7 @@ using Flit.Infrastructure.Kyverum;
 using Flit.Infrastructure.Messaging;
 using Flit.Infrastructure.Notifications.DeliveryLog;
 using Flit.Infrastructure.Notifications.Renting;
+using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Ocr;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -213,7 +215,7 @@ public static class InfrastructureExtensions
         AddIdentityValidation(services, configuration);
         AddImprontas(services, configuration);
         AddRues(services, configuration);
-        AddRentingChannel(services, configuration);
+        AddRentingChannel(services, configuration, environment);
         AddOcr(services, configuration);
         AddQuipux(services);
 
@@ -737,7 +739,8 @@ public static class InfrastructureExtensions
     /// del certificado (AC4/AC5) tumban el arranque completo, no solo el primer envío.
     /// </para>
     /// </summary>
-    private static void AddRentingChannel(IServiceCollection services, IConfiguration configuration)
+    private static void AddRentingChannel(
+        IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
         // Env var CRUDA primero (a diferencia de Fasecolda, que va config primero): este es un
         // canal 100% de despliegue (12-factor), sin defaults propios de negocio en appsettings.json
@@ -783,12 +786,28 @@ public static class InfrastructureExtensions
             return result;
         }
 
+        // HU #11364 (AC3/AC4/AC5) — interruptor AFIRMATIVO y PROPIO del desvío de destinatario.
+        // Único mecanismo que impide que un envío de desarrollo/QA alcance a un cliente final real
+        // (los tres .pfx "de pruebas" del repositorio del cliente son el MISMO archivo byte a
+        // byte: solo existe el ambiente de producción de Renting). AC5 — el nombre del ambiente NO
+        // decide si se desvía (eso es exclusivo de este interruptor); el nombre del ambiente solo
+        // decide, más abajo (tras validar AC1), si el interruptor está PROHIBIDO (producción) u
+        // OBLIGATORIO (fuera de producción, con el canal habilitado).
+        var developmentRecipientOverrideEnabled = string.Equals(
+            Cfg(
+                "Notifications:Renting:SendEmailDevelopmentRecipientOverrideEnabled",
+                "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+
         // AC1 — se valida la presencia de TODAS las variables requeridas: ruta del certificado,
         // passphrase, URL base, ruta de envío, ruta de login, tiempos de espera y datos del
-        // remitente. Las variables de caché de login (uso de la HU #11360), las del "otro proxy"
-        // que comparte bloque de configuración (DEFAULT_SENDER_*) y las del desvío en no-producción
-        // (uso de la HU #11364) se modelan pero NO se exigen aquí — quedan fuera del alcance de
-        // esta HU (ver comentarios en RentingChannelOptions).
+        // remitente. Las variables de caché de login (uso de la HU #11360) y las del "otro proxy"
+        // que comparte bloque de configuración (DEFAULT_SENDER_*) se modelan pero NO se exigen
+        // aquí — quedan fuera del alcance de esta HU (ver comentarios en RentingChannelOptions). El
+        // destinatario de desvío SÍ se exige cuando el interruptor está activo: sin él, el
+        // interruptor encendido no tendría a dónde desviar y el envío fallaría en silencio en vez
+        // de proteger al cliente final.
         var options = new RentingChannelOptions
         {
             Enabled = true,
@@ -837,13 +856,54 @@ public static class InfrastructureExtensions
                 "Notifications:Renting:DefaultSenderEmail", "RENTING_API_SEND_EMAIL_DEFAULT_SENDER_EMAIL") ?? "",
             DefaultSenderUsername = Cfg(
                 "Notifications:Renting:DefaultSenderUsername", "RENTING_API_SEND_EMAIL_DEFAULT_SENDER_USERNAME") ?? "",
-            SendEmailDevelopmentRecipientEmail = Cfg(
-                "Notifications:Renting:SendEmailDevelopmentRecipientEmail",
-                "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL") ?? "",
-            SendEmailDevelopmentRecipientUsername = Cfg(
-                "Notifications:Renting:SendEmailDevelopmentRecipientUsername",
-                "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME") ?? "",
+            // HU #11364 — con el interruptor activo (única posibilidad fuera de producción, por el
+            // AC4 de arriba) el destinatario de desvío es OBLIGATORIO: sin él el interruptor
+            // encendido no tendría a dónde desviar.
+            SendEmailDevelopmentRecipientEmail = developmentRecipientOverrideEnabled
+                ? Require(
+                    Cfg(
+                        "Notifications:Renting:SendEmailDevelopmentRecipientEmail",
+                        "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL"),
+                    "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL")
+                : Cfg(
+                    "Notifications:Renting:SendEmailDevelopmentRecipientEmail",
+                    "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL") ?? "",
+            SendEmailDevelopmentRecipientUsername = developmentRecipientOverrideEnabled
+                ? Require(
+                    Cfg(
+                        "Notifications:Renting:SendEmailDevelopmentRecipientUsername",
+                        "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME"),
+                    "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME")
+                : Cfg(
+                    "Notifications:Renting:SendEmailDevelopmentRecipientUsername",
+                    "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME") ?? "",
+            SendEmailDevelopmentRecipientOverrideEnabled = developmentRecipientOverrideEnabled,
         };
+
+        // AC3 — en producción, el desvío no puede estar activo: enviaría el correo REAL de un
+        // cliente final a la cuenta de desvío en vez de a su destinatario, silenciando
+        // notificaciones de producción sin que nadie se entere.
+        if (environment.IsProduction() && developmentRecipientOverrideEnabled)
+        {
+            throw new InvalidOperationException(
+                "Canal Renting: el desvío de destinatario "
+                + "(RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED=true) no puede "
+                + "estar activo en producción.");
+        }
+
+        // AC4 — fuera de producción, con el canal habilitado (única rama de este método: el early
+        // return de arriba ya descartó el canal deshabilitado), el desvío es OBLIGATORIO. Acotado a
+        // "canal habilitado" a propósito: si se exigiera siempre, cualquier ambiente de desarrollo
+        // sin Notifications:Renting:Enabled=true (incluida la suite Flit.Admin.Tests, que levanta
+        // el host real con WebApplicationFactory<Program>) dejaría de arrancar.
+        if (!environment.IsProduction() && !developmentRecipientOverrideEnabled)
+        {
+            throw new InvalidOperationException(
+                "Canal Renting habilitado (RENTING_API_ENABLED=true) fuera de producción: el desvío "
+                + "de destinatario (RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED) "
+                + "es obligatorio para no enviar correos reales a clientes desde un ambiente de "
+                + "pruebas.");
+        }
 
         services.Configure<RentingChannelOptions>(o =>
         {
@@ -868,6 +928,7 @@ public static class InfrastructureExtensions
             o.DefaultSenderUsername = options.DefaultSenderUsername;
             o.SendEmailDevelopmentRecipientEmail = options.SendEmailDevelopmentRecipientEmail;
             o.SendEmailDevelopmentRecipientUsername = options.SendEmailDevelopmentRecipientUsername;
+            o.SendEmailDevelopmentRecipientOverrideEnabled = options.SendEmailDevelopmentRecipientOverrideEnabled;
         });
 
         // AC3/AC4/AC5 — Singleton cuyo factory carga y valida el certificado. Con ValidateOnBuild
@@ -911,12 +972,14 @@ public static class InfrastructureExtensions
         services.AddSingleton<IRentingTokenCache, RentingTokenCache>();
         services.AddScoped<RentingAuthenticatedRequestExecutor>();
 
-        // HU #11361 — adaptador de envío/multipart. IRentingRecipientOverride es el punto de
-        // encaje de la HU #11364 (desvío de destinatario fuera de producción): esta HU solo
-        // registra la implementación por defecto (no desvía nada); #11364 la reemplaza con
-        // TryAdd/Replace cuando implemente el desvío real. Quién CONSUME IRentingEmailApiSender es
-        // la HU #11362 (enrutamiento) — no se enchufa a IEmailSender aquí.
-        services.TryAddSingleton<IRentingRecipientOverride, PassthroughRentingRecipientOverride>();
+        // HU #11361 — adaptador de envío/multipart. HU #11364 — IRentingRecipientOverride es el
+        // desvío OBLIGATORIO de destinatario fuera de producción: se registra SIEMPRE que el canal
+        // esté habilitado (única rama en la que este método corre) porque la propia implementación
+        // decide, por su interruptor propio (AC5), si desvía o no — nunca por el ambiente. La
+        // validación de arranque de arriba (AC3/AC4) ya garantiza que el interruptor está en el
+        // valor correcto para el ambiente actual. Quién CONSUME IRentingEmailApiSender es la
+        // HU #11362 (enrutamiento) — no se enchufa a IEmailSender aquí.
+        services.TryAddSingleton<IRentingRecipientOverride, RentingRecipientOverride>();
         services.AddScoped<IRentingEmailApiSender, RentingEmailApiSender>();
     }
 

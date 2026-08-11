@@ -222,6 +222,59 @@ public sealed class NotificationDeliveryLoggingEmailSenderTests
             && e.Message.Contains("bitácora", StringComparison.OrdinalIgnoreCase));
     }
 
+    // ── HU #11364 AC2 — la marca de envío desviado llega a la fila junto al destinatario original ──
+
+    [Fact]
+    public async Task HU11364AC2_EnvioDesviado_DejaLaFilaConLaMarcaEnVerdaderoYElDestinatarioOriginal()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var provider = BuildProvider(dbName);
+        var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new CapturingLogger<NotificationDeliveryLoggingEmailSender>();
+        // El adaptador de canal (RentingEmailApiSender) es quien enciende RecipientDiverted en el
+        // EmailSendResult — aquí se simula directamente ese resultado, que es lo único que atraviesa
+        // el decorador (no hace falta un HTTP real del canal Renting para probar el decorador).
+        var diverted = EmailSendResult.Sent with { RecipientDiverted = true };
+        var inner = new FakeEmailSender(diverted);
+        var sender = new NotificationDeliveryLoggingEmailSender(inner, scopeFactory, logger);
+
+        // El destinatario ORIGINAL es el que trae el EmailMessage — el decorador lo lee ANTES de que
+        // el adaptador de canal lo sustituya por el de desvío (el decorador nunca ve ese cambio).
+        var message = new EmailMessage(
+            TenantA, "analytics.alert", "cliente-real@flit.test", "Cliente Real", "Asunto", "<html/>");
+
+        var result = await sender.SendAsync(message, TestContext.Current.CancellationToken);
+
+        result.RecipientDiverted.Should().BeTrue();
+
+        await using var ctx = NewContext(dbName);
+        var row = await ctx.NotificationDeliveryLogs.SingleAsync(TestContext.Current.CancellationToken);
+
+        row.RecipientDiverted.Should().BeTrue();
+        row.Recipient.Should().Be("cliente-real@flit.test", "la fila conserva el destinatario ORIGINAL, no el de desvío");
+    }
+
+    [Fact]
+    public async Task HU11364AC2_EnvioNoDesviado_DejaLaFilaConLaMarcaEnFalso()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var provider = BuildProvider(dbName);
+        var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new CapturingLogger<NotificationDeliveryLoggingEmailSender>();
+        var inner = new FakeEmailSender(EmailSendResult.Sent);
+        var sender = new NotificationDeliveryLoggingEmailSender(inner, scopeFactory, logger);
+
+        var message = new EmailMessage(
+            TenantA, "analytics.alert", "cliente-real@flit.test", "Cliente Real", "Asunto", "<html/>");
+
+        await sender.SendAsync(message, TestContext.Current.CancellationToken);
+
+        await using var ctx = NewContext(dbName);
+        var row = await ctx.NotificationDeliveryLogs.SingleAsync(TestContext.Current.CancellationToken);
+
+        row.RecipientDiverted.Should().BeFalse();
+    }
+
     // ── Infraestructura de prueba ─────────────────────────────────────────────────────────────────
 
     private static ServiceProvider BuildProvider(string dbName)

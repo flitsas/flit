@@ -29,6 +29,13 @@ internal sealed class NotificationDeliveryLogEntityConfiguration
         builder.Property(x => x.Result).HasColumnName("result").HasMaxLength(20).IsRequired();
         builder.Property(x => x.FailureReason).HasColumnName("failure_reason").HasMaxLength(1000);
         builder.Property(x => x.DurationMs).HasColumnName("duration_ms").IsRequired();
+
+        // HU #11364 AC2 — marca de envío desviado (DDL 68).
+        builder.Property(x => x.RecipientDiverted)
+            .HasColumnName("recipient_diverted")
+            .HasDefaultValue(false)
+            .IsRequired();
+
         builder.Property(x => x.OccurredAt).HasColumnName("occurred_at").IsRequired();
 
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()");

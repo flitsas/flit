@@ -6,6 +6,7 @@ using Flit.Infrastructure.Notifications.Renting;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -118,6 +119,12 @@ public sealed class RentingChannelDependencyInjectionTests : IDisposable
             ["Notifications:Renting:SendEmailSecondsTimeout"] = "20",
             ["Notifications:Renting:SendEmailSenderEmail"] = "no-reply@example.test",
             ["Notifications:Renting:SendEmailSenderUsername"] = "no-reply",
+            // HU #11364 AC4 — fuera de producción, con el canal habilitado, el desvío es
+            // obligatorio: sin este par de valores, AddRentingChannel tumbaría el arranque antes
+            // de llegar a registrar nada de lo que prueba esta clase (que es AC7 de la HU #11360).
+            ["Notifications:Renting:SendEmailDevelopmentRecipientOverrideEnabled"] = "true",
+            ["Notifications:Renting:SendEmailDevelopmentRecipientEmail"] = "desvio@example.test",
+            ["Notifications:Renting:SendEmailDevelopmentRecipientUsername"] = "desvio",
         };
 
         return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
@@ -132,11 +139,23 @@ public sealed class RentingChannelDependencyInjectionTests : IDisposable
 
         try
         {
-            method!.Invoke(null, [services, configuration]);
+            // No-producción (Development): coherente con el desvío obligatorio (AC4) configurado
+            // arriba en BuildEnabledConfiguration.
+            method!.Invoke(null, [services, configuration, new FakeHostEnvironment(Environments.Development)]);
         }
         catch (TargetInvocationException ex) when (ex.InnerException is not null)
         {
             throw ex.InnerException;
         }
+    }
+
+    /// <summary>HU #11364 — doble mínimo de <see cref="IHostEnvironment"/> (ver mismo tipo en <c>RentingClientCertificateLoaderTests</c>).</summary>
+    private sealed class FakeHostEnvironment(string environmentName) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = environmentName;
+        public string ApplicationName { get; set; } = "Flit.Infrastructure.Tests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } =
+            new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 }

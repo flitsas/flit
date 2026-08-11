@@ -60,7 +60,8 @@ public sealed class RentingEmailApiSenderTests
     private static (RentingEmailApiSender Sender, MockHttpMessageHandler Handler) NewSender(
         Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder,
         RentingChannelOptions? options = null,
-        ILogger<RentingEmailApiSender>? logger = null)
+        ILogger<RentingEmailApiSender>? logger = null,
+        IRentingRecipientOverride? recipientOverride = null)
     {
         var handler = new MockHttpMessageHandler(responder);
         var tokenCache = Substitute.For<IRentingTokenCache>();
@@ -71,7 +72,7 @@ public sealed class RentingEmailApiSenderTests
             executor,
             new FakeHttpClientFactory(handler),
             Microsoft.Extensions.Options.Options.Create(options ?? NewOptions()),
-            new PassthroughRentingRecipientOverride(),
+            recipientOverride ?? new PassthroughRentingRecipientOverride(),
             logger ?? NullLogger<RentingEmailApiSender>.Instance);
 
         return (sender, handler);
@@ -285,6 +286,66 @@ public sealed class RentingEmailApiSenderTests
 
         result.Success.Should().BeFalse();
         result.Outcome.Should().Be(EmailSendOutcome.ProviderUnavailable);
+    }
+
+    // ── HU #11364 AC2 — el desvío sube hasta EmailSendResult.RecipientDiverted ─────
+
+    [Fact]
+    public async Task SendAsync_ConElDesvioActivo_MarcaRecipientDivertedEnElResultado()
+    {
+        // El resultado del envío es el ÚNICO vehículo que atraviesa el decorador de bitácora
+        // (NotificationDeliveryLoggingEmailSender, HU #11363) hacia admin.notification_delivery_logs.
+        var ct = TestContext.Current.CancellationToken;
+        var options = NewOptions();
+        options.SendEmailDevelopmentRecipientOverrideEnabled = true;
+        options.SendEmailDevelopmentRecipientEmail = "desvio@example.test";
+        options.SendEmailDevelopmentRecipientUsername = "Desvío QA";
+        var recipientOverride = new RentingRecipientOverride(
+            Microsoft.Extensions.Options.Options.Create(options), NullLogger<RentingRecipientOverride>.Instance);
+        var (sender, _) = NewSender(
+            (_, _) => Task.FromResult(Json(HttpStatusCode.OK, """{"statusCode":200,"isSuccessStatusCode":true}""")),
+            options,
+            recipientOverride: recipientOverride);
+
+        var result = await sender.SendAsync(OneRecipientRequest(), ct);
+
+        result.Success.Should().BeTrue();
+        result.RecipientDiverted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SendAsync_ConElDesvioApagado_NoMarcaRecipientDivertedEnElResultado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (sender, _) = NewSender((_, _) =>
+            Task.FromResult(Json(HttpStatusCode.OK, """{"statusCode":200,"isSuccessStatusCode":true}""")));
+
+        var result = await sender.SendAsync(OneRecipientRequest(), ct);
+
+        result.RecipientDiverted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SendAsync_ConElDesvioActivoYElProveedorRechazandoElEnvio_SigueMarcandoElDesvio()
+    {
+        // El desvío se marca sin importar si el intento terminó en éxito o en fallo: la petición SÍ
+        // salió hacia el destinatario de desvío, aunque el proveedor la haya rechazado.
+        var ct = TestContext.Current.CancellationToken;
+        var options = NewOptions();
+        options.SendEmailDevelopmentRecipientOverrideEnabled = true;
+        options.SendEmailDevelopmentRecipientEmail = "desvio@example.test";
+        options.SendEmailDevelopmentRecipientUsername = "Desvío QA";
+        var recipientOverride = new RentingRecipientOverride(
+            Microsoft.Extensions.Options.Options.Create(options), NullLogger<RentingRecipientOverride>.Instance);
+        var (sender, _) = NewSender(
+            (_, _) => Task.FromResult(Json(HttpStatusCode.BadRequest, """{"error":"rechazado"}""")),
+            options,
+            recipientOverride: recipientOverride);
+
+        var result = await sender.SendAsync(OneRecipientRequest(), ct);
+
+        result.Success.Should().BeFalse();
+        result.RecipientDiverted.Should().BeTrue();
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────

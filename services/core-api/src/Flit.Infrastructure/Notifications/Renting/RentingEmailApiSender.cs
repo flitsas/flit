@@ -39,9 +39,10 @@ internal sealed class RentingEmailApiSender(
 
     public async Task<EmailSendResult> SendAsync(RentingSendEmailRequest request, CancellationToken cancellationToken)
     {
-        // Punto de encaje de la HU #11364 (desvío de destinatario fuera de producción). Esta HU
-        // solo modela el hueco: por defecto (PassthroughRentingRecipientOverride) no cambia nada.
-        var effective = recipientOverride.Apply(request);
+        // HU #11364 — desvío de destinatario fuera de producción. Por defecto
+        // (PassthroughRentingRecipientOverride) no cambia nada y Diverted es siempre false.
+        var overrideResult = recipientOverride.Apply(request);
+        var effective = overrideResult.Request;
 
         string? tokenUsed = null;
         var outcome = await executor.ExecuteAsync(
@@ -52,10 +53,20 @@ internal sealed class RentingEmailApiSender(
             },
             cancellationToken).ConfigureAwait(false);
 
-        if (outcome.IsFailure)
-            return outcome.Failure!;
+        var result = outcome.IsFailure
+            ? outcome.Failure!
+            : await MapResponseAsyncWithDisposal(outcome.Response!, tokenUsed, cancellationToken).ConfigureAwait(false);
 
-        using var response = outcome.Response!;
+        // HU #11364 AC2 — el resultado del envío es el único vehículo que atraviesa el decorador de
+        // bitácora (HU #11363, NotificationDeliveryLoggingEmailSender): sin importar si el intento
+        // desviado terminó en éxito o en fallo, la marca de desvío tiene que viajar en él.
+        return overrideResult.Diverted ? result with { RecipientDiverted = true } : result;
+    }
+
+    private async Task<EmailSendResult> MapResponseAsyncWithDisposal(
+        HttpResponseMessage response, string? tokenUsed, CancellationToken cancellationToken)
+    {
+        using var _ = response;
         return await MapResponseAsync(response, tokenUsed, cancellationToken).ConfigureAwait(false);
     }
 

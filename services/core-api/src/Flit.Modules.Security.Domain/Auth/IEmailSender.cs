@@ -68,6 +68,20 @@ public enum EmailSendOutcome
 /// </summary>
 public sealed record EmailSendResult(bool Success, EmailSendOutcome Outcome, string Message)
 {
+    /// <summary>
+    /// HU #11364 AC2 — <c>true</c> cuando el ADAPTADOR DE CANAL (hoy, únicamente Renting fuera de
+    /// producción; ver <c>RentingRecipientOverride</c>) sustituyó el destinatario real por uno de
+    /// desvío ANTES de enviar. Propiedad no posicional, con default <c>false</c>, para que ningún
+    /// llamador existente (SMTP, consola, los `Failed(outcome)`/`Sent` de abajo) tenga que cambiar:
+    /// solo <c>RentingEmailApiSender</c> la enciende, con un <c>with</c> expression, sobre el
+    /// resultado que ya construyó. El decorador de bitácora (HU #11363,
+    /// <c>NotificationDeliveryLoggingEmailSender</c>) la lee para dejar la marca en
+    /// <c>admin.notification_delivery_logs.recipient_diverted</c> — la fila ya lleva el destinatario
+    /// REAL (lo toma de <see cref="EmailMessage"/>, antes de que el adaptador lo sustituya); sin
+    /// esta marca, esa fila afirmaría (falsamente) que el correo llegó a ese destinatario.
+    /// </summary>
+    public bool RecipientDiverted { get; init; }
+
     /// <summary>Único resultado de éxito posible.</summary>
     public static readonly EmailSendResult Sent = new(true, EmailSendOutcome.Sent, "Correo enviado.");
 

@@ -5,6 +5,7 @@ using Flit.Infrastructure.Notifications.Renting;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -242,7 +243,8 @@ public sealed class RentingClientCertificateLoaderTests : IDisposable
     /// Desenvuelve <see cref="TargetInvocationException"/> para que la aserción vea la excepción
     /// real que lanza <c>Require</c>.
     /// </summary>
-    private static void InvokeAddRentingChannel(IServiceCollection services, IConfiguration configuration)
+    private static void InvokeAddRentingChannel(
+        IServiceCollection services, IConfiguration configuration, IHostEnvironment? environment = null)
     {
         var method = typeof(InfrastructureExtensions).GetMethod(
             "AddRentingChannel", BindingFlags.NonPublic | BindingFlags.Static);
@@ -250,12 +252,25 @@ public sealed class RentingClientCertificateLoaderTests : IDisposable
 
         try
         {
-            method!.Invoke(null, [services, configuration]);
+            method!.Invoke(null, [services, configuration, environment ?? new FakeHostEnvironment(Environments.Development)]);
         }
         catch (TargetInvocationException ex) when (ex.InnerException is not null)
         {
             throw ex.InnerException;
         }
+    }
+
+    /// <summary>
+    /// HU #11364 — doble mínimo de <see cref="IHostEnvironment"/> para invocar
+    /// <c>AddRentingChannel</c> fuera del host real. Por defecto <c>Development</c> (no producción).
+    /// </summary>
+    private sealed class FakeHostEnvironment(string environmentName) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = environmentName;
+        public string ApplicationName { get; set; } = "Flit.Infrastructure.Tests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } =
+            new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 
     private sealed class CapturingLogger : ILogger

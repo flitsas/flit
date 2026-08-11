@@ -111,4 +111,14 @@ public sealed class RentingChannelOptions
 
     /// <summary>Ver <see cref="SendEmailDevelopmentRecipientEmail"/>: consumo en la HU #11364.</summary>
     public string SendEmailDevelopmentRecipientUsername { get; set; } = string.Empty;
+
+    /// <summary>
+    /// HU #11364 — interruptor AFIRMATIVO y PROPIO del desvío de destinatario. Es la ÚNICA señal
+    /// que decide si un envío se desvía (AC5): el nombre del ambiente (<c>IHostEnvironment</c>)
+    /// NUNCA se consulta para tomar esa decisión — solo participa, en el arranque
+    /// (<c>InfrastructureExtensions.AddRentingChannel</c>), para exigir que este interruptor esté
+    /// en el valor correcto (AC3: prohibido en producción; AC4: obligatorio fuera de producción con
+    /// el canal habilitado). Variable: <c>RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED</c>.
+    /// </summary>
+    public bool SendEmailDevelopmentRecipientOverrideEnabled { get; set; }
 }
