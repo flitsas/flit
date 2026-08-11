@@ -226,12 +226,17 @@ services:
       # OPT-IN: con RENTING_API_ENABLED distinto de "true" no se exige ninguna de las demás
       # ni el certificado, y el servicio arranca igual que hoy.
       RENTING_API_ENABLED: ${RENTING_API_ENABLED:-false}
-      # NO se interpola: es la ruta DENTRO del contenedor, donde el volumen de abajo monta el
-      # .pfx. La variable del mismo nombre en el .env del VPS es la ruta en el HOST y solo la
-      # usa la sección volumes. Si alguien "corrige" esta línea a
-      # ${RENTING_API_PFX_CERTIFICATE_PATH} para seguir el patrón del resto del fichero, la
-      # app buscará la ruta del host dentro del contenedor y el arranque falla.
-      RENTING_API_PFX_CERTIFICATE_PATH: /run/secrets/renting-client.pfx
+      # Ruta ABSOLUTA del .pfx. Se interpola con EL MISMO VALOR aquí y en la sección volumes a
+      # propósito: el archivo se monta dentro del contenedor en la misma ruta que tiene en el
+      # HOST. Así este nombre significa UNA sola cosa y `ls -l <ruta>` en el VPS comprueba
+      # exactamente el archivo que la app va a abrir (antes eran dos rutas distintas con el
+      # mismo nombre de variable, y el error de "no se encontró el certificado" no daba forma
+      # de comprobar cuál de las dos estaba mal).
+      # TRAMPA de Docker: si el archivo NO existe en el host, el bind mount no falla — Docker
+      # crea un DIRECTORIO vacío en esa ruta y lo monta. La app reporta que no encuentra el
+      # certificado aunque `ls` muestre algo ahí. Hay que borrar ese directorio (rmdir) ANTES
+      # de dejar el .pfx y recrear el contenedor.
+      RENTING_API_PFX_CERTIFICATE_PATH: ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting-client.pfx}
       RENTING_API_PASSPHRASE: ${RENTING_API_PASSPHRASE:-}
       RENTING_API_BASE_URL: ${RENTING_API_BASE_URL:-}
       RENTING_API_KEY_NAME: ${RENTING_API_KEY_NAME:-Ocp-Apim-Subscription-Key}
@@ -265,13 +270,12 @@ services:
       RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME: "${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME:-Equipo de desarrollo FLIT}"
     volumes:
       # Certificado cliente mTLS del canal API Renting. Solo lectura; NUNCA dentro de la
-      # imagen ni en el repositorio. Se carga y valida AL ARRANCAR (no en el primer envío):
-      # si falta el archivo, si la passphrase no abre o si el Subject no coincide, el
-      # servicio no levanta. Vence el 2027-03-22.
-      # A la IZQUIERDA la ruta en el HOST (interpolada desde el .env del VPS); a la DERECHA
-      # la ruta dentro del contenedor, que es la que lee la app — ver el comentario de
-      # RENTING_API_PFX_CERTIFICATE_PATH arriba.
-      - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting-client.pfx}:/run/secrets/renting-client.pfx:ro
+      # imagen ni en el repositorio. Vence el 2027-03-22.
+      # MISMA RUTA a ambos lados (host:contenedor) — ver RENTING_API_PFX_CERTIFICATE_PATH
+      # arriba. El certificado se abre en el PRIMER ENVÍO del canal, no al arrancar: un .pfx
+      # ausente o ilegible NO impide que el servicio levante, se manifiesta como un envío
+      # fallido. No confíes en que un arranque limpio signifique canal operativo.
+      - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting-client.pfx}:${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting-client.pfx}:ro
     ports:
       - "127.0.0.1:${CORE_API_PORT:-4003}:${CORE_API_PORT:-4003}"
     healthcheck:

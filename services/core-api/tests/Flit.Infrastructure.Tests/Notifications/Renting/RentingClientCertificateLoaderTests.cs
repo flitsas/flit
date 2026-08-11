@@ -89,6 +89,35 @@ public sealed class RentingClientCertificateLoaderTests : IDisposable
     }
 
     [Fact]
+    public void Load_CuandoLaRutaEsUnDirectorio_LoDiceEnVezDeReportarArchivoNoEncontrado()
+    {
+        // Reproduce el fallo real de DEV (2026-08-11): con el .pfx ausente en el host, el bind
+        // mount de Docker monta un DIRECTORIO vacío en su lugar. `File.Exists` devuelve false, así
+        // que sin este caso el operador lee "no se encontró el archivo", hace `ls`, ve algo en esa
+        // ruta y se queda sin pista de qué corregir.
+        var directoryPath = Path.Combine(Path.GetTempPath(), $"renting-dir-{Guid.NewGuid():N}.pfx");
+        Directory.CreateDirectory(directoryPath);
+        const string secretPassphrase = "passphrase-de-prueba-no-real";
+        var options = NewOptions(directoryPath, secretPassphrase, loginSubject: "CN=irrelevante-para-este-caso");
+        var logger = new CapturingLogger();
+
+        try
+        {
+            var act = () => RentingClientCertificateLoader.Load(options, logger);
+
+            var exception = act.Should().Throw<InvalidOperationException>().Which;
+            exception.Message.Should().Contain("DIRECTORIO", "el operador tiene que distinguir este caso del archivo ausente");
+            exception.Message.Should().Contain("RENTING_API_PFX_CERTIFICATE_PATH");
+            exception.Message.Should().Contain(directoryPath, "sin la ruta concreta no se puede comprobar cuál es la mala");
+            exception.Message.Should().NotContain(secretPassphrase, "el mensaje nunca debe filtrar la passphrase");
+        }
+        finally
+        {
+            try { Directory.Delete(directoryPath); } catch (IOException) { /* best-effort cleanup */ }
+        }
+    }
+
+    [Fact]
     public void Load_ConPassphraseQueNoAbreElArchivo_FallaNombrandoLaVariableSinFiltrarLaPassphrase()
     {
         const string realPassphrase = "passphrase-correcta-de-prueba";
