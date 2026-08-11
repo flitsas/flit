@@ -60,5 +60,8 @@ public static class AuditVocabulary
 
         // HU #11320 — documentos personalizados por compañía (Feature #11309).
         public const string Companies = "companies";
+
+        // HU #11366 — buzón de pruebas de notificaciones (Feature #11349).
+        public const string Notifications = "notifications";
     }
 }

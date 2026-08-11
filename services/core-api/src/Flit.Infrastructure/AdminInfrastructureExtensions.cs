@@ -127,6 +127,11 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandateCustomTemplateBlobReader,
             Flit.Infrastructure.Storage.MandateCustomTemplateBlobReader>();
 
+        // HU #11366 (Feature #11349) — buzón de pruebas de notificaciones: lectura/actualización de
+        // la fila única admin.notification_test_settings sembrada por la HU #11365.
+        services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestMailboxAdminService,
+            Flit.Infrastructure.Notifications.Admin.NotificationTestMailboxAdminService>();
+
         // Convenio comercial compañía↔organismo + firma física del mandatario: deciden si el contrato de
         // mandato lleva bloque de firma del mandatario y de qué forma.
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandatoFirmaPolicy,
