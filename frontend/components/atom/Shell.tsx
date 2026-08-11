@@ -309,6 +309,13 @@ export function Shell({
             active: pathname.startsWith("/admin/plataforma/mandatos"),
             onClick: () => window.location.assign("/admin/plataforma/mandatos"),
           },
+          {
+            key: "admin-notificaciones",
+            label: "Notificaciones",
+            icon: Bell,
+            active: pathname.startsWith("/admin/plataforma/notificaciones"),
+            onClick: () => window.location.assign("/admin/plataforma/notificaciones"),
+          },
         ],
       },
     );
