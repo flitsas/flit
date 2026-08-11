@@ -216,8 +216,7 @@ internal sealed class AnalyticsSchedulerProcessor(
         var topProducers = await analytics.GetTopProducersAsync(
             schedule.TenantId, from, to, TopProducersLimit, ct);
 
-        var subject = $"[FLIT] {schedule.Name} — {periodLabel}";
-        var html = SchedulerEmailComposer.BuildScheduledReportHtml(
+        var (subject, html) = SchedulerEmailComposer.BuildScheduledReport(
             schedule.Name, schedule.ReportType, periodLabel, overview, topProducers);
 
         foreach (var recipient in schedule.Recipients)
@@ -376,8 +375,7 @@ internal sealed class AnalyticsSchedulerProcessor(
         DateTimeOffset nowUtc, CancellationToken ct)
     {
         var emailSender = services.GetRequiredService<IEmailSender>();
-        var subject = $"[FLIT] Alerta: {rule.Name}";
-        var html = SchedulerEmailComposer.BuildAlertHtml(
+        var (subject, html) = SchedulerEmailComposer.BuildAlert(
             rule.Name, rule.Metric, rule.Operator, rule.Threshold, alertEvent.MetricValue,
             rule.WindowMinutes, nowUtc, BogotaTimeZone);
 
