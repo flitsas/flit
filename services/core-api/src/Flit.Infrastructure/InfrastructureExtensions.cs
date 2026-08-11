@@ -282,6 +282,11 @@ public static class InfrastructureExtensions
         else
             services.AddScoped<SmtpEmailSender>();
 
+        // HU #11368 (Feature #11349, AC8) — mismo booleano que decide el transporte, publicado como
+        // Singleton para que el banco de pruebas de notificaciones pueda declarar "esto fue consola,
+        // no salió correo real" sin inspeccionar el árbol de DI (ver EmailTransportDescriptor).
+        services.AddSingleton(new EmailTransportDescriptor(useConsoleEmailSender));
+
         // HU #11363 (Feature #11348) — decorador que envuelve el sender real y escribe la bitácora
         // append-only admin.notification_delivery_logs SIN tocar los 6 puntos de llamada de
         // IEmailSender: mide duración con Stopwatch, delega el envío y registra el intento en un

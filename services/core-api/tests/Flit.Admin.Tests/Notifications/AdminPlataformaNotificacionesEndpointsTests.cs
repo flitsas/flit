@@ -24,7 +24,15 @@ namespace Flit.Admin.Tests.Notifications;
 /// no hay <c>tenant_id</c> que aísle un fixture por test, así que el constructor la resetea a
 /// "sin configurar" y el <see cref="Dispose"/> restaura el valor previo — igual estrategia de
 /// housekeeping best-effort que usan los tests que comparten la BD de desarrollo.
+/// <para>
+/// <see cref="NotificationTestSettingsSingletonCollection"/> — esta clase y
+/// <c>AdminPlataformaNotificacionesEnviosEndpointTests</c> (HU #11368) mutan la MISMA fila
+/// singleton; sin una colección compartida, xUnit las corre en paralelo (son
+/// <see cref="WebApplicationFactory{TEntryPoint}"/> distintas) y una sobreescribe a la otra a
+/// mitad de test.
+/// </para>
 /// </remarks>
+[Collection(NotificationTestSettingsSingletonCollection.Name)]
 public sealed class AdminPlataformaNotificacionesEndpointsTests
     : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {

@@ -138,6 +138,12 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationChannelsAdminService,
             Flit.Infrastructure.Notifications.Admin.NotificationChannelsAdminService>();
 
+        // HU #11368 (Feature #11349) — envío de prueba con límite de frecuencia persistido. Usa el
+        // IEmailSender del proceso (registrado en AddPostgresInfrastructure, ya decorado con
+        // bitácora) y EmailTransportDescriptor para declarar si el transporte fue de consola (AC8).
+        services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestSendAdminService,
+            Flit.Infrastructure.Notifications.Admin.NotificationTestSendAdminService>();
+
         // Convenio comercial compañía↔organismo + firma física del mandatario: deciden si el contrato de
         // mandato lleva bloque de firma del mandatario y de qué forma.
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandatoFirmaPolicy,
