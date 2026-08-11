@@ -1,0 +1,6 @@
+<p>Hola Nombre De Prueba,</p>
+<p>Has sido invitado a unirte a FLIT.</p>
+<p>Haz clic en el siguiente enlace para crear tu contraseña y activar tu cuenta:</p>
+<p><a href="https://app.flit.test/invite/activate?token=GOLDEN-TOKEN-0000">Activar mi cuenta</a></p>
+<p>Si no esperabas esta invitación, puedes ignorar este mensaje.</p>
+<p>— Equipo FLIT</p>

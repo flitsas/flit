@@ -1,0 +1,5 @@
+<p>Hola Nombre De Prueba,</p>
+<p>Un administrador restableció tu contraseña en FLIT. Tu contraseña temporal es:</p>
+<p><strong>GoldenTemp0000!</strong></p>
+<p>Por seguridad, deberás definir una nueva contraseña la próxima vez que inicies sesión.</p>
+<p>— Equipo FLIT</p>

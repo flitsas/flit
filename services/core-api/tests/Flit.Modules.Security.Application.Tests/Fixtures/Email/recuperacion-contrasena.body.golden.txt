@@ -1,0 +1,7 @@
+<p>Hola Nombre De Prueba,</p>
+<p>Recibimos una solicitud para restablecer tu contraseña en FLIT.
+Haz clic en el siguiente enlace para crear una nueva contraseña:</p>
+<p><a href="https://app.flit.test/password/reset?token=GOLDEN-TOKEN-0000">Restablecer mi contraseña</a></p>
+<p>El enlace caduca en 30 minutos. Si no solicitaste este cambio,
+puedes ignorar este mensaje; tu contraseña seguirá siendo la misma.</p>
+<p>— Equipo FLIT</p>
