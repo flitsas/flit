@@ -6,9 +6,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace Flit.Api.Endpoints;
 
 /// <summary>
-/// SuperAdmin — Plataforma → Notificaciones (HU #11366, Feature #11349). Alcance exacto de esta
-/// HU: grupo de rutas + buzón de pruebas (leer/actualizar). El listado de canales es la HU #11367
-/// y el envío de prueba la HU #11368 — ninguno de los dos vive aquí.
+/// SuperAdmin — Plataforma → Notificaciones (HU #11366/#11367, Feature #11349). Alcance: grupo de
+/// rutas + buzón de pruebas (leer/actualizar) + listado de canales con remitente resuelto. El
+/// envío de prueba es la HU #11368 — no vive aquí.
 /// </summary>
 /// <remarks>
 /// AC5 — desviación deliberada respecto al hermano de Mandatos: ESTE módulo nunca escribe
@@ -35,6 +35,10 @@ public static class AdminPlataformaNotificacionesEndpoints
             .Produces<NotificationTestMailboxResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status409Conflict);
+
+        group.MapGet("/canales", GetChannelsAsync)
+            .WithName("AdminPlataformaNotificacionesGetCanales")
+            .Produces<NotificationChannelsResponse>(StatusCodes.Status200OK);
 
         return app;
     }
@@ -71,6 +75,18 @@ public static class AdminPlataformaNotificacionesEndpoints
         };
     }
 
+    private static async Task<IResult> GetChannelsAsync(
+        [FromServices] INotificationChannelsAdminService service,
+        CancellationToken ct)
+    {
+        var channels = await service.GetAsync(ct).ConfigureAwait(false);
+        return Results.Ok(new NotificationChannelsResponse(
+            [.. channels.Select(ToResponse)]));
+    }
+
+    private static NotificationChannelResponseItem ToResponse(NotificationChannelView view) =>
+        new(view.Channel, view.Label, view.IsDefault, view.IsConfigured, view.SenderEmail, view.SenderName);
+
     private static NotificationTestMailboxResponse ToResponse(NotificationTestMailboxView view) =>
         new(view.IsConfigured, view.TestRecipientEmail, view.LastTestSentAt, view.RowVersion);
 
@@ -84,6 +100,18 @@ public static class AdminPlataformaNotificacionesEndpoints
 
 /// <summary>Cuerpo de <c>PUT /api/v1/admin/plataforma/notificaciones/buzon-pruebas</c>.</summary>
 public sealed record UpdateNotificationTestMailboxBodyRequest(string? Email, long? RowVersion);
+
+/// <summary>Respuesta de <c>GET /api/v1/admin/plataforma/notificaciones/canales</c> (HU #11367).</summary>
+public sealed record NotificationChannelsResponse(IReadOnlyList<NotificationChannelResponseItem> Channels);
+
+/// <summary>Un canal de notificación con su remitente resuelto por configuración (HU #11367).</summary>
+public sealed record NotificationChannelResponseItem(
+    string Channel,
+    string Label,
+    bool IsDefault,
+    bool IsConfigured,
+    string? SenderEmail,
+    string? SenderName);
 
 /// <summary>Respuesta del buzón de pruebas (AC2/AC3).</summary>
 public sealed record NotificationTestMailboxResponse(

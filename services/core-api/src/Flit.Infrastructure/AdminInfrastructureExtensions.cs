@@ -132,6 +132,12 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestMailboxAdminService,
             Flit.Infrastructure.Notifications.Admin.NotificationTestMailboxAdminService>();
 
+        // HU #11367 (Feature #11349) — canales de notificación con su remitente resuelto por
+        // configuración (EmailSettings / RentingChannelOptions). Sin adaptador de envío: lee, no
+        // construye — mantiene el Feature #11349 independiente del #11348.
+        services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationChannelsAdminService,
+            Flit.Infrastructure.Notifications.Admin.NotificationChannelsAdminService>();
+
         // Convenio comercial compañía↔organismo + firma física del mandatario: deciden si el contrato de
         // mandato lleva bloque de firma del mandatario y de qué forma.
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandatoFirmaPolicy,
