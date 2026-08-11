@@ -4,7 +4,6 @@ using Flit.Modules.Security.Domain.UserManagement;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using NSubstitute.ExceptionExtensions;
 using Xunit;
 
 namespace Flit.Modules.Security.Application.Tests.Auth;
@@ -38,6 +37,10 @@ public sealed class CreateInvitationHandlerTests
         // HU #10623 AC4 sobreescriben este stub explícitamente.
         _userManagementRepo.FindByEmailIncludingDeletedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((ExistingUserByEmail?)null);
+        // HU #11358 — por defecto el sender simula éxito (antes lo hacía implícitamente un Task
+        // no configurado).
+        _email.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
     }
 
     // AC1 — email no registrado, un rol válido → crea invitación y envía email
@@ -102,13 +105,14 @@ public sealed class CreateInvitationHandlerTests
             Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
     }
 
-    // AC2 HU #10176 — fallo proveedor email → invitación creada pending, EmailSent=false, sin excepción
+    // HU #11358 AC2/AC3 — fallo tipado del proveedor de email (ya no una excepción) → invitación
+    // creada pending, EmailSent=false, sin excepción propagada.
     [Fact]
-    public async Task HandleAsync_EmailSenderThrows_InvitationRemainingPendingAndEmailSentFalse()
+    public async Task HandleAsync_EmailSenderFails_InvitationRemainingPendingAndEmailSentFalse()
     {
         _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(false);
         _email.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("SMTP host unreachable"));
+            .Returns(Task.FromResult(EmailSendResult.Failed(EmailSendOutcome.ProviderUnavailable)));
 
         var result = await _handler.HandleAsync(
             new CreateInvitationCommand(TenantId, Email, FullName, [RoleId], InvitedBy),
@@ -117,6 +121,20 @@ public sealed class CreateInvitationHandlerTests
         result.InvitationId.Should().Be(InvitationId);
         result.EmailSent.Should().BeFalse();
         await _repo.Received(1).CreateAsync(Arg.Any<UserInvitationData>(), Arg.Any<CancellationToken>());
+    }
+
+    // HU #11358 AC1 — el tenant de la invitación viaja explícito en la solicitud de envío.
+    [Fact]
+    public async Task HandleAsync_SendsMessageWithCommandTenantId()
+    {
+        _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(false);
+
+        await _handler.HandleAsync(
+            new CreateInvitationCommand(TenantId, Email, FullName, [RoleId], InvitedBy),
+            CancellationToken.None);
+
+        await _email.Received(1).SendAsync(
+            Arg.Is<EmailMessage>(m => m.TenantId == TenantId), Arg.Any<CancellationToken>());
     }
 
     // AC2 — invitación pending para mismo email+tenant → 409 INVITATION_ALREADY_PENDING

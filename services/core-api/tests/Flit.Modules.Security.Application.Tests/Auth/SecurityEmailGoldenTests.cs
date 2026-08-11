@@ -53,6 +53,8 @@ public sealed class SecurityEmailGoldenTests
         var tenantId = Guid.NewGuid();
         var roleId = Guid.NewGuid();
 
+        email.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
         tokenGen.Generate().Returns(new GeneratedToken(RawToken, "hash-golden"));
         repo.CreateAsync(Arg.Any<UserInvitationData>(), Arg.Any<CancellationToken>()).Returns(Guid.NewGuid());
         repo.RoleExistsInTenantAsync(tenantId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
@@ -83,8 +85,10 @@ public sealed class SecurityEmailGoldenTests
         var tokenGen = Substitute.For<ISecureTokenGenerator>();
         var email = Substitute.For<IEmailSender>();
 
+        email.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
         accounts.FindActiveByEmailAsync("destinatario@flit.test", Arg.Any<CancellationToken>())
-            .Returns(new PasswordRecoveryUser(Guid.NewGuid(), "destinatario@flit.test", "Nombre De Prueba"));
+            .Returns(new PasswordRecoveryUser(Guid.NewGuid(), "destinatario@flit.test", "Nombre De Prueba", Guid.NewGuid()));
         tokenGen.Generate().Returns(new GeneratedToken(RawToken, "hash-golden"));
 
         // Fijado en el test: el golden protege la PLANTILLA, no el valor configurado del TTL.
@@ -95,7 +99,8 @@ public sealed class SecurityEmailGoldenTests
             email,
             new PasswordRecoveryOptions { ResetUrlBase = ResetUrlBase, TokenLifetimeMinutes = 30 },
             Substitute.For<IAdminAuditWriter>(),
-            NullAuditContextAccessor.Instance);
+            NullAuditContextAccessor.Instance,
+            NullLogger<ForgotPasswordHandler>.Instance);
 
         await handler.HandleAsync(new ForgotPasswordCommand("destinatario@flit.test"), Ct);
 
@@ -110,6 +115,8 @@ public sealed class SecurityEmailGoldenTests
         var hasher = Substitute.For<IPasswordHasher>();
         var email = Substitute.For<IEmailSender>();
 
+        email.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
         accounts.FindActiveTargetByEmailAsync("destinatario@flit.test", Arg.Any<CancellationToken>())
             .Returns(new AdminTargetUser(Guid.NewGuid(), "destinatario@flit.test", "Nombre De Prueba", Guid.NewGuid()));
         temporaryPassword.Generate().Returns(SyntheticPassword);
@@ -121,7 +128,8 @@ public sealed class SecurityEmailGoldenTests
             hasher,
             email,
             Substitute.For<IAdminAuditWriter>(),
-            NullAuditContextAccessor.Instance);
+            NullAuditContextAccessor.Instance,
+            NullLogger<AdminResetPasswordHandler>.Instance);
 
         await handler.HandleAsync(
             new AdminResetPasswordCommand(Guid.NewGuid(), "SuperAdmin", [], "destinatario@flit.test"),

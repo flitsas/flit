@@ -68,9 +68,17 @@ public sealed record PendingInvitationSummary(
     string FullName,
     DateTimeOffset CreatedAt);
 
-/// <summary>HU #10625: datos mínimos para decidir y ejecutar el reenvío de una invitación.</summary>
+/// <summary>
+/// HU #10625: datos mínimos para decidir y ejecutar el reenvío de una invitación.
+/// </summary>
+/// <param name="TenantId">
+/// HU #11358 — tenant PROPIETARIO de la invitación (no el <c>ScopeTenantId</c> del caller, que
+/// puede ser null para SuperAdmin): una invitación siempre pertenece a un tenant, así que este
+/// campo es el que viaja como <see cref="EmailMessage.TenantId"/> al reenviar.
+/// </param>
 public sealed record InvitationForResend(
     Guid InvitationId,
+    Guid TenantId,
     string Email,
     string FullName,
     string Status,

@@ -58,27 +58,22 @@ public sealed partial class CreateInvitationHandler(
 
         var link = InvitationEmailTemplate.BuildActivateLink(options.ActivateUrlBase, token.RawToken);
         var composed = InvitationEmailTemplate.Compose(command.FullName, link);
-        var message = new EmailMessage(email, email, composed.Subject, composed.HtmlBody);
+        var message = new EmailMessage(command.TenantId, email, email, composed.Subject, composed.HtmlBody);
 
         LogActivationLinkDev(logger, link);
 
-        var emailSent = true;
-        try
-        {
-            await emailSender.SendAsync(message, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogEmailFailed(logger, invitationId, ex);
-            emailSent = false;
-        }
+        // HU #11358 AC2/AC3 — el puerto ya no lanza por un fallo de transporte: el resultado
+        // tipado reemplaza el try/catch.
+        var sendResult = await emailSender.SendAsync(message, cancellationToken);
+        if (!sendResult.Success)
+            LogEmailFailed(logger, invitationId, sendResult.Outcome);
 
-        return new InvitationCreatedResult(invitationId, email, emailSent);
+        return new InvitationCreatedResult(invitationId, email, sendResult.Success);
     }
 
     [LoggerMessage(Level = LogLevel.Warning,
-        Message = "[retryable] Activation email failed for invitation {InvitationId}. Invitation remains pending.")]
-    private static partial void LogEmailFailed(ILogger logger, Guid invitationId, Exception ex);
+        Message = "[retryable] Activation email failed for invitation {InvitationId}. Invitation remains pending. Cause: {Outcome}.")]
+    private static partial void LogEmailFailed(ILogger logger, Guid invitationId, EmailSendOutcome outcome);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "[DEV] Activation link (use this to test locally): {Link}")]

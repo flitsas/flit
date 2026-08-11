@@ -269,10 +269,13 @@ public static class InfrastructureExtensions
         services.AddSingleton(emailSettings);
 
         // SMTP real, o consola en Development cuando no hay host configurado.
+        // HU #11358 AC5 — Scoped (no Singleton): todos los AddHttpClient<T> del repo son
+        // Transient, así que un adaptador HTTP debajo de IEmailSender (HU #11361) sería una
+        // dependencia cautiva si el puerto siguiera siendo instancia única.
         if (environment.IsDevelopment() && string.IsNullOrWhiteSpace(emailSettings.Host))
-            services.AddSingleton<IEmailSender, ConsoleEmailSender>();
+            services.AddScoped<IEmailSender, ConsoleEmailSender>();
         else
-            services.AddSingleton<IEmailSender, SmtpEmailSender>();
+            services.AddScoped<IEmailSender, SmtpEmailSender>();
 
         services.AddSecurityApplication();
 

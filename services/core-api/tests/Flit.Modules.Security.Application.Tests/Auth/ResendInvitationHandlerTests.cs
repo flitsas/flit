@@ -4,7 +4,6 @@ using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using NSubstitute.ExceptionExtensions;
 using Xunit;
 
 namespace Flit.Modules.Security.Application.Tests.Auth;
@@ -32,6 +31,10 @@ public sealed class ResendInvitationHandlerTests
     {
         _handler = new ResendInvitationHandler(_repo, _tokenGen, _email, _options, _logger);
         _tokenGen.Generate().Returns(new GeneratedToken("raw-token-new", "hash-new"));
+        // HU #11358 — por defecto el sender simula éxito (antes lo hacía implícitamente un Task
+        // no configurado).
+        _email.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
     }
 
     // AC1 — invitación pendiente sin envío previo → regenera token, reenvía correo
@@ -39,7 +42,7 @@ public sealed class ResendInvitationHandlerTests
     public async Task HandleAsync_PendingInvitationNeverSent_RegeneratesTokenAndSendsEmail()
     {
         _repo.FindForResendAsync(InvitationId, TenantId, Arg.Any<CancellationToken>())
-            .Returns(new InvitationForResend(InvitationId, Email, FullName, "pending", null));
+            .Returns(new InvitationForResend(InvitationId, TenantId, Email, FullName, "pending", null));
 
         var result = await _handler.HandleAsync(
             new ResendInvitationCommand(InvitationId, TenantId, ResentBy),
@@ -62,7 +65,7 @@ public sealed class ResendInvitationHandlerTests
     {
         _repo.FindForResendAsync(InvitationId, TenantId, Arg.Any<CancellationToken>())
             .Returns(new InvitationForResend(
-                InvitationId, Email, FullName, "pending", DateTimeOffset.UtcNow.AddMinutes(-10)));
+                InvitationId, TenantId, Email, FullName, "pending", DateTimeOffset.UtcNow.AddMinutes(-10)));
 
         var result = await _handler.HandleAsync(
             new ResendInvitationCommand(InvitationId, TenantId, ResentBy),
@@ -79,7 +82,7 @@ public sealed class ResendInvitationHandlerTests
     {
         _repo.FindForResendAsync(InvitationId, TenantId, Arg.Any<CancellationToken>())
             .Returns(new InvitationForResend(
-                InvitationId, Email, FullName, "pending", DateTimeOffset.UtcNow.AddSeconds(-30)));
+                InvitationId, TenantId, Email, FullName, "pending", DateTimeOffset.UtcNow.AddSeconds(-30)));
 
         var exception = await _handler
             .Invoking(h => h.HandleAsync(
@@ -100,7 +103,7 @@ public sealed class ResendInvitationHandlerTests
     public async Task HandleAsync_InvitationAccepted_ThrowsInvitationNotPending()
     {
         _repo.FindForResendAsync(InvitationId, TenantId, Arg.Any<CancellationToken>())
-            .Returns(new InvitationForResend(InvitationId, Email, FullName, "accepted", null));
+            .Returns(new InvitationForResend(InvitationId, TenantId, Email, FullName, "accepted", null));
 
         await _handler
             .Invoking(h => h.HandleAsync(
@@ -118,7 +121,7 @@ public sealed class ResendInvitationHandlerTests
     public async Task HandleAsync_InvitationCancelled_ThrowsInvitationNotPending()
     {
         _repo.FindForResendAsync(InvitationId, TenantId, Arg.Any<CancellationToken>())
-            .Returns(new InvitationForResend(InvitationId, Email, FullName, "cancelled", null));
+            .Returns(new InvitationForResend(InvitationId, TenantId, Email, FullName, "cancelled", null));
 
         await _handler
             .Invoking(h => h.HandleAsync(
@@ -148,7 +151,7 @@ public sealed class ResendInvitationHandlerTests
     public async Task HandleAsync_SuperAdminScope_QueriesRepositoryWithNullTenant()
     {
         _repo.FindForResendAsync(InvitationId, null, Arg.Any<CancellationToken>())
-            .Returns(new InvitationForResend(InvitationId, Email, FullName, "pending", null));
+            .Returns(new InvitationForResend(InvitationId, TenantId, Email, FullName, "pending", null));
 
         var result = await _handler.HandleAsync(
             new ResendInvitationCommand(InvitationId, null, ResentBy),
@@ -158,14 +161,15 @@ public sealed class ResendInvitationHandlerTests
         await _repo.Received(1).FindForResendAsync(InvitationId, null, Arg.Any<CancellationToken>());
     }
 
-    // Fallo del proveedor de email → invitación queda con el token ya regenerado, EmailSent=false
+    // HU #11358 AC2/AC3 — fallo tipado del proveedor de email (ya no una excepción) → invitación
+    // queda con el token ya regenerado, EmailSent=false, sin excepción propagada.
     [Fact]
-    public async Task HandleAsync_EmailSenderThrows_TokenRegeneratedButEmailSentFalse()
+    public async Task HandleAsync_EmailSenderFails_TokenRegeneratedButEmailSentFalse()
     {
         _repo.FindForResendAsync(InvitationId, TenantId, Arg.Any<CancellationToken>())
-            .Returns(new InvitationForResend(InvitationId, Email, FullName, "pending", null));
+            .Returns(new InvitationForResend(InvitationId, TenantId, Email, FullName, "pending", null));
         _email.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("SMTP host unreachable"));
+            .Returns(Task.FromResult(EmailSendResult.Failed(EmailSendOutcome.ProviderUnavailable)));
 
         var result = await _handler.HandleAsync(
             new ResendInvitationCommand(InvitationId, TenantId, ResentBy),
@@ -174,5 +178,21 @@ public sealed class ResendInvitationHandlerTests
         result.EmailSent.Should().BeFalse();
         await _repo.Received(1).UpdateResendAsync(
             InvitationId, "hash-new", Arg.Any<DateTimeOffset>(), ResentBy, Arg.Any<CancellationToken>());
+    }
+
+    // HU #11358 AC1 — el tenant PROPIETARIO de la invitación (no el ScopeTenantId del caller)
+    // viaja explícito en la solicitud de envío.
+    [Fact]
+    public async Task HandleAsync_SendsMessageWithInvitationTenantId()
+    {
+        _repo.FindForResendAsync(InvitationId, TenantId, Arg.Any<CancellationToken>())
+            .Returns(new InvitationForResend(InvitationId, TenantId, Email, FullName, "pending", null));
+
+        await _handler.HandleAsync(
+            new ResendInvitationCommand(InvitationId, TenantId, ResentBy),
+            CancellationToken.None);
+
+        await _email.Received(1).SendAsync(
+            Arg.Is<EmailMessage>(m => m.TenantId == TenantId), Arg.Any<CancellationToken>());
     }
 }

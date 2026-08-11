@@ -99,7 +99,7 @@ public sealed class AnalyticsEmailGoldenTests
     {
         var sender = Substitute.For<IEmailSender>();
         sender.SendAsync(Arg.Do<EmailMessage>(sent.Add), Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult(EmailSendResult.Sent));
         return sender;
     }
 

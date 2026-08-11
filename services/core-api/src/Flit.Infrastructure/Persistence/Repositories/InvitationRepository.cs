@@ -108,7 +108,7 @@ public sealed class InvitationRepository(FlitDbContext db) : IInvitationReposito
             query = query.Where(x => x.TenantId == tenantId);
 
         return await query
-            .Select(x => new InvitationForResend(x.Id, x.Email, x.FullName, x.Status, x.LastSentAt))
+            .Select(x => new InvitationForResend(x.Id, x.TenantId, x.Email, x.FullName, x.Status, x.LastSentAt))
             .FirstOrDefaultAsync(cancellationToken);
     }
 

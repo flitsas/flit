@@ -223,7 +223,12 @@ internal sealed class AnalyticsSchedulerProcessor(
         {
             try
             {
-                await emailSender.SendAsync(new EmailMessage(recipient, recipient, subject, html), ct);
+                // HU #11358 AC2/AC3 — el puerto ya no lanza por un fallo de transporte conocido;
+                // el resultado tipado reemplaza la interpretación "no lanzó == se envió".
+                var result = await emailSender.SendAsync(
+                    new EmailMessage(schedule.TenantId, recipient, recipient, subject, html), ct);
+                if (!result.Success)
+                    SchedulerLog.ScheduleEmailFailed(logger, schedule.Id, recipient, result.Outcome);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -384,8 +389,14 @@ internal sealed class AnalyticsSchedulerProcessor(
         {
             try
             {
-                await emailSender.SendAsync(new EmailMessage(recipient, recipient, subject, html), ct);
-                anySent = true;
+                // HU #11358 AC2/AC3 — igual que en el informe programado: el resultado tipado
+                // decide anySent, no la ausencia de excepción.
+                var result = await emailSender.SendAsync(
+                    new EmailMessage(rule.TenantId, recipient, recipient, subject, html), ct);
+                if (result.Success)
+                    anySent = true;
+                else
+                    SchedulerLog.AlertEmailFailed(logger, rule.Id, recipient, result.Outcome);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -461,6 +472,10 @@ internal static partial class SchedulerLog
         Message = "Scheduler Reportes2: fallo el envío del informe {ScheduleId} al destinatario {Recipient}.")]
     public static partial void ScheduleEmailError(ILogger logger, Guid scheduleId, string recipient, Exception ex);
 
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Scheduler Reportes2: el informe {ScheduleId} no se pudo enviar al destinatario {Recipient}. Cause: {Outcome}.")]
+    public static partial void ScheduleEmailFailed(ILogger logger, Guid scheduleId, string recipient, EmailSendOutcome outcome);
+
     [LoggerMessage(Level = LogLevel.Error,
         Message = "Scheduler Reportes2: error evaluando la regla de alerta {RuleId}.")]
     public static partial void AlertRuleError(ILogger logger, Guid ruleId, Exception ex);
@@ -472,4 +487,8 @@ internal static partial class SchedulerLog
     [LoggerMessage(Level = LogLevel.Error,
         Message = "Scheduler Reportes2: fallo el correo de la alerta {RuleId} al destinatario {Recipient}.")]
     public static partial void AlertEmailError(ILogger logger, Guid ruleId, string recipient, Exception ex);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Scheduler Reportes2: la alerta {RuleId} no se pudo enviar al destinatario {Recipient}. Cause: {Outcome}.")]
+    public static partial void AlertEmailFailed(ILogger logger, Guid ruleId, string recipient, EmailSendOutcome outcome);
 }

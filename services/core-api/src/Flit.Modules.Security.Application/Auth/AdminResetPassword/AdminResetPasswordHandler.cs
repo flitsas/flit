@@ -1,5 +1,6 @@
 using Flit.Admin.Application.Auditing;
 using Flit.Modules.Security.Domain.Auth;
+using Microsoft.Extensions.Logging;
 
 namespace Flit.Modules.Security.Application.Auth.AdminResetPassword;
 
@@ -10,14 +11,19 @@ namespace Flit.Modules.Security.Application.Auth.AdminResetPassword;
 ///
 /// Ámbito: Superadmin (rol o permiso global) puede sobre cualquier tenant; un admin de
 /// compañía requiere el permiso de reset y que el usuario pertenezca a su mismo tenant.
+///
+/// HU #11358 AC3 — un fallo del transporte de correo (resultado tipado, no excepción) NO
+/// interrumpe el flujo: la contraseña ya quedó actualizada y el endpoint responde igual,
+/// sin exponer la causa técnica del fallo de envío al llamador.
 /// </summary>
-public sealed class AdminResetPasswordHandler(
+public sealed partial class AdminResetPasswordHandler(
     IUserAccountRepository userAccountRepository,
     ITemporaryPasswordGenerator temporaryPasswordGenerator,
     IPasswordHasher passwordHasher,
     IEmailSender emailSender,
     IAdminAuditWriter auditWriter,
-    IAuditContextAccessor auditContext)
+    IAuditContextAccessor auditContext,
+    ILogger<AdminResetPasswordHandler> logger)
 {
     /// <summary>Permiso requerido para resetear contraseñas dentro del propio tenant.</summary>
     public const string ResetPermission = "security.users.reset_password";
@@ -66,13 +72,19 @@ public sealed class AdminResetPasswordHandler(
             target.UserId, hash, DateTimeOffset.UtcNow, mustChangePassword: true, cancellationToken);
 
         var composed = AdminResetPasswordEmailTemplate.Compose(target.DisplayName, temporaryPassword);
-        var message = new EmailMessage(target.Email, target.DisplayName, composed.Subject, composed.HtmlBody);
+        var message = new EmailMessage(target.TenantId, target.Email, target.DisplayName, composed.Subject, composed.HtmlBody);
 
-        await emailSender.SendAsync(message, cancellationToken);
+        var sendResult = await emailSender.SendAsync(message, cancellationToken);
+        if (!sendResult.Success)
+            LogEmailFailed(logger, target.UserId, sendResult.Outcome);
 
         await AuditAsync(command, target.UserId, AuditVocabulary.Results.Success, null, cancellationToken)
             .ConfigureAwait(false);
     }
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No fue posible enviar el correo de reset administrativo para el usuario {UserId}. Cause: {Outcome}.")]
+    private static partial void LogEmailFailed(ILogger logger, Guid userId, EmailSendOutcome outcome);
 
     // HU #10678 — sin contraseñas en el rastro: actor = admin que ejecuta, afectado = usuario objetivo.
     private async Task AuditAsync(

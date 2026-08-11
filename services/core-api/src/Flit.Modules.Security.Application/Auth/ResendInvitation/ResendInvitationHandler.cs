@@ -46,27 +46,22 @@ public sealed partial class ResendInvitationHandler(
 
         var link = InvitationEmailTemplate.BuildActivateLink(options.ActivateUrlBase, token.RawToken);
         var composed = InvitationEmailTemplate.Compose(invitation.FullName, link);
-        var message = new EmailMessage(invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody);
+        var message = new EmailMessage(invitation.TenantId, invitation.Email, invitation.Email, composed.Subject, composed.HtmlBody);
 
         LogActivationLinkDev(logger, link);
 
-        var emailSent = true;
-        try
-        {
-            await emailSender.SendAsync(message, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            LogEmailFailed(logger, invitation.InvitationId, ex);
-            emailSent = false;
-        }
+        // HU #11358 AC2/AC3 — el puerto ya no lanza por un fallo de transporte: el resultado
+        // tipado reemplaza el try/catch.
+        var sendResult = await emailSender.SendAsync(message, cancellationToken);
+        if (!sendResult.Success)
+            LogEmailFailed(logger, invitation.InvitationId, sendResult.Outcome);
 
-        return new ResendInvitationResult(invitation.InvitationId, invitation.Email, emailSent);
+        return new ResendInvitationResult(invitation.InvitationId, invitation.Email, sendResult.Success);
     }
 
     [LoggerMessage(Level = LogLevel.Warning,
-        Message = "[retryable] Resend activation email failed for invitation {InvitationId}. Invitation remains pending.")]
-    private static partial void LogEmailFailed(ILogger logger, Guid invitationId, Exception ex);
+        Message = "[retryable] Resend activation email failed for invitation {InvitationId}. Invitation remains pending. Cause: {Outcome}.")]
+    private static partial void LogEmailFailed(ILogger logger, Guid invitationId, EmailSendOutcome outcome);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "[DEV] Resent activation link (use this to test locally): {Link}")]

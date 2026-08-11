@@ -41,7 +41,7 @@ public sealed class AnalyticsSchedulerProcessorTests
         var emailSender = Substitute.For<IEmailSender>();
         var sent = new List<EmailMessage>();
         emailSender.SendAsync(Arg.Do<EmailMessage>(sent.Add), Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult(EmailSendResult.Sent));
         var metrics = Substitute.For<IAlertMetricsReadRepository>();
         metrics.GetMetricValueAsync(TenantId, "rejection_rate_pct", 1440, Arg.Any<CancellationToken>())
             .Returns(31.2m);
@@ -76,6 +76,8 @@ public sealed class AnalyticsSchedulerProcessorTests
         var dbName = NewDbName();
         await SeedRuleAsync(dbName, threshold: 25m);
         var emailSender = Substitute.For<IEmailSender>();
+        emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
         var metrics = Substitute.For<IAlertMetricsReadRepository>();
         metrics.GetMetricValueAsync(TenantId, "rejection_rate_pct", 1440, Arg.Any<CancellationToken>())
             .Returns(31.2m);
@@ -146,7 +148,7 @@ public sealed class AnalyticsSchedulerProcessorTests
         var emailSender = Substitute.For<IEmailSender>();
         var sent = new List<EmailMessage>();
         emailSender.SendAsync(Arg.Do<EmailMessage>(sent.Add), Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult(EmailSendResult.Sent));
         var processor = NewProcessor(dbName, emailSender, Substitute.For<IAlertMetricsReadRepository>());
 
         await processor.ProcessSchedulesAsync(NowUtc, Ct);
@@ -167,6 +169,8 @@ public sealed class AnalyticsSchedulerProcessorTests
         var dbName = NewDbName();
         await SeedScheduleAsync(dbName);
         var emailSender = Substitute.For<IEmailSender>();
+        emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
         var processor = NewProcessor(dbName, emailSender, Substitute.For<IAlertMetricsReadRepository>());
 
         await processor.ProcessSchedulesAsync(NowUtc, Ct);
