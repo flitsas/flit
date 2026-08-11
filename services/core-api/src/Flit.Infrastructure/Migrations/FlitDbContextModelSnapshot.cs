@@ -2092,6 +2092,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("payment_methods")
                         .HasDefaultValueSql("'[]'");
 
+                    b.Property<bool>("PersonalizedDocumentsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("personalized_documents_enabled");
+
                     b.Property<bool>("PlateFlowSkipToTerminado")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

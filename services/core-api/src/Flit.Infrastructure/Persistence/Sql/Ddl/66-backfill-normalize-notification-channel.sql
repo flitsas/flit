@@ -1,0 +1,47 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- HU #11357 (Feature #11348) — BACKFILL 2 de 2: normaliza notification_channel a
+-- 'flit_smtp' para TODOS los tenants.
+--
+-- ESTO NO ES UN RESET DE CONFIGURACIÓN DE CLIENTES. Es deshacer una doble
+-- semántica. Léase completo antes de revertirlo.
+--
+-- QUÉ PASABA:
+--   notification_channel nació para decir por dónde sale el correo, pero nunca
+--   enrutó un solo correo (Bug #11311). Su único consumidor real era
+--   PersonalizedDocumentChannelGuard, así que ponerlo en 'tenant_api' era, en la
+--   práctica, la forma de ENCENDER DOCUMENTOS PERSONALIZADOS. Los tenants que
+--   hoy están en 'tenant_api' están ahí por los documentos, no porque alguien
+--   haya decidido que su correo salga por la API del cliente: esa decisión nunca
+--   se pudo tomar, porque el campo no hacía nada.
+--
+-- QUÉ PASARÍA SI NO SE NORMALIZA:
+--   La HU #11362 hace que el canal enrute de verdad. El canal de API del cliente
+--   (Renting) se despliega DESHABILITADO por configuración (decisión tomada), y
+--   la HU #11359 especifica que un tenant con canal de API sin configuración
+--   habilitada obtiene resultado fallido con causa de configuración incompleta.
+--   Traducción: a esos tenants sus informes y alertas de analítica dejarían de
+--   llegar, en silencio, sin que nadie haya cambiado nada de su configuración.
+--
+-- POR QUÉ ES SEGURO:
+--   1. No hay pérdida funcional: el campo hoy no enruta ni un correo, así que
+--      dejarlo en 'flit_smtp' no cambia el comportamiento de nadie.
+--   2. La capacidad de documentos personalizados quedó preservada en el campo
+--      propio (personalized_documents_enabled) por el backfill 65 — que DEBE
+--      haber corrido antes que este, o la elegibilidad se pierde.
+--   3. Deja el campo en un estado veraz: a partir de aquí, un tenant está en
+--      'tenant_api' solo si alguien lo puso ahí a propósito, ya con el adaptador
+--      del canal existiendo.
+--
+-- ORDEN: estrictamente DESPUÉS del backfill 65. El orden lo garantiza el
+-- timestamp de las migraciones EF gemelas (20260811120100 < 20260811120200), no
+-- el número del archivo.
+--
+-- IDEMPOTENTE: UPDATE con condición sobre el estado destino; re-ejecutarlo no
+-- toca ninguna fila. Y no es destructivo hacia adelante: si después de migrar un
+-- administrador vuelve a poner 'tenant_api' a conciencia, este script ya no se
+-- ejecuta otra vez (la migración queda registrada).
+-- ─────────────────────────────────────────────────────────────────────────────
+
+UPDATE admin.tenant_operational_policies
+   SET notification_channel = 'flit_smtp'
+ WHERE notification_channel <> 'flit_smtp';
