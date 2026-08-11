@@ -79,6 +79,14 @@ public sealed class RentingChannelOptions
 
     public int SendEmailSecondsTimeout { get; set; } = 30;
 
+    /// <summary>
+    /// HU #11361 AC5 — longitud máxima (caracteres) del cuerpo de error del proveedor que se
+    /// conserva tras sanear secretos (ver <see cref="RentingEmailApiSender"/>). No es una variable
+    /// obligatoria (no participa de la validación de arranque de esta HU): sin configurar, aplica
+    /// el valor por defecto.
+    /// </summary>
+    public int SendEmailErrorBodyMaxLength { get; set; } = 500;
+
     /// <summary>Correo remitente que USA este canal (Renting). No confundir con <see cref="DefaultSenderEmail"/>.</summary>
     public string SendEmailSenderEmail { get; set; } = string.Empty;
 

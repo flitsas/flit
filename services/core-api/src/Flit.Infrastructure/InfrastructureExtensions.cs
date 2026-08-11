@@ -905,6 +905,14 @@ public static class InfrastructureExtensions
         services.AddTransient<IRentingLoginClient, RentingLoginClient>();
         services.AddSingleton<IRentingTokenCache, RentingTokenCache>();
         services.AddScoped<RentingAuthenticatedRequestExecutor>();
+
+        // HU #11361 — adaptador de envío/multipart. IRentingRecipientOverride es el punto de
+        // encaje de la HU #11364 (desvío de destinatario fuera de producción): esta HU solo
+        // registra la implementación por defecto (no desvía nada); #11364 la reemplaza con
+        // TryAdd/Replace cuando implemente el desvío real. Quién CONSUME IRentingEmailApiSender es
+        // la HU #11362 (enrutamiento) — no se enchufa a IEmailSender aquí.
+        services.TryAddSingleton<IRentingRecipientOverride, PassthroughRentingRecipientOverride>();
+        services.AddScoped<IRentingEmailApiSender, RentingEmailApiSender>();
     }
 
     /// <summary>
