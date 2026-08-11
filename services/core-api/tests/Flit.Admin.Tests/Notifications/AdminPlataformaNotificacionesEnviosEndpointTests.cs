@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Tests.Companies;
+using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Persistence;
@@ -13,7 +14,6 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Xunit;
@@ -334,27 +334,42 @@ public sealed class AdminPlataformaNotificacionesEnviosEndpointTests
 /// (sustituir <c>IEmailSender</c> aquí no tendría ningún efecto sobre el banco de pruebas).
 /// </summary>
 /// <remarks>
-/// Corrección post-CI (2026-08-11): esta suite dependía de configuración de AMBIENTE
-/// (<c>appsettings.Development.json</c>, gitignored) para el remitente SMTP y para las opciones del
-/// canal Renting — presente en algunas máquinas, ausente en CI, así que el resultado divergía entre
-/// ambos. Ahora la factory FIJA esos valores ella misma, determinísticamente, sin importar qué haya
-/// (o no haya) en el <c>appsettings.*</c> del ambiente que la ejecute:
+/// Corrección post-CI (2026-08-11, dos rondas): esta suite dependía de configuración de AMBIENTE
+/// (<c>appsettings.Development.json</c>, gitignored) para el remitente SMTP, el transporte
+/// consola-vs-SMTP y las opciones del canal Renting — presente en algunas máquinas, ausente en CI,
+/// así que el resultado divergía entre ambos. La primera corrección usó
+/// <c>builder.ConfigureAppConfiguration</c> para el remitente SMTP, pero eso llega TARDE: en
+/// <c>InfrastructureExtensions.AddPostgresInfrastructure</c>, <c>EmailSettings</c> se lee de
+/// <c>IConfiguration</c> y se registra como instancia YA MATERIALIZADA
+/// (<c>services.AddSingleton(emailSettings)</c>) durante <c>Program.cs</c>, ANTES de que
+/// <c>WebApplicationFactory</c> aplique los callbacks de <c>ConfigureAppConfiguration</c> sobre el
+/// <c>IWebHostBuilder</c> — la colección en memoria nunca llega a influir en ese objeto. Ahora se
+/// registra el <c>EmailSettings</c> de prueba directamente como servicio dentro de
+/// <c>ConfigureTestServices</c> (se ejecuta al final del pipeline de hosting; la última
+/// registración de un servicio único gana al resolver), la MISMA técnica que ya funcionaba para
+/// <see cref="RentingChannelOptions"/>:
 /// <list type="bullet">
-/// <item><description><c>Smtp:DefaultSenderEmail</c>/<c>Smtp:DefaultSenderName</c> — remitente que
-/// lee <c>ResolveSender(FlitSmtp)</c>; vacío en <c>appsettings.json</c> (el único que existe en CI)
-/// ⇒ sin esto, <c>ChannelNotConfigured</c> en vez de <c>Sent</c>.</description></item>
-/// <item><description><c>Smtp:Host</c> fijado explícitamente a vacío — decide consola-vs-SMTP real
-/// (<c>InfrastructureExtensions.useConsoleEmailSender</c>); dejarlo a merced del ambiente cambiaría
-/// <c>IsConsoleTransport</c> según quién corra el test.</description></item>
+/// <item><description><c>EmailSettings.DefaultSenderEmail</c>/<c>DefaultSenderName</c> — remitente
+/// que lee <c>ResolveSender(FlitSmtp)</c>; vacío en <c>appsettings.json</c> (el único que existe en
+/// CI) ⇒ sin esto, <c>ChannelNotConfigured</c> en vez de <c>Sent</c>.</description></item>
+/// <item><description><c>EmailSettings.Host</c> fijado explícitamente a vacío en la MISMA instancia
+/// — aunque ya no gobierna <c>useConsoleEmailSender</c> (ver siguiente punto), se mantiene
+/// consistente con un remitente de prueba real.</description></item>
+/// <item><description><c>EmailTransportDescriptor</c> — registrado aparte como singleton de
+/// prueba: es el booleano que declara si el transporte activo es consola (<c>IsConsoleTransport</c>
+/// en la respuesta), calculado en <c>Program.cs</c> con la MISMA condición de registro que
+/// <c>EmailSettings</c> (arranque, no en tiempo de resolución) — fijarlo aquí es la única forma de
+/// que no dependa de si la máquina tiene <c>appsettings.Development.json</c> con host SMTP
+/// poblado.</description></item>
 /// <item><description>Remitente del canal Renting — NO se puede fijar por configuración: cuando el
 /// canal está deshabilitado (como en CI), <c>AddRentingChannel</c> hace un retorno temprano con
 /// <c>services.Configure&lt;RentingChannelOptions&gt;(o =&gt; o.Enabled = false)</c> SIN poblar
 /// ningún otro campo — cualquier valor puesto en la configuración de entrada queda pisado. Por eso
-/// se vuelve a llamar <c>services.Configure&lt;RentingChannelOptions&gt;</c> aquí, DESPUÉS del
-/// registro de la app (<c>ConfigureTestServices</c> se ejecuta al final), para fijar el remitente de
-/// prueba sin tocar <c>Enabled</c> — <see cref="IExplicitChannelEmailSender.IsChannelAvailable"/> ya
-/// está sustituido arriba, así que ese remitente solo importa para <c>ResolveSender(TenantApi)</c>
-/// cuando el test simula el canal disponible.</description></item>
+/// se llama <c>services.Configure&lt;RentingChannelOptions&gt;</c> aquí, DESPUÉS del registro de la
+/// app, para fijar el remitente de prueba sin tocar <c>Enabled</c> —
+/// <see cref="IExplicitChannelEmailSender.IsChannelAvailable"/> ya está sustituido arriba, así que
+/// ese remitente solo importa para <c>ResolveSender(TenantApi)</c> cuando el test simula el canal
+/// disponible.</description></item>
 /// </list>
 /// Valores de prueba obviamente falsos (dominio <c>flit.test</c>) — nunca remitentes reales de FLIT
 /// ni de Renting.
@@ -375,22 +390,22 @@ public sealed class EnviosTestFactory : WebApplicationFactory<Program>
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        // Remitente SMTP y transporte deterministas — ANTES del registro de la app, como cualquier
-        // otra fuente de configuración normal (appsettings.*, env vars). Sobre-escribe lo que traiga
-        // el ambiente (o su ausencia).
-        builder.ConfigureAppConfiguration((_, configBuilder) =>
-        {
-            configBuilder.AddInMemoryCollection(
-            [
-                new("Smtp:DefaultSenderEmail", TestSmtpSenderEmail),
-                new("Smtp:DefaultSenderName", TestSmtpSenderName),
-                new("Smtp:Host", string.Empty),
-            ]);
-        });
-
         builder.ConfigureTestServices(services =>
         {
             services.AddScoped(_ => ExplicitChannelEmailSender);
+
+            // Remitente y transporte SMTP deterministas — EmailSettings se registra en Program.cs
+            // como instancia YA MATERIALIZADA (AddSingleton de un objeto, no de un tipo resuelto en
+            // caliente); solo sobrescribiendo la registración del servicio en sí (aquí, al final del
+            // pipeline) se logra que el test la vea. EmailTransportDescriptor viaja aparte por la
+            // misma razón: decide IsConsoleTransport y también se calcula en el arranque.
+            services.AddSingleton(new EmailSettings
+            {
+                DefaultSenderEmail = TestSmtpSenderEmail,
+                DefaultSenderName = TestSmtpSenderName,
+                Host = string.Empty,
+            });
+            services.AddSingleton(new EmailTransportDescriptor(IsConsole: false));
 
             // Remitente del canal Renting: DESPUÉS del registro de la app (ConfigureTestServices se
             // aplica al final), porque AddRentingChannel con el canal deshabilitado sobre-escribe
