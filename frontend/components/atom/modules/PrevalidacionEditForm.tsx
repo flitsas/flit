@@ -284,6 +284,11 @@ export interface PrevalidacionResendResultPanelProps {
   queued?: boolean;
   resendCount: number;
   onClose: () => void;
+  /**
+   * Aviso previo cuando el reenvío nace de intentar crear una prevalidación de un documento que ya
+   * tenía validación en el tenant: hay que decir POR QUÉ no se creó una nueva.
+   */
+  notice?: string;
 }
 
 export function PrevalidacionResendResultPanel({
@@ -292,6 +297,7 @@ export function PrevalidacionResendResultPanel({
   queued,
   resendCount,
   onClose,
+  notice,
 }: PrevalidacionResendResultPanelProps) {
   const [copied, setCopied] = useState(false);
 
@@ -318,6 +324,14 @@ export function PrevalidacionResendResultPanel({
         <h2 id="pv-resend-title" className="mt-3 text-base font-semibold text-[#162744] dark:text-white">
           Validación reenviada
         </h2>
+        {notice && (
+          <p
+            className="mt-2 rounded-xl border px-3 py-2 text-xs"
+            style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.08)', color: '#162744' }}
+          >
+            {notice}
+          </p>
+        )}
         <p className="mt-2 text-sm opacity-70" role="status" aria-live="polite">
           {queued
             ? `El proveedor no respondió en este momento. La validación quedó encolada y se reintentará automáticamente hacia ${email}.`

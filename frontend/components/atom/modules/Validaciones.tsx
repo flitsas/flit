@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import {
   AlertCircle,
   AlertTriangle,
@@ -13,12 +12,15 @@ import {
   Copy,
   ExternalLink,
   ListTree,
+  Pencil,
   RotateCcw,
   ScanFace,
+  Send,
   ShieldCheck,
   XCircle,
 } from 'lucide-react';
-import { ActionsMenu } from '@/components/atom/ActionsMenu';
+import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
+import { SearchableSelect } from '@/components/atom/SearchableSelect';
 import { ModuleTitle } from './ModuleTitle';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import {
@@ -27,25 +29,52 @@ import {
   hasActiveValidacionesFilters,
   type ValidacionesUiFilters,
 } from './ValidacionesFilterToolbar';
-import { PrevalidacionDetailDrawer } from './PrevalidacionDetailDrawer';
 import { PersonIdentityDetailDrawer } from './PersonIdentityDetailDrawer';
-import { tramitesClient } from '@/lib/api/tramites-client';
+import {
+  PrevalidacionForm,
+  PrevalidacionSuccessPanel,
+  type PrevalidacionReuseInfo,
+} from './PrevalidacionForm';
+import {
+  parseRateLimitDetail,
+  PrevalidacionEditForm,
+  PrevalidacionResendResultPanel,
+  type RateLimitInfo,
+} from './PrevalidacionEditForm';
+import {
+  setActiveTramitesTenant,
+  tramitesClient,
+  TramitesApiError,
+} from '@/lib/api/tramites-client';
+import { superadminClient, type CompanyItem } from '@/lib/api/superadmin-client';
+import { getToken } from '@/lib/api/client';
+import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import type {
   BiometricEstado,
+  BiometricParte,
   BiometricValidationStats,
+  EditarPrevalidacionResult,
+  IniciarPrevalidacionResult,
   StuckIdentityValidation,
   StuckIdentityValidationsResponse,
   TenantBiometricPerson,
   TenantBiometricPersonFilters,
   TenantBiometricValidation,
-  TenantBiometricValidationFilters,
 } from '@/lib/api/types/procedure-runtime';
 
 /**
- * Submódulo "Validaciones de Identidad" (HU #10234). Vista transversal del tenant: lista TODAS las
- * validaciones biométricas/de identidad (biometría + cotejo) con KPIs reales, consumiendo el endpoint
- * GET /api/v1/tramites/biometric-validations. Provider-aware (mock | kyverum). La gestión de captura
- * vive en el wizard del trámite; aquí es monitoreo + navegación al trámite de origen.
+ * Módulo ÚNICO de Identidad: validaciones y prevalidaciones viven aquí (antes había una pantalla
+ * aparte, /tramites/prevalidaciones, hoy retirada). Vista transversal del tenant AGRUPADA POR PERSONA
+ * (GET /api/v1/tramites/biometric-validations/by-person): una fila por documento, sin repetir la misma
+ * cédula, cubriendo tanto las prevalidaciones standalone como las validaciones nacidas de un trámite.
+ * Provider-aware (mock | kyverum).
+ *
+ * El desglose POR VALIDACIÓN (cada intento, con su bitácora de envío, reenvío, aprobación o rechazo)
+ * vive en el detalle de la persona — Acciones → Ver proceso — no en esta grilla.
+ *
+ * Crear una prevalidación se hace desde el botón "Nueva prevalidación" de esta misma pantalla. Si el
+ * documento ya tiene una validación en vuelo en el tenant, NO se crea otra: se reutiliza la existente
+ * (actualizando el correo si viene distinto) y se reenvía el enlace — ver PrevalidacionForm.
  *
  * AC8 — 4 estados de UI: Cargando (skeleton accesible), Error (role="alert"), Vacío (mensaje
  * explícito) y Lleno (KPIs + tabla). WCAG 2.1 AA: aria-labels por fila, foco visible, anuncios a
@@ -118,40 +147,11 @@ function vigenciaBadge(dias: number | null): { label: string; color: string; bg:
 }
 
 /**
- * Convierte los filtros de la UI (strings controlados) a los query params del backend (HU #10347):
- * vacíos → undefined (no se envían), score a número, fechas a ISO (createdTo a fin de día para que la
- * fecha elegida quede incluida). motivoRechazo solo cuando se filtra por estado=rechazado.
+ * Filtros de persona para el endpoint agrupado (HU #11271), única grilla del módulo: solo semántica
+ * de persona (los campos propios de UNA validación —referencia, modalidad, rol, proveedor, score,
+ * motivo de rechazo— no aplican a un grupo y viven en el detalle). Vacíos → undefined (no se envían),
+ * fechas a ISO con `createdTo`/`expiraHasta` a fin de día para incluir la fecha elegida.
  */
-function buildApiFilters(f: ValidacionesUiFilters): TenantBiometricValidationFilters {
-  const text = (s: string) => (s.trim() === '' ? undefined : s.trim());
-  const num = (s: string) => {
-    if (s.trim() === '') return undefined;
-    const n = Number(s);
-    return Number.isNaN(n) ? undefined : n;
-  };
-  return {
-    referenceNumber: text(f.referenceNumber),
-    modalidad: f.modalidad || undefined,
-    name: text(f.name),
-    partyRole: f.partyRole || undefined,
-    documentType: text(f.documentType),
-    documentNumber: text(f.documentNumber),
-    status: f.status || undefined,
-    provider: f.provider || undefined,
-    scoreMin: num(f.scoreMin),
-    scoreMax: num(f.scoreMax),
-    createdFrom: f.createdFrom ? `${f.createdFrom}T00:00:00` : undefined,
-    createdTo: f.createdTo ? `${f.createdTo}T23:59:59` : undefined,
-    rejectionReason: f.status === 'rechazado' ? text(f.rejectionReason) : undefined,
-    vigenciaEstado: f.vigenciaEstado || undefined,
-    // Rango por fecha de fin de vigencia (expiraHasta a fin de día, igual que createdTo).
-    expiraDesde: f.expiraDesde ? `${f.expiraDesde}T00:00:00` : undefined,
-    expiraHasta: f.expiraHasta ? `${f.expiraHasta}T23:59:59` : undefined,
-    venceEnDias: num(f.venceEnDias),
-  };
-}
-
-/** Filtros de persona para el endpoint agrupado (HU #11271): sin campos de validación. */
 function buildPersonApiFilters(f: ValidacionesUiFilters): TenantBiometricPersonFilters {
   const text = (s: string) => (s.trim() === '' ? undefined : s.trim());
   const num = (s: string) => {
@@ -161,7 +161,6 @@ function buildPersonApiFilters(f: ValidacionesUiFilters): TenantBiometricPersonF
   };
   return {
     name: text(f.name),
-    documentType: text(f.documentType),
     documentNumber: text(f.documentNumber),
     status: f.status || undefined,
     createdFrom: f.createdFrom ? `${f.createdFrom}T00:00:00` : undefined,
@@ -173,8 +172,6 @@ function buildPersonApiFilters(f: ValidacionesUiFilters): TenantBiometricPersonF
   };
 }
 
-type ValidacionesViewMode = 'person' | 'validation';
-
 /** Cadencia del auto-refresco en vivo de la grilla (fase 2). 15 s: fresco sin presionar el backend. */
 const AUTO_REFRESH_MS = 15_000;
 
@@ -182,12 +179,88 @@ const AUTO_REFRESH_MS = 15_000;
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
 const DEFAULT_PAGE_SIZE = 20;
 
-export function Validaciones() {
-  const [viewMode, setViewMode] = useState<ValidacionesViewMode>('person');
-  const viewModeRef = useRef(viewMode);
-  viewModeRef.current = viewMode;
+/** HU #10944 (D10) — tope y cooldown de reenvíos, seguidos client-side (el contrato no los expone). */
+const MAX_REENVIOS = 3;
 
-  const [validations, setValidations] = useState<TenantBiometricValidation[] | null>(null);
+/**
+ * Estados en los que la validación sigue EN VUELO: la persona todavía no terminó el proceso, así que
+ * el enlace de captura sirve. En cualquier otro estado el enlace ya no funciona aunque el backend lo
+ * siga devolviendo (el endpoint agrupado no lo anula en estados terminales, a diferencia del plano).
+ */
+const ESTADOS_EN_VUELO: readonly BiometricEstado[] = ['enviado', 'en_proceso', 'pendiente_envio'];
+
+/**
+ * ¿Hay un enlace de captura REALMENTE utilizable? Exige las tres condiciones: que exista, que la
+ * validación siga en vuelo y que el enlace no haya vencido. Gobierna tanto la celda "Enlace" como la
+ * disponibilidad de "Copiar enlace" / "Abrir captura".
+ */
+function tieneEnlaceUtilizable(r: TenantBiometricValidation, now: number): boolean {
+  if (!r.captureUrl || r.expired) return false;
+  if (!ESTADOS_EN_VUELO.includes(r.status)) return false;
+  if (!r.linkExpiresAt) return true;
+  const vence = new Date(r.linkExpiresAt).getTime();
+  return Number.isNaN(vence) || vence > now;
+}
+
+/**
+ * ¿El ESTADO admite reenvío? No cuando la identidad ya está aprobada (no hay nada que capturar) ni
+ * mientras la persona está EN PROCESO: el enlace vigente ya le sirve y reenviar invalidaría el que
+ * está usando. Sí en el resto (enviado sin abrir, rechazado, expirado, error de envío).
+ *
+ * Ojo: que el estado lo admita no significa que la acción esté habilitada — el tope/cooldown de
+ * reenvíos también la deshabilita. Esos casos se muestran como opción deshabilitada CON motivo, no
+ * ocultándola: el gestor necesita saber por qué no puede.
+ */
+function estadoAdmiteReenvio(r: TenantBiometricValidation): boolean {
+  return r.status !== 'aprobado' && r.status !== 'en_proceso';
+}
+
+/**
+ * La validación terminó MAL y la persona se quedó sin forma de validarse: rechazada, expirada o con
+ * el envío al proveedor agotado. Es el caso en el que un trámite se queda atascado si nadie vuelve a
+ * lanzar la identidad, y por eso desde aquí se ofrece reintentarla (ver `onRetryClick`).
+ */
+function esTerminalRecuperable(r: TenantBiometricValidation): boolean {
+  return (
+    r.status === 'rechazado' ||
+    r.status === 'expirado' ||
+    r.status === 'error_envio' ||
+    r.expired
+  );
+}
+
+/** Estado de cooldown/tope de una fila, rastreado en memoria por la sesión de esta pantalla. */
+interface ResendMeta {
+  count: number;
+  cooldownUntil: number | null;
+}
+
+/** Datos mínimos para pre-cargar "Nueva prevalidación" a partir de una fila `aprobado` y vencida. */
+interface PrefillNueva {
+  documentType?: string;
+  documentNumber?: string;
+  name?: string;
+}
+
+/** Resultado de un reenvío (manual, automático al editar el correo, o por documento ya existente). */
+interface ResendResultState {
+  email: string;
+  captureUrl?: string | null;
+  queued?: boolean;
+  resendCount: number;
+  /** Por qué se reenvió sin crear nada (documento ya existente); ausente en el reenvío manual. */
+  notice?: string;
+}
+
+export function Validaciones() {
+  // El admin FLIT puede mirar las validaciones de UNA empresa a la vez. El tenant elegido se fija en
+  // el cliente de trámites (`setActiveTramitesTenant`), que es quien resuelve el header X-Tenant-Id de
+  // TODA la pantalla — incluidos los drawers y formularios anidados, que así no necesitan recibirlo por
+  // props. Para un usuario de compañía esto no cambia nada: el backend le impone su tenant desde el JWT.
+  const [isFlitAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
+  const [companies, setCompanies] = useState<CompanyItem[] | null>(null);
+  const [companyId, setCompanyId] = useState<string>('');
+
   const [persons, setPersons] = useState<TenantBiometricPerson[] | null>(null);
   const [stats, setStats] = useState<BiometricValidationStats | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -201,13 +274,39 @@ export function Validaciones() {
   const [stuckError, setStuckError] = useState<string | null>(null);
   const [requeuing, setRequeuing] = useState<Set<string>>(() => new Set());
   const [requeuingAll, setRequeuingAll] = useState(false);
-  // Panel lateral de proceso/tracking (CF-06/07): tabla compacta + botón "Proceso".
-  const [processId, setProcessId] = useState<string | null>(null);
-  // HU #11273 — historial multi-validación por persona.
+  // HU #11273 — historial multi-validación por persona: el desglose por validación y sus bitácoras.
   const [personDetail, setPersonDetail] = useState<{
     documentType: string;
     documentNumber: string;
   } | null>(null);
+
+  // Gestión de prevalidaciones, absorbida de la pantalla retirada /tramites/prevalidaciones.
+  const [showForm, setShowForm] = useState(false);
+  const [prefillNueva, setPrefillNueva] = useState<PrefillNueva | undefined>(undefined);
+  const [successResult, setSuccessResult] = useState<IniciarPrevalidacionResult | null>(null);
+  const [editingRow, setEditingRow] = useState<TenantBiometricValidation | null>(null);
+  // Confirmación de envío. Dos modos con endpoints distintos:
+  //   'resend' — prevalidación standalone: mismo registro, token nuevo (POST .../resend).
+  //   'retry'  — validación de un trámite terminada mal: lanza una validación NUEVA para esa parte
+  //              (POST /instances/{id}/biometric), igual que el botón "Reintentar" del wizard. Sin
+  //              esto, un rechazo o un vencimiento dejaba el trámite sin salida desde este módulo.
+  const [confirmAction, setConfirmAction] = useState<{
+    row: TenantBiometricValidation;
+    mode: 'resend' | 'retry';
+  } | null>(null);
+  const [resendSubmitting, setResendSubmitting] = useState(false);
+  const [resendConfirmError, setResendConfirmError] = useState<string | null>(null);
+  const [resendResult, setResendResult] = useState<ResendResultState | null>(null);
+  const [resendMeta, setResendMeta] = useState<Record<string, ResendMeta>>({});
+  const [liveMessage, setLiveMessage] = useState('');
+
+  // Tick ligero para refrescar la etiqueta "disponible en N min" sin depender de una acción del
+  // usuario. No es una fuente de datos — solo fuerza el recálculo del cooldown en pantalla.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNowTick(Date.now()), 15_000);
+    return () => window.clearInterval(t);
+  }, []);
 
   // Paginación server-side (el listado ya NO se topa a 500; se navega por páginas).
   const [page, setPage] = useState(1);
@@ -230,8 +329,6 @@ export function Validaciones() {
   // Refs para el auto-refresco: el intervalo lee lo último sin re-suscribirse y se evitan carreras.
   const appliedRef = useRef(applied);
   appliedRef.current = applied;
-  const validationsRef = useRef(validations);
-  validationsRef.current = validations;
   const personsRef = useRef(persons);
   personsRef.current = persons;
   const fetchingRef = useRef(false);
@@ -243,38 +340,21 @@ export function Validaciones() {
       fetchingRef.current = true;
       if (!opts?.background) setFetching(true);
       try {
-        if (viewModeRef.current === 'person') {
-          const res = await tramitesClient.listTenantBiometricPersons({
-            ...buildPersonApiFilters(uiFilters),
-            page: pageRef.current,
-            pageSize: pageSizeRef.current,
-          });
-          if (reqId !== reqIdRef.current) return;
-          setPersons(res.persons);
-          setValidations(null);
-          setStats(res.stats);
-          setTotal(res.total);
-        } else {
-          const res = await tramitesClient.listTenantBiometricValidations({
-            ...buildApiFilters(uiFilters),
-            page: pageRef.current,
-            pageSize: pageSizeRef.current,
-          });
-          if (reqId !== reqIdRef.current) return;
-          setValidations(res.validations);
-          setPersons(null);
-          setStats(res.stats);
-          setTotal(res.total);
-        }
+        const res = await tramitesClient.listTenantBiometricPersons({
+          ...buildPersonApiFilters(uiFilters),
+          page: pageRef.current,
+          pageSize: pageSizeRef.current,
+        });
+        if (reqId !== reqIdRef.current) return;
+        setPersons(res.persons);
+        setStats(res.stats);
+        setTotal(res.total);
         setError(() => null);
         setLastUpdatedAt(new Date());
       } catch (err) {
         if (reqId !== reqIdRef.current) return;
         // En auto-refresco con datos ya en pantalla, un fallo transitorio NO machaca la vista con el error.
-        if (
-          opts?.background &&
-          (validationsRef.current !== null || personsRef.current !== null)
-        ) {
+        if (opts?.background && personsRef.current !== null) {
           return;
         }
         setError(() =>
@@ -290,6 +370,41 @@ export function Validaciones() {
     },
     [],
   );
+
+  // Empresas disponibles para el admin FLIT. Un fallo aquí no rompe la pantalla: el selector
+  // simplemente no aparece y se sigue viendo el tenant propio.
+  useEffect(() => {
+    if (!isFlitAdmin) return;
+    let vivo = true;
+    void superadminClient
+      .listCompanies()
+      .then((res) => {
+        if (vivo) setCompanies(res.data ?? []);
+      })
+      .catch(() => {
+        if (vivo) setCompanies([]);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [isFlitAdmin]);
+
+  // Al salir del módulo se devuelve el cliente a su tenant natural: el override es de ESTA pantalla,
+  // no de la sesión (si no, el admin seguiría viendo la empresa elegida en Trámites o Dashboard).
+  useEffect(() => () => setActiveTramitesTenant(undefined), []);
+
+  const handleCompanyChange = (nextId: string) => {
+    setCompanyId(nextId);
+    // Se fija ANTES de recargar para que la petición ya salga con el tenant nuevo.
+    setActiveTramitesTenant(nextId === '' ? undefined : nextId);
+    setPersons(null);
+    setStats(null);
+    setHasLoadedOnce(false);
+    setPage(1);
+    pageRef.current = 1;
+    void load(appliedRef.current);
+    void refreshStuck();
+  };
 
   // Eventos atascados (dead-letter): independiente de los filtros. HU #11268 — expone error/carga
   // sin romper la grilla principal (el fallo queda acotado al panel de atascadas).
@@ -351,12 +466,7 @@ export function Validaciones() {
   }, []);
 
   const applyChange = useCallback((patch: Partial<ValidacionesUiFilters>, immediate?: boolean) => {
-    // Si el estado deja de ser 'rechazado', se oculta y limpia el filtro de motivo (AC1).
-    const normalized =
-      'status' in patch && patch.status !== 'rechazado'
-        ? { ...patch, rejectionReason: '' }
-        : patch;
-    const next = { ...filtersRef.current, ...normalized };
+    const next = { ...filtersRef.current, ...patch };
     setFilters(next);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (immediate) {
@@ -423,103 +533,212 @@ export function Validaciones() {
     }
   }, [refreshStuck, load]);
 
-  // AC8 — estados de UI. La carga inicial (skeleton) solo aplica antes de la primera respuesta.
-  const initialLoading =
-    !hasLoadedOnce &&
-    validations === null &&
-    persons === null &&
-    error === null;
-  const isEmpty =
-    (viewMode === 'person' && persons !== null && persons.length === 0) ||
-    (viewMode === 'validation' && validations !== null && validations.length === 0);
-  // "Sin resultados" (AC2) vs "Aún no hay validaciones" se decide por los filtros EFECTIVAMENTE aplicados.
-  const filtersActive = hasActiveValidacionesFilters(applied);
+  // ── Gestión de prevalidaciones (crear / editar / reenviar) ────────────────────
 
-  const switchViewMode = (mode: ValidacionesViewMode) => {
-    if (mode === viewMode) return;
-    viewModeRef.current = mode;
-    setViewMode(mode);
-    setPage(1);
-    pageRef.current = 1;
-    setValidations(null);
-    setPersons(null);
-    if (mode === 'person') {
-      const cleared: ValidacionesUiFilters = {
-        ...filtersRef.current,
-        referenceNumber: '',
-        modalidad: '',
-        partyRole: '',
-        provider: '',
-        scoreMin: '',
-        scoreMax: '',
-        rejectionReason: '',
+  const bumpResendMeta = useCallback((id: string) => {
+    setResendMeta((prev) => {
+      const cur = prev[id] ?? { count: 0, cooldownUntil: null };
+      return { ...prev, [id]: { count: cur.count + 1, cooldownUntil: Date.now() + 5 * 60_000 } };
+    });
+  }, []);
+
+  const applyRateLimit = useCallback((id: string, info: RateLimitInfo) => {
+    setResendMeta((prev) => {
+      const cur = prev[id] ?? { count: 0, cooldownUntil: null };
+      return {
+        ...prev,
+        [id]: {
+          count: info.maxedOut ? MAX_REENVIOS : cur.count,
+          cooldownUntil: info.cooldownMinutes
+            ? Date.now() + info.cooldownMinutes * 60_000
+            : cur.cooldownUntil,
+        },
       };
-      setFilters(cleared);
-      setApplied(cleared);
-      void load(cleared);
+    });
+  }, []);
+
+  const handleCreated = (result: IniciarPrevalidacionResult) => {
+    setShowForm(false);
+    setPrefillNueva(undefined);
+    setSuccessResult(result);
+    void load(appliedRef.current);
+  };
+
+  /**
+   * El documento ya tenía validación en vuelo: no se creó fila nueva. El formulario ya actualizó el
+   * correo (si venía distinto) y reenvió el enlace; aquí solo se refleja el resultado y se refresca.
+   */
+  const handleReused = (info: PrevalidacionReuseInfo) => {
+    setShowForm(false);
+    setPrefillNueva(undefined);
+    bumpResendMeta(info.validationId);
+    const nextCount = (resendMeta[info.validationId]?.count ?? 0) + 1;
+    const notice =
+      info.kind === 'email_actualizado'
+        ? `Ya existía una validación para este documento en este tenant: no se creó una nueva. Se actualizó el correo a ${info.email} y se reenvió el enlace.`
+        : `Ya existía una validación para este documento en este tenant con ese mismo correo: no se creó una nueva ni se modificó nada, solo se reenvió el enlace.`;
+    setResendResult({
+      email: info.email,
+      captureUrl: info.captureUrl,
+      queued: info.queued,
+      resendCount: nextCount,
+      notice,
+    });
+    setLiveMessage(notice);
+    void load(appliedRef.current);
+  };
+
+  const handleNew = () => {
+    setSuccessResult(null);
+    setPrefillNueva(undefined);
+    setShowForm(true);
+  };
+
+  /** HU #10944 (D9/borde) — "Nueva prevalidación" para la misma persona desde un registro aprobado. */
+  const handleNewFor = (row: TenantBiometricValidation) => {
+    setPrefillNueva({
+      documentType: row.documentType,
+      documentNumber: row.documentNumber,
+      name: row.name,
+    });
+    setShowForm(true);
+  };
+
+  const handleEditSaved = (row: TenantBiometricValidation, result: EditarPrevalidacionResult) => {
+    setEditingRow(null);
+    if (result.resent) {
+      bumpResendMeta(row.id);
+      const nextCount = (resendMeta[row.id]?.count ?? 0) + 1;
+      setResendResult({
+        email: result.validation.email,
+        captureUrl: result.captureUrl,
+        resendCount: nextCount,
+      });
+      setLiveMessage(`Datos actualizados. Validación reenviada a ${result.validation.email}.`);
     } else {
+      setLiveMessage('Datos de la validación actualizados. No hubo cambio de correo, no se reenvió.');
+    }
+    void load(appliedRef.current);
+  };
+
+  /** Reenvío de una prevalidación standalone: mismo registro, enlace nuevo. */
+  const confirmarReenvio = async (row: TenantBiometricValidation) => {
+    const result = await tramitesClient.resendPrevalidacion(row.id);
+    const nextCount = (resendMeta[row.id]?.count ?? 0) + 1;
+    bumpResendMeta(row.id);
+    setResendResult({
+      email: result.validation.email,
+      captureUrl: result.captureUrl,
+      queued: result.queued,
+      resendCount: nextCount,
+    });
+    setLiveMessage(
+      result.queued
+        ? `La validación quedó encolada para reenviarse a ${result.validation.email}.`
+        : `Validación reenviada a ${result.validation.email}.`,
+    );
+  };
+
+  /**
+   * Reintento de una validación de trámite que terminó mal (rechazada, vencida o con el envío
+   * agotado): lanza una validación NUEVA para esa parte por el mismo endpoint que usa el wizard, en
+   * vez de reenviar la vieja (el backend prohíbe tocar por id una validación de trámite — D12).
+   * El trámite debe admitir cambios (borrador o subsanación); si no, el backend responde 409 y el
+   * mensaje explica que hay que abrir una subsanación.
+   */
+  const confirmarReintento = async (row: TenantBiometricValidation) => {
+    if (!row.instanceId || !row.partyRole) throw new Error('La fila no identifica el trámite ni la parte.');
+    const parte = row.partyRole as BiometricParte;
+    if (row.provider === 'mock') {
+      await tramitesClient.simulateBiometric(row.instanceId, { parte });
+    } else {
+      await tramitesClient.iniciarBiometric(row.instanceId, { parte });
+    }
+    setLiveMessage(
+      `Se lanzó una validación de identidad nueva para ${row.name} en el trámite ${row.referenceNumber ?? ''}.`.trim(),
+    );
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
+    const { row, mode } = confirmAction;
+    setResendSubmitting(true);
+    setResendConfirmError(null);
+    try {
+      if (mode === 'retry') await confirmarReintento(row);
+      else await confirmarReenvio(row);
+      setConfirmAction(null);
       void load(appliedRef.current);
+    } catch (err) {
+      if (err instanceof TramitesApiError) {
+        // 409 del trámite: el gate real es de negocio (radicado ⇒ congelado), no un fallo técnico.
+        setResendConfirmError(
+          mode === 'retry' && err.status === 409
+            ? `${err.message} Si el trámite ya fue radicado, abre una subsanación para poder revalidar la identidad.`
+            : err.message,
+        );
+        if (err.status === 429) applyRateLimit(row.id, parseRateLimitDetail(err.message));
+      } else {
+        setResendConfirmError(
+          err instanceof Error ? err.message : 'No se pudo enviar la validación.',
+        );
+      }
+    } finally {
+      setResendSubmitting(false);
     }
   };
 
+  // AC8 — estados de UI. La carga inicial (skeleton) solo aplica antes de la primera respuesta.
+  const initialLoading = !hasLoadedOnce && persons === null && error === null;
+  const isEmpty = persons !== null && persons.length === 0;
+  // "Sin resultados" (AC2) vs "Aún no hay validaciones" se decide por los filtros EFECTIVAMENTE aplicados.
+  const filtersActive = hasActiveValidacionesFilters(applied);
+
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+      {/* Anuncios para lector de pantalla del resultado de crear/editar/reenviar (WCAG 2.1 AA) */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {liveMessage}
+      </div>
+
       <ModuleTitle
         title="Identidad"
         subtitle="Validación biométrica, OCR IA y cotejo RUNT en tiempo real."
         right={
           <div className="flex items-center gap-3">
-            {/* HU #10868 — enlace a pantalla de prevalidación standalone */}
-            <Link
-              href="/tramites/prevalidaciones"
-              className="flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:border-[#4F74C9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F74C9]"
-              style={{ color: '#4F74C9' }}
-              aria-label="Ir a prevalidaciones de identidad"
-            >
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-              Prevalidaciones
-            </Link>
+            {isFlitAdmin && companies !== null && companies.length > 0 && (
+              <SearchableSelect
+                id="identidad-empresa"
+                label="Ver las validaciones de otra empresa"
+                hideLabel
+                options={companies.map((c) => ({
+                  value: c.id,
+                  label: c.razonSocial,
+                  hint: c.nit,
+                }))}
+                value={companyId}
+                onChange={handleCompanyChange}
+                defaultLabel="Mi empresa"
+                placeholder="Buscar empresa…"
+                className="w-[240px]"
+              />
+            )}
             {hasLoadedOnce ? <LiveIndicator at={lastUpdatedAt} /> : undefined}
+            {/* Módulo unificado: la prevalidación se crea aquí, no en una pantalla aparte. */}
+            <button
+              type="button"
+              onClick={handleNew}
+              className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
+              style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
+              aria-label="Crear nueva prevalidación de identidad"
+            >
+              Nueva prevalidación
+            </button>
           </div>
         }
       />
 
-      <StatsCards stats={stats} loading={initialLoading} />
-
-      {hasLoadedOnce && (
-        <div
-          className="flex flex-wrap items-center gap-2 shrink-0"
-          role="group"
-          aria-label="Modo de vista de la grilla"
-        >
-          <button
-            type="button"
-            onClick={() => switchViewMode('person')}
-            className="rounded-xl px-3 py-1.5 text-[11px] font-semibold border focus-visible:outline focus-visible:outline-2"
-            style={{
-              borderColor: viewMode === 'person' ? '#4F74C9' : 'rgba(22,39,68,0.15)',
-              background: viewMode === 'person' ? 'rgba(79,116,201,0.12)' : 'transparent',
-              color: viewMode === 'person' ? '#4F74C9' : undefined,
-            }}
-            aria-pressed={viewMode === 'person'}
-          >
-            Por persona
-          </button>
-          <button
-            type="button"
-            onClick={() => switchViewMode('validation')}
-            className="rounded-xl px-3 py-1.5 text-[11px] font-semibold border focus-visible:outline focus-visible:outline-2"
-            style={{
-              borderColor: viewMode === 'validation' ? '#4F74C9' : 'rgba(22,39,68,0.15)',
-              background: viewMode === 'validation' ? 'rgba(79,116,201,0.12)' : 'transparent',
-              color: viewMode === 'validation' ? '#4F74C9' : undefined,
-            }}
-            aria-pressed={viewMode === 'validation'}
-          >
-            Por validación
-          </button>
-        </div>
-      )}
+      <StatsCards stats={stats} totalPersonas={total} loading={initialLoading} />
 
       {hasLoadedOnce && (
         <ValidacionesFilterToolbar
@@ -528,16 +747,9 @@ export function Validaciones() {
           onRefresh={() => void handleRefresh()}
           onClearFilters={handleClearFilters}
           loading={fetching}
-          resultCount={
-            viewMode === 'person' ? (persons?.length ?? 0) : (validations?.length ?? 0)
-          }
-          groupedMode={viewMode === 'person'}
+          resultCount={persons?.length ?? 0}
           resultCountLabel={
-            viewMode === 'person'
-              ? total === 0
-                ? 'Sin resultados'
-                : `${total} persona${total === 1 ? '' : 's'}`
-              : undefined
+            total === 0 ? 'Sin resultados' : `${total} persona${total === 1 ? '' : 's'}`
           }
         />
       )}
@@ -631,31 +843,45 @@ export function Validaciones() {
               <>
                 <p className="mt-3 text-sm font-semibold">Aún no hay validaciones de identidad.</p>
                 <p className="mt-1 text-xs opacity-70">
-                  Las validaciones aparecen aquí cuando inicias la identidad de una parte desde el paso
-                  de identidad de un trámite.
+                  Aparecen aquí cuando inicias la identidad de una parte desde el paso de identidad de
+                  un trámite, o cuando creas una prevalidación desde esta pantalla.
                 </p>
+                <button
+                  type="button"
+                  onClick={handleNew}
+                  className="mt-4 mx-auto flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
+                  style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
+                >
+                  Nueva prevalidación
+                </button>
               </>
             )}
           </div>
         </div>
       )}
 
-      {!initialLoading && !isEmpty && viewMode === 'validation' && validations !== null && (
-        <ValidacionesTable rows={validations} onViewProcess={setProcessId} />
-      )}
-
-      {!initialLoading && !isEmpty && viewMode === 'person' && persons !== null && (
+      {!initialLoading && !isEmpty && persons !== null && (
         <PersonasTable
           rows={persons}
+          now={nowTick}
+          resendMeta={resendMeta}
           onOpenPerson={(docType, docNumber) =>
             setPersonDetail({ documentType: docType, documentNumber: docNumber })
           }
+          onEdit={setEditingRow}
+          onResendClick={(row) => {
+            setResendConfirmError(null);
+            setConfirmAction({ row, mode: 'resend' });
+          }}
+          onRetryClick={(row) => {
+            setResendConfirmError(null);
+            setConfirmAction({ row, mode: 'retry' });
+          }}
+          onNewFor={handleNewFor}
         />
       )}
 
-      {!initialLoading &&
-        ((viewMode === 'validation' && validations !== null && validations.length > 0) ||
-          (viewMode === 'person' && persons !== null && persons.length > 0)) && (
+      {!initialLoading && persons !== null && persons.length > 0 && (
         <PaginationBar
           page={page}
           pageSize={pageSize}
@@ -666,21 +892,114 @@ export function Validaciones() {
         />
       )}
 
-      {processId && (
-        <PrevalidacionDetailDrawer
-          validationId={processId}
-          onClose={() => setProcessId(null)}
-          onStatusChanged={() => void load(appliedRef.current, { background: true })}
-          title="Proceso de validación"
-        />
-      )}
-
+      {/* Detalle de la persona: desglose por validación + bitácoras de envío/reenvío/aprobación/rechazo. */}
       {personDetail && (
         <PersonIdentityDetailDrawer
           documentType={personDetail.documentType}
           documentNumber={personDetail.documentNumber}
           onClose={() => setPersonDetail(null)}
           onStatusChanged={() => void load(appliedRef.current, { background: true })}
+        />
+      )}
+
+      {/* Modal: creación (también "Nueva prevalidación" precargada para revalidar, D9/borde) */}
+      {showForm && (
+        <PrevalidacionForm
+          onClose={() => {
+            setShowForm(false);
+            setPrefillNueva(undefined);
+          }}
+          onSuccess={handleCreated}
+          onReused={handleReused}
+          initialValues={prefillNueva}
+        />
+      )}
+
+      {successResult && (
+        <PrevalidacionSuccessPanel
+          result={successResult}
+          onClose={() => setSuccessResult(null)}
+          onNew={handleNew}
+        />
+      )}
+
+      {/* Modal: edición (HU #10944, AC1/AC3/AC4/AC6) */}
+      {editingRow && (
+        <PrevalidacionEditForm
+          row={editingRow}
+          onClose={() => setEditingRow(null)}
+          onSaved={(result) => handleEditSaved(editingRow, result)}
+          onRateLimited={(info) => applyRateLimit(editingRow.id, info)}
+        />
+      )}
+
+      {/* Confirmación de envío (HU #10944, AC2): reenvío standalone o reintento de trámite */}
+      {confirmAction && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="val-resend-confirm-title"
+        >
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-[#0B0F14]">
+            <h2 id="val-resend-confirm-title" className="text-base font-semibold text-[#162744] dark:text-white">
+              Reenviar validación
+            </h2>
+            <p className="mt-2 text-sm opacity-70">
+              {confirmAction.mode === 'retry' ? (
+                <>
+                  Se lanzará una validación de identidad <strong>nueva</strong> para{' '}
+                  <strong>{confirmAction.row.name}</strong> en el trámite{' '}
+                  <strong>{confirmAction.row.referenceNumber ?? '—'}</strong>, con el correo registrado
+                  en el trámite. La anterior queda en el historial.
+                </>
+              ) : (
+                <>
+                  ¿Reenviar el enlace de validación de <strong>{confirmAction.row.name}</strong>? El
+                  enlace anterior dejará de funcionar.
+                </>
+              )}
+            </p>
+            {resendConfirmError && (
+              <p role="alert" aria-live="assertive" className="mt-2 text-xs font-medium" style={{ color: '#FF4E00' }}>
+                {resendConfirmError}
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmAction(null);
+                  setResendConfirmError(null);
+                }}
+                disabled={resendSubmitting}
+                className="rounded-xl border px-4 py-2 text-sm font-medium text-[#162744] transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] disabled:opacity-50 dark:text-white dark:hover:bg-white/10"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmAction()}
+                disabled={resendSubmitting}
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
+                style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
+              >
+                {resendSubmitting ? 'Enviando…' : 'Confirmar reenvío'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resultado del reenvío (manual, al editar el correo, o por documento ya existente) */}
+      {resendResult && (
+        <PrevalidacionResendResultPanel
+          email={resendResult.email}
+          captureUrl={resendResult.captureUrl}
+          queued={resendResult.queued}
+          resendCount={resendResult.resendCount}
+          notice={resendResult.notice}
+          onClose={() => setResendResult(null)}
         />
       )}
     </div>
@@ -980,16 +1299,24 @@ function PaginationBar({
   );
 }
 
-/** KPIs reales por estado. En carga muestra placeholders accesibles. */
+/**
+ * KPIs reales por estado. En carga muestra placeholders accesibles.
+ *
+ * El primer contador es de PERSONAS, no de validaciones: es el `total` del endpoint agrupado, el mismo
+ * que cuenta el toolbar y el que cuadra con las filas de la grilla (una por documento). Los otros tres
+ * siguen siendo conteos de validaciones — una misma persona puede tener una rechazada y otra aprobada.
+ */
 function StatsCards({
   stats,
+  totalPersonas,
   loading,
 }: {
   stats: BiometricValidationStats | null;
+  totalPersonas: number;
   loading: boolean;
 }) {
   const cards = [
-    { l: 'Total validaciones', v: stats?.total, i: ShieldCheck, c: '#4F74C9' },
+    { l: 'Total personas', v: totalPersonas, i: ShieldCheck, c: '#4F74C9' },
     { l: 'Aprobadas', v: stats?.aprobadas, i: CheckCircle2, c: '#70CF3A' },
     { l: 'En proceso', v: stats?.enProceso, i: Clock, c: '#F05A35' },
     { l: 'Rechazadas', v: stats?.rechazadas, i: XCircle, c: '#E43D30' },
@@ -1054,16 +1381,28 @@ const GRID_COLS =
   'minmax(0,1.5fr) minmax(0,1.4fr) minmax(0,1.1fr) minmax(0,1.3fr) minmax(0,1.2fr) minmax(0,0.5fr) minmax(0,1.1fr) minmax(0,1fr) minmax(0,1.4fr) minmax(0,1.2fr) minmax(0,0.9fr)';
 
 /**
- * Vista agrupada por persona: reutiliza la misma fila/estilo de develop (ValidacionRow).
- * Cada fila muestra los datos de la validación MÁS RECIENTE del grupo.
- * "Ver proceso" abre el historial multi-validación de la persona (no el drawer de una sola val.).
+ * Única grilla del módulo: una fila por PERSONA (documento), sin repetir cédula. Cada fila muestra los
+ * datos de la validación MÁS RECIENTE del grupo; "Ver proceso" abre el historial multi-validación de
+ * esa persona, donde vive el desglose por validación con sus bitácoras.
  */
 function PersonasTable({
   rows,
+  now,
+  resendMeta,
   onOpenPerson,
+  onEdit,
+  onResendClick,
+  onRetryClick,
+  onNewFor,
 }: {
   rows: TenantBiometricPerson[];
+  now: number;
+  resendMeta: Record<string, ResendMeta>;
   onOpenPerson: (documentType: string, documentNumber: string) => void;
+  onEdit: (row: TenantBiometricValidation) => void;
+  onResendClick: (row: TenantBiometricValidation) => void;
+  onRetryClick: (row: TenantBiometricValidation) => void;
+  onNewFor: (row: TenantBiometricValidation) => void;
 }) {
   const byLatestId = new Map(rows.map((r) => [r.latestValidationId, r]));
   const mapped: TenantBiometricValidation[] = rows.map((p) => ({
@@ -1085,27 +1424,51 @@ function PersonasTable({
     daysRemaining: p.daysRemaining,
     captureUrl: p.captureUrl,
     linkExpiresAt: p.linkExpiresAt,
-    email: p.email,
+    // El DTO agrupado declara email como string; vacío = el backend aún no lo tiene → "—" en la celda.
+    email: p.email || null,
   }));
+
+  const counts = new Map(rows.map((r) => [r.latestValidationId, r.validationCount]));
 
   return (
     <ValidacionesTable
       rows={mapped}
+      now={now}
+      resendMeta={resendMeta}
+      validationCounts={counts}
       onViewProcess={(latestValidationId) => {
         const person = byLatestId.get(latestValidationId);
         if (person) onOpenPerson(person.documentType, person.documentNumber);
       }}
+      onEdit={onEdit}
+      onResendClick={onResendClick}
+      onRetryClick={onRetryClick}
+      onNewFor={onNewFor}
     />
   );
 }
 
-/** Tabla de validaciones reales. Cada fila enlaza al trámite de origen (vista del wizard). */
+/** Tabla de validaciones. Cada fila es no navegable; el proceso se abre desde Acciones. */
 function ValidacionesTable({
   rows,
+  now,
+  resendMeta,
+  validationCounts,
   onViewProcess,
+  onEdit,
+  onResendClick,
+  onRetryClick,
+  onNewFor,
 }: {
   rows: TenantBiometricValidation[];
+  now: number;
+  resendMeta: Record<string, ResendMeta>;
+  validationCounts: Map<string, number>;
   onViewProcess: (id: string) => void;
+  onEdit: (row: TenantBiometricValidation) => void;
+  onResendClick: (row: TenantBiometricValidation) => void;
+  onRetryClick: (row: TenantBiometricValidation) => void;
+  onNewFor: (row: TenantBiometricValidation) => void;
 }) {
   return (
     <div className="overflow-x-auto shrink-0">
@@ -1124,12 +1487,23 @@ function ValidacionesTable({
           <div>Registro</div>
           <div>Aprobación</div>
           <div>Vigencia</div>
-          <div>Enlace</div>
+          <div>Enlace vigente</div>
           <div>Acciones</div>
         </div>
         <ul className="space-y-2 pt-2" aria-label="Validaciones de identidad">
           {rows.map((r) => (
-            <ValidacionRow key={r.id} row={r} onViewProcess={() => onViewProcess(r.id)} />
+            <ValidacionRow
+              key={r.id}
+              row={r}
+              now={now}
+              resendMeta={resendMeta[r.id] ?? { count: 0, cooldownUntil: null }}
+              validationCount={validationCounts.get(r.id) ?? 1}
+              onViewProcess={() => onViewProcess(r.id)}
+              onEdit={onEdit}
+              onResendClick={onResendClick}
+              onRetryClick={onRetryClick}
+              onNewFor={onNewFor}
+            />
           ))}
         </ul>
       </div>
@@ -1139,13 +1513,31 @@ function ValidacionesTable({
 
 function ValidacionRow({
   row: r,
+  now,
+  resendMeta,
+  validationCount,
   onViewProcess,
+  onEdit,
+  onResendClick,
+  onRetryClick,
+  onNewFor,
 }: {
   row: TenantBiometricValidation;
+  now: number;
+  resendMeta: ResendMeta;
+  validationCount: number;
   onViewProcess: () => void;
+  onEdit: (row: TenantBiometricValidation) => void;
+  onResendClick: (row: TenantBiometricValidation) => void;
+  onRetryClick: (row: TenantBiometricValidation) => void;
+  onNewFor: (row: TenantBiometricValidation) => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const meta = ESTADO_META[r.status] ?? ESTADO_META.enviado;
+  // Estado EFECTIVO: una validación no aprobada con el enlace vencido se lee "Expirado" aunque el
+  // backend la conserve como enviada o en proceso (`expired` ya aplica esa regla). Los KPIs cuentan
+  // por este mismo criterio: si la fila y el contador usaran estados distintos, no cuadrarían.
+  const estado: BiometricEstado = r.expired && r.status !== 'aprobado' ? 'expirado' : r.status;
+  const meta = ESTADO_META[estado] ?? ESTADO_META.enviado;
   const modalidad = r.modalidad
     ? (MODALIDAD_LABEL[r.modalidad] ?? r.modalidad)
     : 'Prevalidación';
@@ -1154,6 +1546,7 @@ function ValidacionRow({
   const vigencia = vigenciaBadge(r.daysRemaining);
   const refLabel = r.referenceNumber ?? '—';
   const emailLabel = r.email ?? '—';
+  const enlaceUtilizable = tieneEnlaceUtilizable(r, now);
   const ariaLabel =
     `Validación de ${r.name}${parte}, trámite ${refLabel} (${modalidad}), ` +
     `proveedor ${provider}, correo ${emailLabel}, estado ${meta.label}` +
@@ -1163,7 +1556,8 @@ function ValidacionRow({
     (r.validatedAt ? `, aprobada ${formatFechaCorta(r.validatedAt)}` : '') +
     (r.validUntil ? `, vigente hasta ${formatFechaCorta(r.validUntil)}` : '') +
     (vigencia ? `, ${vigencia.label === 'Vencida' ? 'vigencia vencida' : `vigencia: ${vigencia.label} restantes`}` : '') +
-    (r.instanceId ? '. Abrir trámite.' : '. Prevalidación standalone.');
+    (r.instanceId ? '.' : '. Prevalidación standalone.') +
+    (validationCount > 1 ? ` ${validationCount} validaciones en el historial de la persona.` : '');
 
   const rowContent = (
     <div
@@ -1174,7 +1568,6 @@ function ValidacionRow({
         {r.referenceNumber ? (
           <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: '#4F74C9' }}>
             <span className="truncate">{r.referenceNumber}</span>
-            {r.instanceId && <ExternalLink className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />}
           </span>
         ) : (
           <span
@@ -1188,10 +1581,15 @@ function ValidacionRow({
       </div>
       <div className="min-w-0">
         <span className="block font-semibold truncate">{r.name}</span>
-        <span className="block text-[10px] opacity-60 truncate">
-          {provider}
-          {r.partyRole ? ` · ${r.partyRole}` : ''}
-        </span>
+        {/* Subtítulo: solo lo que distingue a ESTA persona. El proveedor (siempre el mismo dentro de
+            un tenant) se sacó de la fila — truncaba el rol y el contador; se consulta en el detalle. */}
+        {(r.partyRole || validationCount > 1) && (
+          <span className="block text-[10px] opacity-60 truncate">
+            {r.partyRole ?? ''}
+            {r.partyRole && validationCount > 1 ? ' · ' : ''}
+            {validationCount > 1 ? `${validationCount} validaciones` : ''}
+          </span>
+        )}
       </div>
       <div className="min-w-0 font-mono text-[11px] opacity-80 truncate">
         {r.documentType} {r.documentNumber}
@@ -1230,12 +1628,15 @@ function ValidacionRow({
         )}
       </div>
       <div className="min-w-0 text-[10px] leading-tight opacity-80">
-        {r.captureUrl && r.linkExpiresAt ? (
-          <span title={r.captureUrl}>Vence {formatFechaCorta(r.linkExpiresAt)}</span>
-        ) : r.captureUrl ? (
-          <span title={r.captureUrl}>Vigente</span>
+        {enlaceUtilizable ? (
+          r.linkExpiresAt ? (
+            // La columna ya se llama "Enlace vigente": el dato es la fecha y hora en que deja de serlo.
+            <span title={r.captureUrl ?? undefined}>{formatFecha(r.linkExpiresAt)}</span>
+          ) : (
+            <span title={r.captureUrl ?? undefined}>Vigente</span>
+          )
         ) : (
-          <span>—</span>
+          <span className="opacity-60">No disponible</span>
         )}
       </div>
       <div className="min-w-0" aria-hidden="true" />
@@ -1253,49 +1654,115 @@ function ValidacionRow({
     }
   };
 
-  const actionItems = [
+  // HU #10944 (D12/AC3) — pertenece a un trámite ⇒ solo lectura: editar/reenviar viven en el trámite.
+  const isTramite = r.instanceId !== null;
+  // HU #10944 (D9/AC4) — aprobada (vigente o vencida) ⇒ editar/reenviar bloqueados; se ofrece "Nueva".
+  const isApproved = r.status === 'aprobado';
+  const admiteReenvio = estadoAdmiteReenvio(r);
+
+  let resendDisabledReason: string | null = null;
+  if (resendMeta.count >= MAX_REENVIOS) {
+    resendDisabledReason = 'Se agotó el tope de 3 reenvíos.';
+  } else if (resendMeta.cooldownUntil && resendMeta.cooldownUntil > now) {
+    const minsLeft = Math.max(1, Math.ceil((resendMeta.cooldownUntil - now) / 60_000));
+    resendDisabledReason = `Disponible en ${minsLeft} min.`;
+  }
+
+  const actionItems: ActionsMenuItem[] = [
     {
       key: 'proceso',
       label: 'Ver proceso',
       icon: ListTree,
       onSelect: onViewProcess,
     },
-    ...(r.captureUrl
-      ? [
-          {
-            key: 'copiar',
-            label: 'Copiar enlace',
-            icon: Copy,
-            onSelect: () => {
-              void copiarEnlace();
-            },
-          },
-        ]
-      : []),
   ];
 
+  // Copiar/abrir solo cuando el enlace sirve de verdad: en estados terminales no lleva a ninguna parte.
+  if (enlaceUtilizable) {
+    actionItems.push({
+      key: 'copiar',
+      label: copied ? 'Enlace copiado' : 'Copiar enlace',
+      icon: Copy,
+      onSelect: () => {
+        void copiarEnlace();
+      },
+    });
+    actionItems.push({
+      key: 'abrir',
+      label: 'Abrir captura',
+      icon: ExternalLink,
+      onSelect: () => {
+        window.open(r.captureUrl!, '_blank', 'noopener,noreferrer');
+      },
+    });
+  }
+
+  if (!isTramite && isApproved) {
+    actionItems.push({
+      key: 'nueva',
+      label: 'Nueva prevalidación',
+      icon: ScanFace,
+      onSelect: () => onNewFor(r),
+    });
+  } else if (!isTramite) {
+    actionItems.push({
+      key: 'editar',
+      label: 'Editar',
+      icon: Pencil,
+      onSelect: () => onEdit(r),
+    });
+  }
+
+  if (isTramite) {
+    // Validación de trámite terminada mal: sin esta salida el trámite se queda atascado — la identidad
+    // no se puede reenviar por id (D12) y habría que entrar al wizard. Se lanza una validación NUEVA
+    // para la parte, exactamente lo que hace "Reintentar validación" del paso de identidad.
+    if (esTerminalRecuperable(r)) {
+      const sinParte = !r.partyRole;
+      actionItems.push({
+        key: 'reintentar',
+        // Mismo rótulo que en las prevalidaciones: para el gestor la acción es "reenviar", aunque
+        // por dentro sean endpoints distintos (aquí nace una validación nueva para la parte).
+        label: 'Reenviar',
+        icon: sinParte ? Clock : Send,
+        onSelect: () => onRetryClick(r),
+        disabled: sinParte,
+        disabledReason: sinParte
+          ? 'La fila no identifica la parte del trámite: hazlo desde el trámite.'
+          : undefined,
+      });
+    }
+  } else if (admiteReenvio) {
+    // Prevalidación standalone: mismo registro, enlace nuevo. Si el tope/cooldown lo impide se muestra
+    // deshabilitada con el motivo, en vez de desaparecer sin explicación.
+    actionItems.push({
+      key: 'reenviar',
+      label: 'Reenviar',
+      icon: resendDisabledReason ? Clock : Send,
+      onSelect: () => onResendClick(r),
+      disabled: resendDisabledReason !== null,
+      disabledReason: resendDisabledReason ?? undefined,
+    });
+  }
+
   return (
-    <li className="relative rounded-xl bg-white dark:bg-[#0B0F14] border hover:border-[#4F74C9] transition">
-      {r.instanceId ? (
-        <a
-          href={`/tramites/${r.instanceId}`}
-          aria-label={ariaLabel}
-          className="block focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        >
-          {rowContent}
-        </a>
-      ) : (
-        <div aria-label={ariaLabel} role="listitem">
-          {rowContent}
-        </div>
-      )}
-      {/* Acciones fuera del <a> al trámite: menú portalizado (ActionsMenu). */}
+    <li
+      className="relative rounded-xl bg-white dark:bg-[#0B0F14] border hover:border-[#4F74C9] transition"
+      aria-label={ariaLabel}
+    >
+      {/* Fila no navegable: el detalle/proceso se abre solo desde Acciones → Ver proceso. */}
+      {rowContent}
       <div className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col items-end gap-0.5">
         <ActionsMenu
           ariaLabel={`Acciones de validación de ${r.name}`}
           items={actionItems}
           className="bg-white dark:bg-[#0B0F14]"
         />
+        {/* Sin iconos ni frases bajo el menú: el motivo por el que una acción no procede se lee en el
+            propio ítem deshabilitado. Solo el cooldown/tope se anticipa aquí, porque es transitorio. */}
+        {!isTramite && admiteReenvio && resendDisabledReason && (
+          <span className="text-[10px] opacity-60">{resendDisabledReason}</span>
+        )}
         {copied && (
           <span className="text-[10px] font-semibold" style={{ color: '#4F74C9' }} role="status" aria-live="polite">
             Enlace copiado

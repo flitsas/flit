@@ -10,6 +10,22 @@ import type {
 import { sanitizeDocNumber } from '@/lib/validation/fieldRules';
 
 /**
+ * Resultado de REUTILIZAR una validación existente en vez de crear una nueva (módulo unificado de
+ * Identidad). Un documento solo puede tener una validación en vuelo por tenant: si ya existe, no se
+ * crea otra fila.
+ *   - `email_actualizado` — el correo del formulario difiere del registrado: se actualiza y el backend
+ *     reenvía el enlace al correo nuevo (PATCH con auto-reenvío, D8).
+ *   - `reenviado` — el correo es el mismo: no se actualiza nada y solo se reenvía el enlace.
+ */
+export interface PrevalidacionReuseInfo {
+  kind: 'email_actualizado' | 'reenviado';
+  validationId: string;
+  email: string;
+  captureUrl: string | null;
+  queued?: boolean;
+}
+
+/**
  * Formulario modal/drawer para crear una prevalidación de identidad standalone (HU #10868).
  * CF-01 (Feature #11004, HU #11006, D1) — la prevalidación es SOLO persona natural: el backend
  * rechaza `personType=juridical` con 422 (`prevalidacion_solo_natural`); el formulario ya no ofrece
@@ -24,6 +40,12 @@ import { sanitizeDocNumber } from '@/lib/validation/fieldRules';
 export interface PrevalidacionFormProps {
   onClose: () => void;
   onSuccess: (result: IniciarPrevalidacionResult) => void;
+  /**
+   * El documento ya tenía una validación en vuelo: no se creó ninguna fila nueva y el enlace se
+   * reenvió (actualizando antes el correo si venía distinto). La pantalla padre cierra el formulario,
+   * refresca el listado y muestra el resultado del reenvío.
+   */
+  onReused?: (info: PrevalidacionReuseInfo) => void;
   /**
    * HU #10944 (CF-03, D9/borde) — precarga documento/nombre al ofrecer "Nueva prevalidación" para
    * la misma persona desde un registro `aprobado` y vencido (revalidar exige un registro nuevo, no
@@ -64,7 +86,12 @@ function validEmail(v: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 }
 
-export function PrevalidacionForm({ onClose, onSuccess, initialValues }: PrevalidacionFormProps) {
+export function PrevalidacionForm({
+  onClose,
+  onSuccess,
+  onReused,
+  initialValues,
+}: PrevalidacionFormProps) {
   const [values, setValues] = useState<FormValues>(() => ({ ...EMPTY_FORM, ...initialValues }));
   const [touched, setTouched] = useState<Partial<Record<keyof FormValues, boolean>>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -105,6 +132,38 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
     setConfirmOpen(true);
   };
 
+  /**
+   * El documento ya tiene una validación EN VUELO en el tenant (con enlace vigente o vencido): no se
+   * crea una fila nueva. Se resuelve sobre la validación existente según el correo capturado:
+   *   - correo distinto al registrado → PATCH: actualiza el contacto y el backend reenvía solo (D8);
+   *   - correo igual → el PATCH no reenvía (`resent=false`), así que se dispara el reenvío explícito.
+   * El PATCH se manda siempre primero porque el correo registrado no viaja en el 409; comparar es
+   * responsabilidad del backend, que ya tiene el dato.
+   */
+  const reusarValidacionExistente = async (validationId: string) => {
+    const email = values.email.trim();
+    const edited = await tramitesClient.editPrevalidacion(validationId, {
+      name: values.name.trim(),
+      email,
+    });
+    if (edited.resent) {
+      return {
+        kind: 'email_actualizado' as const,
+        validationId,
+        email: edited.validation.email ?? email,
+        captureUrl: edited.captureUrl,
+      };
+    }
+    const resent = await tramitesClient.resendPrevalidacion(validationId);
+    return {
+      kind: 'reenviado' as const,
+      validationId,
+      email: resent.validation.email ?? email,
+      captureUrl: resent.captureUrl,
+      queued: resent.queued,
+    };
+  };
+
   const sendPrevalidacion = async () => {
     setSubmitting(true);
     setApiError(null);
@@ -121,13 +180,38 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
       onSuccess(result);
     } catch (err) {
       const conflict = getIdentitySendConflict(err);
-      if (conflict) {
+      // Documento ya existente CON validación en vuelo (propia del tenant, no de un trámite): se
+      // reutiliza el registro y se reenvía el correo en vez de fallar. Identidad aprobada vigente y
+      // cobertura del baúl NO reenvían: no hay nada que capturar, solo se informa el proceso existente.
+      const reusable =
+        conflict !== null &&
+        conflict.validationId !== null &&
+        conflict.origen !== 'tramite' &&
+        (conflict.motivo === 'validacion_en_vuelo' || conflict.motivo === 'enlace_vencido_reenvio');
+
+      if (reusable) {
+        try {
+          const info = await reusarValidacionExistente(conflict.validationId!);
+          setConfirmOpen(false);
+          // Sin `onReused` el reenvío ya ocurrió pero nadie lo mostraría: se cierra el formulario en
+          // vez de dejarlo abierto como si no hubiera pasado nada.
+          if (onReused) onReused(info);
+          else onClose();
+        } catch (reuseErr) {
+          setConfirmOpen(false);
+          setApiError(
+            reuseErr instanceof Error
+              ? `Ya existe una validación para este documento en este tenant, pero no se pudo reenviar el correo: ${reuseErr.message}`
+              : 'Ya existe una validación para este documento en este tenant y no se pudo reenviar el correo. Intenta de nuevo.',
+          );
+        }
+      } else if (conflict) {
         setConfirmOpen(false);
         setExistingConflict(conflict);
         setApiError(null);
       } else if (err instanceof TramitesApiError && err.status === 409) {
         setApiError(
-          'Ya existe una prevalidación activa o pendiente para este documento. Revísala en el listado.',
+          'Ya existe una validación activa o pendiente para este documento en este tenant. Revísala en el listado.',
         );
       } else {
         setApiError(
@@ -310,7 +394,10 @@ export function PrevalidacionForm({ onClose, onSuccess, initialValues }: Prevali
                     : ''}
                 </p>
                 <p className="opacity-80">
-                  Estado: {existingConflict.status ?? 'disponible'}. Usa el proceso existente en lugar de reenviar.
+                  Estado: {existingConflict.status ?? 'disponible'}.{' '}
+                  {existingConflict.origen === 'tramite'
+                    ? 'La validación pertenece a un trámite: gestiónala desde ese trámite.'
+                    : 'Usa el proceso existente en lugar de reenviar.'}
                 </p>
                 {existingConflict.validationId && (
                   <button

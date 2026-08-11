@@ -8,6 +8,7 @@ import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import { fetchTransitOfficeTenants, type TransitOfficeTenantItem } from "@/lib/api/admin-transit-office-tenants";
 import type { CompanyListItem } from "@/lib/api/types";
 import { superadminClient } from "@/lib/api/superadmin-client";
+import { SearchableSelect } from "@/components/atom/SearchableSelect";
 import {
   USER_PROFILE_DESCRIPTION,
   USER_PROFILE_LABEL,
@@ -292,31 +293,24 @@ export function InviteUserModal({
             {/* Destino: el perfil FLIT no pertenece a ninguna compañía ni organismo. */}
             {needsTenant && (
               <div>
-                <label htmlFor="invite-tenant" className="mb-1 block text-xs font-semibold">
-                  {profile === "OT" ? "Organismo de tránsito destino *" : "Compañía destino *"}
-                </label>
-                <select
+                {/* Buscador interno: la lista de destinos crece con cada empresa u OT dada de alta. */}
+                <SearchableSelect
                   id="invite-tenant"
-                  required
+                  label={profile === "OT" ? "Organismo de tránsito destino *" : "Compañía destino *"}
+                  options={
+                    profile === "OT"
+                      ? transitOfficeTenants.map((t) => ({
+                          value: t.id,
+                          label: t.legalName,
+                          hint: t.transitOfficeCode,
+                        }))
+                      : companies.map((c) => ({ value: c.id, label: c.name }))
+                  }
                   value={selectedTenantId}
-                  onChange={(e) => setSelectedTenantId(e.target.value)}
+                  onChange={setSelectedTenantId}
                   disabled={tenantsLoading}
-                  className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm outline-none focus:border-[#557EFF]"
-                >
-                  <option value="">{tenantsLoading ? "Cargando…" : "Seleccionar destino…"}</option>
-                  {profile === "GESTOR" &&
-                    companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  {profile === "OT" &&
-                    transitOfficeTenants.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.legalName} ({t.transitOfficeCode})
-                      </option>
-                    ))}
-                </select>
+                  placeholder={tenantsLoading ? "Cargando…" : "Buscar destino…"}
+                />
               </div>
             )}
 

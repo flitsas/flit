@@ -532,6 +532,32 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             ? ListGroupedByPersonNpgsqlAsync(tenantId, skip, take, filter, now, ct)
             : ListGroupedByPersonInMemoryAsync(tenantId, skip, take, filter, now, ct);
 
+    public async Task<IReadOnlyDictionary<string, int>> CountBiometricPersonsByEstadoAsync(
+        Guid tenantId,
+        BiometricPersonGroupFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        if (db.Database.IsNpgsql())
+            return await CountGroupedByPersonNpgsqlAsync(tenantId, filter, now, ct);
+
+        // InMemory: se reutiliza el mismo agrupador (sin paginar) para no duplicar los filtros.
+        var (rows, _) = await ListGroupedByPersonInMemoryAsync(tenantId, 0, int.MaxValue, filter, now, ct);
+        return rows
+            .GroupBy(r => EstadoEfectivo(r.Status, r.ExpiresAt, now))
+            .ToDictionary(g => g.Key, g => g.Count());
+    }
+
+    /// <summary>
+    /// Estado tal como lo ve el gestor: una validación no aprobada con el enlace vencido es "expirada"
+    /// aunque en base siga como enviada o en proceso. Misma regla que el filtro por estado (AC3) y que
+    /// el flag <c>Expired</c> del DTO; el conteo de KPIs debe hablar el mismo idioma que la fila.
+    /// </summary>
+    private static string EstadoEfectivo(string status, DateTimeOffset expiresAt, DateTimeOffset now) =>
+        status != BiometricEstados.Aprobado && expiresAt < now
+            ? BiometricEstados.Expirado
+            : status;
+
     public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>>
         ListBiometricValidationsForPersonAlertScanAsync(
             Guid tenantId,
@@ -606,41 +632,14 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return (rows, total, anyNonTerminal);
     }
 
-    private async Task<(IReadOnlyList<BiometricPersonGroupProjection> Rows, int TotalPersons)>
-        ListGroupedByPersonNpgsqlAsync(
-            Guid tenantId,
-            int skip,
-            int take,
-            BiometricPersonGroupFilter? filter,
-            DateTimeOffset now,
-            CancellationToken ct)
-    {
-        // Misma semántica que el fallback InMemory; DISTINCT ON + índice ix_biometric_validations_doc_norm_created.
-        var name = filter?.Name?.Trim();
-        var docType = string.IsNullOrWhiteSpace(filter?.DocumentType)
-            ? null
-            : DocumentCanonicalNormalization.NormalizePart(filter!.DocumentType);
-        var docNumber = string.IsNullOrWhiteSpace(filter?.DocumentNumber)
-            ? null
-            : DocumentCanonicalNormalization.NormalizePart(filter!.DocumentNumber);
-        var status = string.IsNullOrWhiteSpace(filter?.Status) ? null : filter!.Status!.Trim().ToLowerInvariant();
-        var vigencia = string.IsNullOrWhiteSpace(filter?.VigenciaEstado)
-            ? null
-            : filter!.VigenciaEstado!.Trim().ToLowerInvariant();
-        var createdFrom = filter?.CreatedFrom;
-        var createdTo = filter?.CreatedTo;
-        var expiraDesde = filter?.ExpiraDesde;
-        var expiraHasta = filter?.ExpiraHasta;
-        var venceEnDias = filter?.VenceEnDias;
-        var standalone = filter?.Standalone;
-
-        var corteVigente = now.AddDays(-BiometricRules.VigenciaDias);
-        var cortePorVencer = now.AddDays(-(BiometricRules.VigenciaDias - BiometricRules.VigenciaPorVencerDias));
-        var corteVenceEn = venceEnDias is int n
-            ? now.AddDays(n - BiometricRules.VigenciaDias)
-            : (DateTimeOffset?)null;
-
-        const string sql = """
+    /// <summary>
+    /// CTE compartida del listado agrupado por persona (HU #11270): normaliza el documento, cuenta el
+    /// grupo, se queda con la validación más reciente de cada persona (DISTINCT ON) y aplica los filtros
+    /// de estado/fecha/vigencia sobre ESA fila. La usan tanto la página de filas como el conteo por
+    /// estado de los KPIs, para que ambos hablen exactamente del mismo conjunto (si divergieran, los
+    /// contadores no cuadrarían con las filas que el gestor tiene delante).
+    /// </summary>
+    private const string GroupedByPersonCteSql = """
             WITH base AS (
                 SELECT
                     v.id,
@@ -669,7 +668,11 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                   AND v.deleted_at IS NULL
                   AND (v.procedure_instance_id IS NULL OR pi.deleted_at IS NULL)
                   AND ({1}::text IS NULL OR upper(btrim(v.document_type)) = {1})
-                  AND ({2}::text IS NULL OR upper(btrim(v.document_number)) = {2})
+                  -- Documento por COINCIDENCIA PARCIAL, igual que el listado plano: el gestor teclea
+                  -- los últimos dígitos de la cédula, no el número completo (con "=" el filtro parecía
+                  -- roto salvo que se acertara el documento entero).
+                  AND ({2}::text IS NULL
+                       OR upper(btrim(v.document_number)) LIKE '%' || {2} || '%' ESCAPE '\')
                   AND ({3}::text IS NULL OR v.name ILIKE '%' || {3} || '%' ESCAPE '\')
                   AND ({4}::boolean IS NULL
                        OR ({4} = TRUE AND v.procedure_instance_id IS NULL)
@@ -688,12 +691,23 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 JOIN counted c
                   ON c.document_type_norm = b.document_type_norm
                  AND c.document_number_norm = b.document_number_norm
-                ORDER BY b.document_type_norm, b.document_number_norm, b.created_at DESC
+                -- Desempate por id: sin él, dos validaciones de la misma persona con idéntico
+                -- created_at hacen que DISTINCT ON elija una u otra en cada ejecución, y la página de
+                -- filas y el conteo de KPIs (dos sentencias distintas) pueden quedarse con estados
+                -- diferentes para la misma persona.
+                ORDER BY b.document_type_norm, b.document_number_norm, b.created_at DESC, b.id DESC
             ),
             filtered AS (
                 SELECT *
                 FROM latest
-                WHERE ({5}::text IS NULL OR status = {5})
+                -- Filtra por el estado EFECTIVO (el mismo que se pinta y se cuenta): una validación no
+                -- aprobada con el enlace vencido es "expirada" aunque en base siga enviada o en proceso.
+                -- Con el estado crudo, "Expirado" no encontraba filas que en pantalla decían Expirado.
+                WHERE ({5}::text IS NULL
+                       OR (CASE
+                             WHEN status <> 'aprobado' AND expires_at < {14} THEN 'expirado'
+                             ELSE status
+                           END) = {5})
                   AND ({6}::timestamptz IS NULL OR created_at >= {6})
                   AND ({7}::timestamptz IS NULL OR created_at <= {7})
                   AND (
@@ -711,6 +725,10 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                          AND validated_at > {11} AND validated_at <= {13})
                   )
             )
+        """;
+
+    /// <summary>Página de personas ordenada por registro. Params propios: {14} skip, {15} take.</summary>
+    private const string GroupedByPersonRowsSql = GroupedByPersonCteSql + "\n" + """
             -- Columnas en snake_case SIN alias PascalCase: UseSnakeCaseNamingConvention
             -- mapea CreatedAt→created_at. AS "CreatedAt" hacía que EF buscara created_at
             -- y no lo hallara → InvalidOperationException 500 en by-person.
@@ -738,8 +756,61 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 COUNT(*) OVER() AS total_persons
             FROM filtered
             ORDER BY created_at DESC
-            OFFSET {14} LIMIT {15}
-            """;
+            OFFSET {15} LIMIT {16}
+        """;
+
+    /// <summary>
+    /// KPIs de la grilla agrupada: una fila por estado con su número de PERSONAS. Agrupa por el estado
+    /// EFECTIVO, el mismo que se pinta en la fila: una validación no aprobada con el enlace vencido es
+    /// "expirada" aunque en base siga como enviada o en proceso (misma regla que el filtro por estado
+    /// y que el flag <c>Expired</c> del DTO). Si aquí se agrupara por el estado crudo, el contador diría
+    /// "En proceso" de una fila que el gestor ve como "Expirado".
+    /// </summary>
+    private const string GroupedByPersonCountsSql = GroupedByPersonCteSql + "\n" + """
+            SELECT
+                CASE
+                    WHEN status <> 'aprobado' AND expires_at < {14} THEN 'expirado'
+                    ELSE status
+                END AS status,
+                COUNT(*)::int AS person_count
+            FROM filtered
+            GROUP BY 1
+        """;
+
+    /// <summary>
+    /// Parámetros {0}..{14} compartidos por ambas colas de <see cref="GroupedByPersonCteSql"/>
+    /// ({14} = <c>now</c>, que solo usa la cola de conteo). La página añade {15} skip y {16} take.
+    /// </summary>
+    private static object[] BuildGroupedByPersonParams(
+        Guid tenantId,
+        BiometricPersonGroupFilter? filter,
+        DateTimeOffset now)
+    {
+        var name = filter?.Name?.Trim();
+        var docType = string.IsNullOrWhiteSpace(filter?.DocumentType)
+            ? null
+            : DocumentCanonicalNormalization.NormalizePart(filter!.DocumentType);
+        // Va dentro de un LIKE '%…%': se escapan los comodines para tratarlos como literales.
+        var docNumber = string.IsNullOrWhiteSpace(filter?.DocumentNumber)
+            ? null
+            : EscapeLike(DocumentCanonicalNormalization.NormalizePart(filter!.DocumentNumber));
+        var status = string.IsNullOrWhiteSpace(filter?.Status) ? null : filter!.Status!.Trim().ToLowerInvariant();
+        var vigencia = string.IsNullOrWhiteSpace(filter?.VigenciaEstado)
+            ? null
+            : filter!.VigenciaEstado!.Trim().ToLowerInvariant();
+        var createdFrom = filter?.CreatedFrom;
+        var createdTo = filter?.CreatedTo;
+        var expiraDesde = filter?.ExpiraDesde;
+        var expiraHasta = filter?.ExpiraHasta;
+        var venceEnDias = filter?.VenceEnDias;
+        var standalone = filter?.Standalone;
+
+        var corteVigente = now.AddDays(-BiometricRules.VigenciaDias);
+        var cortePorVencer = now.AddDays(-(BiometricRules.VigenciaDias - BiometricRules.VigenciaPorVencerDias));
+        var corteVenceEn = venceEnDias is int n
+            ? now.AddDays(n - BiometricRules.VigenciaDias)
+            : (DateTimeOffset?)null;
+
 
         // ExpiraDesde/Hasta en el listado plano desplazan por VigenciaDias sobre validated_at;
         // aquí aplicamos el mismo desplazamiento para no divergir el filtro de vigencia por fecha.
@@ -753,30 +824,63 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         // SqlQueryRaw no acepta nulls tipados en params object[] (CS8604): DBNull → NULL SQL.
         object Db(object? v) => v ?? DBNull.Value;
 
+        return
+        [
+            Db(tenantId),
+            Db(docType),
+            Db(docNumber),
+            Db(nameEscaped),
+            Db(standalone),
+            Db(status),
+            Db(createdFrom),
+            Db(createdTo),
+            Db(vigencia),
+            Db(expiraDesdeShifted),
+            Db(expiraHastaShifted),
+            Db(corteVigente),
+            Db(cortePorVencer),
+            Db(corteVenceEn),
+            Db(now),
+        ];
+    }
+
+    private async Task<(IReadOnlyList<BiometricPersonGroupProjection> Rows, int TotalPersons)>
+        ListGroupedByPersonNpgsqlAsync(
+            Guid tenantId,
+            int skip,
+            int take,
+            BiometricPersonGroupFilter? filter,
+            DateTimeOffset now,
+            CancellationToken ct)
+    {
+        var shared = BuildGroupedByPersonParams(tenantId, filter, now);
+        var args = new object[shared.Length + 2];
+        shared.CopyTo(args, 0);
+        args[^2] = skip;
+        args[^1] = take;
+
         var rows = await db.Database
-            .SqlQueryRaw<BiometricPersonGroupSqlRow>(
-                sql,
-                Db(tenantId),
-                Db(docType),
-                Db(docNumber),
-                Db(nameEscaped),
-                Db(standalone),
-                Db(status),
-                Db(createdFrom),
-                Db(createdTo),
-                Db(vigencia),
-                Db(expiraDesdeShifted),
-                Db(expiraHastaShifted),
-                Db(corteVigente),
-                Db(cortePorVencer),
-                Db(corteVenceEn),
-                Db(skip),
-                Db(take))
+            .SqlQueryRaw<BiometricPersonGroupSqlRow>(GroupedByPersonRowsSql, args)
             .ToListAsync(ct);
 
         var total = rows.Count > 0 ? rows[0].TotalPersons : 0;
         var projections = rows.Select(r => r.ToProjection()).ToList();
         return (projections, total);
+    }
+
+    private async Task<IReadOnlyDictionary<string, int>> CountGroupedByPersonNpgsqlAsync(
+        Guid tenantId,
+        BiometricPersonGroupFilter? filter,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var rows = await db.Database
+            .SqlQueryRaw<BiometricPersonStatusCountSqlRow>(
+                GroupedByPersonCountsSql,
+                BuildGroupedByPersonParams(tenantId, filter, now))
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(r => r.Status, r => r.PersonCount);
     }
 
     private async Task<(IReadOnlyList<BiometricPersonGroupProjection> Rows, int TotalPersons)>
@@ -800,8 +904,11 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
 
             if (!string.IsNullOrWhiteSpace(filter.DocumentNumber))
             {
+                // Coincidencia parcial, igual que el LIKE de la consulta Npgsql.
                 var numero = DocumentCanonicalNormalization.NormalizePart(filter.DocumentNumber);
-                all = all.Where(v => DocumentCanonicalNormalization.NormalizePart(v.DocumentNumber) == numero).ToList();
+                all = all
+                    .Where(v => DocumentCanonicalNormalization.NormalizePart(v.DocumentNumber).Contains(numero, StringComparison.Ordinal))
+                    .ToList();
             }
 
             if (!string.IsNullOrWhiteSpace(filter.Name))
@@ -824,7 +931,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 DocumentCanonicalNormalization.NormalizePart(v.DocumentNumber)))
             .Select(g =>
             {
-                var latest = g.OrderByDescending(v => v.CreatedAt).First();
+                // Mismo desempate que el DISTINCT ON de Postgres (created_at, luego id).
+                var latest = g.OrderByDescending(v => v.CreatedAt).ThenByDescending(v => v.Id).First();
                 return new BiometricPersonGroupProjection
                 {
                     LatestValidationId = latest.Id,
@@ -855,8 +963,11 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         {
             if (!string.IsNullOrWhiteSpace(filter.Status))
             {
+                // Estado EFECTIVO, igual que el CASE de la consulta Npgsql.
                 var st = filter.Status.Trim();
-                groups = groups.Where(g => string.Equals(g.Status, st, StringComparison.OrdinalIgnoreCase)).ToList();
+                groups = groups
+                    .Where(g => string.Equals(EstadoEfectivo(g.Status, g.ExpiresAt, now), st, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
             }
 
             if (filter.CreatedFrom is { } from)
@@ -910,6 +1021,14 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             .Take(take)
             .ToList();
         return (page, total);
+    }
+
+    /// <summary>Fila intermedia de SqlQueryRaw para el conteo de PERSONAS por estado (KPIs).</summary>
+    private sealed class BiometricPersonStatusCountSqlRow
+    {
+        public string Status { get; init; } = string.Empty;
+
+        public int PersonCount { get; init; }
     }
 
     /// <summary>Fila intermedia de SqlQueryRaw para el DISTINCT ON agrupado (HU #11270).</summary>

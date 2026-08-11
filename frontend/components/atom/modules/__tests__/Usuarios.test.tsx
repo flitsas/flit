@@ -76,7 +76,9 @@ describe("Usuarios — invitar usuario (SuperAdmin, selector de perfil)", () => 
     await user.click(await screen.findByRole("button", { name: /invitar usuario/i }));
     await user.click(await screen.findByRole("radio", { name: /Gestor/i }));
 
+    // El destino es un combobox con buscador: las opciones solo existen con la lista abierta.
     const tenantSelect = await screen.findByLabelText(/compañía destino/i);
+    await user.click(tenantSelect);
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /Compañía Demo/i })).toBeInTheDocument();
     });
@@ -84,8 +86,8 @@ describe("Usuarios — invitar usuario (SuperAdmin, selector de perfil)", () => 
       screen.queryByRole("option", { name: /Secretaría de Movilidad Demo/i }),
     ).not.toBeInTheDocument();
 
-    await user.selectOptions(tenantSelect, "company-1");
-    expect((tenantSelect as HTMLSelectElement).value).toBe("company-1");
+    await user.click(screen.getByRole("option", { name: /Compañía Demo/i }));
+    expect(tenantSelect).toHaveValue("Compañía Demo");
   });
 
   it("pide organismo de tránsito destino para el perfil OT", async () => {
@@ -95,7 +97,7 @@ describe("Usuarios — invitar usuario (SuperAdmin, selector de perfil)", () => 
     await user.click(await screen.findByRole("button", { name: /invitar usuario/i }));
     await user.click(await screen.findByRole("radio", { name: /Organismo de Tránsito/i }));
 
-    await screen.findByLabelText(/organismo de tránsito destino/i);
+    await user.click(await screen.findByLabelText(/organismo de tránsito destino/i));
     await waitFor(() => {
       expect(
         screen.getByRole("option", { name: /Secretaría de Movilidad Demo/i }),

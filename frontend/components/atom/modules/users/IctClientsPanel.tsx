@@ -17,6 +17,7 @@ import {
 } from "@/lib/api/ict-clients";
 import { fetchCompaniesIndex } from "@/lib/api/admin-companies";
 import type { CompanyListItem } from "@/lib/api/types";
+import { SearchableSelect } from "@/components/atom/SearchableSelect";
 
 interface Props {
   isSuperAdmin: boolean;
@@ -225,21 +226,15 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
             />
           </label>
           {isSuperAdmin && (
-            <label className="flex flex-col gap-1 text-xs text-slate-500">
-              Compañía
-              <select
-                value={companyId}
-                onChange={(e) => setCompanyId(e.target.value)}
-                className="rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:bg-slate-800 dark:text-white"
-              >
-                <option value="">Seleccione…</option>
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.razonSocial}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <SearchableSelect
+              id="ict-clients-compania"
+              label="Compañía"
+              options={companies.map((c) => ({ value: c.id, label: c.razonSocial, hint: c.nit }))}
+              value={companyId}
+              onChange={setCompanyId}
+              placeholder="Buscar compañía…"
+              className="min-w-[220px]"
+            />
           )}
           <button
             type="submit"
