@@ -182,7 +182,15 @@ export function Reportes() {
         subtitle="Monitorea el desempeño operativo por pestañas temáticas."
       />
 
-      {/* Filtros globales (persisten entre pestañas) + exportaciones */}
+      <ReportesTabBar
+        tabs={visibleTabs.map(({ id, label }) => ({ id, label }))}
+        activeId={activeTab ?? ""}
+        onChange={selectTab}
+        ariaLabel="Pestañas de reportes"
+      />
+
+      {/* Filtros globales (persisten entre pestañas) + exportaciones. Van debajo de las pestañas:
+          el usuario primero elige qué quiere ver y luego filtra esa vista. */}
       <div className="flex flex-wrap items-end gap-3 shrink-0">
         <GlobalFilters
           filters={filters}
@@ -214,13 +222,6 @@ export function Reportes() {
           </div>
         )}
       </div>
-
-      <ReportesTabBar
-        tabs={visibleTabs.map(({ id, label }) => ({ id, label }))}
-        activeId={activeTab ?? ""}
-        onChange={selectTab}
-        ariaLabel="Pestañas de reportes"
-      />
 
       {!rangeValid && activeTab !== "consultas" ? (
         <div
