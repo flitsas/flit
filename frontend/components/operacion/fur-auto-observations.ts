@@ -76,3 +76,23 @@ export function furAutoObservations(fields: FieldValue[] | null | undefined): st
 
   return segments;
 }
+
+/**
+ * El recuadro de observaciones tal como quedará: lo que escribe el gestor primero y el texto
+ * automático detrás, en el MISMO orden en que los une el backend
+ * (`FurTransformationObservations.Compose` antepone las manuales; el bloque de servicio/vinculadora
+ * va al final).
+ *
+ * <p><b>Lo que esta vista previa no incluye:</b> el bloque de gravamen (`FurPrendaObservation`), que
+ * el FUR antepone a todo cuando hay prenda vigente con acreedor. Ese dato no viaja en
+ * `field_values` —sale del agregado de prenda— y traerlo aquí exigiría otra llamada y una tercera
+ * copia de la regla de marcado. Por eso el encabezado habla de las observaciones, no del recuadro
+ * entero.</p>
+ */
+export function furObservationsPreview(
+  manual: string | null | undefined,
+  fields: FieldValue[] | null | undefined,
+): { manual: string | null; auto: string[] } {
+  const escrito = manual?.trim();
+  return { manual: escrito ? escrito : null, auto: furAutoObservations(fields) };
+}

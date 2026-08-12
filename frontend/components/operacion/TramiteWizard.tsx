@@ -34,7 +34,7 @@ import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
 import { PrendaForm, traspasoDecisions } from './PrendaForm';
-import { furAutoObservations } from './fur-auto-observations';
+import { furObservationsPreview } from './fur-auto-observations';
 import { SubsanacionPanel } from './SubsanacionPanel';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
@@ -1632,9 +1632,13 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
   const readOnly = useWizardReadOnly();
   const [observaciones, setObservaciones] = useState('');
   const [saving, setSaving] = useState(false);
-  // Lo que el backend anexará solo (transformaciones declaradas, tipo de servicio + vinculadora):
-  // se muestra aquí para que el gestor lo vea al escribir las suyas, en vez de descubrirlo en el PDF.
-  const [autoSegments, setAutoSegments] = useState<string[]>([]);
+  // Los field_values con los que se compone el texto automático (transformaciones declaradas, tipo
+  // de servicio + vinculadora). Se guardan crudos, no ya compuestos, porque la vista previa se
+  // recalcula en cada tecla junto con lo que el gestor escribe.
+  const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
+  // La vista previa se deriva del estado en cada render: así lo que se escribe aparece abajo al
+  // instante, sin esperar al blur que persiste el campo.
+  const preview = furObservationsPreview(observaciones, fieldValues);
 
   useEffect(() => {
     if (!instanceId) return;
@@ -1645,7 +1649,7 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
         if (active) {
           const val = detail?.fieldValues?.find((f) => f.fieldKey === 'fur_observations')?.valueText ?? '';
           setObservaciones(val);
-          setAutoSegments(furAutoObservations(detail?.fieldValues));
+          setFieldValues(detail?.fieldValues ?? []);
         }
       })
       .catch(() => {});
@@ -1693,19 +1697,25 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
           Guardando…
         </p>
       )}
-      {/* Solo lectura a propósito: si se precargara dentro del textarea, el backend lo anexaría otra
-          vez al generar el FUR y saldría duplicado — y el gestor podría borrar sin querer un dato
-          que el formulario necesita. Aquí se ve, no se edita. */}
-      {autoSegments.length > 0 && (
+      {/* Espejo de solo lectura del recuadro del FUR: lo escrito arriba —en vivo, sin esperar al
+          guardado— y detrás lo que el backend añade solo, en el mismo orden en que él los une. El
+          texto automático NO se precarga dentro del textarea a propósito: el backend lo anexa al
+          generar el FUR, así que saldría duplicado, y el gestor podría borrar sin querer un dato que
+          el formulario necesita. */}
+      {(preview.manual || preview.auto.length > 0) && (
         <div className="rounded-xl bg-[#F4F6FA] px-3 py-2 dark:bg-[#131A22]">
-          <p className="text-[10px] font-bold uppercase opacity-55">
-            Se añadirá automáticamente al FUR
-          </p>
-          <ul className="mt-1 space-y-0.5 text-[11px] leading-relaxed">
-            {autoSegments.map((segment) => (
-              <li key={segment}>{segment}</li>
+          <p className="text-[10px] font-bold uppercase opacity-55">Así quedarán en el FUR</p>
+          <div className="mt-1 space-y-0.5 text-[11px] leading-relaxed">
+            {preview.manual && (
+              <p className="whitespace-pre-line break-words">{preview.manual}</p>
+            )}
+            {/* Atenuadas: son las que el gestor no escribió y no puede editar aquí. */}
+            {preview.auto.map((segment) => (
+              <p key={segment} className="opacity-70">
+                {segment}
+              </p>
             ))}
-          </ul>
+          </div>
         </div>
       )}
     </div>
