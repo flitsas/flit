@@ -86,6 +86,13 @@ public abstract class IctPollingJob(
     /// <summary>Fábrica de scopes DI, expuesta para procesar ítems en scopes/conexiones propios (concurrencia).</summary>
     protected IServiceScopeFactory ScopeFactory => scopeFactory;
 
+    /// <summary>
+    /// Cota de lotes por ciclo para los jobs que drenan un backlog llamando un SP batcheado en bucle
+    /// (validación de negocio/externa): evita un bucle sin fin bajo ingesta continua. Con el default de
+    /// lote 500 son ~1M filas por ciclo — drena cualquier backlog realista; si sobra, el siguiente ciclo sigue.
+    /// </summary>
+    protected const int MaxBatchesPerCycle = 2000;
+
     protected abstract TimeSpan PollInterval { get; }
 
     protected abstract string JobName { get; }

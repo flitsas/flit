@@ -11,6 +11,13 @@
 -- obligatorio), related_company_* y el bloque de limitations_* (gravámenes) de v1.
 -- =============================================================================
 
+-- Índice PARCIAL de apoyo al drenado batcheado: solo indexa las filas PENDIENTES de validación de
+-- negocio, así cada lote (LIMIT + ORDER BY created_at) es un index-scan barato aunque el backlog sea de
+-- cientos de miles. Se auto-mantiene pequeño (las filas salen del índice al validarse: bv pasa a 2).
+CREATE INDEX IF NOT EXISTS ix_eim_pending_business
+    ON ict.external_integration_master (created_at)
+    WHERE business_validation = 0 AND process_status_id = 1 AND deleted_at IS NULL;
+
 CREATE OR REPLACE PROCEDURE ict.sp_processor_validation_business()
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -19,13 +26,26 @@ DECLARE
     rec RECORD;
     resultcomments text;
     missingdocs text;
+    v_batch_size integer;
 BEGIN
+    -- Tamaño de lote configurable EN CALIENTE (ict.job_settings.business_batch_size), default 500.
+    -- Cada CALL procesa A LO SUMO v_batch_size filas en UNA transacción (autocommit del job) y retorna;
+    -- el job (BusinessValidationJob) re-invoca en bucle hasta drenar el backlog. Así se elimina la
+    -- transacción única gigante del porte v1 (all-or-nothing, locks largos, bloat de WAL) SIN usar COMMIT
+    -- dentro del procedimiento (Postgres no lo permite aquí: SECURITY DEFINER + FOR sobre query).
+    SELECT COALESCE(business_batch_size, 500) INTO v_batch_size FROM ict.job_settings WHERE id = 1;
+    IF v_batch_size IS NULL OR v_batch_size < 1 THEN
+        v_batch_size := 500;
+    END IF;
+
     FOR rec IN
         SELECT m.id AS id_master, m.tenant_id, m.manager_id_transaction, m.transaction_type,
                m.manager_user, m.manager_mail, m.company_manager_document, m.closed_document,
                m.process_without_attached_documents, m.traffic_secretary_code, m.url_web_hook
         FROM ict.external_integration_master m
         WHERE m.business_validation = 0 AND m.process_status_id = 1 AND m.deleted_at IS NULL
+        ORDER BY m.created_at
+        LIMIT v_batch_size
     LOOP
         -- Inicio: en validación de negocio.
         UPDATE ict.external_integration_master
