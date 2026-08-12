@@ -15,9 +15,21 @@
 // El resumen («2 filtros · últimos 30 días») hace además el trabajo de fondo: convierte un nombre
 // que solo significaba algo el día que se guardó en algo que se reconoce meses después.
 
-import { Check, ChevronRight, Trash2 } from "lucide-react";
+import { Bookmark, Check, ChevronRight, Lightbulb, Search, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 import { RANGE_PRESETS, type SavedQuery } from "@/lib/api/queries";
+
+/**
+ * A partir de cuántas propias aparece el buscador.
+ *
+ * Con dos o tres consultas, leerlas todas es más rápido que escribir para filtrar: el campo solo
+ * gana su sitio cuando la lista deja de caber de un vistazo.
+ */
+const UMBRAL_BUSCADOR = 6;
+
+/** Alto máximo de «Mis consultas» antes de que la lista scrollee por su cuenta. */
+const ALTO_MAX_PROPIAS = "max-h-[26rem]";
 
 export function SavedQueryList({
   queries,
@@ -44,31 +56,66 @@ export function SavedQueryList({
   const propias = queries.filter((q) => !q.deFabrica);
   const fabrica = queries.filter((q) => q.deFabrica);
 
+  // El buscador filtra por nombre. Sin él, encontrar una consulta entre muchas obliga a leerlas
+  // todas mientras se hace scroll — el mismo problema que el alto máximo de abajo evita, pero para
+  // el ojo en vez de para la barra de scroll.
+  const [busqueda, setBusqueda] = useState("");
+  const term = busqueda.trim().toLowerCase();
+  const propiasFiltradas = term
+    ? propias.filter((q) => q.nombre.toLowerCase().includes(term))
+    : propias;
+
   return (
     <div className="flex flex-col gap-4" data-testid={`${testIdPrefix}-guardadas`}>
-      <Grupo titulo="Mis consultas" cuenta={propias.length}>
-        {propias.length === 0 ? (
-          // Un hueco en blanco no explica nada. Este dice qué aparecerá aquí y de dónde sale.
-          <p className="rounded-xl border border-dashed border-[#DFE5ED] px-3 py-3 text-[11px] leading-relaxed text-[#6B7280] dark:border-white/15 dark:text-white/45">
-            Las consultas que guarde aparecen aquí, listas para volver a ejecutarlas con un clic.
-          </p>
-        ) : (
-          <ul className="space-y-1.5">
-            {propias.map((query) => (
-              <Item
-                key={query.id}
-                query={query}
-                activo={query.id === activeId}
-                modificada={modificada}
-                confirmando={porBorrar?.id === query.id}
-                onOpen={onOpen}
-                onPedirBorrado={onPedirBorrado}
-                onConfirmarBorrado={onConfirmarBorrado}
-                testIdPrefix={testIdPrefix}
+      <Grupo titulo="Mis consultas" cuenta={propias.length} icono={Bookmark}>
+        <div className="flex flex-col gap-2">
+          {propias.length > UMBRAL_BUSCADOR && (
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9AA5B4] dark:text-white/30"
+                aria-hidden="true"
               />
-            ))}
-          </ul>
-        )}
+              <input
+                type="search"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar por nombre…"
+                aria-label="Buscar en mis consultas"
+                className="w-full rounded-lg border border-[#DFE5ED] bg-transparent py-1.5 pl-8 pr-2 text-xs outline-none focus:border-[#557EFF] dark:border-white/15"
+                data-testid={`${testIdPrefix}-buscar-guardadas`}
+              />
+            </div>
+          )}
+
+          {propias.length === 0 ? (
+            // Un hueco en blanco no explica nada. Este dice qué aparecerá aquí y de dónde sale.
+            <p className="rounded-xl border border-dashed border-[#DFE5ED] px-3 py-3 text-[11px] leading-relaxed text-[#6B7280] dark:border-white/15 dark:text-white/45">
+              Las consultas que guardes aparecen aquí, listas para volver a ejecutarlas con un clic.
+            </p>
+          ) : propiasFiltradas.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-[#DFE5ED] px-3 py-3 text-[11px] leading-relaxed text-[#6B7280] dark:border-white/15 dark:text-white/45">
+              Ninguna consulta coincide con «{busqueda.trim()}».
+            </p>
+          ) : (
+            // El alto máximo evita que una lista larga empuje el resto de la pantalla: a partir de
+            // ahí scrollea sola, sin arrastrar los filtros ni el resultado que quedan al lado.
+            <ul className={`space-y-1.5 overflow-y-auto pr-1 ${ALTO_MAX_PROPIAS}`}>
+              {propiasFiltradas.map((query) => (
+                <Item
+                  key={query.id}
+                  query={query}
+                  activo={query.id === activeId}
+                  modificada={modificada}
+                  confirmando={porBorrar?.id === query.id}
+                  onOpen={onOpen}
+                  onPedirBorrado={onPedirBorrado}
+                  onConfirmarBorrado={onConfirmarBorrado}
+                  testIdPrefix={testIdPrefix}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
       </Grupo>
 
       {fabrica.length > 0 && (
@@ -76,6 +123,7 @@ export function SavedQueryList({
           titulo="Para empezar"
           cuenta={fabrica.length}
           nota="Ábrelas y cámbialas a tu gusto."
+          icono={Lightbulb}
           separado
         >
           <ul className="space-y-1.5">
@@ -102,32 +150,36 @@ export function SavedQueryList({
 /**
  * Un bloque de la lista con su título.
  *
- * El título pesa más que las tarjetas que encabeza —negrita y color de texto normal, no el gris de
- * pie de página que tenía—, y el grupo que no va primero se separa con una línea. Sin eso, «Mis
- * consultas» y «Para empezar» se leían como una sola lista larga con dos rótulos sueltos por el
- * medio, y la diferencia entre ambas importa: unas son suyas y se borran, las otras vienen dadas.
+ * El título vive dentro de una banda con fondo propio, no solo negrita sobre el fondo general —así
+ * el ojo separa los dos grupos sin tener que leer las palabras primero. Sin eso, «Mis consultas» y
+ * «Para empezar» se leían como una sola lista larga con dos rótulos sueltos por el medio, y la
+ * diferencia entre ambas importa: unas son suyas y se borran, las otras vienen dadas.
  */
 function Grupo({
   titulo,
   cuenta,
   nota,
+  icono: Icono,
   separado,
   children,
 }: {
   titulo: string;
   cuenta: number;
   nota?: string;
+  /** Distingue el grupo de un vistazo, sin depender solo del texto del título. */
+  icono: typeof Bookmark;
   /** Traza la línea de separación con el grupo anterior. */
   separado?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className={separado ? "border-t border-[#DFE5ED] pt-4 dark:border-white/10" : undefined}>
-      <div className="mb-2 flex items-center gap-1.5 px-0.5">
+      <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-[#F5F7FA] px-2 py-1.5 dark:bg-white/[0.06]">
+        <Icono className="h-3.5 w-3.5 shrink-0 text-[#557EFF] dark:text-[#9DB5FF]" aria-hidden="true" />
         <p className="text-[11px] font-bold uppercase tracking-wider text-[#162744] dark:text-white/75">
           {titulo}
         </p>
-        <span className="rounded-full bg-[#F5F7FA] px-1.5 py-px text-[10px] font-semibold tabular-nums text-[#6B7280] dark:bg-white/10 dark:text-white/50">
+        <span className="ml-auto rounded-full bg-white px-1.5 py-px text-[10px] font-semibold tabular-nums text-[#6B7280] dark:bg-white/10 dark:text-white/50">
           {cuenta}
         </span>
       </div>
