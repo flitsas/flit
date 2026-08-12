@@ -236,7 +236,7 @@ services:
       # crea un DIRECTORIO vacío en esa ruta y lo monta. La app reporta que no encuentra el
       # certificado aunque `ls` muestre algo ahí. Hay que borrar ese directorio (rmdir) ANTES
       # de dejar el .pfx y recrear el contenedor.
-      RENTING_API_PFX_CERTIFICATE_PATH: ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting-client.pfx}
+      RENTING_API_PFX_CERTIFICATE_PATH: ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}
       RENTING_API_PASSPHRASE: ${RENTING_API_PASSPHRASE:-}
       RENTING_API_BASE_URL: ${RENTING_API_BASE_URL:-}
       RENTING_API_KEY_NAME: ${RENTING_API_KEY_NAME:-Ocp-Apim-Subscription-Key}
@@ -275,7 +275,7 @@ services:
       # arriba. El certificado se abre en el PRIMER ENVÍO del canal, no al arrancar: un .pfx
       # ausente o ilegible NO impide que el servicio levante, se manifiesta como un envío
       # fallido. No confíes en que un arranque limpio signifique canal operativo.
-      - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting-client.pfx}:${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting-client.pfx}:ro
+      - ${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:${RENTING_API_PFX_CERTIFICATE_PATH:-/opt/certs/email/renting.rc.prod.pfx}:ro
     ports:
       - "127.0.0.1:${CORE_API_PORT:-4003}:${CORE_API_PORT:-4003}"
     healthcheck:
