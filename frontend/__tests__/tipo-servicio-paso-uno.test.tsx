@@ -312,6 +312,31 @@ describe('Tipo de servicio — paso 1 (solo matrícula inicial)', () => {
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
   });
 
+  /**
+   * El RUES puede responder `found` SIN razón social, y la consulta lo guarda como cadena vacía.
+   * El placeholder se elegía con `??`, que no cubre ese caso: el `output` quedaba vacío y el
+   * recuadro colapsaba a puro padding, sin decir por qué. Ahora los tres estados se distinguen:
+   * sin consultar, consultado con nombre, consultado sin nombre.
+   */
+  it('RUES found:true sin razón social — lo dice en vez de dejar el recuadro en blanco', async () => {
+    mocks.ruesPreview.mockResolvedValue({ found: true, nit: NIT_EMPRESA, razonSocial: null });
+    const user = userEvent.setup();
+    renderNuevo();
+
+    await consultarVehiculo(user);
+    await user.selectOptions(screen.getByLabelText('Tipo de servicio'), 'PUBLICO');
+    await user.type(screen.getByLabelText('NIT empresa vinculadora'), NIT_EMPRESA);
+    await user.click(screen.getByRole('button', { name: 'Buscar empresa en RUES' }));
+
+    await waitFor(() => expect(mocks.ruesPreview).toHaveBeenCalled());
+    const razonSocial = await screen.findByLabelText('Razón social');
+    await waitFor(() =>
+      expect(razonSocial).toHaveTextContent(/El RUES no reportó razón social para este NIT/),
+    );
+    // Y NO se queda con el texto de "aún no consultado", que aquí sería falso.
+    expect(razonSocial).not.toHaveTextContent(/La trae el RUES/);
+  });
+
   it('RUES 503 — fallo transitorio del proveedor, no del operador: se ofrece reintentar', async () => {
     mocks.ruesPreview.mockRejectedValueOnce({ status: 503, message: 'Service Unavailable' });
     mocks.ruesPreview.mockResolvedValueOnce({ found: true, nit: NIT_EMPRESA, razonSocial: 'TRANSPORTES SAS' });

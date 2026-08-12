@@ -8,6 +8,7 @@ import {
   parseRuntGravamenesJson,
   buildRuntPrendaSummary,
   pickRuntAcreedor,
+  traspasoDecisions,
 } from '../PrendaForm';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { FieldValue } from '@/lib/api/types/procedure-runtime';
@@ -34,6 +35,26 @@ vi.mock('@/lib/api/tramites-client', () => ({
 }));
 
 const client = vi.mocked(tramitesClient);
+
+// CF-06 (HU #10881) — "asumo el riesgo" no puede convivir con un organismo que exige el certificado:
+// con el override activo, elegir `omitir` satisfacía los dos gates y dejaba la regla del OT evadible.
+describe('traspasoDecisions — "omitir" y el override del organismo', () => {
+  it('no ofrece "omitir" cuando el OT exige el certificado de prenda', () => {
+    expect(traspasoDecisions(true)).not.toContain('omitir');
+  });
+
+  it('con el opt-out del OT vigente, "omitir" sigue disponible', () => {
+    expect(traspasoDecisions(false)).toContain('omitir');
+  });
+
+  it('las decisiones que gestionan la prenda se ofrecen en ambos casos', () => {
+    for (const documentRequired of [true, false]) {
+      expect(traspasoDecisions(documentRequired)).toEqual(
+        expect.arrayContaining(['solicitar', 'registrar', 'levantar']),
+      );
+    }
+  });
+});
 
 describe('PrendaForm (matrícula, R4)', () => {
   beforeEach(() => {
