@@ -17,40 +17,44 @@ public class AsignacionPlacaEmailComposerTests
         EstadoActual: "Asignado");
 
     [Fact]
-    public void ComposeFlit_IncluyeCuerpoYSoporteFlit()
+    public void ComposeFlit_IncluyeHeaderLogoYSoporteFlit()
     {
         var (subject, html) = AsignacionPlacaEmailComposer.ComposeFlit(
             Sample, AsignacionPlacaEmailPreviewSample.DefaultAssetsBaseUrl);
 
-        subject.Should().Contain("ABC123").And.Contain("Asignado");
+        subject.Should().Contain("ABC123").And.Contain("Asignado").And.Contain("[FLIT]");
+        html.Should().Contain("tramite-cambio-estado-header.png");
+        html.Should().Contain("flit-logo.png");
         html.Should().Contain("Juan Carlos P&#233;rez G&#243;mez");
         html.Should().Contain("ABC123");
-        html.Should().Contain("Medell&#237;n");
-        html.Should().Contain("Secretar&#237;a de Movilidad de Medell&#237;n");
         html.Should().Contain("Estado Actual:");
         html.Should().Contain("Asignado");
         html.Should().Contain("soporte@flitsas.com");
-        html.Should().Contain("flit-logo.png");
-        html.Should().NotContain("Renting Colombia");
+        html.Should().NotContain("tramite-cambio-estado-renting-header.png");
+        html.Should().NotContain("tramite-cambio-estado-renting-footer.png");
         html.Should().NotContain("018000524444");
-        html.Should().NotContain("Variante FLIT");
     }
 
     [Fact]
-    public void ComposeRenting_IncluyeLogoContactosYSoporteRenting()
+    public void ComposeRenting_UsaHeaderFooterRentingSinLogosFlit()
     {
         var (subject, html) = AsignacionPlacaEmailComposer.ComposeRenting(
             Sample, AsignacionPlacaEmailPreviewSample.DefaultAssetsBaseUrl);
 
         subject.Should().Contain("ABC123");
-        html.Should().Contain("renting-colombia-logo.png");
-        html.Should().Contain("flit-logo.png");
+        subject.Should().NotContain("[FLIT]");
+        html.Should().Contain("tramite-cambio-estado-renting-header.png");
+        html.Should().Contain("tramite-cambio-estado-renting-footer.png");
+        html.Should().Contain("renting-header-bg");
+        html.Should().Contain("renting-footer-bg");
         html.Should().Contain("018000524444");
         html.Should().Contain("3508285539");
         html.Should().Contain("servicio@rentingcolombia.com");
         html.Should().Contain("dejanos-tus-comentarios-te-asesoramos");
+        html.Should().NotContain("flit-logo.png");
+        html.Should().NotContain("tramite-cambio-estado-header.png");
         html.Should().NotContain("soporte@flitsas.com");
-        html.Should().NotContain("Variante Renting");
+        html.Should().NotContain("alt=\"flit\"");
     }
 
     [Fact]
@@ -72,8 +76,9 @@ public class AsignacionPlacaEmailComposerTests
         var renting = NotificationSampleRenderer.Render(
             AsignacionPlacaEmailComposer.TemplateId, NotificationChannel.TenantApi);
 
-        flit.Html.Should().Contain("soporte@flitsas.com");
-        renting.Html.Should().Contain("servicio@rentingcolombia.com");
+        flit.Html.Should().Contain("flit-logo.png");
+        renting.Html.Should().NotContain("flit-logo.png");
+        renting.Html.Should().Contain("tramite-cambio-estado-renting-footer.png");
         flit.Html.Should().NotBe(renting.Html);
     }
 
