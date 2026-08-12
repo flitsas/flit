@@ -619,45 +619,6 @@ export function QueryConsole<TRow>({
             </div>
           </div>
 
-          {nombrando !== null && (
-            <form
-              className="flex flex-wrap items-center gap-2 rounded-xl bg-[#F5F7FA] p-2 dark:bg-white/5"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void handleSave(nombrando);
-              }}
-              data-testid={`${prefix}-nombrar`}
-            >
-              <label className="text-xs font-semibold" htmlFor={`${prefix}-nombre`}>
-                Nombre
-              </label>
-              <input
-                id={`${prefix}-nombre`}
-                autoFocus
-                value={nombrando}
-                onChange={(e) => setNombrando(e.target.value)}
-                placeholder="Traspasos con prenda de agosto"
-                className={`${FIELD_CLS} min-w-[16rem] flex-1`}
-                data-testid={`${prefix}-nombre-input`}
-              />
-              <button
-                type="submit"
-                disabled={!nombrando.trim()}
-                className="rounded-lg bg-[#557EFF] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
-                data-testid={`${prefix}-guardar-confirmar`}
-              >
-                Guardar
-              </button>
-              <button
-                type="button"
-                onClick={() => setNombrando(null)}
-                className="text-[11px] font-semibold text-[#6B7280] dark:text-white/50"
-              >
-                Cancelar
-              </button>
-            </form>
-          )}
-
           <div className="flex flex-wrap gap-1.5">
             {presets.map((preset) => (
               <button
@@ -803,6 +764,47 @@ export function QueryConsole<TRow>({
             Empezar de cero
           </button>
         </div>
+      </Modal>
+
+      <Modal open={nombrando !== null} onClose={() => setNombrando(null)} title="Guardar consulta" size="sm">
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (nombrando) void handleSave(nombrando);
+          }}
+          data-testid={`${prefix}-nombrar`}
+        >
+          <label className="flex flex-col gap-1 text-xs font-semibold" htmlFor={`${prefix}-nombre`}>
+            Nombre
+            <input
+              id={`${prefix}-nombre`}
+              autoFocus
+              value={nombrando ?? ""}
+              onChange={(e) => setNombrando(e.target.value)}
+              placeholder="Traspasos con prenda de agosto"
+              className={FIELD_CLS}
+              data-testid={`${prefix}-nombre-input`}
+            />
+          </label>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setNombrando(null)}
+              className="rounded-lg border border-[#DFE5ED] bg-white px-3 py-2 text-xs font-semibold text-[#6B7280] hover:text-[#0B1F33] dark:border-white/15 dark:bg-transparent dark:text-white/60 dark:hover:text-white"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={!nombrando?.trim()}
+              className="rounded-lg bg-[#557EFF] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+              data-testid={`${prefix}-guardar-confirmar`}
+            >
+              Guardar
+            </button>
+          </div>
+        </form>
       </Modal>
     </div>
   );
