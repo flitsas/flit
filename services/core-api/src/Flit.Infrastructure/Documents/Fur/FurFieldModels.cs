@@ -40,6 +40,15 @@ public sealed class FurFieldDefinition
     /// renderer: eso sería un string mágico invisible desde el manifiesto).
     /// </summary>
     public bool AutoFit { get; init; }
+
+    /// <summary>
+    /// HU sin ADO 2026-08-11 (tercera tanda) — piso ABSOLUTO de cuerpo para
+    /// <see cref="FurTextFitter.Fit"/> (campos <see cref="FurFieldType.Text"/>), en vez del piso por
+    /// defecto (65% de <see cref="FontSize"/>). Solo aplica a <c>Text</c>; en cualquier otro tipo se
+    /// ignora. <c>null</c> (default) conserva el piso de siempre — es opt-in por campo, igual que
+    /// <see cref="AutoFit"/>, para no afectar la calibración de ningún otro campo del FUR.
+    /// </summary>
+    public double? MinFontSize { get; init; }
 }
 
 /// <summary>Manifest de coordenadas para overlay FUR (origen top-left, puntos PDF).</summary>

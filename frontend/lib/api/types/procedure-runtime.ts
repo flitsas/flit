@@ -260,6 +260,22 @@ export interface TransitOfficesResponse {
   items: TransitOfficeOption[];
 }
 
+/**
+ * Tipo de servicio del vehículo — catálogo cerrado `catalogs.vehicle_service_types` (sección 18 del
+ * FUR). Seis valores fijos (PARTICULAR/PUBLICO/DIPLOMATICO/OFICIAL/ESPECIAL/OTROS); `sortOrder`
+ * respeta el orden normativo del FUR con el que el backend ya lo devuelve.
+ */
+export interface VehicleServiceTypeOption {
+  id: string;
+  code: string;
+  name: string;
+  sortOrder: number;
+}
+
+export interface VehicleServiceTypesResponse {
+  items: VehicleServiceTypeOption[];
+}
+
 export interface FieldValue {
   formFieldId: string;
   fieldKey: string;
@@ -512,6 +528,21 @@ export interface RuesPersonLookupResult {
   // HU #10885 — igual que RuntPersonLookupResult.mode: 'cache' = dato reutilizado (AC1), sin
   // `queriedAt` disponible en el backend para este lookup.
   mode: 'real' | 'mock' | 'cache';
+}
+
+// ── Consulta RUES SIN trámite (paso 1, empresa vinculadora del tipo de servicio PÚBLICO) ──
+// POST /api/v1/tramites/rues-preview  body { documentNumber }
+// No está anclada a una instancia (el paso 1 puede correr sin trámite creado, CF-02): a diferencia
+// de `ruesPersonLookup`, siempre viaja el NIT en el body y nunca un instanceId en la ruta.
+export interface RuesPreviewInput {
+  documentNumber: string;
+}
+
+export interface RuesPreviewResult {
+  /** El proveedor respondió y no existe ese NIT en el RUES (distinto de un fallo transitorio 503). */
+  found: boolean;
+  nit: string;
+  razonSocial: string | null;
 }
 
 // ── Directorio de representantes/escrituras — consumo del wizard (HU #10903/#10906) ──

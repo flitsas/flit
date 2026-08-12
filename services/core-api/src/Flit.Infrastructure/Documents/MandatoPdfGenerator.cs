@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Documents;
@@ -142,7 +143,10 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         var tramite = data.Tramite;
         var parte = tramite.Mandante;
         var esJuridica = parte?.EsJuridica ?? false;
-        var body = ApplyPlaceholders(data.CustomTemplateBody!, data);
+        // Fix negrita — el cuerpo del editor lo escribe el tenant en texto libre, pero los VALORES que
+        // sustituimos ahí son siempre los mismos placeholders {{...}} conocidos (no texto libre): se
+        // marcan en negrita en el momento de sustituirlos, igual que en la plantilla del sistema.
+        var lineas = ApplyPlaceholdersSegmented(data.CustomTemplateBody!, data);
 
         var bytes = Document.Create(doc =>
         {
@@ -154,8 +158,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
                 {
                     col.Spacing(3);
                     col.Item().AlignCenter().Text(t => t.Span("Contrato Privado de Mandato").Bold().FontSize(12));
-                    foreach (var line in body.Split('\n'))
-                        col.Item().Text(line.TrimEnd()).FontSize(9);
+                    foreach (var linea in lineas)
+                        RenderLineaEditor(col, linea);
                     RenderFirmas(col, data, parte, esJuridica, MandatoVariante.Generico);
                 });
             });
@@ -222,7 +226,19 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         return outMs.ToArray();
     }
 
-    private static string ApplyPlaceholders(string body, MandatoData data)
+    /// <summary>
+    /// Sustituye los placeholders <c>{{...}}</c> del cuerpo editado por el OT, línea por línea, marcando
+    /// en negrita el VALOR sustituido (no el resto del texto libre del tenant).
+    /// <para>Este cuerpo lo escribe el administrador del OT en texto libre, así que no se puede componer
+    /// por segmentos "en el momento de interpolar" como las plantillas del sistema (no hay
+    /// interpolación: es texto ya escrito). Lo que SÍ es seguro marcar por construcción es el TOKEN, no
+    /// el contenido del valor — es sintaxis nuestra (<c>{{placa}}</c>, <c>{{mandante_nombre}}</c>, …), fija
+    /// y conocida de antemano, y no cambia de un trámite a otro como sí cambian el NIT o la cédula (la
+    /// causa original del defecto). Por eso NO es el mismo antipatrón que <c>MandatoKeywords</c>: aquí se
+    /// busca la SINTAXIS del placeholder, no el VALOR que reemplazó a un placeholder en un trámite
+    /// anterior.</para>
+    /// </summary>
+    private static List<IReadOnlyList<ParrafoSegmento>> ApplyPlaceholdersSegmented(string body, MandatoData data)
     {
         var tramite = data.Tramite;
         var parte = tramite.Mandante;
@@ -233,30 +249,79 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             data.Transformaciones);
         var (mandNombre, mandDoc) = MandatarioTexto(data.Mandatario);
 
-        return body
-            .Replace("{{placa}}", Val(tramite.Placa, "___"), StringComparison.OrdinalIgnoreCase)
-            .Replace("{{tramite}}", nombreTramite, StringComparison.OrdinalIgnoreCase)
-            .Replace("{{organismo}}", Val(tramite.Organismo.Nombre, "___"), StringComparison.OrdinalIgnoreCase)
-            .Replace("{{ciudad}}", tramite.Organismo.Ciudad?.Trim() ?? "", StringComparison.OrdinalIgnoreCase)
-            .Replace(
-                "{{fecha}}",
-                FormatFechaEs(tramite.FechaTramite ?? DateTime.UtcNow.AddHours(-5)),
-                StringComparison.OrdinalIgnoreCase)
-            .Replace("{{mandante_nombre}}", Val(parte?.Nombre, "___"), StringComparison.OrdinalIgnoreCase)
-            .Replace("{{mandante_documento}}", Val(parte?.Documento, "___"), StringComparison.OrdinalIgnoreCase)
-            .Replace("{{mandatario_nombre}}", mandNombre, StringComparison.OrdinalIgnoreCase)
-            .Replace("{{mandatario_documento}}", mandDoc, StringComparison.OrdinalIgnoreCase)
-            .Replace(
-                "{{mandatario_institucional}}",
-                Val(data.InstitutionalMandataryName, "___"),
-                StringComparison.OrdinalIgnoreCase)
-            .Replace(
-                "{{mandatario_nit}}",
-                Val(data.InstitutionalMandataryNit, "___"),
-                StringComparison.OrdinalIgnoreCase);
+        var reemplazos = new (string Token, string Valor)[]
+        {
+            ("{{placa}}", Val(tramite.Placa, "___")),
+            ("{{tramite}}", nombreTramite),
+            ("{{organismo}}", Val(tramite.Organismo.Nombre, "___")),
+            ("{{ciudad}}", tramite.Organismo.Ciudad?.Trim() ?? string.Empty),
+            ("{{fecha}}", FormatFechaEs(tramite.FechaTramite ?? DateTime.UtcNow.AddHours(-5))),
+            ("{{mandante_nombre}}", Val(parte?.Nombre, "___")),
+            ("{{mandante_documento}}", Val(parte?.Documento, "___")),
+            ("{{mandatario_nombre}}", mandNombre),
+            ("{{mandatario_documento}}", mandDoc),
+            ("{{mandatario_institucional}}", Val(data.InstitutionalMandataryName, "___")),
+            ("{{mandatario_nit}}", Val(data.InstitutionalMandataryNit, "___")),
+        };
+
+        return body.Split('\n')
+            .Select(linea => (IReadOnlyList<ParrafoSegmento>)SplitPlaceholders(linea.TrimEnd(), reemplazos))
+            .ToList();
     }
 
-    private static List<string> BuildParrafos(
+    /// <summary>
+    /// Divide una línea en segmentos normales y en negrita reemplazando los placeholders CONOCIDOS
+    /// (<c>{{token}}</c>) por su valor. Toma siempre el token más largo que calce en cada posición.
+    /// </summary>
+    internal static List<ParrafoSegmento> SplitPlaceholders(
+        string texto, (string Token, string Valor)[] reemplazos)
+    {
+        var segmentos = new List<ParrafoSegmento>();
+        var buffer = new System.Text.StringBuilder();
+        var i = 0;
+        while (i < texto.Length)
+        {
+            var match = reemplazos.FirstOrDefault(r =>
+                i + r.Token.Length <= texto.Length
+                && string.Compare(texto, i, r.Token, 0, r.Token.Length, StringComparison.OrdinalIgnoreCase) == 0);
+            if (match.Token is not null)
+            {
+                if (buffer.Length > 0)
+                {
+                    segmentos.Add(new ParrafoSegmento(buffer.ToString(), false));
+                    buffer.Clear();
+                }
+
+                // Mismo criterio que MandatoParrafoHandler: "___" (sin dato todavía) no se resalta.
+                segmentos.Add(new ParrafoSegmento(match.Valor, match.Valor != "___"));
+                i += match.Token.Length;
+            }
+            else
+            {
+                buffer.Append(texto[i]);
+                i++;
+            }
+        }
+
+        if (buffer.Length > 0)
+            segmentos.Add(new ParrafoSegmento(buffer.ToString(), false));
+
+        return segmentos;
+    }
+
+    /// <summary>Una línea del cuerpo del editor: sin justificar (texto libre del tenant), a 9pt.</summary>
+    private static void RenderLineaEditor(ColumnDescriptor col, IReadOnlyList<ParrafoSegmento> linea) =>
+        col.Item().Text(t =>
+        {
+            foreach (var seg in linea)
+            {
+                var span = t.Span(seg.Texto).FontSize(9);
+                if (seg.Negrita)
+                    span.Bold();
+            }
+        });
+
+    private static List<IReadOnlyList<ParrafoSegmento>> BuildParrafos(
         MandatoData data, DocumentParte? parte, bool esJuridica, MandatoVariante variante,
         string nombreTramite, string placa, string ot, string ciudad, string fecha) => variante switch
         {
@@ -267,33 +332,36 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         };
 
     // ---- Genérica: mandatario persona (firmante del OT). Ambos firman. ----
-    private static List<string> Generico(
+    private static List<IReadOnlyList<ParrafoSegmento>> Generico(
         MandatoData data, DocumentParte? parte, bool esJuridica,
         string nombreTramite, string placa, string ot, string ciudad, string fecha)
     {
         var mandatario = MandatarioTexto(data.Mandatario);
         var intro = esJuridica
-            ? $"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} No. {RlDoc(parte)}, " +
-              $"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, según lo acredita la " +
-              "escritura pública y/o el certificado de existencia y representación expedido por la Cámara de " +
-              $"Comercio de {Camara(data)} y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
-              $"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, " +
-              "quien para los efectos del presente contrato se denominará EL MANDATARIO, hemos acordado suscribir " +
-              ResolucionesCc()
-            : $"Yo, {PnNombre(parte)}, mayor de edad, identificado con {PnTipo(parte)} número No {PnDoc(parte)}, " +
-              "quien para los efectos del presente contrato se denominará EL MANDANTE. " +
-              $"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, " +
-              "quien para los efectos del presente contrato se denominará EL MANDATARIO, hemos acordado suscribir " +
-              ResolucionesCc();
+            ? Parrafo(
+                Frag($"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} No. {RlDoc(parte)}, "),
+                Frag($"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, según lo acredita la "),
+                Frag($"escritura pública y/o el certificado de existencia y representación expedido por la Cámara de "),
+                Frag($"Comercio de {Camara(data)} y quien para los efectos del presente contrato se denominará {"EL MANDANTE"}. "),
+                Frag($"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, "),
+                Frag($"quien para los efectos del presente contrato se denominará {"EL MANDATARIO"}, hemos acordado suscribir "),
+                Frag($"{Plano(ResolucionesCc())}"))
+            : Parrafo(
+                Frag($"Yo, {PnNombre(parte)}, mayor de edad, identificado con {PnTipo(parte)} número No {PnDoc(parte)}, "),
+                Frag($"quien para los efectos del presente contrato se denominará {"EL MANDANTE"}. "),
+                Frag($"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, "),
+                Frag($"quien para los efectos del presente contrato se denominará {"EL MANDATARIO"}, hemos acordado suscribir "),
+                Frag($"{Plano(ResolucionesCc())}"));
 
         return
         [
             intro,
             PrimeraObjeto(nombreTramite),
-            $"Identificado con placas {placa}. Ante el organismo de tránsito de {ot}.",
-            "Como consecuencia, EL MANDATARIO queda facultado para realizar todas las gestiones propias de este " +
-            "mandato y en especial para representar, notificarse, recibir, impugnar, desistir, sustituir, reasumir, " +
-            "pedir, conciliar o asumir obligaciones en nombre del MANDANTE.",
+            Parrafo($"Identificado con placas {placa}. Ante el organismo de tránsito de {ot}."),
+            Parrafo(
+                Frag($"Como consecuencia, {"EL MANDATARIO"} queda facultado para realizar todas las gestiones propias de este "),
+                Frag($"mandato y en especial para representar, notificarse, recibir, impugnar, desistir, sustituir, reasumir, "),
+                Frag($"pedir, conciliar o asumir obligaciones en nombre del {"MANDANTE"}.")),
             SegundaObligaciones(),
             CierreFirma(fecha, ciudad),
         ];
@@ -302,7 +370,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     // ---- Sabaneta: mandatario institucional UT-SETSA. Solo firma el MANDANTE. ----
     // Tipo Abierto (Manual + sin firmante): el cuerpo usa la redacción genérica con placeholders,
     // para no rellenar la UT cuando el negocio pide líneas abiertas.
-    private static List<string> Sabaneta(
+    private static List<IReadOnlyList<ParrafoSegmento>> Sabaneta(
         MandatoData data, DocumentParte? parte, bool esJuridica,
         string nombreTramite, string placa, string ciudad, string fecha)
     {
@@ -315,36 +383,39 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         var inst = Val(data.InstitutionalMandataryName, SetsaNombre);
         var nit = Val(data.InstitutionalMandataryNit, SetsaNit);
         var intro = esJuridica
-            ? $"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} número No {RlDoc(parte)}, " +
-              $"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, según lo acredita la " +
-              "escritura pública y/o el certificado de existencia y representación expedido por la Cámara de " +
-              $"Comercio de {Camara(data)} y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
-              $"Y de {inst}, con NIT N° {nit}, quien para efectos del presente contrato se denominará EL MANDATARIO, " +
-              "hemos acordado suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace " +
-              $"cargo de la gestión de realizar el trámite de {nombreTramite} del vehículo de placas: {placa}, " +
-              "por cuenta y riesgo del mandante."
-            : $"Yo, {PnNombre(parte)}, mayor de edad, identificado con {PnTipo(parte)} número No {PnDoc(parte)}, " +
-              "en representación propia y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
-              $"Y de {inst}, con NIT N° {nit}, quien para efectos del presente contrato se denominará EL MANDATARIO, " +
-              "hemos acordado suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace " +
-              $"cargo de la gestión de realizar el trámite de {nombreTramite} del vehículo de placas: {placa}, " +
-              "por cuenta y riesgo del mandante.";
+            ? Parrafo(
+                Frag($"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} número No {RlDoc(parte)}, "),
+                Frag($"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, según lo acredita la "),
+                Frag($"escritura pública y/o el certificado de existencia y representación expedido por la Cámara de "),
+                Frag($"Comercio de {Camara(data)} y quien para los efectos del presente contrato se denominará {"EL MANDANTE"}. "),
+                Frag($"Y de {inst}, con NIT N° {nit}, quien para efectos del presente contrato se denominará {"EL MANDATARIO"}, "),
+                Frag($"hemos acordado suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace "),
+                Frag($"cargo de la gestión de realizar el trámite de {nombreTramite} del vehículo de placas: {placa}, "),
+                Frag($"por cuenta y riesgo del mandante."))
+            : Parrafo(
+                Frag($"Yo, {PnNombre(parte)}, mayor de edad, identificado con {PnTipo(parte)} número No {PnDoc(parte)}, "),
+                Frag($"en representación propia y quien para los efectos del presente contrato se denominará {"EL MANDANTE"}. "),
+                Frag($"Y de {inst}, con NIT N° {nit}, quien para efectos del presente contrato se denominará {"EL MANDATARIO"}, "),
+                Frag($"hemos acordado suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace "),
+                Frag($"cargo de la gestión de realizar el trámite de {nombreTramite} del vehículo de placas: {placa}, "),
+                Frag($"por cuenta y riesgo del mandante."));
 
         return
         [
             intro,
-            "OBLIGACIONES DEL MANDANTE: EL MANDANTE declara que la información contenida en los documentos que se " +
-            "anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante las " +
-            "autoridades competentes de cualquier irregularidad que los mismos puedan contener; al igual dejando " +
-            $"indemne a la {Sigla(data, SetsaSigla)} de cualquier responsabilidad en los que se ve comprometido la confidencialidad y " +
-            "divulgación de la información legalmente protegida mediante los parámetros y disposiciones de la ley " +
-            "1581 del 2012 y demás normas que se dicten en la materia.",
+            Parrafo(
+                Frag($"{"OBLIGACIONES DEL MANDANTE"}: {"EL MANDANTE"} declara que la información contenida en los documentos que se "),
+                Frag($"anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante las "),
+                Frag($"autoridades competentes de cualquier irregularidad que los mismos puedan contener; al igual dejando "),
+                Frag($"indemne a la {Plano(Sigla(data, SetsaSigla))} de cualquier responsabilidad en los que se ve comprometido la confidencialidad y "),
+                Frag($"divulgación de la información legalmente protegida mediante los parámetros y disposiciones de la ley "),
+                Frag($"1581 del 2012 y demás normas que se dicten en la materia.")),
             CierreFirma(fecha, ciudad),
         ];
     }
 
     // ---- Bello: mandatario persona, representante legal de la UT-MAB. Ambos firman. ----
-    private static List<string> Bello(
+    private static List<IReadOnlyList<ParrafoSegmento>> Bello(
         MandatoData data, DocumentParte? parte, bool esJuridica,
         string nombreTramite, string placa, string ot, string ciudad, string fecha)
     {
@@ -352,66 +423,72 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         var nit = Val(data.InstitutionalMandataryNit, MabNit);
         var mandatario = MandatarioTexto(data.Mandatario);
         var intro = esJuridica
-            ? $"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} número No {RlDoc(parte)}, " +
-              $"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, según lo acredita la " +
-              "escritura pública y/o el Certificado de Existencia y Representación expedido por la Cámara de " +
-              $"Comercio de {Camara(data)} y quien para los efectos del presente contrato se denominará EL MANDANTE. " +
-              $"Y de la otra parte, {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, " +
-              $"Representante Legal de {inst}, con NIT No. {nit}, quien para efectos del presente contrato se " +
-              "denominará EL MANDATARIO, hemos acordado suscribir el siguiente contrato de mandato mediante el cual " +
-              "el mandatario se hace cargo de la gestión de realizar el trámite según las siguientes cláusulas."
-            : $"Yo, {PnNombre(parte)}, mayor de edad, identificado con {PnTipo(parte)} número No {PnDoc(parte)}, " +
-              "quien para los efectos del presente contrato se denominará EL MANDANTE. " +
-              $"Y de la otra parte, {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, " +
-              $"Representante Legal de {inst}, con NIT No. {nit}, quien para efectos del presente contrato se " +
-              "denominará EL MANDATARIO, hemos acordado suscribir el siguiente contrato de mandato mediante el cual " +
-              "el mandatario se hace cargo de la gestión de realizar el trámite según las siguientes cláusulas.";
+            ? Parrafo(
+                Frag($"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} número No {RlDoc(parte)}, "),
+                Frag($"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, según lo acredita la "),
+                Frag($"escritura pública y/o el Certificado de Existencia y Representación expedido por la Cámara de "),
+                Frag($"Comercio de {Camara(data)} y quien para los efectos del presente contrato se denominará {"EL MANDANTE"}. "),
+                Frag($"Y de la otra parte, {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, "),
+                Frag($"Representante Legal de {inst}, con NIT No. {nit}, quien para efectos del presente contrato se "),
+                Frag($"denominará {"EL MANDATARIO"}, hemos acordado suscribir el siguiente contrato de mandato mediante el cual "),
+                Frag($"el mandatario se hace cargo de la gestión de realizar el trámite según las siguientes cláusulas."))
+            : Parrafo(
+                Frag($"Yo, {PnNombre(parte)}, mayor de edad, identificado con {PnTipo(parte)} número No {PnDoc(parte)}, "),
+                Frag($"quien para los efectos del presente contrato se denominará {"EL MANDANTE"}. "),
+                Frag($"Y de la otra parte, {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, "),
+                Frag($"Representante Legal de {inst}, con NIT No. {nit}, quien para efectos del presente contrato se "),
+                Frag($"denominará {"EL MANDATARIO"}, hemos acordado suscribir el siguiente contrato de mandato mediante el cual "),
+                Frag($"el mandatario se hace cargo de la gestión de realizar el trámite según las siguientes cláusulas."));
 
         return
         [
             intro,
             PrimeraObjeto(nombreTramite),
-            $"Identificado con placas {placa}. Ante el organismo de tránsito de {ot}.",
-            "OBLIGACIONES DEL MANDANTE: EL MANDANTE declara que la información contenida en los documentos que se " +
-            "anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante las " +
-            "autoridades competentes de cualquier irregularidad que los mismos puedan contener; de igual modo, " +
-            $"declara que deja indemne a la {inst} de cualquier responsabilidad civil o penal, asimismo, EL MANDANTE " +
-            "de forma expresa asevera que deja impoluto a EL MANDATARIO en todos los casos que se vea comprometido " +
-            "la confidencialidad y divulgación de la información legalmente protegida mediante los parámetros y " +
-            "disposiciones de la ley 1581 del 2012 y demás normas que se dicten en la materia.",
-            $"Dicho contrato se firmó entre las partes el {fecha} en el municipio de Bello, Antioquia.",
+            Parrafo($"Identificado con placas {placa}. Ante el organismo de tránsito de {ot}."),
+            Parrafo(
+                Frag($"{"OBLIGACIONES DEL MANDANTE"}: {"EL MANDANTE"} declara que la información contenida en los documentos que se "),
+                Frag($"anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante las "),
+                Frag($"autoridades competentes de cualquier irregularidad que los mismos puedan contener; de igual modo, "),
+                Frag($"declara que deja indemne a la {inst} de cualquier responsabilidad civil o penal, asimismo, {"EL MANDANTE"} "),
+                Frag($"de forma expresa asevera que deja impoluto a {"EL MANDATARIO"} en todos los casos que se vea comprometido "),
+                Frag($"la confidencialidad y divulgación de la información legalmente protegida mediante los parámetros y "),
+                Frag($"disposiciones de la ley 1581 del 2012 y demás normas que se dicten en la materia.")),
+            Parrafo($"Dicho contrato se firmó entre las partes el {fecha} en el municipio de Bello, Antioquia."),
         ];
     }
 
     // ---- Municipio (Envigado / Funza / Medellín): redacción corta PN; PJ con RL. Ambos firman. ----
-    private static List<string> Municipio(
+    private static List<IReadOnlyList<ParrafoSegmento>> Municipio(
         MandatoData data, DocumentParte? parte, bool esJuridica,
         string nombreTramite, string placa, string ciudad, string fecha)
     {
         var mandatario = MandatarioTexto(data.Mandatario);
         var intro = esJuridica
-            ? $"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} número No {RlDoc(parte)}, " +
-              $"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, quien para los efectos " +
-              "del presente contrato se denominará EL MANDANTE. " +
-              $"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, " +
-              "quien para los efectos del presente contrato se denominará EL MANDATARIO, hemos acordado " +
-              "suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace cargo de la " +
-              $"radicación y reclamación del trámite de {nombreTramite} vehículo de placa: {placa}, por " +
-              "cuenta y riesgo del mandante."
-            : $"Yo, {PnNombre(parte)}, mayor de edad, identificado con {PnTipo(parte)} número No {PnDoc(parte)}, " +
-              "quien para los efectos del presente contrato se denominará EL MANDANTE. " +
-              $"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, " +
-              "quien para los efectos del presente contrato se denominará EL MANDATARIO, hemos acordado " +
-              "suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace cargo de la " +
-              $"radicación y reclamación del trámite de {nombreTramite} vehículo de placa: {placa}, por " +
-              "cuenta y riesgo del mandante.";
+            ? Parrafo(
+                Frag($"Yo, {RlNombre(parte)}, mayor de edad, identificado con {RlTipo(parte)} número No {RlDoc(parte)}, "),
+                Frag($"en representación legal de {Empresa(parte)}, con NIT No. {Nit(parte)}, quien para los efectos "),
+                Frag($"del presente contrato se denominará {"EL MANDANTE"}. "),
+                Frag($"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, "),
+                Frag($"quien para los efectos del presente contrato se denominará {"EL MANDATARIO"}, hemos acordado "),
+                Frag($"suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace cargo de la "),
+                Frag($"radicación y reclamación del trámite de {nombreTramite} vehículo de placa: {placa}, por "),
+                Frag($"cuenta y riesgo del mandante."))
+            : Parrafo(
+                Frag($"Yo, {PnNombre(parte)}, mayor de edad, identificado con {PnTipo(parte)} número No {PnDoc(parte)}, "),
+                Frag($"quien para los efectos del presente contrato se denominará {"EL MANDANTE"}. "),
+                Frag($"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, "),
+                Frag($"quien para los efectos del presente contrato se denominará {"EL MANDATARIO"}, hemos acordado "),
+                Frag($"suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace cargo de la "),
+                Frag($"radicación y reclamación del trámite de {nombreTramite} vehículo de placa: {placa}, por "),
+                Frag($"cuenta y riesgo del mandante."));
 
         return
         [
             intro,
-            "OBLIGACIONES DEL MANDANTE: EL MANDANTE declara que la información contenida en los documentos que se " +
-            "anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante la " +
-            "autoridad competente de cualquier irregularidad que los mismos puedan contener.",
+            Parrafo(
+                Frag($"{"OBLIGACIONES DEL MANDANTE"}: {"EL MANDANTE"} declara que la información contenida en los documentos que se "),
+                Frag($"anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante la "),
+                Frag($"autoridad competente de cualquier irregularidad que los mismos puedan contener.")),
             CierreFirma(fecha, ciudad),
         ];
     }
@@ -424,21 +501,23 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         "normas civiles y comerciales que regulan la materia en concordancia con el Art. 2149 C.C. según las " +
         "siguientes cláusulas.";
 
-    private static string PrimeraObjeto(string nombreTramite) =>
-        "PRIMERA: OBJETO DEL MANDATO. EL MANDANTE confiere a EL MANDATARIO poder amplio y suficiente para que en su " +
-        $"nombre y representación adelante, radique y reclame ante el organismo de tránsito el trámite de {nombreTramite} " +
-        "respecto del automotor.";
+    private static List<ParrafoSegmento> PrimeraObjeto(string nombreTramite) =>
+        Parrafo(
+            Frag($"{"PRIMERA: OBJETO DEL MANDATO"}. {"EL MANDANTE"} confiere a {"EL MANDATARIO"} poder amplio y suficiente para que en su "),
+            Frag($"nombre y representación adelante, radique y reclame ante el organismo de tránsito el trámite de {nombreTramite} "),
+            Frag($"respecto del automotor."));
 
-    private static string SegundaObligaciones() =>
-        "SEGUNDA: OBLIGACIONES DEL MANDANTE. EL MANDANTE declara que la información contenida en los documentos que " +
-        "se anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante la " +
-        "autoridad competente de cualquier irregularidad que los mismos puedan contener.";
+    private static List<ParrafoSegmento> SegundaObligaciones() =>
+        Parrafo(
+            Frag($"{"SEGUNDA: OBLIGACIONES DEL MANDANTE"}. {"EL MANDANTE"} declara que la información contenida en los documentos que "),
+            Frag($"se anexan a la solicitud del trámite es veraz y auténtica, razón por la que se hace responsable ante la "),
+            Frag($"autoridad competente de cualquier irregularidad que los mismos puedan contener."));
 
     /// <summary>Cláusula de cierre: menciona la ciudad solo si se conoce (HU #11016).</summary>
-    private static string CierreFirma(string fecha, string ciudad) =>
+    private static List<ParrafoSegmento> CierreFirma(string fecha, string ciudad) =>
         string.IsNullOrEmpty(ciudad)
-            ? $"Dicho contrato se firmó entre las partes el {fecha}."
-            : $"Dicho contrato se firmó entre las partes el {fecha} en la ciudad de {ciudad}.";
+            ? Parrafo($"Dicho contrato se firmó entre las partes el {fecha}.")
+            : Parrafo($"Dicho contrato se firmó entre las partes el {fecha} en la ciudad de {ciudad}.");
 
     private static void RenderFirmas(
         ColumnDescriptor col, MandatoData data, DocumentParte? parte, bool esJuridica, MandatoVariante variante)
@@ -575,75 +654,110 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     // prioridad del baúl de la HU #11031 viven ahora en FlitFirmaBlock, compartido con la solicitud de
     // trámite virtual. Aquí solo se resuelven los datos de cada firmante.
 
-    // HU #10998 — palabras clave del mandato que se resaltan en negrita dentro del cuerpo (las partes
-    // definidas y los encabezados de cláusula). Se ordenan por longitud descendente al tokenizar para que
-    // los encabezados compuestos ganen sobre sus subcadenas (p. ej. "SEGUNDA: ..." sobre "MANDANTE").
-    private static readonly string[] MandatoKeywords =
-    [
-        "PRIMERA: OBJETO DEL MANDATO",
-        "SEGUNDA: OBLIGACIONES DEL MANDANTE",
-        "OBLIGACIONES DEL MANDANTE",
-        "MANDATARIO",
-        "MANDANTE",
-        // Marcadores del preview de plataforma (MandatoPreviewSample): se muestran en negrita.
-        MandatoPreviewSample.PhRlNombre,
-        MandatoPreviewSample.PhRlDocumento,
-        MandatoPreviewSample.PhRazonSocial,
-        MandatoPreviewSample.PhNit,
-        MandatoPreviewSample.PhPnNombre,
-        MandatoPreviewSample.PhPnDocumento,
-        MandatoPreviewSample.PhMandatarioNombre,
-        MandatoPreviewSample.PhMandatarioDocumento,
-        MandatoPreviewSample.PhPlaca,
-        MandatoPreviewSample.PhCamara,
-    ];
+    // ---- Composición de párrafos por SEGMENTOS (fix de la negrita inconsistente) -------------------
+    //
+    // Antes, cada párrafo se armaba como una única cadena con los valores YA interpolados dentro
+    // (p. ej. $"...identificado con {PnTipo(parte)} número No {PnDoc(parte)}..."), y la negrita se
+    // reconstruía DESPUÉS buscando coincidencias EXACTAS contra una lista fija de palabras clave
+    // (MandatoKeywords: los encabezados de cláusula, "MANDANTE"/"MANDATARIO" y los marcadores del
+    // preview). Esa lista nunca contenía los valores reales de cada trámite (el NIT, la cédula, el
+    // nombre…), que cambian en cada mandato — por eso el NIT de una empresa podía salir en negrita
+    // (si por azar coincidía con algo de la lista) mientras la cédula de al lado no.
+    //
+    // Ahora la negrita es una propiedad de la COMPOSICIÓN, no una búsqueda a posteriori: cada párrafo
+    // es una lista de fragmentos (Frag(...)) y cada fragmento es una interpolación normal donde TODO lo
+    // que va entre `{ }` sale en negrita por defecto — sea un valor del trámite (RlNombre(parte),
+    // Nit(parte), placa…) o una palabra estructural escrita a propósito entre llaves (p. ej.
+    // {"EL MANDANTE"}). El texto que queda FUERA de las llaves nunca se resalta. Quien agregue un
+    // párrafo nuevo tiene que hacer un esfuerzo activo para que un valor NO salga en negrita
+    // (envolverlo con Plano(...)) — el olvido ya no reproduce el defecto original, que era al revés.
+    // internal (no private): Flit.Infrastructure.Tests (InternalsVisibleTo) prueba la composición por
+    // segmentos directamente, igual que ya hace con MandanteIdentificacion/MandatarioIdentificacion —
+    // este generador no expone su texto a un lector de PDF, así que el contrato de "qué queda en
+    // negrita" solo se puede verificar aquí, no inspeccionando bytes.
+    internal readonly record struct ParrafoSegmento(string Texto, bool Negrita);
+
+    /// <summary>
+    /// Envuelve un texto compuesto que NO es un valor del trámite y por eso NO debe resaltarse al
+    /// interpolarlo (p. ej. la cita larga de resoluciones de <see cref="ResolucionesCc"/>, o la sigla de
+    /// la unión temporal en la cláusula de obligaciones de Sabaneta).
+    /// </summary>
+    internal static ParrafoLiteral Plano(string texto) => new(texto);
+
+    internal readonly record struct ParrafoLiteral(string Texto);
+
+    /// <summary>
+    /// Handler de interpolación de un fragmento de párrafo: el texto literal de la plantilla queda
+    /// normal y cada interpolación <c>{ ... }</c> sale en negrita por defecto, salvo que se envuelva con
+    /// <see cref="Plano"/>. Al ser el mecanismo por el que CUALQUIER valor entra al párrafo, un valor
+    /// nuevo no puede "olvidarse" de marcar: si se interpola, ya sale en negrita.
+    /// </summary>
+    [InterpolatedStringHandler]
+    internal struct MandatoParrafoHandler
+    {
+        private readonly List<ParrafoSegmento> _segmentos;
+
+        public MandatoParrafoHandler(int literalLength, int formattedCount)
+        {
+            _segmentos = new List<ParrafoSegmento>((formattedCount * 2) + 1);
+        }
+
+        public void AppendLiteral(string s)
+        {
+            if (s.Length > 0)
+                _segmentos.Add(new ParrafoSegmento(s, false));
+        }
+
+        // Por defecto, NEGRITA: cualquier valor interpolado sale resaltado, sin que el generador tenga
+        // que reconocerlo después por su contenido. Única excepción: "___" es el marcador de "todavía
+        // sin dato" que usa Val(...) en TODO este generador (mandato tipo Abierto sin firmante, placa o
+        // ciudad aún no resueltas…) — no es un valor del trámite, así que se deja igual que el resto del
+        // texto: negritarlo no aporta nada y, en la línea del mandatario, se ve como un guion "raro" más
+        // grueso que el resto.
+        public void AppendFormatted(string? valor)
+        {
+            if (string.IsNullOrEmpty(valor))
+                return;
+            _segmentos.Add(new ParrafoSegmento(valor, valor != "___"));
+        }
+
+        // Escape explícito para texto compuesto que NO es un valor del trámite (Plano(...)).
+        public void AppendFormatted(ParrafoLiteral literal)
+        {
+            if (!string.IsNullOrEmpty(literal.Texto))
+                _segmentos.Add(new ParrafoSegmento(literal.Texto, false));
+        }
+
+        public List<ParrafoSegmento> GetSegments() => _segmentos;
+    }
+
+    /// <summary>Un párrafo compuesto de un único fragmento interpolado.</summary>
+    internal static List<ParrafoSegmento> Parrafo(MandatoParrafoHandler texto) => texto.GetSegments();
+
+    /// <summary>
+    /// Un párrafo compuesto de varios fragmentos — equivalente a unirlos con "+" como antes, pero sin
+    /// perder la negrita de cada uno: cada <see cref="Frag"/> es su propia interpolación, resuelta por
+    /// <see cref="MandatoParrafoHandler"/>.
+    /// </summary>
+    internal static List<ParrafoSegmento> Parrafo(params IReadOnlyList<ParrafoSegmento>[] fragmentos) =>
+        fragmentos.SelectMany(f => f).ToList();
+
+    /// <summary>Un fragmento de párrafo — ver <see cref="Parrafo(IReadOnlyList{ParrafoSegmento}[])"/>.</summary>
+    internal static List<ParrafoSegmento> Frag(MandatoParrafoHandler texto) => texto.GetSegments();
 
     // HU #11034 — párrafos JUSTIFICADOS y compactos: el contrato debe caber en una sola hoja, firmas
     // incluidas, y el texto justificado es lo que espera un documento legal.
-    private static void RenderParrafo(ColumnDescriptor col, string texto) =>
+    private static void RenderParrafo(ColumnDescriptor col, IReadOnlyList<ParrafoSegmento> parrafo) =>
         col.Item().PaddingTop(2).Text(t =>
         {
             t.Justify();
-            foreach (var (segment, bold) in SplitKeywords(texto, MandatoKeywords))
+            foreach (var seg in parrafo)
             {
-                var span = t.Span(segment);
-                if (bold)
+                var span = t.Span(seg.Texto);
+                if (seg.Negrita)
                     span.Bold();
             }
         });
-
-    // Divide el texto en segmentos normales y en negrita según coincidencias EXACTAS (case-sensitive) de
-    // las palabras clave, tomando siempre la coincidencia más larga en cada posición.
-    private static IEnumerable<(string Text, bool Bold)> SplitKeywords(string texto, string[] keywords)
-    {
-        var ordered = keywords.OrderByDescending(k => k.Length).ToArray();
-        var buffer = new System.Text.StringBuilder();
-        var i = 0;
-        while (i < texto.Length)
-        {
-            var match = ordered.FirstOrDefault(k =>
-                i + k.Length <= texto.Length && string.CompareOrdinal(texto, i, k, 0, k.Length) == 0);
-            if (match is not null)
-            {
-                if (buffer.Length > 0)
-                {
-                    yield return (buffer.ToString(), false);
-                    buffer.Clear();
-                }
-
-                yield return (match, true);
-                i += match.Length;
-            }
-            else
-            {
-                buffer.Append(texto[i]);
-                i++;
-            }
-        }
-
-        if (buffer.Length > 0)
-            yield return (buffer.ToString(), false);
-    }
 
     /// <summary>
     /// Identificación del MANDANTE bajo su firma (HU #11047). El organismo de tránsito necesita poder

@@ -693,6 +693,8 @@ export function Validaciones() {
   const isEmpty = persons !== null && persons.length === 0;
   // "Sin resultados" (AC2) vs "Aún no hay validaciones" se decide por los filtros EFECTIVAMENTE aplicados.
   const filtersActive = hasActiveValidacionesFilters(applied);
+  // Empresa ajena que está mirando el admin FLIT (undefined = la suya).
+  const empresaVista = companyId === '' ? undefined : companies?.find((c) => c.id === companyId);
 
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
@@ -706,23 +708,6 @@ export function Validaciones() {
         subtitle="Validación biométrica, OCR IA y cotejo RUNT en tiempo real."
         right={
           <div className="flex items-center gap-3">
-            {isFlitAdmin && companies !== null && companies.length > 0 && (
-              <SearchableSelect
-                id="identidad-empresa"
-                label="Ver las validaciones de otra empresa"
-                hideLabel
-                options={companies.map((c) => ({
-                  value: c.id,
-                  label: c.razonSocial,
-                  hint: c.nit,
-                }))}
-                value={companyId}
-                onChange={handleCompanyChange}
-                defaultLabel="Mi empresa"
-                placeholder="Buscar empresa…"
-                className="w-[240px]"
-              />
-            )}
             {hasLoadedOnce ? <LiveIndicator at={lastUpdatedAt} /> : undefined}
             {/* Módulo unificado: la prevalidación se crea aquí, no en una pantalla aparte. */}
             <button
@@ -737,6 +722,46 @@ export function Validaciones() {
           </div>
         }
       />
+
+      {/*
+        Banda de ALCANCE del admin FLIT. Va en su propia fila, no junto a "Nueva prevalidación": no es
+        una acción más, decide de qué empresa es TODO lo que se ve debajo. Cuando el admin sale de su
+        empresa la banda se tiñe y lo dice explícitamente, para que no cree ni reenvíe nada creyendo
+        que está en la suya.
+      */}
+      {isFlitAdmin && companies !== null && companies.length > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border px-3 py-2 shrink-0"
+          style={
+            empresaVista
+              ? { borderColor: '#557EFF', background: 'rgba(85,126,255,0.08)' }
+              : { borderColor: 'rgba(22,39,68,0.12)' }
+          }
+        >
+          <span className="text-[11px] font-semibold uppercase opacity-60">Viendo</span>
+          <SearchableSelect
+            id="identidad-empresa"
+            label="Ver las validaciones de otra empresa"
+            hideLabel
+            options={companies.map((c) => ({ value: c.id, label: c.razonSocial, hint: c.nit }))}
+            value={companyId}
+            onChange={handleCompanyChange}
+            defaultLabel="Mi empresa"
+            placeholder="Buscar empresa…"
+            className="w-[260px]"
+          />
+          {empresaVista ? (
+            <span className="text-[11px]" style={{ color: '#557EFF' }} role="status" aria-live="polite">
+              Estás viendo los datos de <strong>{empresaVista.razonSocial}</strong>. Todo lo que hagas
+              desde esta pantalla afecta a esa empresa.
+            </span>
+          ) : (
+            <span className="text-[11px] opacity-60">
+              Como administrador FLIT puedes revisar la identidad de otra empresa.
+            </span>
+          )}
+        </div>
+      )}
 
       <StatsCards stats={stats} totalPersonas={total} loading={initialLoading} />
 
@@ -1097,6 +1122,9 @@ function StuckEventsBanner({
 }) {
   const groups = groupStuckByPerson(stuck.stuck);
   const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
+  // Plegado por defecto: es una alerta de fondo, no la tarea del gestor. Ocupaba media pantalla por
+  // encima de la grilla; ahora deja a la vista solo el aviso y la acción, y el detalle se despliega.
+  const [openPanel, setOpenPanel] = useState(false);
 
   const toggleGroup = (key: string) => {
     setOpenKeys((prev) => {
@@ -1109,33 +1137,47 @@ function StuckEventsBanner({
 
   return (
     <section
-      className="rounded-2xl border p-4 shrink-0"
+      className="rounded-2xl border px-3 py-2 shrink-0"
       style={{ borderColor: '#F05A35', background: 'rgba(249,172,0,0.10)' }}
       aria-label="Validaciones de identidad atascadas"
     >
-      <div className="flex items-start gap-3">
-        <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" style={{ color: '#F05A35' }} aria-hidden="true" />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-sm font-semibold" style={{ color: '#F05A35' }} role="status" aria-live="polite">
-              {stuck.total} validación{stuck.total === 1 ? '' : 'es'} de identidad atascada
-              {stuck.total === 1 ? '' : 's'}
-            </p>
-            {stuck.total > 1 && (
-              <button
-                type="button"
-                onClick={onRequeueAll}
-                disabled={requeuingAll}
-                className="flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                style={{ borderColor: '#F05A35', color: '#F05A35' }}
-                aria-label="Reintentar todas las validaciones atascadas"
-              >
-                <RotateCcw className={`h-3 w-3 ${requeuingAll ? 'animate-spin' : ''}`} aria-hidden="true" />
-                {requeuingAll ? 'Reencolando…' : 'Reintentar todos'}
-              </button>
-            )}
-          </div>
-          <p className="mt-0.5 text-[11px] opacity-80">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: '#F05A35' }} aria-hidden="true" />
+        <button
+          type="button"
+          onClick={() => setOpenPanel((v) => !v)}
+          aria-expanded={openPanel}
+          aria-controls="stuck-panel"
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          style={{ color: '#F05A35' }}
+        >
+          <span className="truncate" role="status" aria-live="polite">
+            {stuck.total} validación{stuck.total === 1 ? '' : 'es'} de identidad atascada
+            {stuck.total === 1 ? '' : 's'}
+          </span>
+          <ChevronDown
+            className={`h-3.5 w-3.5 shrink-0 transition-transform ${openPanel ? 'rotate-180' : ''}`}
+            aria-hidden="true"
+          />
+        </button>
+        {stuck.total > 1 && (
+          <button
+            type="button"
+            onClick={onRequeueAll}
+            disabled={requeuingAll}
+            className="flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            style={{ borderColor: '#F05A35', color: '#F05A35' }}
+            aria-label="Reintentar todas las validaciones atascadas"
+          >
+            <RotateCcw className={`h-3 w-3 ${requeuingAll ? 'animate-spin' : ''}`} aria-hidden="true" />
+            {requeuingAll ? 'Reencolando…' : 'Reintentar todos'}
+          </button>
+        )}
+      </div>
+
+      {openPanel && (
+        <div id="stuck-panel" className="mt-2 pl-6">
+          <p className="text-[11px] opacity-80">
             Agotaron {stuck.maxDeliveryAttempts} reintentos automáticos —el envío al proveedor de identidad o
             el encadenamiento de firma/FUR. Reencólalas para que el sistema las procese de nuevo.
           </p>
@@ -1176,7 +1218,7 @@ function StuckEventsBanner({
             })}
           </ul>
         </div>
-      </div>
+      )}
     </section>
   );
 }

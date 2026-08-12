@@ -265,7 +265,7 @@ public sealed class GenerarFurHandler(
         // ADR-0036 (HU #10915) — Contrato de mandato. El firmante persona puede venir ya elegido
         // en el wizard (MandateSignerId); si no, el PDF lleva placeholders y la aprobación lo regenera.
         var mandato = await TryGenerateMandatoAsync(
-            data, Get(fv, "transit_office_code"), instance.MandateSignerId, TransformacionesActivas(fv), ct);
+            instance, data, Get(fv, "transit_office_code"), TransformacionesActivas(fv), ct);
         if (mandato is not null)
         {
             generated.Add(mandato);
@@ -690,7 +690,11 @@ public sealed class GenerarFurHandler(
             SellosIdentidad: sellosIdentidad,
             PrendaMarking: prendaMarking,
             AcreedorPrenda: acreedorPrenda,
-            TemplateFormat: templateFormat)
+            TemplateFormat: templateFormat,
+            // Casilla 19 "EMPRESA VINCULADORA" del FUR: opcional, mismo canal field_values que el resto
+            // del paso de vehículo/comercial. Get() ya devuelve null si la llave no existe.
+            EmpresaVinculadoraRazonSocial: Get(fv, "empresa_vinculadora_razon_social"),
+            EmpresaVinculadoraNit: Get(fv, "empresa_vinculadora_nit"))
         {
             // HU #11030 — tenant contra el que se resuelve el baúl del mandatario.
             TenantIdParaFirmas = instance.TenantId,
@@ -926,9 +930,9 @@ public sealed class GenerarFurHandler(
     }
 
     private async Task<GeneratedDocument?> TryGenerateMandatoAsync(
+        ProcedureInstance instance,
         FurDocumentData data,
         string? transitOfficeCode,
-        Guid? mandateSignerId,
         IReadOnlyList<string> transformaciones,
         CancellationToken ct)
     {
@@ -938,22 +942,52 @@ public sealed class GenerarFurHandler(
         var config = await _mandatePolicy.ResolveAsync(transitOfficeCode, data.TenantIdParaFirmas, ct);
         // Producto: el mandato se emite siempre (PN y PJ). La plantilla/familia vienen de la config del OT.
 
-        // HU #10916 — firmante resuelto al aprobar (instance.MandateSignerId). En preparado va null ⇒ el
-        // PDF pinta placeholders y se regenera al aprobar.
+        // HU #10916, corregido por el bug DEV de la pantalla/documento divergentes — MISMO resolvedor
+        // que usa la pantalla (ListMandateSignerOptionsHandler) y la aprobación (MandatoApprovalHandler):
+        // elección explícita ya guardada → default del OT (si sigue habilitado) → único candidato. Sin
+        // eso, el PDF pintaba placeholders (o el firmante equivocado) hasta que alguien elegía a mano.
         // Abierto / institucional: no se asigna firmante persona (aunque hubiera MandateSignerId).
         MandatarioFirmante? mandatario = null;
+        Guid? resolvedSignerId = null;
         var assignmentMode = config?.AssignmentMode;
-        if (mandateSignerId is { } signerId
-            && !MandatoAssignmentModeCodes.SkipsPersonSigner(assignmentMode))
+        if (!MandatoAssignmentModeCodes.SkipsPersonSigner(assignmentMode))
         {
-            var signer = await _mandateDirectory.GetByIdAsync(signerId, ct).ConfigureAwait(false);
-            if (signer is not null)
+            var transitOfficeId = MandateSignerSelectionResolver.ResolveTransitOfficeId(instance);
+            if (transitOfficeId is { } officeId)
             {
-                // HU #11030 — la firma del mandatario no se pintaba nunca: el contrato salía con la línea
-                // en blanco aunque el mandatario tuviera firma en el baúl o identidad validada. Misma
-                // precedencia que el resto de documentos: imagen del baúl > sello de identidad > línea.
-                var (firma, sello, metadatos) = await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
-                mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento, firma, sello, metadatos);
+                var candidatos = await _mandateDirectory
+                    .GetCandidatesAsync(
+                        officeId, data.TenantIdParaFirmas,
+                        MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
+                    .ConfigureAwait(false);
+
+                resolvedSignerId = MandateSignerDefaultResolver.Resolve(
+                    candidatos.Select(c => c.Id).ToList(), instance.MandateSignerId, config?.DefaultMandateSignerId);
+
+                if (resolvedSignerId is { } signerId)
+                {
+                    var signer = candidatos.FirstOrDefault(c => c.Id == signerId)
+                        ?? await _mandateDirectory.GetByIdAsync(signerId, ct).ConfigureAwait(false);
+                    if (signer is not null)
+                    {
+                        // HU #11030 — la firma del mandatario no se pintaba nunca: el contrato salía con
+                        // la línea en blanco aunque el mandatario tuviera firma en el baúl o identidad
+                        // validada. Misma precedencia que el resto de documentos: imagen del baúl > sello
+                        // de identidad > línea.
+                        var (firma, sello, metadatos) =
+                            await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
+                        mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento, firma, sello, metadatos);
+
+                        // Persistir lo resuelto SOLO cuando NO venía de una elección explícita ya
+                        // guardada (el gestor no había elegido nada: salió del default del OT o del
+                        // único candidato). El mandato es un documento legal — quién lo firma queda
+                        // registrado, no recalculado en cada regeneración. Así un cambio posterior en la
+                        // parametrización del OT no reescribe en silencio quién firmó un expediente ya
+                        // emitido, y la próxima regeneración es idempotente (ya hay elección explícita).
+                        if (instance.MandateSignerId is null)
+                            instance.MandateSignerId = signerId;
+                    }
+                }
             }
         }
 
@@ -962,7 +996,7 @@ public sealed class GenerarFurHandler(
         // por ese mismo código: sin fila de configuración no hay id y el mandato conserva el bloque, que
         // es el default seguro.
         var modoFirma = await _mandatoFirmaPolicy
-            .ResolveAsync(data.TenantIdParaFirmas, config?.TransitOfficeId ?? Guid.Empty, mandateSignerId, ct)
+            .ResolveAsync(data.TenantIdParaFirmas, config?.TransitOfficeId ?? Guid.Empty, resolvedSignerId, ct)
             .ConfigureAwait(false);
 
         var customKind = MandatoCustomTemplateKindCodes.Resolve(config?.CustomTemplateKind);

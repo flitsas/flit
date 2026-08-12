@@ -4,6 +4,7 @@ using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.PlatePreassign;
 using Flit.Api.Middleware;
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Tramites.Enums;
@@ -753,6 +754,37 @@ internal static class ProcedureInstanceEndpoints
             };
         }).WithName("RunProcedureInstancePreflightPreview");
 
+        // HU sin ADO 2026-08-11 — consulta RUES por NIT SIN trámite creado (paso 1, casilla 19 del FUR:
+        // "EMPRESA VINCULADORA"). Hermano de /preflight-preview: no lleva instancia en la ruta y NO
+        // persiste nada (ver XML doc de RuesPreviewHandler / ADR-0041 — procedure_instance_id NOT NULL
+        // es imposible de cumplir aquí). "El proveedor no encontró el NIT" (200, found:false) y "el
+        // proveedor no respondió" (503) son casos DISTINTOS a propósito: el frontend los trata distinto
+        // (found:false → cae al ingreso manual; 503 → reintentar o avisar que el servicio no está
+        // disponible).
+        group.MapPost("/rues-preview", async (
+            RuesPreviewBody body,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            RuesPreviewHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(body.DocumentNumber, tenantId.Value, ct);
+
+            return error switch
+            {
+                "invalid_request" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Se requiere documentNumber (NIT)."),
+                "provider_not_found" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor RUES no está disponible."),
+                // El proveedor está registrado pero la consulta falló (no-200, timeout, red, respuesta
+                // ilegible). Se responde 503 igual que si no estuviera configurado: para el operador
+                // ambos son "reintenta en unos minutos", y lo que NO puede pasar es que se le diga que
+                // su NIT no existe cuando el problema está del lado del servicio.
+                "provider_unavailable" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "No fue posible consultar el RUES en este momento. Reintenta en unos minutos."),
+                _ => Results.Ok(result),
+            };
+        }).WithName("RuesPreview");
+
         // CF-02 (HU #10879 AC5 / #10883 AC4) — creación del trámite AL AVANZAR al segundo paso, con el
         // vehículo ya consultado. Reemplaza al POST /instances "vacío" en el flujo del wizard: crea,
         // persiste los identificadores capturados y deja el preflight persistido en una sola operación,
@@ -778,12 +810,22 @@ internal static class ProcedureInstanceEndpoints
                     body.OwnerDocumentType,
                     body.OwnerDocumentNumber,
                     body.PreviewToken,
-                    body.TransitOfficeId),
+                    body.TransitOfficeId,
+                    body.TipoServicioCode,
+                    body.EmpresaVinculadoraNit,
+                    body.EmpresaVinculadoraRazonSocial),
                 ct);
 
             return err switch
             {
                 "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el VIN (matrícula inicial) o la placa (traspaso) para crear el trámite."),
+                // HU sin ADO 2026-08-11 — tipoServicioCode debe ser uno de los 6 códigos cerrados
+                // (VehicleServiceTypeCode). Es entrada estructurada del selector, no texto libre del
+                // RUNT: un valor fuera del catálogo se rechaza en vez de caer en silencio a "Particular".
+                "invalid_tipo_servicio" => Results.Problem(
+                    statusCode: 400,
+                    title: "Bad Request",
+                    detail: "tipoServicioCode inválido: debe ser uno de PARTICULAR, PUBLICO, DIPLOMATICO, OFICIAL, ESPECIAL, OTROS."),
                 // HU #11199 (AC1/AC3) — la secretaría del paso 1 se re-confirma al crear el trámite.
                 TransitOfficeSelectionPolicy.RequiredErrorCode => Results.Problem(
                     statusCode: 400,
@@ -978,6 +1020,9 @@ internal sealed record PreflightPreviewBody(
     /// <summary>HU #11199 — secretaría del paso 1; obligatoria en matrícula inicial.</summary>
     Guid? TransitOfficeId);
 
+/// <summary>Body de POST /rues-preview (HU sin ADO 2026-08-11). NIT a consultar en RUES.</summary>
+internal sealed record RuesPreviewBody(string? DocumentNumber);
+
 /// <summary>
 /// Body de POST /instances/from-consulta (CF-02). <c>PreviewToken</c> es el de la consulta del paso 1:
 /// si falta o expiró, el preflight vuelve a consultar (degradación, no error).
@@ -991,4 +1036,17 @@ internal sealed record CreateFromConsultaBody(
     string? OwnerDocumentType,
     string? OwnerDocumentNumber,
     string? PreviewToken,
-    Guid? TransitOfficeId);
+    Guid? TransitOfficeId,
+    /// <summary>
+    /// HU sin ADO 2026-08-11 — casilla 18 del FUR (tipo de servicio), elegido por el operador en
+    /// MATRÍCULA INICIAL. Uno de los 6 códigos cerrados de <see cref="VehicleServiceTypeCode"/>. Se
+    /// ignora fuera de matrícula inicial (mismo criterio que <see cref="TransitOfficeId"/>).
+    /// </summary>
+    string? TipoServicioCode = null,
+    /// <summary>
+    /// HU sin ADO 2026-08-11 — casilla 19 del FUR (empresa vinculadora). Solo tiene efecto cuando
+    /// <see cref="TipoServicioCode"/> es <c>PUBLICO</c>; con cualquier otro valor (o ausente) se
+    /// ignora, ver <c>CreateProcedureInstanceFromConsultaHandler</c>.
+    /// </summary>
+    string? EmpresaVinculadoraNit = null,
+    string? EmpresaVinculadoraRazonSocial = null);

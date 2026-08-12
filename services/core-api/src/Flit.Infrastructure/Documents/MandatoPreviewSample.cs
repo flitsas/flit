@@ -9,7 +9,9 @@ namespace Flit.Infrastructure.Documents;
 /// </summary>
 public static class MandatoPreviewSample
 {
-    // Marcadores en mayúsculas: el generador los pinta en negrita vía MandatoKeywords.
+    // Marcadores en mayúsculas: salen en negrita POR CONSTRUCCIÓN, igual que cualquier valor real —
+    // fluyen por los mismos accessors (PnNombre, RlNombre, Camara…) que interpolan cada párrafo del
+    // generador (MandatoPdfGenerator.MandatoParrafoHandler), no por una lista de palabras clave.
     public const string PhRlNombre = "[ACÁ VA EL NOMBRE DEL REPRESENTANTE LEGAL]";
     public const string PhRlDocumento = "[ACÁ VA EL DOCUMENTO DEL REPRESENTANTE LEGAL]";
     public const string PhRazonSocial = "[ACÁ VA LA RAZÓN SOCIAL DEL MANDANTE]";

@@ -314,4 +314,50 @@ public sealed class MandateSignerSelectionTests
         decision.Outcome.Should().Be(MandatoApprovalOutcome.Resolved);
         decision.MandateSignerId.Should().Be(Ana);
     }
+
+    /// <summary>
+    /// Bug DEV — antes de unificar la resolución, el gate de aprobación NO conocía el default del OT (solo
+    /// lo usaba el listado de pantalla): con varios candidatos y sin elección, dependía ÚNICAMENTE del
+    /// cotejo por cuenta de usuario y, sin match, exigía seleccionar (409) aunque el OT ya tuviera un
+    /// mandatario preferido configurado. Ahora el default parametrizado se aplica ANTES del cotejo, igual
+    /// que en pantalla y en el documento.
+    /// </summary>
+    [Fact]
+    public async Task AlAprobar_SinEleccionNiCotejoDeUsuario_ElDefaultDelOtResuelveSolo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instancia(estado: TramiteEstado.Preparado);
+        instance.TransitOfficeId = Ot;
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            FieldKey = "transit_office_code",
+            ValueText = "05001",
+            Source = "user",
+        });
+        instance.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = Tenant,
+            ProcedureInstanceId = instance.Id,
+            Tipo = "mandato",
+        });
+        _repo.GetByIdWithFurGraphAsync(instance.Id, Tenant, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var policy = Substitute.For<IMandateRequirementPolicy>();
+        policy.ResolveAsync("05001", Tenant, Arg.Any<CancellationToken>())
+            .Returns(new MandateOtConfig(
+                Ot, "generico", RequiresForNaturalPerson: false, null, null,
+                AssignmentMode: "signer", DefaultMandateSignerId: Carlos));
+
+        var handler = new MandatoApprovalHandler(
+            _repo,
+            new Directorio(Candidato(Ana, "Ana Restrepo"), Candidato(Carlos, "Carlos Pérez")),
+            mandatePolicy: policy);
+
+        // approvingUserId sin match con ningún candidato: antes hubiera exigido seleccionar (409).
+        var decision = await handler.CheckAsync(instance.Id, Tenant, approvingUserId: Guid.NewGuid(), explicitSignerId: null, ct);
+
+        decision.Outcome.Should().Be(MandatoApprovalOutcome.Resolved);
+        decision.MandateSignerId.Should().Be(Carlos);
+    }
 }
