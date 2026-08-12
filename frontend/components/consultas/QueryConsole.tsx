@@ -18,6 +18,7 @@
 // todas las páginas— es el mismo código, porque son la misma promesa.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Modal } from "@/components/atom/Modal";
 import {
   QUERY_MAX_PAGE_SIZE,
   RANGE_PRESETS,
@@ -767,45 +768,42 @@ export function QueryConsole<TRow>({
             onConfirmarBorrado={(q) => void handleDelete(q)}
             testIdPrefix={prefix}
           />
-          {confirmandoLimpiar ? (
-            <div
-              className="mt-1 rounded-xl border border-[#C0392B]/40 bg-[#C0392B]/5 p-2.5"
-              data-testid={`${prefix}-limpiar-confirmar`}
-            >
-              <p className="mb-2 text-[11px] leading-snug text-[#0B1F33] dark:text-white/80">
-                Se perderán los filtros que no has guardado.
-              </p>
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={limpiar}
-                  className="flex-1 rounded-lg bg-[#C0392B] px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-[#A63325]"
-                  data-testid={`${prefix}-limpiar-confirmar-si`}
-                >
-                  Empezar de cero
-                </button>
-                <button
-                  type="button"
-                  autoFocus
-                  onClick={() => setConfirmandoLimpiar(false)}
-                  className="flex-1 rounded-lg border border-[#DFE5ED] bg-white px-2 py-1.5 text-[11px] font-semibold text-[#6B7280] hover:text-[#0B1F33] dark:border-white/15 dark:bg-transparent dark:text-white/60 dark:hover:text-white"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => (hayTrabajoSinGuardar ? setConfirmandoLimpiar(true) : limpiar())}
-              className="mt-1 w-full rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.06] px-2 py-2 text-[11px] font-semibold text-[#557EFF] transition hover:border-[#557EFF] hover:bg-[#557EFF]/10 dark:border-[#557EFF]/30 dark:bg-[#557EFF]/10 dark:text-[#9DB5FF]"
-              data-testid={`${prefix}-nueva`}
-            >
-              Empezar de cero
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => (hayTrabajoSinGuardar ? setConfirmandoLimpiar(true) : limpiar())}
+            className="mt-1 w-full rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.06] px-2 py-2 text-[11px] font-semibold text-[#557EFF] transition hover:border-[#557EFF] hover:bg-[#557EFF]/10 dark:border-[#557EFF]/30 dark:bg-[#557EFF]/10 dark:text-[#9DB5FF]"
+            data-testid={`${prefix}-nueva`}
+          >
+            Empezar de cero
+          </button>
         </Section>
       </aside>
+
+      <Modal
+        open={confirmandoLimpiar}
+        onClose={() => setConfirmandoLimpiar(false)}
+        title="¿Empezar de cero?"
+        description="Se perderán los filtros que no has guardado."
+        size="sm"
+      >
+        <div className="flex justify-end gap-2" data-testid={`${prefix}-limpiar-confirmar`}>
+          <button
+            type="button"
+            onClick={() => setConfirmandoLimpiar(false)}
+            className="rounded-lg border border-[#DFE5ED] bg-white px-3 py-2 text-xs font-semibold text-[#6B7280] hover:text-[#0B1F33] dark:border-white/15 dark:bg-transparent dark:text-white/60 dark:hover:text-white"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={limpiar}
+            className="rounded-lg bg-[#C0392B] px-3 py-2 text-xs font-semibold text-white hover:bg-[#A63325]"
+            data-testid={`${prefix}-limpiar-confirmar-si`}
+          >
+            Empezar de cero
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }
