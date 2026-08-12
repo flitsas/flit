@@ -75,7 +75,7 @@ export function SavedQueryList({
         <Grupo
           titulo="Para empezar"
           cuenta={fabrica.length}
-          nota="Ábralas y cámbielas a su gusto."
+          nota="Ábrelas y cámbialas a tu gusto."
           separado
         >
           <ul className="space-y-1.5">

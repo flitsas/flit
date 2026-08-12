@@ -62,7 +62,7 @@ const TABS = [
   {
     id: "consultas",
     label: "Consultas personalizadas",
-    hint: "Arme su propia búsqueda, guárdela y expórtela",
+    hint: "Arma tu propia búsqueda, guárdala y expórtala",
   },
 ] as const;
 

@@ -264,7 +264,7 @@ function ConditionEditor({
             onChange={(e) => setTexto(e.target.value)}
             rows={operator === "contiene" ? 1 : 4}
             placeholder={
-              operator === "contiene" ? "Parte del texto…" : "Un valor por línea, o pegue una columna de Excel"
+              operator === "contiene" ? "Parte del texto…" : "Un valor por línea, o pega una columna de Excel"
             }
             aria-label={`Valores de ${field.label}`}
             className={`${FIELD_CLS} w-full resize-y`}
