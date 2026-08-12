@@ -260,18 +260,16 @@ services:
       # ATENCIÓN — ADR-0044 (2026-08-12): el desvío de destinatario YA NO lo decide
       # ASPNETCORE_ENVIRONMENT (este servicio corre con Development en DEV, QA y PDN por igual,
       # ver arriba). Lo decide, únicamente, RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED:
-      # ausente/vacía o "false" ⇒ desvía al buzón de control (default seguro, el de abajo);
-      # "true" ⇒ envía a destinatarios REALES de clientes en CUALQUIER ambiente, incluido este.
+      # "true" ⇒ envía a destinatarios REALES; "false"/vacío ⇒ desvía al buzón de control.
+      # Default de este compose: true (envío real). Para desviar en un ambiente, declarar
+      # RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED=false en el .env de ese despliegue.
       # Cualquier otro valor no vacío tumba el arranque a propósito (no degrada en silencio).
-      # NINGÚN compose puede traer esta variable con default "true": si se necesita una ventana
-      # de envío real (acordada con el cliente), se declara explícitamente en el .env de ESE
-      # despliegue y se retira al cerrar la ventana. La variable
       # RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED queda DEROGADA: su sola
       # presencia (con el canal encendido) tumba el arranque con un mensaje de migración — no la
       # declares en ningún despliegue. Única excepción al desvío (aplica en ambos modos): los
       # envíos del banco de pruebas de notificaciones, que van a su buzón configurado (decisión
       # del PO 2026-08-11) — no aplica a los envíos reales de notificaciones. Ver .env.renting.example.
-      RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED: ${RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED:-}
+      RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED: ${RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED:-true}
       RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL: ${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL:-}
       RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME: "${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME:-Equipo de desarrollo FLIT}"
     volumes:
