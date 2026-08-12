@@ -149,7 +149,8 @@ internal sealed class ProcedureStateChangeOutboxProcessor(
                     row.ToStatus,
                     row.OccurredAt,
                     row.Reason,
-                    row.ChangedByUserId),
+                    row.ChangedByUserId,
+                    row.Id),
                 ct);
 
             row.PublishedAt = DateTimeOffset.UtcNow;

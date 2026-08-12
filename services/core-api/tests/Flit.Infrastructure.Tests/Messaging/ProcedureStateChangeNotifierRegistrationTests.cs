@@ -1,10 +1,12 @@
-using System.Reflection;
 using Flit.Admin.Domain.OtWebhooks;
 using Flit.Infrastructure.Ict;
 using Flit.Infrastructure.Messaging;
 using Flit.Infrastructure.OtWebhooks;
+using Flit.Infrastructure.Persistence;
+using Flit.Tramites.Application.Notifications;
 using Flit.Tramites.Domain.Integration;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -13,23 +15,29 @@ using Xunit;
 namespace Flit.Infrastructure.Tests.Messaging;
 
 /// <summary>
-/// HU #11464 — el fan-out de <see cref="IProcedureStateChangeNotifier"/> se registra en un solo
+/// HU #11464 / #11465 — el fan-out de <see cref="IProcedureStateChangeNotifier"/> se registra en un solo
 /// punto (<see cref="ProcedureStateChangeNotifierRegistration"/>).
 /// </summary>
 public sealed class ProcedureStateChangeNotifierRegistrationTests
 {
     [Fact]
-    public void SinIct_ElFanOutEsSoloElWebhookOt()
+    public void SinIct_ElFanOutEsCompositeConOtYCorreo()
     {
         var services = new ServiceCollection();
+        services.AddLogging();
         services.AddScoped(_ =>
             new OtWebhookProcedureStateChangeNotifier(Substitute.For<IOtWebhookDispatchService>()));
+        services.AddScoped(_ => new FlitDbContext(
+            new DbContextOptionsBuilder<FlitDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options));
+        services.AddScoped<ITramiteNotificationRecipientResolver, TramiteNotificationRecipientResolver>();
         services.AddProcedureStateChangeNotifierFanOut(includeIctReflection: false);
 
         using var sp = services.BuildServiceProvider();
         var notifier = sp.GetRequiredService<IProcedureStateChangeNotifier>();
 
-        notifier.Should().BeOfType<OtWebhookProcedureStateChangeNotifier>();
+        notifier.Should().BeOfType<CompositeProcedureStateChangeNotifier>();
     }
 
     [Fact]

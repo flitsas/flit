@@ -7,9 +7,10 @@ using Microsoft.Extensions.Logging;
 namespace Flit.Infrastructure.Messaging;
 
 /// <summary>
-/// HU #11464 (Feature #11459, ADR-0045) — único punto que registra el fan-out de
-/// <see cref="IProcedureStateChangeNotifier"/>. Hoy: OT solo, u OT+ICT. Mañana: + sink de correo
-/// (HU #11465) sin volver a tocar dos rutas de DI.
+/// HU #11464 / #11465 (Feature #11459, ADR-0045) — único punto que registra el fan-out de
+/// <see cref="IProcedureStateChangeNotifier"/>. Sinks: OT, opcionalmente ICT, y siempre el
+/// sink de correo que encola despachos. Nunca registrar un
+/// <c>AddScoped&lt;IProcedureStateChangeNotifier&gt;</c> fuera de aquí.
 /// </summary>
 public static class ProcedureStateChangeNotifierRegistration
 {
@@ -22,20 +23,29 @@ public static class ProcedureStateChangeNotifierRegistration
         this IServiceCollection services,
         bool includeIctReflection)
     {
+        services.AddScoped<ProcedureStateChangeEmailEnqueueNotifier>();
+
         services.AddScoped<IProcedureStateChangeNotifier>(sp =>
         {
-            if (!includeIctReflection)
+            var sinks = new List<IProcedureStateChangeNotifier>
             {
-                return sp.GetRequiredService<OtWebhookProcedureStateChangeNotifier>();
+                sp.GetRequiredService<OtWebhookProcedureStateChangeNotifier>(),
+            };
+
+            if (includeIctReflection)
+            {
+                sinks.Add(sp.GetRequiredService<IctProcedureStateChangeNotifier>());
             }
 
-            IProcedureStateChangeNotifier[] sinks =
-            [
-                sp.GetRequiredService<OtWebhookProcedureStateChangeNotifier>(),
-                sp.GetRequiredService<IctProcedureStateChangeNotifier>(),
-            ];
+            sinks.Add(sp.GetRequiredService<ProcedureStateChangeEmailEnqueueNotifier>());
+
+            if (sinks.Count == 1)
+            {
+                return sinks[0];
+            }
+
             return new CompositeProcedureStateChangeNotifier(
-                sinks,
+                sinks.ToArray(),
                 sp.GetRequiredService<ILogger<CompositeProcedureStateChangeNotifier>>());
         });
 

@@ -83,6 +83,7 @@ public sealed class ProcedureStateChangeOutboxTests
         evt.FromStatus.Should().Be(TramiteEstado.Borrador);
         evt.ToStatus.Should().Be(TramiteEstado.Preparado);
         evt.Reason.Should().Be("gates ok");
+        evt.OutboxId.Should().NotBe(Guid.Empty);
 
         await using var verify = NewContext(dbName);
         var row = await verify.ProcedureStateChangeOutbox.SingleAsync(Ct);
