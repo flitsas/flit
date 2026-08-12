@@ -12,9 +12,9 @@ public static class AsignacionPlacaEmailPreviewSample
     public static AsignacionPlacaEmailModel Sample { get; } = new(
         ClienteNombre: "Juan Carlos Pérez Gómez",
         Placa: "ABC123",
+        EstadoActual: "Asignado",
         Ciudad: "Medellín",
-        SecretariaTransito: "Secretaría de Movilidad de Medellín",
-        EstadoActual: "Asignado");
+        SecretariaTransito: "Secretaría de Movilidad de Medellín");
 
     public static (string Subject, string Html) BuildFlit(string? assetsBaseUrl = null) =>
         AsignacionPlacaEmailComposer.ComposeFlit(

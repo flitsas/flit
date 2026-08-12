@@ -12,9 +12,9 @@ public class AsignacionPlacaEmailComposerTests
     private static readonly AsignacionPlacaEmailModel Sample = new(
         ClienteNombre: "Juan Carlos Pérez Gómez",
         Placa: "ABC123",
+        EstadoActual: "Asignado",
         Ciudad: "Medellín",
-        SecretariaTransito: "Secretaría de Movilidad de Medellín",
-        EstadoActual: "Asignado");
+        SecretariaTransito: "Secretaría de Movilidad de Medellín");
 
     [Fact]
     public void ComposeFlit_IncluyeHeaderLogoYSoporteFlit()
