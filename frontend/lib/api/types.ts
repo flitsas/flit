@@ -176,6 +176,8 @@ export interface TenantSettings {
   avaluoProviderConfig?: AvaluoProviderConfig;
   // FEATURE 02 — opcional por compatibilidad; el backend siempre lo devuelve.
   finesQuerySource?: FinesQuerySource;
+  /** HU #11469 — avisos de correo al cambio de estado. Default true. */
+  avisosCambioEstadoActivos?: boolean;
 }
 
 /** Payload del PUT settings — los mismos campos editables (sin tenantId). */
@@ -201,6 +203,8 @@ export interface TenantSettingsUpdate {
   avaluoProviderConfig?: AvaluoProviderConfig;
   // FEATURE 02 — si se omite el backend conserva el valor previo.
   finesQuerySource?: FinesQuerySource;
+  /** HU #11469 — avisos de correo al cambio de estado. Opcional: null conserva. */
+  avisosCambioEstadoActivos?: boolean;
 }
 
 // ── Errores de validación 422 ───────────────────────────────────────────────

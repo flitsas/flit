@@ -32,7 +32,8 @@ internal static class SettingsMapper
             settings.AvaluoProviderConfig.Primary,
             settings.AvaluoProviderConfig.Enabled),
         settings.FinesQuerySource,
-        settings.PersonalizedDocumentsEnabled);
+        settings.PersonalizedDocumentsEnabled,
+        settings.TramiteStateEmailsEnabled);
 
     private static Dictionary<string, ConsultationProviderChoice> ToChoices(
         ConsultationProviderConfig config)

@@ -246,16 +246,18 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
     }
 
     /// <summary>
-    /// HU #11469 — interruptor operativo. Mientras la columna no exista en el modelo mapeado,
-    /// el default es <c>true</c> (avisos encendidos). La HU-H cablea la lectura real.
+    /// HU #11469 — interruptor operativo. Sin fila de política o columna ausente ⇒ <c>true</c>
+    /// (avisos encendidos; default de despliegue).
     /// </summary>
-    private static Task<bool> IsTramiteStateEmailsEnabledAsync(
+    private static async Task<bool> IsTramiteStateEmailsEnabledAsync(
         FlitDbContext db, Guid tenantId, CancellationToken ct)
     {
-        _ = db;
-        _ = tenantId;
-        _ = ct;
-        return Task.FromResult(true);
+        var enabled = await db.TenantOperationalPolicies.AsNoTracking()
+            .Where(p => p.TenantId == tenantId)
+            .Select(p => (bool?)p.TramiteStateEmailsEnabled)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        return enabled ?? true;
     }
 
     private static string EstadoFromTemplateKey(string templateKey)

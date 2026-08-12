@@ -2098,6 +2098,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("personalized_documents_enabled");
 
+                    b.Property<bool>("TramiteStateEmailsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("tramite_state_emails_enabled");
+
                     b.Property<bool>("PlateFlowSkipToTerminado")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

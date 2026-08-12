@@ -41,6 +41,9 @@ internal sealed class TenantOperationalPolicyConfiguration
         // actual). Lo enciende el backfill 65 para quien venía en canal tenant_api.
         builder.Property(x => x.PersonalizedDocumentsEnabled).HasDefaultValue(false);
 
+        // HU #11469 — avisos de cambio de estado (default true = encendidos al desplegar).
+        builder.Property(x => x.TramiteStateEmailsEnabled).HasDefaultValue(true);
+
         builder.Property(x => x.PaymentMethods)
             .HasColumnType("jsonb").HasDefaultValueSql("'[]'").IsRequired();
 

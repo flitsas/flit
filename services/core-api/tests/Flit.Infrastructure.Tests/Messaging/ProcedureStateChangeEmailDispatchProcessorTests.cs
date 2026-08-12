@@ -142,6 +142,70 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
         sender.Messages[0].ToEmail.Should().Be("ana@flit.test");
     }
 
+    [Fact]
+    public async Task KillSwitchApagado_NoEnviaNiGastaAttempts()
+    {
+        var dbName = NewDbName();
+        await SeedInstanceAsync(dbName);
+        await SeedDispatchAsync(dbName, "persona", "Ana", "ana@flit.test");
+        await using (var db = NewContext(dbName))
+        {
+            db.TenantOperationalPolicies.Add(new Flit.Infrastructure.Persistence.Entities.Admin.TenantOperationalPolicy
+            {
+                Id = Guid.NewGuid(),
+                TenantId = TenantId,
+                TramiteStateEmailsEnabled = false,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var sender = new RecordingSender();
+        var processor = NewProcessor(dbName, sender, NotificationChannel.FlitSmtp);
+
+        await processor.ProcessPendingAsync(Ct);
+
+        sender.Messages.Should().BeEmpty();
+        await using var verify = NewContext(dbName);
+        var row = await verify.ProcedureStateChangeEmailDispatches.SingleAsync(Ct);
+        row.Status.Should().Be("pendiente");
+        row.Attempts.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task KillSwitchReanudado_EnviaLoAcumulado()
+    {
+        var dbName = NewDbName();
+        await SeedInstanceAsync(dbName);
+        await SeedDispatchAsync(dbName, "persona", "Ana", "ana@flit.test");
+        await using (var db = NewContext(dbName))
+        {
+            db.TenantOperationalPolicies.Add(new Flit.Infrastructure.Persistence.Entities.Admin.TenantOperationalPolicy
+            {
+                Id = Guid.NewGuid(),
+                TenantId = TenantId,
+                TramiteStateEmailsEnabled = false,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(Ct);
+        }
+
+        var sender = new RecordingSender();
+        var processor = NewProcessor(dbName, sender, NotificationChannel.FlitSmtp);
+        await processor.ProcessPendingAsync(Ct);
+        sender.Messages.Should().BeEmpty();
+
+        await using (var db = NewContext(dbName))
+        {
+            var policy = await db.TenantOperationalPolicies.SingleAsync(Ct);
+            policy.TramiteStateEmailsEnabled = true;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await processor.ProcessPendingAsync(Ct);
+        sender.Messages.Should().ContainSingle();
+    }
+
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------

@@ -159,6 +159,7 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         policy.ValidateSoatWithRunt = settings.ValidateSoatWithRunt;
         policy.NotificationChannel = TenantSettingsCodes.ToDb(settings.NotificationChannel);
         policy.PersonalizedDocumentsEnabled = settings.PersonalizedDocumentsEnabled;
+        policy.TramiteStateEmailsEnabled = settings.TramiteStateEmailsEnabled;
         policy.NotificationTarget = TenantSettingsCodes.ToDb(settings.NotificationTarget);
         policy.PaymentMethods = JsonSerializer.Serialize(settings.PaymentMethods);
         policy.RuntFailoverTimeoutMs = settings.RuntFailoverTimeoutMs;
@@ -183,6 +184,7 @@ internal sealed class TenantSettingsRepository : ITenantSettingsRepository
         PlateFlowSkipToTerminado = entity.PlateFlowSkipToTerminado,
         NotificationChannel = TenantSettingsCodes.ParseChannelDb(entity.NotificationChannel),
         PersonalizedDocumentsEnabled = entity.PersonalizedDocumentsEnabled,
+        TramiteStateEmailsEnabled = entity.TramiteStateEmailsEnabled,
         NotificationTarget = TenantSettingsCodes.ParseTargetDb(entity.NotificationTarget),
         PaymentMethods = DeserializePaymentMethods(entity.PaymentMethods),
         RuntFailoverTimeoutMs = entity.RuntFailoverTimeoutMs,

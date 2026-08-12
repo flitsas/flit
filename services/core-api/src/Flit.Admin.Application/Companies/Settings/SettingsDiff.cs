@@ -32,6 +32,7 @@ internal static class SettingsDiff
         AddBool(changes, "plate_flow_skip_to_terminado", previous.PlateFlowSkipToTerminado, updated.PlateFlowSkipToTerminado);
         // HU #11357/#11362 (ADR-0043) — elegibilidad de documentos personalizados, campo propio.
         AddBool(changes, "personalized_documents_enabled", previous.PersonalizedDocumentsEnabled, updated.PersonalizedDocumentsEnabled);
+        AddBool(changes, "tramite_state_emails_enabled", previous.TramiteStateEmailsEnabled, updated.TramiteStateEmailsEnabled);
 
         // FEATURE 02 — fuente de comparendos (internal | external).
         AddString(changes, "fines_query_source", previous.FinesQuerySource, updated.FinesQuerySource);

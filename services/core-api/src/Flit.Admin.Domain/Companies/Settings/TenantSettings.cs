@@ -92,6 +92,12 @@ public sealed class TenantSettings
     /// </summary>
     public bool PersonalizedDocumentsEnabled { get; init; }
 
+    /// <summary>
+    /// HU #11469 — interruptor operativo de avisos de correo al cambio de estado
+    /// (<c>tramite_state_emails_enabled</c>). Default <c>true</c>.
+    /// </summary>
+    public bool TramiteStateEmailsEnabled { get; init; } = true;
+
     /// <summary>Destinatario de notificaciones (<c>notification_target</c>).</summary>
     public required NotificationTarget NotificationTarget { get; init; }
 
@@ -146,6 +152,7 @@ public sealed class TenantSettings
         ValidateSoatWithRunt = false,
         NotificationChannel = NotificationChannel.FlitSmtp,
         PersonalizedDocumentsEnabled = false,
+        TramiteStateEmailsEnabled = true,
         NotificationTarget = NotificationTarget.Radicador,
         PaymentMethods = [],
         RuntFailoverTimeoutMs = 60_000,

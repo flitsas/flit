@@ -140,6 +140,8 @@ export interface SettingsForm {
   avaluoPrimary: string;
   // FEATURE 02 — fuente de comparendos (internal | external).
   finesQuerySource: FinesQuerySource;
+  /** HU #11469 — avisos de correo al cambio de estado (default true). */
+  avisosCambioEstadoActivos: boolean;
 }
 
 /** Construye el estado del formulario a partir de la configuración cargada. */
@@ -171,6 +173,7 @@ export function formFromSettings(settings: TenantSettings): SettingsForm {
     runtFailoverTimeoutMs: settings.runtFailoverTimeoutMs ?? DEFAULT_FAILOVER_MS,
     ...avaluoFromSettings(settings.avaluoProviderConfig),
     finesQuerySource: settings.finesQuerySource ?? DEFAULT_FINES_QUERY_SOURCE,
+    avisosCambioEstadoActivos: settings.avisosCambioEstadoActivos ?? true,
   };
 }
 
@@ -223,6 +226,7 @@ export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
       enabled: normalizeAvaluoEnabled(form.avaluoEnabled),
     },
     finesQuerySource: form.finesQuerySource,
+    avisosCambioEstadoActivos: form.avisosCambioEstadoActivos,
   };
 }
 
@@ -329,6 +333,12 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
       detail: `${SMTP_LABELS[i.enrutamientoSMTP]} → ${SMTP_LABELS[c.enrutamientoSMTP]}`,
       tone: "neutral",
     }),
+  },
+  {
+    key: "avisosCambioEstadoActivos",
+    module: "Configuración Empresa",
+    label: "Avisos de correo al cambio de estado",
+    describe: (_i, c) => onOff(c.avisosCambioEstadoActivos),
   },
   {
     key: "notificationTarget",
