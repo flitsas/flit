@@ -18,7 +18,6 @@
 // todas las páginas— es el mismo código, porque son la misma promesa.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Plus } from "lucide-react";
 import {
   QUERY_MAX_PAGE_SIZE,
   RANGE_PRESETS,
@@ -760,10 +759,9 @@ export function QueryConsole<TRow>({
               setActiveId(null);
               setActiveSnapshot(null);
             }}
-            className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.06] px-2 py-2 text-[11px] font-semibold text-[#557EFF] transition hover:border-[#557EFF] hover:bg-[#557EFF]/10 dark:border-[#557EFF]/30 dark:bg-[#557EFF]/10 dark:text-[#9DB5FF]"
+            className="mt-1 w-full rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.06] px-2 py-2 text-[11px] font-semibold text-[#557EFF] transition hover:border-[#557EFF] hover:bg-[#557EFF]/10 dark:border-[#557EFF]/30 dark:bg-[#557EFF]/10 dark:text-[#9DB5FF]"
             data-testid={`${prefix}-nueva`}
           >
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             Empezar de cero
           </button>
         </Section>
