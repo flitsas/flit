@@ -256,6 +256,10 @@ public static class DependencyInjection
         services.AddScoped<ListConsultationTemplatesHandler>();
         services.AddScoped<ApplyConsultationTemplateFieldsHandler>();
 
+        // HU #11462 — resolución de destinatarios del aviso de cambio de estado (ADR-0045).
+        services.AddScoped<Notifications.ITramiteNotificationRecipientResolver,
+            Notifications.TramiteNotificationRecipientResolver>();
+
         return services;
     }
 }
