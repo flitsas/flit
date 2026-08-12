@@ -64,7 +64,7 @@ public sealed class TenantChannelEmailRouterTests
         IOptions<RentingChannelOptions>? rentingOptions = null) =>
         new(
             flitTransport,
-            settingsRepository,
+            new NotificationChannelResolver(settingsRepository),
             rentingSender,
             rentingOptions ?? RentingOptions(),
             NullLogger<TenantChannelEmailRouter>.Instance);

@@ -91,7 +91,11 @@ public sealed class ControlledMailboxRecipientExemptionTests
         var flitTransport = Substitute.For<IEmailSender>();
 
         var router = new TenantChannelEmailRouter(
-            flitTransport, settingsRepo, rentingSender, Options.Create(options), NullLogger<TenantChannelEmailRouter>.Instance);
+            flitTransport,
+            new NotificationChannelResolver(settingsRepo),
+            rentingSender,
+            Options.Create(options),
+            NullLogger<TenantChannelEmailRouter>.Instance);
 
         return (router, handler);
     }

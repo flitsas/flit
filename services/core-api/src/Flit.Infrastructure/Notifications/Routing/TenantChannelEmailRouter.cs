@@ -89,7 +89,7 @@ internal interface IExplicitChannelEmailSender
 /// </remarks>
 internal sealed partial class TenantChannelEmailRouter(
     IEmailSender flitTransport,
-    ITenantSettingsRepository tenantSettingsRepository,
+    INotificationChannelResolver channelResolver,
     IRentingEmailApiSender? rentingEmailApiSender,
     IOptions<RentingChannelOptions> rentingOptions,
     ILogger<TenantChannelEmailRouter> logger) : IEmailSender, IExplicitChannelEmailSender
@@ -107,7 +107,7 @@ internal sealed partial class TenantChannelEmailRouter(
             return accountResult with { Channel = TenantSettingsCodes.ChannelFlitSmtp };
         }
 
-        var channel = await ResolveChannelAsync(message.TenantId, cancellationToken).ConfigureAwait(false);
+        var channel = await channelResolver.ResolveAsync(message.TenantId, cancellationToken).ConfigureAwait(false);
         // HU #11372 — camino de producción: NUNCA propaga la exención de buzón controlado. No hay
         // parámetro ni rama por la que pudiera colarse — este método sencillamente llama a
         // SendViaChannelAsync sin ese argumento, así que el desvío de la HU #11364 sigue aplicando
@@ -180,23 +180,6 @@ internal sealed partial class TenantChannelEmailRouter(
             ? await rentingEmailApiSender.SendAsync(request, recipientExemption, cancellationToken).ConfigureAwait(false)
             : await rentingEmailApiSender.SendAsync(request, cancellationToken).ConfigureAwait(false);
         return tenantApiResult with { Channel = TenantSettingsCodes.ChannelTenantApi };
-    }
-
-    /// <summary>
-    /// AC1/AC2/AC6 — sin tenant resoluble en el mensaje (ver <see cref="EmailMessage.TenantId"/>) o
-    /// sin fila de política operativa para el tenant, el canal por defecto es
-    /// <see cref="NotificationChannel.FlitSmtp"/>: nunca se intenta el canal del cliente sin que el
-    /// tenant lo haya configurado explícitamente.
-    /// </summary>
-    private async Task<NotificationChannel> ResolveChannelAsync(Guid? tenantId, CancellationToken cancellationToken)
-    {
-        if (tenantId is not { } id)
-        {
-            return NotificationChannel.FlitSmtp;
-        }
-
-        var settings = await tenantSettingsRepository.GetAsync(id, cancellationToken).ConfigureAwait(false);
-        return settings?.NotificationChannel ?? NotificationChannel.FlitSmtp;
     }
 
     /// <summary>

@@ -316,6 +316,8 @@ public static class InfrastructureExtensions
         // GetRequiredService) lo resuelve como null en cualquier otro ambiente — el router trata ese
         // null como "canal no disponible" y responde ConfigurationIncomplete en vez de fallar al
         // resolver el árbol de DI.
+        services.AddScoped<INotificationChannelResolver, NotificationChannelResolver>();
+
         services.AddScoped(sp =>
         {
             IEmailSender flitTransport = useConsoleEmailSender
@@ -324,7 +326,7 @@ public static class InfrastructureExtensions
 
             return new TenantChannelEmailRouter(
                 flitTransport,
-                sp.GetRequiredService<ITenantSettingsRepository>(),
+                sp.GetRequiredService<INotificationChannelResolver>(),
                 sp.GetService<IRentingEmailApiSender>(),
                 sp.GetRequiredService<IOptions<RentingChannelOptions>>(),
                 sp.GetRequiredService<ILogger<TenantChannelEmailRouter>>());

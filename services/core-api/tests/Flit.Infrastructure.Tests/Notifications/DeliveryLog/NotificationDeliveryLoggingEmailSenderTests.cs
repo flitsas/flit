@@ -294,7 +294,7 @@ public sealed class NotificationDeliveryLoggingEmailSenderTests
             .Returns(EmailSendResult.Sent);
         var router = new TenantChannelEmailRouter(
             flitTransport,
-            settingsRepo,
+            new NotificationChannelResolver(settingsRepo),
             rentingSender,
             Options.Create(new RentingChannelOptions { Enabled = true, SendEmailSenderEmail = "renting@example.test", SendEmailSenderUsername = "Renting" }),
             NullLogger<TenantChannelEmailRouter>.Instance);
@@ -342,7 +342,7 @@ public sealed class NotificationDeliveryLoggingEmailSenderTests
         var rentingSender = Substitute.For<IRentingEmailApiSender>();
         var router = new TenantChannelEmailRouter(
             flitTransport,
-            settingsRepo,
+            new NotificationChannelResolver(settingsRepo),
             rentingSender,
             Options.Create(new RentingChannelOptions { Enabled = true, SendEmailSenderEmail = "renting@example.test", SendEmailSenderUsername = "Renting" }),
             NullLogger<TenantChannelEmailRouter>.Instance);
