@@ -216,7 +216,7 @@ public static class InfrastructureExtensions
         AddIdentityValidation(services, configuration);
         AddImprontas(services, configuration);
         AddRues(services, configuration);
-        AddRentingChannel(services, configuration, environment);
+        AddRentingChannel(services, configuration);
         AddOcr(services, configuration);
         AddQuipux(services);
 
@@ -773,8 +773,7 @@ public static class InfrastructureExtensions
     /// del certificado (AC4/AC5) tumban el arranque completo, no solo el primer envío.
     /// </para>
     /// </summary>
-    private static void AddRentingChannel(
-        IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
+    private static void AddRentingChannel(IServiceCollection services, IConfiguration configuration)
     {
         // Env var CRUDA primero (a diferencia de Fasecolda, que va config primero): este es un
         // canal 100% de despliegue (12-factor), sin defaults propios de negocio en appsettings.json
@@ -820,19 +819,56 @@ public static class InfrastructureExtensions
             return result;
         }
 
-        // HU #11364 (AC3/AC4/AC5) — interruptor AFIRMATIVO y PROPIO del desvío de destinatario.
-        // Único mecanismo que impide que un envío de desarrollo/QA alcance a un cliente final real
-        // (los tres .pfx "de pruebas" del repositorio del cliente son el MISMO archivo byte a
-        // byte: solo existe el ambiente de producción de Renting). AC5 — el nombre del ambiente NO
-        // decide si se desvía (eso es exclusivo de este interruptor); el nombre del ambiente solo
-        // decide, más abajo (tras validar AC1), si el interruptor está PROHIBIDO (producción) u
-        // OBLIGATORIO (fuera de producción, con el canal habilitado).
-        var developmentRecipientOverrideEnabled = string.Equals(
-            Cfg(
-                "Notifications:Renting:SendEmailDevelopmentRecipientOverrideEnabled",
-                "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED"),
-            "true",
-            StringComparison.OrdinalIgnoreCase);
+        // ADR-0044 — interruptor AFIRMATIVO y PROPIO del despliegue: RENTING_API_ENABLED=true no
+        // vuelve a consultar IHostEnvironment para decidir si desvía. Tri-estado, a propósito:
+        // AUSENTE/VACÍA distingue del valor ININTELIGIBLE (bool.TryParse a secas no basta, porque
+        // "" y "ture" tratados igual dejarían degradar en silencio un error de escritura).
+        //   - ausente o vacía  ⇒ desviar (default seguro)
+        //   - "false"          ⇒ desviar (declaración explícita del default)
+        //   - "true"           ⇒ enviar real (en CUALQUIER ambiente)
+        //   - cualquier otro valor no vacío ⇒ falla el arranque (no degrada en silencio)
+        var realRecipientsRaw = Cfg(
+            "Notifications:Renting:SendEmailRealRecipientsEnabled",
+            "RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED");
+
+        // Variable derogada (HU #11364 original). Su sola PRESENCIA con valor no vacío, con el
+        // canal encendido, tumba el arranque — sin importar el valor de la variable nueva — para
+        // que un despliegue viejo no crea que sigue gobernando el desvío.
+        var deprecatedOverrideRaw = Cfg(
+            "Notifications:Renting:SendEmailDevelopmentRecipientOverrideEnabled",
+            "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED");
+        if (!string.IsNullOrWhiteSpace(deprecatedOverrideRaw))
+        {
+            throw new InvalidOperationException(
+                "Canal Renting: la variable 'RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED' "
+                + "quedó DEROGADA (ADR-0044) y ya no gobierna el desvío de destinatario. Retírela del "
+                + "despliegue. La decisión ahora la toma 'RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED' "
+                + "— el valor seguro es NO declararla (equivale a desviar al buzón de control).");
+        }
+
+        bool sendRealRecipients;
+        if (string.IsNullOrWhiteSpace(realRecipientsRaw))
+        {
+            sendRealRecipients = false;
+        }
+        else if (string.Equals(realRecipientsRaw, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            sendRealRecipients = true;
+        }
+        else if (string.Equals(realRecipientsRaw, "false", StringComparison.OrdinalIgnoreCase))
+        {
+            sendRealRecipients = false;
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "Canal Renting habilitado (RENTING_API_ENABLED=true) pero la variable de configuración "
+                + "'RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED' tiene un valor no reconocido. Valores "
+                + "válidos: 'true', 'false', o ausente/vacía (equivalente a 'false' — desvía al buzón de "
+                + "control).");
+        }
+
+        var divertRecipients = !sendRealRecipients;
 
         // AC1 — se valida la presencia de TODAS las variables requeridas: ruta del certificado,
         // passphrase, URL base, ruta de envío, ruta de login, tiempos de espera y datos del
@@ -890,10 +926,10 @@ public static class InfrastructureExtensions
                 "Notifications:Renting:DefaultSenderEmail", "RENTING_API_SEND_EMAIL_DEFAULT_SENDER_EMAIL") ?? "",
             DefaultSenderUsername = Cfg(
                 "Notifications:Renting:DefaultSenderUsername", "RENTING_API_SEND_EMAIL_DEFAULT_SENDER_USERNAME") ?? "",
-            // HU #11364 — con el interruptor activo (única posibilidad fuera de producción, por el
-            // AC4 de arriba) el destinatario de desvío es OBLIGATORIO: sin él el interruptor
-            // encendido no tendría a dónde desviar.
-            SendEmailDevelopmentRecipientEmail = developmentRecipientOverrideEnabled
+            // ADR-0044 — con el desvío activo (default seguro) el buzón de control es OBLIGATORIO:
+            // sin él el interruptor no tendría a dónde desviar. Con envío real, el buzón puede
+            // quedar vacío (no hay desvío que necesite dónde caer).
+            SendEmailDevelopmentRecipientEmail = divertRecipients
                 ? Require(
                     Cfg(
                         "Notifications:Renting:SendEmailDevelopmentRecipientEmail",
@@ -902,7 +938,7 @@ public static class InfrastructureExtensions
                 : Cfg(
                     "Notifications:Renting:SendEmailDevelopmentRecipientEmail",
                     "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL") ?? "",
-            SendEmailDevelopmentRecipientUsername = developmentRecipientOverrideEnabled
+            SendEmailDevelopmentRecipientUsername = divertRecipients
                 ? Require(
                     Cfg(
                         "Notifications:Renting:SendEmailDevelopmentRecipientUsername",
@@ -911,33 +947,12 @@ public static class InfrastructureExtensions
                 : Cfg(
                     "Notifications:Renting:SendEmailDevelopmentRecipientUsername",
                     "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME") ?? "",
-            SendEmailDevelopmentRecipientOverrideEnabled = developmentRecipientOverrideEnabled,
+            DivertRecipientsEnabled = divertRecipients,
         };
 
-        // AC3 — en producción, el desvío no puede estar activo: enviaría el correo REAL de un
-        // cliente final a la cuenta de desvío en vez de a su destinatario, silenciando
-        // notificaciones de producción sin que nadie se entere.
-        if (environment.IsProduction() && developmentRecipientOverrideEnabled)
-        {
-            throw new InvalidOperationException(
-                "Canal Renting: el desvío de destinatario "
-                + "(RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED=true) no puede "
-                + "estar activo en producción.");
-        }
-
-        // AC4 — fuera de producción, con el canal habilitado (única rama de este método: el early
-        // return de arriba ya descartó el canal deshabilitado), el desvío es OBLIGATORIO. Acotado a
-        // "canal habilitado" a propósito: si se exigiera siempre, cualquier ambiente de desarrollo
-        // sin Notifications:Renting:Enabled=true (incluida la suite Flit.Admin.Tests, que levanta
-        // el host real con WebApplicationFactory<Program>) dejaría de arrancar.
-        if (!environment.IsProduction() && !developmentRecipientOverrideEnabled)
-        {
-            throw new InvalidOperationException(
-                "Canal Renting habilitado (RENTING_API_ENABLED=true) fuera de producción: el desvío "
-                + "de destinatario (RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED) "
-                + "es obligatorio para no enviar correos reales a clientes desde un ambiente de "
-                + "pruebas.");
-        }
+        // ADR-0044 — ninguna rama de este método vuelve a consultar IHostEnvironment: la decisión
+        // de desviar/enviar real ya quedó resuelta arriba, únicamente por
+        // RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED.
 
         services.Configure<RentingChannelOptions>(o =>
         {
@@ -962,15 +977,19 @@ public static class InfrastructureExtensions
             o.DefaultSenderUsername = options.DefaultSenderUsername;
             o.SendEmailDevelopmentRecipientEmail = options.SendEmailDevelopmentRecipientEmail;
             o.SendEmailDevelopmentRecipientUsername = options.SendEmailDevelopmentRecipientUsername;
-            o.SendEmailDevelopmentRecipientOverrideEnabled = options.SendEmailDevelopmentRecipientOverrideEnabled;
+            o.DivertRecipientsEnabled = options.DivertRecipientsEnabled;
         });
 
-        // AC3/AC4/AC5 — Singleton cuyo factory carga y valida el certificado. Con ValidateOnBuild
-        // esto se ejecuta al construir el IServiceProvider (arranque), no en el primer uso.
+        // AC3/AC4/AC5 (HU #11359/#11360) — Singleton cuyo factory carga y valida el certificado.
+        // Con ValidateOnBuild esto se ejecuta al construir el IServiceProvider (arranque), no en el
+        // primer uso. ADR-0044 — mismo checkpoint de arranque: se aprovecha para dejar en el log
+        // real (no un logger de arranque aparte) en qué modo queda el canal — sin registrar
+        // secretos ni direcciones de correo.
         services.AddSingleton(sp =>
         {
             var logger = sp.GetRequiredService<ILoggerFactory>()
                 .CreateLogger("Flit.Infrastructure.Notifications.Renting");
+            RentingChannelStartupLog.LogMode(logger, divertRecipients);
             var certificate = RentingClientCertificateLoader.Load(options, logger);
             return new RentingClientCertificateProvider(certificate);
         });
@@ -1145,5 +1164,32 @@ public static class InfrastructureExtensions
         var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
         await db.Database.MigrateAsync(cancellationToken);
         await DevelopmentAuthSeeder.SeedAsync(db, hasher, env, cancellationToken);
+    }
+}
+
+/// <summary>
+/// ADR-0044 — log de arranque (source-generated, CA1848) que deja constancia inequívoca del modo
+/// en que quedó el canal Renting. Nunca registra secretos ni direcciones de correo: solo el modo.
+/// </summary>
+internal static partial class RentingChannelStartupLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Canal Renting: arranca en modo DESVÍO. Todo envío por este canal va al buzón de "
+            + "control, no a destinatarios reales (RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED "
+            + "ausente/vacía o 'false').")]
+    public static partial void LogDivertMode(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Canal Renting: arranca en modo ENVÍO REAL. ESTE DESPLIEGUE ENVÍA A DESTINATARIOS "
+            + "REALES DE CLIENTES por la API PRODUCTIVA de Renting "
+            + "(RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED=true).")]
+    public static partial void LogRealRecipientsMode(ILogger logger);
+
+    public static void LogMode(ILogger logger, bool divertRecipients)
+    {
+        if (divertRecipients)
+            LogDivertMode(logger);
+        else
+            LogRealRecipientsMode(logger);
     }
 }

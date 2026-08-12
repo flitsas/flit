@@ -11,14 +11,14 @@ using Xunit;
 namespace Flit.Infrastructure.Tests.Notifications.Renting;
 
 /// <summary>
-/// HU #11364 — desvío OBLIGATORIO de destinatario fuera de producción
-/// (<see cref="RentingRecipientOverride"/>), con interruptor afirmativo propio
-/// (<see cref="RentingChannelOptions.SendEmailDevelopmentRecipientOverrideEnabled"/>).
+/// HU #11364 / ADR-0044 — desvío al buzón de control (<see cref="RentingRecipientOverride"/>), con
+/// interruptor afirmativo propio del despliegue
+/// (<see cref="RentingChannelOptions.DivertRecipientsEnabled"/>).
 /// <para>
 /// Uso de ejemplo del componente bajo prueba:
 /// <code>
 /// var overrideImpl = new RentingRecipientOverride(
-///     Options.Create(new RentingChannelOptions { SendEmailDevelopmentRecipientOverrideEnabled = true, ... }),
+///     Options.Create(new RentingChannelOptions { DivertRecipientsEnabled = true, ... }),
 ///     logger);
 /// var effective = overrideImpl.Apply(request);
 /// </code>
@@ -45,7 +45,7 @@ public sealed class RentingRecipientOverrideTests
         new(
             Options.Create(new RentingChannelOptions
             {
-                SendEmailDevelopmentRecipientOverrideEnabled = enabled,
+                DivertRecipientsEnabled = enabled,
                 SendEmailDevelopmentRecipientEmail = recipientEmail ?? string.Empty,
                 SendEmailDevelopmentRecipientUsername = recipientUsername ?? string.Empty,
             }),
@@ -138,7 +138,7 @@ public sealed class RentingRecipientOverrideTests
         {
             ctor.GetParameters().Should().NotContain(
                 p => typeof(IHostEnvironment).IsAssignableFrom(p.ParameterType),
-                "el desvío se decide SOLO por RentingChannelOptions.SendEmailDevelopmentRecipientOverrideEnabled");
+                "el desvío se decide SOLO por RentingChannelOptions.DivertRecipientsEnabled (ADR-0044)");
         }
     }
 

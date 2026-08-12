@@ -49,7 +49,7 @@ public sealed class ControlledMailboxRecipientExemptionTests
         SendEmailSecondsTimeout = 5,
         SendEmailSenderEmail = "canal@renting.test",
         SendEmailSenderUsername = "Canal Renting",
-        SendEmailDevelopmentRecipientOverrideEnabled = overrideEnabled,
+        DivertRecipientsEnabled = overrideEnabled,
         SendEmailDevelopmentRecipientEmail = DivertedRecipientEmail,
         SendEmailDevelopmentRecipientUsername = "Desvío QA",
     };
