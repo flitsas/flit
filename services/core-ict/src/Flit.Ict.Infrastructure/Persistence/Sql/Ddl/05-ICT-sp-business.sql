@@ -47,6 +47,15 @@ BEGIN
         ORDER BY m.created_at
         LIMIT v_batch_size
     LOOP
+        -- CANDADO DE PRUEBA (kill-switch por-tenant): si la compañía tiene un cliente ICT en modo prueba
+        -- (test_mode=true), se fuerza CON NOVEDADES y NO se consultan fuentes externas de pago. Robusto (no
+        -- depende del payload) y aislado (no toca a compañías reales). Uso: pruebas de carga/estrés en DEV.
+        UPDATE ict.external_integration_master
+        SET business_comments_validation = business_comments_validation || ' modo prueba: sin consultar fuentes externas;'
+        WHERE id = rec.id_master
+          AND EXISTS (SELECT 1 FROM ict.integration_clients c
+                      WHERE c.tenant_id = rec.tenant_id AND c.test_mode = true AND c.deleted_at IS NULL);
+
         -- Inicio: en validación de negocio.
         UPDATE ict.external_integration_master
         SET process_status_id = 2, business_validation = 1, business_date_validation = now()

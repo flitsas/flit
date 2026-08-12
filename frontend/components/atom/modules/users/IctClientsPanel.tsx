@@ -63,6 +63,7 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [username, setUsername] = useState("");
   const [companyId, setCompanyId] = useState("");
+  const [testMode, setTestMode] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -113,11 +114,12 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
 
     setCreating(true);
     try {
-      const res = await createIctClient({ username: username.trim(), tenantId: effectiveTenantId });
+      const res = await createIctClient({ username: username.trim(), tenantId: effectiveTenantId, testMode });
       setClients((prev) => [res.client, ...prev]);
       setRevealed({ username: res.client.username, secret: res.generatedSecret });
       setUsername("");
       setCompanyId("");
+      setTestMode(false);
       setShowForm(false);
       setStatus("ready");
     } catch (err) {
@@ -236,6 +238,18 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
               className="min-w-[220px]"
             />
           )}
+          <label
+            className="flex items-center gap-2 text-xs text-slate-500"
+            title="La compañía no consultará fuentes externas de pago (SOAT/RNMC/RUNT); todas sus filas caen en Con Novedades. Para pruebas de carga."
+          >
+            <input
+              type="checkbox"
+              checked={testMode}
+              onChange={(e) => setTestMode(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            Modo prueba (no consulta fuentes de pago)
+          </label>
           <button
             type="submit"
             disabled={creating}
@@ -282,6 +296,14 @@ export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
                     >
                       {c.isActive ? "Activo" : "Inactivo"}
                     </span>
+                    {c.testMode && (
+                      <span
+                        className="ml-1 inline-flex rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-600"
+                        title="No consulta fuentes de pago; todas sus filas caen en Con Novedades."
+                      >
+                        Prueba
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     {c.lastLoginAt ? new Date(c.lastLoginAt).toLocaleString() : "—"}
