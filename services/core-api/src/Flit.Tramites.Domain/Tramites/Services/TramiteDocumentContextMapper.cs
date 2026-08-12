@@ -64,6 +64,14 @@ public static class TramiteDocumentContextMapper
 
         var esPersonaNatural = !esNit && actors.Any(a => ActorPersonTypes.IsNatural(a.PersonType));
 
+        // Nota: se evaluó reusar VehicleServiceTypeCode.Resolve (mismo campo, normalizado para la
+        // casilla 18 del FUR) en vez de este "Contains" directo, pero esta bandera es un booleano
+        // de negocio independiente (RF33: ¿el servicio es especial en algún sentido, para exigir
+        // documentos adicionales?), no una selección exclusiva de casilla. Resolve() resuelve un
+        // texto compuesto a UN código con precedencia (p. ej. "OFICIAL ESPECIAL" resolvería a
+        // OFICIAL); usarlo aquí podría apagar silenciosamente la exigencia de documentos para
+        // combinaciones donde otra categoría gane la precedencia, cambiando un comportamiento de
+        // negocio ya vigente sin que nadie lo pidiera. Este "Contains" se deja tal cual.
         var servicioEspecial = fieldValues.Any(f =>
             string.Equals(f.FieldKey, VehicleServiceFieldKey, StringComparison.OrdinalIgnoreCase)
             && f.ValueText is not null

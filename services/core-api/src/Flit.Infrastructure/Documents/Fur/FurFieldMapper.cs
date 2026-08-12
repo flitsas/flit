@@ -51,6 +51,11 @@ public static class FurFieldMapper
             ["vehicle_owner_city"] = Text(DisplayOrDash(propietario?.City)),
             ["vehicle_owner_phone"] = Text(DisplayOrDash(propietario?.Phone)),
             ["observations"] = Text(BuildObservations(data)),
+            // Casilla 19 "EMPRESA VINCULADORA". Solo se llena cuando el trámite trae el dato (servicio
+            // público con empresa vinculadora); si no, queda en blanco como el resto del recuadro
+            // (Text() ya devuelve "" ante null/whitespace — misma convención que el resto del mapper).
+            ["linked_company_name"] = Text(Upper(data.EmpresaVinculadoraRazonSocial)),
+            ["linked_company_nit"] = Text(data.EmpresaVinculadoraNit),
         };
 
         SetSignature(
@@ -227,16 +232,22 @@ public static class FurFieldMapper
         || n.Contains("GAS NATURAL")
         || (n.Contains("GAS") && !n.Contains("GASOL") && !n.Contains("GASOLINA"));
 
+    /// <summary>
+    /// Casilla 18 del FUR. Delega en <see cref="VehicleServiceTypeCode.Resolve"/> para reducir el
+    /// valor de <c>vehicle_service</c> (texto libre del RUNT o código de matrícula inicial) a UN
+    /// solo código canónico y marcar exactamente una casilla — antes cada casilla se evaluaba con
+    /// un <c>Contains</c> independiente y un valor compuesto del RUNT como "SERVICIO PUBLICO
+    /// ESPECIAL" marcaba PÚBLICO y ESPECIAL a la vez.
+    /// </summary>
     private static void MarkServicio(Dictionary<string, FurFieldValue> dict, string? servicio)
     {
-        var n = Norm(servicio);
-        var isParticular = string.IsNullOrEmpty(n) || n.Contains("PARTICULAR") || n.Contains("PARTICUL");
-        MarkCheckbox(dict, "vehicle_service_type_1", isParticular);
-        MarkCheckbox(dict, "vehicle_service_type_2", n.Contains("PUBLICO") || n.Contains("PUBLIC"));
-        MarkCheckbox(dict, "vehicle_service_type_3", n.Contains("DIPLOMAT"));
-        MarkCheckbox(dict, "vehicle_service_type_4", n.Contains("OFICIAL"));
-        MarkCheckbox(dict, "vehicle_service_type_5", n.Contains("ESPECIAL"));
-        MarkCheckbox(dict, "vehicle_service_type_6", n.Contains("OTRO"));
+        var codigo = VehicleServiceTypeCode.Resolve(servicio);
+        MarkCheckbox(dict, "vehicle_service_type_1", codigo == VehicleServiceTypeCode.Particular);
+        MarkCheckbox(dict, "vehicle_service_type_2", codigo == VehicleServiceTypeCode.Publico);
+        MarkCheckbox(dict, "vehicle_service_type_3", codigo == VehicleServiceTypeCode.Diplomatico);
+        MarkCheckbox(dict, "vehicle_service_type_4", codigo == VehicleServiceTypeCode.Oficial);
+        MarkCheckbox(dict, "vehicle_service_type_5", codigo == VehicleServiceTypeCode.Especial);
+        MarkCheckbox(dict, "vehicle_service_type_6", codigo == VehicleServiceTypeCode.Otros);
     }
 
     private static void MarkDocType(

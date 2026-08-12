@@ -125,16 +125,17 @@ public static partial class FurOverlayRenderer
             if (field.AutoFit)
             {
                 // HU #11256 — opt-in por manifiesto (CF12): solo los campos que declaran
-                // `autoFit: true` (hoy, únicamente `observations`) pasan por el auto-encaje. Los
-                // sellos de firma, también `multiline`, NUNCA entran aquí: siguen partiendo
-                // exclusivamente por `\n` explícitos, como hoy, sin medir ni un carácter.
+                // `autoFit: true` (hoy, `observations` y `linked_company_name`) pasan por el
+                // auto-encaje. Los sellos de firma, también `multiline`, NUNCA entran aquí: siguen
+                // partiendo exclusivamente por `\n` explícitos, como hoy, sin medir ni un carácter.
                 var fit = FurTextFitter.FitMultiline(
                     text,
                     field.W,
                     field.H,
                     fontSize,
                     (value, size) => gfx.MeasureString(value, CreateFont(size, field.Bold)).Width,
-                    elidedChars => LogObservationsTruncated(logger, referenceNumber ?? "(sin id)", field.Id, elidedChars));
+                    elidedChars => LogTextTruncated(logger, referenceNumber ?? "(sin id)", field.Id, elidedChars),
+                    field.MinFontSize);
                 lines = [.. fit.Lines];
                 fontSize = fit.FontSize;
             }
@@ -154,7 +155,8 @@ public static partial class FurOverlayRenderer
                 field.W,
                 field.H,
                 fontSize,
-                (value, size) => gfx.MeasureString(value, CreateFont(size, field.Bold)).Width);
+                (value, size) => gfx.MeasureString(value, CreateFont(size, field.Bold)).Width,
+                field.MinFontSize);
             lines = [.. fit.Lines];
             fontSize = fit.FontSize;
         }
@@ -290,10 +292,12 @@ public static partial class FurOverlayRenderer
         return new XFont("Arial", size, style);
     }
 
-    // HU #11256 (R4) — último recurso de FurTextFitter.FitMultiline: el texto no cupo ni al cuerpo
-    // mínimo y se truncó con elipsis. Se deja constancia del trámite y de cuánto se elidió; nunca se
-    // dibuja fuera de la caja.
+    // HU #11256 (R4), generalizado HU sin ADO 2026-08-11 (cuarta tanda) — último recurso de
+    // FurTextFitter.FitMultiline: el texto no cupo ni al piso de cuerpo y se truncó con elipsis. Se
+    // deja constancia del trámite y de cuánto se elidió; nunca se dibuja fuera de la caja. Antes solo
+    // lo disparaba `observations`; ahora también `linked_company_name` (casilla 19), de ahí el nombre
+    // genérico "texto" en vez de "observaciones".
     [LoggerMessage(Level = LogLevel.Warning,
-        Message = "FUR {ReferenceNumber}: observaciones truncadas en el campo {FieldId} — {ElidedChars} caracteres elididos")]
-    private static partial void LogObservationsTruncated(ILogger logger, string referenceNumber, string fieldId, int elidedChars);
+        Message = "FUR {ReferenceNumber}: texto truncado en el campo {FieldId} — {ElidedChars} caracteres elididos")]
+    private static partial void LogTextTruncated(ILogger logger, string referenceNumber, string fieldId, int elidedChars);
 }

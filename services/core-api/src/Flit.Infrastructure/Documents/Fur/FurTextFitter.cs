@@ -53,12 +53,22 @@ internal static class FurTextFitter
     private const string Ellipsis = "…";
 
     /// <param name="measure">Mide el ancho de un texto para un cuerpo dado.</param>
+    /// <param name="minFontSize">
+    /// HU sin ADO 2026-08-11 (tercera tanda, casilla 19 del FUR) — piso ABSOLUTO opcional, distinto
+    /// del piso por defecto (<see cref="MinFontRatio"/> × <paramref name="baseFontSize"/>). Un campo
+    /// declarado a un cuerpo bajo (p. ej. 7,6 pt) tiene por defecto un piso de ~4,9 pt (0,65×7,6):
+    /// suficiente para ganar caracteres antes de truncar, pero por debajo de lo legible en un
+    /// formulario que se imprime y a veces se escanea. Este parámetro deja fijar un piso mayor
+    /// (p. ej. 6,5 pt) SIN tocar <see cref="MinFontRatio"/>, que es global y calibra el resto de
+    /// campos de texto del FUR. <c>null</c> (por defecto) conserva el comportamiento de siempre.
+    /// </param>
     internal static FurTextFit Fit(
         string text,
         double maxWidth,
         double maxHeight,
         double baseFontSize,
-        Func<string, double, double> measure)
+        Func<string, double, double> measure,
+        double? minFontSize = null)
     {
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(measure);
@@ -71,7 +81,9 @@ internal static class FurTextFitter
         if (measure(text, baseFontSize) <= maxWidth)
             return new FurTextFit([text], baseFontSize);
 
-        var minFont = Math.Max(MinFontSize, baseFontSize * MinFontRatio);
+        var minFont = minFontSize is { } floor
+            ? Math.Max(MinFontSize, floor)
+            : Math.Max(MinFontSize, baseFontSize * MinFontRatio);
 
         // (2) Reducir el cuerpo manteniendo una sola línea.
         for (var size = baseFontSize - Step; size >= minFont; size -= Step)
@@ -79,6 +91,14 @@ internal static class FurTextFitter
             if (measure(text, size) <= maxWidth)
                 return new FurTextFit([text], size);
         }
+
+        // HU sin ADO 2026-08-11 (cuarta tanda) — el piso puede no coincidir con la rejilla de pasos de
+        // 0,25 desde `baseFontSize` (p. ej. base 7,6 / piso 7,0: el bucle de arriba prueba 7,35 y 7,10
+        // y se detiene en 6,85 sin tocar el 7,0 exacto). Sin este intento explícito, un texto que SÍ
+        // cabría en una sola línea justo al piso caía al paso (3) y se partía en líneas sin necesidad.
+        // Mismo motivo por el que `FitMultiline` ya prueba su propio piso de forma explícita.
+        if (measure(text, minFont) <= maxWidth)
+            return new FurTextFit([text], minFont);
 
         // (3) Partir por palabras, si el alto admite más de una línea. Se prueba de mayor a menor cuerpo
         //     para conservar la mayor legibilidad posible.
@@ -93,8 +113,40 @@ internal static class FurTextFitter
                 return new FurTextFit(wrapped, size);
         }
 
-        // (4) Último recurso: una línea al cuerpo mínimo, truncada con elipsis.
-        return new FurTextFit([Truncate(text, maxWidth, minFont, measure)], minFont);
+        // Mismo motivo que el intento explícito del paso (2): el piso puede no coincidir con la
+        // rejilla de 0,25 desde `baseFontSize`, así que se prueba una última vez exactamente en
+        // `minFont` antes de rendirse al truncado. Con un piso alto (p. ej. 7,0) esto puede ser la
+        // diferencia entre 3 líneas completas y truncar de más por probar solo hasta ~7,1.
+        if (MaxLines(maxHeight, minFont) >= 2)
+        {
+            var wrappedAtFloor = Wrap(text, maxWidth, minFont, measure);
+            if (wrappedAtFloor.Count <= MaxLines(maxHeight, minFont)
+                && wrappedAtFloor.All(l => measure(l, minFont) <= maxWidth))
+                return new FurTextFit(wrappedAtFloor, minFont);
+        }
+
+        // (4) Último recurso, al piso: si el alto admite varias líneas se aprovechan TODAS antes de
+        // truncar (recorta a las que caben y trunca solo la última con elipsis) — HU sin ADO
+        // 2026-08-11 (cuarta tanda): con un campo de una sola línea (h chico) esto degrada exactamente
+        // al truncado de siempre (maxLinesAtFloor < 2). Con `h` para varias líneas (p. ej. casilla 19),
+        // desperdiciar la 2ª/3ª línea aquí habría sido peor que necesario: "cuando de verdad no cabe,
+        // trunca" no significa "trunca ya en la primera línea si hay más espacio abajo".
+        var maxLinesAtFloor = MaxLines(maxHeight, minFont);
+        if (maxLinesAtFloor < 2)
+            return new FurTextFit([Truncate(text, maxWidth, minFont, measure)], minFont);
+
+        var overflowWrap = Wrap(text, maxWidth, minFont, measure);
+        var kept = overflowWrap.Take(maxLinesAtFloor).ToList();
+        if (kept.Count == 0)
+            kept.Add(string.Empty);
+
+        var hasOverflow = overflowWrap.Count > kept.Count;
+        var lastIdx = kept.Count - 1;
+        kept[lastIdx] = hasOverflow
+            ? ForceEllipsis(kept[lastIdx], maxWidth, minFont, measure)
+            : Truncate(kept[lastIdx], maxWidth, minFont, measure);
+
+        return new FurTextFit(kept, minFont);
     }
 
     /// <summary>
@@ -124,16 +176,27 @@ internal static class FurTextFitter
     /// decide cómo loguearlo (incluye ahí el id del trámite): este método no depende de ningún
     /// framework de logging para seguir siendo puro.
     /// </param>
+    /// <param name="minFontSize">
+    /// HU sin ADO 2026-08-11 (cuarta tanda, casilla 19 del FUR) — piso ABSOLUTO opcional, análogo al
+    /// que ya recibe <see cref="Fit"/>. Reemplaza el piso por defecto (<see cref="MinMultilineFontSize"/>,
+    /// 5 pt — calibrado para <c>observations</c>, un párrafo libre donde priorizar caracteres visibles
+    /// importa más que el cuerpo) por uno mayor (p. ej. 7 pt) cuando el campo necesita mantenerse
+    /// legible en un formulario que se imprime y a veces se escanea. <c>null</c> (por defecto)
+    /// conserva el piso de 5 pt de siempre — <c>observations</c> no pasa este parámetro y no cambia.
+    /// </param>
     internal static FurTextFit FitMultiline(
         string text,
         double maxWidth,
         double maxHeight,
         double baseFontSize,
         Func<string, double, double> measure,
-        Action<int>? onTruncate = null)
+        Action<int>? onTruncate = null,
+        double? minFontSize = null)
     {
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(measure);
+
+        var floor = minFontSize ?? MinMultilineFontSize;
 
         // Guarda de entrada. `observations` es texto libre y no tiene tope ni en el wizard ni en la
         // columna, así que puede llegar un pegado de cientos de miles de caracteres. Recortar aquí no
@@ -141,7 +204,7 @@ internal static class FurTextFitter
         // que todo lo que pase del tope se elidiría igual— y evita pasear esa cadena por el envolvido
         // y el truncado. Lo recortado se suma a los caracteres reportados: no se pierde en silencio.
         if (text.Length <= MaxMultilineInputChars)
-            return FitMultilineCore(text, maxWidth, maxHeight, baseFontSize, measure, onTruncate);
+            return FitMultilineCore(text, maxWidth, maxHeight, baseFontSize, measure, onTruncate, floor);
 
         var elidedByGuard = text.Length - MaxMultilineInputChars;
         var reported = false;
@@ -151,7 +214,8 @@ internal static class FurTextFitter
             {
                 reported = true;
                 onTruncate?.Invoke(elided + elidedByGuard);
-            });
+            },
+            floor);
 
         if (!reported)
             onTruncate?.Invoke(elidedByGuard);
@@ -165,7 +229,8 @@ internal static class FurTextFitter
         double maxHeight,
         double baseFontSize,
         Func<string, double, double> measure,
-        Action<int>? onTruncate)
+        Action<int>? onTruncate,
+        double floor)
     {
 
         // Preprocesado IDÉNTICO al que usa hoy la ruta multiline del renderer sin autoFit: es la
@@ -187,25 +252,25 @@ internal static class FurTextFitter
             return new FurTextFit(atBaseSize, baseFontSize);
 
         // (3) Reducir el cuerpo re-envolviendo en cada tamaño (CF3): más ancho por línea ⇒ menos
-        // líneas. Se acepta el primer tamaño que quepa. El piso (`MinMultilineFontSize`) se prueba
-        // siempre de forma explícita al final: los pasos de 0.25 desde `baseFontSize` no necesariamente
-        // aterrizan justo en el piso (p. ej. 7.2 → …,5.2,4.95(excluido)), y sin este último intento un
-        // texto que sí cabría exactamente a 5 pt caería al truncado del paso (4) sin necesidad.
-        for (var size = baseFontSize - Step; size > MinMultilineFontSize; size -= Step)
+        // líneas. Se acepta el primer tamaño que quepa. El piso (`floor`) se prueba siempre de forma
+        // explícita al final: los pasos de 0.25 desde `baseFontSize` no necesariamente aterrizan justo
+        // en el piso (p. ej. 7.2 → …,5.2,4.95(excluido)), y sin este último intento un texto que sí
+        // cabría exactamente al piso caería al truncado del paso (4) sin necesidad.
+        for (var size = baseFontSize - Step; size > floor; size -= Step)
         {
             var wrapped = WrapParagraphs(paragraphs, maxWidth, size, measure);
             if (wrapped.Count <= MaxLines(maxHeight, size) && wrapped.All(l => measure(l, size) <= maxWidth))
                 return new FurTextFit(wrapped, size);
         }
 
-        var atFloor = WrapParagraphs(paragraphs, maxWidth, MinMultilineFontSize, measure);
-        if (atFloor.Count <= MaxLines(maxHeight, MinMultilineFontSize)
-            && atFloor.All(l => measure(l, MinMultilineFontSize) <= maxWidth))
-            return new FurTextFit(atFloor, MinMultilineFontSize);
+        var atFloor = WrapParagraphs(paragraphs, maxWidth, floor, measure);
+        if (atFloor.Count <= MaxLines(maxHeight, floor) && atFloor.All(l => measure(l, floor) <= maxWidth))
+            return new FurTextFit(atFloor, floor);
 
-        // (4) Último recurso, al piso de 5 pt: recorta a las líneas que caben en el alto y trunca la
-        // última con elipsis. Pisar los campos vecinos de un formulario oficial es peor que elidir texto.
-        return LastResortMultiline(paragraphs, maxWidth, maxHeight, measure, onTruncate);
+        // (4) Último recurso, al piso: recorta a las líneas que caben en el alto y trunca la última con
+        // elipsis. Pisar los campos vecinos de un formulario oficial es peor que elidir texto — y NUNCA
+        // baja del piso, aunque eso signifique truncar más de lo que un cuerpo menor habría permitido.
+        return LastResortMultiline(paragraphs, maxWidth, maxHeight, measure, onTruncate, floor);
     }
 
     /// <summary>Cada párrafo cabe en el ancho al cuerpo declarado y el bloque cabe en el alto.</summary>
@@ -242,10 +307,11 @@ internal static class FurTextFitter
         double maxWidth,
         double maxHeight,
         Func<string, double, double> measure,
-        Action<int>? onTruncate)
+        Action<int>? onTruncate,
+        double floor)
     {
-        var wrapped = WrapParagraphs(paragraphs, maxWidth, MinMultilineFontSize, measure);
-        var maxLines = MaxLines(maxHeight, MinMultilineFontSize);
+        var wrapped = WrapParagraphs(paragraphs, maxWidth, floor, measure);
+        var maxLines = MaxLines(maxHeight, floor);
 
         var kept = wrapped.Take(maxLines).ToList();
         if (kept.Count == 0)
@@ -261,8 +327,8 @@ internal static class FurTextFitter
         // descartadas, se llegó aquí porque una palabra suelta no cabe ni al piso — ahí sí basta el
         // truncado normal (no fuerza elipsis si por algún motivo ya cupiera).
         var truncatedLast = overflow.Count > 0
-            ? ForceEllipsis(originalLast, maxWidth, MinMultilineFontSize, measure)
-            : Truncate(originalLast, maxWidth, MinMultilineFontSize, measure);
+            ? ForceEllipsis(originalLast, maxWidth, floor, measure)
+            : Truncate(originalLast, maxWidth, floor, measure);
         kept[lastIndex] = truncatedLast;
 
         var elidedChars = overflow.Sum(l => l.Length + 1)
@@ -270,7 +336,7 @@ internal static class FurTextFitter
         if (elidedChars > 0)
             onTruncate?.Invoke(elidedChars);
 
-        return new FurTextFit(kept, MinMultilineFontSize);
+        return new FurTextFit(kept, floor);
     }
 
     /// <summary>

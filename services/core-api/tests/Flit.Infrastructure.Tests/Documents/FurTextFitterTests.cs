@@ -101,6 +101,117 @@ public sealed class FurTextFitterTests
         fit.Lines.Should().OnlyContain(l => Measure(l, fit.FontSize) <= CampoW);
         (fit.Lines.Count * fit.FontSize * 1.25).Should().BeLessThanOrEqualTo(CampoH);
     }
+
+    // HU sin ADO 2026-08-11 (tercera tanda) — piso ABSOLUTO opcional (Plan B de la casilla 19
+    // "EMPRESA VINCULADORA" del FUR): un texto que necesitaría bajar del piso por defecto
+    // (65% × cuerpo) para caber se trunca en su lugar, en vez de seguir encogiendo hasta casi
+    // ilegible. Un texto que cabe ANTES de tocar el piso no se ve afectado (mismo resultado con o
+    // sin `minFontSize`).
+    [Fact]
+    public void MinFontSize_ExplicitoReemplazaElPisoPorDefecto()
+    {
+        // Con el piso por defecto (65% × 7.7 ≈ 5.0) este texto encajaría en una línea más pequeña.
+        // Con minFontSize=7.0 (más alto que 5.0) debe truncar en vez de encoger por debajo de 7.0.
+        var sinPiso = FurTextFitter.Fit(new string('A', 40), CampoW, CampoH, CampoFont, Measure);
+        var conPisoAlto = FurTextFitter.Fit(new string('A', 40), CampoW, CampoH, CampoFont, Measure, minFontSize: 7.0);
+
+        sinPiso.FontSize.Should().BeLessThan(7.0); // encogió por debajo de 7.0 sin el piso explícito
+        conPisoAlto.FontSize.Should().Be(7.0);
+        conPisoAlto.Lines[0].Should().EndWith("…", "no cabe ni al piso de 7.0, así que trunca");
+    }
+
+    [Fact]
+    public void MinFontSize_NuncaBajaDelPisoExplicito()
+    {
+        var fit = FurTextFitter.Fit(new string('X', 400), CampoW, CampoH, CampoFont, Measure, minFontSize: 6.5);
+
+        fit.FontSize.Should().Be(6.5);
+    }
+
+    [Fact]
+    public void MinFontSize_Null_ConservaElComportamientoDeSiempre()
+    {
+        // Pasar null explícito es idéntico a no pasar el parámetro (default).
+        var conNull = FurTextFitter.Fit(new string('A', 28), CampoW, CampoH, CampoFont, Measure, minFontSize: null);
+        var sinParametro = Fit(new string('A', 28));
+
+        conNull.FontSize.Should().Be(sinParametro.FontSize);
+        conNull.Lines.Should().Equal(sinParametro.Lines);
+    }
+
+    [Fact]
+    public void MinFontSize_TextoQueYaCabeIgnoraElPiso()
+    {
+        // El piso solo importa cuando hace falta encoger; un texto que ya cabe al cuerpo declarado
+        // no lo consulta en absoluto (paso 1, passthrough).
+        var fit = FurTextFitter.Fit("Juan Pérez A", CampoW, CampoH, CampoFont, Measure, minFontSize: 7.0);
+
+        fit.Lines.Should().Equal("Juan Pérez A");
+        fit.FontSize.Should().Be(CampoFont);
+    }
+
+    // HU sin ADO 2026-08-11 (cuarta tanda) — el piso puede no coincidir con la rejilla de pasos de
+    // 0,25 desde `baseFontSize`: sin una prueba explícita AL piso exacto, un texto que sí cabría justo
+    // ahí caía al paso siguiente (partir en líneas, o truncar) sin necesidad. Caso real: base 7.6,
+    // piso 7.0 — el bucle prueba 7.35 y 7.10 y se detiene en 6.85 (por debajo del piso), sin tocar
+    // nunca el 7.0 exacto.
+    [Fact]
+    public void MinFontSize_SeProbaExplicitamenteAunqueNoCaigaEnLaRejillaDePasos()
+    {
+        // Con Measure lineal (ancho = chars × size × 0.5) y base=7.6/piso=7.0: el bucle de reducción
+        // prueba 7.35 y 7.10 (7.6 menos pasos de 0.25) y se detiene ahí — 6.85 ya está por debajo del
+        // piso. Un texto de 26 caracteres mide 95.55 a 7.35 y 92.3 a 7.10 (ninguno cabe en w=91), pero
+        // EXACTAMENTE 91.0 al piso de 7.0 (26 × 7.0 × 0.5) — ese tamaño nunca lo toca la rejilla de
+        // pasos, solo la prueba explícita al piso.
+        var texto = new string('A', 26);
+        var fit = FurTextFitter.Fit(texto, maxWidth: 91, maxHeight: CampoH, baseFontSize: 7.6, Measure, minFontSize: 7.0);
+
+        // Solo el piso EXACTO (7.0) hace que el texto quepa en una línea.
+        fit.Lines.Should().Equal(texto);
+        fit.FontSize.Should().Be(7.0);
+    }
+
+    // HU sin ADO 2026-08-11 (cuarta tanda) — casilla 19 del FUR: cuando ni una línea ni el ancho
+    // alcanzan ni siquiera al piso, el último recurso ahora aprovecha TODAS las líneas que el alto
+    // admite antes de truncar (como ya hacía `FitMultiline`), en vez de colapsar todo a una sola línea
+    // truncada y desperdiciar el resto del campo.
+    [Fact]
+    public void UltimoRecurso_ConAltoParaVariasLineas_AprovechaTodasAntesDeTruncar()
+    {
+        // Texto con espacios (partible) que no cabe ni en 3 líneas al piso: se esperan 3 líneas, la
+        // última con elipsis, ninguna más ancha que el campo.
+        var texto = string.Join(" ", Enumerable.Repeat("PALABRA", 30));
+        // h=27 con Measure lineal (0.5×size×1.25 líneas): a piso 7.0, lineHeight=8.75 ⇒ MaxLines=3.
+        var fit = FurTextFitter.Fit(texto, maxWidth: 128, maxHeight: 27, baseFontSize: 7.6, Measure, minFontSize: 7.0);
+
+        fit.FontSize.Should().Be(7.0);
+        fit.Lines.Should().HaveCount(3);
+        fit.Lines[^1].Should().EndWith("…");
+        fit.Lines.Should().OnlyContain(l => Measure(l, fit.FontSize) <= 128);
+    }
+
+    [Fact]
+    public void UltimoRecurso_ConAltoDeUnaLinea_SigueColapsandoAUnaSolaLineaTruncada()
+    {
+        // h pequeño (como los campos de nombre de siempre, h≈14): MaxLines(14, 7.0)=1 ⇒ el
+        // comportamiento de última instancia sigue siendo el de HU #11048, sin regresión.
+        var fit = FurTextFitter.Fit(new string('X', 400), CampoW, CampoH, CampoFont, Measure, minFontSize: 6.5);
+
+        fit.Lines.Should().HaveCount(1);
+        fit.Lines[0].Should().EndWith("…");
+    }
+
+    // HU sin ADO 2026-08-11 (cuarta tanda) — casilla 19: con `h` suficiente para varias líneas, un
+    // texto que no cabe en una sola línea se PARTE en líneas al cuerpo base o al piso, nunca se
+    // queda en una sola línea truncada mientras haya alto disponible sin usar.
+    [Fact]
+    public void ConAltoParaVariasLineas_PrefiereEnvolverAntesQueTruncarEnUnaSolaLinea()
+    {
+        var texto = "TRANSPORTE ESPECIAL Y MASIVO DE PASAJEROS DEL EJE CAFETERO Y ALREDEDORES";
+        var fit = FurTextFitter.Fit(texto, maxWidth: 128, maxHeight: 27, baseFontSize: 7.6, Measure, minFontSize: 7.0);
+
+        fit.Lines.Count.Should().BeGreaterThan(1);
+    }
 }
 
 /// <summary>
@@ -272,6 +383,45 @@ public sealed class FurTextFitterFitMultilineTests
         fit.Lines.Should().OnlyContain(l => Measure(l, fit.FontSize) <= CampoW);
         // Lo reportado incluye tanto lo que quitó la guarda como lo que elidió el último recurso.
         elidedChars.Should().BeGreaterThan(42_000);
+    }
+
+    // HU sin ADO 2026-08-11 (cuarta tanda) — el coordinador pidió verificar explícitamente si
+    // `FitMultiline` honraba un piso propio: NO lo hacía (usaba `MinMultilineFontSize = 5` fijo en
+    // todos sus pasos). Se extendió con el mismo parámetro opcional `minFontSize` que ya tenía `Fit`
+    // — `observations` sigue sin pasarlo, así que su piso de 5pt no cambia (tests de arriba).
+    [Fact]
+    public void MinFontSize_ExplicitoReemplazaElPisoPorDefectoDe5()
+    {
+        var texto = string.Join(" ", Enumerable.Repeat("PALABRA", 400)); // el mismo texto desmedido de arriba
+
+        var sinPiso = FitMultiline(texto); // piso por defecto: 5
+        var conPisoAlto = FurTextFitter.FitMultiline(texto, CampoW, CampoH, CampoFont, Measure, minFontSize: 7.0);
+
+        sinPiso.FontSize.Should().Be(MinMultilineFontSizeForTests);
+        conPisoAlto.FontSize.Should().Be(7.0);
+        conPisoAlto.FontSize.Should().BeGreaterThan(sinPiso.FontSize, "el piso explícito es más alto que el de siempre");
+    }
+
+    [Fact]
+    public void MinFontSize_NuncaBajaDelPisoExplicitoEnFitMultiline()
+    {
+        var texto = string.Join(" ", Enumerable.Repeat("PALABRA", 400));
+
+        var fit = FurTextFitter.FitMultiline(texto, CampoW, CampoH, CampoFont, Measure, minFontSize: 6.8);
+
+        fit.FontSize.Should().Be(6.8);
+        fit.Lines.Should().OnlyContain(l => Measure(l, fit.FontSize) <= CampoW);
+    }
+
+    [Fact]
+    public void MinFontSize_NullEnFitMultiline_ConservaElPisoDeSiempre()
+    {
+        var texto = string.Join(" ", Enumerable.Repeat("PALABRA", 400));
+
+        var conNull = FurTextFitter.FitMultiline(texto, CampoW, CampoH, CampoFont, Measure, minFontSize: null);
+        var sinParametro = FitMultiline(texto);
+
+        conNull.FontSize.Should().Be(sinParametro.FontSize).And.Be(MinMultilineFontSizeForTests);
     }
 
     [Fact]

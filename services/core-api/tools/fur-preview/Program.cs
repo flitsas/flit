@@ -142,6 +142,45 @@ var scenarios = new (string Slug, FurDocumentData Data)[]
         Observaciones = FurPrendaObservation.Compose(
             FurPrendaMarking.Levantamiento, AcreedorPrendaNombre, AcreedorPrendaDocumento),
     }),
+
+    // Casilla 19 "EMPRESA VINCULADORA" — verificación visual de calibración (x/y nuevos en el
+    // manifest AUTOMOTOR). `linked_company_name` es `multiline` + `autoFit` con piso de 7pt (cuarta
+    // tanda): hasta 3 líneas, nunca por debajo de 7pt, x/y/fontSize base sin cambios frente a la
+    // versión `text` original para que el caso corto no se mueva ni cambie de tamaño.
+    // 22: valores cortos que caben en una línea (NO debe cambiar de aspecto).
+    // 23: razón social larga (79 car., el ejemplo sintético original) — entra completa en 2-3 líneas.
+    // 24: razón social real del sector de transporte público (69 car., la que pidió el coordinador)
+    //     — debe entrar COMPLETA, sin puntos suspensivos.
+    // 25: nombre absurdamente largo (134 car.) para comprobar que el truncado a 7pt SIGUE
+    //     funcionando cuando de verdad no cabe ni en 3 líneas, sin desbordar la casilla.
+    ("22-automotor-empresa-vinculadora-corta", AutomotorData() with
+    {
+        Vehiculo = AutomotorData().Vehiculo with { TipoServicio = "PUBLICO" },
+        EmpresaVinculadoraRazonSocial = "TRANSPORTES DEL NORTE S.A.S.",
+        EmpresaVinculadoraNit = "900123456-7",
+    }),
+    ("23-automotor-empresa-vinculadora-larga", AutomotorData() with
+    {
+        Vehiculo = AutomotorData().Vehiculo with { TipoServicio = "PUBLICO" },
+        EmpresaVinculadoraRazonSocial =
+            "TRANSPORTE ESPECIAL Y MASIVO DE PASAJEROS DEL EJE CAFETERO Y ALREDEDORES S.A.S.",
+        EmpresaVinculadoraNit = "900987654-3",
+    }),
+    ("24-automotor-empresa-vinculadora-cooperativa", AutomotorData() with
+    {
+        Vehiculo = AutomotorData().Vehiculo with { TipoServicio = "PUBLICO" },
+        EmpresaVinculadoraRazonSocial =
+            "COOPERATIVA DE TRANSPORTADORES ESPECIALES DEL ORIENTE ANTIOQUEÑO S.A.S.",
+        EmpresaVinculadoraNit = "890912345-1",
+    }),
+    ("25-automotor-empresa-vinculadora-absurda", AutomotorData() with
+    {
+        Vehiculo = AutomotorData().Vehiculo with { TipoServicio = "PUBLICO" },
+        EmpresaVinculadoraRazonSocial =
+            "COOPERATIVA MULTIACTIVA DE TRANSPORTADORES ESPECIALES Y SERVICIOS COMPLEMENTARIOS " +
+            "DE LOS MUNICIPIOS DEL SUR DEL VALLE DE ABURRA S.A.S.",
+        EmpresaVinculadoraNit = "800123987-2",
+    }),
 };
 
 foreach (var (slug, data) in scenarios)
