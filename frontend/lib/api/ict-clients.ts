@@ -14,6 +14,8 @@ export interface IctClient {
   scopes: string;
   isActive: boolean;
   mustRotate: boolean;
+  /** Modo prueba: la compañía NO consulta fuentes externas de pago; todo cae en Con Novedades. */
+  testMode: boolean;
   lastLoginAt: string | null;
   lockedUntil: string | null;
   createdAt: string;
@@ -33,13 +35,14 @@ export function createIctClient(body: {
   username: string;
   tenantId: string;
   scopes?: string[];
+  testMode?: boolean;
 }): Promise<IctClientSecret> {
   return apiFetch<IctClientSecret>("/api/v1/ict/clients", { method: "POST", body });
 }
 
 export function updateIctClient(
   id: string,
-  body: { isActive?: boolean; mustRotate?: boolean; scopes?: string[] },
+  body: { isActive?: boolean; mustRotate?: boolean; scopes?: string[]; testMode?: boolean },
 ): Promise<IctClient> {
   return apiFetch<IctClient>(`/api/v1/ict/clients/${id}`, { method: "PATCH", body });
 }
