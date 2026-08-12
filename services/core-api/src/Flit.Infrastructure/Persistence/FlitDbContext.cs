@@ -234,6 +234,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<ProcedureStateChangeEmailDispatch> ProcedureStateChangeEmailDispatches =>
         Set<ProcedureStateChangeEmailDispatch>();
 
+    // Trámites — cola de despachos de correo al asignar placa (HU #11484, ADR-0046)
+    public DbSet<PlateAssignmentEmailDispatch> PlateAssignmentEmailDispatches =>
+        Set<PlateAssignmentEmailDispatch>();
+
     // Trámites — bitácora ÚNICA del ciclo de validación de identidad (envío/webhook/descifrado/errores)
     public DbSet<IdentityValidationAuditEvent> IdentityValidationAudits => Set<IdentityValidationAuditEvent>();
 
