@@ -3,6 +3,69 @@
 // backend manda los códigos; la UI los traduce a lenguaje del operador. Si
 // llega un código desconocido se devuelve un fallback legible (no se rompe).
 
+/** En qué punto de la cadena de identidad automática se estaba cuando algo salió mal. */
+export type IdentidadAutomaticaEtapa = 'asegurar' | 'proveedor' | 'iniciar' | 'simular';
+
+/**
+ * Qué decirle al gestor cuando la identidad automática del Continuar no prospera.
+ *
+ * <p>La cadena son cuatro llamadas (asegurar → resolver proveedor → iniciar/simular) y hasta ahora
+ * TODAS caían en el mismo mensaje: "no se pudo iniciar automáticamente la validación de identidad".
+ * Con eso delante, un gestor que no ve llegar el correo de Kyverum no puede saber si el actor no
+ * tiene correo, si esa persona ya tenía un envío en vuelo o si el proveedor rechazó — y nosotros
+ * tampoco, porque el código de estado no quedaba en ninguna parte.</p>
+ *
+ * <p><b>El 409 no es un fallo.</b> Desde la decisión única de envío por persona (HU #11265), que ya
+ * haya una validación en curso para ese documento significa que el sistema decidió NO mandar otra:
+ * la identidad está encaminada. Pintarlo en rojo hacía leer como avería lo que era la regla
+ * funcionando, así que sale como aviso positivo.</p>
+ */
+export function identidadAutomaticaCopy(
+  etapa: IdentidadAutomaticaEtapa,
+  status?: number,
+): { message: string; tone: 'success' | 'error' } {
+  if (status === 409) {
+    return {
+      message:
+        'Esta persona ya tiene una validación de identidad en curso, así que no se envió otra.',
+      tone: 'success',
+    };
+  }
+
+  if (etapa === 'iniciar' && status === 400) {
+    return {
+      message:
+        'Faltan datos del actor para pedir la validación de identidad (nombre, tipo y número de documento y correo).',
+      tone: 'error',
+    };
+  }
+
+  if (etapa === 'iniciar' && (status === 502 || status === 503)) {
+    return {
+      message: 'El proveedor de validación de identidad no respondió, así que el enlace no salió.',
+      tone: 'error',
+    };
+  }
+
+  if (etapa === 'iniciar') {
+    return { message: 'No se pudo enviar la validación de identidad al proveedor.', tone: 'error' };
+  }
+
+  if (etapa === 'proveedor') {
+    return {
+      message: 'No se pudo resolver qué proveedor de identidad aplica a este trámite.',
+      tone: 'error',
+    };
+  }
+
+  // `asegurar` y `simular` comparten el mensaje de siempre: en el primero aún no se sabe nada del
+  // envío, y el segundo no manda correos (proveedor mock), así que el detalle no aporta.
+  return {
+    message: 'No se pudo iniciar automáticamente la validación de identidad.',
+    tone: 'error',
+  };
+}
+
 /** Razones por las que un paso queda incompleto. */
 const REASON_COPY: Record<string, string> = {
   // consultas RUNT por actor
