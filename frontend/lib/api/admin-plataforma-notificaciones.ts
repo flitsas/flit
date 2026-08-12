@@ -14,7 +14,7 @@ const buzonPruebasBase = "/api/v1/admin/plataforma/notificaciones/buzon-pruebas"
 export interface NotificationTemplateItem {
   id: string;
   name: string;
-  /** `"Security"` o `"Analytics"` según el catálogo del backend. */
+  /** `"Security"`, `"Analytics"` o `"Tramites"` según el catálogo del backend. */
   module: string;
   triggers: string[];
 }
@@ -29,7 +29,7 @@ export interface NotificationChannelItem {
   senderName: string | null;
 }
 
-/** `GET /api/v1/admin/plataforma/notificaciones/plantillas` — catálogo íntegro (5 elementos). */
+/** `GET /api/v1/admin/plataforma/notificaciones/plantillas` — catálogo íntegro. */
 export async function listNotificationTemplates(
   signal?: AbortSignal,
 ): Promise<NotificationTemplateItem[]> {
@@ -47,6 +47,8 @@ export async function listNotificationChannels(
 
 // ── HU #11371 — Ver en vivo aislado ─────────────────────────────────────────
 
+export type NotificationTestChannel = "FLIT_SMTP" | "TENANT_API";
+
 /** Render de muestra de una plantilla (AC1/AC2). Nunca se envía correo al pedirlo. */
 export interface NotificationSample {
   templateId: string;
@@ -57,15 +59,18 @@ export interface NotificationSample {
 /**
  * `GET /api/v1/admin/plataforma/notificaciones/plantillas/{templateId}/muestra` — HTML de
  * muestra para renderizar en el `iframe` aislado. `404` si el id no existe en el catálogo.
+ * `channel` opcional (`FLIT_SMTP` | `TENANT_API`) selecciona la variante cuando la plantilla
+ * tiene formatos distintos por canal (p. ej. `tramites.aprobado` / `tramites.rechazado`).
  */
 export async function getNotificationSample(
   templateId: string,
-  signal?: AbortSignal,
+  options?: { channel?: NotificationTestChannel; signal?: AbortSignal },
 ): Promise<NotificationSample> {
-  return apiFetch<NotificationSample>(
-    `${plantillasBase}/${encodeURIComponent(templateId)}/muestra`,
-    { signal },
-  );
+  const params = new URLSearchParams();
+  if (options?.channel) params.set("channel", options.channel);
+  const qs = params.toString();
+  const path = `${plantillasBase}/${encodeURIComponent(templateId)}/muestra${qs ? `?${qs}` : ""}`;
+  return apiFetch<NotificationSample>(path, { signal: options?.signal });
 }
 
 // ── HU #11371 — Buzón de pruebas ────────────────────────────────────────────
@@ -101,8 +106,6 @@ export async function updateTestMailbox(
 }
 
 // ── HU #11371 — Envío de prueba ─────────────────────────────────────────────
-
-export type NotificationTestChannel = "FLIT_SMTP" | "TENANT_API";
 
 /**
  * Resultado de `POST /api/v1/admin/plataforma/notificaciones/buzon-pruebas/envios` (AC3/AC4).

@@ -12,4 +12,7 @@ public enum NotificationModule
 
     /// <summary>Flit.Infrastructure.Analytics — informe programado y alerta (Reportes 2.0).</summary>
     Analytics,
+
+    /// <summary>Trámites — notificaciones de ciclo de vida (banco de pruebas; disparador productivo diferido).</summary>
+    Tramites,
 }

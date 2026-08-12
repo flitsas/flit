@@ -3,7 +3,6 @@ using Flit.Admin.Domain.Companies.Settings;
 using Flit.Admin.Application.Companies.Settings;
 using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Notifications.Catalog;
-using Flit.Infrastructure.Notifications.Preview;
 using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Persistence;
@@ -72,6 +71,7 @@ internal sealed partial class NotificationTestSendAdminService(
     IExplicitChannelEmailSender explicitChannelSender,
     EmailSettings emailSettings,
     IOptions<RentingChannelOptions> rentingOptions,
+    IOptions<NotificationEmailAssetsOptions> emailAssets,
     EmailTransportDescriptor transportDescriptor,
     TimeProvider timeProvider,
     ILogger<NotificationTestSendAdminService> logger) : INotificationTestSendAdminService
@@ -117,7 +117,7 @@ internal sealed partial class NotificationTestSendAdminService(
         }
 
         // HU #11371 — plantilla de cuenta + canal TENANT_API: error de entrada, SIN I/O, SIN
-        // consumir enfriamiento. Las 3 plantillas de NotificationModule.Security ignoran el canal
+        // consumir enfriamiento. Las plantillas de NotificationModule.Security ignoran el canal
         // por diseño (AC3 de la HU #11362) y en producción SIEMPRE salen por Colas FLIT — forzar el
         // envío por TENANT_API aquí haría creer que esos correos se enrutan, que es justo el
         // Bug #11311 que esta ola cierra.
@@ -195,7 +195,8 @@ internal sealed partial class NotificationTestSendAdminService(
         string subject, html;
         try
         {
-            (subject, html) = RenderSample(descriptor.Id);
+            (subject, html) = NotificationSampleRenderer.Render(
+                descriptor.Id, channel, emailAssets.Value.BaseUrl);
         }
         catch (Exception ex)
         {
@@ -298,26 +299,6 @@ internal sealed partial class NotificationTestSendAdminService(
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return row;
     }
-
-    // Duplicado deliberado del despacho de AdminPlataformaNotificacionesPlantillasEndpoints
-    // (Flit.Api, HU #11356): esta clase vive en Flit.Infrastructure, una capa por debajo de
-    // Flit.Api, así que no puede referenciar ese endpoint. Ambos despachos consumen las MISMAS
-    // muestras (SecurityEmailPreviewSample / AnalyticsEmailPreviewSample), que a su vez componen
-    // con los MISMOS composers de producción — la única superficie que podría divergir es esta
-    // lista de 5 ids, tan estable como el propio catálogo (AC3 de la HU #11353).
-    private static (string Subject, string Html) RenderSample(string templateId) => templateId switch
-    {
-        "security.invitation" => ToTuple(SecurityEmailPreviewSample.BuildInvitation()),
-        "security.forgot-password" => ToTuple(SecurityEmailPreviewSample.BuildForgotPassword()),
-        "security.admin-reset-password" => ToTuple(SecurityEmailPreviewSample.BuildAdminResetPassword()),
-        "analytics.scheduled-report" => AnalyticsEmailPreviewSample.BuildScheduledReport(),
-        "analytics.alert" => AnalyticsEmailPreviewSample.BuildAlert(),
-        _ => throw new InvalidOperationException(
-            $"El catálogo resolvió el id '{templateId}' pero no hay muestra registrada para él."),
-    };
-
-    private static (string Subject, string Html) ToTuple(Flit.Modules.Security.Application.Auth.ComposedEmail email) =>
-        (email.Subject, email.HtmlBody);
 
     private static string BuildMessage(EmailSendResult sendResult, bool isConsoleTransport)
     {

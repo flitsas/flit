@@ -189,5 +189,17 @@ public sealed class SecurityEmailPreviewSampleTests
         SecurityEmailPreviewSample.BuildInvitation().Subject.Should().Be(InvitationEmailTemplate.Subject);
         SecurityEmailPreviewSample.BuildForgotPassword().Subject.Should().Be(ForgotPasswordEmailTemplate.Subject);
         SecurityEmailPreviewSample.BuildAdminResetPassword().Subject.Should().Be(AdminResetPasswordEmailTemplate.Subject);
+        SecurityEmailPreviewSample.BuildWelcomeRegistration().Subject.Should().Be(WelcomeRegistrationEmailTemplate.Subject);
+    }
+
+    [Fact]
+    public void WelcomeRegistration_muestra_enlaza_login_principal_y_usa_shell_flit()
+    {
+        var muestra = SecurityEmailPreviewSample.BuildWelcomeRegistration();
+
+        muestra.HtmlBody.Should().Contain(WelcomeRegistrationEmailTemplate.DefaultLoginUrl);
+        muestra.HtmlBody.Should().Contain("tramite-cambio-estado-header.png");
+        muestra.HtmlBody.Should().Contain("flit-logo.png");
+        muestra.HtmlBody.Should().Contain("GRACIAS POR REGISTRARTE");
     }
 }

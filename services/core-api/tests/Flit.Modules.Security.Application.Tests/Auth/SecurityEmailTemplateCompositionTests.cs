@@ -132,4 +132,30 @@ public sealed class SecurityEmailTemplateCompositionTests
         // no una generada internamente.
         composed.HtmlBody.Should().Contain(temporaryPassword);
     }
+
+    // --- WelcomeRegistrationEmailTemplate -------------------------------------------------
+
+    [Fact]
+    public void WelcomeRegistration_Compose_es_pura_misma_entrada_misma_salida()
+    {
+        var first = WelcomeRegistrationEmailTemplate.Compose();
+        var second = WelcomeRegistrationEmailTemplate.Compose();
+
+        first.Should().Be(second);
+    }
+
+    [Fact]
+    public void WelcomeRegistration_Compose_usa_login_principal_y_copy_del_diseno()
+    {
+        var composed = WelcomeRegistrationEmailTemplate.Compose();
+
+        composed.Subject.Should().Be(WelcomeRegistrationEmailTemplate.Subject);
+        var decoded = System.Net.WebUtility.HtmlDecode(composed.HtmlBody);
+        decoded.Should().Contain("GRACIAS POR REGISTRARTE");
+        decoded.Should().Contain("Nos alegra que estés aquí.");
+        composed.HtmlBody.Should().Contain(WelcomeRegistrationEmailTemplate.DefaultLoginUrl);
+        decoded.Should().Contain("dev.flitsas.online/login");
+        decoded.Should().Contain("Disfruta de todos tus beneficios");
+        decoded.Should().Contain("POLÍTICA DE PRIVACIDAD");
+    }
 }

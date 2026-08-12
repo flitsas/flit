@@ -1,7 +1,10 @@
+using Flit.Admin.Application.Companies.Settings;
+using Flit.Admin.Domain.Companies.Settings;
 using Flit.Api.Authorization;
+using Flit.Infrastructure.Notifications;
 using Flit.Infrastructure.Notifications.Catalog;
-using Flit.Infrastructure.Notifications.Preview;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Api.Endpoints;
 
@@ -76,7 +79,9 @@ public static class AdminPlataformaNotificacionesPlantillasEndpoints
     private static IResult GetSampleAsync(
         string templateId,
         [FromQuery] string? tramiteId,
-        [FromQuery] string? usuarioId)
+        [FromQuery] string? usuarioId,
+        [FromQuery] string? channel,
+        IOptions<NotificationEmailAssetsOptions> emailAssets)
     {
         // AC3 — el contrato NO admite identificadores reales. Se rechaza aquí, ANTES de resolver
         // el catálogo, para que la respuesta sea IDÉNTICA exista o no exista el templateId
@@ -84,10 +89,20 @@ public static class AdminPlataformaNotificacionesPlantillasEndpoints
         if (!string.IsNullOrWhiteSpace(tramiteId) || !string.IsNullOrWhiteSpace(usuarioId))
             return Results.BadRequest(new { error = "solicitud_invalida" });
 
+        // Canal opcional: si llega, debe ser un valor wire válido. Por defecto Colas FLIT
+        // (variante con marca para tramites.aprobado / tramites.rechazado).
+        var resolvedChannel = NotificationChannel.FlitSmtp;
+        if (!string.IsNullOrWhiteSpace(channel))
+        {
+            if (!SettingsWire.TryParseChannel(channel, out resolvedChannel))
+                return Results.BadRequest(new { error = "canal_invalido", allowed = SettingsWire.AllowedChannels });
+        }
+
         if (!NotificationTemplateCatalog.TryResolve(templateId ?? string.Empty, out var descriptor))
             return Results.NotFound();
 
-        var (subject, html) = RenderSample(descriptor.Id);
+        var assetsBaseUrl = emailAssets.Value.BaseUrl;
+        var (subject, html) = NotificationSampleRenderer.Render(descriptor.Id, resolvedChannel, assetsBaseUrl);
         return Results.Ok(new NotificationTemplateSampleResponse(descriptor.Id, subject, html));
     }
 
@@ -97,23 +112,6 @@ public static class AdminPlataformaNotificacionesPlantillasEndpoints
             descriptor.Name,
             descriptor.Module.ToString(),
             descriptor.Triggers.Select(t => t.ToString()).ToList());
-
-    // AC2 — cada plantilla se renderiza con la MISMA muestra que compone por los composers de
-    // producción (HU #11354/#11355); este método solo hace el despacho por id, nunca construye
-    // HTML por su cuenta.
-    private static (string Subject, string Html) RenderSample(string templateId) => templateId switch
-    {
-        "security.invitation" => ToTuple(SecurityEmailPreviewSample.BuildInvitation()),
-        "security.forgot-password" => ToTuple(SecurityEmailPreviewSample.BuildForgotPassword()),
-        "security.admin-reset-password" => ToTuple(SecurityEmailPreviewSample.BuildAdminResetPassword()),
-        "analytics.scheduled-report" => AnalyticsEmailPreviewSample.BuildScheduledReport(),
-        "analytics.alert" => AnalyticsEmailPreviewSample.BuildAlert(),
-        _ => throw new InvalidOperationException(
-            $"El catálogo resolvió el id '{templateId}' pero no hay muestra registrada para él."),
-    };
-
-    private static (string Subject, string Html) ToTuple(Flit.Modules.Security.Application.Auth.ComposedEmail email) =>
-        (email.Subject, email.HtmlBody);
 }
 
 /// <summary>Respuesta de <c>GET /api/v1/admin/plataforma/notificaciones/plantillas</c> (AC1).</summary>

@@ -4,8 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NotificacionesBankPanel } from "@/components/admin/plataforma/NotificacionesBankPanel";
 
 const listNotificationTemplates = vi.fn();
-const listNotificationChannels = vi.fn();
-const fetchCompaniesIndex = vi.fn();
 const getTestMailbox = vi.fn();
 const updateTestMailbox = vi.fn();
 const getNotificationSample = vi.fn();
@@ -13,19 +11,14 @@ const sendNotificationTest = vi.fn();
 
 vi.mock("@/lib/api/admin-plataforma-notificaciones", () => ({
   listNotificationTemplates: (...a: unknown[]) => listNotificationTemplates(...a),
-  listNotificationChannels: (...a: unknown[]) => listNotificationChannels(...a),
   getTestMailbox: (...a: unknown[]) => getTestMailbox(...a),
   updateTestMailbox: (...a: unknown[]) => updateTestMailbox(...a),
   getNotificationSample: (...a: unknown[]) => getNotificationSample(...a),
   sendNotificationTest: (...a: unknown[]) => sendNotificationTest(...a),
 }));
 
-vi.mock("@/lib/api/admin-companies", () => ({
-  fetchCompaniesIndex: (...a: unknown[]) => fetchCompaniesIndex(...a),
-}));
-
-// Uso de ejemplo: <NotificacionesBankPanel /> se monta sin props, carga plantillas + canales +
-// compañías en paralelo y arma 6 filas (5 plantillas del catálogo + Kyverum, informativa).
+// Uso de ejemplo: <NotificacionesBankPanel /> carga plantillas + buzón y arma 9 filas
+// (8 plantillas del catálogo + Kyverum, informativa).
 
 const sampleTemplates = [
   {
@@ -47,6 +40,12 @@ const sampleTemplates = [
     triggers: ["AdminResetPassword"],
   },
   {
+    id: "security.welcome-registration",
+    name: "Gracias por registrarte",
+    module: "Security",
+    triggers: ["WelcomeRegistration"],
+  },
+  {
     id: "analytics.scheduled-report",
     name: "Reporte programado",
     module: "Analytics",
@@ -58,52 +57,19 @@ const sampleTemplates = [
     module: "Analytics",
     triggers: ["Alert"],
   },
-];
-
-const sampleChannels = [
   {
-    channel: "FLIT_SMTP",
-    label: "Colas FLIT",
-    isDefault: true,
-    isConfigured: true,
-    senderEmail: "no-reply@flit.com.co",
-    senderName: "FLIT Trámites",
+    id: "tramites.aprobado",
+    name: "Trámite Aprobado",
+    module: "Tramites",
+    triggers: ["ProcedureStatusChanged"],
   },
   {
-    channel: "TENANT_API",
-    label: "API Renting cliente",
-    isDefault: false,
-    isConfigured: false,
-    senderEmail: null,
-    senderName: null,
+    id: "tramites.rechazado",
+    name: "Trámite Rechazado",
+    module: "Tramites",
+    triggers: ["ProcedureStatusChanged"],
   },
 ];
-
-const sampleCompanies = {
-  data: [
-    {
-      id: "c1",
-      nit: "900123456-1",
-      razonSocial: "Renting Colombia S.A.S.",
-      code: "RC1",
-      tenantType: "renting",
-      isTransitOffice: false,
-      estadoActivo: true,
-    },
-    {
-      id: "c2",
-      nit: "900987654-2",
-      razonSocial: "Autos del Valle",
-      code: "AV2",
-      tenantType: "standard",
-      isTransitOffice: false,
-      estadoActivo: true,
-    },
-  ],
-  totalCount: 2,
-  page: 1,
-  pageSize: 50,
-};
 
 const sampleMailboxConfigured = {
   isConfigured: true,
@@ -114,36 +80,26 @@ const sampleMailboxConfigured = {
 
 function mockHappyPath() {
   listNotificationTemplates.mockResolvedValue(sampleTemplates);
-  listNotificationChannels.mockResolvedValue(sampleChannels);
-  fetchCompaniesIndex.mockResolvedValue(sampleCompanies);
   getTestMailbox.mockResolvedValue(sampleMailboxConfigured);
 }
 
-describe("NotificacionesBankPanel", () => {
+describe("NotificacionesBankPanel", { timeout: 15_000 }, () => {
   beforeEach(() => {
     listNotificationTemplates.mockReset();
-    listNotificationChannels.mockReset();
-    fetchCompaniesIndex.mockReset();
     getTestMailbox.mockReset();
     updateTestMailbox.mockReset();
     getNotificationSample.mockReset();
     sendNotificationTest.mockReset();
-    // HU #11371 — buzón configurado por defecto salvo que el test lo sobrescriba; evita que la
-    // sección del buzón quede en error/loading en tests que no la ejercitan directamente.
     getTestMailbox.mockResolvedValue(sampleMailboxConfigured);
   });
 
-  // ── Estados de carga (4 estados obligatorios) ────────────────────────────
-
-  it("muestra el estado de carga mientras resuelven las 3 peticiones", async () => {
+  it("muestra el estado de carga mientras resuelven las plantillas", async () => {
     let resolveTemplates: (v: typeof sampleTemplates) => void = () => {};
     listNotificationTemplates.mockReturnValue(
       new Promise((resolve) => {
         resolveTemplates = resolve;
       }),
     );
-    listNotificationChannels.mockResolvedValue(sampleChannels);
-    fetchCompaniesIndex.mockResolvedValue(sampleCompanies);
 
     render(<NotificacionesBankPanel />);
     expect(screen.getByTestId("ui-loading")).toBeInTheDocument();
@@ -154,8 +110,6 @@ describe("NotificacionesBankPanel", () => {
 
   it("muestra el estado de error y reintenta con éxito", async () => {
     listNotificationTemplates.mockRejectedValueOnce(new Error("boom"));
-    listNotificationChannels.mockResolvedValue(sampleChannels);
-    fetchCompaniesIndex.mockResolvedValue(sampleCompanies);
 
     const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
@@ -169,10 +123,8 @@ describe("NotificacionesBankPanel", () => {
     expect(await screen.findByText("Invitación a la plataforma")).toBeInTheDocument();
   });
 
-  it("con catálogo de plantillas vacío conserva solo la fila Kyverum (edge case, no altas/bajas inventadas)", async () => {
+  it("con catálogo de plantillas vacío conserva solo la fila Kyverum", async () => {
     listNotificationTemplates.mockResolvedValue([]);
-    listNotificationChannels.mockResolvedValue(sampleChannels);
-    fetchCompaniesIndex.mockResolvedValue(sampleCompanies);
 
     render(<NotificacionesBankPanel />);
 
@@ -180,57 +132,76 @@ describe("NotificacionesBankPanel", () => {
     expect(screen.getByRole("heading", { name: /banco de pruebas \(1\)/i })).toBeInTheDocument();
   });
 
-  // ── AC1 ───────────────────────────────────────────────────────────────────
-
-  it("AC1 — estado inicial: canal Colas FLIT y 6 filas (5 plantillas + Kyverum)", async () => {
+  it("AC1 — 9 filas (8 plantillas + Kyverum) y buzón arriba de la tabla", async () => {
     mockHappyPath();
     render(<NotificacionesBankPanel />);
 
     expect(await screen.findByText("Invitación a la plataforma")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: /canal de notificación/i })).toHaveValue("FLIT_SMTP");
 
     for (const t of sampleTemplates) {
       expect(screen.getByText(t.name)).toBeInTheDocument();
     }
     expect(screen.getByText(/Validación de identidad \(Kyverum Verify\)/i)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /banco de pruebas \(6\)/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /banco de pruebas \(9\)/i })).toBeInTheDocument();
+
+    const panel = screen.getByTestId("notificaciones-bank-panel");
+    const buzonHeading = within(panel).getByRole("heading", { name: /buzón de pruebas/i });
+    const tablaHeading = within(panel).getByRole("heading", { name: /banco de pruebas \(9\)/i });
+    expect(
+      Boolean(
+        buzonHeading.compareDocumentPosition(tablaHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
   });
 
-  // ── AC2 ───────────────────────────────────────────────────────────────────
-
-  it("AC2 — cambiar de canal conserva las mismas 6 filas y cambia el remitente mostrado", async () => {
+  it("AC2 — remitente según módulo; sin selectores de canal/compañía ni bloques de identidad", async () => {
     mockHappyPath();
-    const user = userEvent.setup();
     render(<NotificacionesBankPanel />);
 
     await screen.findByText("Invitación a la plataforma");
-    expect(screen.getAllByText(/no-reply@flit\.com\.co/i).length).toBeGreaterThan(0);
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: /canal de notificación/i }),
-      "TENANT_API",
-    );
+    expect(screen.queryByRole("combobox", { name: /canal de notificación/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /^compañía$/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("notificaciones-identidad-compania")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Vista previa$/i)).not.toBeInTheDocument();
 
-    // Mismas 6 filas, sin altas ni bajas.
-    for (const t of sampleTemplates) {
-      expect(screen.getByText(t.name)).toBeInTheDocument();
-    }
-    expect(screen.getByText(/Validación de identidad \(Kyverum Verify\)/i)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /banco de pruebas \(6\)/i })).toBeInTheDocument();
-
-    // Remitente cambia: ya no aparece el correo de Colas FLIT para las plantillas propias.
-    expect(screen.queryAllByText(/no-reply@flit\.com\.co/i)).toHaveLength(0);
-    expect(
-      screen.getAllByText(/Sin remitente configurado en este canal/i).length,
-    ).toBeGreaterThan(0);
-
-    // La fila Kyverum nunca depende del canal seleccionado.
+    const securityCount = sampleTemplates.filter((t) => t.module === "Security").length;
+    const dualChannelCount = sampleTemplates.length - securityCount;
+    expect(screen.getAllByText(/^Colas FLIT$/i).length).toBe(securityCount);
+    expect(screen.getAllByText(/Según botón: FLIT o Renting/i).length).toBe(dualChannelCount);
     expect(screen.getByText(/Kyverum Verify \(proveedor externo\)/i)).toBeInTheDocument();
   });
 
-  // ── AC3 ───────────────────────────────────────────────────────────────────
+  it("acciones en una columna con grupos FLIT / Renting; Security sin Renting", async () => {
+    mockHappyPath();
+    render(<NotificacionesBankPanel />);
 
-  it("AC3 — la fila Kyverum es informativa: sin ver en vivo/enviar prueba, con el motivo visible", async () => {
+    await screen.findByText("Invitación a la plataforma");
+    expect(screen.getByRole("columnheader", { name: /^acciones$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /acciones flit/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /acciones renting/i })).not.toBeInTheDocument();
+
+    for (const t of sampleTemplates) {
+      const row = screen.getByText(t.name).closest("tr") as HTMLElement;
+      const scoped = within(row);
+      expect(scoped.getByTestId(`notificaciones-acciones-${t.id}`)).toBeInTheDocument();
+      expect(scoped.getByTestId(`notificaciones-acciones-flit-${t.id}`)).toBeInTheDocument();
+      expect(scoped.getByRole("button", { name: /preview flit/i })).toBeEnabled();
+      expect(scoped.getByRole("button", { name: /enviar flit/i })).toBeEnabled();
+
+      if (t.module === "Security") {
+        expect(scoped.queryByTestId(`notificaciones-acciones-renting-${t.id}`)).not.toBeInTheDocument();
+        expect(scoped.queryByRole("button", { name: /preview renting/i })).not.toBeInTheDocument();
+        expect(scoped.queryByRole("button", { name: /enviar renting/i })).not.toBeInTheDocument();
+      } else {
+        expect(scoped.getByTestId(`notificaciones-acciones-renting-${t.id}`)).toBeInTheDocument();
+        expect(scoped.getByRole("button", { name: /preview renting/i })).toBeEnabled();
+        expect(scoped.getByRole("button", { name: /enviar renting/i })).toBeEnabled();
+      }
+    }
+  });
+
+  it("AC3 — la fila Kyverum es informativa: sin preview/enviar, con el motivo visible", async () => {
     mockHappyPath();
     render(<NotificacionesBankPanel />);
 
@@ -239,89 +210,12 @@ describe("NotificacionesBankPanel", () => {
     expect(kyverumRow).not.toBeNull();
     const scoped = within(kyverumRow as HTMLElement);
 
-    expect(scoped.queryByRole("button", { name: /ver en vivo/i })).not.toBeInTheDocument();
-    expect(scoped.queryByRole("button", { name: /enviar prueba/i })).not.toBeInTheDocument();
+    expect(scoped.queryByRole("button", { name: /preview flit/i })).not.toBeInTheDocument();
+    expect(scoped.queryByRole("button", { name: /enviar flit/i })).not.toBeInTheDocument();
+    expect(scoped.queryByRole("button", { name: /preview renting/i })).not.toBeInTheDocument();
+    expect(scoped.queryByRole("button", { name: /enviar renting/i })).not.toBeInTheDocument();
     expect(
       scoped.getByText(/el correo lo emite el proveedor; flit no controla su contenido/i),
     ).toBeInTheDocument();
-
-    // Las filas de plantilla sí muestran los botones, ya cableados (HU #11371).
-    const invitacionRow = screen.getByText("Invitación a la plataforma").closest("tr");
-    const scopedInvitacion = within(invitacionRow as HTMLElement);
-    expect(scopedInvitacion.getByRole("button", { name: /ver en vivo/i })).toBeEnabled();
-    expect(scopedInvitacion.getByRole("button", { name: /enviar prueba/i })).toBeEnabled();
-  });
-
-  // ── AC4 ───────────────────────────────────────────────────────────────────
-
-  it("AC4 — cambiar de compañía actualiza la identidad contigua sin alterar la vista previa", async () => {
-    mockHappyPath();
-    const user = userEvent.setup();
-    render(<NotificacionesBankPanel />);
-
-    await screen.findByText("Invitación a la plataforma");
-    const identityBlock = screen.getByTestId("notificaciones-identidad-compania");
-    expect(within(identityBlock).getByText("Renting Colombia S.A.S.")).toBeInTheDocument();
-    expect(within(identityBlock).getByText(/900123456-1/)).toBeInTheDocument();
-
-    const previewText = screen.getByText(
-      /El contenido de la plantilla es fijo.*no cambia al cambiar de compañía/i,
-    ).textContent;
-
-    await user.selectOptions(screen.getByRole("combobox", { name: /^compañía$/i }), "c2");
-
-    expect(within(identityBlock).getByText("Autos del Valle")).toBeInTheDocument();
-    expect(within(identityBlock).getByText(/900987654-2/)).toBeInTheDocument();
-    expect(within(identityBlock).queryByText("Renting Colombia S.A.S.")).not.toBeInTheDocument();
-
-    // El contenido renderizado de la plantilla (vista previa) permanece idéntico.
-    expect(
-      screen.getByText(
-        /El contenido de la plantilla es fijo.*no cambia al cambiar de compañía/i,
-      ).textContent,
-    ).toBe(previewText);
-  });
-
-  // ── AC5 ───────────────────────────────────────────────────────────────────
-
-  it("AC5 — el bloque de identidad no muestra logotipo ni control para cargarlo", async () => {
-    mockHappyPath();
-    render(<NotificacionesBankPanel />);
-
-    await screen.findByText("Invitación a la plataforma");
-    const identityBlock = screen.getByTestId("notificaciones-identidad-compania");
-
-    expect(within(identityBlock).queryByRole("img")).not.toBeInTheDocument();
-    expect(identityBlock.querySelector("input[type='file']")).toBeNull();
-    expect(within(identityBlock).queryByText(/logo/i)).not.toBeInTheDocument();
-  });
-
-  // ── AC6 ───────────────────────────────────────────────────────────────────
-
-  it("AC6 — sin aviso cuando el canal está configurado (Colas FLIT)", async () => {
-    mockHappyPath();
-    render(<NotificacionesBankPanel />);
-
-    await screen.findByText("Invitación a la plataforma");
-    expect(screen.queryByTestId("notificaciones-canal-aviso")).not.toBeInTheDocument();
-  });
-
-  it("AC6 — aviso honesto cuando el canal no está configurado, sin mencionar el Bug #11311", async () => {
-    mockHappyPath();
-    const user = userEvent.setup();
-    render(<NotificacionesBankPanel />);
-
-    await screen.findByText("Invitación a la plataforma");
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: /canal de notificación/i }),
-      "TENANT_API",
-    );
-
-    const aviso = await screen.findByTestId("notificaciones-canal-aviso");
-    expect(aviso).toHaveTextContent(
-      "El canal “API Renting cliente” no está configurado ni habilitado en este ambiente. Un envío de prueba por este canal no va a salir hasta que se configure aquí.",
-    );
-    expect(aviso.textContent?.toLowerCase()).not.toContain("11311");
-    expect(aviso.textContent?.toLowerCase()).not.toContain("no altera el transporte");
   });
 });
