@@ -463,35 +463,6 @@ export function QueryConsole<TRow>({
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row" data-testid={rootTestId ?? `${prefix}-tab`}>
-      {/* Algo más ancha de lo que pediría una lista de nombres: las tarjetas llevan nombre y
-          resumen, y a 14rem el resumen se corta justo donde empieza a ser útil. */}
-      <aside className="lg:w-64 lg:shrink-0">
-        <Section title="Consultas" testId={`${prefix}-lista`}>
-          <SavedQueryList
-            queries={saved}
-            activeId={activeId}
-            modificada={modificada}
-            porBorrar={porBorrar}
-            onOpen={openSaved}
-            onPedirBorrado={setPorBorrar}
-            onConfirmarBorrado={(q) => void handleDelete(q)}
-            testIdPrefix={prefix}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              setDefinition(emptyDefinition());
-              setActiveId(null);
-              setActiveSnapshot(null);
-            }}
-            className="mt-1 w-full rounded-xl border border-dashed border-[#DFE5ED] px-2 py-2 text-[11px] font-semibold text-[#6B7280] transition hover:border-[#557EFF] hover:text-[#557EFF] dark:border-white/20 dark:text-white/60"
-            data-testid={`${prefix}-nueva`}
-          >
-            Empezar de cero
-          </button>
-        </Section>
-      </aside>
-
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         <Section
           title="Qué quiere ver"
@@ -766,6 +737,35 @@ export function QueryConsole<TRow>({
           )}
         </Section>
       </div>
+
+      {/* Algo más ancha de lo que pediría una lista de nombres: las tarjetas llevan nombre y
+          resumen, y a 14rem el resumen se corta justo donde empieza a ser útil. */}
+      <aside className="lg:w-64 lg:shrink-0">
+        <Section title="Consultas" testId={`${prefix}-lista`}>
+          <SavedQueryList
+            queries={saved}
+            activeId={activeId}
+            modificada={modificada}
+            porBorrar={porBorrar}
+            onOpen={openSaved}
+            onPedirBorrado={setPorBorrar}
+            onConfirmarBorrado={(q) => void handleDelete(q)}
+            testIdPrefix={prefix}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setDefinition(emptyDefinition());
+              setActiveId(null);
+              setActiveSnapshot(null);
+            }}
+            className="mt-1 w-full rounded-xl border border-dashed border-[#DFE5ED] px-2 py-2 text-[11px] font-semibold text-[#6B7280] transition hover:border-[#557EFF] hover:text-[#557EFF] dark:border-white/20 dark:text-white/60"
+            data-testid={`${prefix}-nueva`}
+          >
+            Empezar de cero
+          </button>
+        </Section>
+      </aside>
     </div>
   );
 }
