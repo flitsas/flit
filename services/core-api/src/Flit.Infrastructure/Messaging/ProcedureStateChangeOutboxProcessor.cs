@@ -16,8 +16,10 @@ namespace Flit.Infrastructure.Messaging;
 /// (webhooks OT) y sella <c>published_at</c>. Ante fallo incrementa <c>attempts</c>; al alcanzar
 /// <see cref="MaxAttempts"/> la fila queda en dead-letter observable (no se reclama más).
 /// Mismo patrón de reclamo que <see cref="IdentityValidationOutboxProcessor"/>:
-/// <c>FOR UPDATE SKIP LOCKED</c> por fila en su propia transacción (seguro con varias réplicas),
-/// con rama LINQ para providers no relacionales (tests InMemory).
+/// <c>FOR NO KEY UPDATE SKIP LOCKED</c> por fila en su propia transacción (seguro con varias réplicas).
+/// <c>NO KEY</c> es obligatorio: el sink de correo (HU #11465) inserta en otra conexión con FK a
+/// <c>outbox_id</c>; <c>FOR UPDATE</c> bloquearía el <c>FOR KEY SHARE</c> del INSERT hasta timeout.
+/// Rama LINQ para providers no relacionales (tests InMemory).
 /// </summary>
 internal sealed class ProcedureStateChangeOutboxProcessor(
     IServiceScopeFactory scopeFactory,
@@ -77,8 +79,9 @@ internal sealed class ProcedureStateChangeOutboxProcessor(
         // El notifier va en un scope PROPIO (DbContext/conexión frescos): su cadena de despacho
         // (OtWebhookDispatchService → OtWebhookSubscriptionRepository.ExecuteInTenantScopeAsync)
         // abre su propia transacción para el SET LOCAL de RLS, y no puede compartir la conexión
-        // que sostiene el claim FOR UPDATE de esta fila (InvalidOperationException: "already in
-        // a transaction").
+        // que sostiene el claim FOR NO KEY UPDATE de esta fila (InvalidOperationException: "already in
+        // a transaction"). El claim NO KEY permite que el sink de correo haga INSERT con FK
+        // (FOR KEY SHARE) sobre la misma fila desde esa otra conexión.
         await using var notifierScope = scopeFactory.CreateAsyncScope();
         var notifier = notifierScope.ServiceProvider.GetRequiredService<IProcedureStateChangeNotifier>();
 
@@ -107,7 +110,7 @@ internal sealed class ProcedureStateChangeOutboxProcessor(
             return false;
         }
 
-        // La fila está bloqueada por esta transacción (FOR UPDATE); se carga rastreada para sellarla.
+        // La fila está bloqueada por esta transacción (FOR NO KEY UPDATE); se carga rastreada para sellarla.
         var row = await db.ProcedureStateChangeOutbox.FirstAsync(o => o.Id == claimedId.Value, ct);
         await DispatchAsync(row, notifier, ct);
 
@@ -167,8 +170,9 @@ internal sealed class ProcedureStateChangeOutboxProcessor(
 
     /// <summary>
     /// Reclama el id de la próxima fila pendiente (con intentos por debajo del tope) usando
-    /// <c>FOR UPDATE SKIP LOCKED</c> sobre la conexión/transacción actuales, para que varias
-    /// réplicas no tomen la misma fila. SQL crudo: EF Core no expone el locking clause en LINQ.
+    /// <c>FOR NO KEY UPDATE SKIP LOCKED</c> sobre la conexión/transacción actuales, para que varias
+    /// réplicas no tomen la misma fila y el sink de correo pueda insertar con FK a <c>outbox_id</c>
+    /// desde otra conexión. SQL crudo: EF Core no expone el locking clause en LINQ.
     /// </summary>
     private static async Task<Guid?> ClaimNextIdAsync(FlitDbContext db, CancellationToken ct)
     {
@@ -184,7 +188,7 @@ internal sealed class ProcedureStateChangeOutboxProcessor(
               AND attempts < @max_attempts
             ORDER BY occurred_at
             LIMIT 1
-            FOR UPDATE SKIP LOCKED
+            FOR NO KEY UPDATE SKIP LOCKED
             """;
 
         var pMax = cmd.CreateParameter();
