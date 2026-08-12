@@ -15,21 +15,22 @@
 // El resumen («2 filtros · últimos 30 días») hace además el trabajo de fondo: convierte un nombre
 // que solo significaba algo el día que se guardó en algo que se reconoce meses después.
 
-import { Bookmark, Check, ChevronRight, Lightbulb, Search, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Bookmark, Check, ChevronDown, ChevronRight, Lightbulb, Search, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { RANGE_PRESETS, type SavedQuery } from "@/lib/api/queries";
 
 /**
- * A partir de cuántas propias aparece el buscador.
+ * A partir de cuántas propias «Mis consultas» deja de ser una lista siempre abierta y pasa a un
+ * desplegable con buscador.
  *
- * Con dos o tres consultas, leerlas todas es más rápido que escribir para filtrar: el campo solo
- * gana su sitio cuando la lista deja de caber de un vistazo.
+ * Con dos o tres consultas, verlas todas de un vistazo es más rápido que abrir algo para buscar.
+ * Pero una lista abierta que crece sin límite empuja el resto de la pantalla o necesita su propio
+ * scroll permanente — y un scroll que está siempre ahí, se use o no, se siente como si algo no
+ * cupiera. El desplegable lo esconde hasta que hace falta: el scroll existe, pero solo dentro del
+ * panel, y solo cuando el usuario decidió abrirlo.
  */
-const UMBRAL_BUSCADOR = 6;
-
-/** Alto máximo de «Mis consultas» antes de que la lista scrollee por su cuenta. */
-const ALTO_MAX_PROPIAS = "max-h-[26rem]";
+const UMBRAL_DESPLEGABLE = 6;
 
 export function SavedQueryList({
   queries,
@@ -56,66 +57,42 @@ export function SavedQueryList({
   const propias = queries.filter((q) => !q.deFabrica);
   const fabrica = queries.filter((q) => q.deFabrica);
 
-  // El buscador filtra por nombre. Sin él, encontrar una consulta entre muchas obliga a leerlas
-  // todas mientras se hace scroll — el mismo problema que el alto máximo de abajo evita, pero para
-  // el ojo en vez de para la barra de scroll.
-  const [busqueda, setBusqueda] = useState("");
-  const term = busqueda.trim().toLowerCase();
-  const propiasFiltradas = term
-    ? propias.filter((q) => q.nombre.toLowerCase().includes(term))
-    : propias;
-
   return (
     <div className="flex flex-col gap-4" data-testid={`${testIdPrefix}-guardadas`}>
       <Grupo titulo="Mis consultas" cuenta={propias.length} icono={Bookmark}>
-        <div className="flex flex-col gap-2">
-          {propias.length > UMBRAL_BUSCADOR && (
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9AA5B4] dark:text-white/30"
-                aria-hidden="true"
+        {propias.length === 0 ? (
+          // Un hueco en blanco no explica nada. Este dice qué aparecerá aquí y de dónde sale.
+          <p className="rounded-xl border border-dashed border-[#DFE5ED] px-3 py-3 text-[11px] leading-relaxed text-[#6B7280] dark:border-white/15 dark:text-white/45">
+            Las consultas que guardes aparecen aquí, listas para volver a ejecutarlas con un clic.
+          </p>
+        ) : propias.length > UMBRAL_DESPLEGABLE ? (
+          <ConsultasDesplegable
+            propias={propias}
+            activeId={activeId}
+            modificada={modificada}
+            porBorrar={porBorrar}
+            onOpen={onOpen}
+            onPedirBorrado={onPedirBorrado}
+            onConfirmarBorrado={onConfirmarBorrado}
+            testIdPrefix={testIdPrefix}
+          />
+        ) : (
+          <ul className="space-y-1.5">
+            {propias.map((query) => (
+              <Item
+                key={query.id}
+                query={query}
+                activo={query.id === activeId}
+                modificada={modificada}
+                confirmando={porBorrar?.id === query.id}
+                onOpen={onOpen}
+                onPedirBorrado={onPedirBorrado}
+                onConfirmarBorrado={onConfirmarBorrado}
+                testIdPrefix={testIdPrefix}
               />
-              <input
-                type="search"
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar por nombre…"
-                aria-label="Buscar en mis consultas"
-                className="w-full rounded-lg border border-[#DFE5ED] bg-transparent py-1.5 pl-8 pr-2 text-xs outline-none focus:border-[#557EFF] dark:border-white/15"
-                data-testid={`${testIdPrefix}-buscar-guardadas`}
-              />
-            </div>
-          )}
-
-          {propias.length === 0 ? (
-            // Un hueco en blanco no explica nada. Este dice qué aparecerá aquí y de dónde sale.
-            <p className="rounded-xl border border-dashed border-[#DFE5ED] px-3 py-3 text-[11px] leading-relaxed text-[#6B7280] dark:border-white/15 dark:text-white/45">
-              Las consultas que guardes aparecen aquí, listas para volver a ejecutarlas con un clic.
-            </p>
-          ) : propiasFiltradas.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-[#DFE5ED] px-3 py-3 text-[11px] leading-relaxed text-[#6B7280] dark:border-white/15 dark:text-white/45">
-              Ninguna consulta coincide con «{busqueda.trim()}».
-            </p>
-          ) : (
-            // El alto máximo evita que una lista larga empuje el resto de la pantalla: a partir de
-            // ahí scrollea sola, sin arrastrar los filtros ni el resultado que quedan al lado.
-            <ul className={`space-y-1.5 overflow-y-auto pr-1 ${ALTO_MAX_PROPIAS}`}>
-              {propiasFiltradas.map((query) => (
-                <Item
-                  key={query.id}
-                  query={query}
-                  activo={query.id === activeId}
-                  modificada={modificada}
-                  confirmando={porBorrar?.id === query.id}
-                  onOpen={onOpen}
-                  onPedirBorrado={onPedirBorrado}
-                  onConfirmarBorrado={onConfirmarBorrado}
-                  testIdPrefix={testIdPrefix}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
+            ))}
+          </ul>
+        )}
       </Grupo>
 
       {fabrica.length > 0 && (
@@ -142,6 +119,154 @@ export function SavedQueryList({
             ))}
           </ul>
         </Grupo>
+      )}
+    </div>
+  );
+}
+
+/**
+ * «Mis consultas» cuando hay demasiadas para dejarlas siempre abiertas.
+ *
+ * Se cierra al elegir una, al pulsar Escape o al hacer clic fuera — igual que el selector de
+ * columnas (`ColumnPicker`), que ya resolvía este mismo patrón. El buscador vive DENTRO del panel y
+ * no fuera: fuera obligaría a mostrar igual la lista completa mientras se escribe, que es el scroll
+ * permanente que este desplegable existe para evitar.
+ */
+function ConsultasDesplegable({
+  propias,
+  activeId,
+  modificada,
+  porBorrar,
+  onOpen,
+  onPedirBorrado,
+  onConfirmarBorrado,
+  testIdPrefix,
+}: {
+  propias: SavedQuery[];
+  activeId: string | null;
+  modificada: boolean;
+  porBorrar: SavedQuery | null;
+  onOpen: (query: SavedQuery) => void;
+  onPedirBorrado: (query: SavedQuery | null) => void;
+  onConfirmarBorrado: (query: SavedQuery) => void;
+  testIdPrefix: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function onPointerDown(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  const activa = propias.find((q) => q.id === activeId);
+  const term = busqueda.trim().toLowerCase();
+  const filtradas = term ? propias.filter((q) => q.nombre.toLowerCase().includes(term)) : propias;
+
+  // Cierra el panel al elegir: abrir una consulta es salir del modo «buscando» y volver al modo
+  // «trabajando con ella», que es lo que la lista siempre abierta transmitía sin necesidad de esto.
+  function seleccionar(query: SavedQuery) {
+    onOpen(query);
+    setOpen(false);
+    setBusqueda("");
+  }
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition ${
+          activa
+            ? "border-[#557EFF]/50 bg-[#557EFF]/[0.06]"
+            : "border-[#DFE5ED] hover:border-[#557EFF]/50 dark:border-white/10 dark:hover:border-[#557EFF]/40"
+        }`}
+        data-testid={`${testIdPrefix}-guardadas-trigger`}
+      >
+        <Search className="h-3.5 w-3.5 shrink-0 text-[#9AA5B4] dark:text-white/30" aria-hidden="true" />
+        <span
+          className={`min-w-0 flex-1 truncate text-xs ${
+            activa
+              ? "font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
+              : "font-medium text-[#6B7280] dark:text-white/50"
+          }`}
+        >
+          {activa ? activa.nombre : "Elige una consulta guardada…"}
+        </span>
+        {activa && modificada && (
+          <span className="shrink-0 rounded-full bg-[#F2C14E]/20 px-1.5 py-px text-[10px] font-semibold text-[#8A6100] dark:text-[#F2C14E]">
+            modificada
+          </span>
+        )}
+        <ChevronDown
+          className={`h-3.5 w-3.5 shrink-0 text-[#9AA5B4] transition-transform dark:text-white/30 ${open ? "rotate-180" : ""}`}
+          aria-hidden="true"
+        />
+      </button>
+
+      {open && (
+        <div
+          className="absolute left-0 right-0 z-50 mt-1.5 rounded-2xl border border-[#DFE5ED] bg-white p-2 shadow-2xl dark:border-white/10 dark:bg-[#0B0F14]"
+          data-testid={`${testIdPrefix}-guardadas-panel`}
+        >
+          <div className="relative mb-2">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9AA5B4] dark:text-white/30"
+              aria-hidden="true"
+            />
+            <input
+              autoFocus
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por nombre…"
+              aria-label="Buscar en mis consultas"
+              className="w-full rounded-lg border border-[#DFE5ED] bg-transparent py-1.5 pl-8 pr-2 text-xs outline-none focus:border-[#557EFF] dark:border-white/15"
+              data-testid={`${testIdPrefix}-buscar-guardadas`}
+            />
+          </div>
+
+          {filtradas.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-[#DFE5ED] px-3 py-3 text-[11px] leading-relaxed text-[#6B7280] dark:border-white/15 dark:text-white/45">
+              Ninguna consulta coincide con «{busqueda.trim()}».
+            </p>
+          ) : (
+            <ul className="max-h-[20rem] space-y-1.5 overflow-y-auto pr-1">
+              {filtradas.map((query) => (
+                <Item
+                  key={query.id}
+                  query={query}
+                  activo={query.id === activeId}
+                  modificada={modificada}
+                  confirmando={porBorrar?.id === query.id}
+                  onOpen={seleccionar}
+                  onPedirBorrado={onPedirBorrado}
+                  onConfirmarBorrado={onConfirmarBorrado}
+                  testIdPrefix={testIdPrefix}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </div>
   );
