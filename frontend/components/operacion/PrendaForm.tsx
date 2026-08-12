@@ -40,6 +40,22 @@ const CAPTURA_ACREEDOR: ReadonlySet<PrendaDecision> = new Set<PrendaDecision>([
 /** En matrícula la prenda es declarativa: registrar o sin prenda. */
 const MATRICULA_DECISIONS: PrendaDecision[] = ['registrar', 'sin_prenda'];
 
+/**
+ * Decisiones que ofrece el traspaso (R10, HU #10598).
+ *
+ * CF-06 (HU #10881): `omitir` —"asumo el riesgo"— desaparece cuando el organismo exige el
+ * certificado de prenda, porque ahí el riesgo no es del gestor sino una regla del OT. Ofrecerla
+ * llevaba a guardar una decisión que satisfacía los dos gates sin el certificado, dejando la regla
+ * del organismo evadible; el PUT de prenda la rechaza con el mismo criterio, así que esta lista
+ * evita que el gestor llegue a intentarlo. Vive aquí, junto a las etiquetas, para que la regla y la
+ * UI que la aplica no se separen.
+ */
+export function traspasoDecisions(documentRequired: boolean): PrendaDecision[] {
+  return documentRequired
+    ? ['solicitar', 'registrar', 'levantar']
+    : ['solicitar', 'registrar', 'levantar', 'omitir'];
+}
+
 /** Ítem de prenda/gravamen reportado por el RUNT (cuando el proveedor trae detalle). */
 export type RuntGravamenItem = {
   idPrenda?: string | null;

@@ -56,6 +56,18 @@ public static class TramiteEstadoErrores
     public const string PrendaDocumentoRequerido = "prenda_documento_requerido";
 
     /// <summary>
+    /// CF-06 (HU #10881) — el override compañía+OT exige el documento de prenda y no está adjunto
+    /// (409). Código PROPIO, distinto de <see cref="PrendaDocumentoRequerido"/>, desde 2026-08-12:
+    /// ambos caminos compartían código y el wizard pintaba el copy del gate del traspaso ("la decisión
+    /// de prenda seleccionada requiere…") para un bloqueo cuyo origen es una regla del organismo, no
+    /// la decisión del gestor. El backend ya distinguía los dos casos en el <c>detail</c>; el listado
+    /// de blockers del wizard no, porque solo transporta el código. Separarlos permite que el mensaje
+    /// diga de dónde viene, sin romper la coincidencia wizard/submit: ambos emiten ESTE código para
+    /// este camino.
+    /// </summary>
+    public const string PrendaDocumentoRequeridoOt = "prenda_documento_requerido_ot";
+
+    /// <summary>
     /// HU #11051 — el gestor pidió generar o regenerar documentación de un trámite en estado final
     /// (aprobado/anulado), cuya documentación ya es definitiva (409). No aplica a la regeneración
     /// interna del sistema (aprobación del OT, asignación de placa, identidad validada).

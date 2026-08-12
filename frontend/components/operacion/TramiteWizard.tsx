@@ -33,7 +33,7 @@ import { TransitOfficeSearchPicker } from './TransitOfficeSearchPicker';
 import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
-import { PrendaForm } from './PrendaForm';
+import { PrendaForm, traspasoDecisions } from './PrendaForm';
 import { SubsanacionPanel } from './SubsanacionPanel';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
@@ -2674,22 +2674,37 @@ function ConsultaStep({
                 )}
               </div>
 
-              <div>
+              {/* Fila completa: las razones sociales del RUES llegan largas (la de Bancolombia son
+                  79 caracteres, con su cláusula de denominación alterna) y a media rejilla no se
+                  leen. */}
+              <div className="sm:col-span-2">
                 <label
                   htmlFor="tramite-empresa-vinculadora-razon-social"
                   className="mb-1.5 block text-xs font-semibold"
                 >
                   Razón social
                 </label>
-                <input
+                {/* `output`, no `input`: el dato NO se edita, y un campo de una línea recorta el
+                    nombre dejando el resto accesible solo moviendo el cursor — en un campo de solo
+                    lectura, inalcanzable. `output` envuelve el texto, es etiquetable (conserva el
+                    `htmlFor` de arriba) y su rol implícito `status` anuncia el valor cuando el RUES
+                    responde, que es justo cuando el gestor quiere oírlo. */}
+                <output
                   id="tramite-empresa-vinculadora-razon-social"
-                  type="text"
-                  value={empresaVinculadoraRazonSocial ?? ''}
-                  readOnly
                   aria-describedby={razonSocialDesdeDirectorio ? 'tramite-razon-social-origen' : undefined}
-                  className={`${inputClass} cursor-not-allowed bg-[#F4F6FA] dark:bg-[#131A22]`}
-                  placeholder="La trae el RUES"
-                />
+                  className={`block w-full whitespace-pre-line break-words rounded-xl border bg-[#F4F6FA] px-3 py-2 text-xs leading-relaxed dark:bg-[#131A22] ${
+                    empresaVinculadoraRazonSocial ? '' : 'opacity-60'
+                  }`}
+                >
+                  {/* Tres estados, no dos: `null` = aún no se ha consultado; cadena vacía = el RUES
+                      respondió `found` SIN razón social (lo guarda así la consulta de arriba), y ahí
+                      "la trae el RUES" sería mentira además de dejar el recuadro colapsado a puro
+                      padding. Un `??` solo cubre el primero. */}
+                  {empresaVinculadoraRazonSocial === null
+                    ? 'La trae el RUES'
+                    : empresaVinculadoraRazonSocial ||
+                      'El RUES no reportó razón social para este NIT'}
+                </output>
                 {/* De dónde salió el dato, con el mismo criterio honesto del actor jurídico: si vino
                     del directorio NO se consultó el RUES, y el gestor tiene derecho a saberlo. */}
                 {razonSocialDesdeDirectorio && (
@@ -2997,11 +3012,15 @@ function StepBody({
           />
           {/* R10 (HU #10598) — prenda como gate del traspaso: la decisión se registra en el paso
               comercial. Con gravámenes en warn, el backend bloquea la preparación/radicación sin
-              decisión vigente (o sin su documento). "Omitir" es la vía "asumo el riesgo". */}
+              decisión vigente (o sin su documento). "Omitir" es la vía "asumo el riesgo", y por eso
+              desaparece cuando el organismo exige el certificado (CF-06, HU #10881): ahí el riesgo
+              no es del gestor sino una regla del OT, y ofrecerla llevaba a guardar una decisión que
+              el backend luego rechaza. El PUT de prenda aplica la misma regla, esta lista solo evita
+              que el gestor llegue a intentarlo. */}
           <PrendaForm
             ref={prendaFormRef}
             instanceId={instanceId}
-            decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+            decisions={traspasoDecisions(prendaDocumentRequired)}
             onSaved={onRefresh}
             embeddedInWizard
             modalidad="traspaso"

@@ -12,7 +12,13 @@ describe('wizard-copy — gate de prenda (HU #10598)', () => {
   });
 
   it('traduce prenda_decision_requerida como bloqueo de radicación', () => {
-    expect(blockerCopy('prenda_decision_requerida')).toMatch(/gravámenes/i);
+    expect(blockerCopy('prenda_decision_requerida')).toMatch(/decisión de prenda/i);
+  });
+
+  // El mismo código lo emite el override del organismo, que aplica a matrícula inicial: ahí no hay
+  // gravamen alguno, así que el bloqueo no puede atribuirse a uno.
+  it('no atribuye el bloqueo a gravámenes, que no siempre existen', () => {
+    expect(blockerCopy('prenda_decision_requerida')).not.toMatch(/gravámenes/i);
   });
 });
 
