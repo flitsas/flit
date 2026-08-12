@@ -13,11 +13,13 @@ namespace Flit.Ict.Application.Clients;
 // débiles, acorde al modelo de credencial de máquina.
 // =============================================================================
 
-/// <summary>Alta de un cliente ICT: username + compañía (tenant) + scopes opcionales.</summary>
-public sealed record CreateClientCommand(string Username, Guid TenantId, IReadOnlyList<string>? Scopes);
+/// <summary>Alta de un cliente ICT: username + compañía (tenant) + scopes opcionales + modo prueba.</summary>
+public sealed record CreateClientCommand(
+    string Username, Guid TenantId, IReadOnlyList<string>? Scopes, bool TestMode = false);
 
-/// <summary>Edición de un cliente ICT: activar/desactivar, forzar rotación, cambiar scopes.</summary>
-public sealed record UpdateClientCommand(Guid Id, bool? IsActive, bool? MustRotate, IReadOnlyList<string>? Scopes);
+/// <summary>Edición de un cliente ICT: activar/desactivar, forzar rotación, cambiar scopes, modo prueba.</summary>
+public sealed record UpdateClientCommand(
+    Guid Id, bool? IsActive, bool? MustRotate, IReadOnlyList<string>? Scopes, bool? TestMode = null);
 
 /// <summary>Vista de un cliente ICT para el listado/detalle (nunca incluye el hash ni el secreto).</summary>
 public sealed record IntegrationClientView(
@@ -28,6 +30,7 @@ public sealed record IntegrationClientView(
     string Scopes,
     bool IsActive,
     bool MustRotate,
+    bool TestMode,
     DateTime? LastLoginAt,
     DateTime? LockedUntil,
     DateTime CreatedAt);
@@ -68,6 +71,7 @@ internal static class IntegrationClientMapper
         client.Scopes,
         client.IsActive,
         client.MustRotate,
+        client.TestMode,
         client.LastLoginAt,
         client.LockedUntil,
         client.CreatedAt);
@@ -120,6 +124,7 @@ public sealed class CreateIntegrationClientHandler(
             Scopes = IntegrationClientMapper.SerializeScopes(command.Scopes),
             IsActive = true,
             MustRotate = false,
+            TestMode = command.TestMode,
             PasswordChangedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
         };
@@ -187,6 +192,11 @@ public sealed class UpdateIntegrationClientHandler(
         if (command.Scopes is not null)
         {
             client.Scopes = IntegrationClientMapper.SerializeScopes(command.Scopes);
+        }
+
+        if (command.TestMode is { } testMode)
+        {
+            client.TestMode = testMode;
         }
 
         client.UpdatedAt = DateTime.UtcNow;
