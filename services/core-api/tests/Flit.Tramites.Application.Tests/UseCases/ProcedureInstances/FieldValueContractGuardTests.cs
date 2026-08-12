@@ -79,6 +79,11 @@ public sealed class FieldValueContractGuardTests
     private const string Preflight = App + "UseCases/ProcedureInstances/PreflightCommand.cs";
     private const string RuesProvider = Infra + "Consultations/VerifikRuesConsultationProvider.cs";
     private const string RuesLookup = App + "UseCases/Consultations/RuesPersonLookupHandler.cs";
+    /// <summary>
+    /// HU sin ADO 2026-08-11 (segunda tanda) — casilla 18/19 del FUR elegidas por el operador en
+    /// matrícula inicial (tipoServicioCode == PUBLICO para la 19), escritas al crear el trámite.
+    /// </summary>
+    private const string CreateFromConsulta = App + "UseCases/ProcedureInstances/CreateFromConsultaCommand.cs";
     private const string WizardFur = "frontend/components/operacion/FirmaFurStep.tsx";
     /// <summary>P6 del wizard — observaciones del trámite (antes vivían en FirmaFurStep).</summary>
     private const string WizardTramite = "frontend/components/operacion/TramiteWizard.tsx";
@@ -118,7 +123,11 @@ public sealed class FieldValueContractGuardTests
         ["vehicle_chassis"] = new(Verifik, Modo.Literal),
         ["vehicle_engine_number"] = new(Verifik, Modo.Literal),
         ["vehicle_series"] = new(Verifik, Modo.Literal),
-        ["vehicle_service"] = new(Verifik, Modo.Literal),
+        // HU sin ADO 2026-08-11 (segunda tanda) — segundo productor, sin quitar el de Verifik: el
+        // traspaso lo hidrata el RUNT como texto libre; la matrícula inicial persiste el CÓDIGO
+        // cerrado que el operador elige (casilla 18). VehicleServiceTypeCode.Resolve (Domain)
+        // normaliza cualquiera de las dos formas a una sola casilla del FUR.
+        ["vehicle_service"] = new([Verifik, CreateFromConsulta], Modo.Literal),
         ["vehicle_passengers"] = new(Verifik, Modo.Literal),
         ["vehicle_weight"] = new(Verifik, Modo.Literal),
         ["vehicle_axles"] = new(Verifik, Modo.Literal),
@@ -170,6 +179,12 @@ public sealed class FieldValueContractGuardTests
         ["transit_office_city"] = new(WizardFur, Modo.Literal),
         ["fur_observations"] = new(WizardTramite, Modo.Literal), // HU #10987 — productor en P6 del wizard
         ["fur_processing_date"] = new(WizardFur, Modo.Literal), // HU #10988
+
+        // HU sin ADO 2026-08-11 (segunda tanda) — casilla 19 "EMPRESA VINCULADORA" del FUR: el
+        // operador la captura en matrícula inicial (solo con tipoServicioCode == PUBLICO) y se
+        // persiste al crear el trámite, mismo canal que transit_office_*/vehicle_service de arriba.
+        ["empresa_vinculadora_nit"] = new(CreateFromConsulta, Modo.Literal),
+        ["empresa_vinculadora_razon_social"] = new(CreateFromConsulta, Modo.Literal),
 
         // RUES — provider de consulta; el resolutor por actor (HU #10990) devuelve estas mismas llaves.
         ["rues_nit"] = new(RuesProvider, Modo.Literal),

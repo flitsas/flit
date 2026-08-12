@@ -32,7 +32,6 @@ public sealed class RuesPersonLookupHandler(
 {
     private const string ConsultationSource = "consultation";
 
-    private const string RuesProviderKey = "verifik_rues";
     private const string RuesSourceCode = "RUES";
     private const string DocumentTypeNit = "NIT";
 
@@ -56,18 +55,11 @@ public sealed class RuesPersonLookupHandler(
         // intenta un HIT de ExternalQueryCacheService.TryReusePersonAsync antes de resolver el
         // proveedor (ver remarks de la clase). El resultado fresco SÍ se sigue cacheando al final
         // (SavePersonResultAsync).
-        var provider = registry.Resolve(RuesProviderKey);
-        if (provider is null)
-            return (null, "provider_not_found");
-
-        var fieldValues = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["nit"] = nit,
-            ["documentNumber"] = nit,
-        };
-
-        var ctx = new ConsultationContext(instanceId, tenantId, "RUES_ACTOR_JURIDICAL", fieldValues);
-        var result = await provider.ConsultAsync(ctx, ct);
+        var (consultResult, consultError) = await RuesActorJuridicalLookup.ConsultAsync(
+            registry, instanceId, tenantId, nit, ct);
+        if (consultError is not null)
+            return (null, consultError);
+        var result = consultResult!;
 
         // Persistencia de campos RUES: solo cuando el expediente admite edición (borrador o
         // rechazado+subsanación). Fuera de eso el trigger de BD bloquea field_values.
@@ -168,30 +160,19 @@ public sealed class RuesPersonLookupHandler(
         }
     }
 
-    private static string? GetHydrated(IReadOnlyList<HydratedField> fields, string fieldKey)
-    {
-        foreach (var f in fields)
-        {
-            if (string.Equals(f.FieldKey, fieldKey, StringComparison.OrdinalIgnoreCase))
-                return f.ValueText;
-        }
-
-        return null;
-    }
-
     /// <summary>Arma el DTO leyendo el shape común HydratedField[] — usado tanto en el HIT de caché como en el consult en vivo.</summary>
     private static RuesPersonDto BuildDtoFromFields(IReadOnlyList<HydratedField> fields, string nit, string mode)
     {
-        var razonSocial = GetHydrated(fields, "rues_razon_social");
+        var razonSocial = RuesActorJuridicalLookup.GetHydrated(fields, "rues_razon_social");
         var found = !string.IsNullOrWhiteSpace(razonSocial);
 
         return new RuesPersonDto(
             Found: found,
             RazonSocial: found ? razonSocial : null,
-            Estado: found ? GetHydrated(fields, "rues_estado") : null,
+            Estado: found ? RuesActorJuridicalLookup.GetHydrated(fields, "rues_estado") : null,
             DocumentNumber: nit,
-            MatriculaMercantil: found ? GetHydrated(fields, "rues_matricula_mercantil") : null,
-            CamaraComercio: found ? GetHydrated(fields, "rues_camara_comercio") : null,
+            MatriculaMercantil: found ? RuesActorJuridicalLookup.GetHydrated(fields, "rues_matricula_mercantil") : null,
+            CamaraComercio: found ? RuesActorJuridicalLookup.GetHydrated(fields, "rues_camara_comercio") : null,
             Mode: mode);
     }
 

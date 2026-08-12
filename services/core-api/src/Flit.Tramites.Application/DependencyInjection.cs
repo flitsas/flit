@@ -241,6 +241,8 @@ public static class DependencyInjection
         services.AddScoped<UseCases.Consultations.ValidateSoatViaRuntHandler>();
         // Lookup jurídico RUES (bifurcación del "Consultar RUNT" para persona jurídica / NIT).
         services.AddScoped<UseCases.Consultations.RuesPersonLookupHandler>();
+        // HU sin ADO 2026-08-11 — mismo lookup RUES pero SIN instancia (paso 1, casilla 19 del FUR).
+        services.AddScoped<UseCases.Consultations.RuesPreviewHandler>();
 
         // OCR semántico de documentos de trámites (prompt + LLM de visión). El handler es Application;
         // el IDocumentOcrAnalyzer (mock | Anthropic según Ocr:Provider) se registra en Infraestructura
