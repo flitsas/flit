@@ -230,8 +230,9 @@ public sealed class GetWizardStateHandler(
         // CF-06 (HU #10881) — override del OT (independiente del semáforo de gravámenes): si aplica
         // y falta el documento de prenda, canSubmit debe reflejarlo con el mismo código de bloqueo
         // que el gate de preparación (TramiteLifecycleService), para que el wizard y el submit
-        // coincidan. Solo aplica a traspaso (única modalidad con concepto de prenda/gravamen).
-        var prendaDocumentoOtRequerido = await PrendaDocumentoOtBlockeaAsync(instance, ct);
+        // coincidan. Aplica a CUALQUIER modalidad con OT: la matrícula inicial que constituye prenda
+        // (vehículo nuevo financiado) es justo el caso que el semáforo de gravámenes no ve.
+        var prendaOtBlocker = await PrendaOtBlockerAsync(instance, ct);
 
         // Actores a los que el tipo de trámite exige pasar por el RUNT, y los documentos que se
         // consultaron de verdad en este trámite. Sin repositorio de tipos (tests) no hay exigencia.
@@ -241,7 +242,7 @@ public sealed class GetWizardStateHandler(
 
         var state = AnnotateInstanceFlags(
             ComputeState(
-                instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaDocumentoOtRequerido,
+                instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaOtBlocker,
                 runtExigido) with
             {
                 IdentityValidationEnabled = identityRequired,
@@ -409,8 +410,13 @@ public sealed class GetWizardStateHandler(
     /// bloqueo insatisfacible: una matrícula inicial con <c>sin_prenda</c> quedaba atascada en
     /// "Finalizar" pidiendo un adjunto que el paso de prenda no ofrece cargar para esa decisión. La
     /// regla la impone <see cref="PrendaGate.EvaluateOtOverride"/>; aquí solo se le aporta el dato.</para>
+    ///
+    /// <para>Devuelve el CÓDIGO de bloqueo, no un booleano: el override puede pedir el documento
+    /// (<c>prenda_documento_requerido_ot</c>) o la decisión que aún nadie tomó
+    /// (<c>prenda_decision_requerida</c>), y el wizard tiene que decir cuál de las dos para que el
+    /// banner coincida con lo que devuelve el gate de preparación.</para>
     /// </summary>
-    private async Task<bool> PrendaDocumentoOtBlockeaAsync(ProcedureInstance instance, CancellationToken ct)
+    private async Task<string?> PrendaOtBlockerAsync(ProcedureInstance instance, CancellationToken ct)
     {
         var otRequiere = await _prendaDocumentRequirementPolicy
             .IsRequiredAsync(
@@ -420,7 +426,7 @@ public sealed class GetWizardStateHandler(
                 ct)
             .ConfigureAwait(false);
         if (!otRequiere)
-            return false;
+            return null;
 
         // Solo se paga la lectura del agregado de prenda cuando el override está activo: sin él la
         // decisión da igual y el gate no bloquea de todos modos.
@@ -429,7 +435,7 @@ public sealed class GetWizardStateHandler(
             : await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
 
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
-        return PrendaGate.EvaluateOtOverride(otRequiere, prenda?.Decision, docTipos) is not null;
+        return PrendaGate.EvaluateOtOverride(otRequiere, prenda?.Decision, docTipos);
     }
 
     /// <summary>
@@ -448,17 +454,18 @@ public sealed class GetWizardStateHandler(
     /// compañía + OT). Default <c>true</c> ⇒ comportamiento previo; los llamadores que no resuelven la
     /// política (p. ej. el listado de trámites) lo dejan en el default sin regresión.
     /// </param>
-    /// <param name="prendaDocumentoOtRequerido">
-    /// CF-06 (HU #10881): <c>true</c> cuando el override del OT exige el documento de prenda y el
-    /// trámite no lo tiene adjunto. Default <c>false</c> ⇒ comportamiento previo (sin override, o
-    /// llamadores que no lo resuelven, p. ej. el listado de trámites), sin regresión.
+    /// <param name="prendaOtBlocker">
+    /// CF-06 (HU #10881): código de bloqueo que emite el override del OT
+    /// (<c>prenda_documento_requerido_ot</c> o <c>prenda_decision_requerida</c>), o <c>null</c> si no
+    /// bloquea. Default <c>null</c> ⇒ comportamiento previo (sin override, o llamadores que no lo
+    /// resuelven, p. ej. el listado de trámites), sin regresión.
     /// </param>
     public static WizardStateDto ComputeState(
         ProcedureInstance instance,
         IReadOnlySet<string> identidadAprobadaPartes,
         bool? documentosCompletosOverride = null,
         bool comparendosBloquean = true,
-        bool prendaDocumentoOtRequerido = false,
+        string? prendaOtBlocker = null,
         RuntConsultaExigida? runtExigido = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
@@ -476,8 +483,8 @@ public sealed class GetWizardStateHandler(
             return BuildReadonlySnapshot(instance, modalidad);
 
         return modalidad == TramiteModalidadEntrada.Traspaso
-            ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride, comparendosBloquean, prendaDocumentoOtRequerido, runtExigido)
-            : BuildMatricula(instance, identidadAprobadaPartes, documentosCompletosOverride, runtExigido, prendaDocumentoOtRequerido);
+            ? BuildTraspaso(instance, identidadAprobadaPartes, documentosCompletosOverride, comparendosBloquean, prendaOtBlocker, runtExigido)
+            : BuildMatricula(instance, identidadAprobadaPartes, documentosCompletosOverride, runtExigido, prendaOtBlocker);
     }
 
     /// <summary>
@@ -520,7 +527,7 @@ public sealed class GetWizardStateHandler(
         IReadOnlySet<string> identidadAprobadaPartes,
         bool? docsCompletosOverride = null,
         RuntConsultaExigida? runtExigido = null,
-        bool prendaDocumentoOtRequerido = false)
+        string? prendaOtBlocker = null)
     {
         var fv = FieldValues(instance);
         var comprador = ParteOf(instance, "comprador");
@@ -625,7 +632,7 @@ public sealed class GetWizardStateHandler(
         // sigue diferido. El frontend nunca recalcula gates: solo pinta estos códigos.
         // Compañía+OT: + documento de prenda cuando la política lo exige (cualquier modalidad).
         var blockers = BlockersFrom(
-            preflight, docsCompletos, riesgoAceptado, identidadAprobada, prendaDocumentoOtRequerido);
+            preflight, docsCompletos, riesgoAceptado, identidadAprobada, prendaOtBlocker);
         var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [4, 5]);
 
         return new WizardStateDto(
@@ -644,7 +651,7 @@ public sealed class GetWizardStateHandler(
     private static WizardStateDto BuildTraspaso(
         ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes,
         bool? docsCompletosOverride = null, bool comparendosBloquean = true,
-        bool prendaDocumentoOtRequerido = false, RuntConsultaExigida? runtExigido = null)
+        string? prendaOtBlocker = null, RuntConsultaExigida? runtExigido = null)
     {
         var fv = FieldValues(instance);
         var vendedor = ParteOf(instance, "vendedor");
@@ -743,7 +750,7 @@ public sealed class GetWizardStateHandler(
         // comprador (endurecer vendedor+firma en traspaso sigue como deuda M5, ver SubmitGate).
         // CF-06 (HU #10881): + override OT del documento de prenda (independiente del gravamen).
         var blockers = BlockersFrom(
-            preflight, docsCompletos, riesgoAceptado, ctx.Biometria.Comprador, prendaDocumentoOtRequerido);
+            preflight, docsCompletos, riesgoAceptado, ctx.Biometria.Comprador, prendaOtBlocker);
         var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [6]);
 
         return new WizardStateDto(
@@ -797,7 +804,7 @@ public sealed class GetWizardStateHandler(
         bool documentosCompletos,
         bool riesgoAceptado,
         bool identidadAprobada,
-        bool prendaDocumentoOtRequerido = false)
+        string? prendaOtBlocker = null)
     {
         var blockers = new List<string>(5);
         if (preflight?.ProviderError == true)
@@ -809,11 +816,12 @@ public sealed class GetWizardStateHandler(
         if (!identidadAprobada)
             blockers.Add(TramiteEstadoErrores.IdentidadNoAprobada);
         // CF-06 (HU #10881) — override del OT: exige el documento de prenda con independencia del
-        // semáforo de gravámenes (no de la decisión: ver PrendaGate.EvaluateOtOverride). Código
+        // semáforo de gravámenes (sí de la decisión: ver PrendaGate.EvaluateOtOverride). Código
         // PROPIO para que el banner pueda decir que el origen es una regla del organismo y no la
-        // decisión del gestor — mismo código que emite el gate de preparación por este camino.
-        if (prendaDocumentoOtRequerido)
-            blockers.Add(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+        // decisión del gestor — el gate de preparación emite exactamente el mismo por este camino,
+        // incluido el prenda_decision_requerida de cuando aún no hay decisión que evaluar.
+        if (prendaOtBlocker is not null)
+            blockers.Add(prendaOtBlocker);
         return blockers;
     }
 

@@ -556,6 +556,32 @@ public sealed class WizardStateHandlerTests
             "con esta decisión no hay documento de prenda que cargar: exigirlo deja el trámite sin salida");
     }
 
+    /// <summary>
+    /// El hueco que abrió la corrección de arriba, cerrado por el otro lado. Matrícula inicial con el
+    /// override activo y SIN decisión de prenda registrada: si el override callara, bastaría con no
+    /// abrir el paso de prenda para radicar sin el certificado que el OT exige — y en matrícula no hay
+    /// ningún otro gate que lo recoja (<c>PrendaGate.Evaluate</c> solo actúa en traspaso con warn).
+    /// El código es el accionable: registra la decisión, que siempre está a mano.
+    /// </summary>
+    [Fact]
+    public async Task Get_Matricula_PoliticaPrendaObligatoria_SinDecision_ExigeLaDecision()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("matricula_inicial");
+        instance.TransitOfficeId = Guid.NewGuid();
+        instance.Actors.Add(Actor("comprador"));
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo,
+            prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true),
+            prendaRepo: new StubPrendaRepo(decision: null));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.Blockers.Should().Contain(TramiteEstadoErrores.PrendaDecisionRequerida);
+        result.CanSubmit.Should().BeFalse();
+    }
+
     [Fact]
     public async Task Get_Matricula_PoliticaPrendaOpcional_SinDocumento_NoAgregaBlocker()
     {

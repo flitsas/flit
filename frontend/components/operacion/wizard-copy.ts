@@ -72,9 +72,14 @@ const BLOCKER_COPY: Record<string, string> = {
   pendiente_firma: 'Firma de la compraventa (informativa, no bloquea)',
   fur_pendiente: 'FUR pendiente (opcional)',
   pasos_incompletos: 'Hay pasos sin completar',
-  // R10 (HU #10597/#10598) — gate de preparación/radicación del traspaso por prenda.
+  // R10 (HU #10597/#10598) — gate de preparación/radicación por prenda. Como BLOQUEO este código
+  // tiene dos orígenes: el semáforo de gravámenes del traspaso y el override del organismo (que
+  // aplica también a matrícula inicial, sin gravamen que detectar). Por eso no los nombra: decirle
+  // "el vehículo tiene gravámenes" a quien matricula un vehículo nuevo describe una causa que no es
+  // la suya — el mismo error que motivó separar prenda_documento_requerido_ot. Como RAZÓN de paso
+  // sigue naciendo solo del semáforo, y allí el texto sí los nombra.
   prenda_decision_requerida:
-    'El vehículo tiene gravámenes: registra una decisión de prenda antes de preparar o radicar el trámite',
+    'Registra la decisión de prenda del vehículo antes de preparar o radicar el trámite',
   prenda_documento_requerido:
     'La decisión de prenda seleccionada requiere adjuntar su documento de soporte',
   // CF-06 (HU #10881) — ver la nota del mapa de razones: el origen es el organismo, no la decisión.

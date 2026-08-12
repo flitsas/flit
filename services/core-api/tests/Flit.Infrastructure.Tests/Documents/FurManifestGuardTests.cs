@@ -230,17 +230,21 @@ public sealed class FurManifestGuardTests
     // Medido replicando `Fit` con las métricas reales (el resolutor mapea "Arial" a la TrueType
     // EMBEBIDA, ~11% más ancha que Helvetica: 130,1pt para "TRANSPORTES DEL NORTE S.A.S." a 7,0pt):
     // con el piso en 7,0 el fitter se queda en 7,00pt / 3 líneas y trunca; bajándolo, aterriza en
-    // 6,60pt / 3 líneas COMPLETAS. Basta 6,5, pero el piso queda en 6,0 a propósito: `Fit` siempre
-    // elige el mayor cuerpo que quepa, así que bajar el piso NO encoge ningún caso que ya cabía —
-    // solo amplía el rango de nombres que salen enteros antes de rendirse a la elipsis. 6,0 es
-    // también el suelo deliberado: el campo más pequeño del formulario (`traffic_secretary_name`)
-    // está a 6,5, y por debajo de 6 el FUR deja de resistir un escaneo.
+    // 6,60pt / 3 líneas COMPLETAS. Basta 6,5, pero el piso queda en 6,0 a propósito: es el suelo
+    // deliberado —el campo más pequeño del formulario (`traffic_secretary_name`) está a 6,5, y por
+    // debajo de 6 el FUR deja de resistir un escaneo—, y da margen a razones sociales aún más largas
+    // antes de rendirse a la elipsis.
     //
-    // Efecto colateral aceptado: el caso corto de referencia pasa de 7,00 a 6,85pt. No es que encoja
-    // por el piso nuevo, es que 7,0 NO está en la rejilla de pasos de 0,25 desde 7,6 (7,35 / 7,10 /
-    // 6,85) y antes solo se alcanzaba por el intento explícito AL piso; con el piso en 6,0 el bucle
-    // encuentra 6,85 primero. Diferencia de 0,15pt, imperceptible — la misma que la cuarta tanda ya
-    // había dado por buena en sentido contrario.
+    // CORRECCIÓN dentro de la misma tanda: bajar el piso SÍ encogía casos que ya cabían, al contrario
+    // de lo que decía este comentario. `Fit` elige el mayor cuerpo que quepa EN UNA LÍNEA antes de
+    // partir, así que ampliar el rango de encogido le daba de comer nombres medianos: medido con la
+    // fuente embebida, "DISTRIBUIDORA NACIONAL DE CARGA" pasaba de 7,60pt / 2 líneas a 6,10pt / 1, y
+    // "INVERSIONES EL PORVENIR S.A.S." de 7,60 / 2L a 6,60 / 1L — un 20% menos de cuerpo en un
+    // recuadro con sitio para tres renglones, lo contrario de lo que buscaba la tanda. El piso se
+    // queda en 6,0 y quien acota es `FurTextFitter.MaxSingleLineShrinkRatio`: el encogido en una sola
+    // línea se detiene en lo cosmético y de ahí en adelante parte el texto, de modo que el piso bajo
+    // solo lo gastan los nombres que ni partidos caben. Fijado en `FurCasilla19FitTests` con la
+    // fuente real (caso corto en 1 línea, mediano partido a cuerpo casi declarado, largo entero).
     //
     // Regenerar SOLO de forma deliberada vía EmitBaseline tras recalibrar el manifest.
     private const string Baseline = """

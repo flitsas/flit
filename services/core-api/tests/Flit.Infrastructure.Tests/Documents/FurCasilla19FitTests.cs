@@ -40,6 +40,13 @@ public sealed class FurCasilla19FitTests
     /// </summary>
     private const string RazonSocialCorta = "TRANSPORTES DEL NORTE S.A.S.";
 
+    /// <summary>
+    /// Caso MEDIANO: no cabe en un renglón al cuerpo declarado, pero sí en dos. Es la banda que el
+    /// piso de 6,0 puso en riesgo — sin tope al encogido de una línea, el fitter prefería 6,10pt en
+    /// UNA línea antes que 7,60pt en dos, en un recuadro con sitio para tres.
+    /// </summary>
+    private const string RazonSocialMediana = "DISTRIBUIDORA NACIONAL DE CARGA";
+
     [Fact]
     public void RazonSocialDelRues_SaleCompleta_SinElipsis()
     {
@@ -83,6 +90,41 @@ public sealed class FurCasilla19FitTests
         var (fit, _) = Encajar(RazonSocialCorta);
 
         fit.Lines.Should().ContainSingle().Which.Should().Be(RazonSocialCorta);
+    }
+
+    /// <summary>
+    /// Bajar el piso NO puede encoger lo que ya salía bien. Un nombre mediano tiene que partirse
+    /// conservando (o casi) el cuerpo declarado en vez de comprimirse a un renglón diminuto: la caja
+    /// se calibró con alto para varios renglones justamente para eso, y el FUR se imprime y se escanea.
+    /// </summary>
+    [Fact]
+    public void RazonSocialMediana_SeParteEnVezDeEncogerse()
+    {
+        var (fit, campo) = Encajar(RazonSocialMediana);
+
+        fit.Lines.Count.Should().BeGreaterThan(1, "la caja admite más de un renglón: partir conserva cuerpo");
+        fit.FontSize.Should().BeGreaterThanOrEqualTo(
+            campo.FontSize * 0.92,
+            "encoger más de lo cosmético en una sola línea, con sitio para partir, es la regresión que "
+            + "introdujo bajar el piso a 6,0");
+
+        NormalizarEspacios(string.Join(" ", fit.Lines))
+            .Should().Be(NormalizarEspacios(RazonSocialMediana));
+    }
+
+    /// <summary>
+    /// El tope al encogido de una línea no puede costar completitud: el caso del RUES sigue saliendo
+    /// entero. Aquí el piso de 6,0 sí hace falta, porque ni partido cabe por encima de él.
+    /// </summary>
+    [Fact]
+    public void RazonSocialLarga_UsaElPisoBajoYSaleEntera()
+    {
+        var (fit, campo) = Encajar(RazonSocialBancolombia);
+
+        fit.Lines.Count.Should().BeGreaterThan(1);
+        fit.FontSize.Should().BeLessThan(
+            campo.FontSize * 0.92, "este es el caso que de verdad necesita el piso bajo");
+        fit.FontSize.Should().BeGreaterThanOrEqualTo(campo.MinFontSize!.Value);
     }
 
     // ── Andamiaje ─────────────────────────────────────────────────────────────

@@ -56,21 +56,33 @@ public static class PrendaGate
     /// una matrícula inicial con <c>sin_prenda</c> atascada en "Finalizar". Ahora el gate comparte
     /// predicado con la UI: si la decisión no pide documento, el override calla.</para>
     ///
-    /// <para>Sin decisión tomada (<c>null</c>) tampoco bloquea: ese hueco lo cubre
-    /// <see cref="Evaluate"/> con <c>prenda_decision_requerida</c>, que es el mensaje accionable.
-    /// Y si un OT necesita el certificado sí o sí ante un gravamen, lo que corresponde es no ofrecer
-    /// <c>omitir</c> en ese trámite —decidirlo al elegir—, no aceptar la elección y bloquear después
-    /// con una exigencia imposible.</para>
+    /// <para><b>Sin decisión tomada (<c>null</c>) exige la decisión, no calla (2026-08-12, corrección
+    /// de la misma tanda).</b> Delegar ese hueco en <see cref="Evaluate"/> solo funciona en TRASPASO
+    /// con el semáforo de gravámenes en warn: en matrícula inicial <see cref="Evaluate"/> sale por
+    /// <c>!esTraspaso</c> y no hay ningún otro gate de prenda, así que el gestor que nunca abre el
+    /// paso de prenda radicaba sin el certificado que el OT exige — justo lo que el override existe
+    /// para impedir. <c>prenda_decision_requerida</c> es accionable y satisfacible (tomar la decisión
+    /// siempre está a mano), a diferencia del documento imposible que motivó el cambio de arriba.</para>
+    ///
+    /// <para>Y si un OT necesita el certificado sí o sí ante un gravamen, lo que corresponde es no
+    /// ofrecer <c>omitir</c> en ese trámite —decidirlo al elegir—, no aceptar la elección y bloquear
+    /// después con una exigencia imposible.</para>
     /// </summary>
     public static string? EvaluateOtOverride(
         bool otRequiereDocumentoPrenda,
         string? decision,
         IReadOnlyCollection<string> docTipos)
     {
-        if (!otRequiereDocumentoPrenda || !PrendaDecision.RequiereDocumento(decision))
+        if (!otRequiereDocumentoPrenda)
             return null;
 
         ArgumentNullException.ThrowIfNull(docTipos);
+
+        if (string.IsNullOrWhiteSpace(decision))
+            return TramiteEstadoErrores.PrendaDecisionRequerida;
+
+        if (!PrendaDecision.RequiereDocumento(decision))
+            return null;
 
         var tieneDocumentoPrenda = docTipos.Any(t => PrendaDocTipos.All.Contains(t));
 

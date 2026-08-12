@@ -116,13 +116,35 @@ public sealed class PrendaGateTests
     }
 
     /// <summary>
-    /// Sin decisión tomada el override calla: ese hueco lo cubre <see cref="PrendaGate.Evaluate"/>
-    /// con <c>prenda_decision_requerida</c>, que sí dice qué hacer.
+    /// Sin decisión tomada el override NO calla: pide la decisión. Delegarlo en
+    /// <see cref="PrendaGate.Evaluate"/> solo cubría el traspaso con el semáforo en warn; en matrícula
+    /// inicial no hay ningún otro gate de prenda, así que callar aquí dejaba radicar sin el
+    /// certificado que el OT exige con solo no abrir el paso de prenda.
     /// </summary>
     [Fact]
-    public void OtOverride_SinDecision_NoBloquea()
+    public void OtOverride_SinDecision_ExigeLaDecision()
     {
         PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, decision: null, docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
+
+    /// <summary>
+    /// Y lo pide aunque ya haya un documento de prenda adjunto: el adjunto no dice qué se decidió, y
+    /// el FUR y el trámite se arman a partir de la decisión, no del archivo.
+    /// </summary>
+    [Fact]
+    public void OtOverride_SinDecision_ExigeLaDecisionAunqueHayaDocumento()
+    {
+        PrendaGate.EvaluateOtOverride(
+                otRequiereDocumentoPrenda: true, decision: null, docTipos: ["prenda_registro"])
+            .Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
+
+    /// <summary>Override inactivo: sin decisión tampoco bloquea, como siempre.</summary>
+    [Fact]
+    public void OtOverride_Inactivo_SinDecision_NoBloquea()
+    {
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: false, decision: null, docTipos: [])
             .Should().BeNull();
     }
 
@@ -150,7 +172,8 @@ public sealed class PrendaGateTests
     public void OtOverride_SeDisparaExactamenteConElConjuntoQuePideDocumento()
     {
         var disparan = PrendaDecision.All
-            .Where(d => PrendaGate.EvaluateOtOverride(true, d, docTipos: []) is not null)
+            .Where(d => PrendaGate.EvaluateOtOverride(true, d, docTipos: [])
+                == TramiteEstadoErrores.PrendaDocumentoRequeridoOt)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         disparan.Should().BeEquivalentTo(PrendaDecision.RequierenDocumento);

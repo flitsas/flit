@@ -723,6 +723,34 @@ public sealed class TramiteLifecycleServiceTests
         outcome.ErrorCode.Should().NotBe(TramiteEstadoErrores.PrendaDocumentoRequerido);
     }
 
+    /// <summary>
+    /// Hermano del anterior por el otro lado: con el override activo y SIN decisión registrada, el
+    /// trámite NO pasa a preparado. Callar aquí convertía "no abrir el paso de prenda" en la vía para
+    /// radicar sin el certificado que el OT exige. El código es el accionable (registra la decisión),
+    /// no el documento imposible que motivó la corrección de la tanda.
+    /// </summary>
+    [Fact]
+    public async Task OverrideOtActivo_SinDecisionRegistrada_ExigeLaDecision()
+    {
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(decision: null));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+        i.Status.Should().Be(TramiteEstado.Borrador);
+    }
+
     [Fact]
     public async Task Ac1_OverrideOtActivo_ConDocumentoDePrendaAdjunto_Permite()
     {
