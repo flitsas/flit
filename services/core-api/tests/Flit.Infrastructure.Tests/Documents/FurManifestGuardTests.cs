@@ -218,8 +218,31 @@ public sealed class FurManifestGuardTests
     // ajuste de palabras (huecos al final de cada línea). Truncan con elipsis, que es exactamente el
     // comportamiento que el propio coordinador definió como correcto para "cuando de verdad no cabe a
     // 7pt". `linked_company_nit` no cambia. La huella `Canon` suma `MinFontSize` (null en el resto de
-    // campos del manifest, que no lo declaran). Regenerar SOLO de forma deliberada vía EmitBaseline
-    // tras recalibrar el manifest.
+    // campos del manifest, que no lo declaran).
+    //
+    // QUINTA TANDA (2026-08-12) — `minFontSize` baja de 7,0 a 6,0 SOLO en `linked_company_name`. El
+    // caso real que lo motivó es el que la cuarta tanda dio por bueno truncar: la razón social que
+    // devuelve el RUES para el NIT 890903938 — "BANCOLOMBIA S.A, ADEMÁS PODRÁ GIRAR BAJO LA
+    // DENOMINACIÓN BANCO DE COLOMBIA S.A." (79 caracteres) — salía cortada en "BANCO DE…". El
+    // criterio del coordinador cambió con razón: ese texto NO es adorno, es lo que el RUES declara
+    // como razón social, así que la casilla 19 debe mostrarlo íntegro aunque cueste cuerpo.
+    //
+    // Medido replicando `Fit` con las métricas reales (el resolutor mapea "Arial" a la TrueType
+    // EMBEBIDA, ~11% más ancha que Helvetica: 130,1pt para "TRANSPORTES DEL NORTE S.A.S." a 7,0pt):
+    // con el piso en 7,0 el fitter se queda en 7,00pt / 3 líneas y trunca; bajándolo, aterriza en
+    // 6,60pt / 3 líneas COMPLETAS. Basta 6,5, pero el piso queda en 6,0 a propósito: `Fit` siempre
+    // elige el mayor cuerpo que quepa, así que bajar el piso NO encoge ningún caso que ya cabía —
+    // solo amplía el rango de nombres que salen enteros antes de rendirse a la elipsis. 6,0 es
+    // también el suelo deliberado: el campo más pequeño del formulario (`traffic_secretary_name`)
+    // está a 6,5, y por debajo de 6 el FUR deja de resistir un escaneo.
+    //
+    // Efecto colateral aceptado: el caso corto de referencia pasa de 7,00 a 6,85pt. No es que encoja
+    // por el piso nuevo, es que 7,0 NO está en la rejilla de pasos de 0,25 desde 7,6 (7,35 / 7,10 /
+    // 6,85) y antes solo se alcanzaba por el intento explícito AL piso; con el piso en 6,0 el bucle
+    // encuentra 6,85 primero. Diferencia de 0,15pt, imperceptible — la misma que la cuarta tanda ya
+    // había dado por buena en sentido contrario.
+    //
+    // Regenerar SOLO de forma deliberada vía EmitBaseline tras recalibrar el manifest.
     private const string Baseline = """
         traffic_secretary_name=Text:525,64,175,11.9,6.5,Left,False,null
         traffic_secretary_city=Text:500,89,50,11.9,6.5,Left,False,null
@@ -266,7 +289,7 @@ public sealed class FurManifestGuardTests
         vehicle_service_type_4=cb:658.2,364,10.2
         vehicle_service_type_5=cb:687.9,364.1,9.8
         vehicle_service_type_6=cb:726.5,364.5,9.8
-        linked_company_name=Text:572,411,130.5,27,7.6,Left,False,7
+        linked_company_name=Text:572,411,130.5,27,7.6,Left,False,6
         linked_company_nit=Text:705.3,411,48,14,7.6,Left,False,null
         vehicle_serial_number=Text:570,286.5,124.7,14.5,7.8,Left,False,null
         vehicle_vin_number=Text:569.1,313.7,124.5,14.5,7.8,Left,False,null
