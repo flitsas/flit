@@ -17,8 +17,8 @@ vi.mock("@/lib/api/admin-plataforma-notificaciones", () => ({
   sendNotificationTest: (...a: unknown[]) => sendNotificationTest(...a),
 }));
 
-// Uso de ejemplo: <NotificacionesBankPanel /> carga plantillas + buzón y arma 9 filas
-// (8 plantillas del catálogo + Kyverum, informativa).
+// Uso de ejemplo: <NotificacionesBankPanel /> carga plantillas + buzón y arma 10 filas
+// (9 plantillas del catálogo + Kyverum, informativa).
 
 const sampleTemplates = [
   {
@@ -68,6 +68,12 @@ const sampleTemplates = [
     name: "Trámite Rechazado",
     module: "Tramites",
     triggers: ["ProcedureStatusChanged"],
+  },
+  {
+    id: "tramites.asignacion-placa",
+    name: "Asignación placa",
+    module: "Tramites",
+    triggers: ["PlateAssigned"],
   },
 ];
 
@@ -132,7 +138,7 @@ describe("NotificacionesBankPanel", { timeout: 15_000 }, () => {
     expect(screen.getByRole("heading", { name: /banco de pruebas \(1\)/i })).toBeInTheDocument();
   });
 
-  it("AC1 — 9 filas (8 plantillas + Kyverum) y buzón arriba de la tabla", async () => {
+  it("AC1 — 10 filas (9 plantillas + Kyverum) y buzón arriba de la tabla", async () => {
     mockHappyPath();
     render(<NotificacionesBankPanel />);
 
@@ -142,11 +148,11 @@ describe("NotificacionesBankPanel", { timeout: 15_000 }, () => {
       expect(screen.getByText(t.name)).toBeInTheDocument();
     }
     expect(screen.getByText(/Validación de identidad \(Kyverum Verify\)/i)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /banco de pruebas \(9\)/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /banco de pruebas \(10\)/i })).toBeInTheDocument();
 
     const panel = screen.getByTestId("notificaciones-bank-panel");
     const buzonHeading = within(panel).getByRole("heading", { name: /buzón de pruebas/i });
-    const tablaHeading = within(panel).getByRole("heading", { name: /banco de pruebas \(9\)/i });
+    const tablaHeading = within(panel).getByRole("heading", { name: /banco de pruebas \(10\)/i });
     expect(
       Boolean(
         buzonHeading.compareDocumentPosition(tablaHeading) & Node.DOCUMENT_POSITION_FOLLOWING,

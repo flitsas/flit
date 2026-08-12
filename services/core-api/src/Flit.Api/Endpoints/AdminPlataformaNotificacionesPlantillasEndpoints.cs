@@ -90,7 +90,7 @@ public static class AdminPlataformaNotificacionesPlantillasEndpoints
             return Results.BadRequest(new { error = "solicitud_invalida" });
 
         // Canal opcional: si llega, debe ser un valor wire válido. Por defecto Colas FLIT
-        // (variante con marca para tramites.aprobado / tramites.rechazado).
+        // (variante FLIT para plantillas Trámites con dual-canal).
         var resolvedChannel = NotificationChannel.FlitSmtp;
         if (!string.IsNullOrWhiteSpace(channel))
         {

@@ -69,7 +69,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
     // ── AC1 — listado del catálogo ──────────────────────────────────────────
 
     [Fact]
-    public async Task AC1_List_Returns200With8TemplatesIdModuleAndTriggers()
+    public async Task AC1_List_Returns200With9TemplatesIdModuleAndTriggers()
     {
         var client = SuperAdminClient();
 
@@ -78,7 +78,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<ListDto>(TestContext.Current.CancellationToken);
         body.Should().NotBeNull();
-        body!.Items.Should().HaveCount(8);
+        body!.Items.Should().HaveCount(9);
         body.Items.Select(i => i.Id).Should().OnlyHaveUniqueItems();
         body.Items.Should().Contain(i =>
             i.Id == "security.invitation"
@@ -99,6 +99,10 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
             i.Id == "tramites.rechazado"
             && i.Module == "Tramites"
             && i.Triggers.Contains("ProcedureStatusChanged"));
+        body.Items.Should().Contain(i =>
+            i.Id == "tramites.asignacion-placa"
+            && i.Module == "Tramites"
+            && i.Triggers.Contains("PlateAssigned"));
     }
 
     [Theory]
@@ -106,6 +110,8 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
     [InlineData("tramites.aprobado", "TENANT_API", "¡Buenas Noticias!")]
     [InlineData("tramites.rechazado", "FLIT_SMTP", "RECHAZADO")]
     [InlineData("tramites.rechazado", "TENANT_API", "¡Es un gusto saludarte!")]
+    [InlineData("tramites.asignacion-placa", "FLIT_SMTP", "soporte@flitsas.com")]
+    [InlineData("tramites.asignacion-placa", "TENANT_API", "servicio@rentingcolombia.com")]
     public async Task GetSample_TramitesAprobadoYRechazado_RespectsChannelVariant(
         string templateId, string channel, string expectedMarker)
     {

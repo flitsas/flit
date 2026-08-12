@@ -36,4 +36,10 @@ public enum NotificationTrigger
     /// de pruebas; el handler productivo se conecta en una fase posterior.
     /// </summary>
     ProcedureStatusChanged,
+
+    /// <summary>
+    /// Asignación de placa en matrícula inicial (plantilla <c>tramites.asignacion-placa</c>).
+    /// Declarativo en el catálogo del banco de pruebas; el handler productivo se conecta después.
+    /// </summary>
+    PlateAssigned,
 }
