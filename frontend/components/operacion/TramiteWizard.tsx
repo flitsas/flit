@@ -2674,22 +2674,30 @@ function ConsultaStep({
                 )}
               </div>
 
-              <div>
+              {/* Fila completa: las razones sociales del RUES llegan largas (la de Bancolombia son
+                  79 caracteres, con su cláusula de denominación alterna) y a media rejilla no se
+                  leen. */}
+              <div className="sm:col-span-2">
                 <label
                   htmlFor="tramite-empresa-vinculadora-razon-social"
                   className="mb-1.5 block text-xs font-semibold"
                 >
                   Razón social
                 </label>
-                <input
+                {/* `output`, no `input`: el dato NO se edita, y un campo de una línea recorta el
+                    nombre dejando el resto accesible solo moviendo el cursor — en un campo de solo
+                    lectura, inalcanzable. `output` envuelve el texto, es etiquetable (conserva el
+                    `htmlFor` de arriba) y su rol implícito `status` anuncia el valor cuando el RUES
+                    responde, que es justo cuando el gestor quiere oírlo. */}
+                <output
                   id="tramite-empresa-vinculadora-razon-social"
-                  type="text"
-                  value={empresaVinculadoraRazonSocial ?? ''}
-                  readOnly
                   aria-describedby={razonSocialDesdeDirectorio ? 'tramite-razon-social-origen' : undefined}
-                  className={`${inputClass} cursor-not-allowed bg-[#F4F6FA] dark:bg-[#131A22]`}
-                  placeholder="La trae el RUES"
-                />
+                  className={`block w-full whitespace-pre-line break-words rounded-xl border bg-[#F4F6FA] px-3 py-2 text-xs leading-relaxed dark:bg-[#131A22] ${
+                    empresaVinculadoraRazonSocial ? '' : 'opacity-60'
+                  }`}
+                >
+                  {empresaVinculadoraRazonSocial ?? 'La trae el RUES'}
+                </output>
                 {/* De dónde salió el dato, con el mismo criterio honesto del actor jurídico: si vino
                     del directorio NO se consultó el RUES, y el gestor tiene derecho a saberlo. */}
                 {razonSocialDesdeDirectorio && (

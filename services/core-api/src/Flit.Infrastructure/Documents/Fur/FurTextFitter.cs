@@ -14,9 +14,11 @@ internal sealed record FurTextFit(IReadOnlyList<string> Lines, double FontSize);
 ///
 /// <para><b>La estrategia</b>, en este orden, para tocar lo mínimo: (1) si cabe con el cuerpo declarado
 /// se deja EXACTAMENTE como está —la calibración del manifiesto en milímetros de la HU #10921 no se
-/// altera para los textos que ya caben—; (2) se reduce el cuerpo por pasos hasta un mínimo legible;
-/// (3) si el alto del campo admite más de una línea, se parte por palabras; (4) como último recurso se
-/// trunca con elipsis, que es preferible a pisar el campo de al lado.</para>
+/// altera para los textos que ya caben—; (2) se reduce el cuerpo por pasos hasta un mínimo legible
+/// —solo hasta donde el encogido sea cosmético si la caja admite más de un renglón, ver
+/// <see cref="MaxSingleLineShrinkRatio"/>—; (3) si el alto del campo admite más de una línea, se parte
+/// por palabras; (4) como último recurso se trunca con elipsis, que es preferible a pisar el campo
+/// de al lado.</para>
 ///
 /// <para>La medición se inyecta (<c>measure</c>) para que el algoritmo sea puro y testeable sin
 /// PdfSharpCore ni una fuente instalada.</para>
@@ -43,6 +45,24 @@ internal static class FurTextFitter
     /// Existe porque el campo de observaciones es texto libre sin límite en el wizard ni en la columna.
     /// </summary>
     private const int MaxMultilineInputChars = 8_000;
+
+    /// <summary>
+    /// Reducción máxima admisible en UNA SOLA línea cuando la caja admite más de una (HU sin ADO
+    /// 2026-08-12, quinta tanda). El paso (2) encoge antes de partir porque un nombre partido se lee
+    /// peor que uno un pelo más pequeño — pero eso solo vale mientras la diferencia sea cosmética.
+    ///
+    /// <para>Sin este tope, bajar el piso de la casilla 19 de 7,0 a 6,0 no ampliaba el rango de
+    /// nombres completos: lo que hacía era ENCOGER los medianos. Medido con la fuente embebida,
+    /// "DISTRIBUIDORA NACIONAL DE CARGA" pasaba de 7,60pt en 2 líneas a 6,10pt en 1, un 20% menos de
+    /// cuerpo en un recuadro con sitio para tres renglones. Con el tope, el paso (2) se detiene antes
+    /// y el paso (3) parte el texto conservando el cuerpo declarado; el piso de 6,0 queda para lo que
+    /// de verdad lo necesita: los nombres que ni partidos caben (el caso del RUES que motivó la
+    /// tanda), donde la alternativa era truncar.</para>
+    ///
+    /// <para>0,92 reproduce a propósito la calibración anterior de la casilla 19 (piso 7,0 sobre
+    /// cuerpo 7,6 = 0,921): 7,6 → 7,0 en un renglón es imperceptible al imprimir, 7,6 → 6,1 no.</para>
+    /// </summary>
+    private const double MaxSingleLineShrinkRatio = 0.92;
 
     /// <summary>Paso de reducción del cuerpo.</summary>
     private const double Step = 0.25;
@@ -85,8 +105,14 @@ internal static class FurTextFitter
             ? Math.Max(MinFontSize, floor)
             : Math.Max(MinFontSize, baseFontSize * MinFontRatio);
 
-        // (2) Reducir el cuerpo manteniendo una sola línea.
-        for (var size = baseFontSize - Step; size >= minFont; size -= Step)
+        // (2) Reducir el cuerpo manteniendo una sola línea. Con una caja de más de un renglón el
+        // encogido en una sola línea se limita a lo cosmético (ver MaxSingleLineShrinkRatio): pasado
+        // ese punto es el paso (3) —partir conservando el cuerpo declarado— el que da mejor resultado.
+        var singleLineFloor = MaxLines(maxHeight, minFont) >= 2
+            ? Math.Max(minFont, baseFontSize * MaxSingleLineShrinkRatio)
+            : minFont;
+
+        for (var size = baseFontSize - Step; size >= singleLineFloor; size -= Step)
         {
             if (measure(text, size) <= maxWidth)
                 return new FurTextFit([text], size);
@@ -96,9 +122,10 @@ internal static class FurTextFitter
         // 0,25 desde `baseFontSize` (p. ej. base 7,6 / piso 7,0: el bucle de arriba prueba 7,35 y 7,10
         // y se detiene en 6,85 sin tocar el 7,0 exacto). Sin este intento explícito, un texto que SÍ
         // cabría en una sola línea justo al piso caía al paso (3) y se partía en líneas sin necesidad.
-        // Mismo motivo por el que `FitMultiline` ya prueba su propio piso de forma explícita.
-        if (measure(text, minFont) <= maxWidth)
-            return new FurTextFit([text], minFont);
+        // Mismo motivo por el que `FitMultiline` ya prueba su propio piso de forma explícita. El piso
+        // que se prueba aquí es el de UNA línea, que con una caja multilínea es más alto que `minFont`.
+        if (measure(text, singleLineFloor) <= maxWidth)
+            return new FurTextFit([text], singleLineFloor);
 
         // (3) Partir por palabras, si el alto admite más de una línea. Se prueba de mayor a menor cuerpo
         //     para conservar la mayor legibilidad posible.

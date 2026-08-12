@@ -238,8 +238,8 @@ describe('Tipo de servicio — paso 1 (solo matrícula inicial)', () => {
     await user.type(screen.getByLabelText('NIT empresa vinculadora'), NIT_EMPRESA);
     await user.click(screen.getByRole('button', { name: 'Buscar empresa en RUES' }));
 
-    const razonSocial = (await screen.findByLabelText('Razón social')) as HTMLInputElement;
-    expect(razonSocial).toHaveValue('BANCOLOMBIA S.A.S');
+    const razonSocial = await screen.findByLabelText('Razón social');
+    expect(razonSocial).toHaveTextContent(/^BANCOLOMBIA S\.A\.S$/);
     // El proveedor externo NO se toca cuando el directorio ya tenía el dato.
     expect(mocks.ruesPreview).not.toHaveBeenCalled();
     // Y se dice de dónde salió: no se consultó el RUES, y el gestor tiene derecho a saberlo.
@@ -259,7 +259,7 @@ describe('Tipo de servicio — paso 1 (solo matrícula inicial)', () => {
     await user.click(screen.getByRole('button', { name: 'Buscar empresa en RUES' }));
 
     await waitFor(() => expect(mocks.ruesPreview).toHaveBeenCalled());
-    expect(await screen.findByLabelText('Razón social')).toHaveValue('TRANSPORTES SAS');
+    expect(await screen.findByLabelText('Razón social')).toHaveTextContent(/^TRANSPORTES SAS$/);
   });
 
   it('flujo feliz del RUES: la razón social llega de solo lectura y habilita "Continuar"', async () => {
@@ -273,9 +273,12 @@ describe('Tipo de servicio — paso 1 (solo matrícula inicial)', () => {
     await user.click(screen.getByRole('button', { name: 'Buscar empresa en RUES' }));
 
     await waitFor(() => expect(mocks.ruesPreview).toHaveBeenCalledWith({ documentNumber: NIT_EMPRESA }));
-    const razonSocial = (await screen.findByLabelText('Razón social')) as HTMLInputElement;
-    expect(razonSocial).toHaveValue('TRANSPORTES SAS');
-    expect(razonSocial).toHaveAttribute('readonly');
+    const razonSocial = await screen.findByLabelText('Razón social');
+    expect(razonSocial).toHaveTextContent(/^TRANSPORTES SAS$/);
+    // No es un campo de formulario: es un `output` de solo lectura. La diferencia importa — un
+    // `input` de una línea recorta las razones sociales largas del RUES y, al ser readOnly, el
+    // resto del nombre queda fuera del alcance del gestor.
+    expect(razonSocial.tagName).toBe('OUTPUT');
 
     await waitFor(() => expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled());
 
@@ -329,6 +332,6 @@ describe('Tipo de servicio — paso 1 (solo matrícula inicial)', () => {
     await user.click(screen.getByRole('button', { name: /Reintentar/i }));
 
     await waitFor(() => expect(mocks.ruesPreview).toHaveBeenCalledTimes(2));
-    expect(await screen.findByLabelText('Razón social')).toHaveValue('TRANSPORTES SAS');
+    expect(await screen.findByLabelText('Razón social')).toHaveTextContent(/^TRANSPORTES SAS$/);
   });
 });
