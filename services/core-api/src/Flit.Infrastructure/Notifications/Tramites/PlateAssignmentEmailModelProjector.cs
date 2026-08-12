@@ -4,40 +4,39 @@ using Flit.Tramites.Domain.Entities;
 namespace Flit.Infrastructure.Notifications.Tramites;
 
 /// <summary>
-/// HU #11463 — proyecta el trámite persistido a <see cref="TramiteCambioEstadoEmailModel"/>
-/// sin tocar el composer. OT desde field_values (misma fuente que FUR), no desde TransitOfficeId.
+/// HU #11486 (ADR-0046) — proyecta el trámite persistido a <see cref="AsignacionPlacaEmailModel"/>.
+/// OT desde field_values (misma fuente que FUR), nunca desde <see cref="ProcedureInstance.TransitOfficeId"/>.
 /// </summary>
-public static class TramiteCambioEstadoEmailProjector
+public static class PlateAssignmentEmailModelProjector
 {
-    public static TramiteCambioEstadoEmailModel Project(
+    public const string DefaultEstadoAsignado = "Asignado";
+
+    public static AsignacionPlacaEmailModel Project(
         ProcedureInstance instance,
         IReadOnlyList<ProcedureInstanceActor> actors,
-        IReadOnlyDictionary<string, string?> fieldValues,
-        string estadoActual)
+        IReadOnlyDictionary<string, string?> fieldValues)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(actors);
         ArgumentNullException.ThrowIfNull(fieldValues);
 
-        var esTraspaso = string.Equals(
-            instance.ModalidadEntrada?.Trim(),
-            "traspaso",
-            StringComparison.OrdinalIgnoreCase);
-
         var comprador = FindActor(actors, "comprador");
-        var vendedor = FindActor(actors, "vendedor");
-
         var ciudad = TramiteEmailCityResolver.Resolve(fieldValues, comprador);
-        var ot = Get(fieldValues, "transit_office_name") ?? string.Empty;
+        var secretaria = Get(fieldValues, "transit_office_name")?.Trim() ?? string.Empty;
+        var estado = NormalizeEstado(instance.PlateFlowStatus);
 
-        return new TramiteCambioEstadoEmailModel(
-            VendedorNombre: esTraspaso ? (vendedor?.FullName?.Trim() ?? string.Empty) : string.Empty,
-            CompradorNombre: comprador?.FullName?.Trim() ?? string.Empty,
+        return new AsignacionPlacaEmailModel(
+            ClienteNombre: comprador?.FullName?.Trim() ?? string.Empty,
             Placa: instance.Plate?.Trim() ?? string.Empty,
-            CiudadOt: ciudad,
-            NombreOt: ot.Trim(),
-            EstadoActual: estadoActual,
-            EsTraspaso: esTraspaso);
+            EstadoActual: estado,
+            Ciudad: ciudad,
+            SecretariaTransito: secretaria);
+    }
+
+    private static string NormalizeEstado(string? plateFlowStatus)
+    {
+        var value = plateFlowStatus?.Trim();
+        return string.IsNullOrEmpty(value) ? DefaultEstadoAsignado : value;
     }
 
     private static ProcedureInstanceActor? FindActor(

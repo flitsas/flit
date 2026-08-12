@@ -15,6 +15,7 @@ using Flit.Infrastructure.Notifications.DeliveryLog;
 using Flit.Infrastructure.Notifications.Renting;
 using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Notifications;
+using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Infrastructure.Ocr;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -691,6 +692,16 @@ public static class InfrastructureExtensions
         services.AddHostedService<ProcedureStateChangeOutboxProcessor>();
         // HU #11467 — worker de la cola de avisos de correo al cambio de estado (ADR-0045).
         services.AddHostedService<ProcedureStateChangeEmailDispatchProcessor>();
+        // HU #11485 (Feature #11482, ADR-0046) — sink post-asignación de placa (Flujo B).
+        services.AddScoped<Flit.Tramites.Application.Notifications.IPlateAssignmentEmailEnqueuer,
+            PlateAssignmentEmailEnqueuer>();
+        // HU #11486 — proyección del modelo y marca FLIT/Renting por NIT (worker #11487).
+        services.AddScoped<Flit.Tramites.Application.Notifications.IPlateAssignmentBrandResolver,
+            PlateAssignmentBrandResolver>();
+        services.AddScoped<Flit.Tramites.Application.Notifications.IPlateAssignmentEmailModelProjector,
+            PlateAssignmentEmailModelProjectorService>();
+        // HU #11487 — worker de la cola de avisos de correo al asignar placa (ADR-0046).
+        services.AddHostedService<PlateAssignmentEmailDispatchProcessor>();
 
         // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
         // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.

@@ -2,6 +2,7 @@ using Flit.Admin.Application.Auditing;
 using Flit.Modules.Security.Application.Auth.ActivateAccount;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ReturnsExtensions;
 using Xunit;
@@ -14,6 +15,7 @@ public sealed class ActivateAccountHandlerTests
     private readonly ISecureTokenGenerator _tokenGen = Substitute.For<ISecureTokenGenerator>();
     private readonly IUserActivationRepository _activationRepo = Substitute.For<IUserActivationRepository>();
     private readonly IPasswordHasher _hasher = Substitute.For<IPasswordHasher>();
+    private readonly IEmailSender _emailSender = Substitute.For<IEmailSender>();
     private readonly IAdminAuditWriter _auditWriter = Substitute.For<IAdminAuditWriter>();
     private readonly IAuditContextAccessor _auditContext = NullAuditContextAccessor.Instance;
     private readonly ActivateAccountHandler _handler;
@@ -36,9 +38,12 @@ public sealed class ActivateAccountHandlerTests
     public ActivateAccountHandlerTests()
     {
         _handler = new ActivateAccountHandler(
-            _invitationRepo, _tokenGen, _activationRepo, _hasher, _auditWriter, _auditContext);
+            _invitationRepo, _tokenGen, _activationRepo, _hasher, _emailSender, _auditWriter, _auditContext,
+            NullLogger<ActivateAccountHandler>.Instance);
         _tokenGen.HashToken(RawToken).Returns(TokenHash);
         _hasher.Hash(ValidPassword).Returns("hashed-password");
+        _emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(EmailSendResult.Sent);
     }
 
     // AC1 — token válido, contraseña correcta, con un rol → usuario creado e invitación aceptada
@@ -61,6 +66,12 @@ public sealed class ActivateAccountHandlerTests
                 d.TenantId == TenantId &&
                 d.RoleIds.Count == 1 && d.RoleIds[0] == RoleId &&
                 d.PasswordHash == "hashed-password"),
+            Arg.Any<CancellationToken>());
+        await _emailSender.Received(1).SendAsync(
+            Arg.Is<EmailMessage>(m =>
+                m.TemplateKey == "security.welcome-registration" &&
+                m.ToEmail == "invited@flit.local" &&
+                m.TenantId == TenantId),
             Arg.Any<CancellationToken>());
     }
 
@@ -98,9 +109,11 @@ public sealed class ActivateAccountHandlerTests
 
         await _activationRepo.DidNotReceiveWithAnyArgs().ActivateAsync(
             Arg.Any<ActivationData>(), Arg.Any<CancellationToken>());
+        await _emailSender.DidNotReceiveWithAnyArgs().SendAsync(
+            Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
     }
 
-    // Contraseña débil con token válido → WeakPasswordException, sin crear usuario
+    // Contraseña débil con token válido → WeakPasswordException, sin crear usuario ni enviar bienvenida
     [Fact]
     public async Task HandleAsync_WeakPassword_ThrowsWeakPasswordException()
     {
@@ -115,5 +128,23 @@ public sealed class ActivateAccountHandlerTests
 
         await _activationRepo.DidNotReceiveWithAnyArgs().ActivateAsync(
             Arg.Any<ActivationData>(), Arg.Any<CancellationToken>());
+        await _emailSender.DidNotReceiveWithAnyArgs().SendAsync(
+            Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_WelcomeEmailFailure_DoesNotRevertActivation()
+    {
+        _invitationRepo.FindPendingByTokenHashAsync(TokenHash, Arg.Any<CancellationToken>())
+            .Returns(_pendingInvitation);
+        _emailSender.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
+            .Returns(EmailSendResult.Failed(EmailSendOutcome.ProviderUnavailable));
+
+        var result = await _handler.HandleAsync(
+            new ActivateAccountCommand(RawToken, ValidPassword),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        await _activationRepo.Received(1).ActivateAsync(Arg.Any<ActivationData>(), Arg.Any<CancellationToken>());
     }
 }

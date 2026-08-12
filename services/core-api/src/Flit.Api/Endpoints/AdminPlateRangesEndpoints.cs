@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Admin.Domain.PlatePreassign;
 using Flit.Api.Authorization;
+using Flit.Tramites.Application.Notifications;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -71,6 +72,7 @@ public static class AdminPlateRangesEndpoints
     private static async Task<IResult> AssignPlateToProcedureAsync(
         Guid instanceId, AssignPlateToProcedureRequest request, HttpContext http,
         IOtClientProcedureRepository otRepo, GenerarFurHandler furHandler,
+        IPlateAssignmentEmailEnqueuer plateAssignmentEmailEnqueuer,
         ILoggerFactory loggerFactory, CancellationToken ct)
     {
         var tenantClaim = http.User.FindFirstValue(AdminAuthorization.TenantIdClaimType);
@@ -170,6 +172,30 @@ public static class AdminPlateRangesEndpoints
             {
                 AdminPlateRegenLog.RegeneracionPlacaOmitida(
                     loggerFactory.CreateLogger("AdminPlate.AssignPlateRegen"), ex, instanceId);
+            }
+
+            // HU #11485 (Feature #11482, ADR-0046) — aviso de correo al comprador tras asignar placa
+            // (Flujo B). Best-effort en el scope RLS del cliente: un fallo NO revierte la asignación.
+            try
+            {
+                var plate = request.Plate.Trim().ToUpperInvariant();
+                await otRepo
+                    .ExecuteInClientTenantScopeAsync(
+                        procedure.ClientTenantId,
+                        async () =>
+                        {
+                            await plateAssignmentEmailEnqueuer
+                                .EnqueueAsync(procedure.ClientTenantId, instanceId, plate, ct)
+                                .ConfigureAwait(false);
+                            return 0;
+                        },
+                        ct)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                AdminPlateRegenLog.CorreoAsignacionPlacaOmitido(
+                    loggerFactory.CreateLogger("AdminPlate.AssignPlateEmail"), ex, instanceId);
             }
         }
 
@@ -334,4 +360,8 @@ internal static partial class AdminPlateRegenLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Conflicto de persistencia al asignar la placa al trámite {InstanceId}; se responde 409 al OT.")]
     public static partial void AsignacionPlacaConflicto(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se pudo encolar el aviso de correo tras asignar la placa al trámite {InstanceId}; la asignación se conserva.")]
+    public static partial void CorreoAsignacionPlacaOmitido(ILogger logger, Exception ex, Guid instanceId);
 }

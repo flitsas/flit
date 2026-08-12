@@ -12,9 +12,9 @@ public class AsignacionPlacaEmailComposerTests
     private static readonly AsignacionPlacaEmailModel Sample = new(
         ClienteNombre: "Juan Carlos Pérez Gómez",
         Placa: "ABC123",
+        EstadoActual: "Asignado",
         Ciudad: "Medellín",
-        SecretariaTransito: "Secretaría de Movilidad de Medellín",
-        EstadoActual: "Asignado");
+        SecretariaTransito: "Secretaría de Movilidad de Medellín");
 
     [Fact]
     public void ComposeFlit_IncluyeHeaderLogoYSoporteFlit()
@@ -86,5 +86,36 @@ public class AsignacionPlacaEmailComposerTests
     public void RentingCompanyRegisteredNit_DocumentaReglaProductiva()
     {
         AsignacionPlacaEmailComposer.RentingCompanyRegisteredNit.Should().Be("811011779");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Compose_CopyActualizado_PlacaAsignadaSinPosiblePlaca_IncluyeSoat(bool flit)
+    {
+        var (_, html) = flit
+            ? AsignacionPlacaEmailComposer.ComposeFlit(
+                Sample, AsignacionPlacaEmailPreviewSample.DefaultAssetsBaseUrl)
+            : AsignacionPlacaEmailComposer.ComposeRenting(
+                Sample, AsignacionPlacaEmailPreviewSample.DefaultAssetsBaseUrl);
+
+        html.Should().Contain("placa asignada es");
+        html.Should().Contain("SOAT (Seguro Obligatorio de Accidentes de Tránsito)");
+        html.Should().NotContain("posible placa", "el copy ya no debe sugerir placa provisional");
+        html.Should().NotContain("cuya posible placa es");
+    }
+
+    [Theory]
+    [InlineData(NotificationChannel.FlitSmtp)]
+    [InlineData(NotificationChannel.TenantApi)]
+    public void SampleRenderer_AsignacionPlaca_RenderizaSinExcepcion_ConCopyNuevo(NotificationChannel channel)
+    {
+        var (subject, html) = NotificationSampleRenderer.Render(
+            AsignacionPlacaEmailComposer.TemplateId, channel);
+
+        subject.Should().Contain("ABC123");
+        html.Should().Contain("placa asignada es");
+        html.Should().Contain("SOAT (Seguro Obligatorio de Accidentes de Tránsito)");
+        html.Should().NotContain("posible placa");
     }
 }

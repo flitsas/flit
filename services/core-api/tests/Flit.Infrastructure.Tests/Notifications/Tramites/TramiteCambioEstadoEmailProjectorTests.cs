@@ -55,4 +55,46 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
         model.EsTraspaso.Should().BeTrue();
         model.Placa.Should().Be("ABC123");
     }
+
+    [Fact]
+    public void CodigoDivipola_UsaCiudadDelCompradorEnMetadata()
+    {
+        var instance = new ProcedureInstance { ModalidadEntrada = "matricula_inicial", Plate = "ABC123" };
+        var actors = new List<ProcedureInstanceActor>
+        {
+            new()
+            {
+                ActorType = "comprador",
+                FullName = "Comprador X",
+                Metadata = """{"Ciudad":"Bogotá"}""",
+            },
+        };
+        var fields = new Dictionary<string, string?>
+        {
+            ["transit_office_city"] = "25286",
+            ["transit_office_name"] = "OT",
+        };
+
+        var model = TramiteCambioEstadoEmailProjector.Project(instance, actors, fields, "APROBADO");
+
+        model.CiudadOt.Should().Be("Bogotá");
+        model.EsTraspaso.Should().BeFalse();
+    }
+
+    [Fact]
+    public void MatriculaInicial_NoExponeVendedorEnModelo()
+    {
+        var instance = new ProcedureInstance { ModalidadEntrada = "matricula_inicial", Plate = "XYZ99" };
+        var actors = new List<ProcedureInstanceActor>
+        {
+            new() { ActorType = "comprador", FullName = "Comprador" },
+            new() { ActorType = "vendedor", FullName = "No Debe Aparecer" },
+        };
+
+        var model = TramiteCambioEstadoEmailProjector.Project(
+            instance, actors, new Dictionary<string, string?>(), "APROBADO");
+
+        model.VendedorNombre.Should().BeEmpty();
+        model.EsTraspaso.Should().BeFalse();
+    }
 }
