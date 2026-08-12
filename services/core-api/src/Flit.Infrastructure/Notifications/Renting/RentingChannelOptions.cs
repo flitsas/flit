@@ -13,7 +13,7 @@ namespace Flit.Infrastructure.Notifications.Renting;
 /// Esta clase SOLO modela configuración de transporte/login/envío. NO implementa login ni caché de
 /// token (HU #11360), NI el adaptador de envío/multipart (HU #11361), NI el desvío de destinatario
 /// al buzón de control (ADR-0044/HU #11364: consume <see cref="SendEmailDevelopmentRecipientEmail"/> /
-/// <see cref="SendEmailDevelopmentRecipientUsername"/> / <see cref="DivertRecipientsEnabled"/>),
+/// <see cref="SendEmailDevelopmentRecipientUsername"/> / <see cref="SendRealRecipientsEnabled"/>),
 /// NI el enrutamiento por canal (HU #11362:
 /// consume <see cref="Enabled"/> vía <c>IOptions&lt;RentingChannelOptions&gt;</c> para decidir si un
 /// tenant con <c>NotificationChannel = "tenant_api"</c> puede enviar por este canal — AC6).
@@ -106,7 +106,7 @@ public sealed class RentingChannelOptions
 
     /// <summary>
     /// Destinatario del buzón de control. Se modela aquí; su USO es de <see cref="RentingRecipientOverride"/>.
-    /// Obligatorio en todo despliegue que no declare envío real (ver <see cref="DivertRecipientsEnabled"/>);
+    /// Obligatorio en todo despliegue que no declare envío real (ver <see cref="SendRealRecipientsEnabled"/>);
     /// opcional (puede quedar vacío) cuando el despliegue envía a destinatarios reales.
     /// </summary>
     public string SendEmailDevelopmentRecipientEmail { get; set; } = string.Empty;
@@ -115,28 +115,30 @@ public sealed class RentingChannelOptions
     public string SendEmailDevelopmentRecipientUsername { get; set; } = string.Empty;
 
     /// <summary>
-    /// ADR-0044 — <c>true</c> cuando este DESPLIEGUE debe desviar todo envío al buzón de control en
-    /// lugar de al destinatario real. Es la ÚNICA señal que decide si un envío se desvía: el nombre
+    /// ADR-0044 — <c>true</c> cuando este DESPLIEGUE debe enviar a destinatarios REALES en lugar de
+    /// desviar al buzón de control. Es la ÚNICA señal que decide si un envío se desvía: el nombre
     /// del ambiente (<c>IHostEnvironment</c>) NUNCA participa en esta decisión, ni en el arranque
     /// (<c>InfrastructureExtensions.AddRentingChannel</c>) ni en el adaptador
     /// (<see cref="RentingRecipientOverride"/>).
     /// <para>
     /// Se calcula en el arranque a partir de la variable AFIRMATIVA y PROPIA del despliegue
     /// <c>RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED</c> (tri-estado: ausente/vacía o
-    /// <c>false</c> ⇒ <c>true</c> aquí — desviar, el default seguro; <c>true</c> literal ⇒
-    /// <c>false</c> aquí — envío real; cualquier otro valor no vacío tumba el arranque). Deroga el
+    /// <c>false</c> ⇒ <c>false</c> aquí — desviar, el default seguro; <c>true</c> literal ⇒
+    /// <c>true</c> aquí — envío real; cualquier otro valor no vacío tumba el arranque). Deroga el
     /// antiguo interruptor por ambiente de la HU #11364 (AC3/AC4), cuya variable
     /// <c>RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED</c> queda prohibida: su
     /// sola presencia con valor no vacío, con el canal encendido, tumba el arranque con un mensaje
     /// de migración.
     /// </para>
     /// <para>
-    /// El default seguro ("ausente ⇒ desviar") lo aplica <c>AddRentingChannel</c> al RESOLVER esta
-    /// propiedad desde la variable de entorno — no el valor por defecto de la propiedad en sí
-    /// (que, como cualquier <c>bool</c> sin inicializar, es <c>false</c>): quien construya
-    /// <see cref="RentingChannelOptions"/> directamente (p. ej. en pruebas) debe declarar el valor
-    /// que necesita explícitamente.
+    /// La propiedad se nombró en polaridad AFIRMATIVA a propósito (a diferencia del derogado
+    /// <c>DivertRecipientsEnabled</c>, cuyo <c>false</c> significaba "envía real"): el default del
+    /// CLR para un <c>bool</c> sin inicializar es <c>false</c>, y con este nombre ese default
+    /// significa "desviar" — el estado seguro. Cualquier <see cref="RentingChannelOptions"/>
+    /// construido sin tocar esta propiedad (incluyendo pruebas que instancien la clase directamente
+    /// con <c>new RentingChannelOptions()</c>) desvía por defecto, sin depender de que
+    /// <c>AddRentingChannel</c> la resuelva explícitamente desde la variable de entorno.
     /// </para>
     /// </summary>
-    public bool DivertRecipientsEnabled { get; set; }
+    public bool SendRealRecipientsEnabled { get; set; }
 }

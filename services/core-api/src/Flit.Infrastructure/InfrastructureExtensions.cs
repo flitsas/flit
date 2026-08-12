@@ -947,7 +947,7 @@ public static class InfrastructureExtensions
                 : Cfg(
                     "Notifications:Renting:SendEmailDevelopmentRecipientUsername",
                     "RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME") ?? "",
-            DivertRecipientsEnabled = divertRecipients,
+            SendRealRecipientsEnabled = sendRealRecipients,
         };
 
         // ADR-0044 — ninguna rama de este método vuelve a consultar IHostEnvironment: la decisión
@@ -977,7 +977,7 @@ public static class InfrastructureExtensions
             o.DefaultSenderUsername = options.DefaultSenderUsername;
             o.SendEmailDevelopmentRecipientEmail = options.SendEmailDevelopmentRecipientEmail;
             o.SendEmailDevelopmentRecipientUsername = options.SendEmailDevelopmentRecipientUsername;
-            o.DivertRecipientsEnabled = options.DivertRecipientsEnabled;
+            o.SendRealRecipientsEnabled = options.SendRealRecipientsEnabled;
         });
 
         // AC3/AC4/AC5 (HU #11359/#11360) — Singleton cuyo factory carga y valida el certificado.

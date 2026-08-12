@@ -141,6 +141,7 @@ Este ADR cambia **solo el cálculo del booleano** que consume `RentingRecipientO
 - El buzón `..._DEVELOPMENT_RECIPIENT_EMAIL/_USERNAME` sigue siendo obligatorio en todo despliegue que no envíe real; conserva su nombre y cambia su documentación.
 - Encender el envío real en un ambiente que no sea PDN es una decisión operativa acordada con el cliente (golpea su API productiva); debe quedar registrada y revertirse al cerrar la ventana.
 - Al arrancar, el log dice en qué modo quedó el canal: ese es el chequeo de despliegue, junto con un envío desde el banco de pruebas.
+- **Neutralizar un valor heredado de `appsettings` exige `="false"` explícito, no dejar la variable vacía.** `AddRentingChannel` resuelve `RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED` con la misma función `Cfg` que Rues/Kyverum/Fasecolda: variable de entorno con contenido primero, y si viene ausente o vacía cae a `IConfiguration` (appsettings). Si algún `appsettings.{Environment}.json` llegara a declarar la clave equivalente en `true`, un `${RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED:-}` vacío en el compose **no la anula** — sigue leyendo el `true` de `appsettings`. Hoy ningún `appsettings` versionado declara la clave, así que no hay exposición real, pero quien migre o audite el despliegue debe saberlo. No es una decisión de este ADR tocar `Cfg` ni su orden de precedencia.
 
 ## ADRs relacionados
 

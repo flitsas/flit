@@ -13,12 +13,15 @@ namespace Flit.Infrastructure.Tests.Notifications.Renting;
 /// <summary>
 /// HU #11364 / ADR-0044 — desvío al buzón de control (<see cref="RentingRecipientOverride"/>), con
 /// interruptor afirmativo propio del despliegue
-/// (<see cref="RentingChannelOptions.DivertRecipientsEnabled"/>).
+/// (<see cref="RentingChannelOptions.SendRealRecipientsEnabled"/>). El default seguro del <c>bool</c>
+/// sin inicializar (<c>false</c>) significa "desviar" — por eso los ejemplos de abajo que quieren
+/// desviar dejan la propiedad SIN tocar, y solo la declaran explícitamente en <c>true</c> cuando el
+/// escenario bajo prueba es el envío real.
 /// <para>
 /// Uso de ejemplo del componente bajo prueba:
 /// <code>
 /// var overrideImpl = new RentingRecipientOverride(
-///     Options.Create(new RentingChannelOptions { DivertRecipientsEnabled = true, ... }),
+///     Options.Create(new RentingChannelOptions { SendRealRecipientsEnabled = false, ... }),
 ///     logger);
 /// var effective = overrideImpl.Apply(request);
 /// </code>
@@ -39,13 +42,17 @@ public sealed class RentingRecipientOverrideTests
         BccRecipients: ["bcc-real@example.test"],
         Attachments: []);
 
+    /// <param name="divertEnabled">
+    /// <c>true</c> ⇒ desvía (equivalente al default seguro del despliegue); <c>false</c> ⇒ envío
+    /// real (<see cref="RentingChannelOptions.SendRealRecipientsEnabled"/> = <c>true</c>).
+    /// </param>
     private static RentingRecipientOverride NewOverride(
-        bool enabled, string? recipientEmail = "desvio@example.test", string? recipientUsername = "Desvío QA",
+        bool divertEnabled, string? recipientEmail = "desvio@example.test", string? recipientUsername = "Desvío QA",
         ILogger<RentingRecipientOverride>? logger = null) =>
         new(
             Options.Create(new RentingChannelOptions
             {
-                DivertRecipientsEnabled = enabled,
+                SendRealRecipientsEnabled = !divertEnabled,
                 SendEmailDevelopmentRecipientEmail = recipientEmail ?? string.Empty,
                 SendEmailDevelopmentRecipientUsername = recipientUsername ?? string.Empty,
             }),
@@ -56,7 +63,7 @@ public sealed class RentingRecipientOverrideTests
     [Fact]
     public void Apply_ConInterruptorActivoYDestinatarioConfigurado_LlevaElDestinatarioDeDesvioYNoElOriginal()
     {
-        var overrideImpl = NewOverride(enabled: true);
+        var overrideImpl = NewOverride(divertEnabled: true);
 
         var result = overrideImpl.Apply(SampleRequest());
 
@@ -80,7 +87,7 @@ public sealed class RentingRecipientOverrideTests
     {
         // Edge case — sin el interruptor propio en true, NO hay desvío, sin importar qué otra
         // configuración exista (AC5: solo decide el interruptor).
-        var overrideImpl = NewOverride(enabled: false);
+        var overrideImpl = NewOverride(divertEnabled: false);
         var request = SampleRequest();
 
         var result = overrideImpl.Apply(request);
@@ -90,13 +97,44 @@ public sealed class RentingRecipientOverrideTests
         result.Request.Recipients[0].Email.Should().Be("cliente-real@example.test");
     }
 
+    // ── L2 (revisión de seguridad, ADR-0044) — el default del CLR es el estado seguro ──
+
+    [Fact]
+    public void RentingChannelOptions_ConstruidoSinTocarNada_DejaSendRealRecipientsEnabledEnFalse()
+    {
+        // Regresión de polaridad: un `bool` sin inicializar en C# vale `false` por default del CLR.
+        // Con SendRealRecipientsEnabled esa condición significa "NO enviar real", es decir, desviar
+        // — el estado seguro. (El derogado DivertRecipientsEnabled tenía la polaridad opuesta: su
+        // `false` por defecto significaba "envía real".)
+        var options = new RentingChannelOptions();
+
+        options.SendRealRecipientsEnabled.Should().BeFalse(
+            "un RentingChannelOptions recién construido sin tocar debe significar «desviar»");
+    }
+
+    [Fact]
+    public void Apply_ConOptionsRecienConstruidoSinTocar_DesviaPorDefecto()
+    {
+        // Mismo criterio que el test anterior, pero ejercitado de punta a punta contra el
+        // componente real (no solo inspeccionando la propiedad): construir RentingChannelOptions
+        // sin asignar SendRealRecipientsEnabled y sin configurar el buzón de control igual debe
+        // producir un desvío (aunque el destinatario de desvío quede vacío, Diverted es true).
+        var overrideImpl = new RentingRecipientOverride(
+            Options.Create(new RentingChannelOptions()), NullLogger<RentingRecipientOverride>.Instance);
+
+        var result = overrideImpl.Apply(SampleRequest());
+
+        result.Diverted.Should().BeTrue(
+            "un RentingChannelOptions() sin tocar debe significar desvío activo, no envío real");
+    }
+
     // ── AC2 — el desvío queda registrado ────────────────────────────────────────────
 
     [Fact]
     public void Apply_ConInterruptorActivo_LaBitacoraRegistraElDestinatarioOriginalYUnaMarcaDeEnvioDesviado()
     {
         var logger = new CapturingLogger();
-        var overrideImpl = NewOverride(enabled: true, logger: logger);
+        var overrideImpl = NewOverride(divertEnabled: true, logger: logger);
 
         overrideImpl.Apply(SampleRequest());
 
@@ -115,7 +153,7 @@ public sealed class RentingRecipientOverrideTests
     {
         // Contrato — sin desvío, no hay nada de "envío desviado" que registrar.
         var logger = new CapturingLogger();
-        var overrideImpl = NewOverride(enabled: false, logger: logger);
+        var overrideImpl = NewOverride(divertEnabled: false, logger: logger);
 
         overrideImpl.Apply(SampleRequest());
 
@@ -138,7 +176,7 @@ public sealed class RentingRecipientOverrideTests
         {
             ctor.GetParameters().Should().NotContain(
                 p => typeof(IHostEnvironment).IsAssignableFrom(p.ParameterType),
-                "el desvío se decide SOLO por RentingChannelOptions.DivertRecipientsEnabled (ADR-0044)");
+                "el desvío se decide SOLO por RentingChannelOptions.SendRealRecipientsEnabled (ADR-0044)");
         }
     }
 

@@ -54,7 +54,7 @@ internal sealed class PassthroughRentingRecipientOverride : IRentingRecipientOve
 ///
 /// <para>
 /// ADR-0044 — la decisión de desviar se toma ÚNICAMENTE por
-/// <see cref="RentingChannelOptions.DivertRecipientsEnabled"/> (calculado en el arranque a partir
+/// <see cref="RentingChannelOptions.SendRealRecipientsEnabled"/> (calculado en el arranque a partir
 /// de la variable afirmativa y propia del despliegue,
 /// <c>RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED</c>). Esta clase NUNCA consulta
 /// <c>IHostEnvironment</c> ni el nombre del ambiente: esa consulta desapareció del canal por
@@ -75,7 +75,7 @@ internal sealed class RentingRecipientOverride(
     public RentingRecipientOverrideResult Apply(RentingSendEmailRequest request)
     {
         var o = options.Value;
-        if (!o.DivertRecipientsEnabled)
+        if (o.SendRealRecipientsEnabled)
             return new RentingRecipientOverrideResult(request, Diverted: false);
 
         // Log de aplicación (aviso operativo, se rota y no es evidencia auditable). AC2 lo cumple la
@@ -107,7 +107,7 @@ internal sealed class RentingRecipientOverride(
 internal static partial class RentingRecipientOverrideLog
 {
     [LoggerMessage(Level = LogLevel.Warning,
-        Message = "Canal Renting: ENVÍO DESVIADO (desarrollo/QA). Destinatario(s) original(es): {OriginalRecipients}. "
+        Message = "Canal Renting: ENVÍO DESVIADO al buzón de control. Destinatario(s) original(es): {OriginalRecipients}. "
             + "Copia oculta original: {OriginalBcc}.")]
     public static partial void RecipientDiverted(ILogger logger, string originalRecipients, string originalBcc);
 }
