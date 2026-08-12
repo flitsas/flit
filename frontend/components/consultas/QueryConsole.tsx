@@ -154,6 +154,7 @@ export function QueryConsole<TRow>({
   // para siempre — el botón dejaría de funcionar sin decir nada.
   const [nombrando, setNombrando] = useState<string | null>(null);
   const [porBorrar, setPorBorrar] = useState<SavedQuery | null>(null);
+  const [confirmandoLimpiar, setConfirmandoLimpiar] = useState(false);
 
   // La preferencia de columnas se rehidrata DESPUÉS del montaje: leer localStorage durante el
   // render haría que el servidor y el cliente pintaran tablas distintas.
@@ -461,6 +462,20 @@ export function QueryConsole<TRow>({
   const modificada = activeSnapshot !== null && activeSnapshot !== preguntaKey;
   const totalPaginas = result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1;
 
+  // Si «empezar de cero» tirara esto sin avisar, armar una consulta larga y darle sin querer
+  // perdería el trabajo entero. Solo hace falta confirmar cuando hay algo que de verdad se pierde:
+  // una consulta en blanco no tiene nada que tirar, y una guardada tal cual sigue estando guardada.
+  const definicionVacia =
+    definition.condiciones.length === 0 && definition.fechas.preset === "ultimos_30";
+  const hayTrabajoSinGuardar = !definicionVacia && (activeId === null || modificada);
+
+  function limpiar() {
+    setDefinition(emptyDefinition());
+    setActiveId(null);
+    setActiveSnapshot(null);
+    setConfirmandoLimpiar(false);
+  }
+
   return (
     <div className="flex flex-col gap-6 lg:flex-row" data-testid={rootTestId ?? `${prefix}-tab`}>
       <div className="flex min-w-0 flex-1 flex-col gap-4">
@@ -752,18 +767,43 @@ export function QueryConsole<TRow>({
             onConfirmarBorrado={(q) => void handleDelete(q)}
             testIdPrefix={prefix}
           />
-          <button
-            type="button"
-            onClick={() => {
-              setDefinition(emptyDefinition());
-              setActiveId(null);
-              setActiveSnapshot(null);
-            }}
-            className="mt-1 w-full rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.06] px-2 py-2 text-[11px] font-semibold text-[#557EFF] transition hover:border-[#557EFF] hover:bg-[#557EFF]/10 dark:border-[#557EFF]/30 dark:bg-[#557EFF]/10 dark:text-[#9DB5FF]"
-            data-testid={`${prefix}-nueva`}
-          >
-            Empezar de cero
-          </button>
+          {confirmandoLimpiar ? (
+            <div
+              className="mt-1 rounded-xl border border-[#C0392B]/40 bg-[#C0392B]/5 p-2.5"
+              data-testid={`${prefix}-limpiar-confirmar`}
+            >
+              <p className="mb-2 text-[11px] leading-snug text-[#0B1F33] dark:text-white/80">
+                Se perderán los filtros que no has guardado.
+              </p>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={limpiar}
+                  className="flex-1 rounded-lg bg-[#C0392B] px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-[#A63325]"
+                  data-testid={`${prefix}-limpiar-confirmar-si`}
+                >
+                  Empezar de cero
+                </button>
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => setConfirmandoLimpiar(false)}
+                  className="flex-1 rounded-lg border border-[#DFE5ED] bg-white px-2 py-1.5 text-[11px] font-semibold text-[#6B7280] hover:text-[#0B1F33] dark:border-white/15 dark:bg-transparent dark:text-white/60 dark:hover:text-white"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => (hayTrabajoSinGuardar ? setConfirmandoLimpiar(true) : limpiar())}
+              className="mt-1 w-full rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.06] px-2 py-2 text-[11px] font-semibold text-[#557EFF] transition hover:border-[#557EFF] hover:bg-[#557EFF]/10 dark:border-[#557EFF]/30 dark:bg-[#557EFF]/10 dark:text-[#9DB5FF]"
+              data-testid={`${prefix}-nueva`}
+            >
+              Empezar de cero
+            </button>
+          )}
         </Section>
       </aside>
     </div>
