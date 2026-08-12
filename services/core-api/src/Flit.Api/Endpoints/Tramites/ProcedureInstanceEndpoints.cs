@@ -457,6 +457,8 @@ internal static class ProcedureInstanceEndpoints
                 // R10 (HU #10597) — gate de prenda del traspaso.
                 TramiteEstadoErrores.PrendaDecisionRequerida => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.PrendaDecisionRequerida, detail: "El vehículo tiene gravámenes: registra una decisión de prenda antes de radicar."),
                 TramiteEstadoErrores.PrendaDocumentoRequerido => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.PrendaDocumentoRequerido, detail: "La decisión de prenda seleccionada requiere adjuntar su documento de soporte."),
+                // CF-06 (HU #10881) — el override compañía+OT, que NO nace de la decisión del gestor.
+                TramiteEstadoErrores.PrendaDocumentoRequeridoOt => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.PrendaDocumentoRequeridoOt, detail: "El organismo de tránsito exige adjuntar el documento de prenda para este trámite."),
                 // CF-03 (HU #10877) — precondición registral "vehículo ya matriculado" (doble fuente
                 // RUNT/FLIT), SEGUNDO momento (el estado pudo cambiar desde el preflight). Bloqueo DURO
                 // no subsanable.
@@ -637,7 +639,11 @@ internal static class ProcedureInstanceEndpoints
                     statusCode: 409, title: TramiteEstadoErrores.ConflictoConcurrencia,
                     detail: errorDetail ?? "El trámite fue modificado por otro proceso. Recargue e intente de nuevo."),
                 // R10 (HU #10597) — gate de prenda del traspaso (409, subsanable con la decisión/documento).
-                TramiteEstadoErrores.PrendaDecisionRequerida or TramiteEstadoErrores.PrendaDocumentoRequerido =>
+                // CF-06 (HU #10881) — y el override compañía+OT, con código propio desde 2026-08-12 para que
+                // el mensaje pueda decir que el origen es una regla del organismo, no la decisión del gestor.
+                TramiteEstadoErrores.PrendaDecisionRequerida
+                    or TramiteEstadoErrores.PrendaDocumentoRequerido
+                    or TramiteEstadoErrores.PrendaDocumentoRequeridoOt =>
                     Results.Problem(statusCode: 409, title: errorCode, detail: errorDetail),
                 // ADR-0036 §D9 (HU #10916) — al aprobar hay varios mandatarios y ninguno cotejó: elegir uno
                 // (409, subsanable reintentando con mandateSignerId).

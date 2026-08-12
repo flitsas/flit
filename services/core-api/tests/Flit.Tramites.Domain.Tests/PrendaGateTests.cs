@@ -68,15 +68,15 @@ public sealed class PrendaGateTests
     [Fact]
     public void OtOverride_Inactivo_NuncaBloquea()
     {
-        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: false, docTipos: [])
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: false, decision: "registrar", docTipos: [])
             .Should().BeNull();
     }
 
     [Fact]
     public void OtOverride_Activo_SinDocumento_Bloquea()
     {
-        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, docTipos: [])
-            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequerido);
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, decision: "registrar", docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
     }
 
     [Theory]
@@ -85,14 +85,74 @@ public sealed class PrendaGateTests
     [InlineData("prenda_levantamiento")]
     public void OtOverride_Activo_ConCualquierDocumentoDePrenda_Pasa(string docTipo)
     {
-        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, docTipos: [docTipo])
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, decision: "registrar", docTipos: [docTipo])
             .Should().BeNull();
     }
 
     [Fact]
     public void OtOverride_Activo_ConOtroDocumentoNoRelacionado_Bloquea()
     {
-        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, docTipos: ["soat", "rtm"])
-            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequerido);
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, decision: "registrar", docTipos: ["soat", "rtm"])
+            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+    }
+
+    // ── 2026-08-12 — el override deja de exigir lo que la UI no ofrece cargar ────────────────────
+
+    /// <summary>
+    /// EL CASO REAL que motivó el cambio: matrícula inicial con <c>sin_prenda</c>, override del OT
+    /// activo (su valor por DEFECTO mientras nadie configure el opt-out) y ningún adjunto de prenda.
+    /// El trámite quedaba atascado en "Finalizar" exigiendo un documento que el paso de prenda no
+    /// ofrece cargar para esa decisión: sin vía para cumplirlo desde el trámite.
+    /// </summary>
+    [Theory]
+    [InlineData(PrendaDecision.SinPrenda)]
+    [InlineData(PrendaDecision.Omitir)]
+    public void OtOverride_ConDecisionQueNoPideDocumento_NoBloquea(string decision)
+    {
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, decision, docTipos: [])
+            .Should().BeNull(
+                "el paso de prenda no ofrece cargar documento para esta decisión: exigirlo deja al "
+                + "gestor sin forma de desbloquear el trámite");
+    }
+
+    /// <summary>
+    /// Sin decisión tomada el override calla: ese hueco lo cubre <see cref="PrendaGate.Evaluate"/>
+    /// con <c>prenda_decision_requerida</c>, que sí dice qué hacer.
+    /// </summary>
+    [Fact]
+    public void OtOverride_SinDecision_NoBloquea()
+    {
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, decision: null, docTipos: [])
+            .Should().BeNull();
+    }
+
+    /// <summary>
+    /// Lo que el override NO pierde: sigue siendo independiente del SEMÁFORO. Una matrícula inicial
+    /// que constituye prenda (vehículo nuevo financiado, sin gravamen previo que detectar) sigue
+    /// exigiendo su soporte — ahí `Evaluate` no llega, porque solo actúa en traspaso con warn.
+    /// </summary>
+    [Theory]
+    [InlineData(PrendaDecision.Solicitar)]
+    [InlineData(PrendaDecision.Registrar)]
+    [InlineData(PrendaDecision.Levantar)]
+    public void OtOverride_ConDecisionQuePideDocumento_SigueExigiendoloSinGravamenDetectado(string decision)
+    {
+        PrendaGate.EvaluateOtOverride(otRequiereDocumentoPrenda: true, decision, docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+    }
+
+    /// <summary>
+    /// El conjunto que dispara el override tiene que ser EXACTAMENTE el mismo que usa la UI para
+    /// decidir si ofrece la carga. Si alguien añade una decisión a uno y no al otro, vuelve el
+    /// bloqueo insatisfacible — este test lo convierte en un fallo, no en un misterio en producción.
+    /// </summary>
+    [Fact]
+    public void OtOverride_SeDisparaExactamenteConElConjuntoQuePideDocumento()
+    {
+        var disparan = PrendaDecision.All
+            .Where(d => PrendaGate.EvaluateOtOverride(true, d, docTipos: []) is not null)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        disparan.Should().BeEquivalentTo(PrendaDecision.RequierenDocumento);
     }
 }

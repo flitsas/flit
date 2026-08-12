@@ -123,7 +123,8 @@ public sealed class GetWizardStateHandler(
     IDynamicProceduresPolicy? dynamicPolicy = null,
     IProcedureTypeSnapshotRepository? snapshotRepo = null,
     IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null,
-    IProcedureTypeRepository? typeRepo = null)
+    IProcedureTypeRepository? typeRepo = null,
+    IProcedureInstancePrendaRepository? prendaRepo = null)
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
@@ -157,6 +158,11 @@ public sealed class GetWizardStateHandler(
     // gravámenes). Default permisivo (nunca exige) cuando no hay política cableada (tests).
     private readonly IPrendaDocumentRequirementPolicy _prendaDocumentRequirementPolicy =
         prendaDocumentRequirementPolicy ?? NullPrendaDocumentRequirementPolicy.Instance;
+
+    // 2026-08-12 — la decisión de prenda vive en un agregado aparte (no cuelga de ProcedureInstance),
+    // y el override del OT la necesita para no exigir un documento que la UI no ofrece cargar. Sin
+    // repo (tests, listado de trámites) la decisión queda null ⇒ el override calla, igual que antes.
+    private readonly IProcedureInstancePrendaRepository? _prendaRepo = prendaRepo;
 
     public async Task<(WizardStateDto? Result, string? Error)> HandleAsync(
         Guid id,
@@ -398,6 +404,11 @@ public sealed class GetWizardStateHandler(
     /// Compañía+OT: ¿el documento de prenda es obligatorio y el trámite no lo tiene adjunto?
     /// Aplica a cualquier modalidad (matrícula, traspaso, etc.). Usa <c>TransitOfficeId</c> de la
     /// instancia (mismo OT que la matriz documental) y el <c>CreatedAt</c> para el snapshot.
+    ///
+    /// <para>2026-08-12 — se consulta también la DECISIÓN vigente. Antes no, y el resultado era un
+    /// bloqueo insatisfacible: una matrícula inicial con <c>sin_prenda</c> quedaba atascada en
+    /// "Finalizar" pidiendo un adjunto que el paso de prenda no ofrece cargar para esa decisión. La
+    /// regla la impone <see cref="PrendaGate.EvaluateOtOverride"/>; aquí solo se le aporta el dato.</para>
     /// </summary>
     private async Task<bool> PrendaDocumentoOtBlockeaAsync(ProcedureInstance instance, CancellationToken ct)
     {
@@ -411,8 +422,14 @@ public sealed class GetWizardStateHandler(
         if (!otRequiere)
             return false;
 
+        // Solo se paga la lectura del agregado de prenda cuando el override está activo: sin él la
+        // decisión da igual y el gate no bloquea de todos modos.
+        var prenda = _prendaRepo is null
+            ? null
+            : await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
+
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
-        return PrendaGate.EvaluateOtOverride(otRequiere, docTipos) is not null;
+        return PrendaGate.EvaluateOtOverride(otRequiere, prenda?.Decision, docTipos) is not null;
     }
 
     /// <summary>
@@ -792,9 +809,11 @@ public sealed class GetWizardStateHandler(
         if (!identidadAprobada)
             blockers.Add(TramiteEstadoErrores.IdentidadNoAprobada);
         // CF-06 (HU #10881) — override del OT: exige el documento de prenda con independencia del
-        // semáforo de gravámenes/decisión.
+        // semáforo de gravámenes (no de la decisión: ver PrendaGate.EvaluateOtOverride). Código
+        // PROPIO para que el banner pueda decir que el origen es una regla del organismo y no la
+        // decisión del gestor — mismo código que emite el gate de preparación por este camino.
         if (prendaDocumentoOtRequerido)
-            blockers.Add(TramiteEstadoErrores.PrendaDocumentoRequerido);
+            blockers.Add(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
         return blockers;
     }
 

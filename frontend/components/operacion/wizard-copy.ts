@@ -47,6 +47,11 @@ const REASON_COPY: Record<string, string> = {
     'El vehículo tiene gravámenes: registra una decisión de prenda para continuar',
   prenda_documento_requerido:
     'La decisión de prenda seleccionada requiere adjuntar su documento de soporte',
+  // CF-06 (HU #10881) — código distinto del anterior a propósito: este bloqueo NO nace de la
+  // decisión del gestor sino de una regla del organismo, y decir "la decisión seleccionada
+  // requiere…" a quien eligió "sin prenda" describe una causa que no es la suya.
+  prenda_documento_requerido_ot:
+    'El organismo de tránsito exige adjuntar el documento de prenda para este trámite',
   // R19 (HU #10604/#10605/#10697) — RNMC ya NO bloquea: la medida correctiva es informativa.
   rnmc_medida_pendiente:
     'Medida correctiva RNMC registrada (informativa, no bloquea el envío)',
@@ -72,6 +77,9 @@ const BLOCKER_COPY: Record<string, string> = {
     'El vehículo tiene gravámenes: registra una decisión de prenda antes de preparar o radicar el trámite',
   prenda_documento_requerido:
     'La decisión de prenda seleccionada requiere adjuntar su documento de soporte',
+  // CF-06 (HU #10881) — ver la nota del mapa de razones: el origen es el organismo, no la decisión.
+  prenda_documento_requerido_ot:
+    'El organismo de tránsito exige adjuntar el documento de prenda para este trámite',
   // R19 (HU #10697) — RNMC ya NO bloquea el envío al OT; no hay blocker de medida correctiva.
 };
 

@@ -38,9 +38,14 @@ public sealed class TramiteLifecycleServiceTests
             .IsOperableAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(true);
         _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
+        // 2026-08-12 — el override del OT ya no exige documento con CUALQUIER decisión, solo con las
+        // que lo piden (solicitar/registrar/levantar), así que estos tests necesitan una decisión
+        // vigente para ejercitarlo. Por defecto `registrar`; los casos que prueban lo contrario
+        // construyen su propio servicio con otra decisión.
         _sut = new TramiteLifecycleService(
             _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
-            prendaDocumentRequirementPolicy: _prendaPolicy);
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(PrendaDecision.Registrar));
     }
 
     private ProcedureInstance Wire(string status, bool conGates = false)
@@ -99,6 +104,17 @@ public sealed class TramiteLifecycleServiceTests
             CreatedAt = DateTimeOffset.UtcNow,
         });
         return i;
+    }
+
+    /// <summary>Repo de prenda que siempre devuelve la misma decisión vigente (o ninguna si es null).</summary>
+    private static IProcedureInstancePrendaRepository StubPrendaRepo(string? decision)
+    {
+        var repo = Substitute.For<IProcedureInstancePrendaRepository>();
+        repo.GetVigenteAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(decision is null
+                ? null
+                : new ProcedureInstancePrenda { Decision = decision, Estado = PrendaEstado.Vigente });
+        return repo;
     }
 
     private Task<TramiteTransitionOutcome> Transition(
@@ -673,9 +689,38 @@ public sealed class TramiteLifecycleServiceTests
         var outcome = await Transition(i, TramiteEstado.Preparado);
 
         outcome.Success.Should().BeFalse();
-        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDocumentoRequerido);
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
         i.Status.Should().Be(TramiteEstado.Borrador);
         _recorder.Records.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// EL CASO REPORTADO (2026-08-12) en el gate de preparación, hermano del que cubre
+    /// <c>WizardStateHandlerTests</c>: con <c>sin_prenda</c> u <c>omitir</c> no hay documento que
+    /// adjuntar —el paso de prenda ni siquiera lo ofrece—, así que el override del OT no puede
+    /// exigirlo. Antes bloqueaba, y el trámite se quedaba sin salida.
+    /// </summary>
+    [Theory]
+    [InlineData(PrendaDecision.SinPrenda)]
+    [InlineData(PrendaDecision.Omitir)]
+    public async Task OverrideOtActivo_ConDecisionSinSoporte_NoBloquea(string decision)
+    {
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(decision));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.ErrorCode.Should().NotBe(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+        outcome.ErrorCode.Should().NotBe(TramiteEstadoErrores.PrendaDocumentoRequerido);
     }
 
     [Fact]
