@@ -489,6 +489,39 @@ describe('ActorsForm — cards RUNT enriquecidas', () => {
     expect(screen.getByDisplayValue('JUAN CARLOS PEREZ GOMEZ')).toBeInTheDocument();
   });
 
+  // El backend entrega el nombre desglosado: firstName es solo el PRIMER nombre. La tarjeta
+  // muestra los de pila juntos; si se pintara solo firstName, "JOSE GABRIEL JAIME" saldría "JOSE".
+  it('junta primer y segundo nombre en la fila Nombres', async () => {
+    const user = userEvent.setup();
+    mocks.runtPersonLookup.mockResolvedValue({
+      found: true,
+      fullName: 'JOSE GABRIEL JAIME ACOSTA MADRID',
+      firstName: 'JOSE',
+      secondName: 'GABRIEL JAIME',
+      lastName: 'ACOSTA MADRID',
+      firstLastName: 'ACOSTA',
+      secondLastName: 'MADRID',
+      documentType: 'CC',
+      documentNumber: '71600391',
+      licenseStatus: 'ACTIVO',
+      source: 'RUNT',
+      mode: 'real',
+      citizenStatus: 'ACTIVA',
+      hasPendingFines: false,
+      hasActiveLicense: true,
+      licenseCategories: 'C1,B1',
+    });
+
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await user.type(await screen.findByLabelText('Número de documento'), '71600391');
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+
+    expect(await screen.findByText('Persona encontrada en RUNT')).toBeInTheDocument();
+    expect(screen.getByText('JOSE GABRIEL JAIME')).toBeInTheDocument();
+    expect(screen.getByText('ACOSTA MADRID')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('JOSE GABRIEL JAIME ACOSTA MADRID')).toBeInTheDocument();
+  });
+
   it('muestra alerta roja cuando hasPendingFines=true', async () => {
     const user = userEvent.setup();
     mocks.runtPersonLookup.mockResolvedValue({

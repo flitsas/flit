@@ -476,8 +476,14 @@ export interface RuntPersonLookupInput {
 export interface RuntPersonLookupResult {
   found: boolean;
   fullName: string | null;
+  // El nombre llega desglosado: `firstName` es el PRIMER nombre (no todos los de pila) y
+  // `lastName` conserva los dos apellidos juntos. El RUNT enmascara sus campos de display, así
+  // que el backend resuelve la separación y el front no debe volver a partir `fullName`.
   firstName: string | null;
   lastName: string | null;
+  secondName?: string | null;
+  firstLastName?: string | null;
+  secondLastName?: string | null;
   documentType: string;
   documentNumber: string;
   licenseStatus: string | null;    // driverStatus del conductor
