@@ -33,7 +33,7 @@ import { TransitOfficeSearchPicker } from './TransitOfficeSearchPicker';
 import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
-import { PrendaForm } from './PrendaForm';
+import { PrendaForm, traspasoDecisions } from './PrendaForm';
 import { SubsanacionPanel } from './SubsanacionPanel';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
@@ -2696,7 +2696,14 @@ function ConsultaStep({
                     empresaVinculadoraRazonSocial ? '' : 'opacity-60'
                   }`}
                 >
-                  {empresaVinculadoraRazonSocial ?? 'La trae el RUES'}
+                  {/* Tres estados, no dos: `null` = aún no se ha consultado; cadena vacía = el RUES
+                      respondió `found` SIN razón social (lo guarda así la consulta de arriba), y ahí
+                      "la trae el RUES" sería mentira además de dejar el recuadro colapsado a puro
+                      padding. Un `??` solo cubre el primero. */}
+                  {empresaVinculadoraRazonSocial === null
+                    ? 'La trae el RUES'
+                    : empresaVinculadoraRazonSocial ||
+                      'El RUES no reportó razón social para este NIT'}
                 </output>
                 {/* De dónde salió el dato, con el mismo criterio honesto del actor jurídico: si vino
                     del directorio NO se consultó el RUES, y el gestor tiene derecho a saberlo. */}
@@ -3005,11 +3012,15 @@ function StepBody({
           />
           {/* R10 (HU #10598) — prenda como gate del traspaso: la decisión se registra en el paso
               comercial. Con gravámenes en warn, el backend bloquea la preparación/radicación sin
-              decisión vigente (o sin su documento). "Omitir" es la vía "asumo el riesgo". */}
+              decisión vigente (o sin su documento). "Omitir" es la vía "asumo el riesgo", y por eso
+              desaparece cuando el organismo exige el certificado (CF-06, HU #10881): ahí el riesgo
+              no es del gestor sino una regla del OT, y ofrecerla llevaba a guardar una decisión que
+              el backend luego rechaza. El PUT de prenda aplica la misma regla, esta lista solo evita
+              que el gestor llegue a intentarlo. */}
           <PrendaForm
             ref={prendaFormRef}
             instanceId={instanceId}
-            decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+            decisions={traspasoDecisions(prendaDocumentRequired)}
             onSaved={onRefresh}
             embeddedInWizard
             modalidad="traspaso"

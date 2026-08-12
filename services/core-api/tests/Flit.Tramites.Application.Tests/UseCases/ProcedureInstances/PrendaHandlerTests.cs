@@ -61,6 +61,76 @@ public sealed class PrendaHandlerTests
                 CreatedAt = DateTimeOffset.UtcNow,
             });
 
+    // ── CF-06 (HU #10881) — "omitir" contra un OT que exige el certificado ──────────────────────
+
+    private static IPrendaDocumentRequirementPolicy PolicyQueExige(bool required)
+    {
+        var policy = Substitute.For<IPrendaDocumentRequirementPolicy>();
+        policy.IsRequiredAsync(
+                Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(required);
+        return policy;
+    }
+
+    /// <summary>
+    /// El agujero que dejaba la regla del organismo evadible: con el override activo, "omitir"
+    /// satisfacía a la vez el gate de gravámenes y el del OT, así que el gestor radicaba sin el
+    /// certificado eligiendo "asumo el riesgo". Se corta AL ELEGIR, no al radicar.
+    /// </summary>
+    [Fact]
+    public async Task Registrar_omitir_con_ot_que_exige_certificado_se_rechaza()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        InstanceExists(id, tenantId);
+        var registrar = new RegistrarPrendaHandler(_instances, _prendas, PolicyQueExige(true));
+
+        var (result, error) = await registrar.HandleAsync(
+            id, tenantId, new RegistrarPrendaInput(PrendaDecision.Omitir), null, ct);
+
+        error.Should().Be(RegistrarPrendaHandler.OmitirNoAdmitidoError);
+        result.Should().BeNull();
+        _prendas.Rows.Should().BeEmpty("una decisión rechazada no puede quedar persistida");
+    }
+
+    /// <summary>Con el opt-out del OT vigente, "asumo el riesgo" sigue siendo una elección legítima.</summary>
+    [Fact]
+    public async Task Registrar_omitir_con_certificado_opcional_se_acepta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        InstanceExists(id, tenantId);
+        var registrar = new RegistrarPrendaHandler(_instances, _prendas, PolicyQueExige(false));
+
+        var (result, error) = await registrar.HandleAsync(
+            id, tenantId, new RegistrarPrendaInput(PrendaDecision.Omitir), null, ct);
+
+        error.Should().BeNull();
+        result!.Decision.Should().Be(PrendaDecision.Omitir);
+    }
+
+    /// <summary>
+    /// La regla es de "omitir", no del override: las decisiones que gestionan la prenda —y
+    /// <c>sin_prenda</c>, que declara que no hay— se guardan igual con el certificado exigido.
+    /// </summary>
+    [Theory]
+    [InlineData(PrendaDecision.Registrar)]
+    [InlineData(PrendaDecision.Levantar)]
+    [InlineData(PrendaDecision.SinPrenda)]
+    public async Task Registrar_otras_decisiones_no_las_toca_el_override(string decision)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (id, tenantId) = (Guid.NewGuid(), Guid.NewGuid());
+        InstanceExists(id, tenantId);
+        var registrar = new RegistrarPrendaHandler(_instances, _prendas, PolicyQueExige(true));
+
+        var (result, error) = await registrar.HandleAsync(
+            id, tenantId, new RegistrarPrendaInput(decision), null, ct);
+
+        error.Should().BeNull();
+        result!.Decision.Should().Be(decision);
+    }
+
     [Fact]
     public async Task Registrar_decision_invalida_devuelve_error()
     {
