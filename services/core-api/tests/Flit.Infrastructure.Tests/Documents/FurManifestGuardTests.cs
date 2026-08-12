@@ -246,6 +246,20 @@ public sealed class FurManifestGuardTests
     // solo lo gastan los nombres que ni partidos caben. Fijado en `FurCasilla19FitTests` con la
     // fuente real (caso corto en 1 línea, mediano partido a cuerpo casi declarado, largo entero).
     //
+    // SEXTA TANDA (2026-08-12) — casilla 23 (`observations`) recalibrada: `w` 403,1 → 392 y cuerpo
+    // 7,2 → 6,5. El recuadro se estaba llenando hasta el filo. Medido con la fuente embebida, el caso
+    // reportado —"Cambio de color: ABANO BLANCO. Servicio: PÚBLICO. Empresa vinculadora: BANCOLOMBIA
+    // S.A.S, NIT 890903938."— rendía una primera línea de 396,1 pt contra un ancho declarado de
+    // 403,1: el auto-encaje la daba por buena (cabía, según el manifiesto) y no encogía nada, pero al
+    // imprimir el texto tocaba la línea vertical del recuadro. El problema no era el fitter sino que
+    // el campo no declaraba NINGÚN margen respecto al borde dibujado; bajar solo el cuerpo lo habría
+    // disimulado para este texto y dejado el filo intacto para el siguiente. Con 392 hay ~11 pt de
+    // aire y con 6,5 el caso real entra holgado (el alto de 33 pt admite 4 renglones a ese cuerpo, y
+    // se usan 2). 6,5 es además el cuerpo de los manifiestos de observaciones de los otros formatos,
+    // así que la casilla queda alineada con ellos. Fijado en `FurCasilla23FitTests` con la fuente
+    // real: ninguna línea alcanza el borde, el texto sale entero y el margen no se puede volver a
+    // perder sin que el test lo diga.
+    //
     // Regenerar SOLO de forma deliberada vía EmitBaseline tras recalibrar el manifest.
     private const string Baseline = """
         traffic_secretary_name=Text:525,64,175,11.9,6.5,Left,False,null
@@ -330,7 +344,7 @@ public sealed class FurManifestGuardTests
         vehicle_buyer_city=Text:215.9,508.7,36.8,14.1,7.7,Left,False,null
         vehicle_buyer_phone=Text:314.8,509.3,44.9,14.1,7.7,Left,False,null
         vehicle_buyer_signature=Multiline:33.2,529.7,341.6,35.3,8,Left,False,null
-        observations=Multiline:379.9,472.6,403.1,33,7.2,Left,True,null
+        observations=Multiline:379.9,472.6,392,33,6.5,Left,True,null
         """;
 
     // Línea base congelada de la geometría del manifest MAQUINARIA (version 2026-07-24-maquinaria-v2-traspaso-calib,

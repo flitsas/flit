@@ -820,9 +820,9 @@
       "type": "multiline",
       "x": 379.9,
       "y": 472.6,
-      "w": 403.1,
+      "w": 392.0,
       "h": 33.0,
-      "fontSize": 7.2,
+      "fontSize": 6.5,
       "bold": true,
       "align": "left",
       "autoFit": true

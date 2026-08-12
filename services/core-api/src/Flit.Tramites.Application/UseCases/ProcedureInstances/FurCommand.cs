@@ -677,13 +677,22 @@ public sealed class GenerarFurHandler(
             //   2. HU #10987 — las observaciones que escribe el gestor (fur_observations).
             //   3. A4/B4 (HU #10673, ADR-0029) — el texto automático de las transformaciones de
             //      color/combustible declaradas (diff snapshot RUNT vs efectivo).
+            //   4. El tipo de servicio con la empresa vinculadora que lo respalda, por el mismo
+            //      canal automático que las transformaciones (solo si hay vinculadora).
             Observaciones: FurPrendaObservation.Join(
                 FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento),
-                FurTransformationObservations.Compose(
-                    Get(fv, "fur_observations"),
-                    Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
-                    Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel"),
-                    Get(fv, "vehicle_body_type_runt"), Get(fv, "vehicle_body_type"))),
+                FurPrendaObservation.Join(
+                    FurTransformationObservations.Compose(
+                        Get(fv, "fur_observations"),
+                        Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
+                        Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel"),
+                        Get(fv, "vehicle_body_type_runt"), Get(fv, "vehicle_body_type")),
+                    // `vehicle_service` guarda el CÓDIGO elegido en matrícula inicial (y el texto
+                    // libre del RUNT en traspaso, que aquí no llega: el bloque exige vinculadora).
+                    FurServicioVinculadoraObservation.Compose(
+                        Get(fv, "vehicle_service"),
+                        Get(fv, "empresa_vinculadora_razon_social"),
+                        Get(fv, "empresa_vinculadora_nit")))),
             FirmaImagenes: firmaImagenes,
             FirmaBaulMetadatos: firmaBaulMetadatos,
             IdentidadValidada: identidadValidada,

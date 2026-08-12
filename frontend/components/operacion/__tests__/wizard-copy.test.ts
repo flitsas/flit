@@ -1,6 +1,35 @@
 // HU #10598 (R10) — copy del gate de prenda. HU #10697 (R19) — RNMC informativo (ya no bloquea).
 import { describe, expect, it } from 'vitest';
-import { blockerCopy, reasonCopy } from '../wizard-copy';
+import { blockerCopy, identidadAutomaticaCopy, reasonCopy } from '../wizard-copy';
+
+// La cadena de identidad automática son cuatro llamadas; el mensaje tiene que decir cuál falló.
+describe('identidadAutomaticaCopy', () => {
+  it('un 409 no es un fallo: hay envío en curso y no se manda otro', () => {
+    const { message, tone } = identidadAutomaticaCopy('iniciar', 409);
+    expect(tone).toBe('success');
+    expect(message).toMatch(/ya tiene una validación de identidad en curso/i);
+  });
+
+  it('400 al iniciar señala los datos que faltan del actor', () => {
+    expect(identidadAutomaticaCopy('iniciar', 400).message).toMatch(/correo/i);
+  });
+
+  it.each([502, 503])('%i al iniciar señala al proveedor, no al gestor', (status) => {
+    expect(identidadAutomaticaCopy('iniciar', status).message).toMatch(/proveedor/i);
+  });
+
+  it('resolver el proveedor y enviar son fallos distintos', () => {
+    expect(identidadAutomaticaCopy('proveedor').message).not.toBe(
+      identidadAutomaticaCopy('iniciar').message,
+    );
+  });
+
+  it('sin señal útil conserva el mensaje de siempre', () => {
+    expect(identidadAutomaticaCopy('asegurar').message).toBe(
+      'No se pudo iniciar automáticamente la validación de identidad.',
+    );
+  });
+});
 
 describe('wizard-copy — gate de prenda (HU #10598)', () => {
   it('traduce prenda_decision_requerida como razón de paso', () => {

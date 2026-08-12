@@ -34,13 +34,14 @@ import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
 import { PrendaForm, traspasoDecisions } from './PrendaForm';
+import { furObservationsPreview } from './fur-auto-observations';
 import { SubsanacionPanel } from './SubsanacionPanel';
 import { AvisosCorreoPanel } from './AvisosCorreoPanel';
 import { EstadoTimelinePanel } from './EstadoTimeline';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
-import { blockerCopy } from './wizard-copy';
+import { blockerCopy, identidadAutomaticaCopy } from './wizard-copy';
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
 import { VehicleTransformationsCard } from './VehicleTransformationsCard';
@@ -988,6 +989,12 @@ export function TramiteWizard(props: Props) {
               : [];
       if (partesIdentidad.length > 0 && instanceId) {
         for (const parteIdentidad of partesIdentidad) {
+          // Qué se estaba haciendo cuando falló. El catch de abajo cubre CUATRO llamadas y hasta
+          // ahora las aplastaba todas en un mismo mensaje sin código de estado: con el toast delante
+          // era imposible saber si el correo de Kyverum no salió porque el actor no tiene email
+          // (400), porque esa persona ya tiene un envío en vuelo (409, que es una decisión
+          // deliberada y no un fallo) o porque el proveedor rechazó (502/503).
+          let etapa: 'asegurar' | 'proveedor' | 'iniciar' | 'simular' = 'asegurar';
           try {
             const ensured = await tramitesClient.ensureIdentity(instanceId, parteIdentidad);
             // HU #10646 — actor jurídico (NIT) cubierto por la firma del baúl: NO se lanza biométrica.
@@ -1002,10 +1009,13 @@ export function TramiteWizard(props: Props) {
               // se limpia la marca para no arrastrar el estado del baúl de un guardado anterior.
               setVaultCoveredPartes((prev) => prev.filter((p) => p !== parteIdentidad));
               if (ensured.outcome === 'requiere_validacion') {
+                etapa = 'proveedor';
                 const { provider } = await tramitesClient.getBiometricState(instanceId);
                 if (provider === 'kyverum') {
+                  etapa = 'iniciar';
                   await tramitesClient.iniciarBiometric(instanceId, { parte: parteIdentidad });
                 } else {
+                  etapa = 'simular';
                   await tramitesClient.simulateBiometric(instanceId, { parte: parteIdentidad });
                 }
               }
@@ -1014,14 +1024,20 @@ export function TramiteWizard(props: Props) {
             // No se traga en silencio (HU #10350): asegurar/iniciar la identidad falló. No bloquea el
             // avance —el gestor puede iniciarla manualmente en el paso de Identidad— pero SÍ se avisa para
             // que no continúe creyendo que la identidad quedó encaminada, y se deja traza para observabilidad.
-            console.warn('[tramite-wizard] ensureIdentity falló', {
+            const status = (ensureErr as { status?: number } | null)?.status;
+            console.warn('[tramite-wizard] identidad automática falló', {
               instanceId,
               parte: parteIdentidad,
+              etapa,
+              status,
               error: ensureErr,
             });
+            const { message, tone } = identidadAutomaticaCopy(etapa, status);
             show(
-              'No se pudo iniciar automáticamente la validación de identidad. Continúa y, si es necesario, iníciala en el paso de Identidad.',
-              'error',
+              tone === 'error'
+                ? `${message} Continúa y, si es necesario, iníciala en el paso de Identidad.`
+                : message,
+              tone,
             );
           }
         }
@@ -1625,6 +1641,13 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
   const readOnly = useWizardReadOnly();
   const [observaciones, setObservaciones] = useState('');
   const [saving, setSaving] = useState(false);
+  // Los field_values con los que se compone el texto automático (transformaciones declaradas, tipo
+  // de servicio + vinculadora). Se guardan crudos, no ya compuestos, porque la vista previa se
+  // recalcula en cada tecla junto con lo que el gestor escribe.
+  const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
+  // La vista previa se deriva del estado en cada render: así lo que se escribe aparece abajo al
+  // instante, sin esperar al blur que persiste el campo.
+  const preview = furObservationsPreview(observaciones, fieldValues);
 
   useEffect(() => {
     if (!instanceId) return;
@@ -1635,6 +1658,7 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
         if (active) {
           const val = detail?.fieldValues?.find((f) => f.fieldKey === 'fur_observations')?.valueText ?? '';
           setObservaciones(val);
+          setFieldValues(detail?.fieldValues ?? []);
         }
       })
       .catch(() => {});
@@ -1681,6 +1705,27 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
         <p className="text-[10px] opacity-50" role="status" aria-live="polite">
           Guardando…
         </p>
+      )}
+      {/* Espejo de solo lectura del recuadro del FUR: lo escrito arriba —en vivo, sin esperar al
+          guardado— y detrás lo que el backend añade solo, en el mismo orden en que él los une. El
+          texto automático NO se precarga dentro del textarea a propósito: el backend lo anexa al
+          generar el FUR, así que saldría duplicado, y el gestor podría borrar sin querer un dato que
+          el formulario necesita. */}
+      {(preview.manual || preview.auto.length > 0) && (
+        <div className="rounded-xl bg-[#F4F6FA] px-3 py-2 dark:bg-[#131A22]">
+          <p className="text-[10px] font-bold uppercase opacity-55">Así quedarán en el FUR</p>
+          <div className="mt-1 space-y-0.5 text-[11px] leading-relaxed">
+            {preview.manual && (
+              <p className="whitespace-pre-line break-words">{preview.manual}</p>
+            )}
+            {/* Atenuadas: son las que el gestor no escribió y no puede editar aquí. */}
+            {preview.auto.map((segment) => (
+              <p key={segment} className="opacity-70">
+                {segment}
+              </p>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -2686,6 +2731,13 @@ function ConsultaStep({
               {/* Fila completa: las razones sociales del RUES llegan largas (la de Bancolombia son
                   79 caracteres, con su cláusula de denominación alterna) y a media rejilla no se
                   leen. */}
+              {/* El campo NO existe hasta que se consulta. Un recuadro vacío con "la trae el RUES"
+                  ocupa sitio para no decir nada y se lee como un dato pendiente de llenar, cuando en
+                  realidad no hay nada que el gestor pueda hacer ahí: aparece solo, con el nombre
+                  dentro, en cuanto el directorio o el RUES responden. `null` es exactamente eso —
+                  "todavía no se ha consultado" — y vuelve a null al cambiar el NIT, así que el campo
+                  también desaparece si el gestor corrige el número. */}
+              {empresaVinculadoraRazonSocial !== null && (
               <div className="sm:col-span-2">
                 <label
                   htmlFor="tramite-empresa-vinculadora-razon-social"
@@ -2705,14 +2757,11 @@ function ConsultaStep({
                     empresaVinculadoraRazonSocial ? '' : 'opacity-60'
                   }`}
                 >
-                  {/* Tres estados, no dos: `null` = aún no se ha consultado; cadena vacía = el RUES
-                      respondió `found` SIN razón social (lo guarda así la consulta de arriba), y ahí
-                      "la trae el RUES" sería mentira además de dejar el recuadro colapsado a puro
-                      padding. Un `??` solo cubre el primero. */}
-                  {empresaVinculadoraRazonSocial === null
-                    ? 'La trae el RUES'
-                    : empresaVinculadoraRazonSocial ||
-                      'El RUES no reportó razón social para este NIT'}
+                  {/* Aquí ya se consultó (el `null` no llega: el campo entero no se pinta). Falta
+                      distinguir el otro vacío, que sí es un resultado: el RUES respondió `found` SIN
+                      razón social, y la consulta lo guarda como cadena vacía. Sin este `||` el
+                      recuadro aparecería colapsado a puro padding justo cuando hay algo que explicar. */}
+                  {empresaVinculadoraRazonSocial || 'El RUES no reportó razón social para este NIT'}
                 </output>
                 {/* De dónde salió el dato, con el mismo criterio honesto del actor jurídico: si vino
                     del directorio NO se consultó el RUES, y el gestor tiene derecho a saberlo. */}
@@ -2729,6 +2778,7 @@ function ConsultaStep({
                   </p>
                 )}
               </div>
+              )}
             </div>
           )}
 

@@ -313,6 +313,20 @@ describe('Tipo de servicio — paso 1 (solo matrícula inicial)', () => {
   });
 
   /**
+   * El recuadro de razón social NO existe hasta que se consulta: vacío no dice nada y se lee como un
+   * campo pendiente de llenar, cuando no hay nada que el gestor pueda hacer ahí.
+   */
+  it('la razón social no se muestra antes de consultar', async () => {
+    const user = userEvent.setup();
+    renderNuevo();
+
+    await consultarVehiculo(user);
+    await user.selectOptions(screen.getByLabelText('Tipo de servicio'), 'PUBLICO');
+
+    expect(screen.queryByLabelText('Razón social')).not.toBeInTheDocument();
+  });
+
+  /**
    * El RUES puede responder `found` SIN razón social, y la consulta lo guarda como cadena vacía.
    * El placeholder se elegía con `??`, que no cubre ese caso: el `output` quedaba vacío y el
    * recuadro colapsaba a puro padding, sin decir por qué. Ahora los tres estados se distinguen:
