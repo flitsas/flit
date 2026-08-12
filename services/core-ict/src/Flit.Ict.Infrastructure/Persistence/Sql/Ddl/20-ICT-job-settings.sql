@@ -28,10 +28,17 @@ CREATE TABLE IF NOT EXISTS ict.job_settings (
     send_batch_size           integer     NOT NULL DEFAULT 50,
     webhook_poll_seconds      integer     NOT NULL DEFAULT 10,
     webhook_batch_size        integer     NOT NULL DEFAULT 50,
+    business_batch_size       integer     NOT NULL DEFAULT 500,
+    external_batch_size       integer     NOT NULL DEFAULT 500,
     updated_at                timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT pk_ict_job_settings PRIMARY KEY (id),
     CONSTRAINT ck_ict_job_settings_singleton CHECK (id = 1)
 );
+
+-- Idempotente para BD que YA tenían la tabla sin esta columna: tamaño de lote del SP de validación de
+-- negocio (filas por transacción/COMMIT del drenado batcheado, ver 05-ICT-sp-business.sql). Default 500.
+ALTER TABLE ict.job_settings ADD COLUMN IF NOT EXISTS business_batch_size integer NOT NULL DEFAULT 500;
+ALTER TABLE ict.job_settings ADD COLUMN IF NOT EXISTS external_batch_size integer NOT NULL DEFAULT 500;
 
 COMMENT ON TABLE ict.job_settings
     IS '@config Cadencia/concurrencia/tamaño de lote de los jobs ICT (fila única id=1). Editable en caliente; la lee IctJobSettingsProvider.';

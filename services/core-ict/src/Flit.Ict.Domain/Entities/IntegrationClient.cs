@@ -25,6 +25,13 @@ public sealed class IntegrationClient : AuditableEntity
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>
+    /// Modo prueba (kill-switch por-tenant): si un cliente de la compañía lo tiene en <c>true</c>, el SP de
+    /// validación de negocio fuerza CON NOVEDADES todas sus filas y NO consulta fuentes externas de pago.
+    /// Para pruebas de carga sin cobrar consultas; aislado, no afecta a compañías reales.
+    /// </summary>
+    public bool TestMode { get; set; }
+
     public short FailedLoginAttempts { get; set; }
 
     public DateTime? LockedUntil { get; set; }

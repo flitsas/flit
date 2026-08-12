@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS ict.integration_clients (
     must_rotate            boolean NOT NULL DEFAULT false,
     scopes                 jsonb NOT NULL DEFAULT '["ict.transactions.write","ict.status.read"]'::jsonb,
     is_active              boolean NOT NULL DEFAULT true,
+    test_mode              boolean NOT NULL DEFAULT false,
     failed_login_attempts  smallint NOT NULL DEFAULT 0,
     locked_until           timestamptz,
     last_login_at          timestamptz,
@@ -69,6 +70,10 @@ COMMENT ON COLUMN ict.integration_clients.password_hash IS '@pii:high';
 CREATE OR REPLACE TRIGGER tr_integration_clients_row_version
     BEFORE UPDATE ON ict.integration_clients
     FOR EACH ROW EXECUTE FUNCTION ict.set_row_version();
+-- Kill-switch por-tenant para pruebas de carga: si un cliente ICT tiene test_mode=true, el SP de negocio
+-- fuerza CON NOVEDADES para TODAS las filas de esa compañía (no consulta fuentes externas de pago). Aislado
+-- (no afecta a compañías reales) y robusto (no depende del payload). Idempotente para BD existentes.
+ALTER TABLE ict.integration_clients ADD COLUMN IF NOT EXISTS test_mode boolean NOT NULL DEFAULT false;
 
 -- -----------------------------------------------------------------------------
 -- ict.procedure_type_mapping — transaction_type (1-16) -> ProcedureType code v2.
