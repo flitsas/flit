@@ -7,7 +7,7 @@ using Flit.Tramites.Application.Documents;
 var vendedor = new DocumentParte(
     "vendedor",
     "COMERCIALIZADORA DE VEHICULOS DEL NORTE S.A.S.",
-    "900123456-7",
+    "890903938",
     "contacto@comercializadora.com",
     "NIT",
     "6041112233",
@@ -51,6 +51,37 @@ var data = new FurDocumentData(
 var mandato = new MandatoPdfGenerator().GenerateMandato(
     new MandatoData(data, "generico", null, null, new MandatarioFirmante("CARLOS ANDRES RUIZ", "71234567")));
 File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "mandato.pdf"), mandato.Content);
+
+// Verificación visual del fix de negrita (mandato por segmentos, no por lista de palabras clave):
+// las tres variantes que mostró el usuario.
+
+// 1) Institucional — el mandatario es el propio organismo (Sabaneta, UT-SETSA por fallback literal).
+var mandatoInstitucional = new MandatoPdfGenerator().GenerateMandato(
+    new MandatoData(data, "sabaneta", null, null, null));
+File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "mandato-institucional.pdf"), mandatoInstitucional.Content);
+
+// 2) Mandatario persona — nombre y documento del mandatario en negrita (mismo escenario que mandato.pdf,
+// con nombre propio para que quede claro en el PDF cuál es cuál).
+var mandatoPersona = new MandatoPdfGenerator().GenerateMandato(
+    new MandatoData(data, "generico", null, null, new MandatarioFirmante("LUIS FERNANDO CASTRO OSPINA", "79795089")));
+File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "mandato-persona.pdf"), mandatoPersona.Content);
+
+// 3) Abierto — el mandatario va en líneas en blanco (Manual + sin firmante resuelto): los guiones no
+// deben romperse ni salir en negrita de forma rara.
+var mandatoAbierto = new MandatoPdfGenerator().GenerateMandato(
+    new MandatoData(data, "sabaneta", null, null, null, ModoFirmaMandatario: MandatarioFirmaModo.Manual));
+File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "mandato-abierto.pdf"), mandatoAbierto.Content);
+
+// 4) Plantilla personalizada del OT (editor con placeholders {{...}}) — mismo fix, por sustitución de
+// TOKEN conocido en vez de contenido.
+var cuerpoEditor =
+    "Yo, {{mandante_nombre}}, identificado con {{mandante_documento}}, otorgo mandato a {{mandatario_nombre}}, " +
+    "identificado con {{mandatario_documento}}, para el trámite de {{tramite}} del vehículo de placas " +
+    "{{placa}} ante {{organismo}} en {{ciudad}}, el {{fecha}}.";
+var mandatoEditor = new MandatoPdfGenerator().GenerateMandato(new MandatoData(
+    data, "generico", null, null, new MandatarioFirmante("LUIS FERNANDO CASTRO OSPINA", "79795089"),
+    CustomTemplateKind: "editor", CustomTemplateBody: cuerpoEditor));
+File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "mandato-editor.pdf"), mandatoEditor.Content);
 
 var virtual_ = new SolicitudVirtualPdfGenerator().GenerateSolicitudVirtual(data);
 File.WriteAllBytes(Path.Combine(AppContext.BaseDirectory, "virtual.pdf"), virtual_.Content);

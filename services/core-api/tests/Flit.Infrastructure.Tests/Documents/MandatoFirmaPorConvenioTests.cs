@@ -125,13 +125,13 @@ public sealed class MandatoFirmaPorConvenioTests
             .GetMethod("BuildParrafos", BindingFlags.NonPublic | BindingFlags.Static)!;
         var data = Mandato(MandatarioFirmaModo.Manual) with { Mandatario = null };
         var parte = data.Tramite.Partes[0];
-        var parrafos = (List<string>)build.Invoke(
+        var parrafos = (List<IReadOnlyList<MandatoPdfGenerator.ParrafoSegmento>>)build.Invoke(
             null,
             [
                 data, parte, false, MandatoVariante.Generico,
                 "TRASPASO", "PJS615", "ENVIGADO", "ENVIGADO", "5 de agosto de 2026",
             ])!;
-        var texto = string.Join("\n", parrafos);
+        var texto = string.Join("\n", parrafos.Select(p => string.Concat(p.Select(s => s.Texto))));
         texto.Should().Contain("Y de ___ identificado con la cédula de ciudadanía No ___");
         texto.Should().NotContain("Carlos Ruiz");
     }
@@ -147,13 +147,13 @@ public sealed class MandatoFirmaPorConvenioTests
                 MandatoTemplateResolver.Bello) with
             { Mandatario = null };
         var parte = data.Tramite.Partes[0];
-        var parrafos = (List<string>)build.Invoke(
+        var parrafos = (List<IReadOnlyList<MandatoPdfGenerator.ParrafoSegmento>>)build.Invoke(
             null,
             [
                 data, parte, false, MandatoVariante.Bello,
                 "MATRICULA", "QXU635", "BELLO", "Bello", "5 de agosto de 2026",
             ])!;
-        var texto = string.Join("\n", parrafos);
+        var texto = string.Join("\n", parrafos.Select(p => string.Concat(p.Select(s => s.Texto))));
         texto.Should().Contain("Y de la otra parte, ___ identificado con la cédula de ciudadanía No ___");
     }
 
