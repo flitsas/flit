@@ -192,6 +192,9 @@ public sealed class RuntPersonLookupHandler(
             FullName: found ? fullName : null,
             FirstName: found ? GetHydrated(fields, "person_first_name") : null,
             LastName: found ? GetHydrated(fields, "person_last_name") : null,
+            SecondName: found ? GetHydrated(fields, "person_second_name") : null,
+            FirstLastName: found ? GetHydrated(fields, "person_first_last_name") : null,
+            SecondLastName: found ? GetHydrated(fields, "person_second_last_name") : null,
             DocumentType: documentType,
             DocumentNumber: documentNumber,
             LicenseStatus: found ? GetHydrated(fields, "person_license_status") : null,
@@ -258,6 +261,13 @@ internal static partial class RuntPersonLookupLog
 /// person_full_name no vacío. Cuando Found=false, los campos de nombre van en null y el
 /// frontend cae al ingreso manual.
 /// </summary>
+/// <remarks>
+/// El nombre viene desglosado en cuatro componentes además de <see cref="FullName"/>:
+/// <see cref="FirstName"/> es el PRIMER nombre (no todos los de pila) y <see cref="LastName"/>
+/// conserva los dos apellidos juntos. Los proveedores ya no entregan el nombre en un solo campo
+/// confiable — el RUNT enmascara los de display — así que la separación la resuelve
+/// <see cref="DriverNameResolver"/> y no el consumidor.
+/// </remarks>
 public sealed record RuntPersonDto(
     bool Found,
     string? FullName,
@@ -273,4 +283,7 @@ public sealed record RuntPersonDto(
     string? NroPazYSalvo = null,
     bool HasActiveLicense = false,
     string? LicenseCategories = null,
-    IReadOnlyList<FineDetail>? Fines = null);
+    IReadOnlyList<FineDetail>? Fines = null,
+    string? SecondName = null,
+    string? FirstLastName = null,
+    string? SecondLastName = null);

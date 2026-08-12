@@ -1,8 +1,21 @@
 {
   "ok": true,
+  "identidad": {
+    "primerNombre": "DANIEL",
+    "segundoNombre": "",
+    "primerApellido": "AMADO",
+    "segundoApellido": "GARCIA",
+    "nombreCompleto": "DANIEL AMADO GARCIA"
+  },
+  "estadoIdentidad": "resolved",
   "persona": {
-    "nombres": "DANIEL ",
-    "apellidos": "AMADO GARCIA",
+    "nombres": "D****L",
+    "apellidos": "A****O G****A",
+    "primerNombre": "DANIEL",
+    "segundoNombre": "",
+    "primerApellido": "AMADO",
+    "segundoApellido": "GARCIA",
+    "nombreCompleto": "DANIEL AMADO GARCIA",
     "tipoDocumento": "C",
     "documento": "1193552679",
     "estadoPersona": "ACTIVA",

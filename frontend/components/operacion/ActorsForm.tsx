@@ -1509,7 +1509,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               <div>
                 <span className="opacity-60 font-normal">Nombres: </span>
                 <span className="font-semibold" style={{ color: '#162744' }}>
-                  {r.firstName ?? r.fullName ?? '—'}
+                  {/* firstName es solo el PRIMER nombre; los de pila se muestran juntos. */}
+                  {[r.firstName, r.secondName].filter(Boolean).join(' ') || r.fullName || '—'}
                 </span>
               </div>
               <div>

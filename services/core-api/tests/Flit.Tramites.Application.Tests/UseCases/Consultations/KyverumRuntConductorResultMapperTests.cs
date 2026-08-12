@@ -43,15 +43,78 @@ public sealed class KyverumRuntConductorResultMapperTests
         // Multas SI ⇒ no verde.
         result.Overall.Should().Be("yellow");
 
-        // nombres="DANIEL " + apellidos="AMADO GARCIA" → colapsa espacios.
+        // El nombre sale de `identidad`, no de persona.nombres/apellidos (que llegan enmascarados).
         Field(result, "person_full_name").Should().Be("DANIEL AMADO GARCIA");
         Field(result, "person_first_name").Should().Be("DANIEL");
+        Field(result, "person_first_last_name").Should().Be("AMADO");
+        Field(result, "person_second_last_name").Should().Be("GARCIA");
         Field(result, "person_last_name").Should().Be("AMADO GARCIA");
+        Field(result, "person_second_name").Should().BeNull();   // persona con un solo nombre
         Field(result, "person_license_status").Should().Be("ACTIVO");
         Field(result, "person_citizen_status").Should().Be("ACTIVA");
         Field(result, "person_has_pending_fines").Should().Be("true");
         Field(result, "person_has_active_license").Should().Be("true");
         Field(result, "person_license_categories").Should().Be("A2,C1,B1");
+    }
+
+    // El RUNT enmascara persona.nombres/apellidos. Si alguien vuelve a leerlos, el nombre del actor
+    // termina en basura ("SL CS GZ" tras el saneo del front), así que se blinda explícitamente.
+    [Fact]
+    public void PersonaConNombresEnmascarados_NingunCampoHidratadoTraeAsteriscos()
+    {
+        var result = KyverumRuntConductorResultMapper.Map(Load("persona-daniel-1193552679.json"));
+
+        result.HydratedFields.Should().NotContain(f => f.ValueText != null && f.ValueText.Contains('*'));
+    }
+
+    // Sin bloque `identidad` (respuestas que solo traen la persona), el nombre real sigue estando en
+    // los campos desglosados de `persona` — nunca en los enmascarados.
+    [Fact]
+    public void SinBloqueIdentidad_UsaLosDesglosadosDePersona()
+    {
+        var result = KyverumRuntConductorResultMapper.Map(new KyverumRuntPersonaResponse
+        {
+            Ok = true,
+            Persona = new KyverumRuntPersona
+            {
+                Nombres = "J****E G****L J****E",
+                Apellidos = "A****A M****D",
+                PrimerNombre = "JOSE",
+                SegundoNombre = "GABRIEL JAIME",
+                PrimerApellido = "ACOSTA",
+                SegundoApellido = "MADRID",
+                NombreCompleto = "JOSE GABRIEL JAIME ACOSTA MADRID",
+                EstadoPersona = "ACTIVA",
+                EstadoConductor = "ACTIVO",
+            },
+        });
+
+        Field(result, "person_full_name").Should().Be("JOSE GABRIEL JAIME ACOSTA MADRID");
+        Field(result, "person_first_name").Should().Be("JOSE");
+        Field(result, "person_second_name").Should().Be("GABRIEL JAIME");
+        Field(result, "person_first_last_name").Should().Be("ACOSTA");
+        Field(result, "person_second_last_name").Should().Be("MADRID");
+    }
+
+    // Solo quedan los campos enmascarados: no hay nombre utilizable, así que la persona se reporta
+    // como NO hallada y el wizard cae al ingreso manual, en vez de autopoblar asteriscos.
+    [Fact]
+    public void SoloCamposEnmascarados_SeReportaComoNoHallada()
+    {
+        var result = KyverumRuntConductorResultMapper.Map(new KyverumRuntPersonaResponse
+        {
+            Ok = true,
+            Persona = new KyverumRuntPersona
+            {
+                Nombres = "S****L",
+                Apellidos = "C****S G****Z",
+                EstadoPersona = "ACTIVA",
+                EstadoConductor = "ACTIVO",
+            },
+        });
+
+        Status(result, "conductor_identidad").Should().Be("unknown");
+        result.HydratedFields.Should().BeEmpty();
     }
 
     [Fact]
