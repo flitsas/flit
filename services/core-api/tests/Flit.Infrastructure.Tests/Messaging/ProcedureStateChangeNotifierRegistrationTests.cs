@@ -97,14 +97,12 @@ public sealed class ProcedureStateChangeNotifierRegistrationTests
 
     private static string LocateRepoRoot()
     {
+        // No anclar en CLAUDE.md: está gitignored y no existe en CI.
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "CLAUDE.md"))
-                && Directory.Exists(Path.Combine(dir.FullName, "services", "core-api")))
-            {
+            if (Directory.Exists(Path.Combine(dir.FullName, "services", "core-api", "src")))
                 return dir.FullName;
-            }
 
             dir = dir.Parent;
         }
