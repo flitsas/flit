@@ -100,8 +100,11 @@ internal sealed partial class TenantChannelEmailRouter(
 
         if (IsAccountEmail(message.TemplateKey))
         {
-            // AC3 — ignora el canal por completo.
-            return await flitTransport.SendAsync(message, cancellationToken).ConfigureAwait(false);
+            // AC3 — ignora el canal por completo: SIEMPRE sale por FlitSmtp, sin importar la
+            // política del tenant. El decorador de bitácora (HU #11363) necesita este dato para no
+            // asumir el canal del tenant sobre un envío que lo ignoró a propósito.
+            var accountResult = await flitTransport.SendAsync(message, cancellationToken).ConfigureAwait(false);
+            return accountResult with { Channel = TenantSettingsCodes.ChannelFlitSmtp };
         }
 
         var channel = await ResolveChannelAsync(message.TenantId, cancellationToken).ConfigureAwait(false);
@@ -147,15 +150,19 @@ internal sealed partial class TenantChannelEmailRouter(
         if (channel != NotificationChannel.TenantApi)
         {
             // AC2/AC6 — FlitSmtp explícito, o tenant sin política operativa (default).
-            return await flitTransport.SendAsync(message, cancellationToken).ConfigureAwait(false);
+            var flitResult = await flitTransport.SendAsync(message, cancellationToken).ConfigureAwait(false);
+            return flitResult with { Channel = TenantSettingsCodes.ChannelFlitSmtp };
         }
 
         if (rentingEmailApiSender is null)
         {
             // Caso heredado de la HU #11359 AC6 — canal solicitado pero NO habilitado por
-            // configuración en este ambiente. Nunca se cae a SMTP en silencio.
+            // configuración en este ambiente. Nunca se cae a SMTP en silencio. Se etiqueta con
+            // TenantApi: es el canal que se INTENTÓ (nunca cayó a FlitSmtp en silencio), no un
+            // envío que efectivamente haya salido por FlitSmtp.
             LogTenantApiChannelNotAvailable(logger, message.TenantId ?? Guid.Empty, message.TemplateKey);
-            return EmailSendResult.Failed(EmailSendOutcome.ConfigurationIncomplete);
+            return EmailSendResult.Failed(EmailSendOutcome.ConfigurationIncomplete)
+                with { Channel = TenantSettingsCodes.ChannelTenantApi };
         }
 
         var options = rentingOptions.Value;
@@ -169,9 +176,10 @@ internal sealed partial class TenantChannelEmailRouter(
         // suministra recipientExemption; el camino de producción (SendAsync(EmailMessage, ...)) lo
         // deja en null, así que el desvío de la HU #11364 sigue aplicando siempre para los 6 puntos
         // de envío reales.
-        return recipientExemption is not null
+        var tenantApiResult = recipientExemption is not null
             ? await rentingEmailApiSender.SendAsync(request, recipientExemption, cancellationToken).ConfigureAwait(false)
             : await rentingEmailApiSender.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        return tenantApiResult with { Channel = TenantSettingsCodes.ChannelTenantApi };
     }
 
     /// <summary>

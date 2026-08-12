@@ -85,6 +85,9 @@ public sealed class TenantChannelEmailRouterTests
         var result = await router.SendAsync(AnalyticsEmail(), Ct);
 
         result.Success.Should().BeTrue();
+        // Bug corregido — la bitácora (HU #11363) necesita el canal REALMENTE usado, no una
+        // constante fija: aquí el router lo etiqueta como TenantApi.
+        result.Channel.Should().Be(TenantSettingsCodes.ChannelTenantApi);
         await flitTransport.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
         await rentingSender.Received(1).SendAsync(
             Arg.Is<RentingSendEmailRequest>(r =>
@@ -143,6 +146,7 @@ public sealed class TenantChannelEmailRouterTests
         var result = await router.SendAsync(message, Ct);
 
         result.Success.Should().BeTrue();
+        result.Channel.Should().Be(TenantSettingsCodes.ChannelFlitSmtp);
         await flitTransport.Received(1).SendAsync(message, Ct);
         await rentingSender.DidNotReceive().SendAsync(Arg.Any<RentingSendEmailRequest>(), Arg.Any<CancellationToken>());
     }
@@ -167,6 +171,10 @@ public sealed class TenantChannelEmailRouterTests
         var result = await router.SendAsync(message, Ct);
 
         result.Success.Should().BeTrue();
+        // Bug corregido — pese a que el tenant tiene TenantApi configurado, AC3 hace que el correo
+        // de cuenta salga por FlitSmtp: el canal EFECTIVO (el que ve la bitácora) es flit_smtp, no
+        // el del tenant.
+        result.Channel.Should().Be(TenantSettingsCodes.ChannelFlitSmtp);
         await flitTransport.Received(1).SendAsync(message, Ct);
         await rentingSender.DidNotReceive().SendAsync(Arg.Any<RentingSendEmailRequest>(), Arg.Any<CancellationToken>());
         // El repositorio ni siquiera necesita consultarse para bypasear el canal.
@@ -229,6 +237,9 @@ public sealed class TenantChannelEmailRouterTests
 
         result.Success.Should().BeFalse();
         result.Outcome.Should().Be(EmailSendOutcome.ConfigurationIncomplete);
+        // El canal intentado fue TenantApi (nunca cayó a SMTP en silencio) — la bitácora debe
+        // reflejar eso, no flit_smtp.
+        result.Channel.Should().Be(TenantSettingsCodes.ChannelTenantApi);
         await flitTransport.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
     }
 

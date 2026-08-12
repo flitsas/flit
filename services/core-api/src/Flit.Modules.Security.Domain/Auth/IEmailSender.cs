@@ -82,6 +82,21 @@ public sealed record EmailSendResult(bool Success, EmailSendOutcome Outcome, str
     /// </summary>
     public bool RecipientDiverted { get; init; }
 
+    /// <summary>
+    /// HU #11362/#11363 — canal REALMENTE usado para este intento
+    /// (<c>Flit.Admin.Domain.Companies.Settings.TenantSettingsCodes.ChannelFlitSmtp</c> /
+    /// <c>ChannelTenantApi</c>), o <c>null</c> cuando quien construyó el resultado no participa del
+    /// enrutamiento por canal (los adaptadores de transporte — <c>SmtpEmailSender</c>,
+    /// <c>ConsoleEmailSender</c>, <c>RentingEmailApiSender</c> — no lo fijan; solo lo fija
+    /// <c>TenantChannelEmailRouter</c>, que es quien decide por cuál de los dos transportes salió el
+    /// mensaje). Propiedad no posicional, con default <c>null</c>, por la misma razón que
+    /// <see cref="RecipientDiverted"/>: ningún llamador existente cambia. La consume
+    /// <c>NotificationDeliveryLoggingEmailSender</c> (HU #11363) para dejar el canal EFECTIVO en
+    /// <c>admin.notification_delivery_logs.channel</c> — nunca una constante fija, porque desde la
+    /// HU #11362 el canal puede variar por tenant.
+    /// </summary>
+    public string? Channel { get; init; }
+
     /// <summary>Único resultado de éxito posible.</summary>
     public static readonly EmailSendResult Sent = new(true, EmailSendOutcome.Sent, "Correo enviado.");
 

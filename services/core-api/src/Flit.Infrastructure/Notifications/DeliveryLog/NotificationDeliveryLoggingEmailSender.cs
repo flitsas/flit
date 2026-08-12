@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Flit.Admin.Domain.Companies.Settings;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -38,9 +39,18 @@ namespace Flit.Infrastructure.Notifications.DeliveryLog;
 /// petición HTTP después de que el correo ya salió no debe impedir que quede la evidencia.
 /// </para>
 /// <para>
-/// <b>Canal:</b> hoy solo existe <see cref="ChannelName"/> ("flit_smtp") — el enrutamiento por
-/// canal (HU #11362) todavía no existe, así que este es el único canal que hay (backfill 66 ya
-/// normalizó toda fila existente a este mismo valor).
+/// <b>Canal:</b> el canal escrito en la bitácora es el REALMENTE usado por el envío, no una
+/// constante fija. Desde la HU #11362, <see cref="Flit.Infrastructure.Notifications.Routing.TenantChannelEmailRouter"/>
+/// se registra como el <paramref name="inner"/> de este decorador (ver
+/// <c>InfrastructureExtensions.AddSecurityInfrastructure</c>) y es quien decide, tenant por
+/// tenant, por cuál de los dos transportes sale cada envío — este decorador NO vuelve a resolver
+/// esa decisión consultando <c>tenant_settings</c> por su cuenta: sería una segunda fuente de
+/// verdad que puede divergir del canal que el router realmente usó (p. ej. AC3 del router hace que
+/// los correos de cuenta salgan por FlitSmtp aunque el tenant tenga configurado TenantApi). El
+/// canal efectivo llega ya resuelto en <see cref="EmailSendResult.Channel"/>; si viene <c>null</c>
+/// (un <paramref name="inner"/> que no participa del enrutamiento, p. ej. en un test que envuelve
+/// directamente <c>SmtpEmailSender</c>) se asume <see cref="TenantSettingsCodes.ChannelFlitSmtp"/>,
+/// el único transporte que existía antes de la HU #11362.
 /// </para>
 /// </remarks>
 internal sealed partial class NotificationDeliveryLoggingEmailSender(
@@ -48,8 +58,6 @@ internal sealed partial class NotificationDeliveryLoggingEmailSender(
     IServiceScopeFactory scopeFactory,
     ILogger<NotificationDeliveryLoggingEmailSender> logger) : IEmailSender
 {
-    private const string ChannelName = "flit_smtp";
-
     public async Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -77,11 +85,14 @@ internal sealed partial class NotificationDeliveryLoggingEmailSender(
             using var scope = scopeFactory.CreateScope();
             var writer = scope.ServiceProvider.GetRequiredService<INotificationDeliveryLogWriter>();
 
+            // Canal REALMENTE usado (ver comentario de clase) — nunca una constante fija.
+            var effectiveChannel = result.Channel ?? TenantSettingsCodes.ChannelFlitSmtp;
+
             await writer.WriteAsync(
                 new NotificationDeliveryLogEntry(
                     tenantId,
                     message.TemplateKey,
-                    ChannelName,
+                    effectiveChannel,
                     message.ToEmail,
                     result.Success,
                     result.Success ? null : result.Message,
@@ -96,7 +107,7 @@ internal sealed partial class NotificationDeliveryLoggingEmailSender(
         {
             // AC6 — el fallo se registra de verdad en la traza de aplicación; el resultado del
             // envío (ya calculado arriba) se devuelve intacto, sin importar qué pasó aquí.
-            LogWriteFailed(logger, ex, message.TemplateKey, ChannelName);
+            LogWriteFailed(logger, ex, message.TemplateKey, result.Channel ?? TenantSettingsCodes.ChannelFlitSmtp);
         }
 
         return result;
