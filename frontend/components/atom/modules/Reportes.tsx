@@ -33,7 +33,7 @@ const TAB_DEFS: ReadonlyArray<{ id: TabId; label: string; slug: string }> = [
   { id: "ot", label: "Organismo de Tránsito", slug: "reportes.ot.read" },
   { id: "uso", label: "Uso del aplicativo", slug: "reportes.uso.read" },
   { id: "productividad", label: "Productividad", slug: "reportes.productividad.read" },
-  { id: "consultas", label: "Consultas", slug: "reportes.consultas.read" },
+  { id: "consultas", label: "Consultas personalizadas", slug: "reportes.consultas.read" },
 ];
 
 /** Slug legado: hace visible al menos "Resumen general" (compatibilidad §3). */
