@@ -60,4 +60,24 @@ public sealed class PlateAssignmentEmailModelProjectorTests
         model.Ciudad.Should().BeEmpty();
         model.Placa.Should().Be("XYZ99");
     }
+
+    [Fact]
+    public void CodigoDivipola_UsaCiudadDelCompradorEnMetadata()
+    {
+        var instance = new ProcedureInstance { Plate = "XYZ99" };
+        var actors = new List<ProcedureInstanceActor>
+        {
+            new()
+            {
+                ActorType = "comprador",
+                FullName = "Comprador",
+                Metadata = """{"Ciudad":"Cali"}""",
+            },
+        };
+        var fields = new Dictionary<string, string?> { ["transit_office_city"] = "25286" };
+
+        var model = PlateAssignmentEmailModelProjector.Project(instance, actors, fields);
+
+        model.Ciudad.Should().Be("Cali");
+    }
 }

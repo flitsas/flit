@@ -19,10 +19,7 @@ public enum NotificationTrigger
     /// <summary>HU #10170 — <c>AdminResetPasswordHandler</c>.</summary>
     AdminResetPassword,
 
-    /// <summary>
-    /// Bienvenida tras registro (plantilla <c>security.welcome-registration</c>). Declarativo en
-    /// el catálogo del banco de pruebas; el handler productivo se conecta en una fase posterior.
-    /// </summary>
+    /// <summary>HU #11489 H2 — <c>ActivateAccountHandler</c> tras activación exitosa.</summary>
     WelcomeRegistration,
 
     /// <summary>Reportes 2.0 HU-D — <c>AnalyticsSchedulerProcessor</c> (informe programado).</summary>

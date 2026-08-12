@@ -1,4 +1,3 @@
-using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 
@@ -28,7 +27,7 @@ public static class TramiteCambioEstadoEmailProjector
         var comprador = FindActor(actors, "comprador");
         var vendedor = FindActor(actors, "vendedor");
 
-        var ciudad = TransitOfficeCity.Legible(Get(fieldValues, "transit_office_city")) ?? string.Empty;
+        var ciudad = TramiteEmailCityResolver.Resolve(fieldValues, comprador);
         var ot = Get(fieldValues, "transit_office_name") ?? string.Empty;
 
         return new TramiteCambioEstadoEmailModel(

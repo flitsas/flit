@@ -21,7 +21,7 @@ public static class PlateAssignmentEmailModelProjector
         ArgumentNullException.ThrowIfNull(fieldValues);
 
         var comprador = FindActor(actors, "comprador");
-        var ciudad = TransitOfficeCity.Legible(Get(fieldValues, "transit_office_city")) ?? string.Empty;
+        var ciudad = TramiteEmailCityResolver.Resolve(fieldValues, comprador);
         var secretaria = Get(fieldValues, "transit_office_name")?.Trim() ?? string.Empty;
         var estado = NormalizeEstado(instance.PlateFlowStatus);
 

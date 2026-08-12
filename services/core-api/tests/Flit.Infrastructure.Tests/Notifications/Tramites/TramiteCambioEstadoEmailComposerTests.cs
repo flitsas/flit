@@ -70,8 +70,10 @@ public class TramiteCambioEstadoEmailComposerTests
         html.Should().Contain("Detalles clave:");
         html.Should().Contain("renting-header-bg");
         html.Should().Contain("renting-footer-bg");
-        html.Should().Contain("bgcolor=\"#000000\"");
         html.Should().Contain("bgcolor=\"#ffffff\"");
+        html.Should().Contain("content=\"light\"");
+        html.Should().NotContain("bgcolor=\"#000000\"");
+        html.Should().NotContain("light dark");
         html.Should().Contain("color-scheme");
     }
 
@@ -103,6 +105,51 @@ public class TramiteCambioEstadoEmailComposerTests
         rechazadoRenting.Html.Should().Contain("RECHAZADO");
         rechazadoRenting.Html.Should().Contain("tramite-cambio-estado-renting-header.png");
         aprobadoFlit.Html.Should().NotBe(rechazadoRenting.Html);
+    }
+
+    [Fact]
+    public void ComposeFlit_MatriculaInicial_OmiteFilaVendedor()
+    {
+        var model = new TramiteCambioEstadoEmailModel(
+            VendedorNombre: string.Empty,
+            CompradorNombre: "Comprador SAS",
+            Placa: "MI001",
+            CiudadOt: "Medellín",
+            NombreOt: "OT Medellín",
+            EstadoActual: "APROBADO",
+            EsTraspaso: false);
+
+        var (_, html) = TramiteCambioEstadoEmailComposer.ComposeFlit(model, "https://cdn.example/email-assets");
+
+        html.Should().NotContain("<strong style=\"color:#2F6FED;\">Vendedor:</strong>");
+        html.Should().Contain("Comprador SAS");
+    }
+
+    [Fact]
+    public void ComposeRenting_MatriculaInicial_OmiteFilaVendedor()
+    {
+        var model = new TramiteCambioEstadoEmailModel(
+            VendedorNombre: string.Empty,
+            CompradorNombre: "Comprador SAS",
+            Placa: "MI001",
+            CiudadOt: "Medellín",
+            NombreOt: "OT Medellín",
+            EstadoActual: "APROBADO",
+            EsTraspaso: false);
+
+        var (_, html) = TramiteCambioEstadoEmailComposer.ComposeRenting(model, "https://cdn.example/email-assets");
+
+        html.Should().NotContain("<strong>Vendedor:</strong>");
+        html.Should().Contain("Comprador SAS");
+    }
+
+    [Fact]
+    public void ComposeFlit_SinCiudad_OmiteFragmento()
+    {
+        var model = TraspasoAprobado with { CiudadOt = string.Empty };
+        var (_, html) = TramiteCambioEstadoEmailComposer.ComposeFlit(model, "https://cdn.example/email-assets");
+
+        html.Should().NotContain("<strong style=\"color:#2F6FED;\">Ciudad:</strong>");
     }
 
     [Fact]
