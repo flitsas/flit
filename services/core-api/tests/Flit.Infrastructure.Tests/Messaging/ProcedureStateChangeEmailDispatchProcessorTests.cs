@@ -315,23 +315,23 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
 
     private static ProcedureStateChangeEmailDispatch NewDispatch(
         string kind, string name, string? email, string status, int attempts = 0) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        TenantId = TenantId,
-        OutboxId = OutboxId,
-        ProcedureInstanceId = InstanceId,
-        Recipient = email,
-        RecipientName = name,
-        RecipientRole = "comprador",
-        RecipientKind = kind,
-        TemplateKey = "tramites.aprobado",
-        Status = status,
-        Attempts = attempts,
-        QueuedAt = DateTimeOffset.UtcNow,
-        CreatedAt = DateTimeOffset.UtcNow,
-        ProcessedAt = status == "omitido" ? DateTimeOffset.UtcNow : null,
-        FailureReason = status == "omitido" ? "Sin correo para la persona" : null,
-    };
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantId,
+            OutboxId = OutboxId,
+            ProcedureInstanceId = InstanceId,
+            Recipient = email,
+            RecipientName = name,
+            RecipientRole = "comprador",
+            RecipientKind = kind,
+            TemplateKey = "tramites.aprobado",
+            Status = status,
+            Attempts = attempts,
+            QueuedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
+            ProcessedAt = status == "omitido" ? DateTimeOffset.UtcNow : null,
+            FailureReason = status == "omitido" ? "Sin correo para la persona" : null,
+        };
 
     private sealed class RecordingSender : IEmailSender
     {

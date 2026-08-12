@@ -162,7 +162,8 @@ internal sealed partial class TenantChannelEmailRouter(
             // envío que efectivamente haya salido por FlitSmtp.
             LogTenantApiChannelNotAvailable(logger, message.TenantId ?? Guid.Empty, message.TemplateKey);
             return EmailSendResult.Failed(EmailSendOutcome.ConfigurationIncomplete)
-                with { Channel = TenantSettingsCodes.ChannelTenantApi };
+                with
+            { Channel = TenantSettingsCodes.ChannelTenantApi };
         }
 
         var options = rentingOptions.Value;
