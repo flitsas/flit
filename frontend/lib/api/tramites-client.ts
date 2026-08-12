@@ -45,6 +45,10 @@ import type {
   MandateSignerSelection,
   TransitOfficeOption,
   TransitOfficesResponse,
+  VehicleServiceTypeOption,
+  VehicleServiceTypesResponse,
+  RuesPreviewInput,
+  RuesPreviewResult,
   IniciarBiometriaInput,
   IniciarBiometriaResult,
   InvitarParticipanteInput,
@@ -345,6 +349,19 @@ export function isTransitOfficeUnavailable(err: unknown): boolean {
   return (problem as { title?: unknown }).title === 'TRANSIT_OFFICE_NOT_AVAILABLE';
 }
 
+/**
+ * Consulta RUES sin trámite (paso 1, empresa vinculadora del tipo de servicio PÚBLICO) — distingue el
+ * fallo transitorio del proveedor (503, NO es culpa del operador: se ofrece reintentar) del caso
+ * "el proveedor respondió y el NIT no existe" (200 con `found:false`, que no lanza excepción).
+ *
+ * Duck-typing sobre `{ status }`, mismo patrón que `isTransitOfficeUnavailable`.
+ */
+export function isRuesPreviewUnavailable(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const { status } = err as { status?: unknown };
+  return status === 503;
+}
+
 // Exportado para que otros clientes del mismo dominio (p. ej. lib/api/ui-preferences.ts)
 // reutilicen el mismo manejo de errores/JSON en vez de reimplementarlo.
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -550,6 +567,14 @@ export const tramitesClient = {
     return res?.items ?? [];
   },
 
+  // Captura del TIPO DE SERVICIO en el paso 1 (solo matrícula inicial, sección 18 del FUR). Catálogo
+  // cerrado (6 valores) y sin tenant-scoping: el backend lo devuelve activos + ordenados por
+  // sort_order (orden normativo del FUR); se ordena de nuevo aquí como defensa adicional.
+  listVehicleServiceTypes: async (): Promise<VehicleServiceTypeOption[]> => {
+    const res = await request<VehicleServiceTypesResponse>('/api/v1/tramites/vehicle-service-types');
+    return (res?.items ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
+  },
+
   /** Catálogo RUNT de colores (BD). Búsqueda server-side; no descarga el catálogo completo. */
   searchVehicleColors: async (
     search?: string,
@@ -700,6 +725,17 @@ export const tramitesClient = {
         body: JSON.stringify(input),
       },
     ),
+
+  // Consulta RUES SIN trámite (paso 1, empresa vinculadora cuando el tipo de servicio es PÚBLICO):
+  // sin instanceId, porque en creación diferida (CF-02) el trámite todavía no existe. `found:false`
+  // (200) = el proveedor respondió y el NIT no existe; un 503 (proveedor caído) llega como excepción
+  // y se distingue con `isRuesPreviewUnavailable`.
+  ruesPreview: (input: RuesPreviewInput, tenantId?: string) =>
+    request<RuesPreviewResult>('/api/v1/tramites/rues-preview', {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: JSON.stringify(input),
+    }),
 
   // HU #10956 (revierte parcialmente HU #10885/#10878, AC2/AC3/AC4/AC5) — precarga SOLO datos de
   // CONTACTO (ciudad/correo/dirección/teléfono) de una persona ya conocida en el tenant, tras
@@ -1104,7 +1140,14 @@ export const tramitesClient = {
   // consultado: es el único punto del flujo que da de alta el registro. `previewToken` evita repetir
   // la consulta al proveedor externo; si expiró, el backend consulta de nuevo (no falla).
   createInstanceFromConsulta: async (
-    input: ConsultaVehiculoInput & { previewToken?: string | null },
+    input: ConsultaVehiculoInput & {
+      previewToken?: string | null;
+      /** Tipo de servicio elegido en el paso 1 (solo matrícula inicial, sección 18 del FUR). */
+      tipoServicioCode?: string | null;
+      /** NIT/razón social de la empresa vinculadora, solo cuando `tipoServicioCode` es PUBLICO. */
+      empresaVinculadoraNit?: string | null;
+      empresaVinculadoraRazonSocial?: string | null;
+    },
     tenantId?: string,
   ): Promise<CreateFromConsultaResult> => {
     const payload = decodeJwtPayload(getToken());
@@ -1126,6 +1169,11 @@ export const tramitesClient = {
         // HU #11199 — la secretaría elegida en el paso 1 viaja a la creación: es lo que la vuelve
         // permanente y lo que hace que el paso del FUR ya no tenga que preguntarla.
         transitOfficeId: input.transitOfficeId ?? null,
+        // Tipo de servicio (paso 1, matrícula inicial): igual patrón que transitOfficeId — se elige
+        // antes de que el trámite exista y viaja explícito a la creación.
+        tipoServicioCode: input.tipoServicioCode ?? null,
+        empresaVinculadoraNit: input.empresaVinculadoraNit ?? null,
+        empresaVinculadoraRazonSocial: input.empresaVinculadoraRazonSocial ?? null,
       }),
     });
     return {

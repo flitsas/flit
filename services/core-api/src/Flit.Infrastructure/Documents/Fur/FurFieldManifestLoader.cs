@@ -92,6 +92,7 @@ public static class FurFieldManifestLoader
             Bold = f.Bold ?? true,
             Align = align,
             AutoFit = f.AutoFit ?? false,
+            MinFontSize = f.MinFontSize,
         };
     }
 
@@ -119,5 +120,6 @@ public static class FurFieldManifestLoader
         public bool? Bold { get; set; }
         public string? Align { get; set; }
         public bool? AutoFit { get; set; }
+        public double? MinFontSize { get; set; }
     }
 }

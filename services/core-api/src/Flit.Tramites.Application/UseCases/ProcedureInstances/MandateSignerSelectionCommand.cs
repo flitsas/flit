@@ -107,18 +107,11 @@ public sealed class ListMandateSignerOptionsHandler(
         }
 
         // Prioridad: ya elegido en el trámite → default parametrizado (módulo Mandatos) → único candidato.
-        var defaultFromRule = mandateConfig?.DefaultMandateSignerId;
-        Guid? elegido = instance.MandateSignerId;
-        if (elegido is null
-            && defaultFromRule is { } pref
-            && opciones.Exists(o => o.Id == pref))
-        {
-            elegido = pref;
-        }
-        else if (elegido is null && opciones.Count == 1)
-        {
-            elegido = opciones[0].Id;
-        }
+        // Resolvedor COMPARTIDO (bug DEV: el radio se marcaba con una sugerencia que nunca se guardó, y
+        // el documento resolvía el firmante con otro criterio): el mismo método lo usa la generación del
+        // mandato y el gate de aprobación, para que la pantalla y el documento nunca diverjan.
+        var elegido = MandateSignerDefaultResolver.Resolve(
+            opciones.ConvertAll(o => o.Id), instance.MandateSignerId, mandateConfig?.DefaultMandateSignerId);
 
         return (new MandateSignerSelectionDto(opciones, elegido, editable), null);
     }

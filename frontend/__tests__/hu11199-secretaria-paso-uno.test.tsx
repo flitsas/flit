@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   getPreflight: vi.fn(),
   getConsultationConfig: vi.fn(),
   listTransitOffices: vi.fn(),
+  listVehicleServiceTypes: vi.fn(),
 }));
 
 const transitOfficeUnavailable = vi.hoisted(() => ({ value: false }));
@@ -102,12 +103,26 @@ async function elegirSecretaria(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: /Medellín/ }));
 }
 
+/** Tipo de servicio (sección 18 del FUR): requisito independiente de la secretaría, ver TramiteWizard. */
+const TIPOS_SERVICIO = [
+  { id: 'ts-particular', code: 'PARTICULAR', name: 'Particular', sortOrder: 1 },
+  { id: 'ts-publico', code: 'PUBLICO', name: 'Público', sortOrder: 2 },
+];
+
+async function elegirTipoServicio(
+  user: ReturnType<typeof userEvent.setup>,
+  code = 'PARTICULAR',
+) {
+  await user.selectOptions(await screen.findByLabelText('Tipo de servicio'), code);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   transitOfficeUnavailable.value = false;
   mocks.runPreflightPreview.mockResolvedValue(PREVIEW_RESULT);
   mocks.getConsultationConfig.mockResolvedValue({ vehiclePlate: 'kyverum_runt', onlyOwnVehicles: false });
   mocks.listTransitOffices.mockResolvedValue(SECRETARIAS);
+  mocks.listVehicleServiceTypes.mockResolvedValue(TIPOS_SERVICIO);
   mocks.setCurrentStep.mockResolvedValue({ id: 'inst-1', currentStep: 'documentos' });
   mocks.createInstanceFromConsulta.mockResolvedValue({
     instance: {
@@ -197,6 +212,7 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     await user.type(screen.getByLabelText('Número VIN'), VIN_VALIDO);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
+    await elegirTipoServicio(user);
 
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
 
@@ -215,6 +231,7 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     await user.type(screen.getByLabelText('Número VIN'), VIN_VALIDO);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
+    await elegirTipoServicio(user);
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
 
     // El trámite se crea con la secretaría que esté en pantalla: no puede quedar un preview de otra.

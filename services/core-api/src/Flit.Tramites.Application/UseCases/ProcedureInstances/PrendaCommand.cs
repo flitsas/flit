@@ -33,8 +33,15 @@ public sealed record RegistrarPrendaInput(
 /// </summary>
 public sealed class RegistrarPrendaHandler(
     IProcedureInstanceRepository instances,
-    IProcedureInstancePrendaRepository prendas)
+    IProcedureInstancePrendaRepository prendas,
+    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null)
 {
+    /// <summary>Error: el OT exige el certificado de prenda, así que "omitir" no es elegible.</summary>
+    public const string OmitirNoAdmitidoError = "prenda_omitir_no_admitido";
+
+    private readonly IPrendaDocumentRequirementPolicy _documentPolicy =
+        prendaDocumentRequirementPolicy ?? NullPrendaDocumentRequirementPolicy.Instance;
+
     public async Task<(PrendaDto? Result, string? Error)> HandleAsync(
         Guid instanceId,
         Guid tenantId,
@@ -55,6 +62,22 @@ public sealed class RegistrarPrendaHandler(
             return (null, TramiteEstadoErrores.EstadoFinal);
 
         var decision = input.Decision.Trim().ToLowerInvariant();
+
+        // CF-06 (HU #10881) — "omitir" es la vía "asumo el riesgo", y con un OT que exige el
+        // certificado de prenda no hay riesgo que el gestor pueda asumir por su cuenta: la regla es
+        // del organismo. Se rechaza AL ELEGIR, que es donde el gate de radicación decía que había que
+        // decidirlo (ver PrendaGate.EvaluateOtOverride). Bloquear después dejaría guardada una
+        // decisión que ningún adjunto puede satisfacer —el paso de prenda no ofrece cargar documento
+        // para "omitir"—, que es exactamente el atasco que corrigió esta tanda. Las decisiones ya
+        // guardadas no se revisan: la regla mira la elección nueva, no reabre trámites en curso.
+        if (string.Equals(decision, PrendaDecision.Omitir, StringComparison.OrdinalIgnoreCase)
+            && await _documentPolicy
+                .IsRequiredAsync(tenantId, instance.TransitOfficeId, instance.CreatedAt, ct)
+                .ConfigureAwait(false))
+        {
+            return (null, OmitirNoAdmitidoError);
+        }
+
         var now = DateTimeOffset.UtcNow;
 
         // Versionado: la decisión vigente anterior queda reemplazada. Se persiste PRIMERO (libera el índice

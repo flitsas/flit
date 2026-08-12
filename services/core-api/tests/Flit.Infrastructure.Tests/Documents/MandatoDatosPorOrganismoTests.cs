@@ -132,13 +132,16 @@ public sealed class MandatoDatosPorOrganismoTests
             chamberCity,
             sigla);
 
-        var parrafos = (List<string>)BuildParrafos.Invoke(
+        // HU (fix negrita) — BuildParrafos ahora devuelve párrafos por SEGMENTOS
+        // (MandatoPdfGenerator.ParrafoSegmento), no cadenas planas; este helper solo verifica el TEXTO
+        // legal (ignora qué quedó en negrita), así que reconstruye la cadena concatenando los segmentos.
+        var parrafos = (List<IReadOnlyList<MandatoPdfGenerator.ParrafoSegmento>>)BuildParrafos.Invoke(
             null,
             [
                 data, parte, esJuridica, MandatoTemplateResolver.Resolve(template),
                 "MATRÍCULA INICIAL", "ABC123", "Sabaneta", "Sabaneta", "1 de agosto de 2026",
             ])!;
 
-        return string.Join("\n", parrafos);
+        return string.Join("\n", parrafos.Select(p => string.Concat(p.Select(s => s.Texto))));
     }
 }

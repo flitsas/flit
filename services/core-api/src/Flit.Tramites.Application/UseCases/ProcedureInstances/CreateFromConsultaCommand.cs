@@ -26,7 +26,26 @@ public sealed record CreateFromConsultaRequest(
     /// HU #11199 — secretaría elegida en el primer paso. OBLIGATORIA en matrícula inicial; en traspaso
     /// llega nula porque el organismo lo impone el RUNT y lo fija el preflight (B11, HU #10659).
     /// </summary>
-    Guid? TransitOfficeId = null);
+    Guid? TransitOfficeId = null,
+    /// <summary>
+    /// HU sin ADO 2026-08-11 — casilla 18 del FUR (tipo de servicio), elegido por el operador. Opcional
+    /// y solo aplica en MATRÍCULA INICIAL (mismo criterio que <see cref="TransitOfficeId"/>: en
+    /// traspaso se ignora sin rechazar la creación, porque el traspaso hidrata <c>vehicle_service</c>
+    /// con texto libre del RUNT y este canal no le compete). Si viene, debe ser uno de los 6 códigos
+    /// cerrados de <see cref="VehicleServiceTypeCode"/> — se valida estricto porque es entrada de un
+    /// selector cerrado, no texto libre: un valor fuera del catálogo es un bug del caller, no un dato
+    /// legítimo que debamos tolerar en silencio.
+    /// </summary>
+    string? TipoServicioCode = null,
+    /// <summary>
+    /// HU sin ADO 2026-08-11 — casilla 19 del FUR (empresa vinculadora). Solo tiene efecto cuando
+    /// <see cref="TipoServicioCode"/> resuelve a <c>PUBLICO</c>: con cualquier otro tipo (o sin
+    /// tipo) se IGNORAN sin rechazar la creación — mismo criterio de tolerancia que
+    /// <see cref="TransitOfficeId"/> fuera de matrícula. Ambos opcionales: si faltan, la casilla 19
+    /// queda en blanco (comportamiento por defecto, sin romper trámites existentes).
+    /// </summary>
+    string? EmpresaVinculadoraNit = null,
+    string? EmpresaVinculadoraRazonSocial = null);
 
 public sealed record CreateFromConsultaResult(
     ProcedureInstanceSummary Instance,
@@ -94,6 +113,18 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
                 return (null, TransitOfficeSelectionPolicy.UnavailableErrorCode, null, null);
         }
 
+        // HU sin ADO 2026-08-11 — tipoServicioCode (casilla 18) se valida ANTES de crear nada, igual
+        // que la secretaría arriba: es entrada de un selector cerrado (VehicleServiceTypeCode), así
+        // que un valor fuera del catálogo es un bug del caller y se rechaza en vez de crear el trámite
+        // y dejar la casilla en un estado indefinido. Fuera de matrícula inicial NO se valida ni se
+        // usa (ver más abajo): mismo criterio de tolerancia que TransitOfficeId en traspaso.
+        var tipoServicioCode = Trim(request.TipoServicioCode)?.ToUpperInvariant();
+        if (esMatricula && tipoServicioCode is not null
+            && !VehicleServiceTypeCode.All.Any(c => string.Equals(c, tipoServicioCode, StringComparison.Ordinal)))
+        {
+            return (null, "invalid_tipo_servicio", null, null);
+        }
+
         // CF-01 antes de persistir: si la llave se ocupó mientras el operador revisaba el paso 1, se
         // bloquea SIN dejar registro (el objetivo de CF-02 es justamente no crear trámites inservibles).
         // HU #10970 — solo en modo block. En warn/off el trámite SÍ se crea y es el preflight de abajo
@@ -119,6 +150,8 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
             return (null, createError ?? "invalid_request", null, null);
 
         var items = new List<FieldValueInput>();
+        // Casillas 18/19 del FUR: se escriben en un patch APARTE, después del preflight (ver abajo).
+        var tipoServicioFieldValues = new List<FieldValueInput>();
         if (esMatricula)
         {
             items.Add(new FieldValueInput(null, "vin", vin, null));
@@ -134,6 +167,37 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
                 TransitOfficeSelectionPolicy.OrigenFieldKey,
                 TransitOfficeSelectionPolicy.OrigenPasoUno,
                 null));
+
+            // HU sin ADO 2026-08-11 — casilla 18 (tipo de servicio) y casilla 19 (empresa vinculadora)
+            // del FUR. `vehicle_service` es el MISMO field_value que hidrata el RUNT en traspaso
+            // (KyverumRuntVehicleResultMapper / IntempoVehicleResultMapper / VerifikResultMapper con
+            // texto libre); aquí se persiste el CÓDIGO cerrado que el operador eligió en matrícula
+            // inicial. FurFieldMapper.MarkServicio (vía VehicleServiceTypeCode.Resolve) normaliza
+            // cualquiera de las dos formas a una sola casilla — ver ese normalizador para la
+            // precedencia entre texto libre y código.
+            if (tipoServicioCode is not null)
+            {
+                // Se acumulan aparte y se escriben DESPUÉS del preflight — ver el comentario largo en
+                // el punto de escritura, más abajo: la hidratación del vehículo pisa `vehicle_service`.
+                tipoServicioFieldValues.Add(new FieldValueInput(null, "vehicle_service", tipoServicioCode, null));
+
+                // NIT/razón social de la empresa vinculadora SOLO tienen sentido con servicio PÚBLICO.
+                // Con cualquier otro tipo se IGNORAN sin rechazar la creación (no un 400): mismo
+                // criterio de tolerancia que ya usa este handler con TransitOfficeId fuera de
+                // matrícula — un dato irrelevante para el contexto elegido se descarta en silencio, no
+                // bloquea el trámite. Peor caso, si llegaran igual: casilla 19 queda en blanco, que es
+                // lo correcto para un tipo no público.
+                if (string.Equals(tipoServicioCode, VehicleServiceTypeCode.Publico, StringComparison.Ordinal))
+                {
+                    // Viajan con el tipo de servicio para que las tres llaves de la casilla 18/19 se
+                    // escriban en el mismo punto y no se puedan desincronizar.
+                    if (Trim(request.EmpresaVinculadoraNit) is { } evNit)
+                        tipoServicioFieldValues.Add(new FieldValueInput(null, "empresa_vinculadora_nit", evNit, null));
+                    if (Trim(request.EmpresaVinculadoraRazonSocial) is { } evRazonSocial)
+                        tipoServicioFieldValues.Add(
+                            new FieldValueInput(null, "empresa_vinculadora_razon_social", evRazonSocial, null));
+                }
+            }
         }
         else
         {
@@ -155,6 +219,25 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
         var precomputed = previewStore.TryTake(request.TenantId, request.PreviewToken);
         var (preflight, preflightError, existingId, vehicleState) =
             await preflightHandler.HandleAsync(summary.Id, request.TenantId, precomputed, ct);
+
+        // El tipo de servicio elegido por el operador se escribe DESPUÉS del preflight, a propósito.
+        //
+        // El preflight hidrata los atributos del vehículo desde el proveedor de consulta, y entre ellos
+        // viene `vehicle_service`. En TRASPASO eso es correcto: el vehículo está matriculado y el RUNT
+        // es la fuente de su tipo de servicio. En MATRÍCULA INICIAL no lo es —el vehículo aún no existe
+        // en el RUNT— pero los proveedores devuelven el campo igual (hoy con "Particular" fijo en sus
+        // datos de demo), así que si se escribiera antes, la hidratación pisaría la elección del
+        // operador y la casilla 18 del FUR saldría marcada en "Particular" habiendo elegido "Público".
+        //
+        // Va antes del `return` por error del preflight a propósito: si el preflight falla el trámite
+        // YA existe, y perder la elección del operador obligaría a rehacerla.
+        if (esMatricula && tipoServicioFieldValues.Count > 0)
+        {
+            var (_, tipoServicioPatchError) = await patchHandler.HandleAsync(
+                summary.Id, request.TenantId, new PatchFieldValuesRequest(tipoServicioFieldValues), ct);
+            if (tipoServicioPatchError is not null && preflightError is null)
+                return (null, tipoServicioPatchError, null, null);
+        }
 
         if (preflightError is not null)
             return (null, preflightError, existingId, vehicleState);

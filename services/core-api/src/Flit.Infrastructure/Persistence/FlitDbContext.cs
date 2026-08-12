@@ -134,6 +134,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<VehicleColor> VehicleColors => Set<VehicleColor>();
 
+    /// <summary>Catálogo global de tipos de servicio del vehículo (sección 18 del FUR, ADR-0019).</summary>
+    public DbSet<VehicleServiceType> VehicleServiceTypes => Set<VehicleServiceType>();
+
     /// <summary>
     /// Catálogo global de causales de rechazo (SuperAdmin). Sustituye al motivo escrito a mano
     /// como dato agregable del reporte de motivos.

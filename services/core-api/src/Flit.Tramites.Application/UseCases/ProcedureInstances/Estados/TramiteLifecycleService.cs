@@ -585,22 +585,29 @@ public sealed class TramiteLifecycleService(
     {
         var docTipos = instance.Attachments.Select(a => a.Tipo).ToList();
 
+        // La decisión vigente se carga ANTES del override: desde 2026-08-12 el override la necesita
+        // para no exigir un documento que la UI no ofrece cargar (sin_prenda / omitir). Sin repo
+        // cableado (tests) queda null, que el gate trata como "falta decidir" ⇒ prenda_decision_requerida.
+        var prenda = _prendaRepo is null
+            ? null
+            : await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
+
         // Compañía+OT: default exige certificado; opt-out al CreatedAt ⇒ opcional. Aplica a
         // matrícula, traspaso y cualquier otra modalidad con OT.
         var documentoExigido = await _prendaDocumentRequirementPolicy
             .IsRequiredAsync(instance.TenantId, instance.TransitOfficeId, instance.CreatedAt, ct)
             .ConfigureAwait(false);
-        var otError = PrendaGate.EvaluateOtOverride(documentoExigido, docTipos);
+        var otError = PrendaGate.EvaluateOtOverride(documentoExigido, prenda?.Decision, docTipos);
         if (otError is not null)
-            return (otError,
-                "La compañía exige el documento de prenda para este organismo de tránsito.");
+            return (otError, otError == TramiteEstadoErrores.PrendaDecisionRequerida
+                ? "El organismo de tránsito exige el documento de prenda: registra la decisión de "
+                  + "prenda del trámite antes de prepararlo."
+                : "La compañía exige el documento de prenda para este organismo de tránsito.");
 
         // R10 (HU #10597) — gate del semáforo de gravámenes (decisión de prenda), solo traspaso.
         var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) == TramiteModalidadEntrada.Traspaso;
         if (!esTraspaso || _prendaRepo is null || !HasGravamenWarn(instance))
             return (null, null);
-
-        var prenda = await _prendaRepo.GetVigenteAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
 
         return PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, prenda, docTipos) switch
         {

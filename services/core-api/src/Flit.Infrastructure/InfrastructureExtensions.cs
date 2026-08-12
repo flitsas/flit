@@ -122,6 +122,8 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IDocumentTypeCatalog, DocumentTypeCatalog>();
         // Catálogo RUNT de colores de vehículo (transformaciones FUR) — búsqueda paginada.
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IVehicleColorCatalog, DbVehicleColorCatalog>();
+        // Catálogo global de tipos de servicio del vehículo (sección 18 del FUR, ADR-0019) — cerrado, 6 valores.
+        services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IVehicleServiceTypeCatalog, DbVehicleServiceTypeCatalog>();
         // HU #10521 (RF31) — puente de parámetros documentales por gestora hacia el checklist condicional.
         services.AddScoped<Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider, ChecklistCompanyParamsProvider>();
         // HU #10522 (RF17/RF22) — puente de la matriz documental resuelta del gestor hacia el checklist (matriz viva).

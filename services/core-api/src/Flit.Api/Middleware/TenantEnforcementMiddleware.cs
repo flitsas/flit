@@ -90,6 +90,11 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // la compañía y busca duplicidad entre SUS trámites). Sin esta entrada el middleware no poblaba
         // http.Items y el endpoint respondía 403 "sin compañía asignada" a un usuario que sí la tiene.
         || path.Equals("/api/v1/tramites/preflight-preview", StringComparison.OrdinalIgnoreCase)
+        // HU sin ADO 2026-08-11 — consulta RUES del paso 1 SIN trámite creado (casilla 19 del FUR):
+        // mismo caso que preflight-preview justo arriba, sin instancia en la ruta pero tan
+        // tenant-scoped como el resto (usa el proveedor RUES de la compañía). Sin esta entrada el
+        // endpoint confiaría en el X-Tenant-Id crudo del cliente.
+        || path.Equals("/api/v1/tramites/rues-preview", StringComparison.OrdinalIgnoreCase)
         // HU #10943 — StartsWithSegments, NO Equals: con la comparación exacta el listado y el create
         // quedaban scopeados, pero las rutas hijas (PATCH /{id} y POST /{id}/resend, edición y reenvío de
         // una prevalidación) caían fuera y el backend confiaba en el X-Tenant-Id crudo del cliente — un

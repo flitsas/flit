@@ -434,6 +434,31 @@
       "size": 9.8
     },
     {
+      "id": "linked_company_name",
+      "page": 1,
+      "type": "text",
+      "x": 572.0,
+      "y": 411.0,
+      "w": 130.5,
+      "h": 27.0,
+      "fontSize": 7.6,
+      "minFontSize": 6.0,
+      "bold": true,
+      "align": "left"
+    },
+    {
+      "id": "linked_company_nit",
+      "page": 1,
+      "type": "text",
+      "x": 705.3,
+      "y": 411.0,
+      "w": 48.0,
+      "h": 14.0,
+      "fontSize": 7.6,
+      "bold": true,
+      "align": "left"
+    },
+    {
       "id": "vehicle_serial_number",
       "page": 1,
       "type": "text",

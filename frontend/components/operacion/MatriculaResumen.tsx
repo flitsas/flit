@@ -636,6 +636,9 @@ export default function MatriculaResumen({
           instanceId={instanceId}
           onChanged={onBiometricRefresh}
           asDisclosure
+          // Plegado en el resumen: el sistema resuelve el mandatario solo, así que abierto por
+          // defecto ocupaba sitio pidiendo una decisión que no hace falta tomar.
+          defaultOpen={false}
         />
       ) : null}
 

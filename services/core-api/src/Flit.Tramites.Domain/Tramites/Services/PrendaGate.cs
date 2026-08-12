@@ -40,15 +40,37 @@ public static class PrendaGate
 
     /// <summary>
     /// CF-06 (HU #10881) — override del Organismo de Tránsito: exige el documento de prenda con
-    /// INDEPENDENCIA del semáforo de gravámenes/decisión (a diferencia de <see cref="Evaluate"/>).
-    /// Basta con que el trámite tenga adjunto CUALQUIER documento de prenda conocido (solicitud,
-    /// registro o levantamiento — la decisión concreta la sigue tomando el gestor en su paso de
-    /// prenda) para satisfacer el gate. <c>otRequiereDocumentoPrenda</c> ya viene resuelto con el
-    /// comportamiento SNAPSHOT (AC2): solo <c>true</c> cuando el override ya estaba activo al crear
-    /// el trámite.
+    /// INDEPENDENCIA del semáforo de gravámenes (a diferencia de <see cref="Evaluate"/>, que solo
+    /// actúa en traspaso con el check <c>gravamenes</c> en warn). Así una matrícula inicial que
+    /// CONSTITUYE prenda —vehículo nuevo financiado, sin gravamen previo que detectar— sigue
+    /// exigiendo su soporte. Basta con que el trámite tenga adjunto CUALQUIER documento de prenda
+    /// conocido (solicitud, registro o levantamiento) para satisfacer el gate.
+    /// <c>otRequiereDocumentoPrenda</c> ya viene resuelto con el comportamiento SNAPSHOT (AC2): solo
+    /// <c>true</c> cuando el override ya estaba activo al crear el trámite.
+    ///
+    /// <para><b>Independiente del semáforo, NO de la decisión (2026-08-12).</b> Nació ignorando
+    /// también la decisión, y eso lo volvía insatisfacible: con <c>sin_prenda</c> u <c>omitir</c> el
+    /// paso de prenda no OFRECE cargar documento —el conjunto que habilita la carga es exactamente
+    /// <see cref="PrendaDecision.RequierenDocumento"/>—, así que el trámite quedaba bloqueado por un
+    /// adjunto que la interfaz nunca pedía y que el gestor no tenía forma de aportar. El síntoma real:
+    /// una matrícula inicial con <c>sin_prenda</c> atascada en "Finalizar". Ahora el gate comparte
+    /// predicado con la UI: si la decisión no pide documento, el override calla.</para>
+    ///
+    /// <para><b>Sin decisión tomada (<c>null</c>) exige la decisión, no calla (2026-08-12, corrección
+    /// de la misma tanda).</b> Delegar ese hueco en <see cref="Evaluate"/> solo funciona en TRASPASO
+    /// con el semáforo de gravámenes en warn: en matrícula inicial <see cref="Evaluate"/> sale por
+    /// <c>!esTraspaso</c> y no hay ningún otro gate de prenda, así que el gestor que nunca abre el
+    /// paso de prenda radicaba sin el certificado que el OT exige — justo lo que el override existe
+    /// para impedir. <c>prenda_decision_requerida</c> es accionable y satisfacible (tomar la decisión
+    /// siempre está a mano), a diferencia del documento imposible que motivó el cambio de arriba.</para>
+    ///
+    /// <para>Y si un OT necesita el certificado sí o sí ante un gravamen, lo que corresponde es no
+    /// ofrecer <c>omitir</c> en ese trámite —decidirlo al elegir—, no aceptar la elección y bloquear
+    /// después con una exigencia imposible.</para>
     /// </summary>
     public static string? EvaluateOtOverride(
         bool otRequiereDocumentoPrenda,
+        string? decision,
         IReadOnlyCollection<string> docTipos)
     {
         if (!otRequiereDocumentoPrenda)
@@ -56,8 +78,14 @@ public static class PrendaGate
 
         ArgumentNullException.ThrowIfNull(docTipos);
 
+        if (string.IsNullOrWhiteSpace(decision))
+            return TramiteEstadoErrores.PrendaDecisionRequerida;
+
+        if (!PrendaDecision.RequiereDocumento(decision))
+            return null;
+
         var tieneDocumentoPrenda = docTipos.Any(t => PrendaDocTipos.All.Contains(t));
 
-        return tieneDocumentoPrenda ? null : TramiteEstadoErrores.PrendaDocumentoRequerido;
+        return tieneDocumentoPrenda ? null : TramiteEstadoErrores.PrendaDocumentoRequeridoOt;
     }
 }

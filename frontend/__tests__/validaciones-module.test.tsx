@@ -478,6 +478,26 @@ describe('Validaciones — selector de empresa del admin FLIT', () => {
     expect(mocks.setActiveTramitesTenant).toHaveBeenLastCalledWith(undefined);
   });
 
+  it('al mirar otra empresa lo dice explícitamente, para no operar sobre datos ajenos por descuido', async () => {
+    const user = userEvent.setup();
+    mocks.isSuperAdmin.mockReturnValue(true);
+    mocks.listCompanies.mockResolvedValue(EMPRESAS);
+    mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
+
+    renderValidaciones();
+    const selector = await screen.findByRole('combobox', { name: /ver las validaciones de otra empresa/i });
+
+    // En "Mi empresa" no hay aviso: es el caso normal.
+    expect(screen.queryByText(/estás viendo los datos de/i)).not.toBeInTheDocument();
+
+    await user.click(selector);
+    await user.click(screen.getByRole('option', { name: /Movilidad Bogotá/ }));
+
+    const aviso = await screen.findByText(/estás viendo los datos de/i);
+    expect(aviso).toHaveTextContent('Movilidad Bogotá');
+    expect(aviso).toHaveTextContent(/afecta a esa empresa/i);
+  });
+
   it('al salir del módulo se devuelve el cliente al tenant propio', async () => {
     mocks.isSuperAdmin.mockReturnValue(true);
     mocks.listCompanies.mockResolvedValue(EMPRESAS);
@@ -697,16 +717,47 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349 / #11268)',
     maxDeliveryAttempts: 5,
   };
 
-  async function expandStuckGroup(label: RegExp | string) {
+  /**
+   * El banner nace PLEGADO (es una alerta de fondo, no la tarea del gestor): solo muestra el aviso y
+   * "Reintentar todos". El detalle por persona se despliega desde el propio título.
+   */
+  async function abrirPanelAtascadas() {
     const banner = await screen.findByRole('region', {
       name: /validaciones de identidad atascadas/i,
     });
+    await userEvent.click(within(banner).getByRole('button', { name: /de identidad atascada/i }));
+    return banner;
+  }
+
+  async function expandStuckGroup(label: RegExp | string) {
+    const banner = await abrirPanelAtascadas();
     const toggle = within(banner).getByRole('button', {
       name: typeof label === 'string' ? new RegExp(label, 'i') : label,
     });
     await userEvent.click(toggle);
     return banner;
   }
+
+  it('nace plegado: solo el aviso y "Reintentar todos", sin la lista por encima de la grilla', async () => {
+    mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
+    mocks.listStuckIdentityValidations.mockResolvedValue(STUCK);
+
+    renderValidaciones();
+
+    const banner = await screen.findByRole('region', {
+      name: /validaciones de identidad atascadas/i,
+    });
+    const toggle = within(banner).getByRole('button', { name: /de identidad atascada/i });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    // Ni el detalle por persona ni la explicación ocupan sitio mientras está plegado.
+    expect(within(banner).queryByRole('button', { name: /maria compradora/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/reintentos automáticos/i)).not.toBeInTheDocument();
+
+    await userEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(within(banner).getByRole('button', { name: /maria compradora/i })).toBeInTheDocument();
+  });
 
   it('muestra el banner con el nombre y el documento enmascarado de la persona', async () => {
     mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
@@ -744,9 +795,7 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349 / #11268)',
 
     renderValidaciones();
 
-    const banner = await screen.findByRole('region', {
-      name: /validaciones de identidad atascadas/i,
-    });
+    const banner = await abrirPanelAtascadas();
     await userEvent.click(within(banner).getByRole('button', { name: /pedro envio/i }));
     await userEvent.click(within(banner).getByRole('button', { name: /ana cadena/i }));
     expect(within(banner).getByText('Envío a proveedor')).toBeInTheDocument();
@@ -849,9 +898,7 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349 / #11268)',
     });
 
     renderValidaciones();
-    const banner = await screen.findByRole('region', {
-      name: /validaciones de identidad atascadas/i,
-    });
+    const banner = await abrirPanelAtascadas();
     const maria = within(banner).getByRole('button', { name: /maria compradora.*3 eventos/i });
     const luis = within(banner).getByRole('button', { name: /luis solo.*1 evento/i });
     expect(maria).toHaveAttribute('aria-expanded', 'false');
@@ -885,9 +932,7 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349 / #11268)',
     });
 
     renderValidaciones();
-    const banner = await screen.findByRole('region', {
-      name: /validaciones de identidad atascadas/i,
-    });
+    const banner = await abrirPanelAtascadas();
     expect(
       within(banner).getByRole('button', { name: /reintentar todas las validaciones atascadas/i }),
     ).toBeInTheDocument();
@@ -919,9 +964,7 @@ describe('Validaciones — eventos atascados (dead-letter, HU #10349 / #11268)',
     });
 
     renderValidaciones();
-    const banner = await screen.findByRole('region', {
-      name: /validaciones de identidad atascadas/i,
-    });
+    const banner = await abrirPanelAtascadas();
     expect(within(banner).getByRole('button', { name: /no identificados/i })).toBeInTheDocument();
     expect(within(banner).getByRole('button', { name: /maria compradora/i })).toBeInTheDocument();
   });
