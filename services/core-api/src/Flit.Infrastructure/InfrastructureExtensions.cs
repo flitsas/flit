@@ -691,6 +691,9 @@ public static class InfrastructureExtensions
         services.AddHostedService<ProcedureStateChangeOutboxProcessor>();
         // HU #11467 — worker de la cola de avisos de correo al cambio de estado (ADR-0045).
         services.AddHostedService<ProcedureStateChangeEmailDispatchProcessor>();
+        // HU #11485 (Feature #11482, ADR-0046) — sink post-asignación de placa (Flujo B).
+        services.AddScoped<Flit.Tramites.Application.Notifications.IPlateAssignmentEmailEnqueuer,
+            PlateAssignmentEmailEnqueuer>();
 
         // Plano C (ICT §A.3/§A.9): reflejo de estado hacia core-ict. Añade el sink ICT al notifier
         // COMPUESTO (junto a los webhooks OT) cuando hay Ict:StateCallback:Address; sin endpoint es no-op.

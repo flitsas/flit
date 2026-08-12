@@ -39,7 +39,7 @@ public enum NotificationTrigger
 
     /// <summary>
     /// Asignación de placa en matrícula inicial (plantilla <c>tramites.asignacion-placa</c>).
-    /// Declarativo en el catálogo del banco de pruebas; el handler productivo se conecta después.
+    /// HU #11485 — encolado tras POST assign-plate (Flujo B, arista preasignado→asignado).
     /// </summary>
     PlateAssigned,
 }
