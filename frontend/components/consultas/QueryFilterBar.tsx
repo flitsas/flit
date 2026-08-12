@@ -163,8 +163,8 @@ export function QueryFilterBar({
             data-testid={`${testIdPrefix}-campos`}
           >
             {grupos.map((grupo) => (
-              <div key={grupo} className="mb-1">
-                <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#6B7280] dark:text-white/40">
+              <div key={grupo} className="mb-1.5">
+                <p className="mb-1 rounded-md bg-[#F5F7FA] px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-[#162744] dark:bg-white/[0.06] dark:text-white/75">
                   {grupo}
                 </p>
                 {disponibles
@@ -264,7 +264,7 @@ function ConditionEditor({
             onChange={(e) => setTexto(e.target.value)}
             rows={operator === "contiene" ? 1 : 4}
             placeholder={
-              operator === "contiene" ? "Parte del texto…" : "Un valor por línea, o pegue una columna de Excel"
+              operator === "contiene" ? "Parte del texto…" : "Un valor por línea, o pega una columna de Excel"
             }
             aria-label={`Valores de ${field.label}`}
             className={`${FIELD_CLS} w-full resize-y`}

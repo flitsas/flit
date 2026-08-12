@@ -80,7 +80,7 @@ export function ConsultasTab({ tenantId, needsCompany = false }: ConsultasTabPro
       defaultColumns={defaultCompanyQueryColumns()}
       rowKey={(fila) => fila.procedureInstanceId}
       sheetName="Consulta"
-      ambito="su empresa"
+      ambito="tu empresa"
       renderCell={(columnId, fila) =>
         columnId === "estado" ? (
           <span

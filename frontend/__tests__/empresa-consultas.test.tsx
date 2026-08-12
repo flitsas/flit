@@ -200,7 +200,7 @@ describe("Consultas de la empresa", () => {
 });
 
 describe("Cobertura, del lado de la empresa", () => {
-  it("dice que lo que no salió no está en SU empresa, no en el organismo", async () => {
+  it("dice que lo que no salió no está en TU empresa, no en el organismo", async () => {
     mocks.runCompanyQuery.mockResolvedValue(
       result({
         total: 0,
@@ -211,7 +211,7 @@ describe("Cobertura, del lado de la empresa", () => {
             valor: "ZZZ999",
             resultado: "no_existe",
             motivoCampo: null,
-            motivo: "No hay ningún trámite con este valor en su empresa.",
+            motivo: "No hay ningún trámite con este valor en tu empresa.",
           },
         ],
       }),
@@ -223,7 +223,7 @@ describe("Cobertura, del lado de la empresa", () => {
 
     // Mandar a un gestor a reclamar al organismo por una placa que sencillamente no es suya es el
     // error que este aviso existe para no cometer.
-    expect(aviso).toHaveTextContent("su empresa");
+    expect(aviso).toHaveTextContent("tu empresa");
     expect(aviso).not.toHaveTextContent("organismo");
   });
 
