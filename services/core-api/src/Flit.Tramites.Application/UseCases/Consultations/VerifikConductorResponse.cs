@@ -33,6 +33,18 @@ public sealed class VerifikConductorData
     [JsonPropertyName("fullName")]
     public string? FullName { get; set; }
 
+    /// <summary>
+    /// Apellidos ya separados. Verifik los incluye solo en ALGUNAS respuestas (llegan para unos
+    /// documentos y para otros no), así que son una pista preferente, no una garantía: sin ellos el
+    /// mapper separa <see cref="LastName"/> por su cuenta.
+    /// </summary>
+    [JsonPropertyName("primerApellido")]
+    public string? PrimerApellido { get; set; }
+
+    /// <summary>Ver <see cref="PrimerApellido"/>.</summary>
+    [JsonPropertyName("segundoApellido")]
+    public string? SegundoApellido { get; set; }
+
     [JsonPropertyName("citizenStatus")]
     public string? CitizenStatus { get; set; }
 

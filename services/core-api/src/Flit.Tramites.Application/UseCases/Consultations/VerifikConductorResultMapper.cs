@@ -22,8 +22,9 @@ public static class VerifikConductorResultMapper
     {
         var data = response.Data;
 
-        var fullName = data?.FullName?.Trim();
-        var found = !string.IsNullOrWhiteSpace(fullName);
+        var names = ResolveNames(data);
+        var fullName = DriverNameResolver.ResolveFullName(data?.FullName, names);
+        var found = names.HasAny || fullName.Length > 0;
 
         var checks = new List<ConsultationCheck>();
 
@@ -55,7 +56,7 @@ public static class VerifikConductorResultMapper
             }
         }
 
-        var hydrated = MapHydratedFields(data, found);
+        var hydrated = MapHydratedFields(data, names, fullName, found);
 
         var hasActiveLicenseForOverall = found && data is not null &&
             data.Licenses?.Any(l => string.Equals(l.Status, "ACTIVA", StringComparison.OrdinalIgnoreCase)) == true;
@@ -67,20 +68,31 @@ public static class VerifikConductorResultMapper
         return new ConsultationResult(Provider, overall, checks, hydrated);
     }
 
-    private static List<HydratedField> MapHydratedFields(VerifikConductorData? data, bool found)
+    /// <summary>
+    /// Nombre real de la persona. Verifik entrega <c>firstName</c> con TODOS los nombres de pila y
+    /// <c>lastName</c> con todos los apellidos; <c>primerApellido</c>/<c>segundoApellido</c> solo
+    /// llegan en algunas respuestas y, cuando están, evitan tener que separar por heurística. Si no
+    /// vino ninguno de esos campos se cae a separar el <c>fullName</c>.
+    /// </summary>
+    private static DriverNames ResolveNames(VerifikConductorData? data)
+    {
+        if (data is null)
+            return DriverNames.Empty;
+
+        var fromFields = DriverNameResolver.FromCombined(
+            data.FirstName, data.LastName, data.PrimerApellido, data.SegundoApellido);
+
+        return fromFields.HasAny ? fromFields : DriverNameResolver.FromFullName(data.FullName);
+    }
+
+    private static List<HydratedField> MapHydratedFields(
+        VerifikConductorData? data, DriverNames names, string fullName, bool found)
     {
         if (data is null || !found) return [];
 
         var fields = new List<HydratedField>();
 
-        if (!string.IsNullOrWhiteSpace(data.FullName))
-            fields.Add(new HydratedField("person_full_name", data.FullName.Trim(), null));
-
-        if (!string.IsNullOrWhiteSpace(data.FirstName))
-            fields.Add(new HydratedField("person_first_name", data.FirstName.Trim(), null));
-
-        if (!string.IsNullOrWhiteSpace(data.LastName))
-            fields.Add(new HydratedField("person_last_name", data.LastName.Trim(), null));
+        DriverNameResolver.AddHydratedNames(fields, names, fullName);
 
         // Usar driverStatus (no identityValidationAttempts.estadoUsuario) para person_license_status
         if (!string.IsNullOrWhiteSpace(data.DriverStatus))
@@ -104,9 +116,12 @@ public static class VerifikConductorResultMapper
 
         fields.Add(new HydratedField("person_has_active_license", activeLicenses.Count > 0 ? "true" : "false", null));
 
+        // Distinct como en Kyverum: Verifik trae una fila por categoría, así que dos licencias
+        // activas de la misma categoría repetían el valor ("B1,B1") y divergían del otro proveedor.
         var categories = activeLicenses
             .Where(l => !string.IsNullOrWhiteSpace(l.Category))
             .Select(l => l.Category!.Trim())
+            .Distinct()
             .ToList();
 
         if (categories.Count > 0)
