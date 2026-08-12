@@ -257,15 +257,19 @@ services:
       RENTING_API_SEND_EMAIL_SENDER_USERNAME: "${RENTING_API_SEND_EMAIL_SENDER_USERNAME:-Tramites Renting}"
       RENTING_API_SEND_EMAIL_DEFAULT_SENDER_EMAIL: ${RENTING_API_SEND_EMAIL_DEFAULT_SENDER_EMAIL:-}
       RENTING_API_SEND_EMAIL_DEFAULT_SENDER_USERNAME: "${RENTING_API_SEND_EMAIL_DEFAULT_SENDER_USERNAME:-Tramites Vehiculos}"
-      # ATENCIÓN — este servicio corre con ASPNETCORE_ENVIRONMENT=Development en DEV, QA **y
-      # PDN** (ver arriba, línea del bloque environment). Para el guardarraíl del canal eso
-      # significa que NINGÚN ambiente es "producción": el desvío de destinatario es
-      # OBLIGATORIO en los tres, y con él activo el correo de este canal va a la cuenta de
-      # desvío y NUNCA al cliente final. Es decir: hoy este canal NO puede entregar correo
-      # real en PDN sin resolver antes esa colisión. Única excepción al desvío: los envíos del
-      # banco de pruebas de notificaciones, que van a su buzón configurado (decisión del PO
-      # 2026-08-11) — no aplica a los envíos reales. Ver .env.renting.example.
-      RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED: ${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED:-true}
+      # ATENCIÓN — ADR-0044 (2026-08-12): el desvío de destinatario YA NO lo decide
+      # ASPNETCORE_ENVIRONMENT (este servicio corre con Development en DEV, QA y PDN por igual,
+      # ver arriba). Lo decide, únicamente, RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED:
+      # "true" ⇒ envía a destinatarios REALES; "false"/vacío ⇒ desvía al buzón de control.
+      # Default de este compose: true (envío real). Para desviar en un ambiente, declarar
+      # RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED=false en el .env de ese despliegue.
+      # Cualquier otro valor no vacío tumba el arranque a propósito (no degrada en silencio).
+      # RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED queda DEROGADA: su sola
+      # presencia (con el canal encendido) tumba el arranque con un mensaje de migración — no la
+      # declares en ningún despliegue. Única excepción al desvío (aplica en ambos modos): los
+      # envíos del banco de pruebas de notificaciones, que van a su buzón configurado (decisión
+      # del PO 2026-08-11) — no aplica a los envíos reales de notificaciones. Ver .env.renting.example.
+      RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED: ${RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED:-true}
       RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL: ${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL:-}
       RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME: "${RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_USERNAME:-Equipo de desarrollo FLIT}"
     volumes:

@@ -124,6 +124,7 @@ public static class DependencyInjection
         // HU-2 (N03): puerto de historial del lifecycle — 1 fila de status_history + 1 evento por transición.
         services.AddScoped<Domain.Tramites.Estados.ITramiteTransitionRecorder, UseCases.ProcedureInstances.Estados.TramiteTransitionRecorder>();
         services.AddScoped<UseCases.ProcedureInstances.Estados.GetStatusHistoryHandler>();
+        services.AddScoped<UseCases.ProcedureInstances.Notifications.GetNotificationDispatchesHandler>();
 
         // Biométrica (Slice 6, mock). El scorer es un MOCK determinista; se reemplazará por uno real
         // (proveedor biométrico) sin tocar handlers. Contract-first, igual que los consultation providers.
@@ -257,6 +258,10 @@ public static class DependencyInjection
         services.AddScoped<ListExternalDataSourcesHandler>();
         services.AddScoped<ListConsultationTemplatesHandler>();
         services.AddScoped<ApplyConsultationTemplateFieldsHandler>();
+
+        // HU #11462 — resolución de destinatarios del aviso de cambio de estado (ADR-0045).
+        services.AddScoped<Notifications.ITramiteNotificationRecipientResolver,
+            Notifications.TramiteNotificationRecipientResolver>();
 
         return services;
     }

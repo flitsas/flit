@@ -1834,6 +1834,25 @@ export interface StatusHistoryPage {
   pageSize: number;
 }
 
+/** HU #11470 — fila de despacho de correo (dirección enmascarada). */
+export interface NotificationDispatchItem {
+  id: string;
+  recipientRole: string;
+  recipientKind: string;
+  recipientMasked: string | null;
+  recipientName: string | null;
+  templateKey: string;
+  status: string;
+  failureReason: string | null;
+  attempts: number;
+  queuedAt: string;
+  processedAt: string | null;
+}
+
+export interface NotificationDispatchesResponse {
+  items: NotificationDispatchItem[];
+}
+
 /**
  * HU #11203 — un mandatario que puede firmar el mandato del trámite.
  *

@@ -1492,6 +1492,22 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         return (items, total);
     }
 
+    public async Task<IReadOnlyList<ProcedureStateChangeEmailDispatch>?> ListEmailDispatchesAsync(
+        Guid instanceId, Guid tenantId, CancellationToken ct = default)
+    {
+        var exists = await db.ProcedureInstances.AsNoTracking()
+            .AnyAsync(x => x.Id == instanceId && x.TenantId == tenantId && x.DeletedAt == null, ct);
+        if (!exists)
+            return null;
+
+        return await db.ProcedureStateChangeEmailDispatches.AsNoTracking()
+            .Where(d => d.ProcedureInstanceId == instanceId && d.TenantId == tenantId)
+            .OrderByDescending(d => d.QueuedAt)
+            .ThenBy(d => d.RecipientRole)
+            .ThenBy(d => d.RecipientKind)
+            .ToListAsync(ct);
+    }
+
     public Task<string?> GetUserDisplayNameAsync(Guid userId, CancellationToken ct) =>
         db.Users.AsNoTracking().Where(u => u.Id == userId).Select(u => u.DisplayName).FirstOrDefaultAsync(ct);
 

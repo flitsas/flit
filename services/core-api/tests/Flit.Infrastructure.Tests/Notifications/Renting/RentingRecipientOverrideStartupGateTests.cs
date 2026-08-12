@@ -6,17 +6,17 @@ using Flit.Infrastructure.Notifications.Renting;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace Flit.Infrastructure.Tests.Notifications.Renting;
 
 /// <summary>
-/// HU #11364 AC3/AC4 — validación de arranque del desvío de destinatario. Invoca
-/// <c>InfrastructureExtensions.AddRentingChannel</c> por reflexión (mismo patrón que
-/// <c>RentingClientCertificateLoaderTests</c> / <c>RentingChannelDependencyInjectionTests</c>),
-/// variando <see cref="IHostEnvironment.EnvironmentName"/> y el interruptor
-/// <c>RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED</c>.
+/// ADR-0044 — validación de arranque del canal Renting: envío real vs. buzón de control se decide
+/// por <c>RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED</c> (interruptor afirmativo y propio del
+/// DESPLIEGUE), nunca por <c>IHostEnvironment</c>. Cubre las seis filas de la tabla de falla rápida
+/// del ADR. Invoca <c>InfrastructureExtensions.AddRentingChannel</c> por reflexión (mismo patrón que
+/// <c>RentingClientCertificateLoaderTests</c> / <c>RentingChannelDependencyInjectionTests</c>);
+/// desde ADR-0044 el método ya no recibe <see cref="Microsoft.Extensions.Hosting.IHostEnvironment"/>.
 /// </summary>
 public sealed class RentingRecipientOverrideStartupGateTests : IDisposable
 {
@@ -30,56 +30,67 @@ public sealed class RentingRecipientOverrideStartupGateTests : IDisposable
         }
     }
 
-    // ── AC3 — en producción con el desvío activo, la aplicación no levanta ─────────
+    // ── Fila 1 — canal deshabilitado: no se exige nada, ni la variable derogada (HU #11359 AC2) ──
 
     [Fact]
-    public void AddRentingChannel_EnProduccionConElDesvioActivo_FallaAlArrancar()
+    public void CanalDeshabilitado_NoExigeNiLaVariableNuevaNiLaDerogada()
     {
-        var configuration = BuildEnabledConfiguration(overrideEnabled: true);
+        var values = new Dictionary<string, string?>
+        {
+            ["Notifications:Renting:Enabled"] = "false",
+            // Derogada presente y con valor: igual no se evalúa, porque el canal está apagado.
+            ["Notifications:Renting:SendEmailDevelopmentRecipientOverrideEnabled"] = "true",
+        };
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
 
-        var act = () => InvokeAddRentingChannel(
-            new ServiceCollection(), configuration, new FakeHostEnvironment(Environments.Production));
-
-        var exception = act.Should().Throw<InvalidOperationException>().Which;
-        exception.Message.Should().Contain("RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED");
-        exception.Message.Should().Contain("producción");
-    }
-
-    [Fact]
-    public void AddRentingChannel_EnProduccionConElDesvioApagado_NoFalla()
-    {
-        // Complemento del AC3: producción con el interruptor en el valor correcto (apagado) arranca.
-        var configuration = BuildEnabledConfiguration(overrideEnabled: false);
-
-        var act = () => InvokeAddRentingChannel(
-            new ServiceCollection(), configuration, new FakeHostEnvironment(Environments.Production));
+        var act = () => InvokeAddRentingChannel(new ServiceCollection(), configuration);
 
         act.Should().NotThrow();
     }
 
-    // ── AC4 — fuera de producción con el desvío apagado, la aplicación no levanta ──
+    // ── Fila 2 — canal habilitado, variable ausente o vacía ⇒ arranca desviando ────────────────
 
     [Fact]
-    public void AddRentingChannel_FueraDeProduccionConElCanalHabilitadoYElDesvioApagado_FallaAlArrancar()
+    public void RealRecipientsAusente_ArrancaDesviando_ExigeElBuzonDeControl()
     {
-        var configuration = BuildEnabledConfiguration(overrideEnabled: false);
+        var configuration = BuildEnabledConfiguration(realRecipientsRaw: null, includeMailbox: true);
 
-        var act = () => InvokeAddRentingChannel(
-            new ServiceCollection(), configuration, new FakeHostEnvironment(Environments.Development));
+        var act = () => InvokeAddRentingChannel(new ServiceCollection(), configuration);
 
-        var exception = act.Should().Throw<InvalidOperationException>().Which;
-        exception.Message.Should().Contain("RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED");
-        exception.Message.Should().Contain("obligatorio");
+        act.Should().NotThrow();
     }
 
     [Fact]
-    public void AddRentingChannel_FueraDeProduccionConElCanalHabilitadoYElDesvioActivo_NoFallaYRegistraElDesvioReal()
+    public void RealRecipientsAusente_SinElBuzonDeControl_FallaNombrandoLaVariableQueFalta()
     {
-        var configuration = BuildEnabledConfiguration(overrideEnabled: true);
+        var configuration = BuildEnabledConfiguration(realRecipientsRaw: null, includeMailbox: false);
+
+        var act = () => InvokeAddRentingChannel(new ServiceCollection(), configuration);
+
+        var exception = act.Should().Throw<InvalidOperationException>().Which;
+        exception.Message.Should().Contain("RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_EMAIL");
+    }
+
+    // ── Fila 3 — "false" explícito: idéntico a la fila 2 (declaración explícita del default) ──
+
+    [Fact]
+    public void RealRecipientsFalse_ArrancaDesviando_IdenticoAAusente()
+    {
+        var configuration = BuildEnabledConfiguration(realRecipientsRaw: "false", includeMailbox: true);
+
+        var act = () => InvokeAddRentingChannel(new ServiceCollection(), configuration);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void RealRecipientsFalse_RegistraElDesvioReal_NoElPassthrough()
+    {
+        var configuration = BuildEnabledConfiguration(realRecipientsRaw: "false", includeMailbox: true);
         var services = new ServiceCollection();
         services.AddLogging();
 
-        InvokeAddRentingChannel(services, configuration, new FakeHostEnvironment(Environments.Development));
+        InvokeAddRentingChannel(services, configuration);
 
         var provider = services.BuildServiceProvider(new ServiceProviderOptions
         {
@@ -87,31 +98,71 @@ public sealed class RentingRecipientOverrideStartupGateTests : IDisposable
             ValidateOnBuild = true,
         });
 
-        // El desvío real (no el Passthrough) es el que queda registrado cuando el canal está
-        // habilitado — sin importar el valor del interruptor (que decide si Apply() desvía o no).
-        provider.GetRequiredService<IRentingRecipientOverride>().Should().BeOfType<RentingRecipientOverride>();
+        var overrideImpl = provider.GetRequiredService<IRentingRecipientOverride>();
+        overrideImpl.Should().BeOfType<RentingRecipientOverride>();
     }
 
-    // ── El AC4 solo exige el desvío cuando el canal está habilitado (verificación rápida) ──
+    // ── Fila 4 — "true": arranca enviando real, sin exigir el buzón de control ─────────────────
 
     [Fact]
-    public void AddRentingChannel_ConElCanalDeshabilitado_FueraDeProduccionYSinElDesvio_NoFalla()
+    public void RealRecipientsTrue_ArrancaEnviandoReal_SinExigirElBuzonDeControl()
     {
-        // Es la comprobación más rápida de que la condición del AC4 está bien acotada: si el canal
-        // Renting nace apagado (valor por defecto de despliegue) y el desvío también, CUALQUIER
-        // ambiente de desarrollo sin Notifications:Renting:Enabled=true debe arrancar con
-        // normalidad — igual que la suite Flit.Admin.Tests, que levanta el host real con
-        // WebApplicationFactory<Program>.
-        var values = new Dictionary<string, string?>
-        {
-            ["Notifications:Renting:Enabled"] = "false",
-        };
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
+        var configuration = BuildEnabledConfiguration(realRecipientsRaw: "true", includeMailbox: false);
 
-        var act = () => InvokeAddRentingChannel(
-            new ServiceCollection(), configuration, new FakeHostEnvironment(Environments.Development));
+        var act = () => InvokeAddRentingChannel(new ServiceCollection(), configuration);
 
-        act.Should().NotThrow();
+        act.Should().NotThrow("con envío real el buzón de control puede quedar vacío: no hay desvío que necesite dónde caer");
+    }
+
+    // ── Fila 5 — valor ininteligible: falla el arranque, no degrada en silencio ─────────────────
+
+    [Theory]
+    [InlineData("1")]
+    [InlineData("yes")]
+    [InlineData("ture")]
+    public void RealRecipientsConValorIninteligible_FallaAlArrancar_NoDegradaEnSilencio(string valorInvalido)
+    {
+        var configuration = BuildEnabledConfiguration(realRecipientsRaw: valorInvalido, includeMailbox: true);
+
+        var act = () => InvokeAddRentingChannel(new ServiceCollection(), configuration);
+
+        var exception = act.Should().Throw<InvalidOperationException>().Which;
+        exception.Message.Should().Contain("RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED");
+    }
+
+    // ── Fila 6 — variable derogada presente y no vacía (con cualquier valor de la nueva) ⇒ falla ─
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("false")]
+    [InlineData("true")]
+    public void VariableDerogadaPresente_FallaConMensajeDeMigracionQueNombraAmbasVariables(string? realRecipientsRaw)
+    {
+        var configuration = BuildEnabledConfiguration(
+            realRecipientsRaw: realRecipientsRaw, includeMailbox: true, deprecatedOverrideRaw: "true");
+
+        var act = () => InvokeAddRentingChannel(new ServiceCollection(), configuration);
+
+        var exception = act.Should().Throw<InvalidOperationException>().Which;
+        exception.Message.Should().Contain("RENTING_API_SEND_EMAIL_DEVELOPMENT_RECIPIENT_OVERRIDE_ENABLED");
+        exception.Message.Should().Contain("RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED");
+    }
+
+    // ── El nombre del ambiente ya no participa en la decisión (regresión estructural) ──────────
+
+    [Fact]
+    public void AddRentingChannel_YaNoRecibeIHostEnvironment()
+    {
+        // ADR-0044 — si alguien reintrodujera IHostEnvironment en la firma, este test lo detecta
+        // sin depender de ningún valor de EnvironmentName: la prueba es que el PARÁMETRO no existe.
+        var method = typeof(InfrastructureExtensions).GetMethod(
+            "AddRentingChannel", BindingFlags.NonPublic | BindingFlags.Static);
+
+        method.Should().NotBeNull();
+        method!.GetParameters().Should().NotContain(
+            p => typeof(Microsoft.Extensions.Hosting.IHostEnvironment).IsAssignableFrom(p.ParameterType),
+            "el desvío/envío real se decide SOLO por RENTING_API_SEND_EMAIL_REAL_RECIPIENTS_ENABLED, " +
+            "nunca por el nombre del ambiente");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -133,7 +184,8 @@ public sealed class RentingRecipientOverrideStartupGateTests : IDisposable
         return (path, passphrase, certificate.Subject);
     }
 
-    private IConfiguration BuildEnabledConfiguration(bool overrideEnabled)
+    private IConfiguration BuildEnabledConfiguration(
+        string? realRecipientsRaw, bool includeMailbox, string? deprecatedOverrideRaw = null)
     {
         var (pfxPath, passphrase, subject) = CreateTestCertificate("renting-recipient-override-fixture");
 
@@ -153,10 +205,15 @@ public sealed class RentingRecipientOverrideStartupGateTests : IDisposable
             ["Notifications:Renting:SendEmailSecondsTimeout"] = "20",
             ["Notifications:Renting:SendEmailSenderEmail"] = "no-reply@example.test",
             ["Notifications:Renting:SendEmailSenderUsername"] = "no-reply",
-            ["Notifications:Renting:SendEmailDevelopmentRecipientOverrideEnabled"] = overrideEnabled ? "true" : "false",
         };
 
-        if (overrideEnabled)
+        if (realRecipientsRaw is not null)
+            values["Notifications:Renting:SendEmailRealRecipientsEnabled"] = realRecipientsRaw;
+
+        if (deprecatedOverrideRaw is not null)
+            values["Notifications:Renting:SendEmailDevelopmentRecipientOverrideEnabled"] = deprecatedOverrideRaw;
+
+        if (includeMailbox)
         {
             values["Notifications:Renting:SendEmailDevelopmentRecipientEmail"] = "desvio@example.test";
             values["Notifications:Renting:SendEmailDevelopmentRecipientUsername"] = "desvio";
@@ -165,9 +222,11 @@ public sealed class RentingRecipientOverrideStartupGateTests : IDisposable
         return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
     }
 
-    /// <summary>Ver <c>RentingClientCertificateLoaderTests.InvokeAddRentingChannel</c> — mismo motivo.</summary>
-    private static void InvokeAddRentingChannel(
-        IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
+    /// <summary>
+    /// Ver <c>RentingClientCertificateLoaderTests.InvokeAddRentingChannel</c> — mismo motivo.
+    /// ADR-0044 — <c>AddRentingChannel</c> ya no recibe <see cref="Microsoft.Extensions.Hosting.IHostEnvironment"/>.
+    /// </summary>
+    private static void InvokeAddRentingChannel(IServiceCollection services, IConfiguration configuration)
     {
         var method = typeof(InfrastructureExtensions).GetMethod(
             "AddRentingChannel", BindingFlags.NonPublic | BindingFlags.Static);
@@ -175,20 +234,11 @@ public sealed class RentingRecipientOverrideStartupGateTests : IDisposable
 
         try
         {
-            method!.Invoke(null, [services, configuration, environment]);
+            method!.Invoke(null, [services, configuration]);
         }
         catch (TargetInvocationException ex) when (ex.InnerException is not null)
         {
             throw ex.InnerException;
         }
-    }
-
-    private sealed class FakeHostEnvironment(string environmentName) : IHostEnvironment
-    {
-        public string EnvironmentName { get; set; } = environmentName;
-        public string ApplicationName { get; set; } = "Flit.Infrastructure.Tests";
-        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
-        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } =
-            new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 }

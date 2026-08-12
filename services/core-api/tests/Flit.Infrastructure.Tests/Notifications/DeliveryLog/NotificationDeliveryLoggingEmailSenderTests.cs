@@ -1,10 +1,16 @@
+using Flit.Admin.Domain.Companies.Settings;
 using Flit.Infrastructure.Notifications.DeliveryLog;
+using Flit.Infrastructure.Notifications.Renting;
+using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Security.Domain.Auth;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using NSubstitute;
 using Xunit;
 
 namespace Flit.Infrastructure.Tests.Notifications.DeliveryLog;
@@ -255,6 +261,107 @@ public sealed class NotificationDeliveryLoggingEmailSenderTests
             e.Level == LogLevel.Error
             && e.Exception == thrown
             && e.Message.Contains("bitácora", StringComparison.OrdinalIgnoreCase));
+    }
+
+    // ── Bug corregido — el canal escrito en la fila es el REALMENTE usado, no una constante fija ──
+    // Estas dos pruebas envuelven el TenantChannelEmailRouter REAL como inner del decorador (en vez
+    // del FakeEmailSender que solo devuelve un resultado fijo): así se demuestra, extremo a extremo,
+    // que la columna `channel` refleja la decisión del router y no una constante "flit_smtp".
+
+    [Fact]
+    public async Task Bug_CorreoEnrutadoPorTenantApi_DejaFilaConChannelTenantApi()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var provider = BuildProvider(dbName);
+        var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new CapturingLogger<NotificationDeliveryLoggingEmailSender>();
+
+        var settingsRepo = Substitute.For<ITenantSettingsRepository>();
+        settingsRepo.GetAsync(TenantA, Arg.Any<CancellationToken>()).Returns(new TenantSettings
+        {
+            TenantId = TenantA,
+            AllowInitialRegistration = true,
+            AllowMiscNewVehicles = true,
+            OnlyOwnVehicles = false,
+            SignatureVaultEnabled = false,
+            NotificationChannel = NotificationChannel.TenantApi,
+            NotificationTarget = NotificationTarget.Radicador,
+            PaymentMethods = [],
+        });
+        var flitTransport = Substitute.For<IEmailSender>();
+        var rentingSender = Substitute.For<IRentingEmailApiSender>();
+        rentingSender.SendAsync(Arg.Any<RentingSendEmailRequest>(), Arg.Any<CancellationToken>())
+            .Returns(EmailSendResult.Sent);
+        var router = new TenantChannelEmailRouter(
+            flitTransport,
+            new NotificationChannelResolver(settingsRepo),
+            rentingSender,
+            Options.Create(new RentingChannelOptions { Enabled = true, SendEmailSenderEmail = "renting@example.test", SendEmailSenderUsername = "Renting" }),
+            NullLogger<TenantChannelEmailRouter>.Instance);
+
+        var sender = new NotificationDeliveryLoggingEmailSender(router, scopeFactory, logger);
+
+        // Plantilla de módulo Analytics: NO es un correo de cuenta, así que sí se enruta por canal.
+        var message = new EmailMessage(
+            TenantA, "analytics.alert", "cliente@flit.test", "Cliente", "Asunto", "<html/>");
+
+        var result = await sender.SendAsync(message, TestContext.Current.CancellationToken);
+
+        result.Success.Should().BeTrue();
+        await flitTransport.DidNotReceive().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+
+        await using var ctx = NewContext(dbName);
+        var row = await ctx.NotificationDeliveryLogs.SingleAsync(TestContext.Current.CancellationToken);
+        row.Channel.Should().Be("tenant_api");
+    }
+
+    [Fact]
+    public async Task Bug_CorreoDeCuentaConTenantConfiguradoEnTenantApi_DejaFilaConChannelFlitSmtp()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var provider = BuildProvider(dbName);
+        var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
+        var logger = new CapturingLogger<NotificationDeliveryLoggingEmailSender>();
+
+        // El tenant está configurado en TenantApi, pero AC3 del router hace que los correos de
+        // cuenta (módulo Security) lo ignoren y salgan SIEMPRE por FlitSmtp.
+        var settingsRepo = Substitute.For<ITenantSettingsRepository>();
+        settingsRepo.GetAsync(TenantA, Arg.Any<CancellationToken>()).Returns(new TenantSettings
+        {
+            TenantId = TenantA,
+            AllowInitialRegistration = true,
+            AllowMiscNewVehicles = true,
+            OnlyOwnVehicles = false,
+            SignatureVaultEnabled = false,
+            NotificationChannel = NotificationChannel.TenantApi,
+            NotificationTarget = NotificationTarget.Radicador,
+            PaymentMethods = [],
+        });
+        var flitTransport = Substitute.For<IEmailSender>();
+        flitTransport.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>()).Returns(EmailSendResult.Sent);
+        var rentingSender = Substitute.For<IRentingEmailApiSender>();
+        var router = new TenantChannelEmailRouter(
+            flitTransport,
+            new NotificationChannelResolver(settingsRepo),
+            rentingSender,
+            Options.Create(new RentingChannelOptions { Enabled = true, SendEmailSenderEmail = "renting@example.test", SendEmailSenderUsername = "Renting" }),
+            NullLogger<TenantChannelEmailRouter>.Instance);
+
+        var sender = new NotificationDeliveryLoggingEmailSender(router, scopeFactory, logger);
+
+        var message = new EmailMessage(
+            TenantA, "security.forgot-password", "usuario@flit.test", "Usuario", "Asunto", "<html/>");
+
+        var result = await sender.SendAsync(message, TestContext.Current.CancellationToken);
+
+        result.Success.Should().BeTrue();
+        await flitTransport.Received(1).SendAsync(message, Arg.Any<CancellationToken>());
+        await rentingSender.DidNotReceive().SendAsync(Arg.Any<RentingSendEmailRequest>(), Arg.Any<CancellationToken>());
+
+        await using var ctx = NewContext(dbName);
+        var row = await ctx.NotificationDeliveryLogs.SingleAsync(TestContext.Current.CancellationToken);
+        row.Channel.Should().Be(
+            "flit_smtp", "AC3 del router hace que el correo de cuenta ignore el canal del tenant (tenant_api)");
     }
 
     // ── HU #11364 AC2 — la marca de envío desviado llega a la fila junto al destinatario original ──

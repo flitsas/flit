@@ -79,6 +79,7 @@ import type {
   SimularFirmaResult,
   SolicitarFirmaInput,
   StatusHistoryPage,
+  NotificationDispatchesResponse,
   TenantBiometricValidationsResponse,
   TenantBiometricValidationFilters,
   TenantBiometricPersonsResponse,
@@ -1861,6 +1862,13 @@ export const tramitesClient = {
   ) =>
     request<StatusHistoryPage>(
       `/api/v1/tramites/instances/${instanceId}/status-history?page=${page}&pageSize=${pageSize}`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
+  /** HU #11470 — despachos de correo al cambio de estado (correo enmascarado). */
+  getNotificationDispatches: (instanceId: string, tenantId?: string) =>
+    request<NotificationDispatchesResponse>(
+      `/api/v1/tramites/instances/${instanceId}/notification-dispatches`,
       { headers: tenantHeader(tenantId) },
     ),
 

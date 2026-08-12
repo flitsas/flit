@@ -68,7 +68,11 @@ public static class IdentitySubjectResolver
     }
 
     /// <summary>Lee el representante legal embebido en <c>actor.metadata</c>. Robusto ante null/"{}"/JSON inválido.</summary>
-    private static ActorRepresentanteLegal? ParseRepresentanteLegal(string? metadata)
+    /// <remarks>
+    /// HU #11462 — visibilidad <c>internal</c> para reutilizarlo en
+    /// <c>TramiteNotificationRecipientResolver</c> sin crear un cuarto parser del mismo JSON.
+    /// </remarks>
+    internal static ActorRepresentanteLegal? ParseRepresentanteLegal(string? metadata)
     {
         if (string.IsNullOrWhiteSpace(metadata) || metadata == "{}")
             return null;

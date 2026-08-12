@@ -297,7 +297,7 @@ public sealed class RentingEmailApiSenderTests
         // (NotificationDeliveryLoggingEmailSender, HU #11363) hacia admin.notification_delivery_logs.
         var ct = TestContext.Current.CancellationToken;
         var options = NewOptions();
-        options.SendEmailDevelopmentRecipientOverrideEnabled = true;
+        options.SendRealRecipientsEnabled = false;
         options.SendEmailDevelopmentRecipientEmail = "desvio@example.test";
         options.SendEmailDevelopmentRecipientUsername = "Desvío QA";
         var recipientOverride = new RentingRecipientOverride(
@@ -332,7 +332,7 @@ public sealed class RentingEmailApiSenderTests
         // salió hacia el destinatario de desvío, aunque el proveedor la haya rechazado.
         var ct = TestContext.Current.CancellationToken;
         var options = NewOptions();
-        options.SendEmailDevelopmentRecipientOverrideEnabled = true;
+        options.SendRealRecipientsEnabled = false;
         options.SendEmailDevelopmentRecipientEmail = "desvio@example.test";
         options.SendEmailDevelopmentRecipientUsername = "Desvío QA";
         var recipientOverride = new RentingRecipientOverride(
@@ -380,7 +380,7 @@ public sealed class RentingEmailApiSenderTests
         // consultando IRentingRecipientOverride igual que antes de la HU #11372.
         var ct = TestContext.Current.CancellationToken;
         var options = NewOptions();
-        options.SendEmailDevelopmentRecipientOverrideEnabled = true;
+        options.SendRealRecipientsEnabled = false;
         options.SendEmailDevelopmentRecipientEmail = "desvio@example.test";
         options.SendEmailDevelopmentRecipientUsername = "Desvío QA";
         var recipientOverride = new RentingRecipientOverride(

@@ -5,7 +5,7 @@ using System.Text;
 namespace Flit.Infrastructure.Notifications.Tramites;
 
 /// <summary>
-/// Datos de las plantillas de trámite aprobado/rechazado (banco de pruebas; sin disparador productivo aún).
+/// Datos de las plantillas de trámite aprobado/rechazado.
 /// </summary>
 public sealed record TramiteCambioEstadoEmailModel(
     string VendedorNombre,
@@ -19,6 +19,7 @@ public sealed record TramiteCambioEstadoEmailModel(
 /// <summary>
 /// Composer compartido de <c>tramites.aprobado</c> y <c>tramites.rechazado</c>:
 /// variante FLIT (marca) y Renting (diseño Compra Tu Usado).
+/// Disparador productivo: sink + worker (HU #11465 / #11467, ADR-0045).
 /// </summary>
 public static class TramiteCambioEstadoEmailComposer
 {

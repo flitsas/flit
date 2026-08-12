@@ -254,12 +254,10 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<IOtApiCallLogRepository, OtApiCallLogRepository>();
         services.AddScoped<IOtWebhookSecretHasher, OtWebhookSecretHasherService>();
         services.AddScoped<IOtWebhookDispatchService, OtWebhookDispatchService>();
-        // Concreto + mapeo a la interfaz (misma instancia). El concreto lo consume el notifier COMPUESTO
-        // (OT + reflejo ICT, ver AddIctStateReflection); si el canal inverso ICT no está configurado, este
-        // mapeo a la interfaz sigue vigente y el comportamiento OT no cambia.
+        // Concreto del sink OT. El mapeo a IProcedureStateChangeNotifier vive SOLO en
+        // ProcedureStateChangeNotifierRegistration (HU #11464), invocado desde AddIctStateReflection
+        // (con o sin canal inverso), para que un sink nuevo no silencie OT al registrarse aparte.
         services.AddScoped<OtWebhookProcedureStateChangeNotifier>();
-        services.AddScoped<IProcedureStateChangeNotifier>(sp =>
-            sp.GetRequiredService<OtWebhookProcedureStateChangeNotifier>());
 
         services.AddHttpClient(nameof(OtWebhookDispatchService), client =>
         {

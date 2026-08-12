@@ -34,6 +34,7 @@ public static class NotificationTemplateCatalog
         public const string Alert = "analytics.alert";
         public const string TramiteRechazado = "tramites.rechazado";
         public const string TramiteAprobado = "tramites.aprobado";
+        public const string AsignacionPlaca = "tramites.asignacion-placa";
     }
 
     /// <summary>
@@ -81,6 +82,11 @@ public static class NotificationTemplateCatalog
             "Trámite Rechazado",
             NotificationModule.Tramites,
             [NotificationTrigger.ProcedureStatusChanged]),
+        new NotificationTemplateDescriptor(
+            TemplateIds.AsignacionPlaca,
+            "Asignación placa",
+            NotificationModule.Tramites,
+            [NotificationTrigger.PlateAssigned]),
     ];
 
     /// <summary>

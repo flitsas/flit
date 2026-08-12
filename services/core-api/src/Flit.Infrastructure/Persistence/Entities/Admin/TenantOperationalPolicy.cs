@@ -56,6 +56,12 @@ public sealed class TenantOperationalPolicy
     /// </summary>
     public bool PersonalizedDocumentsEnabled { get; set; }
 
+    /// <summary>
+    /// HU #11469 — interruptor operativo de avisos de correo al cambio de estado.
+    /// Default <c>true</c>: avisos encendidos al desplegar. Lo evalúa el worker, no el sink.
+    /// </summary>
+    public bool TramiteStateEmailsEnabled { get; set; } = true;
+
     public string NotificationTarget { get; set; } = "submitter";
 
     /// <summary>Array JSON (jsonb) de métodos de recaudo. Ej: <c>["pse","efecty"]</c>.</summary>

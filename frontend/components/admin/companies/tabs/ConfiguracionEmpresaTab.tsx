@@ -131,6 +131,14 @@ export function ConfiguracionEmpresaTab({
         )}
       </div>
 
+      <ToggleSwitch
+        id="avisosCambioEstadoActivos"
+        label="Avisos de correo al cambio de estado"
+        description="Cuando está activo, se notifica por correo al ciudadano (y a la empresa / representante legal si aplica) al aprobar o rechazar un trámite. Si se apaga, los avisos quedan en cola y se envían al reactivar."
+        checked={form.avisosCambioEstadoActivos}
+        onChange={(v) => onChange({ avisosCambioEstadoActivos: v })}
+      />
+
       {/* HU #11315 — condicionado al MISMO canal de arriba; con FLIT_SMTP no se renderiza nada. */}
       <PersonalizedDocumentsPanel tenantId={tenantId} enrutamientoSMTP={canalPersistido} />
 

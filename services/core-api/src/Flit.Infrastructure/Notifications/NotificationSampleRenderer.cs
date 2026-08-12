@@ -33,6 +33,9 @@ public static class NotificationSampleRenderer
             TramiteCambioEstadoEmailComposer.TemplateIdRechazado => channel == NotificationChannel.TenantApi
                 ? TramiteEmailPreviewSample.BuildRentingRechazado(baseUrl)
                 : TramiteEmailPreviewSample.BuildFlitRechazado(baseUrl),
+            AsignacionPlacaEmailComposer.TemplateId => channel == NotificationChannel.TenantApi
+                ? AsignacionPlacaEmailPreviewSample.BuildRenting(baseUrl)
+                : AsignacionPlacaEmailPreviewSample.BuildFlit(baseUrl),
             _ => throw new InvalidOperationException(
                 $"El catálogo resolvió el id '{templateId}' pero no hay muestra registrada para él."),
         };

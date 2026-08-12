@@ -230,6 +230,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Trámites — outbox de cambios de estado del trámite (N 03 RNF01, ADR-0022)
     public DbSet<ProcedureStateChangeOutbox> ProcedureStateChangeOutbox => Set<ProcedureStateChangeOutbox>();
 
+    // Trámites — cola de despachos de correo al cambio de estado (HU #11461, ADR-0045)
+    public DbSet<ProcedureStateChangeEmailDispatch> ProcedureStateChangeEmailDispatches =>
+        Set<ProcedureStateChangeEmailDispatch>();
+
     // Trámites — bitácora ÚNICA del ciclo de validación de identidad (envío/webhook/descifrado/errores)
     public DbSet<IdentityValidationAuditEvent> IdentityValidationAudits => Set<IdentityValidationAuditEvent>();
 

@@ -16,13 +16,13 @@ public class NotificationTemplateCatalogTests
     }
 
     [Fact]
-    public void All_DebeTenerExactamenteOchoEntradas()
+    public void All_DebeTenerExactamenteNueveEntradas()
     {
-        NotificationTemplateCatalog.All.Should().HaveCount(8);
+        NotificationTemplateCatalog.All.Should().HaveCount(9);
     }
 
     [Fact]
-    public void All_DebeCubrirLosOchoIdsEsperados()
+    public void All_DebeCubrirLosNueveIdsEsperados()
     {
         NotificationTemplateCatalog.All.Select(t => t.Id).Should().BeEquivalentTo(
         [
@@ -34,6 +34,7 @@ public class NotificationTemplateCatalogTests
             "analytics.alert",
             "tramites.aprobado",
             "tramites.rechazado",
+            "tramites.asignacion-placa",
         ]);
     }
 
@@ -62,6 +63,7 @@ public class NotificationTemplateCatalogTests
         NotificationTemplateCatalog.TryResolve("analytics.alert", out var alert);
         NotificationTemplateCatalog.TryResolve("tramites.aprobado", out var aprobado);
         NotificationTemplateCatalog.TryResolve("tramites.rechazado", out var rechazado);
+        NotificationTemplateCatalog.TryResolve("tramites.asignacion-placa", out var asignacion);
 
         invitation.Module.Should().Be(NotificationModule.Security);
         forgot.Module.Should().Be(NotificationModule.Security);
@@ -71,6 +73,7 @@ public class NotificationTemplateCatalogTests
         alert.Module.Should().Be(NotificationModule.Analytics);
         aprobado.Module.Should().Be(NotificationModule.Tramites);
         rechazado.Module.Should().Be(NotificationModule.Tramites);
+        asignacion.Module.Should().Be(NotificationModule.Tramites);
     }
 
     [Fact]
@@ -102,11 +105,19 @@ public class NotificationTemplateCatalogTests
     }
 
     [Fact]
-    public void All_SonNueveDisparadoresEnTotalParaOchoPlantillas()
+    public void AsignacionPlaca_DeclaraPlateAssigned()
     {
-        // Invitación declara 2; el resto 1 cada una → 9.
+        NotificationTemplateCatalog.TryResolve("tramites.asignacion-placa", out var descriptor).Should().BeTrue();
+        descriptor.Name.Should().Be("Asignación placa");
+        descriptor.Triggers.Should().BeEquivalentTo([NotificationTrigger.PlateAssigned]);
+    }
+
+    [Fact]
+    public void All_SonDiezDisparadoresEnTotalParaNuevePlantillas()
+    {
+        // Invitación declara 2; el resto 1 cada una → 10.
         var totalTriggers = NotificationTemplateCatalog.All.Sum(t => t.Triggers.Count);
-        totalTriggers.Should().Be(9);
+        totalTriggers.Should().Be(10);
     }
 
     [Fact]
