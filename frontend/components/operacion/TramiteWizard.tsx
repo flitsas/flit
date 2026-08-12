@@ -34,6 +34,8 @@ import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
 import { PrendaForm } from './PrendaForm';
 import { SubsanacionPanel } from './SubsanacionPanel';
+import { AvisosCorreoPanel } from './AvisosCorreoPanel';
+import { EstadoTimelinePanel } from './EstadoTimeline';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
@@ -1337,6 +1339,13 @@ export function TramiteWizard(props: Props) {
             </div>
           </div>
         </section>
+
+      {instanceId ? (
+        <>
+          <EstadoTimelinePanel instanceId={instanceId} />
+          <AvisosCorreoPanel instanceId={instanceId} />
+        </>
+      ) : null}
     </div>
    </WizardReadOnlyProvider>
   );

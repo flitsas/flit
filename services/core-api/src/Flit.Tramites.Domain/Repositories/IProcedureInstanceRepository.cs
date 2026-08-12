@@ -398,6 +398,13 @@ public interface IProcedureInstanceRepository
         Guid id, Guid tenantId, int skip, int take, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #11470 — despachos de correo de cambio de estado del trámite.
+    /// <c>null</c> si la instancia no existe en el tenant; lista vacía si no hay avisos.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureStateChangeEmailDispatch>?> ListEmailDispatchesAsync(
+        Guid instanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
     /// Resuelve el <c>DisplayName</c> de un usuario contra <c>identity.users</c> (operador que radica
     /// una generación de impronta desde el trámite). Null si el usuario no existe.
     /// </summary>

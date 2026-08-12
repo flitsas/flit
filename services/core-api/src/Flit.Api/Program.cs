@@ -278,6 +278,7 @@ app.MapTramitesRnmcEndpoints();
 app.MapTramitesWizardEndpoints();
 app.MapTramitesVehicleColorsEndpoints();
 app.MapTramitesStatusHistoryEndpoints();
+app.MapTramitesNotificationDispatchesEndpoints();
 app.MapLegalRepresentativeConsumptionEndpoints();
 
 // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
