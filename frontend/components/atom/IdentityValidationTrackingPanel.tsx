@@ -111,7 +111,7 @@ export function IdentityValidationTrackingPanel({
       <button
         type="button"
         onClick={toggle}
-        className="flex items-center gap-1.5 text-[11px] font-semibold opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="flex items-center gap-1.5 text-xs font-semibold opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
         style={{ outlineColor: FLIT.brand.blue }}
         aria-expanded={open}
         aria-label="Ver tracking de la validación"
@@ -126,12 +126,12 @@ export function IdentityValidationTrackingPanel({
       {open && (
         <div className="mt-2 space-y-2">
           {loading && (
-            <p className="text-[11px] opacity-60" role="status" aria-live="polite">
+            <p className="text-xs opacity-60" role="status" aria-live="polite">
               Cargando bitácora…
             </p>
           )}
           {error && (
-            <p className="text-[11px]" style={{ color: FLIT.state.danger }} role="alert" aria-live="polite">
+            <p className="text-xs" style={{ color: FLIT.state.danger }} role="alert" aria-live="polite">
               {error}
             </p>
           )}
@@ -141,7 +141,7 @@ export function IdentityValidationTrackingPanel({
            */}
           {referenced && (
             <p
-              className="rounded-lg px-2.5 py-1.5 text-[11px]"
+              className="rounded-lg px-2.5 py-1.5 text-xs"
               style={{ background: FLIT.blueAlpha(0.1), color: FLIT.brand.blue }}
               role="status"
             >
@@ -150,18 +150,18 @@ export function IdentityValidationTrackingPanel({
             </p>
           )}
           {!loading && !error && events && events.length === 0 && (
-            <p className="text-[11px] opacity-60">Sin eventos registrados todavía.</p>
+            <p className="text-xs opacity-60">Sin eventos registrados todavía.</p>
           )}
           {events && events.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-[10.5px]">
+              <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="opacity-60">
-                    <th className="py-1 pr-2 font-semibold">Fecha</th>
-                    <th className="py-1 pr-2 font-semibold">Etapa</th>
-                    <th className="py-1 pr-2 font-semibold">Resultado</th>
-                    <th className="py-1 pr-2 font-semibold">Cifrado</th>
-                    <th className="py-1 pr-2 font-semibold">Detalle</th>
+                    <th scope="col" className="py-1 pr-2 font-semibold">Fecha</th>
+                    <th scope="col" className="py-1 pr-2 font-semibold">Etapa</th>
+                    <th scope="col" className="py-1 pr-2 font-semibold">Resultado</th>
+                    <th scope="col" className="py-1 pr-2 font-semibold">Cifrado</th>
+                    <th scope="col" className="py-1 pr-2 font-semibold">Detalle</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -186,7 +186,7 @@ export function IdentityValidationTrackingPanel({
             type="button"
             onClick={() => void loadAudit()}
             disabled={loading}
-            className="flex items-center gap-1 text-[10.5px] font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="flex items-center gap-1 text-xs font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             style={{ color: FLIT.brand.blue, outlineColor: FLIT.brand.blue }}
             aria-label="Refrescar bitácora"
           >
