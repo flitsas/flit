@@ -248,7 +248,11 @@ export function Reportes() {
           {activeTab === "uso" && <UsoTab filters={filters} needsCompany={needsCompany} />}
           {activeTab === "productividad" && <ProductividadTab filters={filters} />}
           {activeTab === "consultas" && (
-            <ConsultasTab tenantId={filters.tenantId || undefined} needsCompany={needsCompany} />
+            <ConsultasTab
+              tenantId={filters.tenantId || undefined}
+              needsCompany={needsCompany}
+              isSuper={isSuper}
+            />
           )}
         </div>
       )}

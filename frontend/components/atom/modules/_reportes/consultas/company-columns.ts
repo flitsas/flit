@@ -70,6 +70,15 @@ const GRUPO_TIEMPOS = "Tiempos";
 
 export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
   {
+    id: "compania",
+    label: "Compañía",
+    group: GRUPO_IDENT,
+    // Solo importa cuando la consulta corre sobre varias compañías a la vez (SuperAdmin); por eso
+    // no va visible por defecto en la vista normal de una empresa — ver ConsultasSuperAdminTab.
+    value: (r) => r.companiaNombre,
+    width: 24,
+  },
+  {
     id: "referencia",
     label: "Radicado",
     group: GRUPO_IDENT,
