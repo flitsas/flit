@@ -901,6 +901,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // Consulta de identidad por documento. Bifurca por tipo de persona: jurídica → RUES (por NIT),
   // natural → RUNT (conductor). Si encuentra, autopopula el actor. Sin resultado exitoso no se
   // permite guardar ni avanzar (gate de Continuar en el wizard).
+  /**
+   * Consultas en vuelo que nacieron de un clic. Es un contador y no un booleano porque en traspaso
+   * hay dos actores y el gestor puede lanzar la segunda consulta sin esperar a la primera.
+   */
+  const [consultasManuales, setConsultasManuales] = useState(0);
+
+  /** Envuelve una consulta para que levante el velo de espera; solo la usan los botones. */
+  const conVelo = (consulta: Promise<unknown>) => {
+    setConsultasManuales((n) => n + 1);
+    void consulta.finally(() => setConsultasManuales((n) => Math.max(0, n - 1)));
+  };
+
   const handleIdentityLookup = async (index: number) => {
     const actor = actors[index];
     const documentNumber = actor.numeroDocumento.trim();
@@ -1696,7 +1708,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  void handleRlLookup(index);
+                  conVelo(handleRlLookup(index));
                 }
               }}
               className={`${INPUT_BASE} mt-1.5 font-mono`}
@@ -1705,7 +1717,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           {!readOnly && !isPreloaded && (
             <button
               type="button"
-              onClick={() => void handleRlLookup(index)}
+              onClick={() => conVelo(handleRlLookup(index))}
               disabled={rlState.status === 'loading' || !(rl.numeroDocumento ?? '').trim() || !instanceId}
               className="h-[42px] shrink-0 rounded-xl px-3 text-xs font-semibold border disabled:opacity-50"
               style={{ borderColor: '#557EFF', color: '#557EFF' }}
@@ -1716,7 +1728,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           {!readOnly && isPreloaded && (
             <button
               type="button"
-              onClick={() => void handleRlLookup(index)}
+              onClick={() => conVelo(handleRlLookup(index))}
               disabled={rlState.status === 'loading' || !(rl.numeroDocumento ?? '').trim() || !instanceId}
               // Secundario en navy y a plena opacidad. Antes iba en gris al 60%, que sobre blanco no
               // llega a AA: para restar peso a una acción el sistema usa el botón secundario, no
@@ -1919,7 +1931,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     if (docLocked) return;
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      void handleIdentityLookup(0);
+                      conVelo(handleIdentityLookup(0));
                     }
                   }}
                   aria-label="Número de documento"
@@ -1938,7 +1950,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               {!readOnly && !autoConsultRunt && (
                 <button
                   type="button"
-                  onClick={() => void handleIdentityLookup(0)}
+                  onClick={() => conVelo(handleIdentityLookup(0))}
                   disabled={runtState.status === 'loading' || !actor.numeroDocumento.trim() || !instanceId}
                   className="flex h-[42px] shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   style={{ background: WIZARD_CTA_GRADIENT }}
@@ -2141,10 +2153,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   }
 
   // ── Layout MULTI (traspaso): una tarjeta blanca por actor, lado a lado ────
-  // Consultar a una persona en el RUNT o a una empresa en el RUES sale a un proveedor externo y
-  // tarda lo mismo que la consulta del vehículo del paso 1: se cubre con la misma escena de espera,
-  // que además evita el segundo clic sobre un botón que parece no haber respondido.
-  const consultandoActor = Object.values(runt).some((s) => s.status === 'loading');
+  // Velo de espera SOLO para las consultas que dispara el gestor. Colgarlo de "hay una consulta en
+  // curso" tapaba la pantalla al entrar al paso: en traspaso el vendedor se consulta solo al montar
+  // (autoConsultRunt), y el velo aparecía en cada visita sin que nadie hubiera pedido nada. Una
+  // espera que el usuario no provocó no se anuncia tapándole la pantalla.
+  const consultandoActor = consultasManuales > 0;
 
   return (
     <>
@@ -2264,7 +2277,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   {!readOnly && !docLocked && (
                     <button
                       type="button"
-                      onClick={() => void handleIdentityLookup(index)}
+                      onClick={() => conVelo(handleIdentityLookup(index))}
                       disabled={runtState.status === 'loading' || !actor.numeroDocumento.trim() || !instanceId}
                       className="mt-2 px-3 py-1.5 rounded-xl text-xs font-semibold border disabled:opacity-50"
                       style={{ borderColor: '#557EFF', color: '#557EFF' }}

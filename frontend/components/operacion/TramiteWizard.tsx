@@ -2598,8 +2598,14 @@ function ConsultaStep({
     <div className="space-y-3 pr-16">
       {/* La consulta al RUNT tarda segundos. Hasta ahora la única señal era el rótulo del botón, que
           se pierde en cuanto la atención se va a otra parte de la pantalla; la propuesta cubre la
-          espera con la escena del vehículo y dice ante quién se está esperando. */}
-      {loading && <CarLoaderModal mode="runt" />}
+          espera con la escena del vehículo y dice ante quién se está esperando.
+
+          Cuelga de `persisting` y NO de `loading`: `loading` incluye `preflightLoading`, que también
+          se enciende cuando el pre-vuelo se recarga solo al abrir el paso. Con eso el velo salía en
+          cada entrada al asistente sin que nadie hubiera pulsado nada. `persisting` solo lo levanta
+          el gestor al consultar. El rótulo del botón sigue usando `loading`: ahí sí interesa que se
+          vea ocupado por cualquier motivo. */}
+      {persisting && <CarLoaderModal mode="runt" />}
       <WizardHelpRail
         modalidad={modalidadVigente}
         transitOfficeId={transitOfficeId || undefined}
@@ -2612,12 +2618,10 @@ function ConsultaStep({
           creado que migrar. Con el trámite ya creado la modalidad gobierna sus pasos y documentos,
           así que queda fija y las demás tarjetas se apagan. */}
       <div className={WIZARD_CARD}>
-        <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
-          Configuración del Trámite
-        </h3>
-        <p className="mt-1 text-xs opacity-70">
-          Define el trámite principal que se radicará con este expediente.
-        </p>
+        <WizardCardHeader
+          title="Configuración del Trámite"
+          subtitle="Define el trámite principal que se radicará con este expediente."
+        />
         <fieldset className="mt-4">
           <legend className="text-xs font-semibold">Tipo de Trámite Principal</legend>
           <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -2665,12 +2669,10 @@ function ConsultaStep({
           con el identificador y el CTA en una línea. Los campos son los que pide cada modalidad:
           el VIN en matrícula; placa, tipo y número de documento del propietario en traspaso. */}
       <div className={WIZARD_CARD}>
-        <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
-          Consulta del Vehículo
-        </h3>
-        <p className="mt-1 text-xs opacity-70">
-          Validamos {isVin ? 'el VIN' : 'la placa'} en el RUNT antes de configurar el trámite.
-        </p>
+        <WizardCardHeader
+          title="Consulta del Vehículo"
+          subtitle={`Validamos ${isVin ? 'el VIN' : 'la placa'} en el RUNT antes de configurar el trámite.`}
+        />
 
 
         <div className="mt-4 flex flex-wrap items-end gap-4">
@@ -2814,12 +2816,10 @@ function ConsultaStep({
           "Continuar y guardar". */}
       {muestraRadicacion && hasVehicleData && (
         <div className={WIZARD_CARD}>
-          <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
-            Organismo de Tránsito y Radicación
-          </h3>
-          <p className="mt-1 text-xs opacity-70">
-            Selecciona la secretaría donde se radicará el expediente.
-          </p>
+          <WizardCardHeader
+            title="Organismo de Tránsito y Radicación"
+            subtitle="Selecciona la secretaría donde se radicará el expediente."
+          />
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="min-w-0">
             <span className={`mb-1 block ${WIZARD_LABEL}`}>Secretaría de tránsito *</span>

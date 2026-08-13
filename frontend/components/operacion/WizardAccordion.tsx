@@ -61,27 +61,34 @@ export function WizardAccordion({
       data-testid={testId}
       className={`overflow-hidden rounded-2xl border bg-white dark:bg-[#0B0F14] ${className}`}
     >
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        aria-controls={panelId}
-        className="flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left transition hover:bg-[#557EFF]/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          {icon}
-          <span className="truncate text-xs font-semibold" style={{ color: '#557EFF' }}>
-            {title}
+      {/* El título va dentro de un `h3`, con la misma tipografía que `WizardCardHeader`. Un acordeón
+          y una tarjeta son la misma jerarquía dentro del paso —secciones hermanas—, y estaba
+          rotulado un escalón por debajo (12px semibold contra 14px bold): en el paso 1, el
+          pre-vuelo se leía como subordinado de la consulta cuando está a su mismo nivel.
+          El patrón ARIA de acordeón pide exactamente esto: encabezado real envolviendo al botón. */}
+      <h3 className="m-0">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          aria-controls={panelId}
+          className="flex w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left transition hover:bg-[#557EFF]/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            {icon}
+            <span className="truncate text-sm font-bold" style={{ color: '#557EFF' }}>
+              {title}
+            </span>
           </span>
-        </span>
-        <span className="flex shrink-0 items-center gap-2">
-          {badge}
-          <ChevronDown
-            className={`h-4 w-4 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`}
-            aria-hidden="true"
-          />
-        </span>
-      </button>
+          <span className="flex shrink-0 items-center gap-2">
+            {badge}
+            <ChevronDown
+              className={`h-4 w-4 opacity-70 transition-transform ${open ? 'rotate-180' : ''}`}
+              aria-hidden="true"
+            />
+          </span>
+        </button>
+      </h3>
       {open ? (
         <div
           id={panelId}

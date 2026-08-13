@@ -440,3 +440,39 @@ describe('Tarjeta de radicación sobre un trámite ya creado', () => {
     );
   });
 });
+
+/**
+ * REGRESIÓN — el velo de espera solo lo levanta el gestor.
+ *
+ * La escena del vehículo se colgó de `loading`, que incluye la recarga automática del pre-vuelo al
+ * abrir el paso. Resultado: el velo aparecía en cada entrada al asistente sin que nadie hubiera
+ * pulsado nada, y el gestor veía el carrito «en cada recarga». Una espera que el usuario no provocó
+ * no se anuncia tapándole la pantalla: se anuncia en el sitio que la provocó, y aquí no hay ninguno.
+ */
+describe('Velo de espera del paso 1', () => {
+  it('no aparece al abrir el paso, aunque el pre-vuelo se esté recargando solo', async () => {
+    renderNuevo();
+    await screen.findByLabelText('Número VIN');
+    expect(screen.queryByText(/Consultando información en el RUNT/)).toBeNull();
+  });
+
+  it('aparece mientras dura la consulta que dispara el gestor', async () => {
+    // La consulta queda colgada a propósito: así el velo sigue en pantalla al asertar.
+    let resolver: (v: unknown) => void = () => {};
+    mocks.runPreflightPreview.mockImplementation(
+      () => new Promise((r) => { resolver = r; }),
+    );
+
+    const user = userEvent.setup();
+    renderNuevo();
+    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+
+    expect(await screen.findByText(/Consultando información en el RUNT/)).toBeInTheDocument();
+
+    resolver(PREVIEW_RESULT);
+    await waitFor(() =>
+      expect(screen.queryByText(/Consultando información en el RUNT/)).toBeNull(),
+    );
+  });
+});
