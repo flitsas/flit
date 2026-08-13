@@ -17,7 +17,7 @@ import { IctLogs } from "@/components/atom/modules/IctLogs";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { useAccessibleModules } from "@/hooks/useAccessibleModules";
 import { useAuthGate } from "@/hooks/useAuthGate";
-import { parseModule, resolveNavigableModuleIds } from "@/lib/nav/modules";
+import { planSpaModuleAccess, resolveNavigableModuleIds } from "@/lib/nav/modules";
 import { trackModuleView } from "@/lib/telemetry"; // Reportes2 HU-A
 import { getToken } from "@/lib/api/client";
 import {
@@ -62,35 +62,47 @@ function HomeContent() {
     [accessibleCodes, isSuperAdminUser, isOtAdminUser, canLogQx, canIctLogs],
   );
 
+  // Clave estable: evita re-ejecutar el effect por nueva referencia de array.
+  const navigableKey = useMemo(() => navigableIds.join("\0"), [navigableIds]);
+  // Depender del string `m`, no del objeto params (referencia inestable en App Router).
+  const rawModule = params.get("m");
+
   // Hold: null hasta !modulesLoading — evita flash del módulo denegado.
   const [module, setModule] = useState<ModuleId | null>(null);
   const lastDeniedRef = useRef<string | null>(null);
+  const replaceIssuedRef = useRef<string | null>(null);
 
-  // Sync / revalidar ?m= cuando cambian params O navigableIds (post-RBAC).
+  // Sync / revalidar ?m= cuando cambian rawModule O navigableIds (post-RBAC).
+  // Importante: un solo replace por módulo denegado — sin loop de router.replace.
   useEffect(() => {
     if (modulesLoading) return;
 
-    const raw = params.get("m");
-    const requested = raw && raw.length > 0 ? raw : null;
-    const isAllowed =
-      !requested || navigableIds.includes(requested as ModuleId);
+    const plan = planSpaModuleAccess(rawModule, navigableIds);
 
-    if (requested && !isAllowed) {
-      if (lastDeniedRef.current !== requested) {
-        lastDeniedRef.current = requested;
+    if (plan.denied) {
+      const deniedKey = rawModule ?? "";
+      if (lastDeniedRef.current !== deniedKey) {
+        lastDeniedRef.current = deniedKey;
         showToast("No tienes acceso a ese módulo.", "error");
       }
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setModule("dashboard");
-      router.replace("/?m=dashboard", { scroll: false });
+      setModule((prev) => (prev === "dashboard" ? prev : "dashboard"));
+      if (
+        plan.shouldReplaceUrl &&
+        plan.replaceTo &&
+        replaceIssuedRef.current !== deniedKey
+      ) {
+        replaceIssuedRef.current = deniedKey;
+        router.replace(plan.replaceTo, { scroll: false });
+      }
       return;
     }
 
     lastDeniedRef.current = null;
-    const fromUrl = parseModule(raw, navigableIds);
+    replaceIssuedRef.current = null;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setModule(fromUrl);
-  }, [params, navigableIds, modulesLoading, router, showToast]);
+    setModule((prev) => (prev === plan.module ? prev : plan.module));
+  }, [rawModule, navigableKey, navigableIds, modulesLoading, router, showToast]);
 
   // Reportes2 HU-A — telemetría solo tras módulo autorizado (no durante hold).
   useEffect(() => {
