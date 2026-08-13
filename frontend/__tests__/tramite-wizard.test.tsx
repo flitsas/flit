@@ -72,6 +72,9 @@ const mocks = vi.hoisted(() => ({
   getPrenda: vi.fn(),
   listMandateSigners: vi.fn(),
   setMandateSigner: vi.fn(),
+  // Declaraciones del paso de requisitos (tipo de servicio, casilla 18 del FUR).
+  listVehicleServiceTypes: vi.fn(),
+  ruesPreview: vi.fn(),
 }));
 
 // AC1 (HU #10882) — el wizard también importa `getDuplicateActiveProcedureId` de este módulo; se
@@ -118,6 +121,10 @@ vi.mock('@/lib/api/tramites-client', () => ({
   getDuplicateActiveProcedureId,
   getVehicleStateBlock,
   isTransitOfficeUnavailable,
+  // Mismo duck-typing que la implementación real (`err.status === 503`): lo importa
+  // DeclaracionesTramite, que el paso de requisitos monta siempre.
+  isRuesPreviewUnavailable: (err: unknown) =>
+    !!err && typeof err === 'object' && (err as { status?: unknown }).status === 503,
 }));
 
 // El wizard usa useToast() para el aviso de "enviado a tránsito"; se stubea para
@@ -281,6 +288,11 @@ beforeEach(() => {
     document: { attachmentId: 'c-1', tipo: 'consolidado', filename: 'c.pdf', sha256: 'abc' },
     regenerado: true,
   });
+  mocks.listVehicleServiceTypes.mockResolvedValue([
+    { id: 'ts-1', code: 'PARTICULAR', name: 'Particular', sortOrder: 1 },
+    { id: 'ts-2', code: 'PUBLICO', name: 'Público', sortOrder: 2 },
+  ]);
+  mocks.ruesPreview.mockResolvedValue({ found: false });
   // Por defecto la identidad ya está vigente (no dispara nueva validación al guardar la parte).
   mocks.ensureIdentity.mockResolvedValue({ outcome: 'ya_vigente' });
 });
@@ -1481,5 +1493,70 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
         },
       ]),
     );
+  });
+});
+
+/**
+ * INVENTARIO DEL PASO DE REQUISITOS (`documentos`).
+ *
+ * Red de seguridad del rediseño visual: fija QUÉ tiene que seguir estando en el paso, no cómo se
+ * ve. El rediseño reordena tarjetas, cambia rejillas y mete acordeones; nada de eso puede hacer
+ * desaparecer una declaración, un documento ni las observaciones del FUR.
+ *
+ * Se consulta por rótulo y por región accesible a propósito: son los dos contratos que sobreviven
+ * a un cambio de maquetación. Si un campo deja de tener rótulo, el test cae — que es exactamente
+ * lo que se quiere, porque un campo sin rótulo ya está roto para el lector de pantalla.
+ */
+describe('TramiteWizard — inventario del paso de Requisitos', () => {
+  /** Lleva el asistente de matrícula al paso 2 (`documentos`, rotulado "Requisitos"). */
+  async function irARequisitos() {
+    const user = userEvent.setup();
+    renderWizard();
+    await user.click(await screen.findByRole('button', { name: /^Paso 2: Requisitos/ }));
+    return user;
+  }
+
+  it('matrícula: mantiene las cuatro secciones del paso', async () => {
+    await irARequisitos();
+
+    // 1 · Declaraciones: tipo de servicio (casilla 18 del FUR).
+    expect(await screen.findByLabelText('Tipo de servicio')).toBeInTheDocument();
+    // 2 · Transformaciones y condiciones, plegadas en su acordeón.
+    expect(
+      screen.getByRole('button', { name: /Transformaciones y condiciones del trámite/ }),
+    ).toBeInTheDocument();
+    // 3 · Observaciones que viajan al FUR.
+    expect(screen.getByLabelText(/Observaciones del trámite/)).toBeInTheDocument();
+    // 4 · Checklist de documentos.
+    expect(screen.getByRole('region', { name: 'Documentos del trámite' })).toBeInTheDocument();
+  });
+
+  it('matrícula: el tipo de servicio ofrece el catálogo completo y exige empresa vinculadora en público', async () => {
+    const user = await irARequisitos();
+    const select = await screen.findByLabelText('Tipo de servicio');
+
+    expect(screen.getByRole('option', { name: 'Particular' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Público' })).toBeInTheDocument();
+
+    // Servicio público ⇒ casilla 19: NIT de la empresa vinculadora y su consulta.
+    await user.selectOptions(select, 'PUBLICO');
+    expect(await screen.findByLabelText(/NIT empresa vinculadora/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Buscar empresa en RUES' })).toBeInTheDocument();
+  });
+
+  it('traspaso: sin tipo de servicio (lo hidrata el RUNT), con transformaciones y leasing', async () => {
+    mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
+    const user = userEvent.setup();
+    renderWizard();
+    await user.click(await screen.findByRole('button', { name: /^Paso 2: Documentos/ }));
+
+    expect(await screen.findByRole('region', { name: 'Documentos del trámite' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Tipo de servicio')).toBeNull();
+
+    // El leasing vive dentro del acordeón de condiciones: hay que abrirlo para inventariarlo.
+    await user.click(
+      screen.getByRole('button', { name: /Transformaciones y condiciones del trámite/ }),
+    );
+    expect(await screen.findByText('Vehículo en leasing')).toBeInTheDocument();
   });
 });
