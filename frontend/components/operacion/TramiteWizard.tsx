@@ -85,7 +85,6 @@ import { WizardHelpRail } from './WizardHelpRail';
 import { WizardModal } from './WizardModal';
 import { estadoLabel } from '@/lib/tramites/estados';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
-import { StatusBadge } from '@/components/atom/StatusBadge';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 
 /**
@@ -2849,7 +2848,11 @@ function ConsultaStep({
         {/* Matrícula: el resultado de la consulta vive DENTRO de esta tarjeta, como en la propuesta
             —la franja con la placa y la retícula de datos aparecen bajo el campo que los trajo—.
             En traspaso el diseño lo saca a un acordeón propio, que se pinta más abajo. */}
-        {isVin && hasVehicleData && (
+        {/* El resultado de la consulta vive DENTRO de la tarjeta que lo trajo, en las dos
+            modalidades. En traspaso salía a un acordeón propio porque así lo hace el otro asistente
+            de la propuesta; el dato es el mismo y el sitio debe ser el mismo. Además un desplegable
+            sobre el resultado que el gestor viene a ver es un clic para nada. */}
+        {hasVehicleData && (
           <div className="mt-4 border-t pt-4">
             <VehicleDataCard fieldValues={fieldValues} bare validadoEnRunt />
           </div>
@@ -2959,14 +2962,29 @@ function ConsultaStep({
             )}
           </div>
 
-          {/* Trámite prioritario (HU #10536). La marca vive en una columna del expediente
-              (`procedure_instances.prioritario`), no en field_values, así que no puede viajar con el
-              resto de lo anotado: se recuerda aquí y el shell la aplica con `setPriority` en cuanto
-              la creación devuelve el id. Es el mismo flag que el listado ya permite alternar. */}
-          <div className="min-w-0">
-            <span id="consulta-prioritario-label" className={`mb-1 block ${WIZARD_LABEL}`}>
-              Trámite prioritario
-            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Trámite prioritario (HU #10536). Vivía DENTRO de la tarjeta de organismo, que solo existe
+          en matrícula, así que en traspaso no había forma de marcarlo desde el asistente — solo
+          después, desde el listado. La prioridad no depende del organismo: es una columna del
+          expediente (`procedure_instances.prioritario`) con su propio endpoint. Sale a su propia
+          tarjeta y existe en las dos modalidades, en el mismo sitio. */}
+      {hasVehicleData && (
+        <div className={WIZARD_CARD}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <span id="consulta-prioritario-label" className="text-sm font-bold" style={{ color: '#557EFF' }}>
+                Trámite prioritario
+              </span>
+              <p id="consulta-prioritario-nota" className="mt-1 text-xs leading-tight opacity-70">
+                Prioriza la gestión de este expediente: el organismo lo revisa con primacía.{' '}
+                {deferred
+                  ? 'Se aplica al crear el trámite y podrás cambiarlo después desde el listado.'
+                  : 'El cambio se guarda al instante; también puedes alternarlo desde el listado.'}
+              </p>
+            </div>
             <button
               type="button"
               onClick={() => handlePrioritario(!prioritarioVigente)}
@@ -2974,7 +2992,7 @@ function ConsultaStep({
               aria-pressed={prioritarioVigente}
               aria-labelledby="consulta-prioritario-label"
               aria-describedby="consulta-prioritario-nota"
-              className="flex h-[38px] w-full items-center justify-between rounded-xl border bg-white px-3 text-xs font-medium transition disabled:opacity-60 dark:bg-[#0B0F14]"
+              className="flex h-[38px] shrink-0 items-center justify-between gap-3 rounded-xl border bg-white px-3 text-xs font-medium transition disabled:opacity-60 dark:bg-[#0B0F14]"
               style={prioritarioVigente ? { borderColor: '#557EFF', color: '#557EFF' } : undefined}
             >
               {prioritarioVigente ? 'Activado' : 'Desactivado'}
@@ -2990,13 +3008,6 @@ function ConsultaStep({
                 />
               </span>
             </button>
-            <p id="consulta-prioritario-nota" className="mt-1 text-xs leading-tight opacity-70">
-              Prioriza la gestión de este expediente: el organismo lo revisa con primacía.{' '}
-              {deferred
-                ? 'Se aplica al crear el trámite y podrás cambiarlo después desde el listado.'
-                : 'El cambio se guarda al instante; también puedes alternarlo desde el listado.'}
-            </p>
-          </div>
           </div>
         </div>
       )}
@@ -3064,15 +3075,6 @@ function ConsultaStep({
           tarjeta de arriba ya dice, con su botón al lado. Es andamio, no información — y en
           matrícula, donde estos mismos datos viven dentro de la tarjeta de consulta, no aparece
           nada hasta consultar. Las dos modalidades se comportan ya igual. */}
-      {!isVin && hasVehicleData && (
-        <WizardAccordion
-          title="Datos consolidados del vehículo (RUNT)"
-          defaultOpen
-          badge={<StatusBadge label="Consultado" tone="success" />}
-        >
-          <VehicleDataCard fieldValues={fieldValues} bare />
-        </WizardAccordion>
-      )}
 
       {mostrarPazSalvo && (
         <label

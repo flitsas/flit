@@ -405,3 +405,60 @@ describe('ActorsForm — inventario: reglas que el rediseño no puede aflojar', 
     expect(mocks.saveActors).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * PARIDAD ENTRE MODALIDADES — tipo de documento del actor.
+ *
+ * El layout partido (matrícula, un solo comprador) no ofrecía este selector: el actor nacía con
+ * `tipoDocumento: 'CC'` y la consulta salía al RUNT con ese valor. Un comprador con cédula de
+ * extranjería o pasaporte se consultaba como si tuviera cédula de ciudadanía, y el proveedor no
+ * tenía forma de encontrarlo.
+ *
+ * No era una diferencia de diseño entre asistentes: era un dato que en matrícula no se podía
+ * capturar. El mismo trámite debe pedir los mismos datos con independencia de la modalidad.
+ */
+describe('Paridad de datos entre modalidades — tipo de documento', () => {
+  it('matrícula ofrece el catálogo de tipos, sin NIT (ese lo fija persona jurídica)', async () => {
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    const selector = await screen.findByLabelText('Tipo de documento');
+    expect(selector).toBeInTheDocument();
+
+    const opciones = Array.from((selector as HTMLSelectElement).options).map((o) => o.textContent);
+    expect(opciones).toEqual([
+      'Cédula de ciudadanía (CC)',
+      'Cédula de extranjería (CE)',
+      'Pasaporte (PAS)',
+      'Tarjeta de identidad (TI)',
+    ]);
+  });
+
+  it('lo elegido es lo que viaja a la consulta, no un CC por defecto', async () => {
+    const user = userEvent.setup();
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await user.selectOptions(await screen.findByLabelText('Tipo de documento'), 'CE');
+    await user.type(
+      screen.getByPlaceholderText(/Número de documento del comprador/),
+      '987654',
+    );
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+
+    await waitFor(() =>
+      expect(mocks.runtPersonLookup).toHaveBeenCalledWith(
+        INSTANCE,
+        expect.objectContaining({ documentType: 'CE', documentNumber: '987654' }),
+      ),
+    );
+  });
+
+  it('en persona jurídica el selector desaparece: el documento es siempre NIT', async () => {
+    const user = userEvent.setup();
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await user.click(await screen.findByRole('button', { name: 'Persona jurídica' }));
+    // Se busca por id y no por rótulo: en jurídica aparece el bloque del representante legal, que
+    // trae su propio "Tipo de documento". El que debe desaparecer es el del actor.
+    expect(document.getElementById('comprador-tipoDoc')).toBeNull();
+  });
+});

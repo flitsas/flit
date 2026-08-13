@@ -1931,7 +1931,35 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           <div className="space-y-3">
             {personTypeSelector(0)}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-end">
-              <div className="lg:col-span-3">
+              {/* Tipo de documento. Faltaba en este layout: el actor nacía con 'CC' fijo y la
+                  consulta salía al RUNT con ese tipo, así que un comprador con cédula de
+                  extranjería o pasaporte se consultaba como si fuera cédula de ciudadanía. No era
+                  una diferencia de diseño entre modalidades: era un dato que en matrícula no se
+                  podía capturar. En persona jurídica el documento es siempre NIT y el selector
+                  sobra, igual que en el layout de traspaso. */}
+              {!isJuridical(actor) && (
+                <div>
+                  <label htmlFor="comprador-tipoDoc" className={`${WIZARD_LABEL} mb-1.5`}>
+                    Tipo de documento
+                  </label>
+                  <select
+                    id="comprador-tipoDoc"
+                    value={actor.tipoDocumento}
+                    onChange={(e) =>
+                      updateActor(0, { tipoDocumento: e.target.value as ActorDocumentType })
+                    }
+                    disabled={docLocked}
+                    className={INPUT_BASE}
+                  >
+                    {DOC_OPTIONS.filter((o) => o.value !== 'NIT').map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className={isJuridical(actor) ? 'lg:col-span-3' : 'lg:col-span-2'}>
                 <input
                   id="comprador-numeroDoc"
                   type="text"

@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type {
@@ -1562,38 +1562,56 @@ describe('TramiteWizard — inventario del paso de Requisitos', () => {
 });
 
 /**
- * REGRESIÓN — el acordeón de datos del vehículo en traspaso.
+ * PARIDAD ENTRE MODALIDADES — dónde viven los datos del vehículo tras consultar.
  *
- * Se pintaba siempre, incluso recién abierto el paso: una sección vacía con una píldora «Pendiente»
- * y una frase pidiendo consultar, justo debajo de la tarjeta que ya lo pide y que tiene el botón al
- * lado. Andamio, no información. Y descuadraba las dos modalidades: en matrícula estos mismos datos
- * viven dentro de la tarjeta de consulta y no aparece nada hasta consultar.
+ * Vivían en sitios distintos: en matrícula dentro de la tarjeta "Consulta del Vehículo", y en
+ * traspaso en un acordeón propio, "Datos consolidados del vehículo (RUNT)". La diferencia no venía
+ * de ninguna regla de negocio sino de que cada modalidad se portó de una pantalla distinta del repo
+ * de propuesta. Un mismo dato, un mismo domicilio: el resultado se queda dentro de la tarjeta que
+ * lo trajo, y sin desplegable de por medio — es justo lo que el gestor viene a ver.
  */
-describe('TramiteWizard — datos consolidados del vehículo (traspaso)', () => {
-  it('no se pinta mientras no haya datos del vehículo', async () => {
+describe('TramiteWizard — datos del vehículo tras consultar', () => {
+  const CON_VEHICULO = {
+    id: 'inst-1',
+    fieldValues: [
+      { formFieldId: '', fieldKey: 'plate', valueText: 'PWL160', valueJson: null, source: 'consultation' },
+      { formFieldId: '', fieldKey: 'vehicle_brand', valueText: 'RENAULT', valueJson: null, source: 'consultation' },
+    ],
+  };
+
+  it('traspaso ya no los saca a un acordeón propio', async () => {
+    mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
+    mocks.getInstance.mockResolvedValue(CON_VEHICULO);
+    renderWizard();
+
+    await screen.findByRole('button', { name: /^Paso 1:/ });
+    expect(screen.queryByText(/Datos consolidados del vehículo/)).toBeNull();
+  });
+
+  it.each([
+    ['traspaso', TRASPASO_WIZARD],
+    ['matrícula', MATRICULA_WIZARD],
+  ])('en %s los datos se pintan dentro de la tarjeta de consulta', async (_nombre, wizard) => {
+    mocks.getWizardState.mockResolvedValue(wizard);
+    mocks.getInstance.mockResolvedValue(CON_VEHICULO);
+    renderWizard();
+
+    // La tarjeta de consulta es la que rotula la sección; los datos cuelgan de ella. Se espera al
+    // dato y no solo a la tarjeta: la hidratación de la instancia llega después del primer pintado.
+    await screen.findByText('Consulta del Vehículo');
+    await waitFor(() => {
+      const tarjeta = screen.getByText('Consulta del Vehículo').closest('div.rounded-2xl');
+      expect(within(tarjeta as HTMLElement).getByText('PWL160')).toBeInTheDocument();
+    });
+  });
+
+  it('sin datos no se anuncia ninguna sección de resultado', async () => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
     mocks.getInstance.mockResolvedValue({ id: 'inst-1', fieldValues: [] });
     renderWizard();
 
     await screen.findByRole('button', { name: /^Paso 1:/ });
-    expect(screen.queryByText(/Datos consolidados del vehículo/)).toBeNull();
-    // Y no queda el rastro de la sección vacía que había antes.
     expect(screen.queryByText(/Consulta la placa y el documento del propietario/)).toBeNull();
-  });
-
-  it('aparece —ya consultado— en cuanto la instancia trae los datos', async () => {
-    mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
-    mocks.getInstance.mockResolvedValue({
-      id: 'inst-1',
-      fieldValues: [
-        { formFieldId: '', fieldKey: 'plate', valueText: 'PWL160', valueJson: null, source: 'consultation' },
-        { formFieldId: '', fieldKey: 'vehicle_brand', valueText: 'RENAULT', valueJson: null, source: 'consultation' },
-      ],
-    });
-    renderWizard();
-
-    expect(await screen.findByText(/Datos consolidados del vehículo/)).toBeInTheDocument();
-    // Si está, es porque ya se consultó: el estado deja de ser una pregunta abierta.
-    expect(screen.getByText('Consultado')).toBeInTheDocument();
+    expect(screen.queryByText('PWL160')).toBeNull();
   });
 });
