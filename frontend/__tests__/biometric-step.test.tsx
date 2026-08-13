@@ -320,15 +320,15 @@ describe('BiometricStep — kyverum (validación real)', () => {
 });
 
 describe('BiometricStep — resultado verificado', () => {
-  it('muestra la tarjeta verde con score cuando la parte ya está aprobada', async () => {
+  it('aprobada: el puntaje va en el badge y el nombre en el recuadro de la persona', async () => {
     mocks.getBiometricState.mockResolvedValue({ validations: [APROBADA], provider: 'mock' });
     render(
       <BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />,
     );
     expect(
-      await screen.findByText('Identidad verificada — 95/100'),
+      await screen.findByText('Aprobado — 95/100'),
     ).toBeInTheDocument();
-    expect(screen.getByText('Ana Comprador')).toBeInTheDocument();
+    expect(screen.getByText(/Ana Comprador/)).toBeInTheDocument();
     // No debe ofrecer botón de iniciar/simular cuando ya hay validación aprobada.
     expect(
       screen.queryByRole('button', { name: /validación de identidad/i }),
@@ -430,7 +430,7 @@ describe('BiometricStep — CF-08 (Feature #11004, HU #11009): historial complet
     mocks.getBiometricState.mockResolvedValue({ validations: [APROBADA], provider: 'mock' });
     render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
-    await screen.findByText('Identidad verificada — 95/100');
+    await screen.findByText('Aprobado — 95/100');
     expect(screen.queryByText(/Historial de validaciones/)).not.toBeInTheDocument();
   });
 });

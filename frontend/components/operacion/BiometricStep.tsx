@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Check,
   Copy,
   ExternalLink,
   FileSignature,
@@ -783,32 +782,22 @@ function VaultCoveredView() {
 
 /** Tarjeta verde "Identidad verificada — {score}/100" con el nombre de la parte. */
 function VerifiedView({ validation: v }: { validation: BiometricValidation }) {
+  /*
+   * Aprobada NO pinta bloque propio: el estado y el puntaje viven en el badge de la cabecera y el
+   * nombre en el recuadro de la persona, justo encima. El bloque verde que había aquí los repetía
+   * los dos —el nombre salía dos veces en la misma tarjeta— y en la referencia el estado se dice
+   * una sola vez, en el badge.
+   *
+   * Se conserva la fecha, que no está en ningún otro sitio cuando la parte tiene una sola
+   * validación: el historial solo se despliega a partir de la segunda.
+   *
+   * El certificado oficial (PDF) NO se descarga aquí: vive en el flujo de Generar/Re-generar FUR y
+   * de Consolidar (FirmaFurStep), donde es uno de los documentos producidos con su propio botón.
+   */
+  const cuando = formatFecha(v.validatedAt);
+  if (!cuando) return null;
   return (
-    <div className="space-y-3">
-      <div
-        className="flex items-center gap-3 rounded-xl p-3"
-        style={{ background: 'rgba(140,198,63,0.12)', border: '1px solid rgba(140,198,63,0.4)' }}
-      >
-        <span
-          className="flex h-9 w-9 items-center justify-center rounded-full shrink-0"
-          style={{ background: '#5B8A1F', color: 'white' }}
-          aria-hidden
-        >
-          <Check className="h-5 w-5" />
-        </span>
-        <div className="space-y-0.5">
-          <p className="text-xs font-bold" style={{ color: 'var(--flit-success-ink)' }}>
-            Identidad verificada — {v.score ?? 95}/100
-          </p>
-          <p className="text-xs opacity-70">{v.name}</p>
-        </div>
-      </div>
-      {/*
-       * El certificado oficial (PDF) NO se descarga aquí: la descarga vive en el flujo de
-       * Generar/Re-generar FUR y de Consolidar (FirmaFurStep), donde el certificado es uno de los
-       * documentos producidos con su propio botón de descarga.
-       */}
-    </div>
+    <p className="text-xs opacity-70">Validada el {cuando}.</p>
   );
 }
 

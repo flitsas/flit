@@ -52,6 +52,25 @@ function auditOutcomeText(outcome: string): string {
 }
 
 /**
+ * Texto de la columna «Detalle».
+ *
+ * Antes era `errorType ?? providerStatus ?? message`, y los tres son nulos cuando el paso salió
+ * bien: la columna quedaba vacía justo en las filas que el gestor más mira, las que fueron bien.
+ * El error sigue teniendo prioridad —es lo que hay que leer primero—, y cuando no hay ninguno se
+ * dice qué pasó en vez de dejar el hueco.
+ *
+ * La bitácora del backend es diagnóstico de soporte y no trae una descripción redactada por
+ * evento; esto compone la mejor frase posible con lo que sí manda, sin inventar nada.
+ */
+function auditDetailText(e: IdentityAuditEvent): string {
+  if (e.errorType) return e.errorType;
+  if (e.message) return e.message;
+  if (e.providerStatus) return `Estado del proveedor: ${e.providerStatus}`;
+  if (e.httpStatus != null) return `Respuesta HTTP ${e.httpStatus}`;
+  return 'Sin novedad';
+}
+
+/**
  * Panel de tracking de identidad compartido (CF-07, Feature #11004, HU #11007). Extraído del
  * `IdentityAuditPanel` original de `BiometricStep` y generalizado para consumirse desde Validaciones,
  * Prevalidaciones y el propio trámite con un único punto de entrada: `validationId`.
@@ -160,7 +179,7 @@ export function IdentityValidationTrackingPanel({
                     <th scope="col" className="py-1 pr-2 font-semibold">Fecha</th>
                     <th scope="col" className="py-1 pr-2 font-semibold">Etapa</th>
                     <th scope="col" className="py-1 pr-2 font-semibold">Resultado</th>
-                    <th scope="col" className="py-1 pr-2 font-semibold">Cifrado</th>
+                    <th scope="col" className="py-1 pr-2 font-semibold">Descifrado</th>
                     <th scope="col" className="py-1 pr-2 font-semibold">Detalle</th>
                   </tr>
                 </thead>
@@ -174,7 +193,7 @@ export function IdentityValidationTrackingPanel({
                         {e.decryptOk == null ? '—' : e.decryptOk ? 'OK' : 'Falló'}
                       </td>
                       <td className="py-1 pr-2 opacity-70">
-                        {e.errorType ?? e.providerStatus ?? e.message ?? ''}
+                        {auditDetailText(e)}
                       </td>
                     </tr>
                   ))}

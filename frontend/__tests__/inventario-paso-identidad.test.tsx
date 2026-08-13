@@ -319,7 +319,7 @@ describe('BiometricStep — inventario: validación en curso (enlace y QR de cap
 });
 
 describe('BiometricStep — inventario: resultados de la validación', () => {
-  it('aprobada muestra el sello, el puntaje y a quién pertenece', async () => {
+  it('aprobada muestra el puntaje en el badge y a quién pertenece en el recuadro', async () => {
     mocks.getBiometricState.mockResolvedValue({
       validations: [APROBADA],
       provider: 'mock',
@@ -328,8 +328,8 @@ describe('BiometricStep — inventario: resultados de la validación', () => {
     await renderPaso('matricula_inicial');
 
     const comprador = await screen.findByRole('group', { name: 'Biométrica Comprador' });
-    expect(within(comprador).getByText('Identidad verificada — 95/100')).toBeInTheDocument();
-    expect(within(comprador).getByText('Ana Compradora')).toBeInTheDocument();
+    expect(within(comprador).getByText('Aprobado — 95/100')).toBeInTheDocument();
+    expect(within(comprador).getByText(/Ana Compradora/)).toBeInTheDocument();
     // Resuelta: ya no se ofrece iniciar ni simular nada.
     expect(within(comprador).queryByRole('button', { name: /validación de identidad/i })).toBeNull();
   });
@@ -348,7 +348,7 @@ describe('BiometricStep — inventario: resultados de la validación', () => {
     });
     await renderPaso('matricula_inicial');
 
-    await screen.findByText('Identidad verificada — 95/100');
+    await screen.findByText('Aprobado — 95/100');
     expect(screen.queryByRole('button', { name: /Certificado/i })).toBeNull();
   });
 
