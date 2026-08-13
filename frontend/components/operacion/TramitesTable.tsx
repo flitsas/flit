@@ -6,10 +6,8 @@ import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
   ArrowDown,
-  ArrowLeftRight,
   ArrowUp,
   ArrowUpDown,
-  Car,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -19,7 +17,6 @@ import {
   FileText,
   Pause,
   Play,
-  Plus,
   Search,
   Star,
   X,
@@ -211,12 +208,6 @@ const FUENTE_LABEL: Record<TramiteFuente, string> = {
 
 /** Filas por página en el listado (paginación client-side sobre `filtered`). */
 const PAGE_SIZE = 10;
-
-// Registro de nuevo trámite por modalidad (botones estilo "Nuevo Trámite" del diseño).
-const NEW_TRAMITE_ACTIONS: { id: WizardModalidad; label: string; icon: typeof Car }[] = [
-  { id: 'matricula_inicial', label: 'Matrícula inicial', icon: Car },
-  { id: 'traspaso', label: 'Traspaso estándar', icon: ArrowLeftRight },
-];
 
 interface TramitesTableProps {
   /** Cambia (incrementa) para forzar un refetch — p. ej. al volver del wizard. */
@@ -763,10 +754,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
                 ? 'La compañía tiene bloqueada la creación de trámites.'
                 : undefined
             }
-            className="flex min-h-[88px] w-28 shrink-0 flex-col items-center justify-center gap-1 rounded-2xl text-sm font-semibold leading-tight text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
+            // Sin icono: en la propuesta el botón es solo el rótulo en dos líneas. El "+" no añadía
+            // nada que el texto no dijera y competía con él por el centro del botón.
+            className="flex min-h-[88px] w-28 shrink-0 flex-col items-center justify-center rounded-2xl text-sm font-semibold leading-tight text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
             style={{ background: '#557EFF' }}
           >
-            <Plus className="h-5 w-5" aria-hidden="true" />
             <span>
               Nuevo
               <br />

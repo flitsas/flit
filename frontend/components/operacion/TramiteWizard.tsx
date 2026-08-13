@@ -1297,7 +1297,7 @@ export function TramiteWizard(props: Props) {
           )}
         </div>
 
-          <div className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-t px-2 py-3 sm:px-5">
+          <div className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-t px-2 pb-3 pt-4 sm:px-5">
             <button
               onClick={() => goToStep(Math.max(0, activeIndex - 1))}
               disabled={activeIndex === 0}
@@ -1319,7 +1319,9 @@ export function TramiteWizard(props: Props) {
               ) : null}
             </div>
 
-            <div className="flex justify-end">
+            {/* `gap-3` como el pie de la propuesta: sin él los botones quedaban pegados y se leían
+                como una sola pieza, con "Cancelar trámite" y el avance sin aire entre medias. */}
+            <div className="flex flex-wrap items-center justify-end gap-3">
             {/* Acción derecha del footer:
                 · Preparado o borrador con identidad OK: "Radicar trámite" (encadena preparado→entregado).
                 · Solo visualización (otros estados no editables): sin acciones, solo se recorre.
