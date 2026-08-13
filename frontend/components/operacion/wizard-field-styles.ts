@@ -26,8 +26,16 @@ export const WIZARD_INPUT =
 /** Igual que el campo de texto, para `<select>` nativos. */
 export const WIZARD_SELECT = WIZARD_INPUT;
 
-/** Etiqueta sobre el campo. 12px es el piso tipográfico del sistema. */
-export const WIZARD_LABEL = 'block text-xs font-medium text-[#162744]/60 dark:text-white/50';
+/**
+ * Etiqueta sobre el campo. 12px es el piso tipográfico del sistema.
+ *
+ * El color es `color.text.secondary` (#59677D, 5.73:1 sobre blanco) y NO el navy al 60 %, que era
+ * lo que había: mezclado sobre blanco da rgb(115,125,143) y se queda en 4.15:1, por debajo del
+ * 4.5:1 que exige un texto de 12px. La regla de «no bajar de 0.7 sobre texto» también se incumple
+ * cuando la transparencia se escribe como alfa del color en vez de como `opacity-*` — ahí no la ve
+ * ningún grep, que es justo como había sobrevivido.
+ */
+export const WIZARD_LABEL = 'block text-xs font-medium text-[#59677D] dark:text-white/70';
 
 /** Texto de ayuda o error bajo el campo. */
 export const WIZARD_HINT = 'mt-1 block text-xs leading-snug opacity-70';

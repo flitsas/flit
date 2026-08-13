@@ -68,7 +68,10 @@ export function WizardCardHeader({
   return (
     <div className="mb-3 flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <h3 id={id} className="text-sm font-bold leading-tight">
+        {/* Azul de marca: es la regla de títulos del sistema y es lo que hacen las dos pantallas de
+            la propuesta. Al extraer el átomo se perdió el color y las tarjetas quedaron
+            descoloridas frente a la cabecera del propio paso. */}
+        <h3 id={id} className="text-sm font-bold leading-tight" style={{ color: '#557EFF' }}>
           {title}
         </h3>
         {/* opacity-70 es el piso del sistema sobre texto; por debajo el contraste efectivo cae de AA. */}

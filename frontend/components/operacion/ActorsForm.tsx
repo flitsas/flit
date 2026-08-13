@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { AlertTriangle, Info, Search } from 'lucide-react';
 import { INLINE_ALERT_TONES, type InlineAlertTone } from '@/components/atom/InlineAlert';
-import { StatusBadge } from '@/components/atom/StatusBadge';
+import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { Modal } from '@/components/atom/Modal';
 import { FineDetailList } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
@@ -39,8 +39,14 @@ import type {
   RuesPersonLookupResult,
   RuntPersonLookupResult,
 } from '@/lib/api/types/procedure-runtime';
-import { WIZARD_INPUT } from './wizard-field-styles';
-import { WizardSegmented } from './wizard-atoms';
+import {
+  WIZARD_INPUT,
+  WIZARD_LABEL,
+  WIZARD_BTN,
+  WIZARD_CARD,
+  WIZARD_CTA_GRADIENT,
+} from './wizard-field-styles';
+import { WizardCardHeader, WizardSegmented } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 
 export type ActorsModalidad = 'matricula_inicial' | 'traspaso';
@@ -1254,8 +1260,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       <button
         type="submit"
         disabled={state.saving}
-        className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-        style={{ background: GRADIENT }}
+        className={`${WIZARD_BTN} text-white disabled:opacity-50 focus-visible:ring-[#557EFF]`}
+        style={{ background: WIZARD_CTA_GRADIENT }}
       >
         {state.saving ? 'Guardando…' : 'Guardar actores'}
       </button>
@@ -1643,26 +1649,23 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     };
 
     return (
-      <div className="md:col-span-2 rounded-xl border p-4 space-y-3" style={{ background: 'rgba(85,126,255,0.03)' }}>
-        <div>
-          <p className="text-xs font-bold" style={{ color: '#162744' }}>
-            Representante legal y/o apoderado
-          </p>
-          {isPreloaded ? (
-            <p className="text-xs mt-0.5" style={{ color: INLINE_ALERT_TONES.info.color }}>
-              Datos precargados desde el directorio / RUES. Puedes editarlos si es necesario.
-            </p>
-          ) : (
-            <p className="text-xs opacity-60">
-              Persona natural que representa a la empresa. Puedes consultarla en el RUNT o registrarla
-              manualmente.
-            </p>
-          )}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="sm:col-span-2 space-y-3">
+        <WizardCardHeader
+          title="Representante legal y/o apoderado"
+          subtitle={
+            isPreloaded
+              ? 'Datos precargados desde el directorio / RUES. Puedes editarlos si es necesario.'
+              : 'Persona natural que representa a la empresa. Puedes consultarla en el RUNT o registrarla manualmente.'
+          }
+        />
+        {/* Rejilla en el lenguaje de MatriculaInicial.tsx (Step2 → bloque de representante legal):
+            documento + botón a la misma altura ("items-end") y un hueco donde el diseño deja aire
+            antes del nombre. Los mensajes de estado de la consulta van a ancho completo debajo de la
+            fila — con `items-end` pegarlos a la celda del documento habría desalineado el botón. */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-end">
           {/* Tipo de documento (natural, sin NIT) */}
           <div>
-            <label htmlFor={`${index}-rl-tipoDoc`} className="text-xs font-semibold mb-1.5 block">
+            <label htmlFor={`${index}-rl-tipoDoc`} className={WIZARD_LABEL}>
               Tipo de documento
             </label>
             <select
@@ -1671,7 +1674,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               onChange={(e) =>
                 handleRlIdentityDocChange({ tipoDocumento: e.target.value as ActorDocumentType })
               }
-              className={INPUT_BASE}
+              className={`${INPUT_BASE} mt-1.5`}
             >
               {RL_DOC_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -1680,68 +1683,74 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               ))}
             </select>
           </div>
-          {/* Número + Consultar RUNT (P5: botón oculto cuando ya precargado desde directorio) */}
+          {/* Número (P5: el botón cambia de texto cuando ya viene precargado desde el directorio) */}
           <div>
-            <label htmlFor={`${index}-rl-numeroDoc`} className="text-xs font-semibold mb-1.5 block">
+            <label htmlFor={`${index}-rl-numeroDoc`} className={WIZARD_LABEL}>
               Número de documento
             </label>
-            <div className="flex gap-2">
-              <input
-                id={`${index}-rl-numeroDoc`}
-                type="text"
-                value={rl.numeroDocumento ?? ''}
-                onChange={(e) => handleRlIdentityDocChange({ numeroDocumento: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    void handleRlLookup(index);
-                  }
-                }}
-                className={`${INPUT_BASE} font-mono`}
-              />
-              {!readOnly && !isPreloaded && (
-                <button
-                  type="button"
-                  onClick={() => void handleRlLookup(index)}
-                  disabled={rlState.status === 'loading' || !(rl.numeroDocumento ?? '').trim() || !instanceId}
-                  className="shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold border disabled:opacity-50"
-                  style={{ borderColor: '#557EFF', color: '#557EFF' }}
-                >
-                  {rlState.status === 'loading' ? 'Consultando…' : 'Consultar RUNT'}
-                </button>
+            <input
+              id={`${index}-rl-numeroDoc`}
+              type="text"
+              value={rl.numeroDocumento ?? ''}
+              onChange={(e) => handleRlIdentityDocChange({ numeroDocumento: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void handleRlLookup(index);
+                }
+              }}
+              className={`${INPUT_BASE} mt-1.5 font-mono`}
+            />
+          </div>
+          {!readOnly && !isPreloaded && (
+            <button
+              type="button"
+              onClick={() => void handleRlLookup(index)}
+              disabled={rlState.status === 'loading' || !(rl.numeroDocumento ?? '').trim() || !instanceId}
+              className="h-[42px] shrink-0 rounded-xl px-3 text-xs font-semibold border disabled:opacity-50"
+              style={{ borderColor: '#557EFF', color: '#557EFF' }}
+            >
+              {rlState.status === 'loading' ? 'Consultando…' : 'Consultar RUNT'}
+            </button>
+          )}
+          {!readOnly && isPreloaded && (
+            <button
+              type="button"
+              onClick={() => void handleRlLookup(index)}
+              disabled={rlState.status === 'loading' || !(rl.numeroDocumento ?? '').trim() || !instanceId}
+              // Secundario en navy y a plena opacidad. Antes iba en gris al 60%, que sobre blanco no
+              // llega a AA: para restar peso a una acción el sistema usa el botón secundario, no
+              // atenuar el texto — atenuado se lee como deshabilitado y encima deja de leerse.
+              className="h-[42px] shrink-0 rounded-xl border px-3 text-xs font-semibold disabled:opacity-50"
+              style={{ borderColor: '#162744', color: '#162744' }}
+              title="Datos ya precargados. Consulta RUNT solo si necesitas actualizar."
+            >
+              {rlState.status === 'loading' ? 'Consultando…' : 'Actualizar RUNT'}
+            </button>
+          )}
+          <div className="hidden lg:block" aria-hidden="true" />
+          {(rlState.status === 'found' || rlState.status === 'not_found' || rlState.status === 'error') && (
+            <div className="lg:col-span-4">
+              {rlState.status === 'found' && (
+                <p className="text-xs" style={{ color: INLINE_ALERT_TONES.info.color }}>
+                  Representante encontrado en RUNT.
+                </p>
               )}
-              {!readOnly && isPreloaded && (
-                <button
-                  type="button"
-                  onClick={() => void handleRlLookup(index)}
-                  disabled={rlState.status === 'loading' || !(rl.numeroDocumento ?? '').trim() || !instanceId}
-                  className="shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold border disabled:opacity-50 opacity-60"
-                  style={{ borderColor: '#9AA5B1', color: '#9AA5B1' }}
-                  title="Datos ya precargados. Consulta RUNT solo si necesitas actualizar."
-                >
-                  {rlState.status === 'loading' ? 'Consultando…' : 'Actualizar RUNT'}
-                </button>
+              {rlState.status === 'not_found' && (
+                <p className="text-xs opacity-70">
+                  No se encontró en RUNT — completa los datos manualmente.
+                </p>
+              )}
+              {rlState.status === 'error' && (
+                <p className="text-xs" style={{ color: '#FF4E00' }}>
+                  No se pudo consultar RUNT. Puedes registrarlo manualmente.
+                </p>
               )}
             </div>
-            {rlState.status === 'found' && (
-              <p className="text-xs mt-1" style={{ color: INLINE_ALERT_TONES.info.color }}>
-                Representante encontrado en RUNT.
-              </p>
-            )}
-            {rlState.status === 'not_found' && (
-              <p className="text-xs mt-1 opacity-70">
-                No se encontró en RUNT — completa los datos manualmente.
-              </p>
-            )}
-            {rlState.status === 'error' && (
-              <p className="text-xs mt-1" style={{ color: '#FF4E00' }}>
-                No se pudo consultar RUNT. Puedes registrarlo manualmente.
-              </p>
-            )}
-          </div>
+          )}
           {/* Nombre */}
-          <div className="md:col-span-2">
-            <label htmlFor={`${index}-rl-nombre`} className="text-xs font-semibold mb-1.5 block">
+          <div className="lg:col-span-2">
+            <label htmlFor={`${index}-rl-nombre`} className={WIZARD_LABEL}>
               Nombre completo del representante
             </label>
             <input
@@ -1749,12 +1758,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               type="text"
               value={rl.nombreCompleto ?? ''}
               onChange={(e) => updateRepLegal(index, { nombreCompleto: e.target.value })}
-              className={INPUT_BASE}
+              className={`${INPUT_BASE} mt-1.5`}
             />
           </div>
           {/* Email — obligatorio en persona jurídica (HU #10688): el RL valida la identidad. */}
           <div>
-            <label htmlFor={`${index}-rl-email`} className="text-xs font-semibold mb-1.5 block">
+            <label htmlFor={`${index}-rl-email`} className={WIZARD_LABEL}>
               Correo electrónico <span style={{ color: '#FF4E00' }}>*</span>
             </label>
             <input
@@ -1763,7 +1772,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               value={rl.email ?? ''}
               onChange={(e) => updateRepLegal(index, { email: e.target.value })}
               placeholder="correo@ejemplo.com"
-              className={INPUT_BASE}
+              className={`${INPUT_BASE} mt-1.5`}
               aria-invalid={!!rlErrors.representanteLegal}
             />
             {rlErrors.representanteLegal && (
@@ -1774,8 +1783,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           </div>
           {/* Teléfono */}
           <div>
-            <label htmlFor={`${index}-rl-telefono`} className="text-xs font-semibold mb-1.5 block">
-              Teléfono <span className="opacity-50 font-normal">(opcional)</span>
+            <label htmlFor={`${index}-rl-telefono`} className={WIZARD_LABEL}>
+              Teléfono <span className="font-normal">(opcional)</span>
             </label>
             <input
               id={`${index}-rl-telefono`}
@@ -1785,7 +1794,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               autoComplete="tel"
               value={rl.telefono ?? ''}
               onChange={(e) => updateRepLegal(index, { telefono: e.target.value })}
-              className={INPUT_BASE}
+              className={`${INPUT_BASE} mt-1.5`}
             />
           </div>
         </div>
@@ -1803,9 +1812,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     if (isJuridical(actor)) return null;
     return (
       <div>
-        <label htmlFor={`${actor.rol}-fechaExpedicion`} className="text-xs font-semibold mb-1.5 block">
+        <label htmlFor={`${actor.rol}-fechaExpedicion`} className={`${WIZARD_LABEL} mb-1.5`}>
           Fecha de expedición del documento{' '}
-          <span className="opacity-50 font-normal">(opcional)</span>
+          <span className="font-normal">(opcional)</span>
         </label>
         <input
           id={`${actor.rol}-fechaExpedicion`}
@@ -1881,22 +1890,25 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
        <fieldset disabled={readOnly} className="space-y-5 min-w-0 border-0 p-0 m-0">
         {errorBanner}
 
-        {/* Sección A — Identificación. Cabecera en el lenguaje de la propuesta: título en azul de
-            marca y una frase que dice qué se registra, dentro de la propia tarjeta. Antes era una
-            franja gris en versalitas con icono, que gritaba el rótulo y no explicaba nada. */}
-        <section className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]">
-          <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
-            {`Datos del ${ROL_LABEL[actor.rol].toLowerCase()}`}
-          </h3>
-          <p className="mt-1 text-xs opacity-70">
-            {actor.rol === 'vendedor'
-              ? 'Registra la persona natural o jurídica que figura hoy como propietaria del vehículo.'
-              : 'Registra la persona natural o jurídica que figurará como propietaria del vehículo.'}
-          </p>
-          <div className="mt-4 space-y-3">
+        {/* Sección A — Identificación. Cabecera con el átomo compartido (WizardCardHeader) y la
+            rejilla de 4 columnas de MatriculaInicial.tsx (Step2, diseño de referencia): documento +
+            botón de consulta a la misma altura ("items-end"), y la nota explicativa a ancho completo
+            debajo. Sigue sin ofrecer un selector de tipo de documento: en persona natural el tipo
+            viene de la validación de identidad (RUNT), no se captura a mano (nota bajo el
+            segmentado); en jurídica el documento siempre es NIT. */}
+        <section className={WIZARD_CARD}>
+          <WizardCardHeader
+            title={`Datos del ${ROL_LABEL[actor.rol].toLowerCase()}`}
+            subtitle={
+              actor.rol === 'vendedor'
+                ? 'Registra la persona natural o jurídica que figura hoy como propietaria del vehículo.'
+                : 'Registra la persona natural o jurídica que figurará como propietaria del vehículo.'
+            }
+          />
+          <div className="space-y-3">
             {personTypeSelector(0)}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-              <div className="flex-1">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-end">
+              <div className="lg:col-span-3">
                 <input
                   id="comprador-numeroDoc"
                   type="text"
@@ -1928,8 +1940,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   type="button"
                   onClick={() => void handleIdentityLookup(0)}
                   disabled={runtState.status === 'loading' || !actor.numeroDocumento.trim() || !instanceId}
-                  className="flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{ background: GRADIENT }}
+                  className="flex h-[42px] shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ background: WIZARD_CTA_GRADIENT }}
                   aria-label={isJuridical(actor) ? 'Consultar RUES' : 'Consultar RUNT'}
                 >
                   <Search className="h-3.5 w-3.5" />
@@ -1940,6 +1952,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       : 'Consultar RUNT'}
                 </button>
               )}
+              <p className="text-xs opacity-70 lg:col-span-4">
+                {isJuridical(actor)
+                  ? `Consultamos el RUES para validar el registro mercantil del ${actor.rol} y precargar la razón social.`
+                  : `Consultamos el RUNT para validar la identidad del ${actor.rol} y precargar sus datos.`}
+              </p>
             </div>
             {runtResult(0)}
             {/* P4 — para persona jurídica el RL se mueve DESPUÉS de los datos de la empresa. */}
@@ -1947,15 +1964,16 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         </section>
 
         {/* Sección B — Datos de contacto */}
-        <section className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]">
-          <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
-            Datos de contacto
-          </h3>
-          <div className="mt-1 text-xs opacity-70">{contactLookupHint(0)}</div>
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <section className={WIZARD_CARD}>
+          <WizardCardHeader
+            title="Datos de contacto"
+            subtitle="Confirma o edita la información de notificación del propietario."
+          />
+          <div className="text-xs opacity-70">{contactLookupHint(0)}</div>
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
             {/* Nombre / razón social */}
             <div className="lg:col-span-2">
-              <label htmlFor="comprador-nombre" className="text-xs font-semibold mb-1.5 flex items-center gap-1.5">
+              <label htmlFor="comprador-nombre" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                 {isJuridical(actor) ? 'Razón social' : 'Nombre completo'}
                 <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
               </label>
@@ -1978,7 +1996,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             </div>
             {/* Documento (readonly — viene de la consulta) */}
             <div>
-              <label htmlFor="comprador-doc-ro" className="text-xs font-semibold mb-1.5 block">
+              <label htmlFor="comprador-doc-ro" className={`${WIZARD_LABEL} mb-1.5`}>
                 Documento
               </label>
               <input
@@ -1992,7 +2010,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             </div>
             {/* Email */}
             <div>
-              <label htmlFor="comprador-email" className="text-xs font-semibold mb-1.5 flex items-center gap-1.5">
+              <label htmlFor="comprador-email" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                 Correo electrónico
                 <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
               </label>
@@ -2017,8 +2035,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             </div>
             {/* Teléfono (opcional) */}
             <div>
-              <label htmlFor="comprador-telefono" className="text-xs font-semibold mb-1.5 block">
-                Teléfono <span className="opacity-50 font-normal">(opcional)</span>
+              <label htmlFor="comprador-telefono" className={`${WIZARD_LABEL} mb-1.5`}>
+                Teléfono <span className="font-normal">(opcional)</span>
               </label>
               <input
                 id="comprador-telefono"
@@ -2039,7 +2057,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             {issueDateField(0)}
             {/* Ciudad (autocomplete) */}
             <div className={`relative ${showCiudades ? 'z-40' : ''}`}>
-              <label htmlFor="comprador-ciudad" className="text-xs font-semibold mb-1.5 block">
+              <label htmlFor="comprador-ciudad" className={`${WIZARD_LABEL} mb-1.5`}>
                 Ciudad
               </label>
               <input
@@ -2085,8 +2103,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               )}
             </div>
             {/* Dirección (full width) */}
-            <div className="md:col-span-2 lg:col-span-3">
-              <label htmlFor="comprador-direccion" className="text-xs font-semibold mb-1.5 block">
+            <div className="lg:col-span-3">
+              <label htmlFor="comprador-direccion" className={`${WIZARD_LABEL} mb-1.5`}>
                 Dirección
               </label>
               <input
@@ -2103,19 +2121,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           </div>
         </section>
 
-        {/* Sección C — Representante legal (P4: solo persona jurídica, después de contacto empresa) */}
-        {isJuridical(actor) && (
-          <section className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]">
-            <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
-              Representante legal
-            </h3>
-            <p className="mt-1 text-xs opacity-70">
-              Representante legal y/o apoderado: la persona natural que representa a la empresa.
-              Puedes consultarla en el RUNT o registrarla manualmente.
-            </p>
-            <div className="mt-4">{rlSection(0)}</div>
-          </section>
-        )}
+        {/* Sección C — Representante legal (P4: solo persona jurídica, después de contacto empresa).
+            `rlSection` ya monta su propia cabecera (título + nota); esta envoltura solo aporta la
+            tarjeta y el espaciado consistentes con las secciones A y B. */}
+        {isJuridical(actor) && <section className={WIZARD_CARD}>{rlSection(0)}</section>}
 
         {footer}
        </fieldset>
@@ -2162,7 +2171,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
       {errorBanner}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {actors.map((actor, index) => {
           const errors = showErrors ? validation.byActor[index] : {};
           const prefix = `actor-${actor.rol}`;
@@ -2175,6 +2184,20 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           // HU #10956 — ciudad con autocomplete, misma lógica que el layout SPLIT pero por índice.
           const ciudadesSuggestions = filterCiudades(actor.ciudad ?? '');
           const showCiudadSuggestions = !!ciudadOpen[index] && ciudadesSuggestions.length > 0;
+          // Píldora de estado de la cabecera (WizardTramite.tsx, ActorPanel): refleja la consulta de
+          // identidad que YA se rastrea en `runt[index]`, sin inventar un dato nuevo (nada de puntaje).
+          // Tintada (StatusBadge) y no de relleno sólido: la propuesta la trae sólida con texto
+          // blanco, y con los tonos de marca en crudo ninguno de los tres estados de color llega a
+          // AA (#8CC63F 2.05:1, #FF4E00 3.31:1, #557EFF 3.61:1). El sistema ya resuelve esto con
+          // tonos semánticos, así que el estado se dice por tono Y por texto.
+          const statusPill: { text: string; tone: StatusTone } =
+            runtState.status === 'found'
+              ? { text: 'Verificado', tone: 'success' }
+              : runtState.status === 'loading'
+                ? { text: 'Consultando…', tone: 'info' }
+                : runtState.status === 'not_found' || runtState.status === 'error'
+                  ? { text: 'No verificado', tone: 'danger' }
+                  : { text: 'Pendiente', tone: 'neutral' };
           return (
             <fieldset
               key={actor.rol}
@@ -2184,19 +2207,20 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             >
               <legend className="sr-only">{ROL_LABEL[actor.rol]}</legend>
               <div
-                className="border-b px-4 py-3"
+                className="flex items-center justify-between gap-2 border-b px-4 py-3"
                 style={{ borderColor: '#DFE5ED', background: 'rgba(85,126,255,0.04)' }}
               >
                 <p className="text-xs font-bold" style={{ color: '#557EFF' }}>
                   {ROL_LABEL[actor.rol]}
                 </p>
+                <StatusBadge label={statusPill.text} tone={statusPill.tone} />
               </div>
-              <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
                 {/* Tipo de persona (HU #10543) */}
-                <div className="md:col-span-2">{personTypeSelector(index)}</div>
+                <div className="sm:col-span-2">{personTypeSelector(index)}</div>
                 {/* Tipo de documento */}
                 <div>
-                  <label htmlFor={`${prefix}-tipoDoc`} className="text-xs font-semibold mb-1.5 block">
+                  <label htmlFor={`${prefix}-tipoDoc`} className={`${WIZARD_LABEL} mb-1.5`}>
                     Tipo de documento
                   </label>
                   <select
@@ -2216,7 +2240,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
                 {/* Número de documento */}
                 <div>
-                  <label htmlFor={`${prefix}-numeroDoc`} className="text-xs font-semibold mb-1.5 flex items-center gap-1.5">
+                  <label htmlFor={`${prefix}-numeroDoc`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                     Número de documento
                     <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
                   </label>
@@ -2254,14 +2278,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   )}
                 </div>
 
-                {/* Resultado de la consulta (RUNT/RUES, autopoblado). */}
-                {runt[index] && runt[index].status !== 'idle' && (
-                  <div className="md:col-span-2">{runtResult(index)}</div>
-                )}
-
                 {/* Nombre / razón social */}
-                <div className="md:col-span-2">
-                  <label htmlFor={`${prefix}-nombre`} className="text-xs font-semibold mb-1.5 flex items-center gap-1.5">
+                <div className="sm:col-span-2">
+                  <label htmlFor={`${prefix}-nombre`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                     {isJuridical(actor) ? 'Razón social' : 'Nombre completo'}
                     <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
                   </label>
@@ -2285,7 +2304,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
                 {/* Email */}
                 <div>
-                  <label htmlFor={`${prefix}-email`} className="text-xs font-semibold mb-1.5 flex items-center gap-1.5">
+                  <label htmlFor={`${prefix}-email`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                     Correo electrónico
                     <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
                   </label>
@@ -2310,8 +2329,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
                 {/* Teléfono (opcional) */}
                 <div>
-                  <label htmlFor={`${prefix}-telefono`} className="text-xs font-semibold mb-1.5 block">
-                    Teléfono <span className="opacity-50 font-normal">(opcional)</span>
+                  <label htmlFor={`${prefix}-telefono`} className={`${WIZARD_LABEL} mb-1.5`}>
+                    Teléfono <span className="font-normal">(opcional)</span>
                   </label>
                   <input
                     id={`${prefix}-telefono`}
@@ -2330,7 +2349,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
                 {/* Ciudad (autocomplete) — HU #10956, precargable desde el contacto ya conocido. */}
                 <div className={`relative ${showCiudadSuggestions ? 'z-40' : ''}`}>
-                  <label htmlFor={`${prefix}-ciudad`} className="text-xs font-semibold mb-1.5 block">
+                  <label htmlFor={`${prefix}-ciudad`} className={`${WIZARD_LABEL} mb-1.5`}>
                     Ciudad
                   </label>
                   <input
@@ -2380,7 +2399,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
                 {/* Dirección (opcional) — HU #10956, precargable desde el contacto ya conocido. */}
                 <div>
-                  <label htmlFor={`${prefix}-direccion`} className="text-xs font-semibold mb-1.5 block">
+                  <label htmlFor={`${prefix}-direccion`} className={`${WIZARD_LABEL} mb-1.5`}>
                     Dirección
                   </label>
                   <input
@@ -2398,7 +2417,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 {/* Aviso de precarga de contacto (HU #10956) — no bloqueante, no reemplaza al badge de
                     origen de la consulta externa (`originBadge`, dentro de runtResult). */}
                 {contactLookupHint(index) && (
-                  <div className="md:col-span-2">{contactLookupHint(index)}</div>
+                  <div className="sm:col-span-2">{contactLookupHint(index)}</div>
                 )}
 
                 {/* Fecha de expedición del documento (RNMC, solo persona natural) */}
@@ -2406,6 +2425,17 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
                 {/* P4 — Representante legal DESPUÉS de los datos de contacto de la empresa (persona jurídica). */}
                 {rlSection(index)}
+
+                {/* Al pie: bloque enmarcado con la validación de identidad (RUNT/RUES) y, cuando
+                    aplica, la firma asociada — mismos badges de `runtResult`, sin datos nuevos. */}
+                {runt[index] && runt[index].status !== 'idle' && (
+                  <div
+                    className="sm:col-span-2 rounded-xl border p-3"
+                    style={{ borderColor: '#DFE5ED' }}
+                  >
+                    {runtResult(index)}
+                  </div>
+                )}
               </div>
             </fieldset>
           );
