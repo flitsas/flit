@@ -388,8 +388,12 @@ describe('BiometricStep — inventario: resultados de la validación', () => {
       provider: 'kyverum',
       firmaBaulPartes: [],
     });
-    await renderPaso('matricula_inicial');
+    const user = await renderPaso('matricula_inicial');
 
+    // El desplegable nace cerrado, como en la referencia.
+    await user.click(
+      await screen.findByRole('button', { name: /Ver trazabilidad de validación/ }),
+    );
     expect(await screen.findByText(/Historial de validaciones \(2\)/)).toBeInTheDocument();
     // Cada intento conserva su bitácora y solo el último se rotula como vigente.
     expect(screen.getAllByRole('button', { name: /ver tracking/i })).toHaveLength(2);

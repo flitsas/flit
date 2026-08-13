@@ -404,8 +404,13 @@ describe('BiometricStep — CF-08 (Feature #11004, HU #11009): historial complet
       validations: [RECHAZADA, EN_PROCESO],
       provider: 'kyverum',
     });
+    const user = userEvent.setup();
     render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
+    // El desplegable nace cerrado, como en la referencia: hay que abrirlo, igual que el gestor.
+    await user.click(
+      await screen.findByRole('button', { name: /Ver trazabilidad de validación/ }),
+    );
     expect(await screen.findByText(/Historial de validaciones \(2\)/)).toBeInTheDocument();
     // Cada ítem del historial trae su propio "Ver tracking" (bitácora por validationId).
     expect(screen.getAllByRole('button', { name: /ver tracking/i })).toHaveLength(2);
@@ -420,8 +425,12 @@ describe('BiometricStep — CF-08 (Feature #11004, HU #11009): historial complet
       validations: [RECHAZADA, EN_PROCESO],
       provider: 'kyverum',
     });
+    const user = userEvent.setup();
     render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
+    await user.click(
+      await screen.findByRole('button', { name: /Ver trazabilidad de validación/ }),
+    );
     await screen.findByText(/Historial de validaciones \(2\)/);
     expect(screen.getAllByText('Vigente')).toHaveLength(1);
   });

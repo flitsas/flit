@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
+  ChevronDown,
   Copy,
   ExternalLink,
   FileSignature,
@@ -15,7 +16,6 @@ import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { WizardCardHeader } from './wizard-atoms';
-import { WizardAccordion } from './WizardAccordion';
 import { WIZARD_CARD } from './wizard-field-styles';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import type {
@@ -712,17 +712,14 @@ function HistorialValidaciones({
     const [v] = historial;
     if (v.provider !== KYVERUM) return null;
     return (
-      <div className="mt-3">
-        <WizardAccordion title="Ver trazabilidad de validación" defaultOpen>
-          <IdentityValidationTrackingPanel validationId={v.id} embebido />
-        </WizardAccordion>
-      </div>
+      <TrazabilidadDisclosure>
+        <IdentityValidationTrackingPanel validationId={v.id} embebido />
+      </TrazabilidadDisclosure>
     );
   }
 
   return (
-    <div className="mt-3">
-      <WizardAccordion title="Ver trazabilidad de validación" defaultOpen>
+    <TrazabilidadDisclosure>
         <p className="text-xs font-semibold opacity-70">
           Historial de validaciones ({historial.length})
         </p>
@@ -746,7 +743,43 @@ function HistorialValidaciones({
             </li>
           ))}
         </ul>
-      </WizardAccordion>
+    </TrazabilidadDisclosure>
+  );
+}
+
+/**
+ * Desplegable «Ver trazabilidad de validación».
+ *
+ * Es un enlace de texto con su chevrón, no una tarjeta: así lo hace la referencia del diseño
+ * (`MatriculaInicial` `Step4`, líneas 932-935) y así corresponde aquí, porque vive DENTRO de la
+ * tarjeta de la parte. Antes usaba `WizardAccordion`, que dibuja su propia tarjeta blanca con
+ * borde: quedaba una tarjeta dentro de otra, el mismo patrón que el guardián ya señaló como ajeno
+ * al sistema en el avalúo comercial.
+ */
+function TrazabilidadDisclosure({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="flex items-center gap-1.5 rounded-lg text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+        style={{ color: '#557EFF' }}
+      >
+        Ver trazabilidad de validación
+        <ChevronDown
+          className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`}
+          aria-hidden="true"
+        />
+      </button>
+      {open && (
+        <div id={panelId} className="mt-2">
+          {children}
+        </div>
+      )}
     </div>
   );
 }

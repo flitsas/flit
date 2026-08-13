@@ -117,10 +117,14 @@
   --badge-neutral-fg: #445569;
   --badge-neutral-border: rgba(223, 229, 237, 0.9);
 
-  /* Tinta legible del verde de marca (#8CC63F, 2.05:1 sobre blanco) cuando ese verde se usa como
-     color de TEXTO — auditoría de accesibilidad del asistente de trámites. El verde de marca sigue
-     valiendo como relleno de punto/borde/fondo tintado; esta variable es solo para texto. */
-  --flit-success-ink: #4a7019;
+  /* Tinta legible del verde cuando el verde de marca (#8CC63F) se usa como color de TEXTO: en
+     plano da 2.05:1 sobre blanco y no se lee. El verde de marca sigue valiendo como relleno de
+     punto, borde o fondo tintado; esta variable es solo para texto.
+
+     El valor es el tono `OK` del propio repo de propuesta, no uno inventado: #4F7A12, que además
+     da 5.09:1 sobre blanco y cumple AA. Se llegó a él después de usar un #4A7019 propio —más
+     apagado y sin razón para existiendo este—. */
+  --flit-success-ink: #4f7a12;
 
   /* Tabla card-list (HU #10844) — tokens de superficie para que el DataTable se lea como
      tarjeta en CUALQUIER fondo (página tintada app-bg o panel blanco). La cabecera usa el
