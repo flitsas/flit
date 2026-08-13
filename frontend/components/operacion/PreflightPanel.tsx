@@ -5,6 +5,7 @@
 // por ahora el hook alimenta un snapshot stub.
 
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import type {
   FineDetail,
   PreflightCheckStatus,
@@ -50,12 +51,20 @@ interface Props {
   esMigrado?: boolean;
 }
 
-const STATUS_PILL_BG: Record<PreflightCheckStatus, string> = {
-  ok: '#8CC63F',
-  warn: '#F9AC00',
-  fail: '#FF4E00',
-  unknown: '#F9AC00',
-  error: '#FF4E00',
+/**
+ * Tono semántico del chip según el estado del check.
+ *
+ * Antes era un mapa de colores de relleno pleno con texto blanco, que el sistema prohíbe: el verde
+ * de marca da 2.05:1 sobre blanco y el ámbar 2.0:1 — ninguno legible. `StatusBadge` resuelve el
+ * tintado y el contraste desde la paleta única de badges, y de paso el chip queda igual que en las
+ * tablas y en el resto del asistente.
+ */
+const STATUS_PILL_TONE: Record<PreflightCheckStatus, StatusTone> = {
+  ok: 'success',
+  warn: 'warning',
+  fail: 'danger',
+  unknown: 'warning',
+  error: 'danger',
 };
 
 /** Palabra visible en la pastilla (UNKNOWN → NO ENCONTRADO). */
@@ -109,8 +118,8 @@ export function checkPillLabel(check: {
   return word;
 }
 
-function checkPillBg(check: { status: PreflightCheckStatus; message?: string | null }): string {
-  return STATUS_PILL_BG[check.status];
+function checkPillTone(check: { status: PreflightCheckStatus; message?: string | null }): StatusTone {
+  return STATUS_PILL_TONE[check.status];
 }
 
 
@@ -362,7 +371,7 @@ export function PreflightPanel({
         >
           {visibleChecks.map((c) => {
             const pill = checkPillLabel(c);
-            const pillBg = checkPillBg(c);
+            const pillTone = checkPillTone(c);
             const msg = c.message?.trim() ?? '';
             // Si el mensaje ya está en la pastilla, no lo repetimos debajo.
             const msgInPill =
@@ -379,13 +388,12 @@ export function PreflightPanel({
                     {c.label}
                     {checkRoleSuffix(c.key)}
                   </span>
-                  <span
-                    className="shrink-0 rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-white"
-                    style={{ background: pillBg }}
-                    title={msg || undefined}
-                  >
-                    {pill}
-                  </span>
+                  <StatusBadge
+                    label={pill}
+                    tone={pillTone}
+                    ariaLabel={`${c.label}: ${pill}`}
+                    className="shrink-0 uppercase tracking-wide"
+                  />
                 </div>
                 {showMessage && (
                   <p className="text-xs opacity-70">{c.message}</p>

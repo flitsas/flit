@@ -13,6 +13,7 @@ import { BatchReviewPanel } from './BatchReviewPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { WizardCardHeader, WizardSegmented } from './wizard-atoms';
 import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
+import { StatusBadge } from '@/components/atom/StatusBadge';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { isPrendaManagedChecklistTipo } from './prenda-document-tipos';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -547,12 +548,12 @@ export function DocumentSlot({
       )}
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
-        <span
-          className="rounded-full px-2.5 py-1 text-xs font-bold text-white"
-          style={{ background: done ? '#8CC63F' : '#59677D' }}
-        >
-          {done ? 'Adjunto' : 'Sin adjuntar'}
-        </span>
+        {/* Tintado y no de relleno pleno con texto blanco: el verde de marca sobre blanco da 2.05:1
+            y el sistema prohíbe expresamente ese badge. `StatusBadge` resuelve tono y contraste. */}
+        <StatusBadge
+          label={done ? 'Adjunto' : 'Sin adjuntar'}
+          tone={done ? 'success' : 'neutral'}
+        />
 
         {readOnly ? (
           attachment && onPreview ? (
