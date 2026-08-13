@@ -312,6 +312,12 @@ services:
       # ICT sube a un sitio y core-api lee de otro → el adjunto transferido por referencia al borrador
       # existe en la tabla pero no abre. Falla en silencio.
       FileManager__BaseUrl: ${FILE_MANAGER_BASE_URL:-https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/}
+      # Lever B (default false): synchronous_commit=off LOCAL en el camino del registro para no esperar el
+      # fsync del WAL por fila (el registro hace 1 commit por fila). Solo afecta al registro (staging
+      # reprocesable), no a reads/abort/edit. Para activarlo en un ambiente, poner
+      # ICT_RELAX_REGISTER_COMMIT_DURABILITY=true en su .env (p.ej. DEV/QA para pruebas de carga).
+      # Ver services/core-ict/docs/adr/ADR-0001-... y el commit de lever B.
+      Ingest__RelaxRegisterCommitDurability: ${ICT_RELAX_REGISTER_COMMIT_DURABILITY:-false}
     ports:
       - "127.0.0.1:${CORE_ICT_PORT:-4020}:${CORE_ICT_PORT:-4020}"
     depends_on:
