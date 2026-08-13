@@ -12,6 +12,7 @@ import { prendaDocTipoFor } from './prenda-document-tipos';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import type { FieldValue, PrendaDecision, WizardModalidad } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT, WIZARD_CARD } from './wizard-field-styles';
+import { WizardCardHeader } from './wizard-atoms';
 
 /** Handle imperativo: la shell del wizard dispara guardar+validar. */
 export type PrendaFormHandle = WizardStepFormHandle;
@@ -369,13 +370,10 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
       noValidate
     >
       {!hideHeader && (
-        <div className="mb-3">
-          <h4 className="text-sm font-bold">Prenda / gravamen</h4>
-          <p className="text-xs opacity-60">
-            Declara si el vehículo tiene prenda. Si registras, solicitas o levantas, adjunta el
-            certificado en esta sección.
-          </p>
-        </div>
+        <WizardCardHeader
+          title="Prenda / gravamen"
+          subtitle="Declara si el vehículo tiene prenda. Si registras, solicitas o levantas, adjunta el certificado en esta sección."
+        />
       )}
 
       {showRuntPanel && (

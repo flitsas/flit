@@ -11,6 +11,8 @@ import { useProcedureBatchUpload } from '@/hooks/useProcedureBatchUpload';
 import { BatchDropzone } from './BatchDropzone';
 import { BatchReviewPanel } from './BatchReviewPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { WizardCardHeader, WizardSegmented } from './wizard-atoms';
+import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import { isPrendaManagedChecklistTipo } from './prenda-document-tipos';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
@@ -764,40 +766,48 @@ export function DocumentChecklist({
       onDownload={previewAttachment ? () => void handleDownloadFromPreview() : undefined}
     />
     <section
-      className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14] mt-4"
+      className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
       aria-label="Documentos del trámite"
     >
-      <div className="mb-3 flex items-center justify-between gap-3">
-        {hideHeader ? (
-          <div />
-        ) : (
-          <div>
-            <h4 className="text-sm font-bold">Documentos requeridos</h4>
-            <p className="text-xs opacity-60">
-              Adjunta los documentos que exige el trámite ({ALLOWED_LABEL}, máx
-              20 MB).
-            </p>
-          </div>
-        )}
-        {checklist && (
-          <span
-            className="shrink-0 rounded-full px-3 py-1 text-xs font-bold"
-            style={
-              checklist.completo
-                ? { background: 'rgba(140,198,63,0.15)', color: '#8CC63F' }
-                : { background: 'rgba(249,172,0,0.15)', color: '#F9AC00' }
-            }
-            role="status"
-            aria-live="polite"
-          >
-            {checklist.completo
-              ? 'Documentos completos'
-              : `Faltan ${checklist.faltanObligatorios} obligatorio${
-                  checklist.faltanObligatorios === 1 ? '' : 's'
-                }`}
-          </span>
-        )}
-      </div>
+      {/* Embebido en el asistente el paso ya tiene su título, pero la tarjeta necesita el suyo:
+          desde el rediseño comparte el paso con las declaraciones, la prenda y las observaciones,
+          y sin nombre propio las cuatro se leían como un único bloque continuo. */}
+      <WizardCardHeader
+        title={hideHeader ? 'Gestión de documentos' : 'Documentos requeridos'}
+        subtitle={
+          hideHeader
+            ? undefined
+            : `Adjunta los documentos que exige el trámite (${ALLOWED_LABEL}, máx 20 MB).`
+        }
+      />
+
+      {/* Banda de completitud, no píldora en la esquina: es la respuesta a "¿ya puedo seguir?" y
+          en la propuesta ocupa el ancho de la tarjeta, con el ámbar de lo que falta o el verde de
+          lo resuelto. */}
+      {checklist &&
+        (() => {
+          // Los tonos salen de INLINE_ALERT_TONES y no de hex sueltos: es la misma paleta con la
+          // que el resto del asistente pinta "todo bien" y "falta algo".
+          const tono = INLINE_ALERT_TONES[checklist.completo ? 'success' : 'warning'];
+          const Icono = tono.Icon;
+          return (
+            <div
+              className="mb-3 flex items-center gap-2.5 rounded-xl px-4 py-3"
+              style={{ background: tono.background, border: `1px solid ${tono.border}` }}
+              role="status"
+              aria-live="polite"
+            >
+              <Icono className="h-4 w-4 shrink-0" style={{ color: tono.color }} aria-hidden="true" />
+              <span className="text-xs font-bold" style={{ color: tono.color }}>
+                {checklist.completo
+                  ? 'Documentos completos'
+                  : `Faltan ${checklist.faltanObligatorios} obligatorio${
+                      checklist.faltanObligatorios === 1 ? '' : 's'
+                    }`}
+              </span>
+            </div>
+          );
+        })()}
 
       {state.error && (
         <div
@@ -825,37 +835,18 @@ export function DocumentChecklist({
       {/* Feature #11211 — selector de modo (excluyente) + UI correspondiente. Default: uno a uno. */}
       {showModeToggle && (
         <div className="mb-3 space-y-2">
-          <div
-            className="flex flex-wrap gap-2"
-            role="radiogroup"
-            aria-label="Modo de cargue de documentos"
-          >
-            {(
-              [
-                { value: 'individual' as const, label: 'Uno a uno' },
-                { value: 'batch' as const, label: 'Masivo' },
-              ] as const
-            ).map((opt) => {
-              const selected = uploadMode === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => setUploadMode(opt.value)}
-                  className="rounded-full px-3 py-1.5 text-xs font-semibold border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                  style={
-                    selected
-                      ? { borderColor: '#557EFF', background: 'rgba(85,126,255,0.12)', color: '#557EFF' }
-                      : { borderColor: '#DFE5ED', color: '#162744' }
-                  }
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
+          {/* Pista segmentada como en la propuesta (Carga Individual / Carga Masiva): las dos
+              opciones son excluyentes y cambian lo que se ve debajo, así que conviene verlas
+              juntas y no como dos píldoras sueltas que se leen como filtros. */}
+          <WizardSegmented
+            label="Modo de cargue de documentos"
+            value={uploadMode}
+            options={[
+              { value: 'individual', label: 'Uno a uno' },
+              { value: 'batch', label: 'Masivo' },
+            ]}
+            onChange={setUploadMode}
+          />
           <p className="text-xs opacity-60" role="note">
             {uploadMode === 'individual'
               ? 'Puedes cargar cada documento en su casilla, uno a uno. También puedes cambiar a Masivo para subir varios archivos juntos.'

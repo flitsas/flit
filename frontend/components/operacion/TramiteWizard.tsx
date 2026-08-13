@@ -83,7 +83,7 @@ import { WizardAccordion } from './WizardAccordion';
 import { WizardHelpRail } from './WizardHelpRail';
 import { WizardModal } from './WizardModal';
 import { estadoLabel } from '@/lib/tramites/estados';
-import { WizardPair, WizardPill } from './wizard-atoms';
+import { WizardCardHeader, WizardPair, WizardPill } from './wizard-atoms';
 
 /**
  * El wizard es server-driven: una vez creada la instancia, GET /wizard decide
@@ -1818,13 +1818,10 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
 
   return (
     <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-2">
-      <div>
-        <p className="text-xs font-semibold opacity-80">Observaciones del trámite</p>
-        <p className="text-xs opacity-55">
-          Se incluirán en el recuadro de observaciones del FUR. Puedes editarlas también en el paso
-          final antes de preparar el expediente.
-        </p>
-      </div>
+      <WizardCardHeader
+        title="Observaciones del trámite"
+        subtitle="Se incluirán en el recuadro de observaciones del FUR. Puedes editarlas también en el paso final antes de preparar el expediente."
+      />
       <textarea
         id="tramite-observaciones"
         aria-label="Observaciones del trámite"
@@ -3032,8 +3029,6 @@ function StepBody({
               />
             );
           })()}
-          {/* P6 — observaciones del trámite; escribe `fur_observations` (mismo campo que FirmaFurStep). */}
-          <TramiteObservacionesField instanceId={instanceId} />
           <DocumentChecklist
             instanceId={instanceId}
             onChanged={() => {
@@ -3043,6 +3038,11 @@ function StepBody({
             hideHeader
             modalidad={modalidad}
           />
+          {/* P6 — observaciones del trámite; escribe `fur_observations` (mismo campo que FirmaFurStep).
+              Van al final, como en la propuesta: es el cierre del paso, lo que el gestor escribe una
+              vez ya sabe qué documentos quedaron adjuntos. Antes salía entre la prenda y el
+              checklist y cortaba en dos la parte documental. */}
+          <TramiteObservacionesField instanceId={instanceId} />
         </div>
       );
 

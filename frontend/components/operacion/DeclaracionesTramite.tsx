@@ -10,6 +10,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { VehicleTransformationsCard } from './VehicleTransformationsCard';
 import { WizardAccordion } from './WizardAccordion';
+import { WizardCardHeader } from './wizard-atoms';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 
 /** El proveedor RUES respondió y no existe empresa con ese NIT — distinto del fallo transitorio 503. */
@@ -264,15 +265,10 @@ export function DeclaracionesTramite({
           (SearchableSelect), pensado para catálogos largos. */}
       {esMatricula && (
         <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
-          <div>
-            <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
-              Tipo de servicio del vehículo
-            </p>
-            <p className="text-xs opacity-55">
-              Determina la casilla 18 del FUR. Con servicio público hay que identificar además la
-              empresa vinculadora.
-            </p>
-          </div>
+          <WizardCardHeader
+            title="Tipo de servicio del vehículo"
+            subtitle="Determina la casilla 18 del FUR. Con servicio público hay que identificar además la empresa vinculadora."
+          />
 
           {tiposServicioLoading ? (
             <p className="text-xs opacity-60" role="status" aria-live="polite">
