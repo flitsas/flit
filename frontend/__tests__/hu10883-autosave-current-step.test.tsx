@@ -249,7 +249,7 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
     mocks.setCurrentStep.mockClear();
 
     await user.click(screen.getByRole('button', { name: /Anterior/ }));
-    await screen.findByRole('heading', { level: 2, name: 'Consulta VIN' });
+    await screen.findByRole('heading', { level: 2, name: 'Consulta VIN y Placa' });
 
     expect(mocks.setCurrentStep).not.toHaveBeenCalled();
   });
@@ -263,7 +263,7 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
     await user.click(screen.getByRole('button', { name: /^Continuar$/ }));
 
     // El wizard avanza igual (heading del paso 2) y no aparece ningún error visible.
-    expect(await screen.findByRole('heading', { level: 2, name: 'Datos y Documentos del Trámite' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Documentos' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -362,7 +362,7 @@ describe('HU #10883 — AC2: reposición en el paso persistido al reabrir', () =
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Datos y Documentos del Trámite' }),
+      await screen.findByRole('heading', { level: 2, name: 'Documentos' }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('heading', { level: 2, name: 'Comprador' }),
@@ -386,7 +386,7 @@ describe('HU #10883 — AC2: reposición en el paso persistido al reabrir', () =
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Datos y Documentos del Trámite' }),
+      await screen.findByRole('heading', { level: 2, name: 'Documentos' }),
     ).toBeInTheDocument();
   });
 
@@ -407,7 +407,7 @@ describe('HU #10883 — AC2: reposición en el paso persistido al reabrir', () =
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Datos y Documentos del Trámite' }),
+      await screen.findByRole('heading', { level: 2, name: 'Documentos' }),
     ).toBeInTheDocument();
   });
 });

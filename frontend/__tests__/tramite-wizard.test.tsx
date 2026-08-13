@@ -515,7 +515,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
     const user = userEvent.setup();
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await screen.findByRole('button', { name: /^Paso 1: (Consulta|Trámite)/ });
     // Navega al último paso (FUR, índice 5).
     await user.click(screen.getByRole('button', { name: /^Paso 6: FUR/ }));
     expect(screen.getByRole('button', { name: /Finalizar/ })).toBeDisabled();
@@ -558,7 +558,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     const onExit = vi.fn();
     const user = userEvent.setup();
     render(<TramiteWizard existingInstanceId="inst-1" onExit={onExit} />);
-    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await screen.findByRole('button', { name: /^Paso 1: (Consulta|Trámite)/ });
     await user.click(screen.getByRole('button', { name: /^Paso 6: FUR/ }));
 
     const radicar = await waitFor(() => {
@@ -620,7 +620,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     render(
       <TramiteWizard configuration={CONFIG} procedureTypeId="type-1" onExit={onExit} />,
     );
-    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await screen.findByRole('button', { name: /^Paso 1: (Consulta|Trámite)/ });
     await user.click(screen.getByRole('button', { name: /^Paso 6: FUR/ }));
 
     const radicar = await screen.findByRole('button', { name: /^Radicar trámite$/ });
@@ -725,7 +725,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     );
     const user = userEvent.setup();
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await screen.findByRole('button', { name: /^Paso 1: (Consulta|Trámite)/ });
     await user.click(screen.getByRole('button', { name: /^Paso 6: FUR/ }));
     await user.click(screen.getByRole('button', { name: /^Radicar trámite$/ }));
 
@@ -890,7 +890,7 @@ describe('TramiteWizard — consulta persiste antes de preflight', () => {
     });
     const user = userEvent.setup();
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await screen.findByRole('button', { name: /^Paso 1: (Consulta|Trámite)/ });
 
     await user.type(screen.getByLabelText(/^Placa$/), 'ABC123');
     await user.type(
@@ -1217,10 +1217,10 @@ describe('TramiteWizard — Guardar y continuar (pasos de actores)', () => {
     });
 
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await screen.findByRole('button', { name: /^Paso 1: (Consulta|Trámite)/ });
 
     // Navega al paso Vendedor (frontera).
-    await user.click(screen.getByRole('button', { name: /^Paso 3: Vendedor/ }));
+    await user.click(screen.getByRole('button', { name: /^Paso 3: Actores/ }));
     // El form hidrata al vendedor cargado y auto-consulta RUNT.
     await screen.findByDisplayValue('Pedro Vendedor');
     await screen.findByText(/Persona encontrada en RUNT/i);
@@ -1249,8 +1249,8 @@ describe('TramiteWizard — Guardar y continuar (pasos de actores)', () => {
       { rol: 'vendedor', tipoDocumento: 'CC', numeroDocumento: '999', nombreCompleto: 'Pedro Vendedor', email: 'pedro@x.com' },
     ]);
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
-    await user.click(screen.getByRole('button', { name: /^Paso 3: Vendedor/ }));
+    await screen.findByRole('button', { name: /^Paso 1: (Consulta|Trámite)/ });
+    await user.click(screen.getByRole('button', { name: /^Paso 3: Actores/ }));
     await screen.findByDisplayValue('Pedro Vendedor');
     await screen.findByText(/Persona encontrada en RUNT/i);
     await user.click(screen.getByRole('button', { name: /Guardar y continuar/ }));
@@ -1349,7 +1349,7 @@ describe('TramiteWizard — traspaso journey (paso 2 documentos + vendedor split
     mocks.getWizardState.mockResolvedValue(traspasoSteps('incomplete'));
     const user = userEvent.setup();
     renderWizard();
-    await user.click(await screen.findByRole('button', { name: /^Paso 3: Vendedor/ }));
+    await user.click(await screen.findByRole('button', { name: /^Paso 3: Actores/ }));
 
     expect(await screen.findByText(/Identificación · Vendedor/)).toBeInTheDocument();
     expect(screen.getByText('Datos de contacto')).toBeInTheDocument();
@@ -1361,7 +1361,7 @@ describe('TramiteWizard — paso comercial', () => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
     const user = userEvent.setup();
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await screen.findByRole('button', { name: /^Paso 1: (Consulta|Trámite)/ });
     await user.click(screen.getByRole('button', { name: /^Paso 5: Comercial/ }));
     expect(
       await screen.findByRole('form', { name: 'Datos comerciales del trámite' }),
@@ -1374,7 +1374,7 @@ describe('TramiteWizard — paso comercial', () => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
     const user = userEvent.setup();
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await screen.findByRole('button', { name: /^Paso 1: (Consulta|Trámite)/ });
     await user.click(screen.getByRole('button', { name: /^Paso 5: Comercial/ }));
     await screen.findByRole('form', { name: 'Datos comerciales del trámite' });
     // El guardado vive en el footer del wizard, no en un botón propio del form.
@@ -1397,7 +1397,7 @@ describe('TramiteWizard — paso comercial', () => {
     });
     const user = userEvent.setup();
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await screen.findByRole('button', { name: /^Paso 1: (Consulta|Trámite)/ });
     await user.click(screen.getByRole('button', { name: /^Paso 5: Comercial/ }));
     // El form hidrata el valor formateado (COP agrupado).
     await screen.findByDisplayValue('50.000.000');
@@ -1422,7 +1422,7 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
   async function abrirPasoConsulta() {
     const user = userEvent.setup();
     render(<TramiteWizard existingInstanceId="inst-tr" onExit={() => {}} />);
-    const consultaTab = await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    const consultaTab = await screen.findByRole('button', { name: /^Paso 1: (Consulta|Trámite)/ });
     await user.click(consultaTab);
     // Espera a que el form de placa (traspaso) se pinte.
     await screen.findByLabelText('Placa');
@@ -1459,7 +1459,7 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
     const user = userEvent.setup();
     render(<TramiteWizard existingInstanceId="inst-tr" onExit={() => {}} />);
     // Instancia existente: reanuda en la frontera, así que hay que abrir el paso de consulta.
-    await user.click(await screen.findByRole('button', { name: /^Paso 1: Consulta/ }));
+    await user.click(await screen.findByRole('button', { name: /^Paso 1: (Consulta|Trámite)/ }));
     await screen.findByLabelText('Placa');
 
     await user.type(screen.getByLabelText(/^Placa$/), 'PWL160');

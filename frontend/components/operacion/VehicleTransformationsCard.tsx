@@ -31,11 +31,18 @@ export function VehicleTransformationsCard({
   readOnly,
   saving,
   onPatch,
+  bare = false,
 }: {
   fieldValues: FieldValue[];
   readOnly: boolean;
   saving: boolean;
   onPatch: (items: { fieldKey: string; valueText: string }[]) => Promise<void>;
+  /**
+   * Se monta dentro de un acordeón que ya pinta la tarjeta y el título. Quita el marco y la
+   * cabecera propia; el texto de ayuda se conserva, porque explica qué se declara aquí y eso el
+   * título del acordeón no lo dice.
+   */
+  bare?: boolean;
 }) {
   const byKey = (key: string) =>
     fieldValues.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
@@ -111,21 +118,31 @@ export function VehicleTransformationsCard({
   return (
     <section
       aria-labelledby="veh-transf-title"
-      className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3"
+      className={
+        bare ? 'space-y-3' : 'space-y-3 rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]'
+      }
     >
-      <div className="flex items-center gap-2">
-        <span
-          aria-hidden="true"
-          className="grid h-7 w-7 place-items-center rounded-lg"
-          style={{ background: 'rgba(85,126,255,0.10)' }}
-        >
-          <Wand2 className="h-4 w-4" style={{ color: '#557EFF' }} />
-        </span>
-        <p id="veh-transf-title" className="text-xs font-semibold opacity-80">
+      {/* Embebido, el título vive en la cabecera del acordeón. Se conserva un rótulo oculto porque
+          el `role="group"` de abajo lo referencia por `aria-labelledby`. */}
+      {bare ? (
+        <p id="veh-transf-title" className="sr-only">
           Transformaciones del vehículo
         </p>
-      </div>
-      <p className="text-xs opacity-55 -mt-1">
+      ) : (
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="grid h-7 w-7 place-items-center rounded-lg"
+            style={{ background: 'rgba(85,126,255,0.10)' }}
+          >
+            <Wand2 className="h-4 w-4" style={{ color: '#557EFF' }} />
+          </span>
+          <p id="veh-transf-title" className="text-xs font-semibold opacity-80">
+            Transformaciones del vehículo
+          </p>
+        </div>
+      )}
+      <p className={`text-xs opacity-55 ${bare ? '' : '-mt-1'}`}>
         Declara un cambio de color, combustible o carrocería frente al RUNT. Se registrará en el
         FUR. La carrocería puede requerir factura como documento de soporte.
       </p>

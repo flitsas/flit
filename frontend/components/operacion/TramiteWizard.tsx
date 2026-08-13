@@ -3,30 +3,21 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Briefcase,
-  Building2,
   Calendar,
   Car,
   ChevronLeft,
   ChevronRight,
   Eye,
-  Fuel,
-  Gauge,
-  Hash,
   Info,
-  Layers,
-  Palette,
   RefreshCw,
   Search,
   Shield,
-  Tag,
-  Users,
   Wrench,
 } from 'lucide-react';
 import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
 import { useWizardTelemetry } from '@/hooks/useWizardTelemetry'; // Reportes2 HU-A
-import { PreflightPanel } from './PreflightPanel';
+import { PreflightPanel, preflightOverall } from './PreflightPanel';
 import { ActiveDeedsCollapse } from './ActiveDeedsCollapse';
 import { ProcedureDocsPreviewInformativo } from './ProcedureDocsPreviewInformativo';
 import { TransitOfficeSearchPicker } from './TransitOfficeSearchPicker';
@@ -92,7 +83,9 @@ import type {
   WizardModalidad,
   WizardStep,
 } from '@/lib/api/types/procedure-runtime';
-import { WIZARD_CARD } from './wizard-field-styles';
+import { WIZARD_CARD, WIZARD_LABEL, WIZARD_SELECT } from './wizard-field-styles';
+import { WizardAccordion } from './WizardAccordion';
+import { WizardPair, WizardPill } from './wizard-atoms';
 
 /**
  * El wizard es server-driven: una vez creada la instancia, GET /wizard decide
@@ -1483,24 +1476,37 @@ export function TramiteWizard(props: Props) {
 const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS'];
 
 /**
- * Atributos de detalle del vehículo (los que NO van en el hero placa/marca/línea/
- * modelo). Cada uno con su icono para una grilla legible. Origen RUNT, hidratados
- * en field_values por la consulta del preflight. Solo se pinta lo presente.
+ * Trámites principales que ofrece el selector del paso 1. Mismo par que la pantalla de entrada
+ * (`/tramites/nuevo`): son las dos modalidades que el asistente sabe recorrer.
  */
-const VEHICLE_DETAILS: { key: string; label: string; icon: typeof Car }[] = [
-  { key: 'vin', label: 'VIN', icon: Hash },
-  { key: 'vehicle_color', label: 'Color', icon: Palette },
-  { key: 'vehicle_class', label: 'Clase', icon: Tag },
-  { key: 'vehicle_service', label: 'Servicio', icon: Briefcase },
-  { key: 'vehicle_fuel', label: 'Combustible', icon: Fuel },
-  { key: 'vehicle_engine_displacement', label: 'Cilindraje', icon: Gauge },
-  { key: 'vehicle_body_type', label: 'Carrocería', icon: Layers },
-  { key: 'vehicle_engine_number', label: 'Nº Motor', icon: Wrench },
-  { key: 'vehicle_chassis', label: 'Nº Chasis', icon: Hash },
-  { key: 'vehicle_series', label: 'Nº Serie', icon: Hash },
-  { key: 'vehicle_passengers', label: 'Pasajeros', icon: Users },
-  { key: 'vehicle_registration_date', label: 'Fecha matrícula', icon: Calendar },
-  { key: 'transit_office_name', label: 'Organismo de tránsito', icon: Building2 },
+const MODALIDAD_OPCIONES: { id: WizardModalidad; label: string }[] = [
+  { id: 'matricula_inicial', label: 'Matrícula inicial' },
+  { id: 'traspaso', label: 'Traspaso estándar' },
+];
+
+/**
+ * Atributos de detalle del vehículo (los que NO van en el hero placa/marca/línea/
+ * modelo). Origen RUNT, hidratados en field_values por la consulta del preflight.
+ * Solo se pinta lo presente.
+ *
+ * Sin icono por atributo: la propuesta presenta estos datos como una retícula de pares
+ * rótulo/valor. Trece iconos distintos en una rejilla de consulta no distinguen nada —el rótulo ya
+ * nombra el dato— y sí compiten con el valor, que es lo único que el gestor viene a leer.
+ */
+const VEHICLE_DETAILS: { key: string; label: string }[] = [
+  { key: 'vin', label: 'VIN' },
+  { key: 'vehicle_color', label: 'Color' },
+  { key: 'vehicle_class', label: 'Clase' },
+  { key: 'vehicle_service', label: 'Servicio' },
+  { key: 'vehicle_fuel', label: 'Combustible' },
+  { key: 'vehicle_engine_displacement', label: 'Cilindraje' },
+  { key: 'vehicle_body_type', label: 'Carrocería' },
+  { key: 'vehicle_engine_number', label: 'Nº Motor' },
+  { key: 'vehicle_chassis', label: 'Nº Chasis' },
+  { key: 'vehicle_series', label: 'Nº Serie' },
+  { key: 'vehicle_passengers', label: 'Pasajeros' },
+  { key: 'vehicle_registration_date', label: 'Fecha matrícula' },
+  { key: 'transit_office_name', label: 'Organismo de tránsito' },
 ];
 
 /**
@@ -1509,7 +1515,14 @@ const VEHICLE_DETAILS: { key: string; label: string; icon: typeof Car }[] = [
  * hero (placa + marca/línea/modelo + estado) y una grilla de atributos con
  * iconos. Solo se pinta lo presente; nada de proveedor.
  */
-function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
+function VehicleDataCard({
+  fieldValues,
+  bare = false,
+}: {
+  fieldValues: FieldValue[];
+  /** Dentro del acordeón "Datos consolidados del vehículo (RUNT)": sin marco ni cabecera propia. */
+  bare?: boolean;
+}) {
   const byKey = (key: string) =>
     fieldValues.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
 
@@ -1538,31 +1551,35 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
 
   return (
     <div
-      className="overflow-hidden rounded-2xl border bg-white dark:bg-[#0B0F14]"
+      className={
+        bare ? '' : 'overflow-hidden rounded-2xl border bg-white dark:bg-[#0B0F14]'
+      }
     >
-      {/* Header */}
-      <div
-        className="flex items-center justify-between gap-3 border-b px-4 py-3"
-      >
-        <div className="flex items-center gap-2">
+      {/* Header — embebido lo pinta el acordeón, que ya dice de dónde vienen los datos. */}
+      {!bare && (
+        <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span
+              className="grid h-7 w-7 place-items-center rounded-lg"
+              style={{ background: 'rgba(85,126,255,0.10)' }}
+            >
+              <Car className="h-4 w-4" style={{ color: '#557EFF' }} />
+            </span>
+            <h4 className="text-sm font-bold">Datos del vehículo</h4>
+          </div>
           <span
-            className="grid h-7 w-7 place-items-center rounded-lg"
-            style={{ background: 'rgba(85,126,255,0.10)' }}
+            className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+            style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
           >
-            <Car className="h-4 w-4" style={{ color: '#557EFF' }} />
+            RUNT
           </span>
-          <h4 className="text-sm font-bold">Datos del vehículo</h4>
         </div>
-        <span
-          className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
-          style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
-        >
-          RUNT
-        </span>
-      </div>
+      )}
 
       {/* Hero: placa + marca/línea/modelo + estado */}
-      <div className="flex flex-wrap items-center gap-4 px-4 py-4">
+      <div
+        className={`flex flex-wrap items-center gap-4 ${bare ? 'pb-4' : 'px-4 py-4'}`}
+      >
         {plate && (
           <div
             className="rounded-xl border-2 px-4 py-2 text-center"
@@ -1601,35 +1618,24 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
         </div>
       </div>
 
-      {/* Grilla de atributos — 4 columnas */}
+      {/* Retícula de pares rótulo/valor de la propuesta: 2 columnas en móvil, 3 en tablet, 5 en
+          escritorio. Sin hairlines entre celdas — el aire separa mejor que la línea cuando lo que
+          se compara son datos cortos. */}
       {details.length > 0 && (
         <div
-          className="grid gap-px border-t sm:grid-cols-2 lg:grid-cols-4"
-          style={{ background: '#DFE5ED' }}
+          className={`grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-5 ${
+            bare ? 'border-t pt-4' : 'border-t px-4 py-4'
+          }`}
         >
-          {details.map((d) => {
-            const Icon = d.icon;
-            return (
-              <div
-                key={d.key}
-                className="flex items-center gap-2.5 bg-white px-4 py-2.5 dark:bg-[#0B0F14]"
-              >
-                <Icon className="h-3.5 w-3.5 shrink-0 opacity-40" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs uppercase opacity-50">{d.label}</p>
-                  <p className="truncate text-xs font-semibold">{d.value}</p>
-                </div>
-              </div>
-            );
-          })}
+          {details.map((d) => (
+            <WizardPair key={d.key} label={d.label} value={d.value} />
+          ))}
         </div>
       )}
 
       {/* Sección SOAT / RTM */}
       {hasSoatRtm && (
-        <div
-          className="border-t px-4 py-3"
-        >
+        <div className={bare ? 'mt-4 border-t pt-3' : 'border-t px-4 py-3'}>
           <p className="mb-2 text-xs font-semibold uppercase opacity-50">
             Documentos del vehículo
           </p>
@@ -2443,6 +2449,11 @@ function ConsultaStep({
     router.push(`/tramites/nuevo/traspaso${qs ? `?${qs}` : ''}`);
   };
 
+  // Trámite principal que gobierna el paso. Con creación diferida la trae la ruta; con el trámite
+  // ya creado se deduce de la clave del paso, que es lo único que distingue las dos ramas aquí.
+  const modalidadVigente: WizardModalidad =
+    deferredModalidad ?? (isVin ? 'matricula_inicial' : 'traspaso');
+
   // Botón "Consultar RUNT": mismo estilo gradiente que "Enviar a tránsito"
   // (unificación de estilos pedida). Disparo único de la consulta.
   const consultButton = (
@@ -2461,52 +2472,65 @@ function ConsultaStep({
   );
 
   return (
-    <div className="space-y-4">
-      {/* HU #10906 — collapse (contraído, carga perezosa) de las escrituras vigentes de la compañía.
-          Tenant-scoped por el header; el NIT del tenant (tenantNitDigits) queda disponible arriba. */}
-      <ActiveDeedsCollapse />
-      {/* HU #11199 — secretaría ANTES de consultar VIN (matrícula). Guía de documentos: enlace
-          discreto → panel lateral (no ocupa el layout del paso 1). */}
-      {eligeSecretaria && (
-        <div className={WIZARD_CARD}>
-          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-semibold">Secretaría de tránsito</p>
-            <ProcedureDocsPreviewInformativo
-              modalidad="matricula_inicial"
-              transitOfficeId={transitOfficeId || undefined}
+    <div className="space-y-3">
+      {/* Tarjeta de consulta — la retícula de 12 columnas de la propuesta: el trámite principal, el
+          identificador del vehículo y el disparo de la consulta en una sola línea. Antes cada dato
+          traía su propia tarjeta y el paso abría con tres bloques apilados antes de llegar a lo
+          único que el gestor viene a hacer aquí, que es consultar. */}
+      <div className={`${WIZARD_CARD} grid grid-cols-1 items-end gap-3 lg:grid-cols-12`}>
+        {/* El tipo lo fija la ruta, pero la propuesta lo muestra DENTRO del paso 1 y así queda a la
+            vista de qué trámite se está hablando. Mientras el trámite no existe (creación diferida)
+            cambiarlo es solo navegar al otro tipo —no hay nada creado que migrar—; con el trámite
+            ya creado se muestra fijo, porque la modalidad ya gobierna sus pasos y documentos. */}
+        <div className="lg:col-span-3">
+          <label className="block min-w-0">
+            <span className={WIZARD_LABEL}>Trámite principal *</span>
+            <select
+              value={modalidadVigente}
+              disabled={!deferred || readOnly}
+              onChange={(e) => router.push(`/tramites/nuevo/${e.target.value}`)}
+              className={`mt-1 ${WIZARD_SELECT}`}
+              aria-label="Trámite principal"
+            >
+              {MODALIDAD_OPCIONES.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {/* HU #11199 — secretaría ANTES de consultar VIN (matrícula). Guía de documentos: enlace
+            discreto → panel lateral (no ocupa el layout del paso 1). */}
+        {eligeSecretaria && (
+          <div className="lg:col-span-4">
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+              <span className={WIZARD_LABEL}>Secretaría de tránsito *</span>
+              <ProcedureDocsPreviewInformativo
+                modalidad="matricula_inicial"
+                transitOfficeId={transitOfficeId || undefined}
+              />
+            </div>
+            <TransitOfficeSearchPicker
+              offices={secretarias}
+              valueId={transitOfficeId}
+              onChange={(id) => {
+                setTransitOfficeId(id);
+                invalidatePreview();
+                setError(null);
+              }}
+              disabled={readOnly}
+              describedBy="consulta-secretaria-aviso"
             />
           </div>
-          <TransitOfficeSearchPicker
-            offices={secretarias}
-            valueId={transitOfficeId}
-            onChange={(id) => {
-              setTransitOfficeId(id);
-              invalidatePreview();
-              setError(null);
-            }}
-            disabled={readOnly}
-            describedBy="consulta-secretaria-aviso"
-          />
-          <p id="consulta-secretaria-aviso" className="mt-2 text-xs leading-tight opacity-70">
-            {SECRETARIA_LISTA_AVISO}
-          </p>
-          {secretariasError && (
-            <p className="mt-1 text-xs leading-tight" style={{ color: '#E5484D' }}>
-              {secretariasError}
-            </p>
-          )}
-        </div>
-      )}
-      {deferred && deferredModalidad === 'traspaso' && (
-        <div className="flex justify-end">
-          <ProcedureDocsPreviewInformativo modalidad="traspaso" />
-        </div>
-      )}
-      {isVin ? (
-        <div
-          className={WIZARD_CARD}
-        >
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        )}
+
+        {isVin ? (
+          <div className={eligeSecretaria ? 'lg:col-span-3' : 'lg:col-span-7'}>
+            <label htmlFor="consulta-vin" className={WIZARD_LABEL}>
+              Número VIN
+            </label>
             <input
               id="consulta-vin"
               type="text"
@@ -2519,25 +2543,14 @@ function ConsultaStep({
                 if (e.key === 'Enter') void handleRun();
               }}
               disabled={readOnly}
-              className={`${inputClass} sm:flex-1 disabled:opacity-60`}
+              className={`mt-1 ${inputClass} disabled:opacity-60`}
               placeholder="Número VIN…"
-              aria-label="Número VIN"
             />
-            {!readOnly && consultButton}
           </div>
-        </div>
-      ) : (
-        <div
-          className={WIZARD_CARD}
-        >
-          {/* Una sola fila de consulta (mismo patrón que la rama VIN de arriba): cada campo ocupa
-              el ancho que pide su dato —placa 6 caracteres, tipo de documento una sigla— y el
-              número toma el resto, con el CTA cerrando la línea. Antes la placa ocupaba media
-              rejilla y el número la fila entera, lo que dejaba anchos dispares y un hueco grande
-              a la derecha. */}
-          <div className="flex max-w-4xl flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
-            <div className="sm:w-36">
-              <label htmlFor="consulta-plate" className="mb-1.5 block text-xs font-semibold">
+        ) : (
+          <>
+            <div className="lg:col-span-2">
+              <label htmlFor="consulta-plate" className={WIZARD_LABEL}>
                 Placa
               </label>
               <input
@@ -2551,16 +2564,13 @@ function ConsultaStep({
                 disabled={readOnly}
                 // Prototipo FLIT: la placa se lee como código —mayúscula y espaciada—.
                 // El placeholder vuelve a texto normal para no leerse como un valor cargado.
-                className={`${inputClass} uppercase tracking-[0.14em] font-semibold placeholder:normal-case placeholder:tracking-normal placeholder:font-normal disabled:opacity-60`}
+                className={`mt-1 ${inputClass} font-semibold uppercase tracking-[0.14em] placeholder:font-normal placeholder:normal-case placeholder:tracking-normal disabled:opacity-60`}
                 placeholder="Ej. ABC123"
               />
             </div>
             {!hideOwnerDocType && (
-              <div className="sm:w-48">
-                <label
-                  htmlFor="consulta-owner-doc-type"
-                  className="mb-1.5 block text-xs font-semibold"
-                >
+              <div className="lg:col-span-2">
+                <label htmlFor="consulta-owner-doc-type" className={WIZARD_LABEL}>
                   Tipo documento propietario
                 </label>
                 <select
@@ -2576,7 +2586,7 @@ function ConsultaStep({
                   // Un <select> no admite readOnly: con la política activa se deshabilita,
                   // el valor (NIT) igual viaja porque vive en estado de React, no en un submit.
                   disabled={readOnly || ownerDocLocked}
-                  className={`${inputClass} disabled:opacity-60`}
+                  className={`mt-1 ${inputClass} disabled:opacity-60`}
                 >
                   {DOC_TYPES.map((t) => (
                     <option key={t} value={t}>
@@ -2586,11 +2596,8 @@ function ConsultaStep({
                 </select>
               </div>
             )}
-            <div className="sm:min-w-56 sm:flex-1">
-              <label
-                htmlFor="consulta-owner-doc-number"
-                className="mb-1.5 block text-xs font-semibold"
-              >
+            <div className={hideOwnerDocType ? 'lg:col-span-5' : 'lg:col-span-3'}>
+              <label htmlFor="consulta-owner-doc-number" className={WIZARD_LABEL}>
                 Número documento propietario
               </label>
               <input
@@ -2606,35 +2613,55 @@ function ConsultaStep({
                 // el campo sigue en el orden de tabulación y se anuncia como de solo lectura.
                 readOnly={ownerDocLocked}
                 aria-describedby={ownerDocLocked ? 'consulta-owner-doc-locked' : undefined}
-                className={`${inputClass} disabled:opacity-60 ${
+                className={`mt-1 ${inputClass} disabled:opacity-60 ${
                   ownerDocLocked ? 'cursor-not-allowed bg-[#F4F6FA] dark:bg-[#131A22]' : ''
                 }`}
                 placeholder="Ej. 1020304050"
               />
             </div>
-            {!readOnly && <div className="sm:shrink-0">{consultButton}</div>}
+          </>
+        )}
+
+        {!readOnly && <div className="lg:col-span-2">{consultButton}</div>}
+
+        {/* Notas y avisos de la consulta: fila completa. Cada uno explica un campo de arriba, así
+            que van bajo la línea y no dentro de una columna, donde descuadraban su altura. */}
+        {(eligeSecretaria ||
+          secretariasError ||
+          ownerDocLocked ||
+          (!hideOwnerDocType && ownerDocTypeSuggested) ||
+          (deferred && deferredModalidad === 'traspaso')) && (
+          <div className="space-y-1.5 lg:col-span-12">
+            {eligeSecretaria && (
+              <p id="consulta-secretaria-aviso" className="text-xs leading-tight opacity-70">
+                {SECRETARIA_LISTA_AVISO}
+              </p>
+            )}
+            {secretariasError && (
+              <p className="text-xs leading-tight" style={{ color: '#E5484D' }}>
+                {secretariasError}
+              </p>
+            )}
+            {/* El fondo gris por sí solo no comunica "no editable": se dice con texto, y este
+                párrafo es además el nombre accesible del estado (aria-describedby del campo). */}
+            {ownerDocLocked && (
+              <p id="consulta-owner-doc-locked" className="text-xs leading-tight opacity-70">
+                Tu compañía solo tramita vehículos propios, así que el propietario queda fijo en su
+                NIT y no se puede editar durante el trámite.
+              </p>
+            )}
+            {!hideOwnerDocType && ownerDocTypeSuggested && (
+              <p className="text-xs leading-tight opacity-70">
+                No se encontró el vehículo en RUNT. Si es maquinaria o remolque, verifica el tipo de
+                documento del propietario (p. ej. NIT) y vuelve a consultar.
+              </p>
+            )}
+            {deferred && deferredModalidad === 'traspaso' && (
+              <ProcedureDocsPreviewInformativo modalidad="traspaso" />
+            )}
           </div>
-          {/* El fondo gris por sí solo no comunica "no editable": se dice con texto, y este párrafo
-              es además el nombre accesible del estado (aria-describedby del campo). */}
-          {ownerDocLocked && (
-            <p
-              id="consulta-owner-doc-locked"
-              className="mt-3 max-w-4xl text-xs leading-tight opacity-70"
-            >
-              Tu compañía solo tramita vehículos propios, así que el propietario queda fijo en su
-              NIT y no se puede editar durante el trámite.
-            </p>
-          )}
-          {/* La sugerencia habla de la consulta completa, no solo del selector: fuera de la fila
-              se lee en una línea y deja de descuadrar la altura de esa columna. */}
-          {!hideOwnerDocType && ownerDocTypeSuggested && (
-            <p className="mt-3 max-w-4xl text-xs leading-tight opacity-70">
-              No se encontró el vehículo en RUNT. Si es maquinaria o remolque, verifica el tipo de
-              documento del propietario (p. ej. NIT) y vuelve a consultar.
-            </p>
-          )}
-        </div>
-      )}
+        )}
+      </div>
 
       {error && (
         <p
@@ -2690,14 +2717,33 @@ function ConsultaStep({
         </div>
       )}
 
-      <VehicleDataCard fieldValues={fieldValues} />
+      {/* HU #10906 — collapse (contraído, carga perezosa) de las escrituras vigentes de la compañía.
+          Tenant-scoped por el header; el NIT del tenant (tenantNitDigits) queda disponible arriba. */}
+      <ActiveDeedsCollapse />
 
-      <VehicleTransformationsCard
-        fieldValues={fieldValues}
-        readOnly={readOnly}
-        saving={atributosSaving}
-        onPatch={saveTransformacion}
-      />
+      {/* Datos consolidados del vehículo. Acordeón abierto de entrada —es el resultado de la
+          consulta, lo que el gestor viene a ver— y con el estado en la cabecera, para que plegado
+          siga diciendo si ya se consultó o no. */}
+      <WizardAccordion
+        title="Datos consolidados del vehículo (RUNT)"
+        defaultOpen
+        badge={
+          <WizardPill
+            text={hasVehicleData ? 'Consultado' : 'Pendiente'}
+            color={hasVehicleData ? '#3F8F0C' : '#6B7688'}
+          />
+        }
+      >
+        {hasVehicleData ? (
+          <VehicleDataCard fieldValues={fieldValues} bare />
+        ) : (
+          <p className="text-xs opacity-60">
+            {isVin
+              ? 'Consulta el VIN para traer los datos del vehículo desde el RUNT.'
+              : 'Consulta la placa y el documento del propietario para traer los datos del vehículo desde el RUNT.'}
+          </p>
+        )}
+      </WizardAccordion>
 
       {/* Tipo de servicio (sección 18 del FUR) — solo matrícula inicial, solo mientras el trámite no
           existe (ver `eligeTipoServicio`) y SOLO DESPUÉS de consultar el vehículo: antes de la
@@ -2869,32 +2915,56 @@ function ConsultaStep({
         </div>
       )}
 
-      {/* Condiciones: en traspaso el leasing; en matrícula ya no hay flags aquí (carrocería
-          vive en Transformaciones). Solo se pinta el bloque si hay algo que marcar. */}
-      {hasVehicleData && !isVin && (
-        <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
-          <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
-          <p className="text-xs opacity-55 -mt-1.5">
-            Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente.
-          </p>
-
-          <label className="flex items-start gap-2.5">
-            <input
-              type="checkbox"
-              checked={esLeasing}
-              onChange={(e) => void saveAtributo('es_leasing', e.target.checked ? 'true' : 'false')}
-              disabled={readOnly || atributosSaving}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
+      {/* Transformaciones y condiciones, juntas en un acordeón como en la propuesta: las dos
+          declaran lo mismo —en qué se aparta el vehículo de lo que dice el RUNT— y las dos ajustan
+          el checklist de documentos. Separadas en dos tarjetas se leían como temas distintos.
+          Plegado por defecto: en la mayoría de trámites no hay nada que declarar. */}
+      <WizardAccordion title="Transformaciones y condiciones del trámite">
+        {hasVehicleData ? (
+          <div className="space-y-4">
+            <VehicleTransformationsCard
+              fieldValues={fieldValues}
+              readOnly={readOnly}
+              saving={atributosSaving}
+              onPatch={saveTransformacion}
+              bare
             />
-            <span className="text-xs">
-              <span className="font-semibold">Vehículo en leasing</span>
-              <span className="mt-0.5 block opacity-55">
-                Exige contrato de leasing y declaración de la arrendadora.
-              </span>
-            </span>
-          </label>
-        </div>
-      )}
+
+            {/* Condiciones: en traspaso el leasing; en matrícula ya no hay flags aquí (carrocería
+                vive en Transformaciones). Solo se pinta el bloque si hay algo que marcar. */}
+            {!isVin && (
+              <div className="space-y-2 border-t pt-4">
+                <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
+                <p className="-mt-1 text-xs opacity-55">
+                  Marca las condiciones que apliquen; el checklist de documentos se ajusta
+                  automáticamente.
+                </p>
+                <label className="flex items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={esLeasing}
+                    onChange={(e) =>
+                      void saveAtributo('es_leasing', e.target.checked ? 'true' : 'false')
+                    }
+                    disabled={readOnly || atributosSaving}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
+                  />
+                  <span className="text-xs">
+                    <span className="font-semibold">Vehículo en leasing</span>
+                    <span className="mt-0.5 block opacity-55">
+                      Exige contrato de leasing y declaración de la arrendadora.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs opacity-60">
+            Consulta el vehículo para declarar transformaciones o condiciones del trámite.
+          </p>
+        )}
+      </WizardAccordion>
 
       {mostrarPazSalvo && (
         <label
@@ -2918,18 +2988,41 @@ function ConsultaStep({
         </label>
       )}
 
+      {/* Semáforo de requisitos. Abierto de entrada y con el resultado global en la cabecera: es lo
+          que decide si el trámite puede seguir, así que plegado tiene que seguir diciéndolo. */}
       {(hasVehicleData || !!effectivePreflight) && (
-        <PreflightPanel
-          snapshot={effectivePreflight}
-          loading={loading}
-          onRun={() => void handleRun()}
-          riesgoAceptado={riesgoAceptado}
-          onToggleRiesgo={(v) => void handleRiesgo(v)}
-          saving={riesgoSaving}
-          showRunButton={false}
-          onIniciarTraspaso={isVin ? handleIniciarTraspaso : undefined}
-          esMigrado={esMigrado}
-        />
+        <WizardAccordion
+          title="Pre-vuelo de requisitos (RUNT · SIMIT · RNMC)"
+          defaultOpen
+          badge={
+            preflightOverall(effectivePreflight?.overall) ? (
+              <span
+                className="shrink-0 rounded-full px-3 py-1 text-xs font-bold"
+                style={{
+                  background: preflightOverall(effectivePreflight?.overall)!.bg,
+                  color: preflightOverall(effectivePreflight?.overall)!.color,
+                }}
+                role="status"
+                aria-live="polite"
+              >
+                {preflightOverall(effectivePreflight?.overall)!.label}
+              </span>
+            ) : null
+          }
+        >
+          <PreflightPanel
+            snapshot={effectivePreflight}
+            loading={loading}
+            onRun={() => void handleRun()}
+            riesgoAceptado={riesgoAceptado}
+            onToggleRiesgo={(v) => void handleRiesgo(v)}
+            saving={riesgoSaving}
+            showRunButton={false}
+            bare
+            onIniciarTraspaso={isVin ? handleIniciarTraspaso : undefined}
+            esMigrado={esMigrado}
+          />
+        </WizardAccordion>
       )}
     </div>
   );

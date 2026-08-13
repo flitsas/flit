@@ -286,6 +286,11 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
 
+    // Las transformaciones viven en un acordeón plegado (la mayoría de trámites no declara
+    // ninguna): hay que abrirlo antes de marcar la carrocería.
+    await user.click(
+      await screen.findByRole('button', { name: /Transformaciones y condiciones del trámite/ }),
+    );
     await user.click(await screen.findByRole('checkbox', { name: /Cambió la carrocería/ }));
     // Sin trámite todavía: no se persiste nada en este momento.
     expect(mocks.patchFieldValues).not.toHaveBeenCalled();

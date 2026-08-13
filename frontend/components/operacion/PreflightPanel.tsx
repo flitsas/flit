@@ -26,6 +26,12 @@ interface Props {
   // El disparo de la consulta puede vivir fuera del panel (p. ej. junto al campo
   // VIN en matrícula). En ese caso el panel es solo presentacional (semáforo).
   showRunButton?: boolean;
+  /**
+   * El panel se monta dentro de un acordeón que ya pinta la tarjeta y el título. Quita el marco y
+   * la cabecera propia para no anidar dos tarjetas ni repetir el encabezado; el semáforo global
+   * pasa a ser el badge del acordeón, que lo compone el caller.
+   */
+  bare?: boolean;
   // R3 (HU #10539) — en matrícula, cuando el preflight detecta que el VIN ya tiene
   // matrícula previa (check `vin_matricula`), el panel ofrece iniciar el traspaso del
   // vehículo. El wizard inyecta la navegación (sembrando placa/VIN); el panel es
@@ -107,6 +113,15 @@ function checkPillBg(check: { status: PreflightCheckStatus; message?: string | n
   return STATUS_PILL_BG[check.status];
 }
 
+
+/**
+ * Semáforo global del pre-vuelo. Exportado para que quien embeba el panel dentro de un acordeón
+ * (`bare`) pueda pintar el mismo estado en la cabecera plegada, que es donde el gestor lo busca
+ * cuando el panel está cerrado.
+ */
+export function preflightOverall(overall: string | null | undefined) {
+  return overall ? (OVERALL[overall] ?? null) : null;
+}
 
 const OVERALL: Record<string, { label: string; bg: string; color: string }> = {
   green: { label: 'Pre-vuelo en verde', bg: 'rgba(140,198,63,0.15)', color: '#8CC63F' },
@@ -207,6 +222,7 @@ export function PreflightPanel({
   onToggleRiesgo,
   saving = false,
   showRunButton = true,
+  bare = false,
   onIniciarTraspaso,
   esMigrado = false,
 }: Props) {
@@ -239,41 +255,44 @@ export function PreflightPanel({
   const warnChecks = visibleChecks.filter((c) => c.status === 'warn');
 
   return (
-    <div
-      className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14] mt-4"
-    >
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <h4 className="text-sm font-bold">Pre-vuelo de requisitos</h4>
-          <p className="text-xs opacity-60">
-            RUNT · SIMIT · RNMC — consulta antes de radicar el trámite
-          </p>
+    <div className={bare ? '' : 'mt-4 rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]'}>
+      {/* Embebido en un acordeón la cabecera sobra: el título y el semáforo global ya viven en la
+          suya. El botón tampoco se pierde — los callers que embeben pasan `showRunButton={false}`
+          porque el disparo de la consulta está arriba, junto al identificador del vehículo. */}
+      {!bare && (
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h4 className="text-sm font-bold">Pre-vuelo de requisitos</h4>
+            <p className="text-xs opacity-60">
+              RUNT · SIMIT · RNMC — consulta antes de radicar el trámite
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {ov && (
+              <span
+                className="shrink-0 rounded-full px-3 py-1 text-xs font-bold"
+                style={{ background: ov.bg, color: ov.color }}
+                role="status"
+                aria-live="polite"
+              >
+                {ov.label}
+              </span>
+            )}
+            {canRun && (
+              <button
+                type="button"
+                onClick={() => onRun(hasResult)}
+                disabled={loading}
+                className="rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                aria-label={hasResult ? 'Actualizar consulta' : 'Consultar RUNT y SIMIT'}
+              >
+                {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {ov && (
-            <span
-              className="shrink-0 rounded-full px-3 py-1 text-xs font-bold"
-              style={{ background: ov.bg, color: ov.color }}
-              role="status"
-              aria-live="polite"
-            >
-              {ov.label}
-            </span>
-          )}
-          {canRun && (
-            <button
-              type="button"
-              onClick={() => onRun(hasResult)}
-              disabled={loading}
-              className="rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-              aria-label={hasResult ? 'Actualizar consulta' : 'Consultar RUNT y SIMIT'}
-            >
-              {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
-            </button>
-          )}
-        </div>
-      </div>
+      )}
 
       {!hasResult && !loading && !esMigrado && (
         <p className="text-xs opacity-60">
