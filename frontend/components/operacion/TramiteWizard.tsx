@@ -24,8 +24,6 @@ import { CommercialForm } from './CommercialForm';
 import { PrendaForm, traspasoDecisions } from './PrendaForm';
 import { furObservationsPreview } from './fur-auto-observations';
 import { SubsanacionPanel } from './SubsanacionPanel';
-import { AvisosCorreoPanel } from './AvisosCorreoPanel';
-import { EstadoTimelinePanel } from './EstadoTimeline';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
@@ -49,6 +47,9 @@ import {
   isTransitOfficeUnavailable,
   type VehicleStateBlockInfo,
 } from '@/lib/api/tramites-client';
+// HU #10806 — ¿la ruta de preasignación de placa está activa para esta compañía en el organismo
+// elegido? Es la misma consulta que hace el paso del FUR antes de ofrecer la placa preasignada.
+import { getPlatePreassignStatus } from '@/lib/api/admin-plate-ranges';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import {
@@ -84,6 +85,7 @@ import { WizardHelpRail } from './WizardHelpRail';
 import { WizardModal } from './WizardModal';
 import { estadoLabel } from '@/lib/tramites/estados';
 import { WizardCardHeader, WizardPair, WizardPill } from './wizard-atoms';
+import { CarLoaderModal } from '@/components/atom/CarLoader';
 
 /**
  * El wizard es server-driven: una vez creada la instancia, GET /wizard decide
@@ -316,6 +318,11 @@ export function TramiteWizard(props: Props) {
       pendingFieldValuesRef.current.delete('riesgo_aceptado');
     }
   }, []);
+
+  // HU #10536 — prioridad marcada en el paso 1. No es un field_value (vive en una columna del
+  // expediente, y su endpoint necesita el id), así que no puede viajar en `pendingFieldValuesRef`:
+  // se recuerda aquí y se aplica con `setPriority` en cuanto la creación devuelve el trámite.
+  const [pendingPrioritario, setPendingPrioritario] = useState(false);
 
   // Tipo de servicio (casilla 18 del FUR): completo o no, tal como lo reporta el paso de requisitos,
   // que es donde se captura desde el rediseño. Arranca en `true` — mientras el paso no se monta no
@@ -864,6 +871,20 @@ export function TramiteWizard(props: Props) {
         }
         pendingFieldValuesRef.current.clear();
 
+        // HU #10536 — la prioridad marcada en el paso 1, ya con el id del trámite. Va aparte del
+        // patch de arriba porque no es un field_value: es una columna del expediente con su propio
+        // endpoint. Solo se llama si se marcó (el default de la columna ya es `false`) y en modo
+        // best-effort: es una preferencia de orden en la bandeja del OT, no un requisito para
+        // avanzar, y sigue siendo alternable desde el listado.
+        if (pendingPrioritario) {
+          try {
+            await tramitesClient.setPriority(created.instance.id, true, created.instance.tenantId);
+          } catch {
+            // Silencioso: el trámite ya existe y la prioridad se puede marcar desde el listado.
+          }
+          setPendingPrioritario(false);
+        }
+
         telemetry.trackStepComplete();
         // AC1 (HU #10883) — el paso de retoma queda en el segundo paso, que es donde continúa el
         // operador. Best-effort, igual que el resto del autosave: no bloquea la navegación.
@@ -1044,6 +1065,10 @@ export function TramiteWizard(props: Props) {
   return (
    <WizardReadOnlyProvider readOnly={editLocked}>
     <div id="tramite-wizard-root" className="flex w-full flex-col gap-3 pb-2">
+      {/* Radicar es la espera más larga del flujo y la que más ansiedad genera: mientras dura, el
+          velo impide el doble envío y el mensaje nombra al organismo de tránsito, para que la
+          demora se lea como lo que es —un tercero respondiendo— y no como un cuelgue. */}
+      {submitting && <CarLoaderModal mode="radicacion" />}
       {/* Título + seguimiento fijos al scroll de main; fondo sólido app-bg (no transparente). */}
       <div className="sticky top-0 z-30 -mx-1 space-y-3 bg-[#eef5ff] px-1 pb-3 pt-1 dark:bg-[#0a1428]">
         <div
@@ -1231,6 +1256,8 @@ export function TramiteWizard(props: Props) {
                 seedPlaca={seedPlaca}
                 onPreviewDone={handlePreviewDone}
                 onPendingFieldValues={collectPendingFieldValues}
+                prioritario={pendingPrioritario}
+                onPrioritarioChange={setPendingPrioritario}
                 onTipoServicioGateChange={setTipoServicioGateOk}
                 paqueteDocsStatus={paqueteDocsStatus}
                 onPaqueteStatusChange={setPaqueteDocsStatus}
@@ -1441,12 +1468,11 @@ export function TramiteWizard(props: Props) {
         </WizardModal>
       )}
 
-      {instanceId ? (
-        <>
-          <EstadoTimelinePanel instanceId={instanceId} />
-          <AvisosCorreoPanel instanceId={instanceId} />
-        </>
-      ) : null}
+      {/* El "Historial de estados" y los "Avisos de correo" NO van en el asistente: colgaban sueltos
+          bajo el pie, en todos los pasos, y el asistente es para capturar el trámite, no para
+          auditarlo. En el repo de diseño la trazabilidad vive en la vista de detalle del trámite
+          (`DetalleTramiteModal`, "Historial de auditoría"), que es donde deben reaparecer.
+          `EstadoTimelinePanel` y `AvisosCorreoPanel` siguen en el repo, listos para montarse ahí. */}
 
       {/* Acuse de radicación — patrón "trámite completado" del diseño: título de éxito, el
           identificador en grande con tracking amplio, mensaje de confirmación y CTA degradado.
@@ -1882,6 +1908,8 @@ function ConsultaStep({
   seedPlaca,
   onPreviewDone,
   onPendingFieldValues,
+  prioritario = false,
+  onPrioritarioChange,
   esMigrado = false,
 }: {
   step: WizardStep;
@@ -1897,6 +1925,9 @@ function ConsultaStep({
   onPreviewDone?: (consulta: PendingConsulta | null) => void;
   /** CF-02 — condiciones marcadas antes de existir el trámite; el shell las guarda al crearlo. */
   onPendingFieldValues?: (items: { fieldKey: string; valueText: string }[]) => void;
+  /** HU #10536 — marca de prioridad elegida aquí; el shell la aplica al crear el trámite. */
+  prioritario?: boolean;
+  onPrioritarioChange?: (value: boolean) => void;
   /** Migración V1→V2 — explica en el panel por qué el pre-vuelo llega vacío. */
   esMigrado?: boolean;
 }) {
@@ -1976,6 +2007,33 @@ function ConsultaStep({
       active = false;
     };
   }, [eligeSecretaria]);
+
+  /**
+   * Dígito de preferencia de placa (HU #10805) declarado aquí, donde lo ubica el diseño. Es el MISMO
+   * dato que el paso del FUR sigue ofreciendo al radicar sin placa (`plate_preferred_last_digit`):
+   * una guía para que el OT elija una placa terminada en ese número al asignarla desde su rango
+   * —en la consola del organismo esas placas salen marcadas y ordenadas primero—. No enruta nada:
+   * el trámite cae por preasignación por NO llevar placa, no por este dígito.
+   *
+   * `preasignacionActiva` (HU #10806) responde si la ruta está viva para esta compañía en ESE
+   * organismo; sin ella el OT no asigna desde un rango y el dígito no tendría a quién guiar.
+   * `null` = todavía consultando.
+   */
+  const [digitoPlaca, setDigitoPlaca] = useState('');
+  const [preasignacionActiva, setPreasignacionActiva] = useState<boolean | null>(null);
+
+  /**
+   * AC2 (HU #10799) — el vehículo YA tiene placa según el RUNT: la preasignación no aplica en
+   * absoluto. Misma regla y misma señal que `PlacaPreasignadaSection` en el paso del FUR
+   * (`vinTienePlacaRunt`): placa presente y `source === 'consultation'`, es decir traída por la
+   * consulta, no elegida por el gestor. Un VIN ya matriculado no necesita que el OT le asigne nada,
+   * así que no se ofrece el dígito, no se consulta el estado de la ruta y no se marca `plate_route_active`.
+   */
+  const placaRunt = fieldValues.find(
+    (f) => f.fieldKey === 'plate' && f.source === 'consultation',
+  )?.valueText?.trim() ?? '';
+  const vehiculoConPlacaRunt = placaRunt !== '';
+
 
   // FEATURE 02 — política "solo vehículos propios" por familia (MATRICULAS | TRASPASO) y NIT del tenant.
   // En traspaso (placa) se autorrellena el documento del propietario con el NIT y, si se edita a otro,
@@ -2153,10 +2211,25 @@ function ConsultaStep({
           plate: isVin ? null : plate.trim(),
           ownerDocumentType: isVin ? null : ownerDocType,
           ownerDocumentNumber: isVin ? null : ownerDocNumber.trim(),
-          transitOfficeId: eligeSecretaria ? transitOfficeId : null,
+          // `|| null`, no a secas: el organismo se elige DESPUÉS de consultar, así que aquí el
+          // estado suele ser cadena vacía. Mandarla tal cual rompía la consulta antes de llegar al
+          // handler — el binder no sabe leer "" como `Guid?` y devuelve un 400 con cuerpo vacío,
+          // que en pantalla se veía como "Revisa los datos e inténtalo de nuevo".
+          transitOfficeId: eligeSecretaria ? transitOfficeId || null : null,
         });
         setPreviewSnapshot(result.preflight);
         setFieldValues(result.vehicleFields);
+        // AC2 (HU #10799) — el vehículo consultado ya trae placa del RUNT: lo que se hubiera
+        // declarado sobre otro VIN deja de aplicar. Se borra la preferencia (también la anotada
+        // para la creación) y se apaga la ruta, o viajaría un `plate_route_active` en true que el
+        // trigger leería al radicar un trámite que no necesita que le asignen placa.
+        if (result.vehicleFields.some(
+          (f) => f.fieldKey === 'plate' && (f.valueText ?? '').trim() !== '',
+        )) {
+          setPreasignacionActiva(null);
+          if (digitoPlaca) handleDigitoPlaca('');
+          upsertLocal([{ fieldKey: 'plate_route_active', valueText: 'false' }]);
+        }
         // Un 200 con el semáforo en rojo NO es una excepción: sin esto el shell solo sabría que
         // "hay consulta" y habilitaría Continuar aunque el vehículo no exista en el RUNT.
         const previewChecks = result.preflight?.checks ?? [];
@@ -2285,6 +2358,71 @@ function ConsultaStep({
     onPendingFieldValues?.(items);
   };
 
+  useEffect(() => {
+    // Sin organismo no hay nada que consultar. El estado vuelve a "cargando" al cambiar de
+    // organismo desde el propio selector, no aquí: así el efecto solo escribe el resultado.
+    if (!eligeSecretaria || !transitOfficeId || vehiculoConPlacaRunt) return;
+    let active = true;
+    /**
+     * HU #10806 (Alternativa C) — la decisión de ruta se persiste como `plate_route_active`: es la
+     * fuente que consume el trigger de BD para fijar `plate_flow_status = 'preasignado'` al radicar
+     * sin placa. El paso del FUR hace exactamente esto al abrir su sección; aquí se anota con el
+     * resto de lo capturado y viaja con la creación del trámite.
+     */
+    const persistRouteActive = (enabled: boolean) => {
+      if (deferred) {
+        upsertLocal([{ fieldKey: 'plate_route_active', valueText: String(enabled) }]);
+        return;
+      }
+      if (!instanceId) return;
+      void tramitesClient
+        .patchFieldValues(instanceId, [
+          { formFieldId: null, fieldKey: 'plate_route_active', valueText: String(enabled), valueJson: null },
+        ])
+        .catch(() => {
+          /* no bloquear el paso si la persistencia falla; el submit sigue decidiendo la ruta */
+        });
+    };
+    getPlatePreassignStatus(transitOfficeId)
+      .then((s) => {
+        if (!active) return;
+        setPreasignacionActiva(s.enabled);
+        persistRouteActive(s.enabled);
+      })
+      .catch(() => {
+        // Mismo criterio que el paso del FUR ante un fallo de esta consulta: no bloquear el flujo.
+        if (!active) return;
+        setPreasignacionActiva(true);
+        persistRouteActive(true);
+      });
+    return () => {
+      active = false;
+    };
+    // `upsertLocal` se recrea en cada render; lo que gobierna la consulta es el organismo elegido.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eligeSecretaria, transitOfficeId, vehiculoConPlacaRunt, deferred, instanceId]);
+
+  /**
+   * HU #10805 — dígito de preferencia. Sin trámite todavía se anota en memoria y viaja con la
+   * creación (mismo mecanismo que paz y salvo o la aceptación de riesgo); sobre un borrador ya
+   * creado hace su PATCH inmediato. La clave es la MISMA que lee el paso del FUR y que la consola
+   * del OT usa para marcar las placas candidatas, así que declararlo aquí o allá es equivalente.
+   */
+  const handleDigitoPlaca = (value: string) => {
+    setDigitoPlaca(value);
+    if (deferred) {
+      upsertLocal([{ fieldKey: 'plate_preferred_last_digit', valueText: value }]);
+      return;
+    }
+    if (!instanceId) return;
+    void tramitesClient
+      .patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'plate_preferred_last_digit', valueText: value, valueJson: null },
+      ])
+      .then(() => onRefresh())
+      .catch(() => {});
+  };
+
   // Paz y salvo de impuesto: solo traspaso (placa-first) y solo si el preflight dejó el
   // check de impuesto sin verificar (unknown/warn). Estado leído de field_values.
   const impuestoCheck = effectivePreflight?.checks?.find((c) =>
@@ -2399,6 +2537,10 @@ function ConsultaStep({
   return (
     // `pr-16` reserva el ancho del carril de consulta anclado a la derecha (propuesta).
     <div className="space-y-3 pr-16">
+      {/* La consulta al RUNT tarda segundos. Hasta ahora la única señal era el rótulo del botón, que
+          se pierde en cuanto la atención se va a otra parte de la pantalla; la propuesta cubre la
+          espera con la escena del vehículo y dice ante quién se está esperando. */}
+      {loading && <CarLoaderModal mode="runt" />}
       <WizardHelpRail
         modalidad={modalidadVigente}
         transitOfficeId={transitOfficeId || undefined}
@@ -2631,6 +2773,11 @@ function ConsultaStep({
                 // el id viaja a la creación desde aquí y allí se valida.
                 setTransitOfficeId(id);
                 setError(null);
+                // La preasignación es del organismo: al cambiarlo, el estado vuelve a "consultando"
+                // y la preferencia de dígito se reinicia (también la ya anotada para la creación),
+                // o viajaría una preferencia que el organismo nuevo quizá ni atiende.
+                setPreasignacionActiva(null);
+                if (digitoPlaca) handleDigitoPlaca('');
               }}
               disabled={readOnly}
               describedBy="consulta-secretaria-aviso"
@@ -2652,54 +2799,91 @@ function ConsultaStep({
             )}
           </div>
 
-          {/* Dígito de preasignación: solo se ofrece si el organismo elegido tiene preasignación
-              activa; sin ella el selector queda inerte y lo dice, como en la propuesta. */}
+          {/* Dígito de preasignación (HU #10805) — la misma preferencia que el paso del FUR ofrece
+              al radicar sin placa (`plate_preferred_last_digit`, ver PlacaPreasignadaSection), aquí
+              declarada de entrada porque es donde la pone el diseño. Solo se ofrece si el organismo
+              elegido tiene la ruta de preasignación activa para la compañía (HU #10806): con ella
+              apagada el OT no asigna placa desde un rango y el dígito no tendría a quién guiar. */}
           <div className="min-w-0">
             <label htmlFor="consulta-digito-placa" className={`mb-1 block ${WIZARD_LABEL}`}>
               Dígito de preasignación de placa
             </label>
-            <select
-              id="consulta-digito-placa"
-              defaultValue=""
-              disabled
-              aria-describedby="consulta-digito-placa-nota"
-              className={`${inputClass} disabled:opacity-60`}
-            >
-              <option value="">Sin preferencia</option>
-              {Array.from({ length: 10 }, (_, i) => (
-                <option key={i} value={String(i)}>{`Termina en ${i}`}</option>
-              ))}
-            </select>
-            <p id="consulta-digito-placa-nota" className="mt-1 text-xs leading-tight opacity-70">
-              El catálogo de organismos aún no informa si admiten preasignación, así que la
-              preferencia no puede enviarse.
-            </p>
+            {/* AC2 (HU #10799) — con placa del RUNT no hay nada que preasignar: se dice, con la
+                placa delante, en vez de dejar un selector apagado que parece un fallo. Es la misma
+                salida temprana que hace el paso del FUR. */}
+            {vehiculoConPlacaRunt ? (
+              <p
+                id="consulta-digito-placa-nota"
+                className="mt-1 rounded-xl border border-dashed px-3 py-2 text-xs leading-tight opacity-80"
+              >
+                El vehículo ya tiene placa según el RUNT (
+                <span className="font-mono font-semibold">{placaRunt}</span>
+                ). No aplica la preasignación de placa.
+              </p>
+            ) : (
+              <>
+                <select
+                  id="consulta-digito-placa"
+                  value={digitoPlaca}
+                  onChange={(e) => handleDigitoPlaca(e.target.value)}
+                  disabled={readOnly || !transitOfficeId || preasignacionActiva !== true}
+                  aria-describedby="consulta-digito-placa-nota"
+                  className={`${inputClass} disabled:opacity-60`}
+                >
+                  <option value="">Sin preferencia</option>
+                  {Array.from({ length: 10 }, (_, i) => (
+                    <option key={i} value={String(i)}>{`Termina en ${i}`}</option>
+                  ))}
+                </select>
+                {/* Cuatro estados más, porque un selector apagado sin explicación se lee como un
+                    fallo: falta el organismo · consultando · sin preasignación · disponible. */}
+                <p id="consulta-digito-placa-nota" className="mt-1 text-xs leading-tight opacity-70">
+                  {!transitOfficeId
+                    ? 'Elige primero la secretaría: la preasignación depende del organismo donde radiques.'
+                    : preasignacionActiva === null
+                      ? 'Consultando si el organismo tiene preasignación de placa…'
+                      : preasignacionActiva === false
+                        ? 'Este organismo (o tu compañía) no tiene preasignación de placa activa: el trámite se entregará de forma estándar.'
+                        : 'Si radicas sin placa, indica el número en el que prefieres que termine. El organismo lo toma como guía; podrás cambiarlo en el paso final.'}
+                </p>
+              </>
+            )}
           </div>
 
-          {/* Trámite prioritario. Inerte a propósito: la prioridad se marca sobre un expediente ya
-              creado (`setPriority`, HU #10536) y en este paso todavía no existe —el trámite se da de
-              alta al pulsar "Continuar"—. Se deja visible, en su columna, para no esconder que la
-              decisión existe, pero sin fingir que se guarda. */}
+          {/* Trámite prioritario (HU #10536). La marca vive en una columna del expediente
+              (`procedure_instances.prioritario`), no en field_values, así que no puede viajar con el
+              resto de lo anotado: se recuerda aquí y el shell la aplica con `setPriority` en cuanto
+              la creación devuelve el id. Es el mismo flag que el listado ya permite alternar. */}
           <div className="min-w-0">
-            <span className={`mb-1 block ${WIZARD_LABEL}`}>Trámite prioritario</span>
+            <span id="consulta-prioritario-label" className={`mb-1 block ${WIZARD_LABEL}`}>
+              Trámite prioritario
+            </span>
             <button
               type="button"
-              disabled
-              aria-pressed={false}
+              onClick={() => onPrioritarioChange?.(!prioritario)}
+              disabled={readOnly}
+              aria-pressed={prioritario}
+              aria-labelledby="consulta-prioritario-label"
               aria-describedby="consulta-prioritario-nota"
-              className="flex h-[38px] w-full items-center justify-between rounded-xl border bg-white px-3 text-xs font-medium opacity-60 dark:bg-[#0B0F14]"
+              className="flex h-[38px] w-full items-center justify-between rounded-xl border bg-white px-3 text-xs font-medium transition disabled:opacity-60 dark:bg-[#0B0F14]"
+              style={prioritario ? { borderColor: '#557EFF', color: '#557EFF' } : undefined}
             >
-              Desactivado
+              {prioritario ? 'Activado' : 'Desactivado'}
               <span
                 aria-hidden="true"
-                className="relative inline-block h-5 w-9 rounded-full"
-                style={{ background: '#CBD5E1' }}
+                className="relative inline-block h-5 w-9 rounded-full transition-colors"
+                style={{ background: prioritario ? '#557EFF' : '#CBD5E1' }}
               >
-                <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white" />
+                <span
+                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
+                    prioritario ? 'left-[1.125rem]' : 'left-0.5'
+                  }`}
+                />
               </span>
             </button>
             <p id="consulta-prioritario-nota" className="mt-1 text-xs leading-tight opacity-70">
-              Prioriza la gestión de este expediente. Se marca desde el trámite una vez creado.
+              Prioriza la gestión de este expediente: el organismo lo revisa con primacía. Se aplica
+              al crear el trámite y podrás cambiarlo después desde el listado.
             </p>
           </div>
           </div>
@@ -2913,6 +3097,8 @@ function StepBody({
   seedPlaca,
   onPreviewDone,
   onPendingFieldValues,
+  prioritario = false,
+  onPrioritarioChange,
   onTipoServicioGateChange,
   paqueteDocsStatus = 'idle',
   onPaqueteStatusChange,
@@ -2931,6 +3117,9 @@ function StepBody({
   onPreviewDone?: (consulta: PendingConsulta | null) => void;
   /** CF-02 — condiciones marcadas en el paso 1 antes de existir el trámite; se guardan al crearlo. */
   onPendingFieldValues?: (items: { fieldKey: string; valueText: string }[]) => void;
+  /** HU #10536 — marca de prioridad del paso 1; se aplica al crear el trámite. */
+  prioritario?: boolean;
+  onPrioritarioChange?: (value: boolean) => void;
   /** Gate Continuar: tipo de servicio (+ empresa vinculadora si es PÚBLICO) completo en requisitos. */
   onTipoServicioGateChange?: (ok: boolean) => void;
   preflight: PreflightSnapshot | null;
@@ -2986,6 +3175,8 @@ function StepBody({
           seedPlaca={seedPlaca}
           onPreviewDone={onPreviewDone}
           onPendingFieldValues={onPendingFieldValues}
+          prioritario={prioritario}
+          onPrioritarioChange={onPrioritarioChange}
           esMigrado={esMigrado}
         />
       );

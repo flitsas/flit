@@ -11,6 +11,7 @@ import type {
 import { VehicleTransformationsCard } from './VehicleTransformationsCard';
 import { WizardAccordion } from './WizardAccordion';
 import { WizardCardHeader } from './wizard-atoms';
+import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 
 /** El proveedor RUES respondió y no existe empresa con ese NIT — distinto del fallo transitorio 503. */
@@ -260,6 +261,9 @@ export function DeclaracionesTramite({
 
   return (
     <div className="space-y-4">
+      {/* Misma espera externa que las demás consultas del asistente (directorio y, si hace falta,
+          RUES): se cubre con la escena de la propuesta en vez de dejar solo el rótulo del botón. */}
+      {ruesLoading && <CarLoaderModal mode="runt" />}
       {/* Tipo de servicio (casilla 18 del FUR) — solo matrícula inicial. Seis valores fijos: un
           <select> simple es más accesible y más rápido de operar que un combobox con buscador
           (SearchableSelect), pensado para catálogos largos. */}

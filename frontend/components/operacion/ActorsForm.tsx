@@ -41,6 +41,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT } from './wizard-field-styles';
 import { WizardSegmented } from './wizard-atoms';
+import { CarLoaderModal } from '@/components/atom/CarLoader';
 
 export type ActorsModalidad = 'matricula_inicial' | 'traspaso';
 
@@ -2131,8 +2132,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   }
 
   // ── Layout MULTI (traspaso): una tarjeta blanca por actor, lado a lado ────
+  // Consultar a una persona en el RUNT o a una empresa en el RUES sale a un proveedor externo y
+  // tarda lo mismo que la consulta del vehículo del paso 1: se cubre con la misma escena de espera,
+  // que además evita el segundo clic sobre un botón que parece no haber respondido.
+  const consultandoActor = Object.values(runt).some((s) => s.status === 'loading');
+
   return (
     <>
+    {consultandoActor && <CarLoaderModal mode="runt" />}
     <form
       onSubmit={handleSubmit}
       className="mt-4"

@@ -152,6 +152,11 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     await user.click(boton);
 
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(1));
+    // Y viaja como null, NO como cadena vacía: el backend lee `Guid?` y un "" lo rechaza el binder
+    // con un 400 sin cuerpo, que en pantalla aparecía como "Revisa los datos e inténtalo de nuevo".
+    expect(mocks.runPreflightPreview).toHaveBeenCalledWith(
+      expect.objectContaining({ transitOfficeId: null }),
+    );
     // La tarjeta de radicación aparece con el resultado, no antes.
     await elegirSecretaria(user);
   });

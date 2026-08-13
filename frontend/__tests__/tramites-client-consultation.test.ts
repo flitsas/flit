@@ -59,6 +59,35 @@ describe('tramitesClient.runConsultation — AC1/AC2 (HU #10885)', () => {
     );
   });
 
+  /**
+   * El organismo de tránsito se elige DESPUÉS de consultar, así que el paso 1 lo pasa como cadena
+   * vacía mientras no hay elección. El backend lo declara `Guid?`: un `""` no lo puede leer el
+   * binder y responde 400 con cuerpo vacío ANTES de entrar al handler — en pantalla se veía como
+   * "No se pudo completar la solicitud. Revisa los datos e inténtalo de nuevo." y la consulta
+   * quedaba rota siempre en matrícula. Ausente tiene que viajar como null.
+   */
+  it('el organismo sin elegir viaja como null, no como cadena vacía', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({ previewToken: 'tok', overall: 'green', checks: [], vehicleFields: [] }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+
+    await tramitesClient.runPreflightPreview({
+      modalidad: 'matricula_inicial',
+      vin: '9BWZZZ377VT004251',
+      transitOfficeId: '',
+    });
+
+    const mock = (globalThis.fetch as ReturnType<typeof vi.fn>).mock;
+    const [, init] = mock.calls[mock.calls.length - 1] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({ transitOfficeId: null });
+  });
+
   it('respuesta sin fromCache/queriedAt (MISS) degrada a fromCache=false, queriedAt=null', async () => {
     vi.stubGlobal(
       'fetch',

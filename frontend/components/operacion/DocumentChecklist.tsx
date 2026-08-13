@@ -13,6 +13,7 @@ import { BatchReviewPanel } from './BatchReviewPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { WizardCardHeader, WizardSegmented } from './wizard-atoms';
 import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
+import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { isPrendaManagedChecklistTipo } from './prenda-document-tipos';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
@@ -753,8 +754,15 @@ export function DocumentChecklist({
     }
   };
 
+  // El OCR de la carga masiva analiza el lote entero y puede tardar bastante; mientras corre no hay
+  // nada útil que hacer en la pantalla, así que la propuesta la cubre con la escena de espera. El
+  // análisis de un documento suelto NO la levanta: su tarjeta ya muestra "Analizando…" con su barra,
+  // y tapar la pantalla entera por un archivo impediría seguir adjuntando los demás.
+  const analizandoLote = batch.state.phase === 'analyzing';
+
   return (
     <>
+    {analizandoLote && <CarLoaderModal mode="ocr" />}
     <DocumentPreviewModal
       open={!!previewAttachment}
       onClose={closePreview}

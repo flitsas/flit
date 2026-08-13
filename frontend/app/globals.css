@@ -337,6 +337,26 @@
     color: #00dbd5;
   }
 
+  /* Escena del CarLoader de la propuesta: la pista queda fija, la línea orbita en contra y el
+     vehículo gira a favor. Las dos velocidades son distintas a propósito — con la misma cadencia
+     los dos elementos parecen una sola pieza rígida y la escena deja de leerse como movimiento. */
+  .flit-escena-orbita {
+    animation: flit-counter 2.5s linear infinite;
+  }
+
+  .flit-escena-vehiculo {
+    animation: flit-orbit 3.5s linear infinite;
+  }
+
+  /* Respeta a quien pidió menos movimiento: la escena se queda quieta y el mensaje sigue
+     anunciando el progreso, que es lo que de verdad informa. */
+  @media (prefers-reduced-motion: reduce) {
+    .flit-escena-orbita,
+    .flit-escena-vehiculo {
+      animation: none;
+    }
+  }
+
   /* Cápsula del dock inferior — vidrio + sombra tokenizados (ajuste visual, sin cambio estructural). */
   .dock-capsula {
     background: var(--nav-vidrio);

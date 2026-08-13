@@ -1120,7 +1120,10 @@ export const tramitesClient = {
         plate: input.plate ?? null,
         ownerDocumentType: input.ownerDocumentType ?? null,
         ownerDocumentNumber: input.ownerDocumentNumber ?? null,
-        transitOfficeId: input.transitOfficeId ?? null,
+        // `||`, no `??`: mientras no se elige, el organismo viaja como cadena vacía (se elige DESPUÉS
+        // de consultar). El backend lo lee como `Guid?` y un `""` lo rechaza el binder con un 400 sin
+        // cuerpo, antes de que el handler pueda explicar nada. Sin elegir es null, no "".
+        transitOfficeId: input.transitOfficeId || null,
       }),
     });
     return {
