@@ -11,6 +11,7 @@ import {
   resolveOtHubHref,
   type OtHubTabId,
 } from "@/components/admin/transit-offices/ot-nav";
+import { OT_ADMIN_SPA_OMIT } from "@/lib/nav/modules";
 import { useDockScrollCondense } from "./useDockScrollCondense";
 import { buildDockGroups, flattenDockEntries } from "./dock/dockGroups";
 import { DockDesktop } from "./dock/DockDesktop";
@@ -194,12 +195,12 @@ export function Shell({
   // está disponible. "Ayuda" es soporte universal (no es un módulo con permiso RBAC),
   // por lo que se muestra siempre, en todas las pantallas del dock.
   // Admin OT: las pestañas del hub viven en el dock (Trámites / Usuarios / Reportes / …);
-  // se omiten los módulos SPA homónimos para no duplicar píldoras.
-  const otAdminSpaOmit = new Set(["tramites", "reportes", "reportes-detallados", "usuarios"]);
+  // se omiten los módulos SPA homónimos para no duplicar píldoras (OT_ADMIN_SPA_OMIT
+  // compartido con resolveNavigableModuleIds — invariante dock ≡ URL).
   const visibleDock = (visibleModuleCodes
     ? DOCK.filter((it) => it.id === "ayuda" || visibleModuleCodes.includes(it.id))
     : DOCK
-  ).filter((it) => !(currentUser?.isOtAdmin && otAdminSpaOmit.has(it.id)));
+  ).filter((it) => !(currentUser?.isOtAdmin && OT_ADMIN_SPA_OMIT.has(it.id)));
 
   // Una sola lista con TODAS las entradas del dock (módulos + botones admin/empresa
   // según rol). El FAB de inicio va siempre en el centro y las entradas se reparten
