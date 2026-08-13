@@ -1156,7 +1156,6 @@ export function TramiteWizard(props: Props) {
             onGoToStep={goToStep}
             viewOnly={navViewOnly}
             coalesceActores={modalidad === 'traspaso'}
-            modalidad={modalidad}
             compacto={cabeceraCompacta}
           />
         )}
@@ -1277,8 +1276,8 @@ export function TramiteWizard(props: Props) {
                   dejar el cuerpo del paso sin nombre en el árbol de encabezados. */}
               <h2 className="sr-only">
                 {modalidad === 'traspaso' && isTraspasoActorStepKey(activeStep.key)
-                  ? stepLabelCopy('actores', 'Actores', 'traspaso')
-                  : stepLabelCopy(activeStep.key, activeStep.label, modalidad)}
+                  ? stepLabelCopy('actores', 'Actores')
+                  : stepLabelCopy(activeStep.key, activeStep.label)}
               </h2>
               <StepBody
                 step={activeStep}

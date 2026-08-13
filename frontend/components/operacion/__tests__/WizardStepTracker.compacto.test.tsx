@@ -25,7 +25,6 @@ function pintar(compacto: boolean) {
       steps={PASOS}
       activeIndex={1}
       onGoToStep={vi.fn()}
-      modalidad="matricula_inicial"
       compacto={compacto}
     />,
   );
@@ -35,19 +34,19 @@ describe('WizardStepTracker — modo condensado', () => {
   it('conserva los nombres accesibles de todos los pasos', () => {
     pintar(true);
     // El nombre accesible es el contrato con el teclado y el lector: no cambia entre modos.
-    expect(screen.getByRole('button', { name: /^Paso 1: Consulta/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Paso 2: Comprador/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paso 1: Consulta Vehículo/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paso 2: Actores/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Paso 3: Requisitos/ })).toBeInTheDocument();
   });
 
   it('los rótulos de los pasos que no están en curso siguen en el documento, solo dejan de verse', () => {
     pintar(true);
     // `sr-only` no es `display:none`: el texto sigue ahí para quien lo lee con asistencia.
-    const rotulo = screen.getByTitle('Consulta');
+    const rotulo = screen.getByTitle('Consulta Vehículo');
     expect(rotulo).toBeInTheDocument();
     expect(rotulo.className).toContain('sr-only');
     // El del paso en curso sí se ve.
-    expect(screen.getByTitle('Comprador').className).not.toContain('sr-only');
+    expect(screen.getByTitle('Actores').className).not.toContain('sr-only');
   });
 
   it('oculta los motivos del paso incompleto, que es lo que hacía saltar el contenido', () => {
@@ -57,7 +56,7 @@ describe('WizardStepTracker — modo condensado', () => {
 
   it('en modo normal se ven todos los rótulos y el motivo del paso en curso', () => {
     pintar(false);
-    expect(screen.getByTitle('Consulta').className).not.toContain('sr-only');
+    expect(screen.getByTitle('Consulta Vehículo').className).not.toContain('sr-only');
     expect(screen.getByTitle('Requisitos').className).not.toContain('sr-only');
     // El motivo vuelve: en la cabecera completa hay sitio y es donde el gestor lo espera.
     expect(screen.getByText(/^•/)).toBeInTheDocument();

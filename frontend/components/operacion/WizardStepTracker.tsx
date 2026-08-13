@@ -90,12 +90,6 @@ export type WizardStepTrackerProps = {
    */
   coalesceActores?: boolean;
   /**
-   * Modalidad del trámite. Solo decide cómo se NOMBRAN los pasos: la propuesta llama distinto a
-   * las mismas claves en cada asistente ("Requisitos" vs "Documentos", "Resumen" vs "FUR y
-   * Expediente"). No altera la estructura, que sigue viniendo del servidor.
-   */
-  modalidad?: 'matricula_inicial' | 'traspaso';
-  /**
    * Modo condensado, para cuando el asistente ya está en marcha y el seguimiento compite por alto
    * con el formulario. Mismo diseño —círculos, conector y colores por estado no cambian—, solo
    * más apretado: marcadores de 24px en vez de 32, y el rótulo visible solo en el paso en curso.
@@ -120,7 +114,6 @@ export function WizardStepTracker({
   onGoToStep,
   viewOnly = false,
   coalesceActores = false,
-  modalidad,
   compacto = false,
 }: WizardStepTrackerProps) {
   const displaySteps: DisplayWizardStep[] = useMemo(
@@ -143,7 +136,7 @@ export function WizardStepTracker({
           const prevComplete = i <= displayActive;
           const lineAfterGreen = i < displayActive;
           // Nombre en la nomenclatura del diseño; cae al del servidor si la clave no está mapeada.
-          const label = stepLabelCopy(s.key, s.label, modalidad);
+          const label = stepLabelCopy(s.key, s.label);
           return (
             <li
               key={s.key}
