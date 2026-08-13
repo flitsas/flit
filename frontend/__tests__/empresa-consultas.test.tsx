@@ -76,6 +76,8 @@ function row(overrides: Partial<CompanyQueryRow> = {}): CompanyQueryRow {
     vin: "VIN0001",
     transitOfficeId: "o1",
     transitOfficeName: "Secretaría de Movilidad",
+    companiaId: "empresa-1",
+    companiaNombre: "Mi Empresa",
     procedureTypeId: "t1",
     procedureTypeName: "Traspaso de vehículo",
     modalidad: "traspaso",

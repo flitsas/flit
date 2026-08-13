@@ -45,9 +45,10 @@ public static class CompanyQuerySort
     public const string Estado = "estado";
     public const string Organismo = "organismo";
     public const string Tipo = "tipo";
+    public const string Compania = "compania";
 
     public static IReadOnlyList<string> All { get; } =
-        [Creado, Enviado, Cerrado, Actualizado, Placa, Referencia, Estado, Organismo, Tipo];
+        [Creado, Enviado, Cerrado, Actualizado, Placa, Referencia, Estado, Organismo, Tipo, Compania];
 }
 
 /// <summary>
@@ -65,6 +66,12 @@ public sealed record CompanyQueryRowDto(
     string? Vin,
     Guid? TransitOfficeId,
     string? TransitOfficeName,
+    /// <summary>
+    /// La compañía dueña del trámite. Se llena siempre, pero solo importa cuando la consulta corre
+    /// sobre varias compañías a la vez (SuperAdmin): en el resto de casos es la del propio tenant.
+    /// </summary>
+    Guid CompaniaId,
+    string CompaniaNombre,
     Guid ProcedureTypeId,
     string ProcedureTypeName,
     string Modalidad,

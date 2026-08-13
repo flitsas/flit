@@ -41,6 +41,12 @@ export interface CompanyQueryRow {
   vin: string | null;
   transitOfficeId: string | null;
   transitOfficeName: string | null;
+  /**
+   * La compañía dueña del trámite. Se llena siempre, pero solo importa cuando la consulta corre
+   * sobre varias compañías a la vez — ver `lib/api/superadmin-queries.ts`.
+   */
+  companiaId: string;
+  companiaNombre: string;
   procedureTypeId: string;
   procedureTypeName: string;
   modalidad: string;

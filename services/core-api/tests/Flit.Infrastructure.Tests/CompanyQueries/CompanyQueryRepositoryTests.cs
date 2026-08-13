@@ -260,6 +260,7 @@ public sealed class CompanyQueryRepositoryTests
             [CompanyQueryFieldCatalog.Leasing] = "true",
             [CompanyQueryFieldCatalog.MetodoPago] = "Efectivo",
             [CompanyQueryFieldCatalog.TipoTraspaso] = CompanyQueryFieldCatalog.TraspasoUnilateral,
+            [CompanyQueryFieldCatalog.Compania] = Empresa.ToString(),
         };
 
         esperado.Keys.Should().BeEquivalentTo(

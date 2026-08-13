@@ -20,6 +20,13 @@ import {
   type CompanyQueryRow,
 } from "@/lib/api/company-queries";
 import {
+  deleteSuperAdminSavedQuery,
+  fetchSuperAdminQueryFields,
+  fetchSuperAdminSavedQueries,
+  runSuperAdminQuery,
+  saveSuperAdminQuery,
+} from "@/lib/api/superadmin-queries";
+import {
   COMPANY_QUERY_COLUMNS,
   COMPANY_QUERY_PRESETS,
   defaultCompanyQueryColumns,
@@ -29,14 +36,23 @@ import {
 export interface ConsultasTabProps {
   /** Solo SuperAdmin: la compañía que se está mirando. El resto va con la suya. */
   tenantId?: string;
-  /** SuperAdmin sin compañía elegida: el backend exige una y no hay nada que consultar. */
+  /** SuperAdmin sin compañía elegida: en el resto de pestañas no hay nada que mostrar. */
   needsCompany?: boolean;
+  /**
+   * SuperAdmin sin compañía elegida es justo el caso de esta pestaña: en vez del aviso que
+   * muestran las demás, corre sobre TODAS las compañías a la vez (motor de operaciones).
+   */
+  isSuper?: boolean;
 }
 
-export function ConsultasTab({ tenantId, needsCompany = false }: ConsultasTabProps) {
+export function ConsultasTab({ tenantId, needsCompany = false, isSuper = false }: ConsultasTabProps) {
+  // SuperAdmin sin compañía elegida en el selector global: el motor de operaciones, sobre todas las
+  // compañías. Elegir una compañía ahí sigue funcionando igual que para una empresa normal.
+  const superAdmin = isSuper && !tenantId;
+
   // El origen se memoriza por compañía: la consola lo usa como dependencia de sus efectos, y una
   // identidad nueva en cada render relanzaría el catálogo y las guardadas sin parar.
-  const source = useMemo<QuerySource<CompanyQueryRow>>(
+  const companySource = useMemo<QuerySource<CompanyQueryRow>>(
     () => ({
       testIdPrefix: "empresa-query",
       dateFields: COMPANY_DATE_FIELDS,
@@ -56,9 +72,28 @@ export function ConsultasTab({ tenantId, needsCompany = false }: ConsultasTabPro
     [tenantId],
   );
 
+  const superAdminSource = useMemo<QuerySource<CompanyQueryRow>>(
+    () => ({
+      testIdPrefix: "superadmin-query",
+      dateFields: COMPANY_DATE_FIELDS,
+      defaultDateField: "creacion",
+      // Aparte de la de una compañía sola: las columnas elegidas (con «Compañía» de más) no
+      // deberían aplicarse sin querer la próxima vez que se mire una sola.
+      columnsStorageKey: "flit-superadmin-consultas-columnas",
+      exportPrefix: "consulta-todas-companias",
+      rowNoun: ["trámite", "trámites"],
+      fetchFields: fetchSuperAdminQueryFields,
+      run: runSuperAdminQuery,
+      fetchSaved: fetchSuperAdminSavedQueries,
+      save: saveSuperAdminQuery,
+      remove: deleteSuperAdminSavedQuery,
+    }),
+    [],
+  );
+
   // Sin compañía elegida no se consulta: el backend responde 400 y un error rojo se lee como una
   // avería. Se dice qué falta, que es lo único accionable.
-  if (needsCompany) {
+  if (needsCompany && !superAdmin) {
     return (
       <div
         className="rounded-2xl border border-[#DFE5ED] p-8 text-center dark:border-white/10"
@@ -72,9 +107,36 @@ export function ConsultasTab({ tenantId, needsCompany = false }: ConsultasTabPro
     );
   }
 
+  if (superAdmin) {
+    return (
+      <QueryConsole
+        source={superAdminSource}
+        columns={COMPANY_QUERY_COLUMNS}
+        presets={COMPANY_QUERY_PRESETS}
+        defaultColumns={["compania", ...defaultCompanyQueryColumns()]}
+        rowKey={(fila) => fila.procedureInstanceId}
+        sheetName="Consulta"
+        ambito="todas las compañías"
+        renderCell={(columnId, fila) =>
+          columnId === "estado" ? (
+            <span
+              className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+              style={{
+                background: `${estadoEmpresa(fila.status).color}1A`,
+                color: estadoEmpresa(fila.status).color,
+              }}
+            >
+              {estadoEmpresa(fila.status).label}
+            </span>
+          ) : null
+        }
+      />
+    );
+  }
+
   return (
     <QueryConsole
-      source={source}
+      source={companySource}
       columns={COMPANY_QUERY_COLUMNS}
       presets={COMPANY_QUERY_PRESETS}
       defaultColumns={defaultCompanyQueryColumns()}

@@ -161,6 +161,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Lo mismo, del otro lado del trámite: las que guarda un usuario de la empresa gestora.
     public DbSet<CompanySavedQueryEntity> CompanySavedQueries => Set<CompanySavedQueryEntity>();
 
+    // Las que guarda SuperAdmin en modo «todas las compañías»: sin tenant, compartidas entre todo
+    // el equipo de SuperAdmin.
+    public DbSet<SuperAdminSavedQueryEntity> SuperAdminSavedQueries => Set<SuperAdminSavedQueryEntity>();
+
     // HU #10545 — requisitos configurables por OT (RNMC, ruta de placa, validación de identidad).
     public DbSet<OtRequirementsEntity> OtRequirements => Set<OtRequirementsEntity>();
 
