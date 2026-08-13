@@ -260,7 +260,7 @@ export function BiometricStep({
   if (pagePanel) {
     return (
       <div
-        className="rounded-2xl border bg-white p-5 dark:bg-[#0B0F14]"
+        className="rounded-2xl border bg-white p-5 dark:bg-[#162744]"
         style={{ borderColor: '#DFE5ED' }}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
@@ -297,7 +297,7 @@ export function BiometricStep({
           el polling / "Actualizar estado" por tarjeta bastan. */}
       {!hideIntro && (
         <div
-          className="flex items-start justify-between gap-3 rounded-2xl border bg-white px-4 py-3 dark:bg-[#0B0F14]"
+          className="flex items-start justify-between gap-3 rounded-2xl border bg-white px-4 py-3 dark:bg-[#162744]"
           style={{ borderColor: '#DFE5ED' }}
         >
           <p className="text-xs opacity-70">
@@ -310,7 +310,7 @@ export function BiometricStep({
 
       {error && (
         <div
-          className="rounded-xl border bg-white p-3 text-xs dark:bg-[#0B0F14]"
+          className="rounded-xl border bg-white p-3 text-xs dark:bg-[#162744]"
           style={{ borderColor: '#FF4E00', color: '#FF4E00' }}
           role="alert"
           aria-live="polite"
@@ -344,7 +344,7 @@ function BiometricSkeleton({
           className={
             nested
               ? 'rounded-xl border p-4'
-              : 'rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]'
+              : 'rounded-2xl border bg-white p-4 dark:bg-[#162744]'
           }
           style={{ borderColor: '#DFE5ED' }}
           aria-hidden="true"
@@ -385,7 +385,7 @@ function ParteCard({
       className={
         nested
           ? 'rounded-xl border p-4'
-          : 'rounded-2xl border bg-white p-5 dark:bg-[#0B0F14]'
+          : 'rounded-2xl border bg-white p-5 dark:bg-[#162744]'
       }
       style={{ borderColor: '#DFE5ED' }}
       aria-label={`Biométrica ${PARTE_LABEL[parte]}`}
@@ -473,7 +473,7 @@ function HistorialValidaciones({
                 <StatusBadge label={ESTADO_LABEL[v.status] ?? v.status} tone={ESTADO_TONE[v.status] ?? 'neutral'} />
                 {v.id === vigenteId && (
                   <span
-                    className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold"
+                    className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
                     style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
                   >
                     Vigente

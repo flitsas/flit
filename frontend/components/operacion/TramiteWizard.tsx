@@ -1107,7 +1107,7 @@ export function TramiteWizard(props: Props) {
         }`}
       >
         <div
-          className={`flex items-center justify-between gap-3 rounded-2xl border border-[#DFE5ED] bg-white px-5 transition-[padding] duration-200 motion-reduce:transition-none dark:border-[#1A1F2B] dark:bg-[#0B0F14] ${
+          className={`flex items-center justify-between gap-3 rounded-2xl border border-[#DFE5ED] bg-white px-5 transition-[padding] duration-200 motion-reduce:transition-none dark:border-[#1A1F2B] dark:bg-[#162744] ${
             cabeceraCompacta ? 'py-2' : 'py-4'
           }`}
           style={{ boxShadow: '0 8px 24px rgba(22, 39, 68, 0.08)' }}
@@ -1125,7 +1125,7 @@ export function TramiteWizard(props: Props) {
               <h1 className="truncate text-lg font-bold sm:text-xl" style={{ color: '#557EFF' }}>
                 {displayTitle}
               </h1>
-              <p className="mt-0.5 truncate text-xs" style={{ color: '#9AA5B1' }}>
+              <p className="mt-0.5 truncate text-xs" style={{ color: '#59677D' }}>
                 {displaySubtitle}
               </p>
             </div>
@@ -1138,7 +1138,7 @@ export function TramiteWizard(props: Props) {
               onExit();
             }}
             className="shrink-0 text-xs font-medium hover:opacity-100"
-            style={{ color: '#9AA5B1' }}
+            style={{ color: '#59677D' }}
             aria-label={editLocked ? 'Volver al listado' : 'Cancelar y volver al selector'}
           >
             {editLocked ? '← Volver al listado' : '← Cancelar'}
@@ -1683,7 +1683,7 @@ function VehicleDataCard({
   return (
     <div
       className={
-        bare ? '' : 'overflow-hidden rounded-2xl border bg-white dark:bg-[#0B0F14]'
+        bare ? '' : 'overflow-hidden rounded-2xl border bg-white dark:bg-[#162744]'
       }
     >
       {/* Header — embebido lo pinta el acordeón, que ya dice de dónde vienen los datos. */}
@@ -1699,7 +1699,7 @@ function VehicleDataCard({
             <h4 className="text-sm font-bold">Datos del vehículo</h4>
           </div>
           <span
-            className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+            className="rounded px-1.5 py-0.5 text-xs font-semibold uppercase"
             style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
           >
             RUNT
@@ -1716,7 +1716,7 @@ function VehicleDataCard({
             className="rounded-xl border-2 px-4 py-2 text-center"
             style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' }}
           >
-            <p className="text-[9px] font-semibold uppercase opacity-50">Placa</p>
+            <p className="text-xs font-semibold uppercase opacity-50">Placa</p>
             <p
               className="font-mono text-lg font-extrabold tracking-widest"
               style={{ color: '#557EFF' }}
@@ -1890,7 +1890,7 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
   };
 
   return (
-    <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-2">
+    <div className="rounded-2xl border bg-white p-4 dark:bg-[#162744] space-y-2">
       <WizardCardHeader
         title="Observaciones del trámite"
         subtitle="Se incluirán en el recuadro de observaciones del FUR. Puedes editarlas también en el paso final antes de preparar el expediente."
@@ -1904,7 +1904,7 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
         disabled={readOnly || saving}
         rows={3}
         placeholder="Ingresa observaciones relevantes para el FUR…"
-        className="w-full resize-none rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14]"
+        className="w-full resize-none rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#162744]"
       />
       {saving && (
         <p className="text-xs opacity-50" role="status" aria-live="polite">
@@ -2364,7 +2364,7 @@ function ConsultaStep({
   };
 
   const inputClass =
-    'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]';
+    'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#162744] text-xs outline-none focus:border-[#557EFF]';
 
   const loading = preflightLoading || persisting;
   // Con creación diferida el semáforo vive en memoria (no hay snapshot persistido que releer).
@@ -2991,7 +2991,7 @@ function ConsultaStep({
               aria-pressed={prioritarioVigente}
               aria-labelledby="consulta-prioritario-label"
               aria-describedby="consulta-prioritario-nota"
-              className="flex h-[38px] shrink-0 items-center justify-between gap-3 rounded-xl border bg-white px-3 text-xs font-medium transition disabled:opacity-60 dark:bg-[#0B0F14]"
+              className="flex h-[38px] shrink-0 items-center justify-between gap-3 rounded-xl border bg-white px-3 text-xs font-medium transition disabled:opacity-60 dark:bg-[#162744]"
               style={prioritarioVigente ? { borderColor: '#557EFF', color: '#557EFF' } : undefined}
             >
               {prioritarioVigente ? 'Activado' : 'Desactivado'}
@@ -3077,7 +3077,7 @@ function ConsultaStep({
 
       {mostrarPazSalvo && (
         <label
-          className="flex items-start gap-2.5 rounded-2xl border p-4 bg-white dark:bg-[#0B0F14]"
+          className="flex items-start gap-2.5 rounded-2xl border p-4 bg-white dark:bg-[#162744]"
           style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.06)' }}
         >
           <input
@@ -3142,7 +3142,7 @@ function ConsultaStep({
           aria-modal="true"
           aria-labelledby="cambiar-tipo-titulo"
         >
-          <div className="w-full max-w-md rounded-2xl border bg-white p-5 dark:bg-[#0B0F14]">
+          <div className="w-full max-w-md rounded-2xl border bg-white p-5 dark:bg-[#162744]">
             <h3 id="cambiar-tipo-titulo" className="text-sm font-bold" style={{ color: '#557EFF' }}>
               Cambiar tipo de trámite
             </h3>

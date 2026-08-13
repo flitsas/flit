@@ -21,7 +21,7 @@ export const WIZARD_INPUT =
   'w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none transition ' +
   'focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 ' +
   'aria-[invalid=true]:border-[#FF4E00] ' +
-  'disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#0B0F14]';
+  'disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#162744]';
 
 /** Igual que el campo de texto, para `<select>` nativos. */
 export const WIZARD_SELECT = WIZARD_INPUT;
@@ -41,7 +41,7 @@ export const WIZARD_LABEL = 'block text-xs font-medium text-[#59677D] dark:text-
 export const WIZARD_HINT = 'mt-1 block text-xs leading-snug opacity-70';
 
 /** Tarjeta de sección dentro de un paso. */
-export const WIZARD_CARD = 'rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]';
+export const WIZARD_CARD = 'rounded-2xl border bg-white p-4 dark:bg-[#162744]';
 
 /**
  * Botón de acción del pie del asistente (`BTN` de la propuesta): 44 px de alto, 13px semibold.

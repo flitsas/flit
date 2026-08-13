@@ -59,7 +59,7 @@ export function WizardAccordion({
   return (
     <div
       data-testid={testId}
-      className={`overflow-hidden rounded-2xl border bg-white dark:bg-[#0B0F14] ${className}`}
+      className={`overflow-hidden rounded-2xl border bg-white dark:bg-[#162744] ${className}`}
     >
       {/* El título va dentro de un `h3`, con la misma tipografía que `WizardCardHeader`. Un acordeón
           y una tarjeta son la misma jerarquía dentro del paso —secciones hermanas—, y estaba

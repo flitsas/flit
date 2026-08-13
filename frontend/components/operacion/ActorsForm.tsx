@@ -1316,7 +1316,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const originBadge = (mode: string, source: string) =>
     mode === 'cache' && (
       <span
-        className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+        className="rounded px-1.5 py-0.5 text-xs font-semibold uppercase"
         style={{ background: 'rgba(85,126,255,0.15)', color: '#557EFF' }}
       >
         Dato reutilizado · {source}
@@ -2130,7 +2130,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               />
               {showCiudades && (
                 <ul
-                  className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-white shadow-lg dark:bg-[#0B0F14]"
+                  className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-white shadow-lg dark:bg-[#162744]"
                   style={{ borderColor: '#DFE5ED' }}
                   aria-label="Sugerencias de ciudad"
                 >
@@ -2247,7 +2247,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           return (
             <fieldset
               key={actor.rol}
-              className="rounded-2xl border bg-white dark:bg-[#0B0F14]"
+              className="rounded-2xl border bg-white dark:bg-[#162744]"
               style={{ borderColor: '#DFE5ED' }}
               aria-label={ROL_LABEL[actor.rol]}
             >
@@ -2419,7 +2419,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   />
                   {showCiudadSuggestions && (
                     <ul
-                      className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-white shadow-lg dark:bg-[#0B0F14]"
+                      className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-white shadow-lg dark:bg-[#162744]"
                       style={{ borderColor: '#DFE5ED' }}
                       aria-label="Sugerencias de ciudad"
                     >

@@ -255,7 +255,7 @@ export function PreflightPanel({
   const warnChecks = visibleChecks.filter((c) => c.status === 'warn');
 
   return (
-    <div className={bare ? '' : 'mt-4 rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]'}>
+    <div className={bare ? '' : 'mt-4 rounded-2xl border bg-white p-4 dark:bg-[#162744]'}>
       {/* Embebido en un acordeón la cabecera sobra: el título y el semáforo global ya viven en la
           suya. El botón tampoco se pierde — los callers que embeben pasan `showRunButton={false}`
           porque el disparo de la consulta está arriba, junto al identificador del vehículo. */}
@@ -313,7 +313,7 @@ export function PreflightPanel({
           aria-live="polite"
         >
           <span
-            className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+            className="rounded px-1.5 py-0.5 text-xs font-semibold uppercase"
             style={{ background: 'rgba(85,126,255,0.15)', color: '#557EFF' }}
           >
             Consulta pendiente
@@ -335,7 +335,7 @@ export function PreflightPanel({
           aria-live="polite"
         >
           <span
-            className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+            className="rounded px-1.5 py-0.5 text-xs font-semibold uppercase"
             style={{ background: 'rgba(85,126,255,0.15)', color: '#557EFF' }}
           >
             Dato reutilizado
@@ -372,7 +372,7 @@ export function PreflightPanel({
             return (
               <li
                 key={c.key}
-                className="flex flex-col gap-1.5 rounded-2xl border bg-white px-3 py-2.5 dark:bg-[#0B0F14]"
+                className="flex flex-col gap-1.5 rounded-2xl border bg-white px-3 py-2.5 dark:bg-[#162744]"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="min-w-0 text-xs font-semibold leading-snug">
@@ -380,7 +380,7 @@ export function PreflightPanel({
                     {checkRoleSuffix(c.key)}
                   </span>
                   <span
-                    className="shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-white"
+                    className="shrink-0 rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-white"
                     style={{ background: pillBg }}
                     title={msg || undefined}
                   >

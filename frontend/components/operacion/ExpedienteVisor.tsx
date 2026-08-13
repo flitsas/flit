@@ -362,7 +362,7 @@ function DocRow({
 
   return (
     <li
-      className="flex items-center gap-3 rounded-2xl border bg-white px-4 py-3 dark:bg-[#0B0F14]"
+      className="flex items-center gap-3 rounded-2xl border bg-white px-4 py-3 dark:bg-[#162744]"
       style={{ borderColor: BORDER }}
     >
       <FileText className="h-5 w-5 shrink-0" style={{ color: BLUE }} aria-hidden="true" />

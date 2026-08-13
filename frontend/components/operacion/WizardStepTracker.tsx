@@ -42,8 +42,8 @@ function StepMarker({
   if (status === 'locked') {
     return (
       <span
-        className={`grid ${tamano} shrink-0 place-items-center rounded-full bg-white text-xs font-bold dark:bg-[#0B0F14]`}
-        style={{ border: '2px solid #DFE5ED', color: '#9AA5B1' }}
+        className={`grid ${tamano} shrink-0 place-items-center rounded-full bg-white text-xs font-bold dark:bg-[#162744]`}
+        style={{ border: '2px solid #DFE5ED', color: '#59677D' }}
         aria-hidden="true"
       >
         <Lock className={compacto ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
@@ -55,7 +55,7 @@ function StepMarker({
   if (active) {
     return (
       <span
-        className={`grid ${tamano} shrink-0 place-items-center rounded-full bg-white text-xs font-bold dark:bg-[#0B0F14]`}
+        className={`grid ${tamano} shrink-0 place-items-center rounded-full bg-white text-xs font-bold dark:bg-[#162744]`}
         style={{
           border: '2px solid #557EFF',
           color: '#557EFF',
@@ -69,8 +69,8 @@ function StepMarker({
   }
   return (
     <span
-      className={`grid ${tamano} shrink-0 place-items-center rounded-full border-2 bg-white text-xs font-bold dark:bg-[#0B0F14]`}
-      style={{ borderColor: '#C5CDD8', color: '#9AA5B1' }}
+      className={`grid ${tamano} shrink-0 place-items-center rounded-full border-2 bg-white text-xs font-bold dark:bg-[#162744]`}
+      style={{ borderColor: '#C5CDD8', color: '#59677D' }}
       aria-hidden="true"
     >
       {index + 1}
@@ -182,7 +182,7 @@ export function WizardStepTracker({
                         ? { color: '#557EFF' }
                         : s.status === 'complete'
                           ? { color: '#59677D' }
-                          : { color: '#9AA5B1' }
+                          : { color: '#59677D' }
                     }
                     title={label}
                   >

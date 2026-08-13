@@ -60,7 +60,7 @@ import type {
 const FILTER_INPUT_CLS =
   'mt-1 w-full rounded-xl border border-[#DFE5ED] bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF] dark:border-white/15';
 const FILTER_FORM_CLS =
-  'grid grid-cols-1 gap-3 rounded-2xl border bg-white p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 dark:bg-[#0B0F14]';
+  'grid grid-cols-1 gap-3 rounded-2xl border bg-white p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 dark:bg-[#162744]';
 /** Tope del camino filtrado del backend (mismo MaxItems del API). */
 const SERVER_LIST_TAKE = 200;
 
@@ -1087,7 +1087,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           aria-labelledby="procesar-plate-title"
         >
           <div
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#162744]"
             style={{ border: '1px solid #DFE5ED' }}
             onClick={(e) => e.stopPropagation()}
           >

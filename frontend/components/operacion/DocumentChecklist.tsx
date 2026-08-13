@@ -280,7 +280,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
         <div
           id={tipId}
           role="tooltip"
-          className="absolute right-0 z-40 mt-1.5 w-56 rounded-xl border bg-white p-2.5 text-left shadow-lg dark:bg-[#0B0F14]"
+          className="absolute right-0 z-40 mt-1.5 w-56 rounded-xl border bg-white p-2.5 text-left shadow-lg dark:bg-[#162744]"
           style={{ borderColor: palette.border }}
         >
           <p className="text-xs font-bold" style={{ color: palette.color }}>
@@ -311,7 +311,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
           onClick={() => setDetailOpen(false)}
         >
           <div
-            className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-white p-4 shadow-xl dark:bg-[#0B0F14]"
+            className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-white p-4 shadow-xl dark:bg-[#162744]"
             style={{ borderColor: palette.border }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -469,7 +469,7 @@ export function DocumentSlot({
   return (
     <li
       className={
-        'flex h-full flex-col rounded-2xl bg-white p-4 transition dark:bg-[#0B0F14] ' +
+        'flex h-full flex-col rounded-2xl bg-white p-4 transition dark:bg-[#162744] ' +
         // La caja punteada del diseño es la señal de "aquí falta algo": se reserva para el slot
         // vacío y desaparece en cuanto hay archivo, que pasa a borde sólido de tarjeta normal.
         (done
@@ -488,7 +488,7 @@ export function DocumentSlot({
         <div className="flex min-w-0 items-start gap-2.5">
           <FileText
             className="mt-0.5 h-4 w-4 shrink-0"
-            style={{ color: done ? '#8CC63F' : '#9AA5B1' }}
+            style={{ color: done ? '#8CC63F' : '#59677D' }}
             aria-hidden="true"
           />
           <div className="min-w-0 flex-1">
@@ -549,7 +549,7 @@ export function DocumentSlot({
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
         <span
           className="rounded-full px-2.5 py-1 text-xs font-bold text-white"
-          style={{ background: done ? '#8CC63F' : '#9AA5B1' }}
+          style={{ background: done ? '#8CC63F' : '#59677D' }}
         >
           {done ? 'Adjunto' : 'Sin adjuntar'}
         </span>
@@ -774,7 +774,7 @@ export function DocumentChecklist({
       onDownload={previewAttachment ? () => void handleDownloadFromPreview() : undefined}
     />
     <section
-      className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
+      className="rounded-2xl p-4 border bg-white dark:bg-[#162744]"
       aria-label="Documentos del trámite"
     >
       {/* Embebido en el asistente el paso ya tiene su título, pero la tarjeta necesita el suyo:

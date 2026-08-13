@@ -119,7 +119,7 @@ export function VehicleTransformationsCard({
     <section
       aria-labelledby="veh-transf-title"
       className={
-        bare ? 'space-y-3' : 'space-y-3 rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]'
+        bare ? 'space-y-3' : 'space-y-3 rounded-2xl border bg-white p-4 dark:bg-[#162744]'
       }
     >
       {/* Embebido, el título vive en la cabecera del acordeón. Se conserva un rótulo oculto porque

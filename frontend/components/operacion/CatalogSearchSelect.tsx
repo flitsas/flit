@@ -59,7 +59,7 @@ export function CatalogSearchSelect({
           setOpen((v) => !v);
           setTimeout(() => inputRef.current?.focus(), 0);
         }}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14]"
+        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#162744]"
       >
         <span className={display ? 'font-medium' : 'opacity-50'}>
           {display || 'Selecciona…'}
@@ -69,7 +69,7 @@ export function CatalogSearchSelect({
 
       {open && !disabled && (
         <div
-          className="absolute z-30 mt-1 w-full rounded-xl border bg-white p-2 shadow-lg dark:bg-[#0B0F14]"
+          className="absolute z-30 mt-1 w-full rounded-xl border bg-white p-2 shadow-lg dark:bg-[#162744]"
           role="listbox"
           aria-label={label}
         >

@@ -16,12 +16,12 @@ const INPUT_BASE = WIZARD_INPUT;
 
 function FirmaBadge({ estado }: { estado: string }) {
   const map: Record<string, { label: string; bg: string; color: string }> = {
-    pendiente_envio: { label: 'Pendiente', bg: '#EEF1F5', color: '#9AA5B1' },
+    pendiente_envio: { label: 'Pendiente', bg: '#EEF1F5', color: '#59677D' },
     enviada: { label: 'Enviada', bg: 'rgba(85,126,255,0.12)', color: '#557EFF' },
     firmada: { label: 'Firmada', bg: 'rgba(140,198,63,0.15)', color: '#5B8A1F' },
     rechazada: { label: 'Rechazada', bg: 'rgba(255,78,0,0.10)', color: '#FF4E00' },
   };
-  const s = map[estado] ?? { label: estado, bg: '#EEF1F5', color: '#9AA5B1' };
+  const s = map[estado] ?? { label: estado, bg: '#EEF1F5', color: '#59677D' };
   return (
     <span
       className="px-2.5 py-1 rounded-full text-xs font-bold"

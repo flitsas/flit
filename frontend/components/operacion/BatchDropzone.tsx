@@ -82,7 +82,7 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
       // Estaba punteada en gris sobre el fondo de la tarjeta, y así no se leía como zona de soltar
       // sino como un bloque informativo más. El área es generosa a propósito: es el destino de un
       // arrastre, y una diana pequeña obliga a apuntar.
-      className="rounded-2xl border-2 border-dashed bg-white p-8 text-center transition-colors dark:bg-[#0B0F14]"
+      className="rounded-2xl border-2 border-dashed bg-white p-8 text-center transition-colors dark:bg-[#162744]"
       style={{
         borderColor: dragging ? '#557EFF' : 'rgba(85,126,255,0.45)',
         background: dragging ? 'rgba(85,126,255,0.06)' : undefined,

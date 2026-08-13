@@ -245,7 +245,7 @@ export function IdentityStatusPanel({
             borderRadius: 12,
             padding: 16,
           }}
-          className="dark:bg-[#0B0F14]"
+          className="dark:bg-[#162744]"
         >
           {error && (
             <div
@@ -317,7 +317,7 @@ export function IdentityStatusPanel({
                             </span>
                             {row.vigente && (
                               <span
-                                className="rounded-full px-1.5 py-0.5 text-[9px] font-semibold"
+                                className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
                                 style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
                               >
                                 Vigente
@@ -330,7 +330,7 @@ export function IdentityStatusPanel({
                             </p>
                           )}
                           {v.status === 'rechazado' && v.rejectionReason && (
-                            <p className="truncate text-[10.5px] opacity-60" title={v.rejectionReason}>
+                            <p className="truncate text-xs opacity-60" title={v.rejectionReason}>
                               {v.rejectionReason}
                             </p>
                           )}

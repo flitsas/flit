@@ -64,7 +64,7 @@ export function AvaluoComercialCard({ instanceId, disabled = false, accepted = f
 
   return (
     <section
-      className="rounded-2xl p-4 border mb-4 bg-white dark:bg-[#0B0F14]"
+      className="rounded-2xl p-4 border mb-4 bg-white dark:bg-[#162744]"
       aria-label="Avalúo comercial sugerido"
     >
       <div className="flex items-center justify-between gap-3 mb-3">

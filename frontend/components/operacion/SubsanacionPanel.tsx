@@ -181,7 +181,7 @@ export function SubsanacionPanel({
               return (
                 <li
                   key={i}
-                  className="flex items-start gap-2 rounded-lg border bg-white dark:bg-[#0B0F14] p-2"
+                  className="flex items-start gap-2 rounded-lg border bg-white dark:bg-[#162744] p-2"
                 >
                   <input
                     id={inputId}

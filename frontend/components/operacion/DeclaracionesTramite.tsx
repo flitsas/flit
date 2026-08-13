@@ -23,7 +23,7 @@ const RUES_NO_DISPONIBLE =
   'El RUES no respondió en este momento. No es un error tuyo: puedes reintentar en unos segundos.';
 
 const inputClass =
-  'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]';
+  'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#162744] text-xs outline-none focus:border-[#557EFF]';
 
 /**
  * Declaraciones del paso de requisitos: TIPO DE SERVICIO (casilla 18 del FUR, con la empresa
@@ -268,7 +268,7 @@ export function DeclaracionesTramite({
           <select> simple es más accesible y más rápido de operar que un combobox con buscador
           (SearchableSelect), pensado para catálogos largos. */}
       {esMatricula && (
-        <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
+        <div className="rounded-2xl border bg-white p-4 dark:bg-[#162744] space-y-3">
           <WizardCardHeader
             title="Tipo de servicio del vehículo"
             subtitle="Determina la casilla 18 del FUR. Con servicio público hay que identificar además la empresa vinculadora."

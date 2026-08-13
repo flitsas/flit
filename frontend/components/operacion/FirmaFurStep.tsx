@@ -67,7 +67,7 @@ const RNMC_STATUS_STYLE: Record<string, { dot: string; text: string }> = {
   ok: { dot: '#8CC63F', text: '#8CC63F' },
   warn: { dot: '#F9AC00', text: '#F9AC00' },
   fail: { dot: '#FF4E00', text: '#FF4E00' },
-  unknown: { dot: '#9AA5B1', text: '#9AA5B1' },
+  unknown: { dot: '#59677D', text: '#59677D' },
   error: { dot: '#FF4E00', text: '#FF4E00' },
 };
 
@@ -109,7 +109,7 @@ function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: b
                       {c.status}
                     </span>
                     <span
-                      className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+                      className="rounded px-1.5 py-0.5 text-xs font-semibold uppercase"
                       style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
                     >
                       {sourceLabel(c.source)}
@@ -1003,7 +1003,7 @@ function OrganismoModal({
       aria-label="Seleccionar organismo de tránsito"
     >
       <div
-        className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh]"
+        className="bg-white dark:bg-[#162744] rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh]"
       >
         <div className="flex items-start justify-between mb-3">
           <div>
@@ -1351,14 +1351,14 @@ function ParticipantRow({
               <StatusChip ok okLabel="Completado" pendingLabel="" />
             ) : p.expirado ? (
               <span
-                className="rounded-full px-2 py-0.5 text-[9px] font-bold"
-                style={{ background: '#EEF1F5', color: '#9AA5B1' }}
+                className="rounded-full px-2 py-0.5 text-xs font-bold"
+                style={{ background: '#EEF1F5', color: '#59677D' }}
               >
                 Expirado
               </span>
             ) : (
               <span
-                className="rounded-full px-2 py-0.5 text-[9px] font-bold"
+                className="rounded-full px-2 py-0.5 text-xs font-bold"
                 style={{ background: 'rgba(249,172,0,0.15)', color: '#F9AC00' }}
               >
                 Pendiente
@@ -1399,11 +1399,11 @@ function StatusChip({
   if (!ok && !pendingLabel) return null;
   return (
     <span
-      className="rounded-full px-2 py-0.5 text-[9px] font-bold"
+      className="rounded-full px-2 py-0.5 text-xs font-bold"
       style={
         ok
           ? { background: 'rgba(140,198,63,0.15)', color: '#5B8A1F' }
-          : { background: '#EEF1F5', color: '#9AA5B1' }
+          : { background: '#EEF1F5', color: '#59677D' }
       }
     >
       {ok ? okLabel : pendingLabel}

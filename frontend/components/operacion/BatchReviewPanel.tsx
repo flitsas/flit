@@ -40,7 +40,7 @@ function Chip({ text, tone = 'info' }: { text: string; tone?: 'info' | 'warn' | 
         ? { background: 'rgba(120,130,145,0.15)', color: '#5B6472' }
         : { background: 'rgba(85,126,255,0.10)', color: '#557EFF' };
   return (
-    <span className="rounded px-1.5 py-0.5 text-[9px] font-semibold" style={palette}>
+    <span className="rounded px-1.5 py-0.5 text-xs font-semibold" style={palette}>
       {text}
     </span>
   );
