@@ -98,6 +98,7 @@ function row(overrides: Partial<CompanyQueryRow> = {}): CompanyQueryRow {
     creadoEn: "2026-08-01T14:00:00Z",
     enviadoEn: "2026-08-02T14:00:00Z",
     cerradoEn: null,
+    aprobadoEn: null,
     actualizadoEn: "2026-08-03T14:00:00Z",
     diasHastaEnvio: 1,
     diasEnOrganismo: 3,

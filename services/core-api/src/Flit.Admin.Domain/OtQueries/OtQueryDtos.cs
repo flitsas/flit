@@ -18,15 +18,23 @@ public static class OtQueryDateField
     /// <summary>Cuándo se aprobó o rechazó. Deja fuera lo que sigue sin decidir.</summary>
     public const string Decision = "decision";
 
+    /// <summary>
+    /// Cuándo pasó a Aprobado, específicamente. Distinto de <see cref="Decision"/>: un trámite
+    /// rechazado también decidió, pero nunca tiene esta fecha.
+    /// </summary>
+    public const string Aprobacion = "aprobacion";
+
     /// <summary>Último movimiento de cualquier tipo.</summary>
     public const string Actualizacion = "actualizacion";
 
-    public static bool IsKnown(string? field) => field is Radicacion or Decision or Actualizacion;
+    public static bool IsKnown(string? field) =>
+        field is Radicacion or Decision or Aprobacion or Actualizacion;
 
     public static IReadOnlyList<QueryFieldOptionDto> Options { get; } =
     [
         new(Radicacion, "Fecha de radicación"),
         new(Decision, "Fecha de decisión"),
+        new(Aprobacion, "Fecha de aprobación"),
         new(Actualizacion, "Última actualización"),
     ];
 }
@@ -61,6 +69,7 @@ public sealed record OtQueryRowDto(
     DateTimeOffset? RadicadoEn,
     DateTimeOffset? UltimaRadicacionEn,
     DateTimeOffset? DecididoEn,
+    DateTimeOffset? AprobadoEn,
     DateTimeOffset? ActualizadoEn,
     string? DecididoPor,
     double? HorasHastaDecision,

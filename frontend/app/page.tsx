@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Shell, type ModuleId } from "@/components/atom/Shell";
 import { Dashboard } from "@/components/atom/modules/Dashboard";
@@ -14,50 +14,99 @@ import { RbacAdmin } from "@/components/atom/modules/RbacAdmin";
 import { Auditoria } from "@/components/atom/modules/Auditoria";
 import { LogQx } from "@/components/atom/modules/LogQx";
 import { IctLogs } from "@/components/atom/modules/IctLogs";
+import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { useAccessibleModules } from "@/hooks/useAccessibleModules";
 import { useAuthGate } from "@/hooks/useAuthGate";
-import { buildValidModules, parseModule } from "@/lib/nav/modules";
+import { planSpaModuleAccess, resolveNavigableModuleIds } from "@/lib/nav/modules";
 import { trackModuleView } from "@/lib/telemetry"; // Reportes2 HU-A
 import { getToken } from "@/lib/api/client";
-import { canReadIctLogs, canReadLogQx, decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import {
+  canReadIctLogs,
+  canReadLogQx,
+  decodeJwtPayload,
+  isOtAdmin,
+  isSuperAdmin,
+} from "@/lib/auth/jwt";
 
 function HomeContent() {
   const router = useRouter();
   const params = useSearchParams();
+  const { show: showToast } = useToast();
   const { authed, hydrated, logout } = useAuthGate();
-  const { modules: accessibleModules, loading: modulesLoading } = useAccessibleModules(authed);
-  // "Auditoría" (HU #10680) es SuperAdmin-only y no tiene fila en el catálogo RBAC de
-  // módulos (se gatea por el claim SuperAdmin del JWT, igual que su entrada en el dock —
-  // Shell.tsx, bloque `currentUser?.isSuperAdmin`), no por `accessibleCodes`. Se re-lee de
-  // forma perezosa (no reactiva) porque el JWT no cambia durante la sesión de la SPA.
+  const {
+    modules: accessibleModules,
+    loading: modulesLoading,
+    error: modulesError,
+  } = useAccessibleModules(authed);
+  // Claims JWT: lectura perezosa (no reactiva) — el token no cambia en la sesión SPA.
   const [isSuperAdminUser] = useState<boolean>(() => isSuperAdmin(decodeJwtPayload(getToken())));
-  // LOG QX (HU #10795) — gate por permiso `logqx.read` (o SuperAdmin). Se re-lee de forma
-  // perezosa (no reactiva) igual que `isSuperAdminUser`: el JWT no cambia durante la sesión.
+  const [isOtAdminUser] = useState<boolean>(() => isOtAdmin(decodeJwtPayload(getToken())));
   const [canLogQx] = useState<boolean>(() => canReadLogQx(decodeJwtPayload(getToken())));
-  // ICT (HU10893) — gate por permiso `ict.logs.read` (o SuperAdmin), lectura perezosa como los demás.
   const [canIctLogs] = useState<boolean>(() => canReadIctLogs(decodeJwtPayload(getToken())));
 
-  const accessibleCodes = accessibleModules.map((m) => m.code) as ModuleId[];
-  // "ayuda" es soporte universal (no es un módulo RBAC): siempre navegable, aunque no
-  // venga en los permisos. Así el dock lo muestra y abre en todas las pantallas.
-  const validModules = buildValidModules(accessibleCodes);
+  const accessibleCodes = useMemo(
+    () => accessibleModules.map((m) => m.code) as ModuleId[],
+    [accessibleModules],
+  );
 
-  const [module, setModule] = useState<ModuleId>(() => parseModule(params.get("m"), []));
+  // Fuente única dock ≡ URL (HU #11507 / #11508).
+  const navigableIds = useMemo(
+    () =>
+      resolveNavigableModuleIds({
+        accessibleCodes,
+        isSuperAdmin: isSuperAdminUser,
+        isOtAdmin: isOtAdminUser,
+        canReadLogQx: canLogQx,
+        canReadIctLogs: canIctLogs,
+      }),
+    [accessibleCodes, isSuperAdminUser, isOtAdminUser, canLogQx, canIctLogs],
+  );
 
-  // Sync active module with URL so the browser back/forward and deep-links work.
+  // Clave estable: evita re-ejecutar el effect por nueva referencia de array.
+  const navigableKey = useMemo(() => navigableIds.join("\0"), [navigableIds]);
+  // Depender del string `m`, no del objeto params (referencia inestable en App Router).
+  const rawModule = params.get("m");
+
+  // Hold: null hasta !modulesLoading — evita flash del módulo denegado.
+  const [module, setModule] = useState<ModuleId | null>(null);
+  const lastDeniedRef = useRef<string | null>(null);
+  const replaceIssuedRef = useRef<string | null>(null);
+
+  // Sync / revalidar ?m= cuando cambian rawModule O navigableIds (post-RBAC).
+  // Importante: un solo replace por módulo denegado — sin loop de router.replace.
   useEffect(() => {
-    const fromUrl = parseModule(params.get("m"), validModules);
-    if (fromUrl !== module) {
+    if (modulesLoading) return;
+
+    const plan = planSpaModuleAccess(rawModule, navigableIds);
+
+    if (plan.denied) {
+      const deniedKey = rawModule ?? "";
+      if (lastDeniedRef.current !== deniedKey) {
+        lastDeniedRef.current = deniedKey;
+        showToast("No tienes acceso a ese módulo.", "error");
+      }
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setModule(fromUrl);
+      setModule((prev) => (prev === "dashboard" ? prev : "dashboard"));
+      if (
+        plan.shouldReplaceUrl &&
+        plan.replaceTo &&
+        replaceIssuedRef.current !== deniedKey
+      ) {
+        replaceIssuedRef.current = deniedKey;
+        router.replace(plan.replaceTo, { scroll: false });
+      }
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params]);
 
-  // Reportes2 HU-A — telemetría module_view: una vez por sesión y módulo al abrir
-  // un módulo del dock (fire-and-forget; requiere sesión para enviarse).
+    lastDeniedRef.current = null;
+    replaceIssuedRef.current = null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setModule((prev) => (prev === plan.module ? prev : plan.module));
+  }, [rawModule, navigableKey, navigableIds, modulesLoading, router, showToast]);
+
+  // Reportes2 HU-A — telemetría solo tras módulo autorizado (no durante hold).
   useEffect(() => {
-    if (authed) trackModuleView(module);
+    if (authed && module) trackModuleView(module);
   }, [module, authed]);
 
   // Track B — Trámites vive en /tramites (ruta propia): el dock y el CTA del
@@ -74,24 +123,46 @@ function HomeContent() {
 
   if (!hydrated || !authed) return null;
 
+  const moduleReady = !modulesLoading && module !== null;
+
   return (
     <Shell
-      active={module}
+      active={module ?? "dashboard"}
       onNav={handleNav}
       onLogout={logout}
       visibleModuleCodes={modulesLoading ? [] : accessibleCodes}
     >
-      {module === "dashboard"    && <Dashboard onNewTramite={() => handleNav("tramites")} />}
-      {module === "tramites"     && <Tramites />}
-      {module === "reportes"     && <Reportes />}
-      {module === "reportes-detallados" && <ReportesDetallados />}
-      {module === "validaciones" && <Validaciones />}
-      {module === "usuarios"     && <Usuarios />}
-      {module === "ayuda"        && <Ayuda />}
-      {module === "rbac"         && <RbacAdmin />}
-      {module === "auditoria"    && isSuperAdminUser && <Auditoria />}
-      {module === "log-qx"       && canLogQx && <LogQx initialInstanceId={params.get("instanceId") ?? undefined} />}
-      {module === "ict-logs"     && canIctLogs && <IctLogs />}
+      {modulesError ? (
+        <div
+          role="alert"
+          className="mx-6 mt-4 rounded-xl border px-4 py-3 text-xs font-medium"
+          style={{
+            borderColor: "#FF4E00",
+            background: "rgba(255, 78, 0, 0.08)",
+            color: "#162744",
+          }}
+        >
+          No se pudieron cargar los permisos de módulos. Acceso restringido hasta
+          reintentar.
+        </div>
+      ) : null}
+
+      {/* Hold / loading RBAC: no montar módulo pedido (sin flash). */}
+      {moduleReady && module === "dashboard" && (
+        <Dashboard onNewTramite={() => handleNav("tramites")} />
+      )}
+      {moduleReady && module === "tramites" && <Tramites />}
+      {moduleReady && module === "reportes" && <Reportes />}
+      {moduleReady && module === "reportes-detallados" && <ReportesDetallados />}
+      {moduleReady && module === "validaciones" && <Validaciones />}
+      {moduleReady && module === "usuarios" && <Usuarios />}
+      {moduleReady && module === "ayuda" && <Ayuda />}
+      {moduleReady && module === "rbac" && <RbacAdmin />}
+      {moduleReady && module === "auditoria" && isSuperAdminUser && <Auditoria />}
+      {moduleReady && module === "log-qx" && canLogQx && (
+        <LogQx initialInstanceId={params.get("instanceId") ?? undefined} />
+      )}
+      {moduleReady && module === "ict-logs" && canIctLogs && <IctLogs />}
     </Shell>
   );
 }
@@ -99,7 +170,9 @@ function HomeContent() {
 export default function HomePage() {
   return (
     <Suspense fallback={null}>
-      <HomeContent />
+      <ToastProvider>
+        <HomeContent />
+      </ToastProvider>
     </Suspense>
   );
 }

@@ -18,8 +18,14 @@ public static class CompanyQueryDateField
     /// <summary>Cuándo se entregó al organismo. Deja fuera lo que sigue en borrador.</summary>
     public const string Envio = "envio";
 
-    /// <summary>Cuándo quedó cerrado. Deja fuera lo que sigue abierto.</summary>
+    /// <summary>Cuándo quedó cerrado. Deja fuera lo que sigue abierto — incluye tanto aprobados como rechazados.</summary>
     public const string Cierre = "cierre";
+
+    /// <summary>
+    /// Cuándo pasó a Aprobado, específicamente. Distinto de <see cref="Cierre"/>: un trámite
+    /// rechazado también cierra, pero nunca tiene esta fecha.
+    /// </summary>
+    public const string Aprobacion = "aprobacion";
 
     /// <summary>Último movimiento de cualquier tipo.</summary>
     public const string Actualizacion = "actualizacion";
@@ -29,6 +35,7 @@ public static class CompanyQueryDateField
         new(Creacion, "Fecha de creación"),
         new(Envio, "Fecha de envío al organismo"),
         new(Cierre, "Fecha de cierre"),
+        new(Aprobacion, "Fecha de aprobación"),
         new(Actualizacion, "Última actualización"),
     ];
 }
@@ -92,6 +99,7 @@ public sealed record CompanyQueryRowDto(
     DateTimeOffset CreadoEn,
     DateTimeOffset? EnviadoEn,
     DateTimeOffset? CerradoEn,
+    DateTimeOffset? AprobadoEn,
     DateTimeOffset? ActualizadoEn,
     double? DiasHastaEnvio,
     double? DiasEnOrganismo,
