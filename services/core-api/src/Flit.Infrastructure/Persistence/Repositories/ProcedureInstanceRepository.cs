@@ -660,7 +660,9 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                     v.email,
                     v.provider,
                     v.score,
-                    v.capture_url
+                    v.capture_url,
+                    v.attempts,
+                    v.max_attempts
                 FROM tramites.procedure_instance_biometric_validations v
                 LEFT JOIN tramites.procedure_instances pi
                     ON pi.id = v.procedure_instance_id
@@ -752,6 +754,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                 provider,
                 score,
                 capture_url,
+                attempts,
+                max_attempts,
                 validation_count,
                 COUNT(*) OVER() AS total_persons
             FROM filtered
@@ -955,6 +959,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
                     Score = latest.Score,
                     CaptureUrl = latest.CaptureUrl,
                     ValidationCount = g.Count(),
+                    Attempts = latest.Attempts,
+                    MaxAttempts = latest.MaxAttempts,
                 };
             })
             .ToList();
@@ -1053,6 +1059,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         public string Provider { get; init; } = string.Empty;
         public int? Score { get; init; }
         public string? CaptureUrl { get; init; }
+        public int Attempts { get; init; }
+        public int MaxAttempts { get; init; }
         public int ValidationCount { get; init; }
         public int TotalPersons { get; init; }
 
@@ -1078,6 +1086,8 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
             Score = Score,
             CaptureUrl = CaptureUrl,
             ValidationCount = ValidationCount,
+            Attempts = Attempts,
+            MaxAttempts = MaxAttempts,
         };
     }
 

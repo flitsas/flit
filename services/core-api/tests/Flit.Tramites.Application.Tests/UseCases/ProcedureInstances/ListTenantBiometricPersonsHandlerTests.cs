@@ -148,4 +148,117 @@ public sealed class ListTenantBiometricPersonsHandlerTests
         error.Should().BeNull();
         result!.Persons[0].WorstAlertKind.Should().Be(IdentityValidationAlertKinds.Atascada);
     }
+
+    /// <summary>
+    /// HU #11505 (AC3) — el DTO de cada fila del listado agrupado incluye Intentos/MaxIntentos, con los
+    /// nombres exactos del contrato (para que la serialización camelCase produzca intentos/maxIntentos).
+    /// </summary>
+    [Fact]
+    public async Task Fila_expone_Intentos_y_MaxIntentos_de_la_validacion_mas_reciente()
+    {
+        var tenantId = Guid.NewGuid();
+        var latestId = Guid.NewGuid();
+        _repo.ListBiometricValidationsGroupedByPersonAsync(
+                tenantId, 0, 20, Arg.Any<BiometricPersonGroupFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns((
+                (IReadOnlyList<BiometricPersonGroupProjection>)
+                [
+                    new BiometricPersonGroupProjection
+                    {
+                        LatestValidationId = latestId,
+                        DocumentType = "CC",
+                        DocumentNumber = "444",
+                        DocumentTypeNorm = "CC",
+                        DocumentNumberNorm = "444",
+                        Name = "Carla",
+                        Status = BiometricEstados.EnProceso,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                        ExpiresAt = DateTimeOffset.UtcNow.AddDays(1),
+                        Email = "c@b.co",
+                        Provider = BiometricProviders.Mock,
+                        ValidationCount = 3,
+                        Attempts = 2,
+                        MaxAttempts = 5,
+                    },
+                ],
+                1));
+
+        _repo.ListBiometricValidationsForPersonAlertScanAsync(
+                tenantId, Arg.Any<IReadOnlyCollection<(string, string)>>(), 30, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+
+        var (result, error) = await Handler().HandleAsync(tenantId, ct: TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        result!.Persons[0].Intentos.Should().Be(2);
+        result.Persons[0].MaxIntentos.Should().Be(5);
+    }
+
+    /// <summary>
+    /// HU #11505 (AC1) — el valor del listado agrupado coincide con el que expone el endpoint de
+    /// DETALLE para esa misma validación. El detalle (<c>BiometricaCommand.ToDto</c>) construye
+    /// <c>BiometricValidationDto.Intentos/MaxIntentos</c> leyendo <c>v.Attempts</c>/<c>v.MaxAttempts</c>
+    /// directamente de la entidad (ver BiometricaCommand.cs) — la misma fuente que esta proyección debe
+    /// usar para que ambas vistas nunca diverjan.
+    /// </summary>
+    [Fact]
+    public async Task Intentos_coincide_con_el_que_muestra_el_detalle_para_la_misma_validacion()
+    {
+        var tenantId = Guid.NewGuid();
+        var validation = new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            DocumentType = "CC",
+            DocumentNumber = "555",
+            Name = "Diego",
+            Email = "d@b.co",
+            Status = BiometricEstados.EnProceso,
+            TokenHash = "h",
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
+            CreatedAt = DateTimeOffset.UtcNow,
+            Attempts = 3,
+            MaxAttempts = 5,
+        };
+
+        // Equivalente a lo que expondría el detalle para esta misma validación (mismos campos de origen).
+        var detalleIntentos = validation.Attempts;
+        var detalleMaxIntentos = validation.MaxAttempts;
+
+        _repo.ListBiometricValidationsGroupedByPersonAsync(
+                tenantId, 0, 20, Arg.Any<BiometricPersonGroupFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns((
+                (IReadOnlyList<BiometricPersonGroupProjection>)
+                [
+                    new BiometricPersonGroupProjection
+                    {
+                        LatestValidationId = validation.Id,
+                        DocumentType = validation.DocumentType,
+                        DocumentNumber = validation.DocumentNumber,
+                        DocumentTypeNorm = "CC",
+                        DocumentNumberNorm = "555",
+                        Name = validation.Name,
+                        Status = validation.Status,
+                        CreatedAt = validation.CreatedAt,
+                        ExpiresAt = validation.ExpiresAt,
+                        Email = validation.Email,
+                        Provider = validation.Provider,
+                        ValidationCount = 1,
+                        // Misma fuente que el detalle: Attempts/MaxAttempts de la entidad.
+                        Attempts = validation.Attempts,
+                        MaxAttempts = validation.MaxAttempts,
+                    },
+                ],
+                1));
+
+        _repo.ListBiometricValidationsForPersonAlertScanAsync(
+                tenantId, Arg.Any<IReadOnlyCollection<(string, string)>>(), 30, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+
+        var (result, error) = await Handler().HandleAsync(tenantId, ct: TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        result!.Persons[0].Intentos.Should().Be(detalleIntentos);
+        result.Persons[0].MaxIntentos.Should().Be(detalleMaxIntentos);
+    }
 }

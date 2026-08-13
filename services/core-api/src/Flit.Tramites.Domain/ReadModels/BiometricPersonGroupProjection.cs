@@ -27,4 +27,7 @@ public sealed class BiometricPersonGroupProjection
     /// <summary>URL de captura de la validación más reciente (null si aún no hay enlace).</summary>
     public string? CaptureUrl { get; init; }
     public int ValidationCount { get; init; }
+    /// <summary>Intentos consumidos y máximo permitido de la validación MÁS RECIENTE (HU #11505 AC3).</summary>
+    public int Attempts { get; init; }
+    public int MaxAttempts { get; init; }
 }
