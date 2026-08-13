@@ -33,22 +33,30 @@ function StepMarker({
       </span>
     );
   }
+  // Pendiente y bloqueado comparten la forma de la propuesta: círculo blanco con borde. El candado
+  // distingue el bloqueado sin recurrir a un relleno gris que rompe la línea de círculos.
   if (status === 'locked') {
     return (
       <span
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold"
-        style={{ background: '#EEF1F5', color: '#9AA5B1' }}
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-xs font-bold dark:bg-[#0B0F14]"
+        style={{ border: '2px solid #DFE5ED', color: '#9AA5B1' }}
         aria-hidden="true"
       >
         <Lock className="h-3.5 w-3.5" />
       </span>
     );
   }
+  // Activo: círculo blanco con borde y número en azul, más un halo. El relleno azul sólido competía
+  // con el verde de los completos y hacía que el paso en curso pareciera otro estado terminado.
   if (active) {
     return (
       <span
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold"
-        style={{ background: '#557EFF', color: '#fff' }}
+        className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-xs font-bold dark:bg-[#0B0F14]"
+        style={{
+          border: '2px solid #557EFF',
+          color: '#557EFF',
+          boxShadow: '0 0 0 4px rgba(85,126,255,0.15)',
+        }}
         aria-hidden="true"
       >
         {index + 1}
@@ -112,8 +120,11 @@ export function WizardStepTracker({
         {displaySteps.map((s, i) => {
           const isActive = i === displayActive;
           const clickable = s.sourceIndexes.some((idx) => canNavigateToStep(steps, idx, viewOnly));
-          const prevComplete = i > 0 && displaySteps[i - 1]?.status === 'complete';
-          const lineAfterGreen = s.status === 'complete';
+          // Las líneas marcan RECORRIDO, no completitud: en la propuesta van en azul hasta el paso
+          // en curso. Coloreadas por `status === 'complete'` un paso saltado dejaba el hilo gris en
+          // medio del recorrido y parecía que el asistente se había roto.
+          const prevComplete = i <= displayActive;
+          const lineAfterGreen = i < displayActive;
           // Nombre en la nomenclatura del diseño; cae al del servidor si la clave no está mapeada.
           const label = stepLabelCopy(s.key, s.label, modalidad);
           return (
@@ -125,14 +136,14 @@ export function WizardStepTracker({
               {i > 0 && (
                 <span
                   className="pointer-events-none absolute left-0 right-1/2 top-4 h-0.5 -translate-y-1/2"
-                  style={{ background: prevComplete ? '#8CC63F' : '#DFE5ED' }}
+                  style={{ background: prevComplete ? '#557EFF' : '#DFE5ED' }}
                   aria-hidden="true"
                 />
               )}
               {i < displaySteps.length - 1 && (
                 <span
                   className="pointer-events-none absolute left-1/2 right-0 top-4 h-0.5 -translate-y-1/2"
-                  style={{ background: lineAfterGreen ? '#8CC63F' : '#DFE5ED' }}
+                  style={{ background: lineAfterGreen ? '#557EFF' : '#DFE5ED' }}
                   aria-hidden="true"
                 />
               )}

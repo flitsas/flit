@@ -84,6 +84,7 @@ import type {
 import { WIZARD_CARD, WIZARD_LABEL } from './wizard-field-styles';
 import { WizardAccordion } from './WizardAccordion';
 import { WizardHelpRail } from './WizardHelpRail';
+import { estadoLabel } from '@/lib/tramites/estados';
 import { WizardPair, WizardPill } from './wizard-atoms';
 
 /**
@@ -557,17 +558,25 @@ export function TramiteWizard(props: Props) {
   const identityApproved = isIdentityApproved(steps, modalidad);
   const canRadicar = canSubmit && identityApproved;
 
-  // Header: tarjeta blanca FLIT — "Nuevo Trámite · {modalidad}" + referencia.
+  // Header en la forma de la propuesta: el título ES el trámite, con una frase que dice qué hace, y
+  // la identidad del expediente (referencia, tipo, identificador, estado) baja a su propia franja.
   const modalidadLabel =
     modalidad === 'traspaso' ? 'Traspaso Estándar' : 'Matrícula Inicial';
-  const displayTitle = editLocked
-    ? `Trámite · ${modalidadLabel}`
-    : `Nuevo Trámite · ${modalidadLabel}`;
-  const refLabel =
-    referenceNumber ?? state.detail?.referenceNumber ?? null;
-  const displaySubtitle = refLabel
-    ? `${refLabel} · Gestión integral de trámites`
-    : 'Gestión integral de trámites';
+  const displayTitle = modalidadLabel;
+  const displaySubtitle =
+    modalidad === 'traspaso'
+      ? 'Traspasa la propiedad del vehículo ante el organismo de tránsito.'
+      : 'Radica el registro inicial del vehículo ante el organismo de tránsito.';
+  const refLabel = referenceNumber ?? state.detail?.referenceNumber ?? null;
+  // Identificador del expediente: el VIN manda en matrícula y la placa en traspaso, que es el dato
+  // por el que se consultó el vehículo en cada modalidad.
+  const fvOf = (key: string) =>
+    state.detail?.fieldValues?.find((f) => f.fieldKey === key)?.valueText?.trim() || null;
+  const identificador =
+    modalidad === 'traspaso'
+      ? (fvOf('plate') ?? fvOf('vin'))
+      : (fvOf('vin') ?? fvOf('plate'));
+  const identificadorLabel = modalidad === 'traspaso' ? 'PLACA' : 'VIN';
 
   // AC1 (HU #10883) — autosave del paso: al AVANZAR (no al retroceder) persiste la `key` del paso
   // destino vía PATCH /instances/{id}/current-step (HU #10879), para retomar ahí al reabrir el
@@ -1128,6 +1137,40 @@ export function TramiteWizard(props: Props) {
             coalesceActores={modalidad === 'traspaso'}
             modalidad={modalidad}
           />
+        )}
+
+        {/* Franja de identidad del expediente (propuesta): referencia, tipo, identificador y
+            estado, centrada bajo los pasos. Solo aparece cuando hay algo que identificar — antes
+            de crear el trámite no hay referencia ni vehículo consultado. */}
+        {(refLabel || identificador) && (
+          <div
+            className="mx-auto flex w-fit max-w-full flex-wrap items-center justify-center gap-x-6 gap-y-1 rounded-xl px-4 py-2.5 text-white"
+            style={{ background: '#557EFF' }}
+          >
+            {refLabel && (
+              <p className="text-xs">
+                <span className="font-medium uppercase text-white/80">ID trámite: </span>
+                <span className="font-semibold">{refLabel}</span>
+              </p>
+            )}
+            <p className="text-xs">
+              <span className="font-medium uppercase text-white/80">Tipo: </span>
+              <span className="font-semibold">{modalidadLabel}</span>
+            </p>
+            {identificador && (
+              <p className="text-xs">
+                <span className="font-medium uppercase text-white/80">Identificador: </span>
+                <span className="font-semibold">
+                  {identificadorLabel}: {identificador}
+                </span>
+              </p>
+            )}
+            {estadoTramite && (
+              <span className="rounded-full border border-white/30 bg-white/15 px-2.5 py-0.5 text-xs font-semibold">
+                {estadoLabel(estadoTramite)}
+              </span>
+            )}
+          </div>
         )}
       </div>
 
