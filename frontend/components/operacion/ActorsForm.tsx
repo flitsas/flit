@@ -40,6 +40,7 @@ import type {
   RuntPersonLookupResult,
 } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT } from './wizard-field-styles';
+import { WizardSegmented } from './wizard-atoms';
 
 export type ActorsModalidad = 'matricula_inicial' | 'traspaso';
 
@@ -1267,36 +1268,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const current = actors[index].personType ?? 'natural';
     return (
       <div>
-        <span className="text-xs font-semibold mb-1.5 block">Tipo de persona</span>
-        <div
-          className="inline-flex rounded-xl border p-0.5 gap-0.5"
-          role="group"
-          aria-label="Tipo de persona"
-        >
-          {PERSON_TYPE_OPTIONS.map((o) => {
-            const active = current === o.value;
-            return (
-              <button
-                key={o.value}
-                type="button"
-                onClick={() => {
-                  // Jurídica ⇒ documento NIT (RUES). Volver a natural desde NIT ⇒ CC por defecto.
-                  const patch: Partial<ProcedureActor> = { personType: o.value };
-                  if (o.value === 'juridical') patch.tipoDocumento = 'NIT';
-                  else if (actors[index].tipoDocumento === 'NIT') patch.tipoDocumento = 'CC';
-                  updateActor(index, patch);
-                }}
-                aria-pressed={active}
-                className={`px-3 py-1.5 rounded-[10px] text-xs font-semibold transition-colors ${
-                  active ? 'text-white' : 'opacity-70'
-                }`}
-                style={active ? { background: GRADIENT } : undefined}
-              >
-                {o.label}
-              </button>
-            );
-          })}
-        </div>
+        <WizardSegmented
+          label="Tipo de persona"
+          value={current}
+          options={PERSON_TYPE_OPTIONS}
+          onChange={(value) => {
+            // Jurídica ⇒ documento NIT (RUES). Volver a natural desde NIT ⇒ CC por defecto.
+            const patch: Partial<ProcedureActor> = { personType: value };
+            if (value === 'juridical') patch.tipoDocumento = 'NIT';
+            else if (actors[index].tipoDocumento === 'NIT') patch.tipoDocumento = 'CC';
+            updateActor(index, patch);
+          }}
+        />
         {current === 'natural' && (
           <p className="text-xs mt-1 opacity-60">
             La cédula se toma de la validación de identidad; no se carga manualmente.

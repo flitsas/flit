@@ -465,27 +465,48 @@ export function DocumentSlot({
 
   return (
     <li
-      className="flex h-full flex-col rounded-2xl border bg-white p-3 dark:bg-[#0B0F14]"
+      className={
+        'flex h-full flex-col rounded-2xl bg-white p-4 transition dark:bg-[#0B0F14] ' +
+        // La caja punteada del diseño es la señal de "aquí falta algo": se reserva para el slot
+        // vacío y desaparece en cuanto hay archivo, que pasa a borde sólido de tarjeta normal.
+        (done
+          ? 'border shadow-sm hover:shadow-md'
+          : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#F0F5FF]')
+      }
       style={{
         borderColor: done
           ? 'rgba(140,198,63,0.45)'
           : item.obligatorio
             ? 'rgba(255,78,0,0.35)'
             : '#DFE5ED',
-        boxShadow: item.obligatorio && !done ? 'inset 3px 0 0 #FF4E00' : undefined,
       }}
     >
-      <div className="flex min-w-0 items-start gap-2.5">
-        <FileText
-          className="mt-0.5 h-4 w-4 shrink-0"
-          style={{ color: done ? '#8CC63F' : '#9AA5B1' }}
-          aria-hidden="true"
-        />
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-bold leading-snug">{item.label}</p>
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <FileText
+            className="mt-0.5 h-4 w-4 shrink-0"
+            style={{ color: done ? '#8CC63F' : '#9AA5B1' }}
+            aria-hidden="true"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold leading-snug">{item.label}</p>
+            <p className="mt-1 text-xs opacity-55">
+              {ALLOWED_LABEL}
+              {item.maxSizeBytes ? ` · hasta ${formatSize(item.maxSizeBytes)}` : ''}
+            </p>
+            {attachment && (
+              <p className="mt-1 truncate text-xs opacity-70">
+                {attachment.filename} · {formatSize(attachment.sizeBytes)}
+              </p>
+            )}
+          </div>
+        </div>
+        {/* Insignias arriba a la derecha, como en la propuesta: el estado del documento se lee
+            antes que su nombre cuando se barre la grilla en diagonal. */}
+        <div className="flex shrink-0 flex-col items-end gap-1">
           {item.obligatorio ? (
             <span
-              className="mt-0.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide"
+              className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide"
               style={{
                 background: 'rgba(255,78,0,0.14)',
                 color: '#FF4E00',
@@ -496,18 +517,31 @@ export function DocumentSlot({
               Obligatorio
             </span>
           ) : (
-            <p className="mt-0.5 text-xs font-medium uppercase tracking-wide opacity-50">
+            <span className="whitespace-nowrap text-xs font-medium uppercase tracking-wide opacity-50">
               Opcional
-            </p>
+            </span>
           )}
-          {attachment && (
-            <p className="mt-1 truncate text-xs opacity-70">
-              {attachment.filename} · {formatSize(attachment.sizeBytes)}
-            </p>
-          )}
+          {ocr ? <OcrStatusPanel tipo={tipo} ocr={ocr} /> : null}
         </div>
-        {ocr ? <OcrStatusPanel tipo={tipo} ocr={ocr} /> : null}
       </div>
+
+      {/* Barra de avance del diseño: llena y verde cuando el documento está resuelto, en pulso
+          azul mientras el OCR lo analiza. Es decorativa — el estado ya va escrito en la píldora. */}
+      {(done || analyzing) && (
+        <div
+          className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
+          style={{ background: '#F1F5F9' }}
+          aria-hidden="true"
+        >
+          <div
+            className={`h-full rounded-full ${analyzing ? 'animate-pulse' : ''}`}
+            style={{
+              width: analyzing ? '60%' : '100%',
+              background: analyzing ? '#557EFF' : '#8CC63F',
+            }}
+          />
+        </div>
+      )}
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
         <span
@@ -550,12 +584,14 @@ export function DocumentSlot({
               className="hidden"
               aria-label={`Subir ${item.label}`}
             />
+            {/* CTA con borde, no enlace: en la grilla de la propuesta es la única acción primaria
+                de la tarjeta y tiene que competir con la insignia de obligatorio. */}
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
               disabled={busy}
-              className="text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-              style={{ color: '#557EFF' }}
+              className="rounded-lg border bg-white px-3 py-1.5 text-xs font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-transparent"
+              style={{ borderColor: '#557EFF', color: '#557EFF' }}
             >
               {analyzing
                 ? 'Analizando…'
