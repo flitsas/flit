@@ -2596,12 +2596,10 @@ function ConsultaStep({
       onClick={() => void handleRun()}
       // Sin los datos que se van a consultar el botón no se habilita: pulsarlo solo devolvía un
       // error que el gestor ya podía ver por sí mismo mirando el campo vacío.
-      // La secretaría vuelve a ser requisito (HU #11199 AC2) porque el backend la exige para la
-      // consulta en matrícula; sin ella `/preflight-preview` responde `transit_office_required` y
-      // el gestor solo veía "No se pudo completar la solicitud".
-      disabled={
-        loading || familyBlocked || !identificadorCompleto || (eligeSecretaria && !transitOfficeId)
-      }
+      // La secretaría ya NO gatea la consulta (antes sí, HU #11199 AC2): se elige después, sobre un
+      // vehículo ya identificado. El requisito sigue vivo donde importa —la creación—, tanto en el
+      // backend como en el gate de "Continuar y guardar".
+      disabled={loading || familyBlocked || !identificadorCompleto}
       className={`${WIZARD_BTN} flex shrink-0 items-center justify-center gap-2 text-white focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50`}
       style={{ background: '#557EFF' }}
       aria-label={familyBlocked ? 'Consulta no permitida para esta compañía' : 'Consultar RUNT'}
@@ -2822,11 +2820,11 @@ function ConsultaStep({
       {/* 3ª tarjeta: Organismo de Tránsito y Radicación (HU #11199 — solo matrícula y solo mientras
           el trámite no existe). La propuesta le da tarjeta propia después de la consulta: es una
           decisión de radicación, no un parámetro más del vehículo. */}
-      {/* El diseño pide el organismo DESPUÉS de consultar, pero el backend no lo permite: en
-          matrícula `/preflight-preview` corta con `transit_office_required` si no lo recibe
-          (PreflightPreviewCommand.cs:182). Hasta que ese endpoint acepte consultar sin organismo,
-          la tarjeta tiene que ir antes; con el orden invertido la consulta fallaba siempre. */}
-      {eligeSecretaria && (
+      {/* Tras la consulta: dónde se radica es una decisión sobre un vehículo YA identificado, y ese
+          es el orden del diseño. `/preflight-preview` acepta consultar sin organismo; el requisito
+          vive en la creación (`CreateFromConsultaCommand`) y, en pantalla, en el gate de
+          "Continuar y guardar". */}
+      {eligeSecretaria && hasVehicleData && (
         <div className={WIZARD_CARD}>
           <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
             Organismo de Tránsito y Radicación
@@ -2841,10 +2839,10 @@ function ConsultaStep({
               offices={secretarias}
               valueId={transitOfficeId}
               onChange={(id) => {
-                // Cambiar de organismo invalida la consulta: el preview se corre CONTRA él (reglas
-                // y bloqueos del OT), así que un resultado de otro organismo no sirve.
+                // NO invalida la consulta: se elige después de consultar y la consulta no se corrió
+                // contra ningún organismo. Borrarla sería deshacer lo que el gestor acaba de hacer;
+                // el id viaja a la creación desde aquí y allí se valida.
                 setTransitOfficeId(id);
-                invalidatePreview();
                 setError(null);
               }}
               disabled={readOnly}

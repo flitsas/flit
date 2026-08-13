@@ -117,10 +117,12 @@ async function elegirSecretaria(user: ReturnType<typeof userEvent.setup>) {
 
 /** Deja el paso 1 de matrícula con la consulta RUNT ya resuelta en verde (secretaría + VIN). */
 async function consultarVehiculo(user: ReturnType<typeof userEvent.setup>) {
-  await elegirSecretaria(user);
   await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
   await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
   await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
+  // El organismo se elige DESPUES de consultar: su tarjeta solo aparece con el vehiculo ya
+  // identificado, y es requisito de la creacion, no de la consulta.
+  await elegirSecretaria(user);
 }
 
 beforeEach(() => {

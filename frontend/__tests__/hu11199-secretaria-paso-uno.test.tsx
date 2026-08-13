@@ -157,21 +157,21 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     expect(mocks.runPreflightPreview).not.toHaveBeenCalled();
   });
 
-  it('AC2: al elegir la secretaría la consulta se habilita y lleva su id', async () => {
+  it('la consulta corre sin secretaría: el organismo se elige después', async () => {
     const user = userEvent.setup();
     renderNuevo();
 
-    await elegirSecretaria(user);
-    await user.type(screen.getByLabelText('Número VIN'), VIN_VALIDO);
+    // El organismo ya no gatea la consulta: se pregunta dónde radicar sobre un vehículo YA
+    // identificado, no antes de saber de cuál se habla.
+    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
 
     const boton = screen.getByRole('button', { name: 'Consultar RUNT' });
     expect(boton).toBeEnabled();
     await user.click(boton);
 
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(1));
-    expect(mocks.runPreflightPreview).toHaveBeenCalledWith(
-      expect.objectContaining({ vin: VIN_VALIDO, transitOfficeId: SECRETARIA_ID }),
-    );
+    // La tarjeta de radicación aparece con el resultado, no antes.
+    await elegirSecretaria(user);
   });
 
   it('AC3: se advierte que solo hay organismos activos y qué hacer si falta el buscado', async () => {
@@ -191,8 +191,7 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     mocks.runPreflightPreview.mockRejectedValue(new Error('422'));
     renderNuevo();
 
-    await elegirSecretaria(user);
-    await user.type(screen.getByLabelText('Número VIN'), VIN_VALIDO);
+    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
 
     expect(await screen.findByText(/No puedes radicar en este organismo de tránsito/)).toBeInTheDocument();
@@ -204,10 +203,10 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     const user = userEvent.setup();
     renderNuevo();
 
-    await elegirSecretaria(user);
-    await user.type(screen.getByLabelText('Número VIN'), VIN_VALIDO);
+    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
+    await elegirSecretaria(user);
     await elegirTipoServicio(user);
 
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
@@ -219,22 +218,24 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     );
   });
 
-  it('cambiar de secretaría invalida la consulta anterior', async () => {
+  it('cambiar de secretaría NO invalida la consulta ya hecha', async () => {
     const user = userEvent.setup();
     renderNuevo();
 
-    await elegirSecretaria(user);
-    await user.type(screen.getByLabelText('Número VIN'), VIN_VALIDO);
+    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
-    await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(1));
+    await elegirSecretaria(user);
     await elegirTipoServicio(user);
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
 
-    // El trámite se crea con la secretaría que esté en pantalla: no puede quedar un preview de otra.
+    // La consulta ya no se corre contra el organismo, así que corregirlo no la invalida: borrarla
+    // obligaría a repetir el RUNT por cambiar un dato que no intervino en él.
     await user.click(screen.getByRole('combobox', { name: /secretaría de tránsito/i }));
     await user.click(await screen.findByRole('option', { name: /Envigado/ }));
 
-    expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
+    expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(1);
   });
 
   it('AC5: en traspaso no se pide la secretaría y el flujo es el actual', async () => {

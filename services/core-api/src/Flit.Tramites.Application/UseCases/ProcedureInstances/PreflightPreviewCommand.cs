@@ -176,12 +176,18 @@ public sealed class RunPreflightPreviewHandler(
         // no se gasta la consulta al RUNT. Se confirma contra los grants y el catálogo (AC3) porque la
         // lista pudo cargarse antes de que un administrador desactivara el organismo o revocara el grant.
         // En traspaso no aplica: allí el organismo lo impone el RUNT y se valida después (HU #11200).
+        // El organismo es OPCIONAL en la consulta: el paso 1 pregunta dónde se radica DESPUÉS de
+        // identificar el vehículo, y exigirlo aquí obligaba a elegirlo a ciegas. Cuando llega se
+        // valida igual que antes (grants + catálogo + operabilidad, AC3); cuando no, las políticas
+        // de abajo caen a los valores del tenant — exactamente lo que ya hacía traspaso, que nunca
+        // trae organismo en este punto.
+        //
+        // El requisito NO desaparece: `CreateFromConsultaCommand` sigue cortando con
+        // `transit_office_required` al crear el trámite, que es cuando el organismo tiene que
+        // quedar guardado. Aquí solo se consulta el RUNT y no se persiste nada.
         ResolvedTransitOffice? secretaria = null;
-        if (esMatricula)
+        if (esMatricula && request.TransitOfficeId is { } elegido && elegido != Guid.Empty)
         {
-            if (request.TransitOfficeId is not { } elegido || elegido == Guid.Empty)
-                return (null, TransitOfficeSelectionPolicy.RequiredErrorCode, null, null);
-
             secretaria = await transitOfficeResolver
                 .ResolveEnabledByIdAsync(request.TenantId, elegido, ct)
                 .ConfigureAwait(false);

@@ -91,12 +91,19 @@ const SECRETARIAS = [
   { id: SECRETARIA_ID, code: '05001000', name: 'Secretaría de Movilidad de Medellín', cityCode: '05001' },
 ];
 
-/** Deja el paso 1 listo para consultar: secretaría elegida y VIN escrito. */
+/** Deja el paso 1 listo para consultar: VIN escrito. */
 async function prepararConsulta(user: ReturnType<typeof userEvent.setup>) {
-  // TransitOfficeSearchPicker: combobox en línea — enfocar el campo despliega la lista.
+  await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+}
+
+/**
+ * Elige el organismo de radicación. Va DESPUÉS de consultar: la tarjeta "Organismo de Tránsito y
+ * Radicación" solo aparece con el vehículo ya identificado, y el organismo se exige al crear el
+ * trámite, no al consultarlo.
+ */
+async function elegirSecretaria(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('combobox', { name: /secretaría de tránsito/i }));
   await user.click(await screen.findByRole('option', { name: /Medellín/ }));
-  await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
 }
 
 /** Tipo de servicio (sección 18 del FUR): requisito independiente de la secretaría/VIN. */
@@ -200,6 +207,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await prepararConsulta(user);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
+    await elegirSecretaria(user);
 
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
     // Es bloqueo DURO: no se ofrece el escape de "asumo el riesgo".
@@ -233,6 +241,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await prepararConsulta(user);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
+    await elegirSecretaria(user);
 
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
 
@@ -255,6 +264,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await prepararConsulta(user);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
+    await elegirSecretaria(user);
     await elegirTipoServicio(user);
 
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
@@ -283,6 +293,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await prepararConsulta(user);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
+    await elegirSecretaria(user);
 
     // Las transformaciones viven en un acordeón plegado (la mayoría de trámites no declara
     // ninguna): hay que abrirlo antes de marcar la carrocería.
@@ -323,6 +334,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await prepararConsulta(user);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
+    await elegirSecretaria(user);
     await elegirTipoServicio(user);
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Continuar/ })).not.toBeDisabled(),
@@ -342,6 +354,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await prepararConsulta(user);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
+    await elegirSecretaria(user);
     await elegirTipoServicio(user);
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
 
