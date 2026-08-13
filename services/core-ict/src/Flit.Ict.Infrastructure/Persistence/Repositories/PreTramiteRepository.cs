@@ -1,7 +1,9 @@
 using System.Globalization;
+using Flit.Ict.Application.Register;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Ict.Infrastructure.Persistence.Repositories;
 
@@ -11,8 +13,12 @@ namespace Flit.Ict.Infrastructure.Persistence.Repositories;
 /// tiene EnableRetryOnFailure, la transacción va DENTRO de la execution strategy de EF (requisito para
 /// combinar reintentos + transacciones iniciadas por el usuario).
 /// </summary>
-public sealed class PreTramiteRepository(IctDbContext db) : IPreTramiteRepository
+public sealed class PreTramiteRepository(IctDbContext db, IOptions<IctIngestOptions> ingestOptions)
+    : IPreTramiteRepository
 {
+    // Lever B (default OFF): relajar la durabilidad del commit SOLO en el camino de ingesta del registro.
+    private readonly bool _relaxRegisterDurability = ingestOptions.Value.RelaxRegisterCommitDurability;
+
     public Task<Guid> AddAsync(ExternalIntegrationMaster master, Guid tenantId, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(master);
@@ -36,7 +42,7 @@ public sealed class PreTramiteRepository(IctDbContext db) : IPreTramiteRepositor
                                        'traffic_secretary_code', {master.TrafficSecretaryCode}))
                 """, ct);
             return master.Id;
-        }, ct);
+        }, ct, relaxedDurability: _relaxRegisterDurability);
     }
 
     public Task<ExternalIntegrationMaster?> GetAsync(Guid id, Guid tenantId, CancellationToken ct = default) =>
@@ -166,7 +172,8 @@ public sealed class PreTramiteRepository(IctDbContext db) : IPreTramiteRepositor
         }, ct);
 
     /// <summary>Ejecuta <paramref name="work"/> en una transacción con el GUC de tenant fijado, dentro de la execution strategy.</summary>
-    private async Task<T> InTenantTransactionAsync<T>(Guid tenantId, Func<Task<T>> work, CancellationToken ct)
+    private async Task<T> InTenantTransactionAsync<T>(
+        Guid tenantId, Func<Task<T>> work, CancellationToken ct, bool relaxedDurability = false)
     {
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
@@ -174,6 +181,16 @@ public sealed class PreTramiteRepository(IctDbContext db) : IPreTramiteRepositor
             await using var tx = await db.Database.BeginTransactionAsync(ct);
             await db.Database.ExecuteSqlInterpolatedAsync(
                 $"SELECT set_config('app.current_tenant_id', {tenantId.ToString()}, true)", ct);
+            // Lever B (opcional, default OFF vía IctIngestOptions.RelaxRegisterCommitDurability): en el camino
+            // de INGESTA del registro se relaja la durabilidad del commit (synchronous_commit LOCAL a ESTA
+            // transacción) para no esperar el fsync del WAL en cada fila (el registro hace 1 commit por fila).
+            // El pre-trámite es staging REPROCESABLE: perder los últimos ms de commits ante un crash del
+            // servidor es tolerable (el gestor reintenta/reconcilia). SET LOCAL ⇒ solo esta tx, se revierte al
+            // commit (no contamina la conexión pooled). NO se aplica a reads ni a abort/edit/timeline.
+            if (relaxedDurability)
+            {
+                await db.Database.ExecuteSqlRawAsync("SET LOCAL synchronous_commit = off", ct);
+            }
             var result = await work();
             await tx.CommitAsync(ct);
             return result;
