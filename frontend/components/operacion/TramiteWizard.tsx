@@ -83,7 +83,7 @@ import type {
   WizardModalidad,
   WizardStep,
 } from '@/lib/api/types/procedure-runtime';
-import { WIZARD_CARD, WIZARD_LABEL, WIZARD_SELECT } from './wizard-field-styles';
+import { WIZARD_CARD, WIZARD_LABEL } from './wizard-field-styles';
 import { WizardAccordion } from './WizardAccordion';
 import { WizardPair, WizardPill } from './wizard-atoms';
 
@@ -1476,12 +1476,37 @@ export function TramiteWizard(props: Props) {
 const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS'];
 
 /**
- * Trámites principales que ofrece el selector del paso 1. Mismo par que la pantalla de entrada
- * (`/tramites/nuevo`): son las dos modalidades que el asistente sabe recorrer.
+ * Trámites principales del selector del paso 1, en el orden y con el copy de la propuesta.
+ *
+ * "Otros Trámites" viaja con `disponible: false`: la propuesta lo contempla como tercera familia
+ * (modificaciones y novedades) pero el asistente todavía no la sabe recorrer —no hay modalidad ni
+ * pasos para ella—. Se pinta apagada en vez de omitirla porque el gestor la busca; ofrecerla
+ * seleccionable sería un camino sin salida.
  */
-const MODALIDAD_OPCIONES: { id: WizardModalidad; label: string }[] = [
-  { id: 'matricula_inicial', label: 'Matrícula inicial' },
-  { id: 'traspaso', label: 'Traspaso estándar' },
+const MODALIDAD_OPCIONES: {
+  id: string;
+  label: string;
+  descripcion: string;
+  disponible: boolean;
+}[] = [
+  {
+    id: 'matricula_inicial',
+    label: 'Matrícula Inicial',
+    descripcion: 'Vehículo nuevo sin placa asignada',
+    disponible: true,
+  },
+  {
+    id: 'traspaso',
+    label: 'Traspaso',
+    descripcion: 'Cambio de propietario del vehículo',
+    disponible: true,
+  },
+  {
+    id: 'otros',
+    label: 'Otros Trámites',
+    descripcion: 'Modificaciones y novedades',
+    disponible: false,
+  },
 ];
 
 /**
@@ -2473,38 +2498,78 @@ function ConsultaStep({
 
   return (
     <div className="space-y-3">
-      {/* Tarjeta de consulta — la retícula de 12 columnas de la propuesta: el trámite principal, el
-          identificador del vehículo y el disparo de la consulta en una sola línea. Antes cada dato
-          traía su propia tarjeta y el paso abría con tres bloques apilados antes de llegar a lo
-          único que el gestor viene a hacer aquí, que es consultar. */}
-      <div className={`${WIZARD_CARD} grid grid-cols-1 items-end gap-3 lg:grid-cols-12`}>
-        {/* El tipo lo fija la ruta, pero la propuesta lo muestra DENTRO del paso 1 y así queda a la
-            vista de qué trámite se está hablando. Mientras el trámite no existe (creación diferida)
-            cambiarlo es solo navegar al otro tipo —no hay nada creado que migrar—; con el trámite
-            ya creado se muestra fijo, porque la modalidad ya gobierna sus pasos y documentos. */}
-        <div className="lg:col-span-3">
-          <label className="block min-w-0">
-            <span className={WIZARD_LABEL}>Trámite principal *</span>
-            <select
-              value={modalidadVigente}
-              disabled={!deferred || readOnly}
-              onChange={(e) => router.push(`/tramites/nuevo/${e.target.value}`)}
-              className={`mt-1 ${WIZARD_SELECT}`}
-              aria-label="Trámite principal"
-            >
-              {MODALIDAD_OPCIONES.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+      {/* 1ª tarjeta: Configuración del Trámite. La propuesta elige el tipo con tarjetas, no con un
+          desplegable: son tres opciones fijas, cada una con una frase que dice qué resuelve, y así
+          se leen de un vistazo en vez de tener que abrir una lista. Operable solo mientras el
+          trámite no existe (creación diferida): ahí cambiar de tipo es navegar al otro, no hay nada
+          creado que migrar. Con el trámite ya creado la modalidad gobierna sus pasos y documentos,
+          así que queda fija y las demás tarjetas se apagan. */}
+      <div className={WIZARD_CARD}>
+        <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
+          Configuración del Trámite
+        </h3>
+        <p className="mt-1 text-xs opacity-70">
+          Define el trámite principal que se radicará con este expediente.
+        </p>
+        <fieldset className="mt-4">
+          <legend className="text-xs font-semibold">Tipo de Trámite Principal</legend>
+          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {MODALIDAD_OPCIONES.map((o) => {
+              const activa = o.id === modalidadVigente;
+              // `disponible: false` (Otros Trámites) es una familia que la propuesta contempla y el
+              // sistema todavía no radica. Se muestra —está en el diseño y el gestor pregunta por
+              // ella— pero apagada y anunciada como tal, en vez de ofrecer un camino sin salida.
+              const seleccionable = o.disponible && deferred && !readOnly && !activa;
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => router.push(`/tramites/nuevo/${o.id}`)}
+                  disabled={!seleccionable}
+                  aria-current={activa ? 'step' : undefined}
+                  className="w-full rounded-xl border p-3.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed enabled:hover:border-[#557EFF]"
+                  style={
+                    activa
+                      ? {
+                          borderColor: '#557EFF',
+                          background: '#EFF6FF',
+                          boxShadow: '0 0 0 3px rgba(85,126,255,0.15)',
+                        }
+                      : { opacity: o.disponible ? 1 : 0.55 }
+                  }
+                >
+                  <p
+                    className="text-xs font-semibold"
+                    style={{ color: activa ? '#557EFF' : '#162744' }}
+                  >
+                    {o.label}
+                  </p>
+                  <p className="mt-0.5 text-xs opacity-70">
+                    {o.disponible ? o.descripcion : `${o.descripcion} · aún no disponible`}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+      </div>
 
-        {/* HU #11199 — secretaría ANTES de consultar VIN (matrícula). Guía de documentos: enlace
-            discreto → panel lateral (no ocupa el layout del paso 1). */}
+      {/* 2ª tarjeta: Consulta del Vehículo. En la propuesta la consulta tiene su propia tarjeta,
+          con el identificador y el CTA en una línea. Los campos son los que pide cada modalidad:
+          el VIN en matrícula; placa, tipo y número de documento del propietario en traspaso. */}
+      <div className={WIZARD_CARD}>
+        <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
+          Consulta del Vehículo
+        </h3>
+        <p className="mt-1 text-xs opacity-70">
+          Validamos {isVin ? 'el VIN' : 'la placa'} en el RUNT antes de configurar el trámite.
+        </p>
+
+        {/* HU #11199 — secretaría ANTES de consultar VIN (matrícula): la consulta no se habilita
+            sin ella, así que va arriba del identificador. Guía de documentos: enlace discreto →
+            panel lateral (no ocupa el layout del paso 1). */}
         {eligeSecretaria && (
-          <div className="lg:col-span-4">
+          <div className="mt-4 max-w-xl">
             <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
               <span className={WIZARD_LABEL}>Secretaría de tránsito *</span>
               <ProcedureDocsPreviewInformativo
@@ -2523,125 +2588,122 @@ function ConsultaStep({
               disabled={readOnly}
               describedBy="consulta-secretaria-aviso"
             />
-          </div>
-        )}
-
-        {isVin ? (
-          <div className={eligeSecretaria ? 'lg:col-span-3' : 'lg:col-span-7'}>
-            <label htmlFor="consulta-vin" className={WIZARD_LABEL}>
-              Número VIN
-            </label>
-            <input
-              id="consulta-vin"
-              type="text"
-              value={vin}
-              onChange={(e) => {
-                setVin(sanitizeVin(e.target.value));
-                invalidatePreview();
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void handleRun();
-              }}
-              disabled={readOnly}
-              className={`mt-1 ${inputClass} disabled:opacity-60`}
-              placeholder="Número VIN…"
-            />
-          </div>
-        ) : (
-          <>
-            <div className="lg:col-span-2">
-              <label htmlFor="consulta-plate" className={WIZARD_LABEL}>
-                Placa
-              </label>
-              <input
-                id="consulta-plate"
-                type="text"
-                value={plate}
-                onChange={(e) => {
-                  setPlate(sanitizePlate(e.target.value));
-                  invalidatePreview();
-                }}
-                disabled={readOnly}
-                // Prototipo FLIT: la placa se lee como código —mayúscula y espaciada—.
-                // El placeholder vuelve a texto normal para no leerse como un valor cargado.
-                className={`mt-1 ${inputClass} font-semibold uppercase tracking-[0.14em] placeholder:font-normal placeholder:normal-case placeholder:tracking-normal disabled:opacity-60`}
-                placeholder="Ej. ABC123"
-              />
-            </div>
-            {!hideOwnerDocType && (
-              <div className="lg:col-span-2">
-                <label htmlFor="consulta-owner-doc-type" className={WIZARD_LABEL}>
-                  Tipo documento propietario
-                </label>
-                <select
-                  id="consulta-owner-doc-type"
-                  value={ownerDocType}
-                  onChange={(e) => {
-                    const next = e.target.value as ActorDocumentType;
-                    setOwnerDocType(next);
-                    // Re-sanea el número al cambiar de tipo (p.ej. PAS→CC quita letras).
-                    setOwnerDocNumber((n) => sanitizeDocNumber(n, next));
-                    invalidatePreview();
-                  }}
-                  // Un <select> no admite readOnly: con la política activa se deshabilita,
-                  // el valor (NIT) igual viaja porque vive en estado de React, no en un submit.
-                  disabled={readOnly || ownerDocLocked}
-                  className={`mt-1 ${inputClass} disabled:opacity-60`}
-                >
-                  {DOC_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div className={hideOwnerDocType ? 'lg:col-span-5' : 'lg:col-span-3'}>
-              <label htmlFor="consulta-owner-doc-number" className={WIZARD_LABEL}>
-                Número documento propietario
-              </label>
-              <input
-                id="consulta-owner-doc-number"
-                type="text"
-                value={ownerDocNumber}
-                onChange={(e) => {
-                  setOwnerDocNumber(sanitizeDocNumber(e.target.value, ownerDocType));
-                  invalidatePreview();
-                }}
-                disabled={readOnly}
-                // readOnly (no disabled): el gestor debe poder ver, enfocar y copiar el NIT, y
-                // el campo sigue en el orden de tabulación y se anuncia como de solo lectura.
-                readOnly={ownerDocLocked}
-                aria-describedby={ownerDocLocked ? 'consulta-owner-doc-locked' : undefined}
-                className={`mt-1 ${inputClass} disabled:opacity-60 ${
-                  ownerDocLocked ? 'cursor-not-allowed bg-[#F4F6FA] dark:bg-[#131A22]' : ''
-                }`}
-                placeholder="Ej. 1020304050"
-              />
-            </div>
-          </>
-        )}
-
-        {!readOnly && <div className="lg:col-span-2">{consultButton}</div>}
-
-        {/* Notas y avisos de la consulta: fila completa. Cada uno explica un campo de arriba, así
-            que van bajo la línea y no dentro de una columna, donde descuadraban su altura. */}
-        {(eligeSecretaria ||
-          secretariasError ||
-          ownerDocLocked ||
-          (!hideOwnerDocType && ownerDocTypeSuggested) ||
-          (deferred && deferredModalidad === 'traspaso')) && (
-          <div className="space-y-1.5 lg:col-span-12">
-            {eligeSecretaria && (
-              <p id="consulta-secretaria-aviso" className="text-xs leading-tight opacity-70">
-                {SECRETARIA_LISTA_AVISO}
-              </p>
-            )}
+            <p id="consulta-secretaria-aviso" className="mt-1.5 text-xs leading-tight opacity-70">
+              {SECRETARIA_LISTA_AVISO}
+            </p>
             {secretariasError && (
-              <p className="text-xs leading-tight" style={{ color: '#E5484D' }}>
+              <p className="mt-1 text-xs leading-tight" style={{ color: '#E5484D' }}>
                 {secretariasError}
               </p>
             )}
+          </div>
+        )}
+
+        <div className="mt-4 flex flex-wrap items-end gap-4">
+          {isVin ? (
+            <div className="min-w-0 max-w-md flex-1">
+              <label htmlFor="consulta-vin" className={WIZARD_LABEL}>
+                Número VIN
+              </label>
+              <input
+                id="consulta-vin"
+                type="text"
+                value={vin}
+                onChange={(e) => {
+                  setVin(sanitizeVin(e.target.value));
+                  invalidatePreview();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleRun();
+                }}
+                disabled={readOnly}
+                className={`mt-1 ${inputClass} disabled:opacity-60`}
+                placeholder="Ej. LZWCDAGA4SC802801"
+              />
+            </div>
+          ) : (
+            <>
+              <div className="w-36">
+                <label htmlFor="consulta-plate" className={WIZARD_LABEL}>
+                  Placa
+                </label>
+                <input
+                  id="consulta-plate"
+                  type="text"
+                  value={plate}
+                  onChange={(e) => {
+                    setPlate(sanitizePlate(e.target.value));
+                    invalidatePreview();
+                  }}
+                  disabled={readOnly}
+                  // Prototipo FLIT: la placa se lee como código —mayúscula y espaciada—.
+                  // El placeholder vuelve a texto normal para no leerse como un valor cargado.
+                  className={`mt-1 ${inputClass} font-semibold uppercase tracking-[0.14em] placeholder:font-normal placeholder:normal-case placeholder:tracking-normal disabled:opacity-60`}
+                  placeholder="Ej. ABC123"
+                />
+              </div>
+              {!hideOwnerDocType && (
+                <div className="w-44">
+                  <label htmlFor="consulta-owner-doc-type" className={WIZARD_LABEL}>
+                    Tipo documento propietario
+                  </label>
+                  <select
+                    id="consulta-owner-doc-type"
+                    value={ownerDocType}
+                    onChange={(e) => {
+                      const next = e.target.value as ActorDocumentType;
+                      setOwnerDocType(next);
+                      // Re-sanea el número al cambiar de tipo (p.ej. PAS→CC quita letras).
+                      setOwnerDocNumber((n) => sanitizeDocNumber(n, next));
+                      invalidatePreview();
+                    }}
+                    // Un <select> no admite readOnly: con la política activa se deshabilita,
+                    // el valor (NIT) igual viaja porque vive en estado de React, no en un submit.
+                    disabled={readOnly || ownerDocLocked}
+                    className={`mt-1 ${inputClass} disabled:opacity-60`}
+                  >
+                    {DOC_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="min-w-56 max-w-xs flex-1">
+                <label htmlFor="consulta-owner-doc-number" className={WIZARD_LABEL}>
+                  Número documento propietario
+                </label>
+                <input
+                  id="consulta-owner-doc-number"
+                  type="text"
+                  value={ownerDocNumber}
+                  onChange={(e) => {
+                    setOwnerDocNumber(sanitizeDocNumber(e.target.value, ownerDocType));
+                    invalidatePreview();
+                  }}
+                  disabled={readOnly}
+                  // readOnly (no disabled): el gestor debe poder ver, enfocar y copiar el NIT, y
+                  // el campo sigue en el orden de tabulación y se anuncia como de solo lectura.
+                  readOnly={ownerDocLocked}
+                  aria-describedby={ownerDocLocked ? 'consulta-owner-doc-locked' : undefined}
+                  className={`mt-1 ${inputClass} disabled:opacity-60 ${
+                    ownerDocLocked ? 'cursor-not-allowed bg-[#F4F6FA] dark:bg-[#131A22]' : ''
+                  }`}
+                  placeholder="Ej. 1020304050"
+                />
+              </div>
+            </>
+          )}
+          {!readOnly && consultButton}
+        </div>
+
+        {/* Notas de los campos de arriba: a lo ancho de la tarjeta, no dentro de una columna,
+            donde descuadraban la altura de su campo. */}
+        {(ownerDocLocked ||
+          (!hideOwnerDocType && ownerDocTypeSuggested) ||
+          (deferred && deferredModalidad === 'traspaso')) && (
+          <div className="mt-3 space-y-1.5">
             {/* El fondo gris por sí solo no comunica "no editable": se dice con texto, y este
                 párrafo es además el nombre accesible del estado (aria-describedby del campo). */}
             {ownerDocLocked && (
