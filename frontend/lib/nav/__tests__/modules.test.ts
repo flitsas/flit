@@ -4,6 +4,7 @@ import {
   ALL_MODULE_IDS,
   buildValidModules,
   parseModule,
+  planSpaModuleAccess,
   resolveNavigableModuleIds,
   UNIVERSAL_MODULE_IDS,
 } from "../modules";
@@ -108,5 +109,33 @@ describe("nav/modules — resolveNavigableModuleIds", () => {
     expect(buildValidModules([])).toContain("ayuda");
     expect(buildValidModules([])).toContain("dashboard");
     expect(buildValidModules([])).not.toContain("rbac");
+  });
+});
+
+describe("nav/modules — planSpaModuleAccess (anti-loop URL)", () => {
+  const allowed = ["dashboard", "tramites", "ayuda"] as const;
+
+  it("módulo denegado → dashboard y shouldReplaceUrl una vez", () => {
+    const plan = planSpaModuleAccess("validaciones", [...allowed]);
+    expect(plan.denied).toBe(true);
+    expect(plan.module).toBe("dashboard");
+    expect(plan.shouldReplaceUrl).toBe(true);
+    expect(plan.replaceTo).toBe("/?m=dashboard");
+  });
+
+  it("si ya está en ?m=dashboard no pide otro replace (rompe el loop)", () => {
+    // Caso patológico: dashboard no en lista (no debería pasar) o re-entry
+    const plan = planSpaModuleAccess("dashboard", ["tramites", "ayuda"]);
+    expect(plan.denied).toBe(true);
+    expect(plan.module).toBe("dashboard");
+    expect(plan.shouldReplaceUrl).toBe(false);
+    expect(plan.replaceTo).toBeNull();
+  });
+
+  it("módulo permitido no replace", () => {
+    const plan = planSpaModuleAccess("tramites", [...allowed]);
+    expect(plan.denied).toBe(false);
+    expect(plan.module).toBe("tramites");
+    expect(plan.shouldReplaceUrl).toBe(false);
   });
 });

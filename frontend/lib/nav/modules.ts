@@ -115,3 +115,42 @@ export function parseModule(raw: string | null, valid: ModuleId[]): ModuleId {
   if (!raw || valid.length === 0) return "dashboard";
   return valid.includes(raw as ModuleId) ? (raw as ModuleId) : "dashboard";
 }
+
+/** Resultado del gate SPA: evitar replace en bucle cuando `?m=` no está autorizado. */
+export type SpaModuleAccessPlan = {
+  module: ModuleId;
+  denied: boolean;
+  /** Solo true si hay que corregir la URL (una vez). */
+  shouldReplaceUrl: boolean;
+  replaceTo: "/?m=dashboard" | null;
+};
+
+/**
+ * Decide módulo activo y si hace falta `router.replace`.
+ * Si `?m=` está denegado → dashboard; `shouldReplaceUrl` solo si la URL aún no es dashboard
+ * (evita loop infinito de navegación con useSearchParams / replace).
+ */
+export function planSpaModuleAccess(
+  raw: string | null,
+  navigableIds: readonly ModuleId[],
+): SpaModuleAccessPlan {
+  const requested = raw && raw.length > 0 ? raw : null;
+  const allowedList = navigableIds as ModuleId[];
+
+  if (requested && !allowedList.includes(requested as ModuleId)) {
+    const alreadyOnDashboard = raw === "dashboard";
+    return {
+      module: "dashboard",
+      denied: true,
+      shouldReplaceUrl: !alreadyOnDashboard,
+      replaceTo: alreadyOnDashboard ? null : "/?m=dashboard",
+    };
+  }
+
+  return {
+    module: parseModule(raw, allowedList),
+    denied: false,
+    shouldReplaceUrl: false,
+    replaceTo: null,
+  };
+}
