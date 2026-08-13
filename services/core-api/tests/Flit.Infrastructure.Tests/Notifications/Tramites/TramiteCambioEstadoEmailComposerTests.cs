@@ -55,6 +55,8 @@ public class TramiteCambioEstadoEmailComposerTests
         html.Should().Contain("BANCOLOMBIA S.A");
         html.Should().Contain("EL NEGOCIO DEL ALVARO AMADO");
         html.Should().Contain("POLÍTICA DE PRIVACIDAD");
+        html.Should().NotContain("Motivo de rechazo");
+        html.Should().NotContain(">Observación");
     }
 
     [Fact]
@@ -166,5 +168,81 @@ public class TramiteCambioEstadoEmailComposerTests
         var (_, html) = TramiteEmailPreviewSample.BuildRentingRechazado("http://localhost:3000/email-assets");
         html.Should().Contain("http://localhost:3000/email-assets/tramite-cambio-estado-renting-header.png");
         html.Should().Contain("RECHAZADO");
+        html.Should().Contain("Motivo de rechazo");
+        html.Should().Contain("Observación");
+    }
+
+    [Fact]
+    public void ComposeFlit_Rechazado_IncluyeCausalesYObservacion()
+    {
+        var model = TraspasoRechazado with
+        {
+            CausalesRechazo = ["Improntas no coinciden", "Documentos ilegibles"],
+            ObservacionRechazo = "Adjuntar SOAT vigente.",
+        };
+
+        var (_, html) = TramiteCambioEstadoEmailComposer.ComposeFlit(
+            model, "https://cdn.example/email-assets");
+
+        html.Should().Contain("Motivo de rechazo");
+        html.Should().Contain("Improntas no coinciden; Documentos ilegibles");
+        html.Should().Contain("Observación");
+        html.Should().Contain("Adjuntar SOAT vigente.");
+    }
+
+    [Fact]
+    public void ComposeRenting_Rechazado_IncluyeCausalesYObservacion()
+    {
+        var model = TraspasoRechazado with
+        {
+            CausalesRechazo = ["Documentos ilegibles"],
+            ObservacionRechazo = "Falta el certificado de tradición.",
+        };
+
+        var (_, html) = TramiteCambioEstadoEmailComposer.ComposeRenting(
+            model, "https://cdn.example/email-assets");
+
+        html.Should().Contain("<strong>Motivo de rechazo:</strong> Documentos ilegibles");
+        html.Should().Contain("<strong>Observación:</strong> Falta el certificado de tradición.");
+    }
+
+    [Fact]
+    public void ComposeFlit_Rechazado_SoloObservacion_OmiteMotivo()
+    {
+        var model = TraspasoRechazado with { ObservacionRechazo = "Rechazo de secretaría." };
+
+        var (_, html) = TramiteCambioEstadoEmailComposer.ComposeFlit(
+            model, "https://cdn.example/email-assets");
+
+        html.Should().NotContain("Motivo de rechazo");
+        html.Should().Contain("Observación");
+        html.Should().Contain("Rechazo de secretaría.");
+    }
+
+    [Fact]
+    public void ComposeFlit_Rechazado_EscapaHtmlYConvierteSaltosDeLinea()
+    {
+        var model = TraspasoRechazado with
+        {
+            CausalesRechazo = ["<script>alert(1)</script>"],
+            ObservacionRechazo = "Línea 1\nLínea 2",
+        };
+
+        var (_, html) = TramiteCambioEstadoEmailComposer.ComposeFlit(
+            model, "https://cdn.example/email-assets");
+
+        html.Should().Contain("&lt;script&gt;alert(1)&lt;/script&gt;");
+        html.Should().NotContain("<script>alert(1)</script>");
+        html.Should().Contain("Línea 1<br/>Línea 2");
+    }
+
+    [Fact]
+    public void ComposeFlit_RechazadoSinDatos_OmiteBloque()
+    {
+        var (_, html) = TramiteCambioEstadoEmailComposer.ComposeFlit(
+            TraspasoRechazado, "https://cdn.example/email-assets");
+
+        html.Should().NotContain("Motivo de rechazo");
+        html.Should().NotContain(">Observación");
     }
 }

@@ -97,4 +97,23 @@ public sealed class TramiteCambioEstadoEmailProjectorTests
         model.VendedorNombre.Should().BeEmpty();
         model.EsTraspaso.Should().BeFalse();
     }
+
+    [Fact]
+    public void Rechazado_MapeaCausalesYObservacion()
+    {
+        var instance = new ProcedureInstance { ModalidadEntrada = "traspaso", Plate = "ABC123" };
+        var causales = new[] { "Documentos ilegibles", "Improntas no coinciden" };
+
+        var model = TramiteCambioEstadoEmailProjector.Project(
+            instance,
+            [],
+            new Dictionary<string, string?>(),
+            "RECHAZADO",
+            causales,
+            "Adjuntar SOAT vigente.");
+
+        model.CausalesRechazo.Should().Equal(causales);
+        model.ObservacionRechazo.Should().Be("Adjuntar SOAT vigente.");
+        model.EstadoActual.Should().Be("RECHAZADO");
+    }
 }

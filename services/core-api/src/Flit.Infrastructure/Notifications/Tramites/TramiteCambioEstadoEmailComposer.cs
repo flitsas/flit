@@ -14,7 +14,9 @@ public sealed record TramiteCambioEstadoEmailModel(
     string CiudadOt,
     string NombreOt,
     string EstadoActual,
-    bool EsTraspaso);
+    bool EsTraspaso,
+    IReadOnlyList<string>? CausalesRechazo = null,
+    string? ObservacionRechazo = null);
 
 /// <summary>
 /// Composer compartido de <c>tramites.aprobado</c> y <c>tramites.rechazado</c>:
@@ -145,8 +147,16 @@ public static class TramiteCambioEstadoEmailComposer
         }
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Secretaría de Tránsito:</strong> {ot}</p>");
+        var rejectionLines = BuildRejectionLines(model, estado);
+        var estadoMargin = rejectionLines.Count > 0 ? "6px" : "16px";
         sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 16px;\"><strong style=\"color:{PrimaryBlue};\">Estado Actual:</strong> <span style=\"color:{estadoColor};font-weight:700;\">{estadoIcon} {estadoEnc}</span></p>");
+            $"<p style=\"margin:0 0 {estadoMargin};\"><strong style=\"color:{PrimaryBlue};\">Estado Actual:</strong> <span style=\"color:{estadoColor};font-weight:700;\">{estadoIcon} {estadoEnc}</span></p>");
+        AppendRejectionLines(
+            sb,
+            rejectionLines,
+            lastMargin: "16px",
+            (label, value, margin) =>
+                $"<p style=\"margin:0 0 {margin};\"><strong style=\"color:{PrimaryBlue};\">{label}:</strong> {value}</p>");
         sb.Append("<p style=\"margin:0 0 20px;\">En FLIT, nos aseguramos de que los trámites de tránsito sean más ágiles, eficientes y sin contratiempos.</p>");
         sb.Append("<p style=\"margin:0 0 8px;\">Cordialmente,</p>");
         sb.Append(CultureInfo.InvariantCulture,
@@ -230,8 +240,16 @@ public static class TramiteCambioEstadoEmailComposer
         }
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 6px;\"><strong>Secretaría de Tránsito:</strong> {ot}</p>");
+        var rejectionLines = BuildRejectionLines(model, estado);
+        var estadoMargin = rejectionLines.Count > 0 ? "6px" : "18px";
         sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 18px;\"><strong>Estado Actual:</strong> <span style=\"color:{estadoColor};font-weight:700;\">{estadoEnc}</span></p>");
+            $"<p style=\"margin:0 0 {estadoMargin};\"><strong>Estado Actual:</strong> <span style=\"color:{estadoColor};font-weight:700;\">{estadoEnc}</span></p>");
+        AppendRejectionLines(
+            sb,
+            rejectionLines,
+            lastMargin: "18px",
+            (label, value, margin) =>
+                $"<p style=\"margin:0 0 {margin};\"><strong>{label}:</strong> {value}</p>");
         sb.Append(CultureInfo.InvariantCulture, $"<p style=\"margin:0 0 18px;\">{cierre}</p>");
         sb.Append("<p style=\"margin:0 0 8px;\">Si tienes alguna inquietud, comunícate con nosotros:</p>");
         sb.Append(CultureInfo.InvariantCulture,
@@ -255,7 +273,56 @@ public static class TramiteCambioEstadoEmailComposer
         return $"{baseUrl}/{fileName}";
     }
 
-    private static string Enc(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);
+    private static List<(string Label, string ValueHtml)> BuildRejectionLines(
+        TramiteCambioEstadoEmailModel model, string estado)
+    {
+        if (!string.Equals(estado, "RECHAZADO", StringComparison.Ordinal))
+            return [];
+
+        var lines = new List<(string Label, string ValueHtml)>();
+        var causales = (model.CausalesRechazo ?? [])
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .ToList();
+        if (causales.Count > 0)
+            lines.Add(("Motivo de rechazo", Enc(string.Join("; ", causales))));
+
+        var observacion = model.ObservacionRechazo?.Trim();
+        if (!string.IsNullOrEmpty(observacion))
+            lines.Add(("Observación", EncMultiline(observacion)));
+
+        return lines;
+    }
+
+    private static void AppendRejectionLines(
+        StringBuilder sb,
+        List<(string Label, string ValueHtml)> lines,
+        string lastMargin,
+        Func<string, string, string, string> formatLine)
+    {
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var margin = i == lines.Count - 1 ? lastMargin : "6px";
+            var (label, value) = lines[i];
+            sb.Append(formatLine(label, value, margin));
+        }
+    }
+
+    private static string Enc(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal)
+            .Replace(">", "&gt;", StringComparison.Ordinal);
+    }
+
+    private static string EncMultiline(string value) =>
+        Enc(value)
+            .Replace("\r\n", "<br/>", StringComparison.Ordinal)
+            .Replace("\n", "<br/>", StringComparison.Ordinal)
+            .Replace("\r", "<br/>", StringComparison.Ordinal);
 
     private static string EncAttr(string? value) =>
         WebUtility.HtmlEncode(value ?? string.Empty).Replace("\"", "&quot;", StringComparison.Ordinal);
