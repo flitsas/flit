@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { FileText } from 'lucide-react';
 import { OtSidePanel } from '@/components/admin/transit-offices/OtSidePanel';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -16,9 +16,15 @@ import type {
 export function ProcedureDocsPreviewInformativo({
   modalidad,
   transitOfficeId,
+  renderTrigger,
 }: {
   modalidad: WizardModalidad;
   transitOfficeId?: string;
+  /**
+   * Sustituye el enlace por otro disparador. Lo usa el carril de ayuda del paso 1, donde la guía
+   * es un icono con tooltip en vez de un enlace en línea. El panel y su carga no cambian.
+   */
+  renderTrigger?: (open: () => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   // El resultado se guarda junto a la llave que lo produjo: así `loading` se deriva del render
@@ -55,15 +61,19 @@ export function ProcedureDocsPreviewInformativo({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 text-xs font-semibold underline-offset-2 hover:underline"
-        style={{ color: '#557EFF' }}
-      >
-        <FileText className="h-3.5 w-3.5" aria-hidden />
-        Ver documentos a tener listos
-      </button>
+      {renderTrigger ? (
+        renderTrigger(() => setOpen(true))
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold underline-offset-2 hover:underline"
+          style={{ color: '#557EFF' }}
+        >
+          <FileText className="h-3.5 w-3.5" aria-hidden />
+          Ver documentos a tener listos
+        </button>
+      )}
 
       <OtSidePanel
         open={open}

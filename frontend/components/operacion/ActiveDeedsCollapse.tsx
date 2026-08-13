@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { WizardAccordion } from './WizardAccordion';
@@ -24,49 +24,66 @@ export function deedVigenciaLabel(diasRestantes: number): string {
   return `${diasRestantes} días`;
 }
 
+export interface ActiveDeedsState {
+  loading: boolean;
+  deeds: ActiveDeed[] | null;
+  error: string | null;
+}
+
 /**
- * Collapse de escrituras vigentes de la compañía en el PRIMER paso del wizard (HU #10906).
- * Contraído por defecto; carga perezosa al abrir (`GET /api/v1/tramites/deeds/active`, tenant-scoped
- * por el header). Cada fila proyecta NIT + razón social + días restantes de vigencia con un badge de
- * estado coloreado por umbral. Mismo patrón de disclosure lazy que la bitácora de BiometricStep.
+ * Carga perezosa de las escrituras vigentes de la compañía (HU #10906): se pide la primera vez que
+ * `active` se pone a true y el resultado se conserva.
+ *
+ * El hook lo llama el CONTENEDOR (el acordeón, el carril), no la lista: tanto el acordeón como el
+ * panel lateral desmontan su contenido al cerrarse, y con el estado dentro de la lista cada
+ * reapertura disparaba una consulta nueva.
  */
-export function ActiveDeedsCollapse({ tenantId }: { tenantId?: string }) {
-  const [open, setOpen] = useState(false);
-  const [deeds, setDeeds] = useState<ActiveDeed[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export function useActiveDeeds(tenantId: string | undefined, active: boolean): ActiveDeedsState {
+  // Un solo estado con el resultado: `loading` se DERIVA del render (visible y aún sin resultado),
+  // de modo que el efecto no tiene que marcar el arranque con un setState síncrono.
+  const [result, setResult] = useState<{ items: ActiveDeed[] | null; error: string | null } | null>(
+    null,
+  );
+  // El disparo se marca en un ref, no en el estado: entre que arranca la consulta y llega el
+  // resultado hay renders en los que `result` sigue a null, y sin esta marca el doble montaje de
+  // StrictMode lanzaría una segunda consulta.
+  const started = useRef(false);
 
-  const loadDeeds = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const items = await tramitesClient.fetchActiveDeeds(tenantId);
-      setDeeds(items);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'No se pudieron cargar las escrituras.',
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantId]);
+  useEffect(() => {
+    if (!active || started.current) return;
+    started.current = true;
+    let alive = true;
+    void tramitesClient
+      .fetchActiveDeeds(tenantId)
+      .then((items) => {
+        if (alive) setResult({ items, error: null });
+      })
+      .catch((err: unknown) => {
+        if (alive) {
+          setResult({
+            items: null,
+            error: err instanceof Error ? err.message : 'No se pudieron cargar las escrituras.',
+          });
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [active, tenantId]);
 
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    // Carga perezosa: solo la primera vez que se abre (o si quedó sin datos por un error previo).
-    if (next && deeds === null && !loading) void loadDeeds();
+  return {
+    loading: active && result === null,
+    deeds: result?.items ?? null,
+    error: result?.error ?? null,
   };
+}
 
+/**
+ * Listado de escrituras vigentes. Presentacional: recibe el estado de {@link useActiveDeeds} para
+ * poder mostrarse tanto en el acordeón del paso como en el panel lateral del carril de consulta.
+ */
+export function ActiveDeedsList({ loading, deeds, error }: ActiveDeedsState) {
   return (
-    // Controlado: `toggle` mantiene la carga perezosa de las escrituras al abrir.
-    <WizardAccordion
-      title="Escrituras vigentes de la compañía"
-      icon={<FileText className="h-4 w-4 shrink-0" style={{ color: '#557EFF' }} aria-hidden="true" />}
-      open={open}
-      onOpenChange={toggle}
-    >
-      {(
         <>
           {loading && (
             <p className="text-xs opacity-70" role="status" aria-live="polite">
@@ -122,7 +139,27 @@ export function ActiveDeedsCollapse({ tenantId }: { tenantId?: string }) {
             </ul>
           )}
         </>
-      )}
+  );
+}
+
+/**
+ * Collapse de escrituras vigentes de la compañía en el PRIMER paso del wizard (HU #10906).
+ * Contraído por defecto; carga perezosa al abrir (`GET /api/v1/tramites/deeds/active`, tenant-scoped
+ * por el header). Mismo patrón de disclosure lazy que la bitácora de BiometricStep.
+ */
+export function ActiveDeedsCollapse({ tenantId }: { tenantId?: string }) {
+  const [open, setOpen] = useState(false);
+  // El estado vive aquí, no en la lista: el acordeón desmonta su contenido al cerrarse.
+  const state = useActiveDeeds(tenantId, open);
+
+  return (
+    <WizardAccordion
+      title="Escrituras vigentes de la compañía"
+      icon={<FileText className="h-4 w-4 shrink-0" style={{ color: '#557EFF' }} aria-hidden="true" />}
+      open={open}
+      onOpenChange={setOpen}
+    >
+      <ActiveDeedsList {...state} />
     </WizardAccordion>
   );
 }

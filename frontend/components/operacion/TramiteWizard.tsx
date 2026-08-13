@@ -18,8 +18,6 @@ import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
 import { useWizardTelemetry } from '@/hooks/useWizardTelemetry'; // Reportes2 HU-A
 import { PreflightPanel, preflightOverall } from './PreflightPanel';
-import { ActiveDeedsCollapse } from './ActiveDeedsCollapse';
-import { ProcedureDocsPreviewInformativo } from './ProcedureDocsPreviewInformativo';
 import { TransitOfficeSearchPicker } from './TransitOfficeSearchPicker';
 import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
@@ -85,6 +83,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_CARD, WIZARD_LABEL } from './wizard-field-styles';
 import { WizardAccordion } from './WizardAccordion';
+import { WizardHelpRail } from './WizardHelpRail';
 import { WizardPair, WizardPill } from './wizard-atoms';
 
 /**
@@ -2518,7 +2517,13 @@ function ConsultaStep({
   );
 
   return (
-    <div className="space-y-3">
+    // `pr-16` reserva el ancho del carril de consulta anclado a la derecha (propuesta).
+    <div className="space-y-3 pr-16">
+      <WizardHelpRail
+        modalidad={modalidadVigente}
+        transitOfficeId={transitOfficeId || undefined}
+      />
+
       {/* 1ª tarjeta: Configuración del Trámite. La propuesta elige el tipo con tarjetas, no con un
           desplegable: son tres opciones fijas, cada una con una frase que dice qué resuelve, y así
           se leen de un vistazo en vez de tener que abrir una lista. Operable solo mientras el
@@ -2706,9 +2711,6 @@ function ConsultaStep({
                 documento del propietario (p. ej. NIT) y vuelve a consultar.
               </p>
             )}
-            {deferred && deferredModalidad === 'traspaso' && (
-              <ProcedureDocsPreviewInformativo modalidad="traspaso" />
-            )}
           </div>
         )}
 
@@ -2734,13 +2736,7 @@ function ConsultaStep({
             Selecciona la secretaría donde se radicará el expediente.
           </p>
           <div className="mt-4 max-w-xl">
-            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-              <span className={WIZARD_LABEL}>Secretaría de tránsito *</span>
-              <ProcedureDocsPreviewInformativo
-                modalidad="matricula_inicial"
-                transitOfficeId={transitOfficeId || undefined}
-              />
-            </div>
+            <span className={`mb-1 block ${WIZARD_LABEL}`}>Secretaría de tránsito *</span>
             <TransitOfficeSearchPicker
               offices={secretarias}
               valueId={transitOfficeId}
@@ -2824,10 +2820,6 @@ function ConsultaStep({
           </span>
         </div>
       )}
-
-      {/* HU #10906 — collapse (contraído, carga perezosa) de las escrituras vigentes de la compañía.
-          Tenant-scoped por el header; el NIT del tenant (tenantNitDigits) queda disponible arriba. */}
-      <ActiveDeedsCollapse />
 
       {/* Datos consolidados del vehículo. Solo traspaso: es el asistente de la propuesta que los
           saca a un acordeón propio (en matrícula van dentro de la tarjeta de consulta). Abierto de
