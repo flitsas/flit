@@ -173,9 +173,6 @@ const TIPO_SERVICIO_INFO_VACIO: TipoServicioInfo = {
 const SECRETARIA_LISTA_AVISO =
   'Solo se muestran los organismos de tránsito activos en FLIT. Si el organismo donde vas a radicar no aparece en la lista, solicita al administrador que lo agregue y lo active.';
 
-/** HU #11199 (AC2) — sin secretaría no se gasta una consulta al RUNT. */
-const SECRETARIA_REQUERIDA = 'Selecciona la secretaría de tránsito antes de consultar el vehículo.';
-
 /** El proveedor RUES respondió y no existe empresa con ese NIT — distinto del fallo transitorio 503. */
 const RUES_NO_ENCONTRADO =
   'No se encontró una empresa con ese NIT en el RUES. Verifica el número e inténtalo de nuevo.';
@@ -1996,6 +1993,15 @@ function ConsultaStep({
   const [secretarias, setSecretarias] = useState<TransitOfficeOption[]>([]);
   const [secretariasError, setSecretariasError] = useState<string | null>(null);
   const [transitOfficeId, setTransitOfficeId] = useState('');
+  /**
+   * Consulta desacoplada ya resuelta, a la espera de que estén los datos que viajan con ella a la
+   * creación. Se guarda en vez de emitirse en el acto porque el organismo de tránsito se elige
+   * DESPUÉS de consultar (orden del diseño) y sin él no se puede crear el trámite.
+   */
+  const [pendingPreview, setPendingPreview] = useState<Omit<
+    PendingConsulta,
+    'transitOfficeId'
+  > | null>(null);
 
   useEffect(() => {
     if (!eligeSecretaria) return;
@@ -2272,12 +2278,6 @@ function ConsultaStep({
       );
       return;
     }
-    // HU #11199 (AC2) — la secretaría es requisito de la consulta. El botón ya está deshabilitado sin
-    // ella; esta guarda cubre el disparo por Enter en el input del VIN.
-    if (eligeSecretaria && !transitOfficeId) {
-      setError(SECRETARIA_REQUERIDA);
-      return;
-    }
     // Familia bloqueada en config de compañía: no consultar ni crear.
     if (familyBlocked) {
       setError(
@@ -2324,13 +2324,14 @@ function ConsultaStep({
         // Un 200 con el semáforo en rojo NO es una excepción: sin esto el shell solo sabría que
         // "hay consulta" y habilitaría Continuar aunque el vehículo no exista en el RUNT.
         const previewChecks = result.preflight?.checks ?? [];
-        onPreviewDone?.({
+        // Se guarda la consulta y se emite en un efecto: el organismo se elige DESPUÉS de consultar,
+        // y "Continuar y guardar" —que es lo que crea el trámite— no puede habilitarse sin él.
+        setPendingPreview({
           previewToken: result.previewToken,
           vin: isVin ? vin.trim() : undefined,
           plate: isVin ? undefined : plate.trim(),
           ownerDocumentType: isVin ? undefined : ownerDocType,
           ownerDocumentNumber: isVin ? undefined : ownerDocNumber.trim(),
-          transitOfficeId: eligeSecretaria ? transitOfficeId : undefined,
           hardBlocked:
             previewChecks.some((c) => c.status === 'error') ||
             previewChecks.some((c) => c.key === 'vehiculo' && c.status === 'fail'),
@@ -2399,8 +2400,28 @@ function ConsultaStep({
   const invalidatePreview = () => {
     if (!deferred) return;
     setPreviewSnapshot(null);
+    setPendingPreview(null);
     onPreviewDone?.(null);
   };
+
+  // La consulta solo habilita "Continuar y guardar" cuando además está el organismo de tránsito
+  // (matrícula), que se elige después de consultar. Elegirlo NO invalida la consulta: sería borrar
+  // lo que el gestor acaba de hacer, y el organismo viaja igualmente a la creación desde aquí.
+  useEffect(() => {
+    if (!deferred) return;
+    if (!pendingPreview) return;
+    if (eligeSecretaria && !transitOfficeId) {
+      onPreviewDone?.(null);
+      return;
+    }
+    onPreviewDone?.({
+      ...pendingPreview,
+      transitOfficeId: eligeSecretaria ? transitOfficeId : undefined,
+    });
+    // `onPreviewDone` es un callback del shell recreado en cada render: incluirlo re-emitiría en
+    // bucle. Lo que gobierna la emisión es la consulta y el organismo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deferred, pendingPreview, eligeSecretaria, transitOfficeId]);
 
   /**
    * CF-02 — el paso 1 ofrece EXACTAMENTE los mismos controles que antes (condiciones del trámite,
@@ -2566,7 +2587,10 @@ function ConsultaStep({
       type="button"
       onClick={() => void handleRun()}
       // HU #11199 (AC2) — sin secretaría la consulta no se habilita.
-      disabled={loading || familyBlocked || (eligeSecretaria && !transitOfficeId)}
+      // La secretaría ya NO gatea la consulta (antes sí, HU #11199 AC2): el diseño consulta primero
+      // y decide dónde radicar después. El requisito se mantiene sobre "Continuar y guardar", que
+      // es donde se crea el trámite y donde el organismo tiene que viajar.
+      disabled={loading || familyBlocked}
       className="flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
       style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
       aria-label={familyBlocked ? 'Consulta no permitida para esta compañía' : 'Consultar RUNT'}
@@ -2787,10 +2811,10 @@ function ConsultaStep({
       {/* 3ª tarjeta: Organismo de Tránsito y Radicación (HU #11199 — solo matrícula y solo mientras
           el trámite no existe). La propuesta le da tarjeta propia después de la consulta: es una
           decisión de radicación, no un parámetro más del vehículo. */}
-      {/* NO se oculta hasta consultar: la consulta por VIN está gateada por haber elegido secretaría
-          (HU #11199, AC2 — `consultButton` se deshabilita sin `transitOfficeId`). Esconder la
-          tarjeta hasta después de consultar deja al gestor sin forma de consultar. */}
-      {eligeSecretaria && (
+      {/* Tras la consulta: dónde se radica es una decisión sobre un vehículo YA identificado, y ese
+          es el orden del diseño. Antes se pedía antes de consultar porque la consulta la gateaba
+          (HU #11199 AC2); ese gate se levantó y el requisito vive ahora en "Continuar y guardar". */}
+      {eligeSecretaria && hasVehicleData && (
         <div className={WIZARD_CARD}>
           <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
             Organismo de Tránsito y Radicación
@@ -2805,8 +2829,9 @@ function ConsultaStep({
               offices={secretarias}
               valueId={transitOfficeId}
               onChange={(id) => {
+                // No invalida la consulta: ahora se elige DESPUÉS de consultar y borrarla sería
+                // deshacer lo que el gestor acaba de hacer. El id viaja a la creación desde aquí.
                 setTransitOfficeId(id);
-                invalidatePreview();
                 setError(null);
               }}
               disabled={readOnly}
