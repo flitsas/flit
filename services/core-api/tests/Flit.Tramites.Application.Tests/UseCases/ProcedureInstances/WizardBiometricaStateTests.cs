@@ -106,8 +106,11 @@ public sealed class WizardBiometricaStateTests
         instance.Actors.Add(Comprador());
     }
 
-    /// <summary>Completa pasos 1-5 de traspaso (placa, vendedor, comprador, documentos, preflight, comercial) → FUR (6) alcanzable.</summary>
-    private static void CompletarHastaFurTraspaso(ProcedureInstance instance)
+    /// <summary>
+    /// Completa pasos 1-4 de traspaso (placa, vendedor, comprador, documentos + valor de venta,
+    /// absorbido en Documentos) → Identidad (5) alcanzable.
+    /// </summary>
+    private static void CompletarHastaIdentidadTraspaso(ProcedureInstance instance)
     {
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
         // HU #10935 — los documentos gobiernan el paso 4 (tras los actores); se marcan los obligatorios.
@@ -226,20 +229,23 @@ public sealed class WizardBiometricaStateTests
         s4.Reasons.Should().BeEmpty();
     }
 
-    // ── Traspaso: paso 6 (FUR) exige biométrica de AMBAS partes ──────────────────
+    // ── Traspaso: paso 5 (Identidad) exige biométrica de AMBAS partes ────────────
+    // Paridad con matrícula (2026-08) — antes se evaluaba de forma diferida (solo para mostrar
+    // razón) en el paso 6 (FUR); ahora es el gate propio del paso 5, y sin él FUR (6) queda locked.
 
     [Fact]
-    public async Task Traspaso_NoBiometria_Step6HasBiometriaReason()
+    public async Task Traspaso_NoBiometria_IdentidadHasBiometriaReasonAndFurLocked()
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
-        CompletarHastaFurTraspaso(instance); // FUR (6) alcanzable
+        CompletarHastaIdentidadTraspaso(instance); // Identidad (5) alcanzable
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        result!.Steps.Single(s => s.Index == 6).Reasons
+        result!.Steps.Single(s => s.Index == 5).Reasons
             .Should().Contain(GetWizardStateHandler.PendienteBiometria);
+        result.Steps.Single(s => s.Index == 6).Status.Should().Be("locked");
     }
 
     [Fact]
@@ -247,30 +253,36 @@ public sealed class WizardBiometricaStateTests
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
-        CompletarHastaFurTraspaso(instance); // FUR (6) alcanzable
+        CompletarHastaIdentidadTraspaso(instance); // Identidad (5) alcanzable
         instance.BiometricValidations.Add(Biometria(parte: "comprador", estado: BiometricEstados.Aprobado, documento: "666"));
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        // Falta vendedor → biométrica aún pendiente.
-        result!.Steps.Single(s => s.Index == 6).Reasons
+        // Falta vendedor → biométrica aún pendiente; Identidad (5) no completa y FUR (6) sigue locked.
+        result!.Steps.Single(s => s.Index == 5).Reasons
             .Should().Contain(GetWizardStateHandler.PendienteBiometria);
+        result.Steps.Single(s => s.Index == 6).Status.Should().Be("locked");
     }
 
     [Fact]
-    public async Task Traspaso_BothPartesAprobadas_NoBiometriaReason()
+    public async Task Traspaso_BothPartesAprobadas_IdentidadCompleteAndFurReachable()
     {
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
-        CompletarHastaFurTraspaso(instance); // FUR (6) alcanzable
+        CompletarHastaIdentidadTraspaso(instance); // Identidad (5) alcanzable
         instance.BiometricValidations.Add(Biometria(parte: "comprador", estado: BiometricEstados.Aprobado, documento: "666"));
         instance.BiometricValidations.Add(Biometria(parte: "vendedor", estado: BiometricEstados.Aprobado, documento: "555"));
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        var s6 = result!.Steps.Single(s => s.Index == 6);
+        var s5 = result!.Steps.Single(s => s.Index == 5);
+        s5.Status.Should().Be("complete");
+        s5.Reasons.Should().BeEmpty();
+
+        // FUR (6) ya no exige biométrica (se movió a Identidad); solo queda pendiente por el FUR.
+        var s6 = result.Steps.Single(s => s.Index == 6);
         s6.Reasons.Should().NotContain(GetWizardStateHandler.PendienteBiometria);
         // B12 (HU #10661, ADR-0028): la firma de compraventa ya NO se exige ni aporta pendiente_firma.
         s6.Reasons.Should().NotContain(GetWizardStateHandler.PendienteFirma);

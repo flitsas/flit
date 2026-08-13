@@ -3261,7 +3261,10 @@ function StepBody({
   /** Feature #11066 — marca dirty en el shell (p.ej. checklist de docs editado). */
   onMarkDirty?: () => void;
 }) {
-  switch (step.key) {
+  // Los datos comerciales dejaron de tener paso propio: viven en Requisitos. La clave `comercial`
+  // solo puede llegar desde un borrador antiguo que quedó apuntando ahí, así que se normaliza a
+  // `documentos` — el gestor encuentra lo que dejó a medias, en su nuevo sitio.
+  switch (step.key === 'comercial' ? 'documentos' : step.key) {
     // Consulta inicial: VIN (matrícula) o placa+propietario (traspaso).
     // Persiste el identificador en field_values ANTES de correr el preflight,
     // de lo contrario el backend consulta RUNT sin datos (DS-4B-1).
@@ -3306,18 +3309,36 @@ function StepBody({
             }}
             onTipoServicioGateChange={onTipoServicioGateChange}
           />
-          {/* R4 (HU #10596) — en matrícula la prenda es declarativa: se registra aquí
-              (informativa, no bloquea la radicación). En traspaso el gate va en el paso
-              comercial (HU #10598), no en documentos. Persistencia vía Continuar (embedded). */}
-          {modalidad !== 'traspaso' && (() => {
+          {/* Datos comerciales del traspaso. Tenían paso propio; ahora viven aquí, porque son
+              requisitos de la operación igual que el tipo de servicio o la prenda, y porque el
+              hueco que dejaban lo ocupa la validación de identidad de las dos partes. Así las dos
+              modalidades recorren los mismos cinco pasos. El guardado sigue colgando del pie
+              ("Continuar y guardar") vía `stepFormRef`, sin botón propio. */}
+          {modalidad === 'traspaso' && (
+            <CommercialForm
+              key="comercial-en-requisitos"
+              ref={stepFormRef}
+              instanceId={instanceId}
+              onSaved={onRefresh}
+              hideHeader={false}
+              embeddedInWizard
+            />
+          )}
+          {/* Prenda. La decisión es la misma pieza en las dos modalidades, con distinto alcance:
+              en matrícula es declarativa (informativa, no bloquea la radicación, HU #10596) y en
+              traspaso es un gate con decisiones de gestión (HU #10598, CF-06 #10881). Antes vivían
+              en pasos distintos; ahora comparten sitio, que es lo que el gestor espera. */}
+          {(() => {
             const gravamen = preflight?.checks?.find((c) => c.key === 'gravamenes');
+            const esTraspaso = modalidad === 'traspaso';
             return (
               <PrendaForm
                 ref={prendaFormRef}
                 instanceId={instanceId}
                 onSaved={onRefresh}
                 embeddedInWizard
-                modalidad="matricula_inicial"
+                modalidad={esTraspaso ? 'traspaso' : 'matricula_inicial'}
+                decisions={esTraspaso ? traspasoDecisions(prendaDocumentRequired) : undefined}
                 documentRequired={prendaDocumentRequired}
                 onDocumentGateChange={onPrendaDocumentGateChange}
                 runtHasGravamen={gravamen?.status === 'warn'}
@@ -3380,45 +3401,9 @@ function StepBody({
       );
     }
 
-    case 'comercial':
-      // hideHeader: el h2 + subtítulo ya cubren el título del paso. El guardado
-      // lo dispara el footer "Guardar y continuar" (vía save() del ref).
-      return (
-        <div className="space-y-4">
-          <CommercialForm
-            key={step.key}
-            ref={stepFormRef}
-            instanceId={instanceId}
-            onSaved={onRefresh}
-            hideHeader
-            embeddedInWizard
-          />
-          {/* R10 (HU #10598) — prenda como gate del traspaso: la decisión se registra en el paso
-              comercial. Con gravámenes en warn, el backend bloquea la preparación/radicación sin
-              decisión vigente (o sin su documento). "Omitir" es la vía "asumo el riesgo", y por eso
-              desaparece cuando el organismo exige el certificado (CF-06, HU #10881): ahí el riesgo
-              no es del gestor sino una regla del OT, y ofrecerla llevaba a guardar una decisión que
-              el backend luego rechaza. El PUT de prenda aplica la misma regla, esta lista solo evita
-              que el gestor llegue a intentarlo. */}
-          <PrendaForm
-            ref={prendaFormRef}
-            instanceId={instanceId}
-            decisions={traspasoDecisions(prendaDocumentRequired)}
-            onSaved={onRefresh}
-            embeddedInWizard
-            modalidad="traspaso"
-            documentRequired={prendaDocumentRequired}
-            onDocumentGateChange={onPrendaDocumentGateChange}
-            runtHasGravamen={
-              preflight?.checks?.find((c) => c.key === 'gravamenes')?.status === 'warn'
-            }
-            runtGravamenMessage={
-              preflight?.checks?.find((c) => c.key === 'gravamenes')?.message
-            }
-          />
-        </div>
-      );
-
+    // Los datos comerciales dejaron de tener paso propio: viven en Requisitos. Esta clave solo
+    // puede llegar desde un borrador antiguo que quedó apuntando aquí, así que cae en Requisitos,
+    // que es donde ahora están sus datos — el gestor encuentra lo que dejó a medias.
     // Matrícula paso 4 = Identidad (biométrica del comprador, parte única).
     // Título + subtítulo van dentro del panel blanco de BiometricStep.
     case 'identidad': {

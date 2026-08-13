@@ -202,6 +202,37 @@ public sealed class TraspasoGatesTests
         r.Code.Should().Be("documentos_incompletos");
     }
 
+    [Fact] // Paridad con matrícula (2026-08) — los datos comerciales se absorbieron en el paso 4.
+    public void Paso4_ValorVenta0_Bloquea()
+    {
+        var ctx = BaseCtx() with { ValorVenta = 0m };
+        var r = TraspasoGates.PasoCompleto(4, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("comercial_valor");
+    }
+
+    [Fact]
+    public void Paso4_ValorVenta0_ForzarNoBypass()
+    {
+        // ValidarComercial no tiene bypass por ForzarContinuar (paridad con el comportamiento previo
+        // del antiguo paso 5, que tampoco lo tenía).
+        var ctx = BaseCtx() with { ValorVenta = 0m, ForzarContinuar = true };
+        var r = TraspasoGates.PasoCompleto(4, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("comercial_valor");
+    }
+
+    [Fact]
+    public void Paso4_DocumentosCompletosSinValorVenta_BloqueaPorComercial()
+    {
+        // Documentos completos pero SIN valor de venta: el gate del paso 4 debe seguir bloqueando por
+        // el dato comercial que ahora también exige (no basta con los documentos del checklist).
+        var ctx = BaseCtx() with { ValorVenta = 0m, DocumentosObligatoriosCompletos = true };
+        var r = TraspasoGates.PasoCompleto(4, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("comercial_valor");
+    }
+
     [Fact] // HU #10935 — el comprador/SIMIT ahora es el paso 3.
     public void Paso3_RiesgoPreflightAceptado_NoBypassSimit()
     {
@@ -284,17 +315,55 @@ public sealed class TraspasoGatesTests
         r.Code.Should().Be("comercial_valor");
     }
 
-    [Fact]
-    public void MaxPasoAlcanzable_SinComercial_Es5()
+    [Fact] // El dato comercial ahora vive en el paso 4 (Documentos): sin él, el máximo alcanzable es 4.
+    public void MaxPasoAlcanzable_SinComercial_Es4()
     {
         var ctx = BaseCtx() with { ValorVenta = 0m };
-        TraspasoGates.MaxPasoAlcanzable(ctx).Should().Be(5);
+        TraspasoGates.MaxPasoAlcanzable(ctx).Should().Be(4);
     }
 
     [Fact]
     public void MaxPasoAlcanzable_TodoCompleto_Es6()
     {
         TraspasoGates.MaxPasoAlcanzable(BaseCtx()).Should().Be(TraspasoGates.TotalPasos);
+    }
+
+    // ── Paso 5 = Identidad: biométrica de AMBAS partes (antes evaluada, solo para mostrar razón,
+    // de forma diferida en el paso 6 vía GateFur) ─────────────────────────────────────────────────
+
+    [Fact]
+    public void Paso5_SinBiometriaDeAlgunaParte_Bloquea()
+    {
+        var ctx = BaseCtx() with { Biometria = new BiometriaSnapshot(Vendedor: true, Comprador: false) };
+        var r = TraspasoGates.PasoCompleto(5, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("biometria_pendiente");
+    }
+
+    [Fact]
+    public void Paso5_BiometriaAmbasPartes_Avanza()
+    {
+        TraspasoGates.PasoCompleto(5, BaseCtx()).Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Paso5_ForzarContinuar_BypassBiometria()
+    {
+        var ctx = BaseCtx() with
+        {
+            Biometria = new BiometriaSnapshot(Vendedor: false, Comprador: false),
+            ForzarContinuar = true,
+        };
+        TraspasoGates.PasoCompleto(5, ctx).Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public void MaxPasoAlcanzable_SinBiometria_Es5()
+    {
+        // Documentos (4, con el valor de venta) completos; sin biométrica de ambas partes el máximo
+        // alcanzable se detiene en 5 (Identidad) y el paso 6 (FUR) queda fuera de alcance.
+        var ctx = BaseCtx() with { Biometria = new BiometriaSnapshot(Vendedor: false, Comprador: true) };
+        TraspasoGates.MaxPasoAlcanzable(ctx).Should().Be(5);
     }
 
     [Fact]
@@ -329,6 +398,27 @@ public sealed class TraspasoGatesTests
             clavesModificadas: new[] { "vendedor" });
         r.Ok.Should().BeFalse();
         r.Code.Should().Be("paso_cerrado");
+    }
+
+    [Fact] // El dato comercial ahora vive en el paso 4 (Documentos), no en el 5.
+    public void DetectarModificacionPasosCerrados_ComercialEnPaso4Cerrado_Bloquea()
+    {
+        // maxEditable=5 → paso 4 (Documentos, dueño de "comercial") ya cerrado.
+        var r = TraspasoGates.DetectarModificacionPasosCerrados(
+            maxPasoEditable: 5,
+            clavesModificadas: new[] { "comercial" });
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("paso_cerrado");
+    }
+
+    [Fact]
+    public void DetectarModificacionPasosCerrados_ComercialEnPaso4Abierto_Permitido()
+    {
+        // maxEditable=4 → paso 4 aún editable (loop corre p &lt; maxPasoEditable, no llega a 4).
+        var r = TraspasoGates.DetectarModificacionPasosCerrados(
+            maxPasoEditable: 4,
+            clavesModificadas: new[] { "comercial" });
+        r.Ok.Should().BeTrue();
     }
 
     [Fact]
