@@ -71,7 +71,8 @@ export function WizardCardHeader({
         <h3 id={id} className="text-sm font-bold leading-tight">
           {title}
         </h3>
-        {subtitle ? <p className="mt-1 text-xs leading-snug opacity-60">{subtitle}</p> : null}
+        {/* opacity-70 es el piso del sistema sobre texto; por debajo el contraste efectivo cae de AA. */}
+        {subtitle ? <p className="mt-1 text-xs leading-snug opacity-70">{subtitle}</p> : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
@@ -110,11 +111,14 @@ export function WizardSegmented<T extends string>({
   return (
     <div className={className}>
       <span className="mb-1.5 block text-xs font-semibold">{label}</span>
+      {/* La pista va en el azul de fondo de la app (`background.app`) y no en un gris frío: sobre la
+          tarjeta blanca hunde el control lo justo, y el gris que trae la propuesta para esto es de
+          la escala `slate-*` de Tailwind, que no es paleta FLIT. */}
       <div
         role="group"
         aria-label={label}
         className="inline-flex gap-0.5 rounded-xl border p-1"
-        style={{ borderColor: '#DFE5ED', background: '#F8FAFC' }}
+        style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
       >
         {options.map((o) => {
           const active = value === o.value;
@@ -136,7 +140,9 @@ export function WizardSegmented<T extends string>({
                   ? {
                       background: '#FFFFFF',
                       color: '#557EFF',
-                      boxShadow: '0 4px 20px -2px rgba(15,23,42,0.05)',
+                      // `shadow.card` del token file. La sombra de la propuesta se apoya en
+                      // rgba(15,23,42,…) —slate-900— y no en el navy de marca.
+                      boxShadow: '0 8px 24px rgba(22, 39, 68, 0.08)',
                     }
                   : undefined
               }

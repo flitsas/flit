@@ -90,7 +90,9 @@ export function CarLoader({ mode = 'runt', label }: { mode?: CarLoaderMode; labe
 
       <div className="text-center">
         <p className="text-sm font-semibold">Cargando…</p>
-        <p className="mt-1 text-xs opacity-60">{mensaje}</p>
+        {/* opacity-70 es el piso del sistema sobre texto: este mensaje es la única explicación de
+            la espera y no puede quedar por debajo de AA. */}
+        <p className="mt-1 text-xs opacity-70">{mensaje}</p>
       </div>
     </div>
   );
@@ -105,13 +107,17 @@ export function CarLoader({ mode = 'runt', label }: { mode?: CarLoaderMode; labe
  */
 export function CarLoaderModal({ mode = 'runt', label }: { mode?: CarLoaderMode; label?: string }) {
   return (
+    // Overlay del token (`component.modal.overlay` + `overlayBlur`), que es uno de los dos únicos
+    // desenfoques autorizados del sistema. La propuesta usa aquí un velo claro y una caja
+    // semitransparente con blur; esa caja sería cristal fuera de las dos excepciones, así que el
+    // desenfoque se queda en el velo y el contenedor va opaco.
     <div
-      className="fixed inset-0 z-[1200] flex items-center justify-center p-6"
-      style={{ background: 'rgba(238,245,255,0.55)' }}
+      className="fixed inset-0 z-[1200] flex items-center justify-center p-6 backdrop-blur-[6px]"
+      style={{ background: 'rgba(22, 39, 68, 0.45)' }}
     >
       <div
-        className="rounded-2xl border border-white/40 bg-white/75 p-8 backdrop-blur-md dark:bg-[#0B0F14]/80"
-        style={{ boxShadow: '0 8px 40px -8px rgba(85,126,255,0.28)' }}
+        className="rounded-2xl border border-[#DFE5ED] bg-white p-8 dark:border-white/10 dark:bg-[#162744]"
+        style={{ boxShadow: '0 24px 60px rgba(22, 39, 68, 0.18)' }}
       >
         <CarLoader mode={mode} label={label} />
       </div>

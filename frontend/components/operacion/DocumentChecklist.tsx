@@ -474,7 +474,7 @@ export function DocumentSlot({
         // vacío y desaparece en cuanto hay archivo, que pasa a borde sólido de tarjeta normal.
         (done
           ? 'border shadow-sm hover:shadow-md'
-          : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#F0F5FF]')
+          : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#EFF6FF]')
       }
       style={{
         borderColor: done
@@ -533,7 +533,7 @@ export function DocumentSlot({
       {(done || analyzing) && (
         <div
           className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
-          style={{ background: '#F1F5F9' }}
+          style={{ background: '#DFE5ED' }}
           aria-hidden="true"
         >
           <div
@@ -919,12 +919,16 @@ export function DocumentChecklist({
         </p>
       ) : (
         <ul
+          // La propuesta llega a cuatro columnas en pantalla ancha; el checklist se quedaba en tres
+          // y dejaba una franja muerta a la derecha en trámites con muchos documentos.
           className={`grid gap-3 ${
             items.length === 1
               ? 'grid-cols-1'
               : items.length === 2
                 ? 'grid-cols-1 sm:grid-cols-2'
-                : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+                : items.length === 3
+                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+                  : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
           }`}
           aria-label="Checklist de documentos"
         >
