@@ -1544,10 +1544,17 @@ const VEHICLE_DETAILS: { key: string; label: string }[] = [
 function VehicleDataCard({
   fieldValues,
   bare = false,
+  validadoEnRunt = false,
 }: {
   fieldValues: FieldValue[];
   /** Dentro del acordeón "Datos consolidados del vehículo (RUNT)": sin marco ni cabecera propia. */
   bare?: boolean;
+  /**
+   * Añade el distintivo "Validado en RUNT" a la franja de identificación. Se usa donde la tarjeta
+   * NO va bajo una cabecera que ya nombre la fuente —dentro de la tarjeta de consulta de
+   * matrícula—, para no perder de dónde salieron los datos.
+   */
+  validadoEnRunt?: boolean;
 }) {
   const byKey = (key: string) =>
     fieldValues.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
@@ -1633,11 +1640,19 @@ function VehicleDataCard({
                 className="rounded-full px-2 py-0.5 text-xs font-bold"
                 style={
                   estadoActivo
-                    ? { background: 'rgba(140,198,63,0.15)', color: '#8CC63F' }
-                    : { background: 'rgba(154,165,177,0.15)', color: '#9AA5B1' }
+                    ? { background: 'rgba(140,198,63,0.15)', color: '#3F8F0C' }
+                    : { background: 'rgba(154,165,177,0.15)', color: '#5B6675' }
                 }
               >
                 {estado}
+              </span>
+            )}
+            {validadoEnRunt && (
+              <span
+                className="rounded-full px-2 py-0.5 text-xs font-bold"
+                style={{ background: 'rgba(140,198,63,0.15)', color: '#3F8F0C' }}
+              >
+                Validado en RUNT
               </span>
             )}
           </div>
@@ -2480,6 +2495,11 @@ function ConsultaStep({
   const modalidadVigente: WizardModalidad =
     deferredModalidad ?? (isVin ? 'matricula_inicial' : 'traspaso');
 
+  // Cambiar de tipo se confirma antes de navegar, como en la propuesta: al hacerlo cambian las
+  // validaciones y los documentos exigidos, y lo poco que ya se hubiera capturado en este paso
+  // (placa, documento del propietario, secretaría) se pierde al montar el otro asistente.
+  const [pendingTipo, setPendingTipo] = useState<string | null>(null);
+
   // Botón "Consultar RUNT": mismo estilo gradiente que "Enviar a tránsito"
   // (unificación de estilos pedida). Disparo único de la consulta.
   const consultButton = (
@@ -2525,7 +2545,7 @@ function ConsultaStep({
                 <button
                   key={o.id}
                   type="button"
-                  onClick={() => router.push(`/tramites/nuevo/${o.id}`)}
+                  onClick={() => setPendingTipo(o.id)}
                   disabled={!seleccionable}
                   aria-current={activa ? 'step' : undefined}
                   className="w-full rounded-xl border p-3.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed enabled:hover:border-[#557EFF]"
@@ -2566,39 +2586,6 @@ function ConsultaStep({
           Validamos {isVin ? 'el VIN' : 'la placa'} en el RUNT antes de configurar el trámite.
         </p>
 
-        {/* HU #11199 — secretaría ANTES de consultar VIN (matrícula): la consulta no se habilita
-            sin ella, así que va arriba del identificador. Guía de documentos: enlace discreto →
-            panel lateral (no ocupa el layout del paso 1). */}
-        {eligeSecretaria && (
-          <div className="mt-4 max-w-xl">
-            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-              <span className={WIZARD_LABEL}>Secretaría de tránsito *</span>
-              <ProcedureDocsPreviewInformativo
-                modalidad="matricula_inicial"
-                transitOfficeId={transitOfficeId || undefined}
-              />
-            </div>
-            <TransitOfficeSearchPicker
-              offices={secretarias}
-              valueId={transitOfficeId}
-              onChange={(id) => {
-                setTransitOfficeId(id);
-                invalidatePreview();
-                setError(null);
-              }}
-              disabled={readOnly}
-              describedBy="consulta-secretaria-aviso"
-            />
-            <p id="consulta-secretaria-aviso" className="mt-1.5 text-xs leading-tight opacity-70">
-              {SECRETARIA_LISTA_AVISO}
-            </p>
-            {secretariasError && (
-              <p className="mt-1 text-xs leading-tight" style={{ color: '#E5484D' }}>
-                {secretariasError}
-              </p>
-            )}
-          </div>
-        )}
 
         <div className="mt-4 flex flex-wrap items-end gap-4">
           {isVin ? (
@@ -2724,7 +2711,65 @@ function ConsultaStep({
             )}
           </div>
         )}
+
+        {/* Matrícula: el resultado de la consulta vive DENTRO de esta tarjeta, como en la propuesta
+            —la franja con la placa y la retícula de datos aparecen bajo el campo que los trajo—.
+            En traspaso el diseño lo saca a un acordeón propio, que se pinta más abajo. */}
+        {isVin && hasVehicleData && (
+          <div className="mt-4 border-t pt-4">
+            <VehicleDataCard fieldValues={fieldValues} bare validadoEnRunt />
+          </div>
+        )}
       </div>
+
+      {/* 3ª tarjeta: Organismo de Tránsito y Radicación (HU #11199 — solo matrícula y solo mientras
+          el trámite no existe). La propuesta le da tarjeta propia después de la consulta: es una
+          decisión de radicación, no un parámetro más del vehículo. */}
+      {eligeSecretaria && (
+        <div className={WIZARD_CARD}>
+          <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
+            Organismo de Tránsito y Radicación
+          </h3>
+          <p className="mt-1 text-xs opacity-70">
+            Selecciona la secretaría donde se radicará el expediente.
+          </p>
+          <div className="mt-4 max-w-xl">
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+              <span className={WIZARD_LABEL}>Secretaría de tránsito *</span>
+              <ProcedureDocsPreviewInformativo
+                modalidad="matricula_inicial"
+                transitOfficeId={transitOfficeId || undefined}
+              />
+            </div>
+            <TransitOfficeSearchPicker
+              offices={secretarias}
+              valueId={transitOfficeId}
+              onChange={(id) => {
+                setTransitOfficeId(id);
+                invalidatePreview();
+                setError(null);
+              }}
+              disabled={readOnly}
+              describedBy="consulta-secretaria-aviso"
+            />
+            {/* Aviso ámbar mientras falta: sin secretaría la consulta no se habilita, y el botón
+                deshabilitado por sí solo no dice por qué. */}
+            {!transitOfficeId && (
+              <p className="mt-1.5 text-xs font-medium leading-tight" style={{ color: '#B45309' }}>
+                Aún no has seleccionado la secretaría de tránsito.
+              </p>
+            )}
+            <p id="consulta-secretaria-aviso" className="mt-1 text-xs leading-tight opacity-70">
+              {SECRETARIA_LISTA_AVISO}
+            </p>
+            {secretariasError && (
+              <p className="mt-1 text-xs leading-tight" style={{ color: '#E5484D' }}>
+                {secretariasError}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {error && (
         <p
@@ -2784,29 +2829,31 @@ function ConsultaStep({
           Tenant-scoped por el header; el NIT del tenant (tenantNitDigits) queda disponible arriba. */}
       <ActiveDeedsCollapse />
 
-      {/* Datos consolidados del vehículo. Acordeón abierto de entrada —es el resultado de la
-          consulta, lo que el gestor viene a ver— y con el estado en la cabecera, para que plegado
-          siga diciendo si ya se consultó o no. */}
-      <WizardAccordion
-        title="Datos consolidados del vehículo (RUNT)"
-        defaultOpen
-        badge={
-          <WizardPill
-            text={hasVehicleData ? 'Consultado' : 'Pendiente'}
-            color={hasVehicleData ? '#3F8F0C' : '#6B7688'}
-          />
-        }
-      >
-        {hasVehicleData ? (
-          <VehicleDataCard fieldValues={fieldValues} bare />
-        ) : (
-          <p className="text-xs opacity-60">
-            {isVin
-              ? 'Consulta el VIN para traer los datos del vehículo desde el RUNT.'
-              : 'Consulta la placa y el documento del propietario para traer los datos del vehículo desde el RUNT.'}
-          </p>
-        )}
-      </WizardAccordion>
+      {/* Datos consolidados del vehículo. Solo traspaso: es el asistente de la propuesta que los
+          saca a un acordeón propio (en matrícula van dentro de la tarjeta de consulta). Abierto de
+          entrada —es el resultado de la consulta, lo que el gestor viene a ver— y con el estado en
+          la cabecera, para que plegado siga diciendo si ya se consultó o no. */}
+      {!isVin && (
+        <WizardAccordion
+          title="Datos consolidados del vehículo (RUNT)"
+          defaultOpen
+          badge={
+            <WizardPill
+              text={hasVehicleData ? 'Consultado' : 'Pendiente'}
+              color={hasVehicleData ? '#3F8F0C' : '#6B7688'}
+            />
+          }
+        >
+          {hasVehicleData ? (
+            <VehicleDataCard fieldValues={fieldValues} bare />
+          ) : (
+            <p className="text-xs opacity-60">
+              Consulta la placa y el documento del propietario para traer los datos del vehículo
+              desde el RUNT.
+            </p>
+          )}
+        </WizardAccordion>
+      )}
 
       {/* Tipo de servicio (sección 18 del FUR) — solo matrícula inicial, solo mientras el trámite no
           existe (ver `eligeTipoServicio`) y SOLO DESPUÉS de consultar el vehículo: antes de la
@@ -3086,6 +3133,43 @@ function ConsultaStep({
             esMigrado={esMigrado}
           />
         </WizardAccordion>
+      )}
+
+      {/* Confirmación de cambio de tipo de trámite (propuesta: modal "Cambiar tipo de trámite"). */}
+      {pendingTipo && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-[#162744]/40 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cambiar-tipo-titulo"
+        >
+          <div className="w-full max-w-md rounded-2xl border bg-white p-5 dark:bg-[#0B0F14]">
+            <h3 id="cambiar-tipo-titulo" className="text-sm font-bold" style={{ color: '#557EFF' }}>
+              Cambiar tipo de trámite
+            </h3>
+            <p className="mt-2 text-xs leading-relaxed opacity-80">
+              ¿Deseas cambiar el tipo de trámite? Se actualizarán las validaciones y los documentos
+              requeridos, y se perderá lo capturado en este paso.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingTipo(null)}
+                className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push(`/tramites/nuevo/${pendingTipo}`)}
+                className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+              >
+                Sí, cambiar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
