@@ -110,10 +110,9 @@ function renderNuevo(modalidad: 'matricula_inicial' | 'traspaso' = 'matricula_in
 }
 
 async function elegirSecretaria(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(
-    await screen.findByRole('button', { name: /Seleccionar secretaría de tránsito/i }),
-  );
-  await user.click(await screen.findByRole('button', { name: /Medellín/ }));
+  // Combobox en línea: enfocar el campo despliega la lista, y la opción se elige de ella.
+  await user.click(await screen.findByRole('combobox', { name: /secretaría de tránsito/i }));
+  await user.click(await screen.findByRole('option', { name: /Medellín/ }));
 }
 
 /** Deja el paso 1 de matrícula con la consulta RUNT ya resuelta en verde (secretaría + VIN). */

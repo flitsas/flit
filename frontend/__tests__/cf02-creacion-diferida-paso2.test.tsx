@@ -93,11 +93,9 @@ const SECRETARIAS = [
 
 /** Deja el paso 1 listo para consultar: secretaría elegida y VIN escrito. */
 async function prepararConsulta(user: ReturnType<typeof userEvent.setup>) {
-  // TransitOfficeSearchPicker: abrir modal y elegir por nombre (ya no es <select>).
-  await user.click(
-    await screen.findByRole('button', { name: /Seleccionar secretaría de tránsito/i }),
-  );
-  await user.click(await screen.findByRole('button', { name: /Medellín/ }));
+  // TransitOfficeSearchPicker: combobox en línea — enfocar el campo despliega la lista.
+  await user.click(await screen.findByRole('combobox', { name: /secretaría de tránsito/i }));
+  await user.click(await screen.findByRole('option', { name: /Medellín/ }));
   await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
 }
 

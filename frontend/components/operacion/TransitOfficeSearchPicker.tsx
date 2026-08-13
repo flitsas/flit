@@ -1,15 +1,20 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Building2, Search, X } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { TransitOfficeOption } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT } from './wizard-field-styles';
 
-const INPUT_BASE = WIZARD_INPUT;
-
 /**
- * Selector de organismo/secretaría con buscador interno (mismo patrón del modal del paso FUR).
- * En el paso 1 de matrícula reemplaza el &lt;select&gt; nativo.
+ * Selector de organismo/secretaría, en la forma de la propuesta: un campo de texto que al enfocarlo
+ * despliega la lista debajo y se filtra escribiendo.
+ *
+ * Antes era un botón "Seleccionar" que abría un diálogo a pantalla completa con su propio buscador.
+ * Elegir una secretaría no justifica sacar al gestor del formulario: es un campo más de la tarjeta
+ * de radicación, y el diseño lo trata como tal.
+ *
+ * Patrón combobox de WAI-ARIA: el campo declara `role="combobox"` con `aria-expanded` y
+ * `aria-activedescendant`, y la lista es un `listbox` navegable con flechas, Enter y Escape. El
+ * ratón por sí solo no basta — este control gatea la consulta del paso 1.
  */
 export function TransitOfficeSearchPicker({
   offices,
@@ -28,6 +33,10 @@ export function TransitOfficeSearchPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [activo, setActivo] = useState(0);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
+  const inputId = useId();
 
   const selected = useMemo(
     () => offices.find((o) => o.id === valueId) ?? null,
@@ -38,138 +47,121 @@ export function TransitOfficeSearchPicker({
     const q = query.trim().toLowerCase();
     const list = q
       ? offices.filter(
-          (o) =>
-            o.name.toLowerCase().includes(q) || o.code.toLowerCase().includes(q),
+          (o) => o.name.toLowerCase().includes(q) || o.code.toLowerCase().includes(q),
         )
       : offices;
     return list.slice(0, 40);
   }, [query, offices]);
 
+  // Cerrar al pulsar fuera. Sin esto la lista queda abierta sobre el resto del formulario cuando el
+  // gestor sigue a otro campo con el ratón.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
   const pick = (org: TransitOfficeOption) => {
     onChange(org.id);
-    setOpen(false);
     setQuery('');
+    setOpen(false);
   };
 
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      setOpen(false);
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!open) {
+        setOpen(true);
+        return;
+      }
+      if (results.length === 0) return;
+      const paso = e.key === 'ArrowDown' ? 1 : -1;
+      setActivo((i) => (i + paso + results.length) % results.length);
+      return;
+    }
+    if (e.key === 'Enter' && open && results[activo]) {
+      e.preventDefault();
+      pick(results[activo]);
+    }
+  };
+
+  // El campo muestra lo elegido cuando está en reposo y lo tecleado mientras se busca, para que el
+  // gestor no pierda de vista qué secretaría tiene puesta al abrir la lista sin escribir.
+  const valorCampo = open ? query : (selected?.name ?? '');
+
   return (
-    <div className="space-y-2" aria-describedby={describedBy}>
-      {!disabled && (
-        <div>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold"
-            style={{ borderColor: '#557EFF', color: '#557EFF' }}
-            aria-label={
-              selected ? 'Cambiar secretaría de tránsito' : 'Seleccionar secretaría de tránsito'
-            }
-          >
-            <Building2 className="h-3 w-3" aria-hidden />
-            {selected ? 'Cambiar' : 'Seleccionar'}
-          </button>
-        </div>
-      )}
-      {selected ? (
-        <div
-          className="flex min-w-0 items-center gap-3 rounded-xl border p-3"
-          style={{ borderColor: '#8CC63F' }}
-        >
-          <Building2 className="h-4 w-4 shrink-0" style={{ color: '#5B8A1F' }} aria-hidden />
-          <div className="min-w-0">
-            <p className="truncate text-xs font-semibold" style={{ color: '#162744' }}>
-              {selected.name}
-            </p>
-            <p className="truncate text-xs opacity-70">
-              {[selected.cityCode, selected.code].filter(Boolean).join(' · ')}
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div
-          className="rounded-xl border p-3 text-xs"
-          style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)', color: '#F9AC00' }}
-          role="status"
-        >
-          Aún no has seleccionado la secretaría de tránsito.
-        </div>
-      )}
+    <div className="relative" ref={wrapRef}>
+      <input
+        id={inputId}
+        type="text"
+        role="combobox"
+        // El rótulo visible lo pinta la tarjeta de radicación con su propia maqueta, así que no hay
+        // <label htmlFor> que asociar: el nombre accesible viaja aquí.
+        aria-label="Secretaría de tránsito"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-activedescendant={open && results[activo] ? `${listId}-${activo}` : undefined}
+        aria-describedby={describedBy}
+        value={valorCampo}
+        disabled={disabled}
+        placeholder="Escribe para buscar el organismo de tránsito"
+        onFocus={() => setOpen(true)}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setActivo(0);
+          setOpen(true);
+        }}
+        onKeyDown={onKeyDown}
+        className={WIZARD_INPUT}
+      />
 
-      {open && (
+      {open && !disabled && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Seleccionar secretaría de tránsito"
+          className="absolute z-30 mt-1 max-h-52 w-full overflow-y-auto rounded-xl border bg-white p-1 dark:bg-[#0B0F14]"
+          style={{ boxShadow: '0 8px 24px rgba(15,23,20,0.12)' }}
         >
-          <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border bg-white p-6 dark:bg-[#0B0F14]">
-            <div className="mb-3 flex items-start justify-between">
-              <div>
-                <h3 className="text-sm font-bold">Secretaría de tránsito</h3>
-                <p className="text-xs opacity-70">
-                  Busca y elige dónde se radicará el trámite.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  setQuery('');
-                }}
-                aria-label="Cerrar"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="relative mb-3">
-              <Search
-                className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-50"
-                aria-hidden
-              />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar por nombre o código…"
-                aria-label="Buscar secretaría de tránsito"
-                className={`${INPUT_BASE} pl-9`}
-                autoFocus
-              />
-            </div>
-
-            <ul className="space-y-1.5 overflow-y-auto" aria-label="Catálogo de organismos">
-              {results.map((o) => (
-                <li key={o.id}>
+          <ul id={listId} role="listbox" aria-label="Organismos de tránsito">
+            {loading && (
+              <li className="px-3 py-2 text-xs opacity-60" role="status">
+                Cargando organismos…
+              </li>
+            )}
+            {!loading && results.length === 0 && (
+              <li className="px-3 py-2 text-xs opacity-60">Sin resultados.</li>
+            )}
+            {!loading &&
+              results.map((o, i) => (
+                // El `role="option"` va en el ELEMENTO PULSABLE, no en el `<li>` que lo envuelve:
+                // con el rol fuera, quien apunte a la opción —una prueba, un lector de pantalla al
+                // activarla— pulsa un contenedor inerte y no pasa nada.
+                <li key={o.id} role="presentation">
                   <button
                     type="button"
+                    id={`${listId}-${i}`}
+                    role="option"
+                    aria-selected={o.id === valueId}
+                    // La lista NO se cierra al perder el foco el campo —solo con un mousedown fuera
+                    // del contenedor—, así que el clic llega entero.
                     onClick={() => pick(o)}
-                    className="w-full rounded-xl border p-2.5 text-left hover:border-[#557EFF]"
+                    onMouseEnter={() => setActivo(i)}
+                    className={`w-full rounded-lg px-3 py-2 text-left text-xs font-medium hover:bg-[#EFF6FF] dark:hover:bg-white/5 ${
+                      i === activo ? 'bg-[#EFF6FF] dark:bg-white/5' : ''
+                    }`}
+                    style={{ color: '#162744' }}
                   >
-                    <p className="text-xs font-semibold">{o.name}</p>
-                    <p className="text-xs opacity-70">
-                      {[o.code, o.cityCode].filter(Boolean).join(' · ')}
-                    </p>
+                    {o.name}
                   </button>
                 </li>
               ))}
-              {loading && (
-                <li className="py-3 text-center text-xs opacity-60">
-                  Cargando organismos habilitados…
-                </li>
-              )}
-              {!loading && offices.length === 0 && (
-                <li className="py-3 text-center text-xs" style={{ color: '#F9AC00' }}>
-                  Tu compañía no tiene organismos de tránsito habilitados. Contacta al
-                  administrador para habilitarlos.
-                </li>
-              )}
-              {!loading && offices.length > 0 && results.length === 0 && (
-                <li className="py-3 text-center text-xs opacity-60">
-                  Sin resultados para «{query}».
-                </li>
-              )}
-            </ul>
-          </div>
+          </ul>
         </div>
       )}
     </div>
