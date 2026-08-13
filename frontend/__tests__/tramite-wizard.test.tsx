@@ -872,12 +872,14 @@ describe('TramiteWizard — consulta persiste antes de preflight', () => {
     renderWizard();
     await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
-    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+    // Sin identificador el disparo ni se ofrece: el botón está deshabilitado en vez de aceptar el
+    // clic para devolver un error que el gestor ya ve mirando el campo vacío.
+    const consultar = screen.getByRole('button', { name: /Consultar RUNT/ });
+    expect(consultar).toBeDisabled();
+    await user.click(consultar);
 
-    // Validación: sin identificador no se persiste ni se consulta.
     expect(mocks.patchFieldValues).not.toHaveBeenCalled();
     expect(mocks.runPreflight).not.toHaveBeenCalled();
-    expect(screen.getByText(/Ingresa el VIN antes de consultar/)).toBeInTheDocument();
   });
 
   it('traspaso persiste placa + documento del propietario antes de preflight', async () => {

@@ -2583,19 +2583,25 @@ function ConsultaStep({
   // (placa, documento del propietario, secretaría) se pierde al montar el otro asistente.
   const [pendingTipo, setPendingTipo] = useState<string | null>(null);
 
-  // Botón "Consultar RUNT": mismo estilo gradiente que "Enviar a tránsito"
-  // (unificación de estilos pedida). Disparo único de la consulta.
+  // El identificador del vehículo está completo: el VIN en matrícula; la placa Y el documento del
+  // propietario en traspaso, porque el RUNT los cruza y con uno solo la consulta no resuelve.
+  const identificadorCompleto = isVin
+    ? vin.trim().length > 0
+    : plate.trim().length > 0 && ownerDocNumber.trim().length > 0;
+
+  // Botón "Consultar RUNT" — azul pleno de marca, como en la propuesta.
   const consultButton = (
     <button
       type="button"
       onClick={() => void handleRun()}
-      // HU #11199 (AC2) — sin secretaría la consulta no se habilita.
+      // Sin los datos que se van a consultar el botón no se habilita: pulsarlo solo devolvía un
+      // error que el gestor ya podía ver por sí mismo mirando el campo vacío.
       // La secretaría ya NO gatea la consulta (antes sí, HU #11199 AC2): el diseño consulta primero
       // y decide dónde radicar después. El requisito se mantiene sobre "Continuar y guardar", que
       // es donde se crea el trámite y donde el organismo tiene que viajar.
-      disabled={loading || familyBlocked}
-      className="flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-      style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+      disabled={loading || familyBlocked || !identificadorCompleto}
+      className={`${WIZARD_BTN} flex shrink-0 items-center justify-center gap-2 text-white focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50`}
+      style={{ background: '#557EFF' }}
       aria-label={familyBlocked ? 'Consulta no permitida para esta compañía' : 'Consultar RUNT'}
     >
       <Search className="h-3.5 w-3.5" />
