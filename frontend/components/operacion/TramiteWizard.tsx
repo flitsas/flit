@@ -1099,7 +1099,13 @@ export function TramiteWizard(props: Props) {
           sticky —si estuviera dentro nunca saldría de vista— y mide un píxel: no ocupa hueco. */}
       <div ref={centinelaCabeceraRef} aria-hidden="true" className="h-px" />
       {/* Título + seguimiento fijos al scroll de main; fondo sólido app-bg (no transparente). */}
-      <div className="sticky top-0 z-30 -mx-1 space-y-3 bg-[#eef5ff] px-1 pb-3 pt-1 dark:bg-[#0a1428]">
+      {/* Al condensar también se aprieta el propio contenedor: la separación entre tarjeta, pasos y
+          franja de identidad estaba calculada para la cabecera completa. */}
+      <div
+        className={`sticky top-0 z-30 -mx-1 bg-[#eef5ff] px-1 pt-1 transition-[padding] duration-200 motion-reduce:transition-none dark:bg-[#0a1428] ${
+          cabeceraCompacta ? 'space-y-1.5 pb-1.5' : 'space-y-3 pb-3'
+        }`}
+      >
         <div
           className={`flex items-center justify-between gap-3 rounded-2xl border border-[#DFE5ED] bg-white px-5 transition-[padding] duration-200 motion-reduce:transition-none dark:border-[#1A1F2B] dark:bg-[#0B0F14] ${
             cabeceraCompacta ? 'py-2' : 'py-4'
@@ -1151,6 +1157,7 @@ export function TramiteWizard(props: Props) {
             viewOnly={navViewOnly}
             coalesceActores={modalidad === 'traspaso'}
             modalidad={modalidad}
+            compacto={cabeceraCompacta}
           />
         )}
 
