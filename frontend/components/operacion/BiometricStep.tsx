@@ -23,6 +23,7 @@ import type {
   BiometricEstado,
   BiometricParte,
   BiometricValidation,
+  ProcedureActor,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
@@ -145,6 +146,71 @@ function formatFecha(iso: string | null | undefined): string {
 }
 
 /**
+ * Datos del recuadro de identidad de una `ParteCard`: nombre/razón social + línea de documento.
+ * Orden de fuente (ver comentario de `PartyIdentityBox`): 1) la validación biométrica, si ya
+ * existe — trae su propio `name`/`documentType`/`documentNumber`, sea cual sea su estado; 2) el
+ * actor del trámite, solo cuando NO hay validación todavía (parte "Sin iniciar"). Jurídica con
+ * representante legal usa la línea "Rep. Legal: {nombre} · {tipoDoc} {numero}", igual que la
+ * referencia del diseño; jurídica sin representante capturado cae al documento del propio actor
+ * (el NIT). `null` cuando no hay ningún dato disponible — el recuadro entonces no se pinta.
+ */
+function personaInfoFor(
+  validation: BiometricValidation | null,
+  actor: ProcedureActor | null,
+): { nombre: string; documentoLine: string } | null {
+  if (validation) {
+    return {
+      nombre: validation.name,
+      documentoLine: `${validation.documentType} ${validation.documentNumber}`,
+    };
+  }
+  if (!actor) return null;
+  const rep = actor.representanteLegal;
+  if (actor.personType === 'juridical' && rep?.nombreCompleto) {
+    const doc = [rep.tipoDocumento, rep.numeroDocumento].filter(Boolean).join(' ');
+    return {
+      nombre: actor.nombreCompleto,
+      documentoLine: doc
+        ? `Rep. Legal: ${rep.nombreCompleto} · ${doc}`
+        : `Rep. Legal: ${rep.nombreCompleto}`,
+    };
+  }
+  return {
+    nombre: actor.nombreCompleto,
+    documentoLine: `${actor.tipoDocumento} ${actor.numeroDocumento}`,
+  };
+}
+
+/**
+ * Recuadro que identifica a la persona detrás de la validación (paridad con la referencia del
+ * diseño: `MatriculaInicial` `Step4`, líneas 917-924 — "TRANSPORTES ANDINOS S.A.S — Comprador" /
+ * "Rep. Legal: Héctor Copete Andrade · CC 71.654.328"). FLIT rotulaba únicamente el ROL en la
+ * cabecera de la tarjeta (`PARTE_LABEL`); el nombre solo aparecía dentro de algunas vistas de
+ * estado. Se pinta antes de la vista de estado, en todos los estados, y se omite en silencio si
+ * todavía no hay ningún dato (nunca deja el paso en blanco por esto).
+ */
+function PartyIdentityBox({
+  parte,
+  validation,
+  actor,
+}: {
+  parte: BiometricParte;
+  validation: BiometricValidation | null;
+  actor: ProcedureActor | null;
+}) {
+  const info = personaInfoFor(validation, actor);
+  if (!info) return null;
+  return (
+    <div className="mb-3 rounded-xl border p-3" style={{ borderColor: '#DFE5ED' }}>
+      <p className="text-xs font-semibold">
+        {info.nombre} — {PARTE_LABEL[parte]}
+      </p>
+      <p className="mt-0.5 text-xs opacity-70">{info.documentoLine}</p>
+    </div>
+  );
+}
+
+/**
  * Paso de validación de identidad. Es provider-aware (HU #10233): con `kyverum` el clic dispara la
  * validación real (Kyverum captura remota + webhook), tomando los datos del actor del trámite y
  * mostrando el enlace de captura (link + QR) que también se envía por correo al cliente; el estado se
@@ -174,6 +240,30 @@ export function BiometricStep({
   const [firmaBaulServidor, setFirmaBaulServidor] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Actores del trámite: solo se usan para el recuadro "quién es la persona" cuando una parte
+  // TODAVÍA no tiene ninguna validación (la validación, si existe, ya trae name/documentType/
+  // documentNumber). Se carga UNA vez por montaje, aparte de `load()` (que sí se repite con el
+  // polling): no es dato que cambie mientras el gestor espera Kyverum, y no debe reiniciar el
+  // recuadro en cada refresco. Si falla, el recuadro simplemente no se pinta (`actors` se queda en
+  // `null`) — nunca bloquea el resto del paso.
+  const [actors, setActors] = useState<ProcedureActor[] | null>(null);
+
+  useEffect(() => {
+    if (!instanceId) return;
+    let cancelled = false;
+    tramitesClient
+      .getActors(instanceId)
+      .then((data) => {
+        if (!cancelled) setActors(data);
+      })
+      .catch(() => {
+        /* el recuadro de identidad es un refuerzo visual, no una fuente crítica: sin actores el
+           paso sigue funcionando (validación aprobada igual trae su propio nombre/documento). */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instanceId]);
 
   const load = useCallback(async () => {
     if (!instanceId) return null;
@@ -282,6 +372,7 @@ export function BiometricStep({
             : v.partyRole === null || v.partyRole === 'comprador',
         );
         const validation = matches.length > 0 ? matches[matches.length - 1] : null;
+        const actor = actors?.find((a) => a.rol === parte) ?? null;
         return (
           <ParteCard
             key={parte}
@@ -289,6 +380,7 @@ export function BiometricStep({
             instanceId={instanceId}
             provider={provider}
             validation={validation}
+            actor={actor}
             historial={matches}
             vaultCovered={
               firmaBaulServidor.includes(parte) || vaultCoveredPartes.includes(parte)
@@ -373,6 +465,7 @@ function ParteCard({
   instanceId,
   provider,
   validation,
+  actor,
   historial,
   vaultCovered,
   onChanged,
@@ -381,6 +474,9 @@ function ParteCard({
   instanceId: string | null;
   provider: string;
   validation: BiometricValidation | null;
+  /** Actor del trámite para este `parte` (comprador/vendedor); alimenta el recuadro de identidad
+   *  cuando aún no hay validación. `null` si los actores no cargaron o no hay uno para esta parte. */
+  actor: ProcedureActor | null;
   /** CF-08 (Feature #11004, HU #11009) — todas las validaciones de la parte, orden cronológico. */
   historial: BiometricValidation[];
   vaultCovered: boolean;
@@ -399,6 +495,14 @@ function ParteCard({
         title={PARTE_LABEL[parte]}
         action={<StatusBadge label={badge.label} tone={badge.tone} />}
       />
+
+      {/* Recuadro "quién es la persona que se está validando" (paridad con la referencia del
+          diseño: MatriculaInicial Step4). Siempre encima de la vista de estado, en TODOS los
+          estados (incluido "Sin iniciar" y cubierto por baúl): FLIT antes solo rotulaba el rol
+          ("Comprador"/"Vendedor") en la cabecera y el nombre solo aparecía dentro de algunas
+          vistas de estado — se está validando la identidad DE ALGUIEN y ese alguien debe verse
+          siempre. */}
+      <PartyIdentityBox parte={parte} validation={validation} actor={actor} />
 
       {/* HU #10646 — actor jurídico (NIT) cubierto por la firma del baúl: la identidad ya está
           satisfecha server-side; se presenta como firma electrónica y se omite toda la biométrica. */}

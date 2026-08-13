@@ -174,8 +174,7 @@ const ORGANISMO_NO_DISPONIBLE =
  * subtítulo. El paso `fur` no pinta título/subtítulo aquí (el resumen tiene su propio encabezado).
  */
 const STEP_SUBTITLE: Record<string, string> = {
-  identidad:
-    'Validación de identidad de cada parte. La biométrica real llegará en una iteración futura; por ahora puedes simular la validación de cada parte.',
+  identidad: 'Verificación de autenticidad de las partes involucradas.',
 };
 
 

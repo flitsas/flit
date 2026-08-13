@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import type { BiometricValidation } from '@/lib/api/types/procedure-runtime';
+import type { BiometricValidation, ProcedureActor } from '@/lib/api/types/procedure-runtime';
 
 // ── Mock del cliente HTTP (sin red real) ───────────────────────────
 const mocks = vi.hoisted(() => ({
   getBiometricState: vi.fn(),
   iniciarBiometric: vi.fn(),
   simulateBiometric: vi.fn(),
+  getActors: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -16,6 +17,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     getBiometricState: mocks.getBiometricState,
     iniciarBiometric: mocks.iniciarBiometric,
     simulateBiometric: mocks.simulateBiometric,
+    getActors: mocks.getActors,
   },
 }));
 
@@ -170,11 +172,20 @@ const EN_PROCESO_SIN_LINK: BiometricValidation = {
   captureUrl: null,
 };
 
+const ACTOR_COMPRADOR: ProcedureActor = {
+  rol: 'comprador',
+  tipoDocumento: 'CC',
+  numeroDocumento: '999',
+  nombreCompleto: 'Carlos Actor',
+  email: 'carlos@example.com',
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'mock' });
   mocks.simulateBiometric.mockResolvedValue(APROBADA);
   mocks.iniciarBiometric.mockResolvedValue({ validation: EN_PROCESO, captureUrl: EN_PROCESO.captureUrl });
+  mocks.getActors.mockResolvedValue([]);
 });
 
 describe('BiometricStep — partes por modalidad', () => {
@@ -508,5 +519,69 @@ describe('BiometricStep — estados "en vuelo" que antes caían al botón de arr
     expect(screen.queryByRole('button', { name: 'Simular validación de identidad' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reintentar envío' })).toBeInTheDocument();
     expect(screen.getByText('Error de envío')).toBeInTheDocument();
+  });
+});
+
+// Recuadro que identifica a la persona detrás de la validación (paridad con la referencia del
+// diseño: MatriculaInicial Step4 — "TRANSPORTES ANDINOS S.A.S — Comprador" / "Rep. Legal: …").
+// Antes FLIT solo rotulaba el ROL en la cabecera de la tarjeta; el nombre de la persona no se veía
+// hasta que la validación ya estaba en curso o aprobada.
+describe('BiometricStep — recuadro de identidad de la parte', () => {
+  it('con validación ya cargada, muestra el nombre y el documento de esa validación', async () => {
+    mocks.getBiometricState.mockResolvedValue({ validations: [APROBADA], provider: 'mock' });
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    expect(await screen.findByText('Ana Comprador — Comprador')).toBeInTheDocument();
+    expect(screen.getByText('CC 123')).toBeInTheDocument();
+    // No debe consultar actores si ya hay validación con los datos (igual se llama para tenerlos
+    // listos por si la validación cambia, pero el recuadro no depende de esa respuesta aquí).
+  });
+
+  it('sin validación todavía (Sin iniciar), toma nombre y documento del actor del trámite', async () => {
+    mocks.getActors.mockResolvedValue([ACTOR_COMPRADOR]);
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await screen.findByRole('group', { name: 'Biométrica Comprador' });
+    expect(await screen.findByText('Carlos Actor — Comprador')).toBeInTheDocument();
+    expect(screen.getByText('CC 999')).toBeInTheDocument();
+  });
+
+  it('jurídica con representante legal: usa "Rep. Legal: {nombre} · {tipoDoc} {numero}"', async () => {
+    const actorJuridico: ProcedureActor = {
+      rol: 'comprador',
+      tipoDocumento: 'NIT',
+      numeroDocumento: '900123456',
+      nombreCompleto: 'TRANSPORTES ANDINOS S.A.S',
+      email: 'contacto@andinos.com',
+      personType: 'juridical',
+      representanteLegal: {
+        nombreCompleto: 'Héctor Copete Andrade',
+        tipoDocumento: 'CC',
+        numeroDocumento: '71654328',
+      },
+    };
+    mocks.getActors.mockResolvedValue([actorJuridico]);
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await screen.findByRole('group', { name: 'Biométrica Comprador' });
+    expect(
+      await screen.findByText('TRANSPORTES ANDINOS S.A.S — Comprador'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Rep. Legal: Héctor Copete Andrade · CC 71654328'),
+    ).toBeInTheDocument();
+  });
+
+  it('si getActors falla, la tarjeta sigue funcionando y simplemente no pinta el recuadro', async () => {
+    mocks.getActors.mockRejectedValue(new Error('network'));
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    // El resto del paso funciona igual: la tarjeta y la acción de iniciar siguen disponibles.
+    expect(await screen.findByRole('group', { name: 'Biométrica Comprador' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Simular validación de identidad' }),
+    ).toBeInTheDocument();
+    // Sin actor ni validación, no hay dato para el recuadro: no se pinta nada falso.
+    expect(screen.queryByText(/— Comprador$/)).not.toBeInTheDocument();
   });
 });

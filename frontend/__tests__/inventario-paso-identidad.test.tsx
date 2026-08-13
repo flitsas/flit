@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   simulateBiometric: vi.fn(),
   reconcileBiometric: vi.fn(),
   getBiometricAuditByValidation: vi.fn(),
+  getActors: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -39,6 +40,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     simulateBiometric: mocks.simulateBiometric,
     reconcileBiometric: mocks.reconcileBiometric,
     getBiometricAuditByValidation: mocks.getBiometricAuditByValidation,
+    getActors: mocks.getActors,
   },
   // Detector por forma del 409 de envío duplicado; el paso lo importa junto al cliente.
   getIdentitySendConflict: () => null,
@@ -116,6 +118,7 @@ beforeEach(() => {
   mocks.iniciarBiometric.mockResolvedValue({ validation: EN_PROCESO, captureUrl: EN_PROCESO.captureUrl });
   mocks.reconcileBiometric.mockResolvedValue({ updated: false });
   mocks.getBiometricAuditByValidation.mockResolvedValue({ events: [], referencedFromOtherProcedure: false });
+  mocks.getActors.mockResolvedValue([]);
 });
 
 /**

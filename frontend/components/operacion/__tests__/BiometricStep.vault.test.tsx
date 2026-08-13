@@ -12,6 +12,10 @@ import { WizardReadOnlyProvider } from '../WizardReadOnlyContext';
 vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: {
     getBiometricState: vi.fn(),
+    // El paso consulta además los actores para poder identificar a la persona en la cabecera de
+    // cada tarjeta. Es un refuerzo visual y su fallo no rompe nada en producción, pero sin el mock
+    // el propio import revienta con "getActors is not a function".
+    getActors: vi.fn().mockResolvedValue([]),
   },
 }));
 
