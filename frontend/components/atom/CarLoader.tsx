@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Car } from 'lucide-react';
 
 /**
@@ -106,7 +107,14 @@ export function CarLoader({ mode = 'runt', label }: { mode?: CarLoaderMode; labe
  * bloquea el puntero, que es lo que se busca — evitar el doble envío mientras el proveedor responde.
  */
 export function CarLoaderModal({ mode = 'runt', label }: { mode?: CarLoaderMode; label?: string }) {
-  return (
+  // Portal a <body>, igual que `Modal` y por el mismo motivo: un `fixed inset-0` renderizado dentro
+  // del árbol del asistente resuelve su posición contra el primer ancestro que cree un containing
+  // block —basta un `transform`, un `filter` o un `backdrop-filter`—, y el velo quedaba recortado
+  // al recuadro del formulario en vez de cubrir la pantalla. Es exactamente lo que pasaba al
+  // consultar desde el paso de actores: el velo se montaba, pero no se veía.
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     // Overlay del token (`component.modal.overlay` + `overlayBlur`), que es uno de los dos únicos
     // desenfoques autorizados del sistema. La propuesta usa aquí un velo claro y una caja
     // semitransparente con blur; esa caja sería cristal fuera de las dos excepciones, así que el
@@ -121,6 +129,7 @@ export function CarLoaderModal({ mode = 'runt', label }: { mode?: CarLoaderMode;
       >
         <CarLoader mode={mode} label={label} />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -1883,6 +1883,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     return null;
   };
 
+  // Velo de espera SOLO para las consultas que dispara el gestor. Colgarlo de "hay una consulta en
+  // curso" tapaba la pantalla al entrar al paso: en traspaso el vendedor se consulta solo al montar
+  // (autoConsultRunt), y el velo aparecía en cada visita sin que nadie hubiera pedido nada. Una
+  // espera que el usuario no provocó no se anuncia tapándole la pantalla.
+  // Se declara ANTES de los dos returns: el layout partido sale antes y también lo necesita.
+  const consultandoActor = consultasManuales > 0;
+
   // ── Layout SPLIT (un comprador): 2 secciones ──────────────────────────────
   if (isSplit && actors.length === 1) {
     const actor = actors[0];
@@ -1894,6 +1901,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const showCiudades = !!ciudadOpen[0] && ciudades.length > 0;
     return (
       <>
+      {/* El velo va en los DOS layouts. Estaba solo en el de traspaso, que es el que cierra el
+          componente, así que al consultar desde matrícula —el layout partido, que retorna aquí—
+          no aparecía nunca. */}
+      {consultandoActor && <CarLoaderModal mode="runt" />}
       <form
         onSubmit={handleSubmit}
         aria-label="Captura de actores del trámite"
@@ -2153,12 +2164,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   }
 
   // ── Layout MULTI (traspaso): una tarjeta blanca por actor, lado a lado ────
-  // Velo de espera SOLO para las consultas que dispara el gestor. Colgarlo de "hay una consulta en
-  // curso" tapaba la pantalla al entrar al paso: en traspaso el vendedor se consulta solo al montar
-  // (autoConsultRunt), y el velo aparecía en cada visita sin que nadie hubiera pedido nada. Una
-  // espera que el usuario no provocó no se anuncia tapándole la pantalla.
-  const consultandoActor = consultasManuales > 0;
-
   return (
     <>
     {consultandoActor && <CarLoaderModal mode="runt" />}

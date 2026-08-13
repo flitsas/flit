@@ -931,3 +931,50 @@ describe('validateActors — unidad', () => {
     expect(v.valid).toBe(false);
   });
 });
+
+/**
+ * REGRESIÓN — el velo de espera al consultar un actor.
+ *
+ * Dos defectos distintos lo hacían invisible y conviene fijar los dos, porque fallan por motivos
+ * que no se parecen en nada:
+ *
+ * 1. Se pintaba con `fixed inset-0` dentro del árbol del formulario. Basta un ancestro con
+ *    `transform`, `filter` o `backdrop-filter` para que ese `fixed` se resuelva contra él y el velo
+ *    quede recortado al recuadro del formulario. Por eso ahora va portalizado a `<body>`, igual que
+ *    `Modal` — y por eso este test lo busca en `document.body`, no en el contenedor del render.
+ * 2. Colgaba de «hay una consulta en curso», y en traspaso el vendedor se consulta solo al montar:
+ *    el velo aparecía al entrar al paso sin que nadie lo hubiera pedido.
+ */
+describe('ActorsForm — velo de espera de la consulta', () => {
+  it('no aparece al montar el formulario', async () => {
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await screen.findByText(/Datos del comprador/);
+    expect(screen.queryByText(/Consultando información en el RUNT/)).toBeNull();
+  });
+
+  it('cubre la pantalla mientras dura la consulta que dispara el gestor', async () => {
+    // Consulta colgada a propósito: el velo tiene que seguir en pantalla al asertar.
+    let resolver: (v: unknown) => void = () => {};
+    mocks.runtPersonLookup.mockImplementation(
+      () => new Promise((r) => { resolver = r; }),
+    );
+
+    const user = userEvent.setup();
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await user.type(
+      await screen.findByPlaceholderText(/Número de documento del comprador/),
+      '12345',
+    );
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+
+    // Se busca en el documento entero: el velo vive en <body>, fuera del árbol del formulario.
+    const velo = await screen.findByText(/Consultando información en el RUNT/);
+    expect(document.body.contains(velo)).toBe(true);
+
+    resolver(RUNT_FOUND);
+    await waitFor(() =>
+      expect(screen.queryByText(/Consultando información en el RUNT/)).toBeNull(),
+    );
+  });
+});
