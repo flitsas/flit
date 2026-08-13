@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { AlertTriangle, Info, Search, UserRound } from 'lucide-react';
+import { AlertTriangle, Info, Search } from 'lucide-react';
 import { INLINE_ALERT_TONES, type InlineAlertTone } from '@/components/atom/InlineAlert';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { Modal } from '@/components/atom/Modal';
@@ -1887,7 +1887,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const razonLocked = isRazonSocialLocked(actor, 0);
     const ciudades = filterCiudades(actor.ciudad ?? '');
     const showCiudades = !!ciudadOpen[0] && ciudades.length > 0;
-    const sectionHeader = 'border-b px-4 py-3 flex items-center gap-2';
     return (
       <>
       <form
@@ -1898,15 +1897,19 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
        <fieldset disabled={readOnly} className="space-y-5 min-w-0 border-0 p-0 m-0">
         {errorBanner}
 
-        {/* Sección A — Identificación */}
-        <section className="rounded-2xl border bg-white dark:bg-[#0B0F14] overflow-hidden">
-          <div className={sectionHeader} style={{ background: 'rgba(85,126,255,0.04)' }}>
-            <UserRound className="h-4 w-4" style={{ color: '#557EFF' }} />
-            <span className="text-xs font-bold uppercase tracking-wide" style={{ color: '#162744' }}>
-              {`Identificación · ${ROL_LABEL[actor.rol]}`}
-            </span>
-          </div>
-          <div className="p-4 space-y-3">
+        {/* Sección A — Identificación. Cabecera en el lenguaje de la propuesta: título en azul de
+            marca y una frase que dice qué se registra, dentro de la propia tarjeta. Antes era una
+            franja gris en versalitas con icono, que gritaba el rótulo y no explicaba nada. */}
+        <section className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]">
+          <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
+            {`Datos del ${ROL_LABEL[actor.rol].toLowerCase()}`}
+          </h3>
+          <p className="mt-1 text-xs opacity-70">
+            {actor.rol === 'vendedor'
+              ? 'Registra la persona natural o jurídica que figura hoy como propietaria del vehículo.'
+              : 'Registra la persona natural o jurídica que figurará como propietaria del vehículo.'}
+          </p>
+          <div className="mt-4 space-y-3">
             {personTypeSelector(0)}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
               <div className="flex-1">
@@ -1960,14 +1963,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         </section>
 
         {/* Sección B — Datos de contacto */}
-        <section className="rounded-2xl border bg-white dark:bg-[#0B0F14]">
-          <div className="border-b px-4 py-3 flex flex-col gap-1" style={{ background: 'rgba(85,126,255,0.04)' }}>
-            <span className="text-xs font-bold uppercase tracking-wide" style={{ color: '#162744' }}>
-              Datos de contacto
-            </span>
-            {contactLookupHint(0)}
-          </div>
-          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <section className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]">
+          <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
+            Datos de contacto
+          </h3>
+          <div className="mt-1 text-xs opacity-70">{contactLookupHint(0)}</div>
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {/* Nombre / razón social */}
             <div className="lg:col-span-2">
               <label htmlFor="comprador-nombre" className="text-xs font-semibold mb-1.5 flex items-center gap-1.5">
@@ -2120,13 +2121,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 
         {/* Sección C — Representante legal (P4: solo persona jurídica, después de contacto empresa) */}
         {isJuridical(actor) && (
-          <section className="rounded-2xl border bg-white dark:bg-[#0B0F14] overflow-hidden">
-            <div className={sectionHeader} style={{ background: 'rgba(85,126,255,0.04)' }}>
-              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: '#162744' }}>
-                Representante legal
-              </span>
-            </div>
-            <div className="p-4">{rlSection(0)}</div>
+          <section className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]">
+            <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
+              Representante legal
+            </h3>
+            <p className="mt-1 text-xs opacity-70">
+              Representante legal y/o apoderado: la persona natural que representa a la empresa.
+              Puedes consultarla en el RUNT o registrarla manualmente.
+            </p>
+            <div className="mt-4">{rlSection(0)}</div>
           </section>
         )}
 

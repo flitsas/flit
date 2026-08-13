@@ -87,7 +87,7 @@ describe('ActorsForm — layout split (un comprador)', () => {
   it('matrícula inicial muestra las 2 secciones (Identificación + Datos de contacto)', async () => {
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
     expect(
-      await screen.findByText(/Identificación · Comprador/),
+      await screen.findByText(/Datos del comprador/),
     ).toBeInTheDocument();
     expect(screen.getByText('Datos de contacto')).toBeInTheDocument();
     // Sección de identificación: documento + Consultar RUNT.
@@ -442,7 +442,7 @@ describe('ActorsForm — save() vía ref (embebido en wizard)', () => {
         embeddedInWizard
       />,
     );
-    await screen.findByText(/Identificación · Comprador/);
+    await screen.findByText(/Datos del comprador/);
 
     let ok: boolean | undefined;
     await act(async () => {

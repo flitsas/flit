@@ -1238,7 +1238,7 @@ describe('TramiteWizard — Guardar y continuar (pasos de actores)', () => {
     expect(order.indexOf('save')).toBeLessThan(order.lastIndexOf('wizard'));
 
     // 3) Con el vendedor ya complete, el wizard avanza al paso Comprador.
-    expect(await screen.findByText(/Identificación · Comprador/)).toBeInTheDocument();
+    expect(await screen.findByText(/Datos del comprador/)).toBeInTheDocument();
   });
 
   // HU #10350 — al guardar la parte, el wizard asegura su identidad (reuso vigente o auto-validación).
@@ -1346,13 +1346,13 @@ describe('TramiteWizard — traspaso journey (paso 2 documentos + vendedor split
     expect(mocks.getChecklist).toHaveBeenCalled();
   });
 
-  it('el paso vendedor usa layout split (Identificación · Vendedor + Datos de contacto)', async () => {
+  it('el paso vendedor usa layout split (Datos del vendedor + Datos de contacto)', async () => {
     mocks.getWizardState.mockResolvedValue(traspasoSteps('incomplete'));
     const user = userEvent.setup();
     renderWizard();
     await user.click(await screen.findByRole('button', { name: /^Paso 3: Actores/ }));
 
-    expect(await screen.findByText(/Identificación · Vendedor/)).toBeInTheDocument();
+    expect(await screen.findByText(/Datos del vendedor/)).toBeInTheDocument();
     expect(screen.getByText('Datos de contacto')).toBeInTheDocument();
   });
 });
