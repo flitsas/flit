@@ -305,11 +305,11 @@ describe('TramiteWizard — sidebar server-driven por modalidad', () => {
     // 5 pasos en el sidebar, etiquetados por aria-label único.
     const stepButtons = await screen.findAllByRole('button', { name: /^Paso \d+:/ });
     expect(stepButtons).toHaveLength(5);
-    expect(screen.getByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Paso 2: Documentos/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Paso 3: Comprador y Rep. Legal/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Paso 4: Identidad/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Paso 5: FUR/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paso 1: Consulta/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paso 2: Requisitos/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paso 3: Comprador/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paso 4: Validación de Identidad/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paso 5: Resumen/ })).toBeInTheDocument();
   });
 
   it('traspaso pinta 6 pasos (placa-first)', async () => {
@@ -343,10 +343,10 @@ describe('TramiteWizard — instancia existente (Track B)', () => {
 
     // El título del paso activo (h2 del cuerpo) es "Datos y Documentos del Trámite", no "Consulta VIN".
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Documentos' }),
+      await screen.findByRole('heading', { level: 2, name: 'Requisitos' }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('heading', { level: 2, name: 'Consulta VIN y Placa' }),
+      screen.queryByRole('heading', { level: 2, name: 'Consulta' }),
     ).not.toBeInTheDocument();
   });
 
@@ -365,7 +365,7 @@ describe('TramiteWizard — instancia existente (Track B)', () => {
     render(<TramiteWizard existingInstanceId="inst-77" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Consulta VIN y Placa' }),
+      await screen.findByRole('heading', { level: 2, name: 'Consulta' }),
     ).toBeInTheDocument();
   });
 });
@@ -402,7 +402,7 @@ describe('TramiteWizard — solo lectura (Track C)', () => {
     render(<TramiteWizard existingInstanceId="inst-sub" onExit={() => {}} />);
 
     // Consulta VIN es un paso completo → navegable en solo lectura.
-    const consultaTab = await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    const consultaTab = await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
     await user.click(consultaTab);
 
     const vin = await screen.findByLabelText('Número VIN');
@@ -454,15 +454,15 @@ describe('TramiteWizard — aviso acorde al estado real (HU #11053)', () => {
 describe('TramiteWizard — status y reasons traducidos', () => {
   it('traduce los códigos de reason a copy amigable', async () => {
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
     expect(screen.getByText(/Faltan documentos obligatorios/)).toBeInTheDocument();
     expect(screen.getByText(/Consulta RUNT del comprador/)).toBeInTheDocument();
   });
 
   it('los pasos locked no son clickables', async () => {
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
-    const locked = screen.getByRole('button', { name: /^Paso 4: Identidad \(locked\)/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    const locked = screen.getByRole('button', { name: /^Paso 4: Validación de Identidad \(locked\)/ });
     expect(locked).toBeDisabled();
   });
 });
@@ -483,18 +483,18 @@ describe('TramiteWizard — navegación en cascada (frontera)', () => {
       ],
     });
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
     // Comprador es la frontera → navegable.
-    expect(screen.getByRole('button', { name: /^Paso 3: Comprador y Rep. Legal/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /^Paso 3: Comprador/ })).toBeEnabled();
     // Identidad está más allá de la frontera → NO navegable, pese a no estar 'locked'.
-    expect(screen.getByRole('button', { name: /^Paso 4: Identidad/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Paso 4: Validación de Identidad/ })).toBeDisabled();
   });
 });
 
 describe('TramiteWizard — Continuar', () => {
   it('Continuar habilitado en step complete', async () => {
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
     // Paso activo inicial = consulta_vin (complete) → Continuar habilitado.
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
   });
@@ -502,9 +502,9 @@ describe('TramiteWizard — Continuar', () => {
   it('Continuar deshabilitado al navegar a un step incompleto', async () => {
     const user = userEvent.setup();
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
     // Navega al paso "Datos y Documentos del Trámite" (incomplete).
-    await user.click(screen.getByRole('button', { name: /^Paso 2: Documentos/ }));
+    await user.click(screen.getByRole('button', { name: /^Paso 2: Requisitos/ }));
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
   });
 });
@@ -768,7 +768,7 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
     expect(screen.getByRole('button', { name: /^Continuar$/ })).toBeEnabled();
     expect(screen.queryByRole('button', { name: /^Finalizar$/ })).not.toBeInTheDocument();
     // El paso 5 (FUR) es navegable aunque la identidad esté pendiente.
-    expect(screen.getByRole('button', { name: /^Paso 5: FUR/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /^Paso 5: Resumen/ })).toBeEnabled();
   });
 
   it('AC1 — "Finalizar" en el paso FUR llama finalize-draft (no submit), avisa y vuelve al listado', async () => {
@@ -780,7 +780,7 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
 
     await screen.findByRole('heading', { level: 2, name: 'Identidad' });
     // Navega al paso 5 (FUR), el paso de decisión.
-    await user.click(screen.getByRole('button', { name: /^Paso 5: FUR/ }));
+    await user.click(screen.getByRole('button', { name: /^Paso 5: Resumen/ }));
 
     // Aviso de que el FUR/firma se generan automáticamente.
     expect(await screen.findByText(/se generarán automáticamente/i)).toBeInTheDocument();
@@ -819,11 +819,11 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
     ).toBeEnabled();
 
     // Los datos quedan en solo lectura: el input del paso de consulta está deshabilitado.
-    await user.click(screen.getByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ }));
+    await user.click(screen.getByRole('button', { name: /^Paso 1: Consulta/ }));
     expect(await screen.findByLabelText('Número VIN')).toBeDisabled();
 
     // En el paso FUR (decisión), "Radicar trámite" deshabilitado hasta validar; sin "Finalizar" (ya finalizado).
-    await user.click(screen.getByRole('button', { name: /^Paso 5: FUR/ }));
+    await user.click(screen.getByRole('button', { name: /^Paso 5: Resumen/ }));
     expect(await screen.findByRole('button', { name: /^Radicar trámite$/ })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /^Finalizar$/ })).not.toBeInTheDocument();
   });
@@ -833,7 +833,7 @@ describe('TramiteWizard — consulta persiste antes de preflight', () => {
   it('persiste el VIN (PATCH field_values) ANTES de runPreflight, y refresca', async () => {
     const user = userEvent.setup();
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
     // 1 carga inicial del wizard.
     await waitFor(() => expect(mocks.getWizardState).toHaveBeenCalledTimes(1));
 
@@ -870,7 +870,7 @@ describe('TramiteWizard — consulta persiste antes de preflight', () => {
   it('no persiste ni corre preflight si el VIN está vacío', async () => {
     const user = userEvent.setup();
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
     await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
 
@@ -928,7 +928,7 @@ describe('TramiteWizard — bloqueo de duplicidad de trámite en curso (HU #1088
       }),
     );
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
     await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
     await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
@@ -953,7 +953,7 @@ describe('TramiteWizard — bloqueo de duplicidad de trámite en curso (HU #1088
       }),
     );
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
     await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
     await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
@@ -976,7 +976,7 @@ describe('TramiteWizard — bloqueo de duplicidad de trámite en curso (HU #1088
       }),
     );
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
     await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
     await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
@@ -1014,7 +1014,7 @@ describe('TramiteWizard — bloqueo por estado del vehículo (HU #10884)', () =>
       ),
     });
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
     await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
     await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
@@ -1040,7 +1040,7 @@ describe('TramiteWizard — bloqueo por estado del vehículo (HU #10884)', () =>
       }),
     );
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
     await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
     await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
@@ -1070,7 +1070,7 @@ describe('TramiteWizard — bloqueo por estado del vehículo (HU #10884)', () =>
       ),
     });
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
     await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
     await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
@@ -1089,7 +1089,7 @@ describe('TramiteWizard — bloqueo por estado del vehículo (HU #10884)', () =>
       }),
     );
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
     await user.type(screen.getByLabelText('Número VIN'), '9BWZZZ377VT004251');
     await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
@@ -1118,7 +1118,7 @@ describe('TramiteWizard — aceptar riesgo de preflight rojo', () => {
     mocks.getPreflight.mockResolvedValue(RED_PREFLIGHT);
     const user = userEvent.setup();
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
     const checkbox = await screen.findByRole('checkbox', {
       name: /Asumo el riesgo de rechazo en el organismo de tránsito/i,
@@ -1144,7 +1144,7 @@ describe('TramiteWizard — aceptar riesgo de preflight rojo', () => {
       fieldValues: [{ fieldKey: 'riesgo_aceptado', valueText: 'true', valueJson: null }],
     });
     renderWizard();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
     const checkbox = await screen.findByRole('checkbox', {
       name: /Asumo el riesgo de rechazo en el organismo de tránsito/i,
@@ -1156,7 +1156,7 @@ describe('TramiteWizard — aceptar riesgo de preflight rojo', () => {
 describe('TramiteWizard — creación única de instancia (StrictMode)', () => {
   it('crea la instancia UNA sola vez aunque el efecto se re-invoque (StrictMode)', async () => {
     renderWizardStrict();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN y Placa/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
     // StrictMode monta→desmonta→remonta y doble-invoca el efecto; la guardia
     // con useRef debe evitar el segundo POST /instances.
     await waitFor(() => expect(mocks.createInstance).toHaveBeenCalledTimes(1));
@@ -1337,6 +1337,7 @@ describe('TramiteWizard — traspaso journey (paso 2 documentos + vendedor split
     mocks.getWizardState.mockResolvedValue(traspasoSteps('locked'));
     const user = userEvent.setup();
     renderWizard();
+    // Traspaso: la clave `documentos` se llama "Documentos" (en matrícula es "Requisitos").
     await user.click(await screen.findByRole('button', { name: /^Paso 2: Documentos/ }));
 
     expect(

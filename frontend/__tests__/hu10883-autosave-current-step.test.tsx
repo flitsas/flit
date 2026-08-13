@@ -201,7 +201,7 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
   it('al pulsar Continuar desde Consulta VIN (tras consultar el vehículo), persiste el paso destino vía PATCH current-step', async () => {
     const user = userEvent.setup();
     renderMatricula();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
     expect(mocks.setCurrentStep).not.toHaveBeenCalled();
 
@@ -222,7 +222,7 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
       ),
     });
     renderMatricula();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
     await user.click(screen.getByRole('button', { name: /^Paso 3: Comprador/ }));
 
@@ -240,7 +240,7 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
       ),
     });
     renderMatricula();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
     await user.click(screen.getByRole('button', { name: /^Continuar$/ }));
     await waitFor(() =>
@@ -249,7 +249,7 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
     mocks.setCurrentStep.mockClear();
 
     await user.click(screen.getByRole('button', { name: /Anterior/ }));
-    await screen.findByRole('heading', { level: 2, name: 'Consulta VIN y Placa' });
+    await screen.findByRole('heading', { level: 2, name: 'Consulta' });
 
     expect(mocks.setCurrentStep).not.toHaveBeenCalled();
   });
@@ -258,12 +258,12 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
     const user = userEvent.setup();
     mocks.setCurrentStep.mockRejectedValue(new Error('vehiculo_no_consultado'));
     renderMatricula();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
     await user.click(screen.getByRole('button', { name: /^Continuar$/ }));
 
     // El wizard avanza igual (heading del paso 2) y no aparece ningún error visible.
-    expect(await screen.findByRole('heading', { level: 2, name: 'Documentos' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Requisitos' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -336,7 +336,7 @@ describe('HU #10883 — AC2: reposición en el paso persistido al reabrir', () =
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'FUR' }),
+      await screen.findByRole('heading', { level: 2, name: 'Resumen' }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('heading', { level: 2, name: 'Identidad' }),
@@ -362,7 +362,7 @@ describe('HU #10883 — AC2: reposición en el paso persistido al reabrir', () =
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Documentos' }),
+      await screen.findByRole('heading', { level: 2, name: 'Requisitos' }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('heading', { level: 2, name: 'Comprador' }),
@@ -386,7 +386,7 @@ describe('HU #10883 — AC2: reposición en el paso persistido al reabrir', () =
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Documentos' }),
+      await screen.findByRole('heading', { level: 2, name: 'Requisitos' }),
     ).toBeInTheDocument();
   });
 
@@ -407,7 +407,7 @@ describe('HU #10883 — AC2: reposición en el paso persistido al reabrir', () =
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Documentos' }),
+      await screen.findByRole('heading', { level: 2, name: 'Requisitos' }),
     ).toBeInTheDocument();
   });
 });

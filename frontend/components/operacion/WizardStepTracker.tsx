@@ -77,6 +77,12 @@ export type WizardStepTrackerProps = {
    * Matrícula no aplica (queda 1:1).
    */
   coalesceActores?: boolean;
+  /**
+   * Modalidad del trámite. Solo decide cómo se NOMBRAN los pasos: la propuesta llama distinto a
+   * las mismas claves en cada asistente ("Requisitos" vs "Documentos", "Resumen" vs "FUR y
+   * Expediente"). No altera la estructura, que sigue viniendo del servidor.
+   */
+  modalidad?: 'matricula_inicial' | 'traspaso';
 };
 
 /**
@@ -90,6 +96,7 @@ export function WizardStepTracker({
   onGoToStep,
   viewOnly = false,
   coalesceActores = false,
+  modalidad,
 }: WizardStepTrackerProps) {
   const displaySteps: DisplayWizardStep[] = useMemo(
     () => (coalesceActores ? coalesceTraspasoActorSteps(steps) : steps.map((s, i) => ({ ...s, sourceIndexes: [i] }))),
@@ -108,7 +115,7 @@ export function WizardStepTracker({
           const prevComplete = i > 0 && displaySteps[i - 1]?.status === 'complete';
           const lineAfterGreen = s.status === 'complete';
           // Nombre en la nomenclatura del diseño; cae al del servidor si la clave no está mapeada.
-          const label = stepLabelCopy(s.key, s.label);
+          const label = stepLabelCopy(s.key, s.label, modalidad);
           return (
             <li
               key={s.key}

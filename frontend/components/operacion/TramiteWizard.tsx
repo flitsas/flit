@@ -1127,6 +1127,7 @@ export function TramiteWizard(props: Props) {
             onGoToStep={goToStep}
             viewOnly={navViewOnly}
             coalesceActores={modalidad === 'traspaso'}
+            modalidad={modalidad}
           />
         )}
       </div>
@@ -1213,8 +1214,8 @@ export function TramiteWizard(props: Props) {
                       lo que se hace es generar el FUR y el expediente. */}
                   <h2 className="text-base font-bold">
                     {modalidad === 'traspaso' && isTraspasoActorStepKey(activeStep.key)
-                      ? stepLabelCopy('actores', 'Actores')
-                      : stepLabelCopy(activeStep.key, activeStep.label)}
+                      ? stepLabelCopy('actores', 'Actores', 'traspaso')
+                      : stepLabelCopy(activeStep.key, activeStep.label, modalidad)}
                   </h2>
                   {(activeStep.key === 'documentos' && modalidad !== 'traspaso'
                     ? DOCUMENTOS_SUBTITLE_MATRICULA

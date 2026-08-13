@@ -177,22 +177,38 @@ export function blockerCopy(code: string): string {
  *
  * `actores` es la clave del paso visual que fusiona vendedor+comprador en traspaso.
  */
-const STEP_LABEL_DISENO: Record<string, string> = {
+const STEP_LABEL_MATRICULA: Record<string, string> = {
+  consulta_vin: 'Consulta',
+  comprador: 'Comprador',
+  documentos: 'Requisitos',
+  identidad: 'Validación de Identidad',
+  fur: 'Resumen',
+};
+
+const STEP_LABEL_TRASPASO: Record<string, string> = {
   consulta: 'Trámite y Vehículo',
-  consulta_vin: 'Consulta VIN y Placa',
   actores: 'Actores y Validación',
   vendedor: 'Actores y Validación',
-  comprador: 'Comprador y Rep. Legal',
+  comprador: 'Actores y Validación',
   documentos: 'Documentos',
   comercial: 'Datos Comerciales',
-  identidad: 'Identidad',
   fur: 'FUR y Expediente',
 };
 
 /**
  * Etiqueta a mostrar para un paso. Cae al label del servidor cuando la clave no está mapeada:
  * un paso nuevo en backend aparece con su nombre, nunca en blanco.
+ *
+ * La modalidad importa porque tres claves se llaman distinto en cada asistente de la propuesta:
+ * `documentos` es "Requisitos" en matrícula y "Documentos" en traspaso, y `fur` es "Resumen" en
+ * matrícula y "FUR y Expediente" en traspaso. Sin modalidad se usa el diccionario de traspaso, que
+ * es el que cubre más claves.
  */
-export function stepLabelCopy(key: string, serverLabel: string): string {
-  return STEP_LABEL_DISENO[key] ?? serverLabel;
+export function stepLabelCopy(
+  key: string,
+  serverLabel: string,
+  modalidad?: 'matricula_inicial' | 'traspaso',
+): string {
+  const mapa = modalidad === 'matricula_inicial' ? STEP_LABEL_MATRICULA : STEP_LABEL_TRASPASO;
+  return mapa[key] ?? serverLabel;
 }
