@@ -427,6 +427,10 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
                 TipoTraspaso: ResolveTipoTraspaso(
                     transferencias.Contains(instance.Id), marcas.Contains(ClaveUnilateral)),
                 RadicadoEn: radicacion?.ChangedAt,
+                // La misma decisión que ya se calculó abajo para «días en organismo», pero solo
+                // cuenta si fue aprobación: un rechazado también decide y también cierra, pero
+                // nunca tiene esta fecha.
+                AprobadoEn: decision?.ToStatus == TramiteEstado.Aprobado ? decision.ChangedAt : null,
                 DiasEnOrganismo: radicacion is null
                     ? null
                     : Math.Round(((decision?.ChangedAt ?? ahora) - radicacion.ChangedAt).TotalDays, 2),
@@ -503,6 +507,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
     {
         CompanyQueryDateField.Envio => row.Instance.SubmittedAt,
         CompanyQueryDateField.Cierre => row.Instance.CompletedAt,
+        CompanyQueryDateField.Aprobacion => row.AprobadoEn,
         CompanyQueryDateField.Actualizacion => row.Instance.UpdatedAt ?? row.Instance.CreatedAt,
         _ => row.Instance.CreatedAt,
     };
@@ -570,6 +575,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             CreadoEn: row.Instance.CreatedAt,
             EnviadoEn: row.Instance.SubmittedAt,
             CerradoEn: row.Instance.CompletedAt,
+            AprobadoEn: row.AprobadoEn,
             ActualizadoEn: row.Instance.UpdatedAt,
             DiasHastaEnvio: row.Instance.SubmittedAt is DateTimeOffset enviado
                 ? Math.Round((enviado - row.Instance.CreatedAt).TotalDays, 2)
@@ -910,6 +916,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
         string? MetodoPago,
         string TipoTraspaso,
         DateTimeOffset? RadicadoEn,
+        DateTimeOffset? AprobadoEn,
         double? DiasEnOrganismo,
         int Devoluciones,
         IReadOnlyList<string> Comprador,

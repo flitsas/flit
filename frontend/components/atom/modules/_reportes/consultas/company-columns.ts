@@ -261,6 +261,14 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     width: 18,
   },
   {
+    id: "aprobado_en",
+    label: "Aprobado",
+    group: GRUPO_TIEMPOS,
+    value: (r) => formatDateTime(r.aprobadoEn),
+    raw: (r) => bogotaClock(r.aprobadoEn),
+    width: 18,
+  },
+  {
     id: "actualizado_en",
     label: "Última actualización",
     group: GRUPO_TIEMPOS,

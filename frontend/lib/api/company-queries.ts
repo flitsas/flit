@@ -31,6 +31,7 @@ export const COMPANY_DATE_FIELDS: { value: string; label: string }[] = [
   { value: "creacion", label: "Fecha de creación" },
   { value: "envio", label: "Fecha de envío al organismo" },
   { value: "cierre", label: "Fecha de cierre" },
+  { value: "aprobacion", label: "Fecha de aprobación" },
   { value: "actualizacion", label: "Última actualización" },
 ];
 
@@ -67,6 +68,7 @@ export interface CompanyQueryRow {
   creadoEn: string;
   enviadoEn: string | null;
   cerradoEn: string | null;
+  aprobadoEn: string | null;
   actualizadoEn: string | null;
   diasHastaEnvio: number | null;
   diasEnOrganismo: number | null;
