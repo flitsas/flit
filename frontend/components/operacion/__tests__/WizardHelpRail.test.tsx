@@ -76,7 +76,7 @@ describe('WizardHelpRail — carril de consulta del paso 1', () => {
 
     await user.click(screen.getByRole('button', { name: 'Documentos a tener listos' }));
 
-    const panel = await screen.findByRole('dialog', { name: 'Guía de documentos del trámite' });
+    const panel = await screen.findByRole('dialog', { name: 'Documentos a tener listos' });
     expect(await within(panel).findByText('Factura de venta')).toBeInTheDocument();
     expect(mocks.fetchDocumentRequirementsPreview).toHaveBeenCalledWith(
       'matricula_inicial',
@@ -96,7 +96,7 @@ describe('WizardHelpRail — carril de consulta del paso 1', () => {
       await user.click(screen.getByRole('button', { name: acceso }));
       const panel = await screen.findByRole('dialog');
       expect(carril.contains(panel)).toBe(false);
-      await user.click(screen.getByRole('button', { name: 'Cerrar panel' }));
+      await user.click(screen.getByRole('button', { name: 'Cerrar' }));
     }
   });
 
@@ -107,7 +107,7 @@ describe('WizardHelpRail — carril de consulta del paso 1', () => {
     await user.click(screen.getByRole('button', { name: 'Escrituras vigentes' }));
     await screen.findByRole('dialog', { name: 'Escrituras vigentes de la compañía' });
 
-    await user.click(screen.getByRole('button', { name: 'Cerrar panel' }));
+    await user.click(screen.getByRole('button', { name: 'Cerrar' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Escrituras vigentes' }));

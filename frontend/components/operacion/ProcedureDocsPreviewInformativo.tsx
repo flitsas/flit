@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { FileText } from 'lucide-react';
-import { OtSidePanel } from '@/components/admin/transit-offices/OtSidePanel';
+import { WizardModal } from './WizardModal';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type {
   DocumentoInformativoPreviewItem,
@@ -82,25 +82,12 @@ export function ProcedureDocsPreviewInformativo({
         </button>
       )}
 
-      <OtSidePanel
-        open={open}
-        title="Documentos a tener listos"
-        ariaLabel="Guía de documentos del trámite"
-        onClose={() => setOpen(false)}
-        width="xl"
-        scrollable={false}
-      >
-        <div className="flex h-full flex-col gap-3 overflow-hidden">
-          <div
-            className="shrink-0 rounded-xl border px-3 py-2"
-            style={{ borderColor: '#DDE5F0', background: '#EEF5FF' }}
-          >
-            <p className="text-xs leading-snug" style={{ color: '#162744' }}>
-              Esta es una guía de lo que deberías tener preparado para este trámite antes de
-              continuar. No sustituye la carga de documentos más adelante en el asistente.
-            </p>
-          </div>
-
+      {/* Lista de viñetas en modal centrado, como la propuesta. Lo que producción añade sobre el
+          diseño —si el documento es obligatorio y su descripción de catálogo— se encaja dentro de
+          la misma viñeta: la marca de opcional junto al nombre y la descripción en una línea
+          atenuada debajo, sin romper la lectura de arriba abajo. */}
+      {open && (
+        <WizardModal title="Documentos a tener listos" onClose={() => setOpen(false)}>
           {loading && (
             <p className="text-xs opacity-70" role="status" aria-live="polite">
               Cargando documentos…
@@ -117,53 +104,29 @@ export function ProcedureDocsPreviewInformativo({
             </p>
           )}
           {!loading && !error && items && items.length > 0 && (
-            <ul
-              className="grid min-h-0 flex-1 grid-cols-2 content-start gap-2 overflow-hidden"
-              aria-label="Lista informativa de documentos"
-            >
+            <ul className="space-y-2" aria-label="Lista informativa de documentos">
               {items.map((doc) => (
-                <li
-                  key={doc.documentTypeId}
-                  className="flex min-h-0 flex-col rounded-xl border px-2.5 py-2"
-                  style={{ borderColor: '#DDE5F0' }}
-                >
-                  <div className="flex items-start justify-between gap-1.5">
-                    <p
-                      className="line-clamp-2 text-xs font-semibold leading-tight"
-                      style={{ color: '#162744' }}
-                      title={doc.nombre}
-                    >
+                <li key={doc.documentTypeId} className="flex items-start gap-2">
+                  <span
+                    aria-hidden="true"
+                    className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{ background: '#557EFF' }}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs" style={{ color: '#162744' }}>
                       {doc.nombre}
+                      {!doc.obligatorio && <span className="opacity-55"> (opcional)</span>}
                     </p>
-                    <span
-                      className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold"
-                      style={{
-                        background: doc.obligatorio ? '#557EFF22' : '#94A3B822',
-                        color: doc.obligatorio ? '#557EFF' : '#64748B',
-                      }}
-                    >
-                      {doc.obligatorio ? 'Obligatorio' : 'Opcional'}
-                    </span>
+                    {doc.descripcion && (
+                      <p className="text-xs leading-snug opacity-60">{doc.descripcion}</p>
+                    )}
                   </div>
-                  {doc.descripcion ? (
-                    <p
-                      className="mt-1 line-clamp-4 text-xs leading-snug"
-                      style={{ color: '#59677D' }}
-                      title={doc.descripcion}
-                    >
-                      {doc.descripcion}
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-xs opacity-50" style={{ color: '#7D8798' }}>
-                      Sin descripción en el catálogo.
-                    </p>
-                  )}
                 </li>
               ))}
             </ul>
           )}
-        </div>
-      </OtSidePanel>
+        </WizardModal>
+      )}
     </>
   );
 }

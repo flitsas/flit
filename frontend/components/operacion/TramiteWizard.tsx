@@ -2735,7 +2735,8 @@ function ConsultaStep({
           <p className="mt-1 text-xs opacity-70">
             Selecciona la secretaría donde se radicará el expediente.
           </p>
-          <div className="mt-4 max-w-xl">
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="min-w-0">
             <span className={`mb-1 block ${WIZARD_LABEL}`}>Secretaría de tránsito *</span>
             <TransitOfficeSearchPicker
               offices={secretarias}
@@ -2763,6 +2764,58 @@ function ConsultaStep({
                 {secretariasError}
               </p>
             )}
+          </div>
+
+          {/* Dígito de preasignación: solo se ofrece si el organismo elegido tiene preasignación
+              activa; sin ella el selector queda inerte y lo dice, como en la propuesta. */}
+          <div className="min-w-0">
+            <label htmlFor="consulta-digito-placa" className={`mb-1 block ${WIZARD_LABEL}`}>
+              Dígito de preasignación de placa
+            </label>
+            <select
+              id="consulta-digito-placa"
+              defaultValue=""
+              disabled
+              aria-describedby="consulta-digito-placa-nota"
+              className={`${inputClass} disabled:opacity-60`}
+            >
+              <option value="">Sin preferencia</option>
+              {Array.from({ length: 10 }, (_, i) => (
+                <option key={i} value={String(i)}>{`Termina en ${i}`}</option>
+              ))}
+            </select>
+            <p id="consulta-digito-placa-nota" className="mt-1 text-xs leading-tight opacity-70">
+              El catálogo de organismos aún no informa si admiten preasignación, así que la
+              preferencia no puede enviarse.
+            </p>
+          </div>
+
+          {/* Trámite prioritario. Inerte a propósito: la prioridad se marca sobre un expediente ya
+              creado (`setPriority`, HU #10536) y en este paso todavía no existe —el trámite se da de
+              alta al pulsar "Continuar"—. Se deja visible, en su columna, para no esconder que la
+              decisión existe, pero sin fingir que se guarda. */}
+          <div className="min-w-0">
+            <span className={`mb-1 block ${WIZARD_LABEL}`}>Trámite prioritario</span>
+            <button
+              type="button"
+              disabled
+              aria-pressed={false}
+              aria-describedby="consulta-prioritario-nota"
+              className="flex h-[38px] w-full items-center justify-between rounded-xl border bg-white px-3 text-xs font-medium opacity-60 dark:bg-[#0B0F14]"
+            >
+              Desactivado
+              <span
+                aria-hidden="true"
+                className="relative inline-block h-5 w-9 rounded-full"
+                style={{ background: '#CBD5E1' }}
+              >
+                <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white" />
+              </span>
+            </button>
+            <p id="consulta-prioritario-nota" className="mt-1 text-xs leading-tight opacity-70">
+              Prioriza la gestión de este expediente. Se marca desde el trámite una vez creado.
+            </p>
+          </div>
           </div>
         </div>
       )}

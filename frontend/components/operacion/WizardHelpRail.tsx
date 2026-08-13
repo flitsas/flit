@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { FileText, ListChecks } from 'lucide-react';
-import { OtSidePanel } from '@/components/admin/transit-offices/OtSidePanel';
+import { WizardModal } from './WizardModal';
 import { ActiveDeedsList, useActiveDeeds } from './ActiveDeedsCollapse';
 import { ProcedureDocsPreviewInformativo } from './ProcedureDocsPreviewInformativo';
 import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
@@ -59,15 +59,15 @@ export function WizardHelpRail({
         />
       </div>
 
-      <OtSidePanel
-        open={escrituras}
-        title="Escrituras vigentes de la compañía"
-        ariaLabel="Escrituras vigentes de la compañía"
-        onClose={() => setEscrituras(false)}
-        width="xl"
-      >
-        <ActiveDeedsList {...deedsState} />
-      </OtSidePanel>
+      {escrituras && (
+        <WizardModal
+          title="Escrituras vigentes de la compañía"
+          onClose={() => setEscrituras(false)}
+          wide
+        >
+          <ActiveDeedsList {...deedsState} />
+        </WizardModal>
+      )}
 
       <ProcedureDocsPreviewInformativo
         modalidad={modalidad}

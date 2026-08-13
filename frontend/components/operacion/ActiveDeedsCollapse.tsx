@@ -101,32 +101,34 @@ export function ActiveDeedsList({ loading, deeds, error }: ActiveDeedsState) {
             </p>
           )}
           {!loading && !error && deeds !== null && deeds.length > 0 && (
-            <ul className="space-y-2" aria-label="Escrituras vigentes">
+            <ul className="space-y-3" aria-label="Escrituras vigentes">
               {deeds.map((deed) => (
                 <li
                   // Llave estable por escritura: el backend devuelve UNA fila por cada par
                   // (escritura × compañía), de modo que una misma compañía (NIT) puede aparecer en
                   // varias filas —una por escritura vigente— (Feature #10929).
                   key={deed.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2"
+                  className="flex items-start justify-between gap-3 rounded-2xl border bg-white px-4 py-3.5 dark:bg-[#0B0F14]"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-xs font-semibold" style={{ color: '#162744' }}>
+                    <p className="text-xs font-semibold" style={{ color: '#162744' }}>
                       {deed.name}
                     </p>
-                    <p className="text-xs font-mono opacity-60">NIT {deed.nit}</p>
+                    <p className="mt-0.5 text-xs opacity-60">NIT {deed.nit}</p>
                     {deed.representativeName ? (
-                      <p className="truncate text-xs" style={{ color: '#162744' }}>
+                      <p className="text-xs opacity-60">
                         RL: {deed.representativeName}
                         {deed.representativeDocumentType && deed.representativeDocumentNumber
                           ? ` · ${deed.representativeDocumentType} ${deed.representativeDocumentNumber}`
                           : ''}
                       </p>
                     ) : (
-                      <p className="truncate text-xs opacity-50">Sin RL vinculado</p>
+                      <p className="text-xs opacity-50">Sin RL vinculado</p>
                     )}
                     {deed.description && (
-                      <p className="truncate text-xs opacity-70">{deed.description}</p>
+                      <p className="mt-1 text-xs font-medium" style={{ color: '#162744' }}>
+                        {deed.description}
+                      </p>
                     )}
                   </div>
                   <StatusBadge
