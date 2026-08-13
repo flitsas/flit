@@ -10,6 +10,7 @@ import {
 } from '@/lib/documents/open-document-tab';
 import { documentLabel } from '@/lib/tramites/document-labels';
 import { WizardAccordion } from './WizardAccordion';
+import { WizardCardHeader } from './wizard-atoms';
 import type {
   InstanceStatus,
   ProcedureAttachment,
@@ -286,17 +287,12 @@ function DocumentosSection({
       )}
 
       <div className="mt-4 space-y-3 border-t pt-4" style={{ borderColor: BORDER }}>
-        <div>
-          <h5 className="text-xs font-bold" style={{ color: '#162744' }}>
-            Expediente consolidado
-          </h5>
-          <p className="mt-1 text-xs opacity-70">
-            Un solo PDF con el FUR, el certificado de identidad, la impronta y los documentos
-            cargados en el trámite
-            {modalidad === 'traspaso' ? ' (incluye el contrato de compraventa)' : ''}. Al generarlo se
-            producen también los documentos que falten.
-          </p>
-        </div>
+        <WizardCardHeader
+          title="Expediente consolidado"
+          level="h4"
+          className=""
+          subtitle={`Un solo PDF con el FUR, el certificado de identidad, la impronta y los documentos cargados en el trámite${modalidad === 'traspaso' ? ' (incluye el contrato de compraventa)' : ''}. Al generarlo se producen también los documentos que falten.`}
+        />
 
         {error && (
           <div

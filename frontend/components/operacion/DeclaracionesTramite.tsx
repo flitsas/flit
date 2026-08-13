@@ -463,11 +463,12 @@ export function DeclaracionesTramite({
               vive en Transformaciones). Solo se pinta el bloque si hay algo que marcar. */}
           {!esMatricula && (
             <div className="space-y-2 border-t pt-4">
-              <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
-              <p className="-mt-1 text-xs opacity-55">
-                Marca las condiciones que apliquen; el checklist de documentos se ajusta
-                automáticamente.
-              </p>
+              <WizardCardHeader
+                title="Condiciones del trámite"
+                level="h4"
+                className=""
+                subtitle="Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente."
+              />
               <label className="flex items-start gap-2.5">
                 <input
                   type="checkbox"

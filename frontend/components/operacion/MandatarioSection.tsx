@@ -109,15 +109,15 @@ export function MandatarioSection({
                   {o.tipoDocumento} {o.documento}
                 </span>
                 {o.firmaFisica ? (
-                  <span className="block text-xs" style={{ color: '#5B8A1F' }}>
+                  <span className="block text-xs" style={{ color: 'var(--flit-success-ink)' }}>
                     Firma de forma física
                   </span>
                 ) : o.firmaBaulVigente ? (
-                  <span className="block text-xs" style={{ color: '#5B8A1F' }}>
+                  <span className="block text-xs" style={{ color: 'var(--flit-success-ink)' }}>
                     Firma del baúl vigente
                   </span>
                 ) : o.identidadVigente ? (
-                  <span className="block text-xs" style={{ color: '#5B8A1F' }}>
+                  <span className="block text-xs" style={{ color: 'var(--flit-success-ink)' }}>
                     Identidad vigente
                     {o.identidadHasta ? ` hasta el ${formatFecha(o.identidadHasta)}` : ''}
                   </span>

@@ -22,6 +22,7 @@ import { PRENDA_DECISION_LABELS } from './PrendaForm';
 import { prendaDocLabelFor, prendaDocTipoFor } from './prenda-document-tipos';
 import { summarizeDeclaredTransformations } from './VehicleTransformationsCard';
 import { InlineAlert } from '@/components/atom/InlineAlert';
+import { StatusBadge } from '@/components/atom/StatusBadge';
 import { WizardAccordion } from './WizardAccordion';
 import { WizardCardHeader } from './wizard-atoms';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
@@ -66,8 +67,8 @@ interface Props {
 
 // FEATURE 05 — colores por estado del check RNMC (mismo semáforo del pre-vuelo: ok verde, warn ámbar).
 const RNMC_STATUS_STYLE: Record<string, { dot: string; text: string }> = {
-  ok: { dot: '#8CC63F', text: '#8CC63F' },
-  warn: { dot: '#F9AC00', text: '#F9AC00' },
+  ok: { dot: '#8CC63F', text: 'var(--flit-success-ink)' },
+  warn: { dot: '#F9AC00', text: 'var(--badge-warning-fg)' },
   fail: { dot: '#FF4E00', text: '#FF4E00' },
   unknown: { dot: '#59677D', text: '#59677D' },
   error: { dot: '#FF4E00', text: '#FF4E00' },
@@ -115,12 +116,7 @@ function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: b
                     <span className="text-xs uppercase font-bold" style={{ color: s.text }}>
                       {c.status}
                     </span>
-                    <span
-                      className="rounded px-1.5 py-0.5 text-xs font-semibold uppercase"
-                      style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
-                    >
-                      {sourceLabel(c.source)}
-                    </span>
+                    <StatusBadge label={sourceLabel(c.source)} tone="info" />
                   </div>
                   {c.message && <p className="mt-0.5 text-xs opacity-70">{c.message}</p>}
                 </div>
@@ -1020,17 +1016,15 @@ function OrganismoModal({
         tabIndex={-1}
         className="bg-white dark:bg-[#162744] rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh] outline-none focus:ring-0"
       >
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <h3 className="text-sm font-bold">Organismo de tránsito</h3>
-            <p className="text-xs opacity-70">
-              Elige dónde se radicará el trámite.
-            </p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Cerrar">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+        <WizardCardHeader
+          title="Organismo de tránsito"
+          subtitle="Elige dónde se radicará el trámite."
+          action={
+            <button type="button" onClick={onClose} aria-label="Cerrar">
+              <X className="h-5 w-5" />
+            </button>
+          }
+        />
 
         {runtSuggestion && (
           <button
@@ -1183,14 +1177,10 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
 
   return (
     <section className="space-y-4" aria-label="Participantes del portal">
-      <div>
-        <h4 className="text-sm font-bold">Participantes (portal)</h4>
-        <p className="text-xs opacity-70">
-          Invita a las partes a completar su parte vía un enlace de portal
-          (consentimiento, documentos, biométrica y firma). En DEV el enlace se
-          entrega manualmente (sin envío de correo).
-        </p>
-      </div>
+      <WizardCardHeader
+        title="Participantes (portal)"
+        subtitle="Invita a las partes a completar su parte vía un enlace de portal (consentimiento, documentos, biométrica y firma). En DEV el enlace se entrega manualmente (sin envío de correo)."
+      />
 
       {error && (
         <div
@@ -1286,7 +1276,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
 
       {lastLink && (
         <div className="space-y-2">
-          <p className="text-xs font-semibold" style={{ color: '#5B8A1F' }}>
+          <p className="text-xs font-semibold" style={{ color: 'var(--flit-success-ink)' }}>
             Enlace de portal generado (DEV: sin envío de correo).
           </p>
           <CopyLink link={lastLink} label="Enlace de portal del participante" />
@@ -1357,27 +1347,16 @@ function ParticipantRow({
           </p>
           <p className="text-xs opacity-70 truncate">{p.email}</p>
           <div className="mt-1 flex flex-wrap gap-1.5">
-            <StatusChip
-              ok={p.consentDado}
-              okLabel="Consentimiento dado"
-              pendingLabel="Sin consentimiento"
+            <StatusBadge
+              label={p.consentDado ? 'Consentimiento dado' : 'Sin consentimiento'}
+              tone={p.consentDado ? 'success' : 'neutral'}
             />
             {p.completado ? (
-              <StatusChip ok okLabel="Completado" pendingLabel="" />
+              <StatusBadge label="Completado" tone="success" />
             ) : p.expirado ? (
-              <span
-                className="rounded-full px-2 py-0.5 text-xs font-bold"
-                style={{ background: '#EEF1F5', color: '#59677D' }}
-              >
-                Expirado
-              </span>
+              <StatusBadge label="Expirado" tone="neutral" />
             ) : (
-              <span
-                className="rounded-full px-2 py-0.5 text-xs font-bold"
-                style={{ background: 'rgba(249,172,0,0.15)', color: 'var(--badge-warning-fg)' }}
-              >
-                Pendiente
-              </span>
+              <StatusBadge label="Pendiente" tone="warning" />
             )}
           </div>
         </div>
@@ -1399,30 +1378,6 @@ function ParticipantRow({
         </p>
       )}
     </li>
-  );
-}
-
-function StatusChip({
-  ok,
-  okLabel,
-  pendingLabel,
-}: {
-  ok: boolean;
-  okLabel: string;
-  pendingLabel: string;
-}) {
-  if (!ok && !pendingLabel) return null;
-  return (
-    <span
-      className="rounded-full px-2 py-0.5 text-xs font-bold"
-      style={
-        ok
-          ? { background: 'rgba(140,198,63,0.15)', color: '#5B8A1F' }
-          : { background: '#EEF1F5', color: '#59677D' }
-      }
-    >
-      {ok ? okLabel : pendingLabel}
-    </span>
   );
 }
 

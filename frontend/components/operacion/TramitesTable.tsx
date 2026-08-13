@@ -119,12 +119,12 @@ function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean } | nu
     }
     if (item.canSubmit) {
       return {
-        chip: { label: 'Listo para radicar', bg: 'rgba(140,198,63,0.15)', color: '#5B8A1F', border: 'rgba(140,198,63,0.4)' },
+        chip: { label: 'Listo para radicar', bg: 'rgba(140,198,63,0.15)', color: 'var(--flit-success-ink)', border: 'rgba(140,198,63,0.4)' },
         ready: true,
       };
     }
     return {
-      chip: { label: 'Identidad validada', bg: 'rgba(140,198,63,0.12)', color: '#5B8A1F', border: 'rgba(140,198,63,0.35)' },
+      chip: { label: 'Identidad validada', bg: 'rgba(140,198,63,0.12)', color: 'var(--flit-success-ink)', border: 'rgba(140,198,63,0.35)' },
       ready: false,
     };
   }

@@ -205,64 +205,77 @@ function isIdentityApproved(steps: WizardStep[], modalidad: WizardModalidad): bo
  * la HU #11051, el backend rechaza en estado final. Ahora el mensaje se deriva del estado real y solo
  * menciona generar donde de verdad se puede.
  */
-const READ_ONLY_NOTICE: Record<string, { titulo: string; detalle: string; color: string; bg: string }> = {
+interface ReadOnlyNoticeStyle {
+  titulo: string;
+  detalle: string;
+  border: string;
+  bg: string;
+  /** Tinta legible del texto/icono cuando difiere del borde (verdes de marca — HU consolidación). */
+  ink?: string;
+}
+
+const READ_ONLY_NOTICE: Record<string, ReadOnlyNoticeStyle> = {
   entregado: {
     titulo: 'Enviado a tránsito — solo visualización.',
     detalle:
       'Este trámite ya no puede editarse, pero aún puedes generar o descargar el expediente consolidado.',
-    color: '#557EFF',
+    border: '#557EFF',
     bg: 'rgba(85,126,255,0.06)',
   },
   aprobado: {
     titulo: 'Trámite aprobado — solo visualización.',
     detalle:
       'El organismo de tránsito lo aprobó. Su documentación es definitiva: puedes consultarla y descargarla, pero ya no se regenera.',
-    color: '#5B8A1F',
+    // El borde/fondo conservan el verde de marca crudo (relleno tintado); el texto/icono usan la
+    // tinta legible unificada (`--flit-success-ink`, consolidación de verdes de texto).
+    border: '#5B8A1F',
     bg: 'rgba(140,198,63,0.10)',
+    ink: 'var(--flit-success-ink)',
   },
   rechazado: {
     titulo: 'Trámite rechazado — solo visualización.',
     detalle:
       'El organismo de tránsito lo rechazó. Revisa el motivo para saber qué corregir; mientras no se active la subsanación no puede editarse.',
-    color: '#c2410c',
+    border: '#c2410c',
     bg: 'rgba(255,78,0,0.06)',
   },
   anulado: {
     titulo: 'Trámite anulado — solo visualización.',
     detalle:
       'Este trámite quedó sin efecto. Puedes consultar y descargar su documentación, pero no editarlo ni regenerarlo.',
-    color: '#b91c1c',
+    border: '#b91c1c',
     bg: 'rgba(185,28,28,0.06)',
   },
   preparado: {
     titulo: 'Borrador preparado — solo visualización.',
     detalle:
       'Los datos quedaron en firme. Desde el paso de decisión puedes radicar el trámite a tránsito.',
-    color: '#B45309',
+    border: '#B45309',
     bg: 'rgba(249,172,0,0.08)',
   },
 };
 
 /** Fallback para un estado no editable no contemplado (nunca debería ocurrir con los estados de N 03). */
-const READ_ONLY_NOTICE_FALLBACK = {
+const READ_ONLY_NOTICE_FALLBACK: ReadOnlyNoticeStyle = {
   titulo: 'Solo visualización.',
   detalle: 'Este trámite no puede editarse en su estado actual.',
-  color: '#557EFF',
+  border: '#557EFF',
   bg: 'rgba(85,126,255,0.06)',
 };
 
 function ReadOnlyStateNotice({ estado }: { estado: InstanceStatus | null }) {
   const notice = (estado && READ_ONLY_NOTICE[estado]) || READ_ONLY_NOTICE_FALLBACK;
+  const ink = notice.ink ?? notice.border;
   return (
     <div
       className="rounded-xl p-3 text-xs border shrink-0 flex items-start gap-2"
-      style={{ borderColor: notice.color, background: notice.bg, color: '#162744' }}
+      style={{ borderColor: notice.border, background: notice.bg, color: '#162744' }}
       role="status"
       aria-live="polite"
     >
-      <Eye className="h-4 w-4 shrink-0 mt-0.5" style={{ color: notice.color }} aria-hidden="true" />
+      <Eye className="h-4 w-4 shrink-0 mt-0.5" style={{ color: ink }} aria-hidden="true" />
       <span>
-        <span className="font-semibold" style={{ color: notice.color }}>
+        <span className="font-semibold" style={{ color: ink }}>
           {notice.titulo}
         </span>{' '}
         {notice.detalle}
@@ -1704,22 +1717,20 @@ function VehicleDataCard({
     >
       {/* Header — embebido lo pinta el acordeón, que ya dice de dónde vienen los datos. */}
       {!bare && (
-        <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span
-              className="grid h-7 w-7 place-items-center rounded-lg"
-              style={{ background: 'rgba(85,126,255,0.10)' }}
-            >
-              <Car className="h-4 w-4" style={{ color: '#557EFF' }} />
-            </span>
-            <h4 className="text-sm font-bold">Datos del vehículo</h4>
-          </div>
+        <div className="flex items-center gap-3 border-b px-4 py-3">
           <span
-            className="rounded px-1.5 py-0.5 text-xs font-semibold uppercase"
-            style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg"
+            style={{ background: 'rgba(85,126,255,0.10)' }}
           >
-            RUNT
+            <Car className="h-4 w-4" style={{ color: '#557EFF' }} />
           </span>
+          <div className="min-w-0 flex-1">
+            <WizardCardHeader
+              title="Datos del vehículo"
+              action={<StatusBadge label="RUNT" tone="info" />}
+              className=""
+            />
+          </div>
         </div>
       )}
 
@@ -1750,25 +1761,9 @@ function VehicleDataCard({
               </span>
             )}
             {estado && (
-              <span
-                className="rounded-full px-2 py-0.5 text-xs font-bold"
-                style={
-                  estadoActivo
-                    ? { background: 'rgba(140,198,63,0.15)', color: '#3F8F0C' }
-                    : { background: 'rgba(154,165,177,0.15)', color: '#5B6675' }
-                }
-              >
-                {estado}
-              </span>
+              <StatusBadge label={estado} tone={estadoActivo ? 'success' : 'neutral'} />
             )}
-            {validadoEnRunt && (
-              <span
-                className="rounded-full px-2 py-0.5 text-xs font-bold"
-                style={{ background: 'rgba(140,198,63,0.15)', color: '#3F8F0C' }}
-              >
-                Validado en RUNT
-              </span>
-            )}
+            {validadoEnRunt && <StatusBadge label="Validado en RUNT" tone="success" />}
           </div>
         </div>
       </div>
@@ -3122,17 +3117,10 @@ function ConsultaStep({
           defaultOpen
           badge={
             preflightOverall(effectivePreflight?.overall) ? (
-              <span
-                className="shrink-0 rounded-full px-3 py-1 text-xs font-bold"
-                style={{
-                  background: preflightOverall(effectivePreflight?.overall)!.bg,
-                  color: preflightOverall(effectivePreflight?.overall)!.color,
-                }}
-                role="status"
-                aria-live="polite"
-              >
-                {preflightOverall(effectivePreflight?.overall)!.label}
-              </span>
+              <StatusBadge
+                label={preflightOverall(effectivePreflight?.overall)!.label}
+                tone={preflightOverall(effectivePreflight?.overall)!.tone}
+              />
             ) : null
           }
         >

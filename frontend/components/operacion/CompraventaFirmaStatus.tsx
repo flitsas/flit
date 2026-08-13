@@ -18,7 +18,7 @@ function FirmaBadge({ estado }: { estado: string }) {
   const map: Record<string, { label: string; bg: string; color: string }> = {
     pendiente_envio: { label: 'Pendiente', bg: '#EEF1F5', color: '#59677D' },
     enviada: { label: 'Enviada', bg: 'rgba(85,126,255,0.12)', color: '#557EFF' },
-    firmada: { label: 'Firmada', bg: 'rgba(140,198,63,0.15)', color: '#5B8A1F' },
+    firmada: { label: 'Firmada', bg: 'rgba(140,198,63,0.15)', color: 'var(--flit-success-ink)' },
     rechazada: { label: 'Rechazada', bg: 'rgba(255,78,0,0.10)', color: '#FF4E00' },
   };
   const s = map[estado] ?? { label: estado, bg: '#EEF1F5', color: '#59677D' };
@@ -163,7 +163,7 @@ export function CompraventaFirmaStatus({
             />
           ) : null}
           {signature.estado === 'firmada' ? (
-            <p className="flex items-center gap-1.5 font-semibold" style={{ color: '#5B8A1F' }}>
+            <p className="flex items-center gap-1.5 font-semibold" style={{ color: 'var(--flit-success-ink)' }}>
               <Check className="h-3.5 w-3.5" /> Compraventa firmada
             </p>
           ) : null}

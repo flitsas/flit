@@ -33,6 +33,13 @@ export interface WizardAccordionProps {
   /** Se traslada al contenedor, para no perder los anclajes de prueba al adoptar el acordeón. */
   testId?: string;
   className?: string;
+  /**
+   * Nivel semántico del título (consolidación HU auditoría de diseño). `h3` por defecto —el
+   * acordeón es una tarjeta más, hermana de las que usan `WizardCardHeader`—; `h4` cuando el
+   * acordeón vive DENTRO de una tarjeta que ya tiene su propio `h3` (para no saltar de padre a
+   * hijo con el mismo nivel).
+   */
+  level?: 'h3' | 'h4';
 }
 
 export function WizardAccordion({
@@ -46,7 +53,9 @@ export function WizardAccordion({
   onOpenChange,
   testId,
   className = '',
+  level = 'h3',
 }: WizardAccordionProps) {
+  const HeadingTag = level;
   const [openState, setOpenState] = useState(defaultOpen);
   const controlado = openProp !== undefined;
   const open = controlado ? openProp : openState;
@@ -66,7 +75,7 @@ export function WizardAccordion({
           rotulado un escalón por debajo (12px semibold contra 14px bold): en el paso 1, el
           pre-vuelo se leía como subordinado de la consulta cuando está a su mismo nivel.
           El patrón ARIA de acordeón pide exactamente esto: encabezado real envolviendo al botón. */}
-      <h3 className="m-0">
+      <HeadingTag className="m-0">
         <button
           type="button"
           onClick={() => setOpen(!open)}
@@ -88,7 +97,7 @@ export function WizardAccordion({
             />
           </span>
         </button>
-      </h3>
+      </HeadingTag>
       {open ? (
         <div
           id={panelId}

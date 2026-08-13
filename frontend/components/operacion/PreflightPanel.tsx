@@ -5,6 +5,7 @@
 // por ahora el hook alimenta un snapshot stub.
 
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { WizardCardHeader } from './wizard-atoms';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import type {
   FineDetail,
@@ -132,10 +133,11 @@ export function preflightOverall(overall: string | null | undefined) {
   return overall ? (OVERALL[overall] ?? null) : null;
 }
 
-const OVERALL: Record<string, { label: string; bg: string; color: string }> = {
-  green: { label: 'Pre-vuelo en verde', bg: 'rgba(140,198,63,0.15)', color: 'var(--flit-success-ink)' },
-  yellow: { label: 'Pre-vuelo con advertencias', bg: 'rgba(249,172,0,0.15)', color: 'var(--badge-warning-fg)' },
-  red: { label: 'Pre-vuelo con bloqueos', bg: 'rgba(255,78,0,0.15)', color: '#FF4E00' },
+/** Chip semántico del semáforo global (HU consolidación de chips — `StatusBadge`). */
+const OVERALL: Record<string, { label: string; tone: StatusTone }> = {
+  green: { label: 'Pre-vuelo en verde', tone: 'success' },
+  yellow: { label: 'Pre-vuelo con advertencias', tone: 'warning' },
+  red: { label: 'Pre-vuelo con bloqueos', tone: 'danger' },
 };
 
 /**
@@ -203,7 +205,7 @@ export function FineDetailList({ details }: { details: FineDetail[] }) {
                 {d.numero ? `Comparendo ${d.numero}` : 'Comparendo'}
               </span>
               {valor && (
-                <span className="text-xs font-bold" style={{ color: '#B47800' }}>
+                <span className="text-xs font-bold" style={{ color: 'var(--badge-warning-fg)' }}>
                   {valor}
                 </span>
               )}
@@ -269,38 +271,27 @@ export function PreflightPanel({
           suya. El botón tampoco se pierde — los callers que embeben pasan `showRunButton={false}`
           porque el disparo de la consulta está arriba, junto al identificador del vehículo. */}
       {!bare && (
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <h4 className="text-sm font-bold">Pre-vuelo de requisitos</h4>
-            <p className="text-xs opacity-60">
-              RUNT · SIMIT · RNMC — consulta antes de radicar el trámite
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {ov && (
-              <span
-                className="shrink-0 rounded-full px-3 py-1 text-xs font-bold"
-                style={{ background: ov.bg, color: ov.color }}
-                role="status"
-                aria-live="polite"
-              >
-                {ov.label}
-              </span>
-            )}
-            {canRun && (
-              <button
-                type="button"
-                onClick={() => onRun(hasResult)}
-                disabled={loading}
-                className="rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-                aria-label={hasResult ? 'Actualizar consulta' : 'Consultar RUNT y SIMIT'}
-              >
-                {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
-              </button>
-            )}
-          </div>
-        </div>
+        <WizardCardHeader
+          title="Pre-vuelo de requisitos"
+          subtitle="RUNT · SIMIT · RNMC — consulta antes de radicar el trámite"
+          action={
+            <div className="flex items-center gap-2">
+              {ov && <StatusBadge label={ov.label} tone={ov.tone} />}
+              {canRun && (
+                <button
+                  type="button"
+                  onClick={() => onRun(hasResult)}
+                  disabled={loading}
+                  className="rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  aria-label={hasResult ? 'Actualizar consulta' : 'Consultar RUNT y SIMIT'}
+                >
+                  {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
+                </button>
+              )}
+            </div>
+          }
+        />
       )}
 
       {!hasResult && !loading && !esMigrado && (
@@ -321,12 +312,7 @@ export function PreflightPanel({
           role="status"
           aria-live="polite"
         >
-          <span
-            className="rounded px-1.5 py-0.5 text-xs font-semibold uppercase"
-            style={{ background: 'rgba(85,126,255,0.15)', color: '#557EFF' }}
-          >
-            Consulta pendiente
-          </span>
+          <StatusBadge label="Consulta pendiente" tone="info" />
           <span className="flex-1 opacity-80">
             Ejecuta la consulta para ver el estado actual del vehículo antes de continuar.
           </span>
@@ -343,12 +329,7 @@ export function PreflightPanel({
           role="status"
           aria-live="polite"
         >
-          <span
-            className="rounded px-1.5 py-0.5 text-xs font-semibold uppercase"
-            style={{ background: 'rgba(85,126,255,0.15)', color: '#557EFF' }}
-          >
-            Dato reutilizado
-          </span>
+          <StatusBadge label="Dato reutilizado" tone="info" />
           <span className="opacity-80">
             Origen: <span className="font-semibold">{sourceLabel(checks[0]?.source) || 'RUNT'}</span>
             {snapshot.queriedAt && (

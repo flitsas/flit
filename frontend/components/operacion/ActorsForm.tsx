@@ -1315,14 +1315,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // `mode: 'cache'`; NO expone fecha de la consulta origen para este lookup (gap de contrato
   // documentado — a diferencia de `ConsultationResult.fromCache/queriedAt` del flujo de vehículo).
   const originBadge = (mode: string, source: string) =>
-    mode === 'cache' && (
-      <span
-        className="rounded px-1.5 py-0.5 text-xs font-semibold uppercase"
-        style={{ background: 'rgba(85,126,255,0.15)', color: '#557EFF' }}
-      >
-        Dato reutilizado · {source}
-      </span>
-    );
+    mode === 'cache' && <StatusBadge label={`Dato reutilizado · ${source}`} tone="info" />;
 
   // ── Bloque de resultado de la consulta (RUNT o RUES, compartido entre layouts) ─────────────
   const runtResult = (index: number) => {
@@ -1665,6 +1658,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       <div className="sm:col-span-2 space-y-3">
         <WizardCardHeader
           title="Representante legal y/o apoderado"
+          level="h4"
           subtitle={
             isPreloaded
               ? 'Datos precargados desde el directorio / RUES. Puedes editarlos si es necesario.'
@@ -2203,17 +2197,19 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       noValidate
     >
      <fieldset disabled={readOnly} className="contents">
-      {/* Embebido en el wizard el título del paso lo pinta la shell (h2); aquí el
-          h4 sería un segundo título redundante, así que se omite. */}
+      {/* Embebido en el wizard el título del paso lo pinta la shell (h2); aquí un segundo
+          título sería redundante, así que se omite. Standalone, este título cuelga
+          directamente de la shell de la página: arranca en h3 (ver representante legal, h4,
+          más abajo — antes invertido: un h4 aquí hacía de padre de ese h3). */}
       {!embeddedInWizard && (
-        <div className="mb-3">
-          <h4 className="text-sm font-bold">Actores del trámite</h4>
-          <p className="text-xs opacity-60">
-            {modalidad === 'matricula_inicial'
+        <WizardCardHeader
+          title="Actores del trámite"
+          subtitle={
+            modalidad === 'matricula_inicial'
               ? 'Registra los datos del comprador (propietario inicial).'
-              : 'Registra los datos del vendedor y del comprador.'}
-          </p>
-        </div>
+              : 'Registra los datos del vendedor y del comprador.'
+          }
+        />
       )}
 
       {errorBanner}
@@ -2254,13 +2250,18 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             >
               <legend className="sr-only">{ROL_LABEL[actor.rol]}</legend>
               <div
-                className="flex items-center justify-between gap-2 border-b px-4 py-3"
+                className="border-b px-4 py-3"
                 style={{ borderColor: '#DFE5ED', background: 'rgba(85,126,255,0.04)' }}
               >
-                <p className="text-xs font-bold" style={{ color: '#557EFF' }}>
-                  {ROL_LABEL[actor.rol]}
-                </p>
-                <StatusBadge label={statusPill.text} tone={statusPill.tone} />
+                {/* Subordinado al título "Actores del trámite" (h3 standalone, h2 sr-only
+                    embebido): arranca en h4, igual que el representante legal que puede vivir
+                    dentro de esta misma tarjeta. */}
+                <WizardCardHeader
+                  title={ROL_LABEL[actor.rol]}
+                  level="h4"
+                  className=""
+                  action={<StatusBadge label={statusPill.text} tone={statusPill.tone} />}
+                />
               </div>
               <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
                 {/* Tipo de persona (HU #10543) */}

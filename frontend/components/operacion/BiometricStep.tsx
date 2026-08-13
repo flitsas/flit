@@ -438,14 +438,7 @@ function HistorialValidaciones({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <StatusBadge label={ESTADO_LABEL[v.status] ?? v.status} tone={ESTADO_TONE[v.status] ?? 'neutral'} />
-                  {v.id === vigenteId && (
-                    <span
-                      className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
-                      style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
-                    >
-                      Vigente
-                    </span>
-                  )}
+                  {v.id === vigenteId && <StatusBadge label="Vigente" tone="info" />}
                   {v.score != null && <span className="opacity-70">{v.score}/100</span>}
                 </div>
                 <span className="opacity-70">
@@ -509,7 +502,7 @@ function VerifiedView({ validation: v }: { validation: BiometricValidation }) {
           <Check className="h-5 w-5" />
         </span>
         <div className="space-y-0.5">
-          <p className="text-xs font-bold" style={{ color: '#5B8A1F' }}>
+          <p className="text-xs font-bold" style={{ color: 'var(--flit-success-ink)' }}>
             Identidad verificada — {v.score ?? 95}/100
           </p>
           <p className="text-xs opacity-70">{v.name}</p>

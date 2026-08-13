@@ -56,22 +56,37 @@ export function WizardCardHeader({
   subtitle,
   action,
   id,
+  level = 'h3',
+  className = 'mb-3',
 }: {
   title: string;
   subtitle?: string;
   action?: ReactNode;
   /** Para colgar un `aria-labelledby` desde la sección que envuelve la tarjeta. */
   id?: string;
+  /**
+   * Nivel semántico del título (consolidación HU auditoría de diseño). Lo que cuelga directamente
+   * de la shell del paso arranca en `h3`; sus subniveles internos (bloque dentro de una tarjeta que
+   * ya tiene su propio `h3`) usan `h4` para no romper la jerarquía de encabezados.
+   */
+  level?: 'h3' | 'h4';
+  /**
+   * Margen inferior del bloque título/acción. Por defecto `mb-3` (tarjeta estándar); las cabeceras
+   * que viven solas dentro de una franja con su propio padding (p. ej. una barra con borde inferior)
+   * pasan `''` para no duplicar el espaciado.
+   */
+  className?: string;
 }) {
+  const Tag = level;
   return (
-    <div className="mb-3 flex items-start justify-between gap-3">
+    <div className={`flex items-start justify-between gap-3 ${className}`}>
       <div className="min-w-0">
         {/* Azul de marca: es la regla de títulos del sistema y es lo que hacen las dos pantallas de
             la propuesta. Al extraer el átomo se perdió el color y las tarjetas quedaron
             descoloridas frente a la cabecera del propio paso. */}
-        <h3 id={id} className="text-sm font-bold leading-tight" style={{ color: '#557EFF' }}>
+        <Tag id={id} className="text-sm font-bold leading-tight" style={{ color: '#557EFF' }}>
           {title}
-        </h3>
+        </Tag>
         {/* opacity-70 es el piso del sistema sobre texto; por debajo el contraste efectivo cae de AA. */}
         {subtitle ? <p className="mt-1 text-xs leading-snug opacity-70">{subtitle}</p> : null}
       </div>

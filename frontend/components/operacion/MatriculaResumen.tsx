@@ -9,10 +9,11 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
+import { StatusBadge } from '@/components/atom/StatusBadge';
 import { formatDateOnly } from '@/lib/format/date-only';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { WizardAccordion } from './WizardAccordion';
-import { WizardPair } from './wizard-atoms';
+import { WizardCardHeader, WizardPair } from './wizard-atoms';
 import { BiometricStep } from './BiometricStep';
 import { MandatarioSection } from './MandatarioSection';
 import { openAttachmentInNewTab } from './ExpedienteVisor';
@@ -111,6 +112,9 @@ function ResumenDisclosure({
       title={title}
       defaultOpen={defaultOpen}
       icon={<span className="h-4 w-1 shrink-0 rounded-full" style={{ background: BLUE }} aria-hidden="true" />}
+      // El resumen (h3, arriba) es la tarjeta que cuelga del paso; estas secciones viven DENTRO de
+      // ella, así que su título arranca un nivel por debajo (h4) y no repite el h3 del resumen.
+      level="h4"
     >
       {children}
     </WizardAccordion>
@@ -229,7 +233,7 @@ function IdentidadStatusBanner({
           <Check className="h-5 w-5" />
         </span>
         <div className="space-y-0.5">
-          <p className="text-xs font-bold" style={{ color: '#5B8A1F' }}>
+          <p className="text-xs font-bold" style={{ color: 'var(--flit-success-ink)' }}>
             Identidad verificada — {bio.score ?? 95}/100
           </p>
           {bio.name ? <p className="text-xs opacity-70">{bio.name}</p> : null}
@@ -496,40 +500,43 @@ export default function MatriculaResumen({
 
   return (
     <section aria-label={resumenTitulo} className="space-y-3">
-      <div className="flex items-center justify-between gap-3 px-0.5">
-        <div className="flex items-center gap-2">
-          <span className="h-5 w-1.5 rounded-full" style={{ background: tone }} aria-hidden="true" />
-          <h4 className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: BLUE }}>
-            {resumenTitulo}
-          </h4>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          {showFecha ? (
-            <div className="text-right">
-              <label
-                htmlFor="fur-fecha-tramite"
-                className="mb-0.5 block text-xs font-semibold uppercase tracking-[0.2em] opacity-70"
-              >
-                Fecha del trámite
-              </label>
-              <input
-                id="fur-fecha-tramite"
-                type="date"
-                value={fechaTramite}
-                readOnly
-                disabled
-                aria-readonly="true"
-                className="cursor-default rounded-lg border bg-transparent px-2.5 py-1 text-xs font-medium opacity-100 disabled:opacity-100"
-                style={{ borderColor: BORDER, color: '#162744' }}
-              />
-            </div>
-          ) : null}
-          <span
-            className="rounded-full px-3 py-1 text-xs font-semibold"
-            style={{ background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}
-          >
-            {estadoLabel(status)}
-          </span>
+      <div className="flex items-center gap-2 px-0.5">
+        <span className="h-5 w-1.5 shrink-0 rounded-full" style={{ background: tone }} aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <WizardCardHeader
+            title={resumenTitulo}
+            className=""
+            action={
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                {showFecha ? (
+                  <div className="text-right">
+                    <label
+                      htmlFor="fur-fecha-tramite"
+                      className="mb-0.5 block text-xs font-semibold uppercase tracking-[0.2em] opacity-70"
+                    >
+                      Fecha del trámite
+                    </label>
+                    <input
+                      id="fur-fecha-tramite"
+                      type="date"
+                      value={fechaTramite}
+                      readOnly
+                      disabled
+                      aria-readonly="true"
+                      className="cursor-default rounded-lg border bg-transparent px-2.5 py-1 text-xs font-medium opacity-100 disabled:opacity-100"
+                      style={{ borderColor: BORDER, color: '#162744' }}
+                    />
+                  </div>
+                ) : null}
+                <StatusBadge
+                  label={estadoLabel(status)}
+                  bg={estadoChipStyle(status).bg}
+                  color={estadoChipStyle(status).color}
+                  border={estadoChipStyle(status).border}
+                />
+              </div>
+            }
+          />
         </div>
       </div>
 
