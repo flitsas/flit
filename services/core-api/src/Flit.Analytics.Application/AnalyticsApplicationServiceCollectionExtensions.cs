@@ -31,6 +31,13 @@ public static class AnalyticsApplicationServiceCollectionExtensions
         services.AddScoped<ListCompanySavedQueriesHandler>();
         services.AddScoped<SaveCompanyQueryHandler>();
         services.AddScoped<DeleteCompanySavedQueryHandler>();
+
+        // Consultas de SuperAdmin sobre todas las compañías: mismo motor de arriba, sin tenant único.
+        services.AddScoped<ExecuteSuperAdminQueryHandler>();
+        services.AddScoped<GetSuperAdminQueryFieldsHandler>();
+        services.AddScoped<ListSuperAdminSavedQueriesHandler>();
+        services.AddScoped<SaveSuperAdminQueryHandler>();
+        services.AddScoped<DeleteSuperAdminSavedQueryHandler>();
         // Reportes2 HU-B — fallback sin datos de la telemetría HU-A: TryAdd cede ante la
         // implementación real (Flit.Infrastructure) cuando se integre; sin ella el host arranca
         // y los endpoints devuelven listas vacías (§4.3/§4.4).
