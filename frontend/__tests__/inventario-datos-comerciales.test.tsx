@@ -479,13 +479,16 @@ describe('Paridad entre modalidades — los datos comerciales dentro de Requisit
   // Convivencia: un borrador anterior al traslado sigue trayendo del backend su paso propio. El
   // asistente lo redirige al contenido de Requisitos, así que el gestor encuentra lo que dejó a
   // medias — con sus datos comerciales dentro.
-  it('un borrador con el paso propio "Datos Comerciales" no pierde sus campos', async () => {
+  //
+  // Y se rotula "Requisitos", no "Datos Comerciales": el panel pinta Requisitos entero, así que el
+  // nombre viejo hacía que el paso mintiera sobre su contenido.
+  it('un borrador con el paso propio de datos comerciales no pierde sus campos', async () => {
     const user = userEvent.setup();
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD_CON_PASO_COMERCIAL);
     render(<TramiteWizard configuration={CONFIG} procedureTypeId="type-1" onExit={() => {}} />);
 
     // Cuarto y no quinto: el asistente funde vendedor + comprador en un solo paso visual (Actores).
-    await user.click(await screen.findByRole('button', { name: /^Paso 4: Datos Comerciales/ }));
+    await user.click(await screen.findByRole('button', { name: /^Paso 4: Requisitos/ }));
 
     expect(await screen.findByRole('form', { name: 'Datos comerciales del trámite' })).toBeInTheDocument();
     expect(screen.getByLabelText(/^Valor de venta/)).toBeInTheDocument();

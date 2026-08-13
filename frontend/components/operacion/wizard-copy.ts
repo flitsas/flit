@@ -201,7 +201,11 @@ const STEP_LABELS: Record<string, string> = {
   vendedor: 'Actores',
   comprador: 'Actores',
   documentos: 'Requisitos',
-  comercial: 'Datos Comerciales',
+  // `comercial` ya no es un paso: sus datos viven en Requisitos y el asistente normaliza la clave
+  // a `documentos`. Solo puede llegar desde un borrador antiguo, y entonces el panel pinta
+  // Requisitos entero. Rotularlo "Datos Comerciales" hacía que el nombre del paso mintiera sobre
+  // lo que hay dentro, así que se rotula por lo que se ve.
+  comercial: 'Requisitos',
   identidad: 'Validación de Identidad',
   fur: 'Resumen',
 };
