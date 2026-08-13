@@ -352,3 +352,91 @@ describe('Dígito de preasignación de placa — paso 1', () => {
     expect(digitoPersistido?.valueText ?? '').toBe('');
   });
 });
+
+/**
+ * REGRESIÓN — la tarjeta de radicación sobrevive a la creación del trámite.
+ *
+ * La tarjeta se pintaba con la misma condición que decide si el organismo viaja en el cuerpo de la
+ * creación, es decir «mientras el trámite no exista». Al continuar, el trámite se creaba y la
+ * tarjeta desaparecía: el gestor volvía al paso 1 y no encontraba ni la secretaría que acababa de
+ * elegir, ni el dígito, ni la prioridad. Los tres datos estaban guardados; no había dónde verlos.
+ *
+ * Ahora la tarjeta se pinta en matrícula siempre que haya vehículo, y sobre un trámite creado los
+ * tres controles releen su valor y lo guardan en el acto.
+ */
+describe('Tarjeta de radicación sobre un trámite ya creado', () => {
+  const INSTANCIA = {
+    id: 'inst-1',
+    referenceNumber: 'MAT-2026-000001',
+    status: 'borrador' as const,
+    procedureTypeId: 'type-1',
+    tenantId: 'tenant-1',
+    createdAt: '2026-08-13T18:00:00Z',
+    submittedAt: null,
+    completedAt: null,
+    prioritario: true,
+    fieldValues: [
+      { formFieldId: '', fieldKey: 'vin', valueText: VIN_VALIDO, valueJson: null, source: 'consultation' },
+      { formFieldId: '', fieldKey: 'vehicle_brand', valueText: 'RENAULT', valueJson: null, source: 'consultation' },
+      { formFieldId: '', fieldKey: 'transit_office_id', valueText: SECRETARIA_ID, valueJson: null, source: 'manual' },
+      { formFieldId: '', fieldKey: 'plate_preferred_last_digit', valueText: '7', valueJson: null, source: 'manual' },
+    ],
+    statusHistory: [],
+    actors: [],
+  };
+
+  function renderExistente() {
+    mocks.getWizardState.mockResolvedValue(wizard());
+    mocks.getInstance.mockResolvedValue(INSTANCIA);
+    mocks.getPreflight.mockResolvedValue(PREVIEW_RESULT.preflight);
+    return render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
+  }
+
+  it('muestra los tres datos ya guardados en vez de esconder la tarjeta', async () => {
+    renderExistente();
+
+    // Secretaría: el combobox llega con el organismo elegido, no con el aviso de "aún no has…".
+    // La hidratación es asíncrona (sale del detalle del trámite), así que se espera al valor.
+    const combo = await screen.findByRole('combobox', { name: /secretaría de tránsito/i });
+    await waitFor(() => expect(combo).toHaveValue('Secretaría de Movilidad de Medellín'));
+    expect(screen.queryByText(/Aún no has seleccionado la secretaría/)).toBeNull();
+
+    // Dígito y prioridad, releídos del expediente.
+    await waitFor(() => expect(digito().value).toBe('7'));
+    expect(screen.getByRole('button', { name: /Trámite prioritario/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('cambiar la prioridad se guarda en el acto, sin esperar a "Continuar"', async () => {
+    const user = userEvent.setup();
+    renderExistente();
+
+    const toggle = await screen.findByRole('button', { name: /Trámite prioritario/ });
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'true'));
+    await user.click(toggle);
+
+    await waitFor(() => expect(mocks.setPriority).toHaveBeenCalledWith('inst-1', false));
+  });
+
+  it('cambiar de organismo lo persiste con su nombre, que es lo que leen el FUR y el listado', async () => {
+    const user = userEvent.setup();
+    renderExistente();
+    await screen.findByRole('combobox', { name: /secretaría de tránsito/i });
+
+    await elegirSecretaria(user, /Envigado/);
+
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-1', [
+        { formFieldId: null, fieldKey: 'transit_office_id', valueText: 'ot-envigado', valueJson: null },
+        {
+          formFieldId: null,
+          fieldKey: 'transit_office_name',
+          valueText: 'Tránsito de Envigado',
+          valueJson: null,
+        },
+      ]),
+    );
+  });
+});

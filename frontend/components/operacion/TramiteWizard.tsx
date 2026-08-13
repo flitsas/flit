@@ -1979,9 +1979,21 @@ function ConsultaStep({
   // existe (AC5 + convivencia D8): los borradores abiertos antes del cambio siguen eligiendo el
   // organismo en el paso del FUR, donde ya lo tenían.
   const eligeSecretaria = deferred && deferredModalidad === 'matricula_inicial';
+  /**
+   * Si la TARJETA de radicación se pinta. Distinto de `eligeSecretaria`, que decide si el organismo
+   * viaja en la creación y si el gate de "Continuar" lo exige.
+   *
+   * Se separaron porque compartían condición y eso escondía un defecto: la tarjeta desaparecía en
+   * cuanto el trámite existía. El gestor elegía secretaría, dígito y prioridad, continuaba, volvía
+   * al paso 1 — y los tres datos ya no estaban en pantalla. Estaban guardados; simplemente no había
+   * dónde verlos ni cómo corregirlos sin llegar al paso del FUR.
+   */
+  const muestraRadicacion = isVin;
   const [secretarias, setSecretarias] = useState<TransitOfficeOption[]>([]);
   const [secretariasError, setSecretariasError] = useState<string | null>(null);
   const [transitOfficeId, setTransitOfficeId] = useState('');
+  /** Prioridad del trámite YA creado (en creación diferida manda la del shell, que viaja con el id). */
+  const [prioritarioInstancia, setPrioritarioInstancia] = useState(false);
   /**
    * Consulta desacoplada ya resuelta, a la espera de que estén los datos que viajan con ella a la
    * creación. Se guarda en vez de emitirse en el acto porque el organismo de tránsito se elige
@@ -1993,7 +2005,7 @@ function ConsultaStep({
   > | null>(null);
 
   useEffect(() => {
-    if (!eligeSecretaria) return;
+    if (!muestraRadicacion) return;
     let active = true;
     void tramitesClient
       .listTransitOffices()
@@ -2006,7 +2018,7 @@ function ConsultaStep({
     return () => {
       active = false;
     };
-  }, [eligeSecretaria]);
+  }, [muestraRadicacion]);
 
   /**
    * Dígito de preferencia de placa (HU #10805) declarado aquí, donde lo ubica el diseño. Es el MISMO
@@ -2065,6 +2077,14 @@ function ConsultaStep({
     if (docType && DOC_TYPES.includes(docType as ActorDocumentType)) {
       setOwnerDocType(docType as ActorDocumentType);
     }
+    // Decisiones de radicación. Sin esto, al volver al paso 1 sobre un trámite YA creado la tarjeta
+    // aparecía vacía: los tres datos existen en el expediente pero el paso no los releía, así que
+    // el organismo elegido hace un minuto se mostraba como "Aún no has seleccionado la secretaría".
+    setTransitOfficeId((v) => v || byKey('transit_office_id'));
+    setDigitoPlaca((v) => v || byKey('plate_preferred_last_digit'));
+    // La prioridad NO está en field_values (es una columna del expediente), por eso viaja aparte en
+    // el detalle. Es la única de las tres que necesitó exponerse en el contrato.
+    setPrioritarioInstancia(detail.prioritario ?? false);
   };
 
   // Rehidrata los inputs desde los field_values guardados de la instancia.
@@ -2361,7 +2381,7 @@ function ConsultaStep({
   useEffect(() => {
     // Sin organismo no hay nada que consultar. El estado vuelve a "cargando" al cambiar de
     // organismo desde el propio selector, no aquí: así el efecto solo escribe el resultado.
-    if (!eligeSecretaria || !transitOfficeId || vehiculoConPlacaRunt) return;
+    if (!muestraRadicacion || !transitOfficeId || vehiculoConPlacaRunt) return;
     let active = true;
     /**
      * HU #10806 (Alternativa C) — la decisión de ruta se persiste como `plate_route_active`: es la
@@ -2400,7 +2420,7 @@ function ConsultaStep({
     };
     // `upsertLocal` se recrea en cada render; lo que gobierna la consulta es el organismo elegido.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eligeSecretaria, transitOfficeId, vehiculoConPlacaRunt, deferred, instanceId]);
+  }, [muestraRadicacion, transitOfficeId, vehiculoConPlacaRunt, deferred, instanceId]);
 
   /**
    * HU #10805 — dígito de preferencia. Sin trámite todavía se anota en memoria y viaja con la
@@ -2408,6 +2428,45 @@ function ConsultaStep({
    * creado hace su PATCH inmediato. La clave es la MISMA que lee el paso del FUR y que la consola
    * del OT usa para marcar las placas candidatas, así que declararlo aquí o allá es equivalente.
    */
+  /**
+   * Organismo elegido sobre un trámite YA creado. En creación diferida no hace nada: allí el id
+   * viaja en el cuerpo de la creación y persistirlo antes sería escribir sobre un trámite que no
+   * existe. Guarda también el nombre porque es lo que leen el FUR y el listado, que no resuelven
+   * el id contra el catálogo.
+   */
+  const handleOrganismo = (id: string) => {
+    if (deferred || !instanceId || !id) return;
+    const nombre = secretarias.find((s) => s.id === id)?.name ?? '';
+    void tramitesClient
+      .patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'transit_office_id', valueText: id, valueJson: null },
+        ...(nombre
+          ? [{ formFieldId: null, fieldKey: 'transit_office_name', valueText: nombre, valueJson: null }]
+          : []),
+      ])
+      .then(() => onRefresh())
+      .catch(() => setError('No se pudo guardar el organismo de tránsito. Reintenta.'));
+  };
+
+  /**
+   * Prioridad. Dos vías según el momento: antes de crear la marca viaja al shell, que la aplica con
+   * `setPriority` en cuanto tiene el id; después se aplica en el acto. Optimista con reversión —es
+   * una preferencia de orden en la bandeja del OT, no un requisito, y no merece bloquear la pantalla.
+   */
+  const prioritarioVigente = deferred ? prioritario : prioritarioInstancia;
+  const handlePrioritario = (value: boolean) => {
+    if (deferred) {
+      onPrioritarioChange?.(value);
+      return;
+    }
+    if (!instanceId) return;
+    setPrioritarioInstancia(value);
+    void tramitesClient
+      .setPriority(instanceId, value)
+      .then(() => onRefresh())
+      .catch(() => setPrioritarioInstancia(!value));
+  };
+
   const handleDigitoPlaca = (value: string) => {
     setDigitoPlaca(value);
     if (deferred) {
@@ -2753,7 +2812,7 @@ function ConsultaStep({
           es el orden del diseño. `/preflight-preview` acepta consultar sin organismo; el requisito
           vive en la creación (`CreateFromConsultaCommand`) y, en pantalla, en el gate de
           "Continuar y guardar". */}
-      {eligeSecretaria && hasVehicleData && (
+      {muestraRadicacion && hasVehicleData && (
         <div className={WIZARD_CARD}>
           <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
             Organismo de Tránsito y Radicación
@@ -2778,6 +2837,7 @@ function ConsultaStep({
                 // o viajaría una preferencia que el organismo nuevo quizá ni atiende.
                 setPreasignacionActiva(null);
                 if (digitoPlaca) handleDigitoPlaca('');
+                handleOrganismo(id);
               }}
               disabled={readOnly}
               describedBy="consulta-secretaria-aviso"
@@ -2860,30 +2920,32 @@ function ConsultaStep({
             </span>
             <button
               type="button"
-              onClick={() => onPrioritarioChange?.(!prioritario)}
+              onClick={() => handlePrioritario(!prioritarioVigente)}
               disabled={readOnly}
-              aria-pressed={prioritario}
+              aria-pressed={prioritarioVigente}
               aria-labelledby="consulta-prioritario-label"
               aria-describedby="consulta-prioritario-nota"
               className="flex h-[38px] w-full items-center justify-between rounded-xl border bg-white px-3 text-xs font-medium transition disabled:opacity-60 dark:bg-[#0B0F14]"
-              style={prioritario ? { borderColor: '#557EFF', color: '#557EFF' } : undefined}
+              style={prioritarioVigente ? { borderColor: '#557EFF', color: '#557EFF' } : undefined}
             >
-              {prioritario ? 'Activado' : 'Desactivado'}
+              {prioritarioVigente ? 'Activado' : 'Desactivado'}
               <span
                 aria-hidden="true"
                 className="relative inline-block h-5 w-9 rounded-full transition-colors"
-                style={{ background: prioritario ? '#557EFF' : '#CBD5E1' }}
+                style={{ background: prioritarioVigente ? '#557EFF' : '#CBD5E1' }}
               >
                 <span
                   className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
-                    prioritario ? 'left-[1.125rem]' : 'left-0.5'
+                    prioritarioVigente ? 'left-[1.125rem]' : 'left-0.5'
                   }`}
                 />
               </span>
             </button>
             <p id="consulta-prioritario-nota" className="mt-1 text-xs leading-tight opacity-70">
-              Prioriza la gestión de este expediente: el organismo lo revisa con primacía. Se aplica
-              al crear el trámite y podrás cambiarlo después desde el listado.
+              Prioriza la gestión de este expediente: el organismo lo revisa con primacía.{' '}
+              {deferred
+                ? 'Se aplica al crear el trámite y podrás cambiarlo después desde el listado.'
+                : 'El cambio se guarda al instante; también puedes alternarlo desde el listado.'}
             </p>
           </div>
           </div>
