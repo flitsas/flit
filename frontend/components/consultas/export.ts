@@ -8,6 +8,7 @@ export function queryFileName(
   from: string,
   to: string,
   ext: "csv" | "xlsx",
+  parte?: { numero: number; total: number },
 ): string {
   const base = nombre
     ? nombre
@@ -18,7 +19,9 @@ export function queryFileName(
         .replace(/^-+|-+$/g, "")
     : "";
 
-  return `${base || prefix}-${from}-a-${to}.${ext}`;
+  const sufijoParte = parte && parte.total > 1 ? `-parte-${parte.numero}-de-${parte.total}` : "";
+
+  return `${base || prefix}-${from}-a-${to}${sufijoParte}.${ext}`;
 }
 
 /** Descarga de un archivo generado. Se revoca la URL para no dejar el blob retenido toda la sesión. */

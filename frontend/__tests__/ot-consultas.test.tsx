@@ -371,6 +371,41 @@ describe("Resultado", () => {
     });
   });
 
+  it("pasado el tamaño de lote, reparte el export en varios archivos en vez de truncarlo", async () => {
+    const pageSize = 200;
+    const total = pageSize * 26; // 5.200 filas: pasa el lote de 5.000 y deja resto para un 2do archivo.
+    mocks.runOtQuery.mockImplementation(async (_definition, { page }: { page: number }) => {
+      const quedan = total - (page - 1) * pageSize;
+      if (quedan <= 0) return result({ total, filas: [] });
+      const filas = Array.from({ length: Math.min(pageSize, quedan) }, (_, i) =>
+        row({ procedureInstanceId: `p${page}-${i}`, referenceNumber: `REF-${page}-${i}` }),
+      );
+      return result({ total, filas });
+    });
+
+    const descargas: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      descargas.push(this.download);
+    });
+
+    renderTab();
+    await screen.findByTestId("ot-query-total");
+    await waitFor(() => expect(screen.getByTestId("ot-query-export-xlsx")).toBeEnabled());
+
+    await userEvent.click(screen.getByTestId("ot-query-export-xlsx"));
+
+    // Dos archivos, no uno truncado a 5.000: el usuario no tiene que volver a acotar su búsqueda
+    // para ver las últimas 200 filas.
+    await waitFor(() => expect(descargas).toHaveLength(2));
+    expect(descargas[0]).toContain("parte-1-de-2");
+    expect(descargas[1]).toContain("parte-2-de-2");
+
+    const aviso = await screen.findByText(/Se exportaron.*en 2 archivos/);
+    expect(aviso).toBeInTheDocument();
+  });
+
   it("el rango de fechas dice explícitamente sobre qué fecha aplica", async () => {
     renderTab();
 

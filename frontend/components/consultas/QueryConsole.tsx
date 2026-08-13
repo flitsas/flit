@@ -64,8 +64,13 @@ import {
 
 const PAGE_SIZE = 25;
 
-/** Tope de filas del export. Se AVISA cuando recorta: un archivo truncado en silencio se firma. */
-const MAX_EXPORT_ROWS = 5000;
+/**
+ * Filas por archivo de export. No es un tope del TOTAL exportable —eso lo impone el motor de
+ * consultas (`MaxUniverso`)— sino el tamaño de cada archivo: pasado esto, se reparte en
+ * `..._parte_1_de_N`, `..._parte_2_de_N`, etc., en vez de forzar al usuario a acotar su búsqueda
+ * para poder descargar el resto.
+ */
+const EXPORT_BATCH_SIZE = 5000;
 
 /**
  * La huella de la PREGUNTA: fechas y condiciones, no columnas ni orden.
@@ -387,6 +392,12 @@ export function QueryConsole<TRow>({
    *
    * Es la pregunta que hace todo el mundo la primera vez, y la respuesta contraria —exportar los 25
    * de pantalla— sería una trampa: el archivo parecería completo y nadie lo comprobaría.
+   *
+   * <p>Se reparte en varios archivos de {@link EXPORT_BATCH_SIZE} filas en vez de truncar: el motor
+   * de consultas ya impide que `result.total` sea inmanejable (`MaxUniverso`), así que el único
+   * límite que queda por resolver aquí es el tamaño cómodo de UN archivo de Excel, no cuánto puede
+   * ver el usuario. Cada archivo se dispara apenas se arma, en la misma interacción del clic, para
+   * no depender de que el usuario vuelva a pedir «el resto».</p>
    */
   const handleExport = useCallback(
     async (formato: "xlsx" | "csv") => {
@@ -395,56 +406,77 @@ export function QueryConsole<TRow>({
       setExporting(true);
       setNotice(null);
       try {
-        const filas: TRow[] = [];
+        const totalArchivos = Math.max(1, Math.ceil(result.total / EXPORT_BATCH_SIZE));
+        const notas = coverageLines(result.cobertura, fields);
+        const nombre = saved.find((q) => q.id === activeId)?.nombre ?? null;
+
+        let lote: TRow[] = [];
+        let numeroArchivo = 1;
+        let exportadas = 0;
         let pagina = 1;
-        while (filas.length < Math.min(result.total, MAX_EXPORT_ROWS)) {
+
+        const volcarLote = () => {
+          if (lote.length === 0) return;
+          const fileName = queryFileName(
+            source.exportPrefix,
+            nombre,
+            result.desde,
+            result.hasta,
+            formato,
+            { numero: numeroArchivo, total: totalArchivos },
+          );
+
+          if (formato === "xlsx") {
+            download(
+              buildWorkbook(sheetName, allColumns, lote, visibleColumns, notas),
+              fileName,
+              XLSX_MIME,
+            );
+          } else {
+            const csv = buildCsv(allColumns, lote, visibleColumns);
+            const conNotas =
+              notas.length > 0
+                ? `${csv}\r\n\r\n${notas.map((n) => `"${n.replace(/"/g, '""')}"`).join("\r\n")}`
+                : csv;
+            download(conNotas, fileName, "text/csv;charset=utf-8;");
+          }
+
+          exportadas += lote.length;
+          numeroArchivo += 1;
+          lote = [];
+        };
+
+        while (exportadas + lote.length < result.total) {
           const data = await source.run(definition, {
             page: pagina,
             pageSize: QUERY_MAX_PAGE_SIZE,
           });
           if (data.filas.length === 0) break;
-          filas.push(...data.filas);
+          lote.push(...data.filas);
           pagina += 1;
-        }
 
-        const recortado = filas.length > MAX_EXPORT_ROWS ? filas.slice(0, MAX_EXPORT_ROWS) : filas;
-        const notas = coverageLines(result.cobertura, fields);
-        if (recortado.length < result.total) {
-          notas.push(
-            `Atención: se exportaron ${recortado.length} de ${result.total} ${pluralNoun} (tope de ${MAX_EXPORT_ROWS}). Acote la consulta para obtener el resto.`,
-          );
+          if (lote.length >= EXPORT_BATCH_SIZE) {
+            volcarLote();
+          }
         }
-
-        const nombre = saved.find((q) => q.id === activeId)?.nombre ?? null;
-        const fileName = queryFileName(
-          source.exportPrefix,
-          nombre,
-          result.desde,
-          result.hasta,
-          formato,
-        );
-
-        if (formato === "xlsx") {
-          download(
-            buildWorkbook(sheetName, allColumns, recortado, visibleColumns, notas),
-            fileName,
-            XLSX_MIME,
-          );
-        } else {
-          const csv = buildCsv(allColumns, recortado, visibleColumns);
-          const conNotas =
-            notas.length > 0
-              ? `${csv}\r\n\r\n${notas.map((n) => `"${n.replace(/"/g, '""')}"`).join("\r\n")}`
-              : csv;
-          download(conNotas, fileName, "text/csv;charset=utf-8;");
-        }
+        volcarLote();
 
         setNotice(
-          `Se exportaron ${plural(recortado.length, singular, pluralNoun)} con ${plural(
-            visibleColumns.length,
-            "columna visible",
-            "columnas visibles",
-          )}.`,
+          totalArchivos > 1
+            ? `Se exportaron ${plural(exportadas, singular, pluralNoun)} en ${plural(
+                totalArchivos,
+                "archivo",
+                "archivos",
+              )} de hasta ${formatInt(EXPORT_BATCH_SIZE)} filas cada uno, con ${plural(
+                visibleColumns.length,
+                "columna visible",
+                "columnas visibles",
+              )}.`
+            : `Se exportaron ${plural(exportadas, singular, pluralNoun)} con ${plural(
+                visibleColumns.length,
+                "columna visible",
+                "columnas visibles",
+              )}.`,
         );
       } catch (e: unknown) {
         setError(e instanceof Error ? `No se pudo exportar: ${e.message}` : "No se pudo exportar.");
