@@ -30,6 +30,12 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("uuidv7()");
 
+                    b.Property<int>("Attempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("attempts");
+
                     b.Property<string>("CaptureUrl")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
@@ -70,6 +76,17 @@ namespace Flit.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("kyverum_verification_id");
+
+                    b.Property<string>("LastAttemptAt")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("last_attempt_at");
+
+                    b.Property<int>("MaxAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(3)
+                        .HasColumnName("max_attempts");
 
                     b.Property<string>("Name")
                         .IsRequired()

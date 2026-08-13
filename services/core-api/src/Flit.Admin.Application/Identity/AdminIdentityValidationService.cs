@@ -279,6 +279,20 @@ public sealed class AdminIdentityValidationService(
             return true;
         }
 
+        if (status.RejectedAttempt)
+        {
+            // HU #11504 — un intento falló SIN señal de cierre: el agregado decide si cuenta (dedup por
+            // AttemptKey) y si ese conteo alcanza el máximo (terminaliza reutilizando Reject). La decisión
+            // vive en el dominio, no aquí.
+            var registered = validation.RegisterFailedAttempt(now, status.AttemptKey, status.ProviderStatus);
+            if (registered)
+            {
+                await repository.UpdateAsync(validation, cancellationToken).ConfigureAwait(false);
+            }
+
+            return registered;
+        }
+
         // Sigue en proceso: solo se registra la traza del proveedor.
         validation.TrackProvider(status.ProviderStatus, status.RawPayloadSanitized, now);
         await repository.UpdateAsync(validation, cancellationToken).ConfigureAwait(false);

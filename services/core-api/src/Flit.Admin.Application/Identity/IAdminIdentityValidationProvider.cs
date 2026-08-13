@@ -30,16 +30,27 @@ public sealed record AdminIdentityStartResult(
     string? RawPayloadSanitized);
 
 /// <summary>
-/// Estado consultado al proveedor durante la reconciliación (ADR-0034). <see cref="Approved"/> y
-/// <see cref="Rejected"/> son mutuamente excluyentes; ambos <c>false</c> = sigue en proceso.
-/// <see cref="CertificateHash"/> es la serie/hash del certificado de identidad (solo si aprobó).
+/// Estado consultado al proveedor durante la reconciliación (ADR-0034). <see cref="Approved"/>,
+/// <see cref="Rejected"/> y <see cref="RejectedAttempt"/> son mutuamente excluyentes; los tres
+/// <c>false</c> = sigue en proceso. <see cref="CertificateHash"/> es la serie/hash del certificado de
+/// identidad (solo si aprobó).
+///
+/// <para><b><see cref="Rejected"/></b> — el proveedor CERRÓ la validación rechazada (terminal,
+/// autoritativo): se aplica de inmediato aunque el conteo local de intentos aún tenga margen.
+/// <b><see cref="RejectedAttempt"/></b> — un INTENTO falló SIN señal de cierre (HU #11504, la
+/// contraparte admin del Bug #11503): no es terminal por sí solo. El reconciliador cuenta los intentos
+/// (dedup por <see cref="AttemptKey"/>, ver <c>AdminIdentityValidation.RegisterFailedAttempt</c>) y solo
+/// terminaliza al alcanzar el máximo. <see cref="AttemptKey"/> es la clave de dedup de ESTE intento
+/// (p. ej. el <c>AttemptAt</c>/<c>validadoAt</c> de Kyverum): null si el proveedor no la reportó.</para>
 /// </summary>
 public sealed record AdminIdentityStatusResult(
     bool Approved,
     bool Rejected,
     string? ProviderStatus,
     string? CertificateHash,
-    string? RawPayloadSanitized);
+    string? RawPayloadSanitized,
+    bool RejectedAttempt = false,
+    string? AttemptKey = null);
 
 /// <summary>
 /// Error al operar con el proveedor. <see cref="Transient"/> = reintentable (proveedor caído, timeout,
