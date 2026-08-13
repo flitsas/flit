@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { OtSidePanel } from '@/components/admin/transit-offices/OtSidePanel';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -16,17 +16,26 @@ import type {
 export function ProcedureDocsPreviewInformativo({
   modalidad,
   transitOfficeId,
-  renderTrigger,
+  open: openProp,
+  onOpenChange,
 }: {
   modalidad: WizardModalidad;
   transitOfficeId?: string;
   /**
-   * Sustituye el enlace por otro disparador. Lo usa el carril de ayuda del paso 1, donde la guía
-   * es un icono con tooltip en vez de un enlace en línea. El panel y su carga no cambian.
+   * Modo controlado, SIN el enlace: el disparador vive fuera. Lo necesita el carril de consulta del
+   * paso 1, cuyo `backdrop-filter` crea bloque contenedor para los descendientes `fixed` — el panel
+   * tiene que renderizarse fuera del carril o queda posicionado respecto al icono.
    */
-  renderTrigger?: (open: () => void) => ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const controlado = openProp !== undefined;
+  const open = controlado ? openProp : openState;
+  const setOpen = (next: boolean) => {
+    if (!controlado) setOpenState(next);
+    onOpenChange?.(next);
+  };
   // El resultado se guarda junto a la llave que lo produjo: así `loading` se deriva del render
   // (llave pedida != llave cargada) y no hace falta un setState síncrono dentro del efecto.
   const [result, setResult] = useState<{
@@ -61,9 +70,7 @@ export function ProcedureDocsPreviewInformativo({
 
   return (
     <>
-      {renderTrigger ? (
-        renderTrigger(() => setOpen(true))
-      ) : (
+      {!controlado && (
         <button
           type="button"
           onClick={() => setOpen(true)}
