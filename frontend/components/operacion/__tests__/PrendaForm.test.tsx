@@ -66,20 +66,20 @@ describe('PrendaForm (matrícula, R4)', () => {
     client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
   });
 
-  it('ofrece solo las decisiones de matrícula (registrar / sin prenda) como radios', async () => {
+  it('ofrece solo las decisiones de matrícula (registrar / sin prenda) como segmentado', async () => {
     render(<PrendaForm instanceId="abc" />);
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    expect(screen.getByRole('radio', { name: 'Registrar prenda' })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'Sin prenda' })).toBeInTheDocument();
-    expect(screen.queryByRole('radio', { name: 'Levantar gravamen' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Registrar prenda' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sin prenda' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Levantar gravamen' })).not.toBeInTheDocument();
   });
 
   it('con "sin prenda" no exige documento ni datos del acreedor (puede continuar)', async () => {
     render(<PrendaForm instanceId="abc" />);
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Sin prenda' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sin prenda' }));
 
     expect(screen.queryByLabelText('Acreedor (beneficiario)')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Documento de soporte de prenda')).not.toBeInTheDocument();
@@ -90,7 +90,7 @@ describe('PrendaForm (matrícula, R4)', () => {
     render(<PrendaForm instanceId="abc" />);
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Registrar prenda' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar prenda' }));
 
     expect(screen.getByLabelText('Acreedor (beneficiario)')).toBeInTheDocument();
     expect(screen.getByLabelText('Documento de soporte de prenda')).toBeInTheDocument();
@@ -105,7 +105,7 @@ describe('PrendaForm (matrícula, R4)', () => {
     render(<PrendaForm instanceId="abc" documentRequired={false} />);
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Registrar prenda' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar prenda' }));
 
     expect(screen.getByLabelText('Documento de soporte de prenda')).toBeInTheDocument();
     expect(screen.getByText(/Opcional/i)).toBeInTheDocument();
@@ -119,7 +119,7 @@ describe('PrendaForm (matrícula, R4)', () => {
     );
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Registrar prenda' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar prenda' }));
 
     await waitFor(() => expect(onGate).toHaveBeenCalledWith(false));
   });
@@ -135,7 +135,7 @@ describe('PrendaForm (matrícula, R4)', () => {
     );
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Registrar prenda' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar prenda' }));
 
     await waitFor(() => expect(onGate).toHaveBeenCalledWith(true));
   });
@@ -162,7 +162,10 @@ describe('PrendaForm (matrícula, R4)', () => {
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
     await waitFor(() => {
-      expect(screen.getByRole('radio', { name: 'Registrar prenda' })).toBeChecked();
+      expect(screen.getByRole('button', { name: 'Registrar prenda' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
     });
     expect(screen.getByLabelText('Acreedor (beneficiario)')).toHaveValue('BANCO RUNT SA');
     expect(screen.getByLabelText('NIT / documento del acreedor')).toHaveValue('900123456');
@@ -206,7 +209,7 @@ describe('PrendaForm (matrícula, R4)', () => {
 
     expect(screen.queryByRole('button', { name: /Guardar decisión de prenda/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Registrar prenda' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar prenda' }));
     fireEvent.change(screen.getByLabelText('Acreedor (beneficiario)'), {
       target: { value: 'Banco XYZ' },
     });

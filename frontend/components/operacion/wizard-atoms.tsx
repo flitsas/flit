@@ -7,7 +7,7 @@
  * mano en cada uno, ya habían divergido en tamaño de rótulo y en el radio de la píldora.
  */
 
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 
 /**
  * Par rótulo/valor de las grillas de datos consolidados (RUNT, resumen del FUR).
@@ -165,6 +165,92 @@ export function WizardSegmented<T extends string>({
             >
               {o.label}
             </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Tarjetas de selección: tres o más opciones excluyentes cuyo texto no cabe en la pista de
+ * `WizardSegmented` (un rótulo largo la revienta o el control lo trunca).
+ *
+ * Sigue siendo, por dentro, un `radiogroup` de `<input type="radio">` — el rótulo se hunde con
+ * `sr-only` y no se retira: es lo único de la implementación en radios nativos que vale la pena
+ * conservar, la navegación por flechas entre opciones del mismo grupo. El foco visible se pinta en
+ * la tarjeta, no en el control oculto.
+ *
+ * La tarjeta seleccionada se tiñe en verde de marca (`#8CC63F` de borde, `rgba(140,198,63,0.12)` de
+ * fondo) con el texto en `--flit-success-ink`, la tinta legible del verde ya resuelta en
+ * `globals.css`. Las no seleccionadas quedan blancas con borde `#DFE5ED`: es la norma FLIT del
+ * "select tipo tarjeta" y la razón de ser de este átomo — la decisión que reemplaza no cumplía ni
+ * eso, un radio nativo teñido con `accent-color` no es una tarjeta estilizada.
+ */
+export function WizardSelectCards<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  disabled,
+  name,
+  className = '',
+}: {
+  /** Rótulo visible sobre las tarjetas; también nombra el grupo para el lector de pantalla. */
+  label: string;
+  value: T;
+  options: ReadonlyArray<{ value: T; label: string; description?: string; disabled?: boolean }>;
+  onChange: (value: T) => void;
+  /** Deshabilita el control completo (solo lectura del asistente). */
+  disabled?: boolean;
+  /** `name` del grupo de radios nativo. Por defecto uno generado con `useId()`. */
+  name?: string;
+  className?: string;
+}) {
+  const autoName = useId();
+  const groupName = name ?? autoName;
+  return (
+    <div className={className}>
+      <span className="mb-1.5 block text-xs font-semibold">{label}</span>
+      <div role="radiogroup" aria-label={label} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {options.map((o) => {
+          const active = value === o.value;
+          const optionDisabled = disabled || o.disabled;
+          return (
+            <label
+              key={o.value}
+              className={
+                'flex items-start gap-2 rounded-xl border px-3 py-2.5 transition-colors ' +
+                'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-[#557EFF] ' +
+                (optionDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-[rgba(85,126,255,0.04)]')
+              }
+              style={
+                active
+                  ? { borderColor: '#8CC63F', background: 'rgba(140,198,63,0.12)' }
+                  : { borderColor: '#DFE5ED', background: '#FFFFFF' }
+              }
+            >
+              <input
+                type="radio"
+                name={groupName}
+                value={o.value}
+                checked={active}
+                onChange={() => onChange(o.value)}
+                disabled={optionDisabled}
+                className="sr-only focus:outline-none"
+              />
+              <span className="min-w-0">
+                <span
+                  className="block text-xs font-semibold leading-snug"
+                  style={active ? { color: 'var(--flit-success-ink)' } : undefined}
+                >
+                  {o.label}
+                </span>
+                {o.description ? (
+                  <span className="mt-0.5 block text-xs opacity-70">{o.description}</span>
+                ) : null}
+              </span>
+            </label>
           );
         })}
       </div>
