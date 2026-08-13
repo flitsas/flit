@@ -461,7 +461,12 @@ describe('BiometricStep — inventario: refrescar el estado y avisar al asistent
     const { unmount } = render(
       <BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" hideIntro heading="Identidad" />,
     );
-    expect(screen.getByText('Cargando validaciones de identidad…')).toBeInTheDocument();
+    // Por rol y nombre, no por texto: el esqueleto anuncia la espera con `aria-label` en su
+    // `role="status"`, que es lo que de verdad oye el lector de pantalla. Buscar el texto ataba el
+    // test a que existiera además un span oculto, detalle de implementación que ya cambió una vez.
+    expect(
+      screen.getByRole('status', { name: /Cargando validaciones de identidad/i }),
+    ).toBeInTheDocument();
     await act(async () => {
       resolver({ validations: [], provider: 'mock', firmaBaulPartes: [] });
     });

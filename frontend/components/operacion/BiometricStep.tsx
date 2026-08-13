@@ -101,6 +101,41 @@ const ESTADO_TONE: Record<BiometricEstado, StatusTone> = {
   error_envio: 'danger',
 };
 
+/**
+ * Chip de estado de la cabecera de cada `ParteCard`, en paridad con la referencia del diseño (cada
+ * tarjeta trae un badge — «Identidad verificada — 78/100» / «Pendiente»). Se calcula aparte de
+ * `ESTADO_LABEL`/`ESTADO_TONE` porque cubre dos casos que esos mapas no representan, ninguno de los
+ * dos un `BiometricEstado` real: la parte que TODAVÍA no tiene ninguna validación (no hay "estado" que
+ * pedirle al backend) y la cobertura por firma del baúl (HU #10646: la identidad se resuelve fuera de
+ * la biométrica, así que tampoco tiene un `BiometricEstado`).
+ */
+function parteBadge(
+  validation: BiometricValidation | null,
+  vaultCovered: boolean,
+): { label: string; tone: StatusTone } {
+  if (vaultCovered) {
+    return { label: 'Cubierto por firma del baúl', tone: 'success' };
+  }
+  if (!validation) {
+    return { label: 'Sin iniciar', tone: 'neutral' };
+  }
+  // Un enlace vencido cae a RejectedView aunque el estado crudo siga en `en_proceso` (ver ParteCard);
+  // el chip debe reflejar lo que el gestor ve en la tarjeta, no el campo crudo del backend.
+  if (validation.expired) {
+    return { label: ESTADO_LABEL.expirado, tone: ESTADO_TONE.expirado };
+  }
+  if (validation.status === 'aprobado') {
+    return {
+      label:
+        validation.score != null
+          ? `${ESTADO_LABEL.aprobado} — ${validation.score}/100`
+          : ESTADO_LABEL.aprobado,
+      tone: ESTADO_TONE.aprobado,
+    };
+  }
+  return { label: ESTADO_LABEL[validation.status], tone: ESTADO_TONE[validation.status] };
+}
+
 /** Formatea una fecha ISO a un texto legible (es-CO). Devuelve el ISO crudo si no parsea. */
 function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -311,13 +346,17 @@ function BiometricSkeleton({
   gridClass?: string;
 }) {
   return (
+    // `aria-label` explícito y no solo el texto oculto: el rol `status` NO toma su nombre
+    // accesible del contenido, así que sin él este esqueleto era indistinguible de cualquier otro
+    // `role="status"` de la pantalla — y eso llegó a costar que se retirara un chip de estado que
+    // el diseño pide, por un test que solo sabía contar roles.
     <div
       className={`grid grid-cols-1 gap-4 ${gridClass}`}
       role="status"
+      aria-label="Cargando validaciones de identidad"
       aria-live="polite"
       aria-busy="true"
     >
-      <span className="sr-only">Cargando validaciones de identidad…</span>
       {partes.map((parte) => (
         <div key={parte} className={WIZARD_CARD} aria-hidden="true">
           <div className="mb-3 h-3 w-24 animate-pulse rounded bg-black/10 dark:bg-white/10" />
@@ -348,13 +387,18 @@ function ParteCard({
   onChanged: () => void;
 }) {
   const estado = validation?.status;
+  const badge = parteBadge(validation, vaultCovered);
   return (
     <div role="group" aria-label={`Biométrica ${PARTE_LABEL[parte]}`} className={WIZARD_CARD}>
-      {/* Sin StatusBadge en la cabecera a propósito: el componente fija `role="status"`, y AC8 exige
-          que ese rol quede libre para el placeholder de carga — cada vista de estado ya lo anuncia
-          por su cuenta (VaultCoveredView/VerifiedView/KyverumPendingView/RejectedView, cada una con
-          su propio role="status"/"alert"). Duplicarlo aquí encima habría sido ruido, no señal nueva. */}
-      <WizardCardHeader title={PARTE_LABEL[parte]} />
+      {/* El chip de estado de la cabecera (paridad con la referencia del diseño) es seguro junto al
+          placeholder de carga de AC8: el esqueleto se busca por su NOMBRE accesible ("Cargando
+          validaciones de identidad"), no por el rol `status` a secas, así que puede convivir con los
+          `role="status"` que trae cada `StatusBadge` sin volverse ambiguo para un lector de pantalla
+          ni para el test que verifica que el esqueleto desaparece. */}
+      <WizardCardHeader
+        title={PARTE_LABEL[parte]}
+        action={<StatusBadge label={badge.label} tone={badge.tone} />}
+      />
 
       {/* HU #10646 — actor jurídico (NIT) cubierto por la firma del baúl: la identidad ya está
           satisfecha server-side; se presenta como firma electrónica y se omite toda la biométrica. */}
@@ -373,6 +417,28 @@ function ParteCard({
         />
       ) : estado === 'rechazado' || estado === 'expirado' || validation?.expired ? (
         <RejectedView
+          validation={validation!}
+          parte={parte}
+          instanceId={instanceId}
+          provider={provider}
+          onChanged={onChanged}
+        />
+      ) : estado === 'error_envio' ? (
+        // Fallo de envío (cola provider-agnostic): NO es una espera, es un error — se distingue con
+        // InlineAlert tone="error" en vez de la vista de "ya enviada, esperando".
+        <SendFailedView
+          validation={validation!}
+          parte={parte}
+          instanceId={instanceId}
+          provider={provider}
+          onChanged={onChanged}
+        />
+      ) : estado === 'enviado' || estado === 'pendiente_envio' || estado === 'en_proceso' ? (
+        // `enviado` / `pendiente_envio` / `en_proceso` SIN captureUrl (el caso CON enlace ya lo cubrió
+        // la rama de KyverumPendingView arriba): la validación ya se disparó y sigue en vuelo. Antes
+        // caían aquí abajo, al StartAction genérico, como si no hubiera pasado nada — el gestor podía
+        // disparar una segunda validación sobre una que ya estaba en curso.
+        <SentPendingView
           validation={validation!}
           parte={parte}
           instanceId={instanceId}
@@ -730,6 +796,99 @@ function RejectedView({
 }
 
 /**
+ * Estado "en vuelo": la validación ya se disparó pero el proveedor todavía no la resuelve. Cubre tres
+ * `BiometricEstado` que antes caían al `StartAction` genérico como si no hubiera pasado nada —
+ * `enviado`, `pendiente_envio` y `en_proceso` SIN `captureUrl` (el caso CON enlace ya tiene su propia
+ * vista, `KyverumPendingView`). El riesgo real que esto corrige: el gestor podía disparar una segunda
+ * validación sobre una que ya estaba en curso, y si el envío falló nadie se lo decía — solo volvía a
+ * ver el botón de arranque.
+ *
+ * El reenvío es una acción SECUNDARIA y explícita ("Reenviar validación", `variant="secondary"` sobre
+ * `StartAction`) — nunca el mismo botón primario relleno del arranque, para que reenviar sin darse
+ * cuenta de que ya había una en curso no vuelva a pasar. También ofrece `ReconcileAction` (consultar el
+ * estado real al proveedor): es justo el caso en que el webhook puede no haber llegado.
+ */
+function SentPendingView({
+  validation: v,
+  parte,
+  instanceId,
+  provider,
+  onChanged,
+}: {
+  validation: BiometricValidation;
+  parte: BiometricParte;
+  instanceId: string | null;
+  provider: string;
+  onChanged: () => void;
+}) {
+  const SENT_STATE_TEXT: Partial<Record<BiometricEstado, string>> = {
+    enviado: 'Ya se envió la validación',
+    pendiente_envio: 'La validación está en cola de envío',
+    en_proceso: 'La validación está en proceso con el proveedor',
+  };
+  const headline = SENT_STATE_TEXT[v.status] ?? 'La validación ya se disparó';
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <RefreshCw className="h-3.5 w-3.5" style={{ color: '#557EFF' }} aria-hidden />
+        <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
+          {headline} de {v.name}
+        </p>
+      </div>
+      <p className="text-xs opacity-70">
+        {v.createdAt
+          ? `Se registró el ${formatFecha(v.createdAt)}. Aún no hay respuesta del proveedor: no hace falta iniciar otra.`
+          : 'Aún no hay respuesta del proveedor: no hace falta iniciar otra.'}
+      </p>
+      <StartAction
+        parte={parte}
+        instanceId={instanceId}
+        provider={provider}
+        onStarted={onChanged}
+        label="Reenviar validación"
+        variant="secondary"
+      />
+      <ReconcileAction instanceId={instanceId} validationId={v.id} onReconciled={onChanged} />
+    </div>
+  );
+}
+
+/**
+ * Estado `error_envio`: el envío al proveedor falló (cola provider-agnostic de reintentos de envío, no
+ * el resultado de la biométrica). Es un FALLO, no una espera — se distingue de `SentPendingView` con
+ * `InlineAlert tone="error"` y ofrece reintentar el envío como acción explícita.
+ */
+function SendFailedView({
+  validation: v,
+  parte,
+  instanceId,
+  provider,
+  onChanged,
+}: {
+  validation: BiometricValidation;
+  parte: BiometricParte;
+  instanceId: string | null;
+  provider: string;
+  onChanged: () => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <InlineAlert tone="error" title="El envío de la validación falló.">
+        No se pudo enviar la validación de identidad de {v.name} al proveedor. Reintenta el envío.
+      </InlineAlert>
+      <StartAction
+        parte={parte}
+        instanceId={instanceId}
+        provider={provider}
+        onStarted={onChanged}
+        label="Reintentar envío"
+      />
+    </div>
+  );
+}
+
+/**
  * Acción provider-aware para (re)iniciar la validación de una parte. Kyverum → validación real (toma
  * los datos del actor del trámite, solo se envía la parte). Mock → simula la validación (score 95).
  */
@@ -740,6 +899,7 @@ function StartAction({
   onStarted,
   label,
   actorEmail,
+  variant = 'primary',
 }: {
   parte: BiometricParte;
   instanceId: string | null;
@@ -748,6 +908,12 @@ function StartAction({
   label?: string;
   /** HU #11267 AC3 — correo del destinatario mostrado en la confirmación. */
   actorEmail?: string | null;
+  /**
+   * `secondary` = botón con borde (no relleno), para los reenvíos desde un estado "ya enviado,
+   * esperando" (`SentPendingView`): nunca debe verse igual al botón primario del arranque, o el
+   * gestor puede confundir "reenviar de nuevo sobre una en curso" con "iniciar la primera".
+   */
+  variant?: 'primary' | 'secondary';
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -833,8 +999,12 @@ function StartAction({
           type="button"
           onClick={handleStart}
           disabled={submitting || !instanceId}
-          className="rounded-xl px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: '#557EFF' }}
+          className={
+            variant === 'secondary'
+              ? 'flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2'
+              : 'rounded-xl px-3 py-2 text-xs font-semibold text-white disabled:opacity-50'
+          }
+          style={variant === 'secondary' ? { borderColor: '#557EFF', color: '#557EFF' } : { background: '#557EFF' }}
         >
           {buttonLabel}
         </button>

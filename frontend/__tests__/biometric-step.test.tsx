@@ -96,6 +96,80 @@ const EXPIRADA: BiometricValidation = {
   captureUrl: null,
 };
 
+const ENVIADA: BiometricValidation = {
+  id: 'val-5',
+  partyRole: 'comprador',
+  name: 'Ana Comprador',
+  documentType: 'CC',
+  documentNumber: '123',
+  email: 'ana@example.com',
+  status: 'enviado',
+  intentos: 0,
+  maxIntentos: 5,
+  score: null,
+  expiresAt: '2026-06-26T00:00:00Z',
+  validatedAt: null,
+  expired: false,
+  provider: 'kyverum',
+  captureUrl: null,
+  createdAt: '2026-06-19T10:00:00Z',
+};
+
+const PENDIENTE_ENVIO: BiometricValidation = {
+  id: 'val-6',
+  partyRole: 'comprador',
+  name: 'Ana Comprador',
+  documentType: 'CC',
+  documentNumber: '123',
+  email: 'ana@example.com',
+  status: 'pendiente_envio',
+  intentos: 0,
+  maxIntentos: 5,
+  score: null,
+  expiresAt: '2026-06-26T00:00:00Z',
+  validatedAt: null,
+  expired: false,
+  provider: 'kyverum',
+  captureUrl: null,
+};
+
+const ERROR_ENVIO: BiometricValidation = {
+  id: 'val-7',
+  partyRole: 'comprador',
+  name: 'Ana Comprador',
+  documentType: 'CC',
+  documentNumber: '123',
+  email: 'ana@example.com',
+  status: 'error_envio',
+  intentos: 0,
+  maxIntentos: 5,
+  score: null,
+  expiresAt: '2026-06-26T00:00:00Z',
+  validatedAt: null,
+  expired: false,
+  provider: 'kyverum',
+  captureUrl: null,
+};
+
+// `en_proceso` SIN `captureUrl`: distinto de EN_PROCESO (que sí tiene enlace y cae en KyverumPendingView).
+const EN_PROCESO_SIN_LINK: BiometricValidation = {
+  id: 'val-8',
+  partyRole: 'comprador',
+  name: 'Ana Comprador',
+  documentType: 'CC',
+  documentNumber: '123',
+  email: 'ana@example.com',
+  status: 'en_proceso',
+  intentos: 0,
+  maxIntentos: 5,
+  score: null,
+  expiresAt: '2026-06-26T00:00:00Z',
+  validatedAt: null,
+  expired: false,
+  provider: 'kyverum',
+  captureUrl: null,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'mock' });
@@ -149,6 +223,8 @@ describe('BiometricStep — mock (simular)', () => {
     await user.click(
       screen.getByRole('button', { name: 'Simular validación de identidad' }),
     );
+    // AC3 — la confirmación ("Se enviará el enlace a…") se interpone antes de disparar la validación.
+    await user.click(await screen.findByRole('button', { name: 'Confirmar y enviar' }));
 
     await waitFor(() => expect(mocks.simulateBiometric).toHaveBeenCalledTimes(1));
     const [instanceId, input] = mocks.simulateBiometric.mock.calls[0];
@@ -165,6 +241,8 @@ describe('BiometricStep — kyverum (validación real)', () => {
     render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
     await user.click(await screen.findByRole('button', { name: 'Validar identidad' }));
+    // AC3 — la confirmación ("Se enviará el enlace a…") se interpone antes de disparar la validación.
+    await user.click(await screen.findByRole('button', { name: 'Confirmar y enviar' }));
 
     await waitFor(() => expect(mocks.iniciarBiometric).toHaveBeenCalledTimes(1));
     const [instanceId, input] = mocks.iniciarBiometric.mock.calls[0];
@@ -358,7 +436,11 @@ describe('BiometricStep — AC8 (estado de carga)', () => {
     render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
     // Antes de resolver: estado de carga visible, sin tarjetas todavía.
-    expect(screen.getByRole('status')).toBeInTheDocument();
+    // Se busca el esqueleto POR SU NOMBRE y no por el rol a secas: `role="status"` lo usan también
+    // los chips de estado de cada parte, y una aserción de "no queda ningún status" convertía
+    // cualquier badge nuevo en un falso fallo — de hecho ya costó que se retirara uno que el
+    // diseño pide. Lo que este test comprueba es que el esqueleto desaparece, nada más.
+    expect(screen.getByRole('status', { name: /Cargando validaciones de identidad/i })).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Biométrica Comprador' })).not.toBeInTheDocument();
 
     // Al resolver: desaparece la carga y aparece la tarjeta de la parte.
@@ -366,6 +448,65 @@ describe('BiometricStep — AC8 (estado de carga)', () => {
       resolveState({ validations: [], provider: 'mock' });
     });
     expect(await screen.findByRole('group', { name: 'Biométrica Comprador' })).toBeInTheDocument();
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: /Cargando validaciones de identidad/i })).not.toBeInTheDocument();
+  });
+});
+
+// Antes, estas cuatro situaciones caían al `else` final y mostraban el mismo botón de arranque que una
+// parte sin ninguna validación: el gestor podía disparar una segunda validación sobre una que ya estaba
+// en vuelo, y si el envío falló nadie se lo decía. Cada test comprueba que el botón primario de arranque
+// ("Validar identidad" / "Simular validación de identidad") YA NO aparece y que sí aparece el estado real.
+describe('BiometricStep — estados "en vuelo" que antes caían al botón de arranque', () => {
+  it('enviado: informa que ya se envió y NO ofrece "Validar identidad"', async () => {
+    mocks.getBiometricState.mockResolvedValue({ validations: [ENVIADA], provider: 'kyverum' });
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    expect(await screen.findByText(/Ya se envió la validación de Ana Comprador/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Validar identidad' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Simular validación de identidad' })).not.toBeInTheDocument();
+    // El reenvío es una acción secundaria y explícita, nunca el botón primario del arranque.
+    expect(screen.getByRole('button', { name: 'Reenviar validación' })).toBeInTheDocument();
+    // Chip de la cabecera refleja el estado real.
+    expect(screen.getByText('Enviado')).toBeInTheDocument();
+  });
+
+  it('pendiente_envio: informa que está en cola y NO ofrece "Validar identidad"', async () => {
+    mocks.getBiometricState.mockResolvedValue({ validations: [PENDIENTE_ENVIO], provider: 'kyverum' });
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    expect(
+      await screen.findByText(/La validación está en cola de envío de Ana Comprador/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Validar identidad' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Simular validación de identidad' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reenviar validación' })).toBeInTheDocument();
+    expect(screen.getByText('Pendiente de envío')).toBeInTheDocument();
+  });
+
+  it('en_proceso SIN captureUrl: informa que sigue en proceso y NO ofrece "Validar identidad"', async () => {
+    mocks.getBiometricState.mockResolvedValue({ validations: [EN_PROCESO_SIN_LINK], provider: 'kyverum' });
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    expect(
+      await screen.findByText(/La validación está en proceso con el proveedor de Ana Comprador/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Validar identidad' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Simular validación de identidad' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reenviar validación' })).toBeInTheDocument();
+    // No debe confundirse con KyverumPendingView (sin enlace de captura ni QR).
+    expect(screen.queryByLabelText('Código QR del enlace de captura')).not.toBeInTheDocument();
+    expect(screen.getAllByText('En proceso').length).toBeGreaterThan(0);
+  });
+
+  it('error_envio: muestra el fallo como error (no como espera) y ofrece reintentar', async () => {
+    mocks.getBiometricState.mockResolvedValue({ validations: [ERROR_ENVIO], provider: 'kyverum' });
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    const alerta = await screen.findByRole('alert');
+    expect(alerta).toHaveTextContent('El envío de la validación falló.');
+    expect(screen.queryByRole('button', { name: 'Validar identidad' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Simular validación de identidad' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reintentar envío' })).toBeInTheDocument();
+    expect(screen.getByText('Error de envío')).toBeInTheDocument();
   });
 });
