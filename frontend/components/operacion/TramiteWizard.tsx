@@ -81,7 +81,7 @@ import type {
   WizardModalidad,
   WizardStep,
 } from '@/lib/api/types/procedure-runtime';
-import { WIZARD_CARD, WIZARD_LABEL } from './wizard-field-styles';
+import { WIZARD_BTN, WIZARD_CARD, WIZARD_CTA_GRADIENT, WIZARD_LABEL } from './wizard-field-styles';
 import { WizardAccordion } from './WizardAccordion';
 import { WizardHelpRail } from './WizardHelpRail';
 import { WizardModal } from './WizardModal';
@@ -1301,7 +1301,9 @@ export function TramiteWizard(props: Props) {
             <button
               onClick={() => goToStep(Math.max(0, activeIndex - 1))}
               disabled={activeIndex === 0}
-              className="flex items-center gap-1 rounded-xl border px-4 py-2 text-xs font-medium disabled:opacity-30"
+              // Misma altura que las acciones de la derecha: en la propuesta el pie es una sola
+              // línea de botones, y un "Anterior" más bajo la partía en dos.
+              className={`${WIZARD_BTN} flex items-center gap-1 border focus-visible:ring-[#162744] disabled:opacity-30`}
               style={{ borderColor: '#162744', color: '#162744' }}
             >
               <ChevronLeft className="h-3 w-3" /> Anterior
@@ -1422,7 +1424,7 @@ export function TramiteWizard(props: Props) {
                   <button
                     type="button"
                     onClick={() => setConfirmCancel(true)}
-                    className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00] focus-visible:ring-offset-2"
+                    className={`${WIZARD_BTN} text-white focus-visible:ring-[#FF4E00]`}
                     style={{ background: '#FF4E00' }}
                   >
                     Cancelar trámite
@@ -1431,11 +1433,12 @@ export function TramiteWizard(props: Props) {
                 <button
                   onClick={() => void handleContinue()}
                   disabled={continueDisabled}
-                  className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-40`}
+                  // Deshabilitado en gris pleno, no el degradado atenuado: media opacidad sobre un
+                  // degradado deja un azul lavado que sigue leyéndose como acción disponible.
+                  style={{ background: continueDisabled ? '#94A3B8' : WIZARD_CTA_GRADIENT }}
                 >
                   {continuing ? 'Guardando…' : 'Continuar y guardar'}
-                  <ChevronRight className="h-3 w-3" />
                 </button>
               </>
             )}
