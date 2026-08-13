@@ -27,23 +27,18 @@ export function WizardPair({ label, value }: { label: string; value: string }) {
   );
 }
 
-/**
- * Píldora de estado sobre fondo de color pleno.
+/*
+ * `WizardPill` vivía aquí: una píldora de relleno pleno con texto blanco, portada del `Pill` de la
+ * propuesta. Se retira, no se deja como opción.
  *
- * `color` es el tono de fondo; el texto va en blanco. Solo se le pasan tonos FLIT con contraste
- * suficiente sobre blanco (azul de marca, verde, naranja y gris de inactivo), nunca el cian, que
- * en pleno no alcanza 4.5:1 con texto blanco.
+ * Su documentación afirmaba que solo se le pasaban tonos con contraste suficiente sobre blanco, y
+ * era falso: el verde de marca da 2.05:1, el naranja 3.31:1 y el azul 3.61:1 — los tres por debajo
+ * del 4.5:1 exigido. El sistema ya prohíbe el badge sólido con texto blanco y ya tiene el
+ * componente correcto para esto, `atom/StatusBadge`, tintado y con tonos semánticos.
+ *
+ * Dejarla aquí sin usos habría sido dejar el patrón prohibido a mano del siguiente que necesite
+ * una píldora.
  */
-export function WizardPill({ text, color }: { text: string; color: string }) {
-  return (
-    <span
-      className="whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold text-white"
-      style={{ background: color }}
-    >
-      {text}
-    </span>
-  );
-}
 
 /**
  * Cabecera de una tarjeta de sección: título y, opcionalmente, una línea que explica qué se

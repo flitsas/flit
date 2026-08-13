@@ -84,7 +84,8 @@ import { WizardAccordion } from './WizardAccordion';
 import { WizardHelpRail } from './WizardHelpRail';
 import { WizardModal } from './WizardModal';
 import { estadoLabel } from '@/lib/tramites/estados';
-import { WizardCardHeader, WizardPair, WizardPill } from './wizard-atoms';
+import { WizardCardHeader, WizardPair } from './wizard-atoms';
+import { StatusBadge } from '@/components/atom/StatusBadge';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 
 /**
@@ -3056,27 +3057,20 @@ function ConsultaStep({
 
       {/* Datos consolidados del vehículo. Solo traspaso: es el asistente de la propuesta que los
           saca a un acordeón propio (en matrícula van dentro de la tarjeta de consulta). Abierto de
-          entrada —es el resultado de la consulta, lo que el gestor viene a ver— y con el estado en
-          la cabecera, para que plegado siga diciendo si ya se consultó o no. */}
-      {!isVin && (
+          entrada —es el resultado de la consulta, lo que el gestor viene a ver—.
+
+          Aparece SOLO cuando hay datos. Antes se pintaba siempre, con una píldora "Pendiente" y una
+          frase pidiendo consultar: una sección vacía que ocupaba sitio para repetir lo que la
+          tarjeta de arriba ya dice, con su botón al lado. Es andamio, no información — y en
+          matrícula, donde estos mismos datos viven dentro de la tarjeta de consulta, no aparece
+          nada hasta consultar. Las dos modalidades se comportan ya igual. */}
+      {!isVin && hasVehicleData && (
         <WizardAccordion
           title="Datos consolidados del vehículo (RUNT)"
           defaultOpen
-          badge={
-            <WizardPill
-              text={hasVehicleData ? 'Consultado' : 'Pendiente'}
-              color={hasVehicleData ? '#3F8F0C' : '#6B7688'}
-            />
-          }
+          badge={<StatusBadge label="Consultado" tone="success" />}
         >
-          {hasVehicleData ? (
-            <VehicleDataCard fieldValues={fieldValues} bare />
-          ) : (
-            <p className="text-xs opacity-60">
-              Consulta la placa y el documento del propietario para traer los datos del vehículo
-              desde el RUNT.
-            </p>
-          )}
+          <VehicleDataCard fieldValues={fieldValues} bare />
         </WizardAccordion>
       )}
 

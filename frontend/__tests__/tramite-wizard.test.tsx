@@ -1560,3 +1560,40 @@ describe('TramiteWizard — inventario del paso de Requisitos', () => {
     expect(await screen.findByText('Vehículo en leasing')).toBeInTheDocument();
   });
 });
+
+/**
+ * REGRESIÓN — el acordeón de datos del vehículo en traspaso.
+ *
+ * Se pintaba siempre, incluso recién abierto el paso: una sección vacía con una píldora «Pendiente»
+ * y una frase pidiendo consultar, justo debajo de la tarjeta que ya lo pide y que tiene el botón al
+ * lado. Andamio, no información. Y descuadraba las dos modalidades: en matrícula estos mismos datos
+ * viven dentro de la tarjeta de consulta y no aparece nada hasta consultar.
+ */
+describe('TramiteWizard — datos consolidados del vehículo (traspaso)', () => {
+  it('no se pinta mientras no haya datos del vehículo', async () => {
+    mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', fieldValues: [] });
+    renderWizard();
+
+    await screen.findByRole('button', { name: /^Paso 1:/ });
+    expect(screen.queryByText(/Datos consolidados del vehículo/)).toBeNull();
+    // Y no queda el rastro de la sección vacía que había antes.
+    expect(screen.queryByText(/Consulta la placa y el documento del propietario/)).toBeNull();
+  });
+
+  it('aparece —ya consultado— en cuanto la instancia trae los datos', async () => {
+    mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
+    mocks.getInstance.mockResolvedValue({
+      id: 'inst-1',
+      fieldValues: [
+        { formFieldId: '', fieldKey: 'plate', valueText: 'PWL160', valueJson: null, source: 'consultation' },
+        { formFieldId: '', fieldKey: 'vehicle_brand', valueText: 'RENAULT', valueJson: null, source: 'consultation' },
+      ],
+    });
+    renderWizard();
+
+    expect(await screen.findByText(/Datos consolidados del vehículo/)).toBeInTheDocument();
+    // Si está, es porque ya se consultó: el estado deja de ser una pregunta abierta.
+    expect(screen.getByText('Consultado')).toBeInTheDocument();
+  });
+});
