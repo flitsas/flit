@@ -23,6 +23,7 @@ import type {
   BiometricEstado,
   BiometricParte,
   BiometricValidation,
+  MecanismoFirma,
   ProcedureActor,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
@@ -364,7 +365,11 @@ export function BiometricStep({
   const partesContent = initialLoading ? (
     <BiometricSkeleton partes={partes} gridClass={gridClass} />
   ) : (
-    <div className={`grid grid-cols-1 gap-4 ${gridClass}`}>
+    // Feature 05 (rediseño) — cada parte ahora trae DOS tarjetas (firma + biométrica, ver
+    // `ParteBlock`), así que la rejilla exterior deja de repartir partes en columnas: cada bloque va
+    // a ancho completo y apilado, con su propio encabezado de rol para no confundir vendedor y
+    // comprador cuando hay dos (traspaso).
+    <div className="space-y-4">
       {partes.map((parte) => {
         const matches = (validations ?? []).filter((v) =>
           modalidad === 'traspaso'
@@ -374,7 +379,7 @@ export function BiometricStep({
         const validation = matches.length > 0 ? matches[matches.length - 1] : null;
         const actor = actors?.find((a) => a.rol === parte) ?? null;
         return (
-          <ParteCard
+          <ParteBlock
             key={parte}
             parte={parte}
             instanceId={instanceId}
@@ -459,6 +464,122 @@ function BiometricSkeleton({
   );
 }
 
+/**
+ * Bloque de UNA parte del trámite: paridad con la referencia del diseño (`MatriculaInicial` Step4,
+ * líneas 904-950), que compone para la MISMA persona dos tarjetas lado a lado —
+ * `SignatureCard` (firma electrónica, INFORMACIÓN: ¿esta parte ya tiene firma vigente?) y `ParteCard`
+ * (validación biométrica, ACCIÓN: ¿hace falta pedirla?). No son excluyentes entre sí — lo excluyente
+ * es si la biométrica hace falta, no si ambas tarjetas se muestran; verlas juntas es justamente lo que
+ * explica por qué a veces no se pide biométrica (cubierta por firma del baúl).
+ *
+ * Con dos partes (traspaso) cada bloque va a ANCHO COMPLETO y apilado (antes las partes competían por
+ * columna); el rótulo de rol encabeza el bloque para no confundir vendedor y comprador.
+ */
+function ParteBlock({
+  parte,
+  instanceId,
+  provider,
+  validation,
+  actor,
+  historial,
+  vaultCovered,
+  onChanged,
+}: {
+  parte: BiometricParte;
+  instanceId: string | null;
+  provider: string;
+  validation: BiometricValidation | null;
+  actor: ProcedureActor | null;
+  historial: BiometricValidation[];
+  vaultCovered: boolean;
+  onChanged: () => void;
+}) {
+  return (
+    <div>
+      <h3 className="mb-2 text-xs font-bold uppercase tracking-wide opacity-70">
+        {PARTE_LABEL[parte]}
+      </h3>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <SignatureCard parte={parte} actor={actor} vaultCovered={vaultCovered} />
+        <ParteCard
+          parte={parte}
+          instanceId={instanceId}
+          provider={provider}
+          validation={validation}
+          actor={actor}
+          historial={historial}
+          vaultCovered={vaultCovered}
+          onChanged={onChanged}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Estado del badge de `SignatureCard`, en tres niveles según el dato REAL disponible (nunca se
+ * fabrica): 1) cubierta por el baúl (`vaultCovered`, calculado por el paso a partir de
+ * `firmaBaulPartes` del backend + la señal optimista `vaultCoveredPartes`); 2) mecanismo elegido
+ * explícitamente por el gestor cuando el representante tiene baúl e identidad vigentes a la vez
+ * (`actor.representanteLegal.mecanismoFirma === 'identidad'`, HU #11061); 3) sin ninguno de los dos
+ * datos, la parte no tiene firma registrada.
+ */
+function signatureBadge(
+  vaultCovered: boolean,
+  mecanismoFirma: MecanismoFirma | undefined,
+): { label: string; tone: StatusTone } {
+  if (vaultCovered) {
+    return { label: 'Firma electrónica activa', tone: 'success' };
+  }
+  if (mecanismoFirma === 'identidad') {
+    return { label: 'Firmará con validación de identidad', tone: 'info' };
+  }
+  return { label: 'Sin firma registrada', tone: 'neutral' };
+}
+
+/**
+ * Tarjeta izquierda del bloque de una parte (paridad con la referencia del diseño: `MatriculaInicial`
+ * Step4, líneas 905-915 — "Firma electrónica" con badge de estado a la derecha del título). Es
+ * INFORMACIÓN, no acción: explica qué firma se usará y con qué mecanismo, a partir de datos que el
+ * paso ya tiene (no dispara ninguna llamada propia).
+ *
+ * A diferencia de la referencia, esta tarjeta NO representa la firma manuscrita ni enseña ningún hash
+ * (Step4 líneas 911-913): en FLIT no existe ni imagen de firma ni hash en ningún tipo del frontend —
+ * ni `ProcedureActor` ni `BiometricValidation` traen uno — y en la maqueta ese hash es un texto FIJO,
+ * idéntico en todas las pantallas del prototipo (Step4 y también Step5). Fabricarlo aquí sería
+ * mostrar, en la pantalla que certifica una identidad, un dato que no viene de ninguna parte. En su
+ * lugar, el recuadro dice el mecanismo REAL con el que esa firma se va a plasmar.
+ */
+function SignatureCard({
+  parte,
+  actor,
+  vaultCovered,
+}: {
+  parte: BiometricParte;
+  actor: ProcedureActor | null;
+  vaultCovered: boolean;
+}) {
+  const mecanismoFirma = actor?.representanteLegal?.mecanismoFirma;
+  const badge = signatureBadge(vaultCovered, mecanismoFirma);
+  const detalle = vaultCovered
+    ? `${PARTE_LABEL[parte]} firmará con la firma electrónica precargada en el baúl.`
+    : mecanismoFirma === 'identidad'
+    ? `${PARTE_LABEL[parte]} firmará con el sello de la validación de identidad (biométrica) como mecanismo de firma.`
+    : `${PARTE_LABEL[parte]} todavía no tiene un mecanismo de firma electrónica registrado.`;
+
+  return (
+    <div className={WIZARD_CARD}>
+      <WizardCardHeader
+        title="Firma electrónica"
+        action={<StatusBadge label={badge.label} tone={badge.tone} />}
+      />
+      <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}>
+        <p className="text-xs opacity-70">{detalle}</p>
+      </div>
+    </div>
+  );
+}
+
 /** Tarjeta por parte: enruta a la vista según el estado de la validación. */
 function ParteCard({
   parte,
@@ -491,8 +612,12 @@ function ParteCard({
           validaciones de identidad"), no por el rol `status` a secas, así que puede convivir con los
           `role="status"` que trae cada `StatusBadge` sin volverse ambiguo para un lector de pantalla
           ni para el test que verifica que el esqueleto desaparece. */}
+      {/* Título en paridad con la referencia del diseño ("Validación biométrica digital", Step4
+          línea 919); el rol de la parte ya lo dice el encabezado del bloque (`ParteBlock`) y, dentro
+          de la tarjeta, `PartyIdentityBox`. El nombre accesible del `role="group"` sigue viniendo del
+          `aria-label` explícito de abajo, no de este título. */}
       <WizardCardHeader
-        title={PARTE_LABEL[parte]}
+        title="Validación biométrica digital"
         action={<StatusBadge label={badge.label} tone={badge.tone} />}
       />
 
