@@ -5,14 +5,14 @@ import { Check, Copy, RefreshCw } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { Signature, SignatureParte } from '@/lib/api/types/procedure-runtime';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { WIZARD_INPUT } from './wizard-field-styles';
 
 const PARTE_LABEL: Record<SignatureParte, string> = {
   comprador: 'Comprador',
   vendedor: 'Vendedor',
 };
 
-const INPUT_BASE =
-  'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]';
+const INPUT_BASE = WIZARD_INPUT;
 
 function FirmaBadge({ estado }: { estado: string }) {
   const map: Record<string, { label: string; bg: string; color: string }> = {
@@ -24,7 +24,7 @@ function FirmaBadge({ estado }: { estado: string }) {
   const s = map[estado] ?? { label: estado, bg: '#EEF1F5', color: '#9AA5B1' };
   return (
     <span
-      className="px-2.5 py-1 rounded-full text-[10px] font-bold"
+      className="px-2.5 py-1 rounded-full text-xs font-bold"
       style={{ background: s.bg, color: s.color }}
     >
       {s.label}
@@ -49,7 +49,7 @@ function CopyLink({ link, label }: { link: string; label: string }) {
       <button
         type="button"
         onClick={() => void handleCopy()}
-        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-semibold text-white shrink-0"
+        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white shrink-0"
         style={{ background: '#557EFF' }}
         aria-label="Copiar enlace"
       >
@@ -128,10 +128,10 @@ export function CompraventaFirmaStatus({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-55">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-55">
             Firma de la compraventa
           </p>
-          <p className="mt-0.5 text-[11px] opacity-60">
+          <p className="mt-0.5 text-xs opacity-60">
             Informativo · se apalanca de la validación de identidad o la firma del baúl · no bloquea
             el traspaso.
           </p>
@@ -143,7 +143,7 @@ export function CompraventaFirmaStatus({
               type="button"
               onClick={() => void refresh()}
               disabled={loading}
-              className="flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
+              className="flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold disabled:opacity-50"
               style={{ borderColor: '#557EFF', color: '#557EFF' }}
               aria-label={`Actualizar firma ${PARTE_LABEL[parte]}`}
             >
@@ -172,7 +172,7 @@ export function CompraventaFirmaStatus({
               type="button"
               onClick={() => void handleSimular()}
               disabled={busy}
-              className="rounded-xl border px-4 py-1.5 text-[11px] font-semibold disabled:opacity-50"
+              className="rounded-xl border px-4 py-1.5 text-xs font-semibold disabled:opacity-50"
               style={{ borderColor: '#557EFF', color: '#557EFF' }}
             >
               {busy ? 'Simulando…' : 'Simular firma (DEV)'}
@@ -180,11 +180,11 @@ export function CompraventaFirmaStatus({
           ) : null}
         </div>
       ) : (
-        <p className="text-[11px] opacity-60">Firma no solicitada.</p>
+        <p className="text-xs opacity-60">Firma no solicitada.</p>
       )}
 
       {error ? (
-        <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
           {error}
         </p>
       ) : null}

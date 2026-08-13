@@ -3,6 +3,7 @@
 import { Lock } from 'lucide-react';
 import type { FormFieldItem } from '@/lib/api/types/procedure-parametrization';
 import { digitsOnly } from '@/lib/format/currency';
+import { WIZARD_INPUT } from './wizard-field-styles';
 
 interface SelectOption {
   value: string;
@@ -41,8 +42,7 @@ interface Props {
   onChange: (value: unknown) => void;
 }
 
-const INPUT_BASE =
-  'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 disabled:cursor-not-allowed';
+const INPUT_BASE = WIZARD_INPUT;
 
 export function DynamicFieldRenderer({ field, value, onChange }: Props) {
   const { fieldType, isRequired, isLocked, lockReason } = field;
@@ -168,7 +168,7 @@ export function DynamicFieldRenderer({ field, value, onChange }: Props) {
           )}
           {isLocked && (
             <span
-              className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded"
+              className="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded"
               style={{ background: 'rgba(249,172,0,0.15)', color: '#F9AC00' }}
               title={lockReason ?? 'Campo bloqueado'}
             >
@@ -179,7 +179,7 @@ export function DynamicFieldRenderer({ field, value, onChange }: Props) {
       )}
       {control}
       {isLocked && lockReason && (
-        <p id={`${fieldId}-lock`} className="text-[10px] opacity-60 mt-1">
+        <p id={`${fieldId}-lock`} className="text-xs opacity-60 mt-1">
           {lockReason}
         </p>
       )}

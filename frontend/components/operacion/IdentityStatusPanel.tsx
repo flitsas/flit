@@ -225,7 +225,7 @@ export function IdentityStatusPanel({
         </button>
         {open && needsLive && (
           <span
-            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
             style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
             role="status"
             aria-live="polite"
@@ -261,7 +261,7 @@ export function IdentityStatusPanel({
                 <button
                   type="button"
                   onClick={() => void load()}
-                  className="mt-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-white"
+                  className="mt-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-white"
                   style={{ background: '#FF4E00' }}
                 >
                   Reintentar
@@ -280,7 +280,7 @@ export function IdentityStatusPanel({
           )}
 
           {!initialLoading && !error && hasData && actors.length === 0 && (
-            <p className="text-[11px] opacity-60">
+            <p className="text-xs opacity-60">
               No hay actores registrados en este trámite todavía.
             </p>
           )}
@@ -292,7 +292,7 @@ export function IdentityStatusPanel({
               )}
 
               {outcomes.length === 0 ? (
-                <p className="text-[11px] opacity-60">
+                <p className="text-xs opacity-60">
                   Aún no hay aprobaciones ni rechazos registrados.
                 </p>
               ) : (
@@ -325,7 +325,7 @@ export function IdentityStatusPanel({
                             )}
                           </div>
                           {row.actorName && (
-                            <p className="truncate text-[11px] opacity-70" title={row.actorName}>
+                            <p className="truncate text-xs opacity-70" title={row.actorName}>
                               {row.actorName}
                             </p>
                           )}
@@ -336,7 +336,7 @@ export function IdentityStatusPanel({
                           )}
                         </div>
                         <time
-                          className="shrink-0 text-[11px] font-medium opacity-65"
+                          className="shrink-0 text-xs font-medium opacity-65"
                           dateTime={when ?? undefined}
                         >
                           {formatFecha(when)}

@@ -175,19 +175,19 @@ export function FineDetailList({ details }: { details: FineDetail[] }) {
             style={{ background: 'rgba(249,172,0,0.10)', border: '1px solid rgba(249,172,0,0.25)' }}
           >
             <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-              <span className="text-[11px] font-semibold">
+              <span className="text-xs font-semibold">
                 {d.numero ? `Comparendo ${d.numero}` : 'Comparendo'}
               </span>
               {valor && (
-                <span className="text-[11px] font-bold" style={{ color: '#B47800' }}>
+                <span className="text-xs font-bold" style={{ color: '#B47800' }}>
                   {valor}
                 </span>
               )}
             </div>
             {d.infraccion && (
-              <p className="mt-0.5 text-[10px] opacity-80">{d.infraccion}</p>
+              <p className="mt-0.5 text-xs opacity-80">{d.infraccion}</p>
             )}
-            <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] opacity-60">
+            <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs opacity-60">
               {d.fecha && <span>Fecha: {d.fecha}</span>}
               {d.organismo && <span>· {d.organismo}</span>}
               {d.estado && <span>· {d.estado}</span>}
@@ -245,14 +245,14 @@ export function PreflightPanel({
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <h4 className="text-sm font-bold">Pre-vuelo de requisitos</h4>
-          <p className="text-[11px] opacity-60">
+          <p className="text-xs opacity-60">
             RUNT · SIMIT · RNMC — consulta antes de radicar el trámite
           </p>
         </div>
         <div className="flex items-center gap-2">
           {ov && (
             <span
-              className="shrink-0 rounded-full px-3 py-1 text-[11px] font-bold"
+              className="shrink-0 rounded-full px-3 py-1 text-xs font-bold"
               style={{ background: ov.bg, color: ov.color }}
               role="status"
               aria-live="polite"
@@ -276,7 +276,7 @@ export function PreflightPanel({
       </div>
 
       {!hasResult && !loading && !esMigrado && (
-        <p className="text-[11px] opacity-60">
+        <p className="text-xs opacity-60">
           Ejecuta la consulta para ver el semáforo de requisitos del vehículo.
         </p>
       )}
@@ -288,7 +288,7 @@ export function PreflightPanel({
           si algo salió mal. Mismo motivo para no nombrar la migración: el trámite es uno solo. */}
       {!hasResult && !loading && esMigrado && (
         <div
-          className="flex flex-wrap items-start gap-2 rounded-xl border p-2.5 text-[11px]"
+          className="flex flex-wrap items-start gap-2 rounded-xl border p-2.5 text-xs"
           style={{ borderColor: 'rgba(85,126,255,0.30)', background: 'rgba(85,126,255,0.06)' }}
           role="status"
           aria-live="polite"
@@ -310,7 +310,7 @@ export function PreflightPanel({
           (`runPreflight`/`getPreflight`, que no completa `fromCache`). */}
       {hasResult && snapshot?.fromCache && (
         <div
-          className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border p-2.5 text-[11px]"
+          className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border p-2.5 text-xs"
           style={{ borderColor: 'rgba(85,126,255,0.30)', background: 'rgba(85,126,255,0.06)' }}
           role="status"
           aria-live="polite"
@@ -369,11 +369,11 @@ export function PreflightPanel({
                   </span>
                 </div>
                 {showMessage && (
-                  <p className="text-[11px] opacity-70">{c.message}</p>
+                  <p className="text-xs opacity-70">{c.message}</p>
                 )}
                 {c.action && (
                   <span
-                    className="text-[11px] font-semibold"
+                    className="text-xs font-semibold"
                     style={{ color: '#557EFF' }}
                   >
                     {c.action.label} →
@@ -395,7 +395,7 @@ export function PreflightPanel({
           <p className="text-xs font-bold" style={{ color: '#557EFF' }}>
             Este VIN ya está matriculado
           </p>
-          <p className="mt-0.5 text-[11px] opacity-70">{vinConflicto.message}</p>
+          <p className="mt-0.5 text-xs opacity-70">{vinConflicto.message}</p>
           {onIniciarTraspaso && !readOnly && (
             <button
               type="button"
@@ -437,7 +437,7 @@ export function PreflightPanel({
           </p>
           <ul className="mt-1.5 space-y-2">
             {warnChecks.map((c) => (
-              <li key={c.key} className="text-[11px]">
+              <li key={c.key} className="text-xs">
                 <span className="font-semibold">
                   {c.label}
                   {checkRoleSuffix(c.key)}
@@ -449,7 +449,7 @@ export function PreflightPanel({
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-[11px] opacity-70">
+          <p className="mt-2 text-xs opacity-70">
             Puedes continuar con el trámite; el organismo de tránsito verá estas
             observaciones.
           </p>

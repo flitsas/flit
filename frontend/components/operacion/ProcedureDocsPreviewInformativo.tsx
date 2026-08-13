@@ -58,7 +58,7 @@ export function ProcedureDocsPreviewInformativo({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 text-[11px] font-semibold underline-offset-2 hover:underline"
+        className="inline-flex items-center gap-1.5 text-xs font-semibold underline-offset-2 hover:underline"
         style={{ color: '#557EFF' }}
       >
         <FileText className="h-3.5 w-3.5" aria-hidden />
@@ -78,7 +78,7 @@ export function ProcedureDocsPreviewInformativo({
             className="shrink-0 rounded-xl border px-3 py-2"
             style={{ borderColor: '#DDE5F0', background: '#EEF5FF' }}
           >
-            <p className="text-[11px] leading-snug" style={{ color: '#162744' }}>
+            <p className="text-xs leading-snug" style={{ color: '#162744' }}>
               Esta es una guía de lo que deberías tener preparado para este trámite antes de
               continuar. No sustituye la carga de documentos más adelante en el asistente.
             </p>
@@ -130,14 +130,14 @@ export function ProcedureDocsPreviewInformativo({
                   </div>
                   {doc.descripcion ? (
                     <p
-                      className="mt-1 line-clamp-4 text-[10px] leading-snug"
+                      className="mt-1 line-clamp-4 text-xs leading-snug"
                       style={{ color: '#59677D' }}
                       title={doc.descripcion}
                     >
                       {doc.descripcion}
                     </p>
                   ) : (
-                    <p className="mt-1 text-[10px] opacity-50" style={{ color: '#7D8798' }}>
+                    <p className="mt-1 text-xs opacity-50" style={{ color: '#7D8798' }}>
                       Sin descripción en el catálogo.
                     </p>
                   )}

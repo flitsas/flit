@@ -115,10 +115,10 @@ export function FirmaPosteriorSection({
 
   return (
     <section className="space-y-3" data-testid="firma-posterior">
-      <h3 className="text-[11px] font-bold uppercase tracking-wide opacity-60">Firma a posteriori</h3>
+      <h3 className="text-xs font-bold uppercase tracking-wide opacity-60">Firma a posteriori</h3>
 
       {error && (
-        <p role="alert" className="text-[11px] font-medium" style={{ color: '#FF4E00' }}>
+        <p role="alert" className="text-xs font-medium" style={{ color: '#FF4E00' }}>
           {error}
         </p>
       )}
@@ -133,7 +133,7 @@ export function FirmaPosteriorSection({
                   {label}
                   {estado.representanteNombre ? ` · ${estado.representanteNombre}` : ''}
                 </p>
-                <p className="mt-1 text-[11px] opacity-70">
+                <p className="mt-1 text-xs opacity-70">
                   {rol === 'mandatario'
                     ? estado.marcado
                       ? `Pendiente de firma. ${AVISO_MANDATARIO}`
@@ -145,7 +145,7 @@ export function FirmaPosteriorSection({
                         `El representante no tiene firma ni identidad vigentes. ${AVISO_METODO}`}
                 </p>
                 {estado.marcado && estado.marcadoAt && (
-                  <p className="mt-1 text-[11px] opacity-60">
+                  <p className="mt-1 text-xs opacity-60">
                     Marcado el {formatFecha(estado.marcadoAt)}
                   </p>
                 )}
@@ -153,7 +153,7 @@ export function FirmaPosteriorSection({
 
               {estado.marcado ? (
                 <span
-                  className="flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+                  className="flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold"
                   style={{ color: '#557EFF', borderColor: '#557EFF' }}
                 >
                   <Clock className="h-3.5 w-3.5" aria-hidden="true" /> Pendiente de firma
@@ -163,7 +163,7 @@ export function FirmaPosteriorSection({
                   type="button"
                   onClick={() => void marcar(rol)}
                   disabled={readOnly || saving === rol}
-                  className="shrink-0 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-60"
+                  className="shrink-0 rounded-lg border px-2.5 py-1.5 text-xs font-semibold disabled:opacity-60"
                   style={{ color: '#557EFF', borderColor: '#557EFF' }}
                 >
                   {saving === rol ? 'Marcando…' : 'Firmar más adelante'}

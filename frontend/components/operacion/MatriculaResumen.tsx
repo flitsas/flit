@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Check, ChevronDown, Download, FileSignature, FileText } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Check, Download, FileSignature, FileText } from 'lucide-react';
 import type {
   BiometricParte,
   BiometricValidation,
@@ -11,6 +11,7 @@ import type {
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { formatDateOnly } from '@/lib/format/date-only';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { WizardAccordion } from './WizardAccordion';
 import { BiometricStep } from './BiometricStep';
 import { MandatarioSection } from './MandatarioSection';
 import { openAttachmentInNewTab } from './ExpedienteVisor';
@@ -90,6 +91,11 @@ interface Props {
 const BORDER = '#DFE5ED';
 const BLUE = '#557EFF';
 
+/**
+ * Secciones del resumen. Delegan en el acordeón compartido del wizard: antes traían su propio
+ * chrome (radio `xl`, título en versalitas con `tracking-[0.2em]`, barrita azul y chevron gris),
+ * que no era el de ningún otro panel del asistente.
+ */
 function ResumenDisclosure({
   title,
   defaultOpen = true,
@@ -99,52 +105,21 @@ function ResumenDisclosure({
   defaultOpen?: boolean;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const panelId = useId();
-
   return (
-    <div
-      className="overflow-hidden rounded-xl border bg-white dark:bg-[#0B0F14]"
-      style={{ borderColor: BORDER }}
+    <WizardAccordion
+      title={title}
+      defaultOpen={defaultOpen}
+      icon={<span className="h-4 w-1 shrink-0 rounded-full" style={{ background: BLUE }} aria-hidden="true" />}
     >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
-        aria-expanded={open}
-        aria-controls={panelId}
-      >
-        <span className="flex items-center gap-2">
-          <span className="h-4 w-1 rounded-full" style={{ background: BLUE }} aria-hidden="true" />
-          <span className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: BLUE }}>
-            {title}
-          </span>
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-          style={{ color: '#9AA5B1' }}
-          aria-hidden
-        />
-      </button>
-      {open ? (
-        <div
-          id={panelId}
-          className="border-t px-4 py-3"
-          style={{ borderColor: BORDER }}
-          role="region"
-          aria-label={title}
-        >
-          {children}
-        </div>
-      ) : null}
-    </div>
+      {children}
+    </WizardAccordion>
   );
 }
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] opacity-60">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-60">{label}</p>
       <p className="break-words text-xs font-medium" style={{ color: '#162744' }}>
         {value || '—'}
       </p>
@@ -166,12 +141,12 @@ function PrendaDocumentoVerButton({
 
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] opacity-60">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-60">{label}</p>
       <div className="mt-1.5 flex flex-col gap-1">
         <button
           type="button"
           disabled={!instanceId || busy}
-          className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full px-4 py-2 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           style={{ background: BLUE }}
           aria-label={`Ver ${documento.filename || label}`}
           onClick={() => {
@@ -189,7 +164,7 @@ function PrendaDocumentoVerButton({
           {busy ? 'Abriendo…' : 'Ver'}
         </button>
         {error ? (
-          <span className="text-[10px]" style={{ color: '#FF4E00' }} role="alert">
+          <span className="text-xs" style={{ color: '#FF4E00' }} role="alert">
             {error}
           </span>
         ) : null}
@@ -230,7 +205,7 @@ function IdentidadStatusBanner({
           <p className="text-xs font-bold" style={{ color: '#557EFF' }}>
             Firma electrónica (baúl)
           </p>
-          <p className="text-[11px] opacity-70">
+          <p className="text-xs opacity-70">
             Identidad cubierta por la firma electrónica del baúl. No requiere validación biométrica.
           </p>
         </div>
@@ -258,7 +233,7 @@ function IdentidadStatusBanner({
           <p className="text-xs font-bold" style={{ color: '#5B8A1F' }}>
             Identidad verificada — {bio.score ?? 95}/100
           </p>
-          {bio.name ? <p className="text-[11px] opacity-70">{bio.name}</p> : null}
+          {bio.name ? <p className="text-xs opacity-70">{bio.name}</p> : null}
         </div>
       </div>
     );
@@ -315,7 +290,7 @@ function CertificadoIdButton({
         type="button"
         onClick={() => void handleOpen()}
         disabled={!aprobado || busy || !instanceId}
-        className="inline-flex w-fit max-w-full items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex w-fit max-w-full items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
         style={{ borderColor: BLUE, color: BLUE }}
         aria-label={label}
         title={
@@ -328,12 +303,12 @@ function CertificadoIdButton({
         {busy ? 'Abriendo…' : label}
       </button>
       {!aprobado && (
-        <span className="text-[10px] opacity-60">
+        <span className="text-xs opacity-60">
           El certificado estará disponible cuando la validación sea aprobada.
         </span>
       )}
       {error && (
-        <span className="text-[10px]" style={{ color: '#FF4E00' }} role="alert">
+        <span className="text-xs" style={{ color: '#FF4E00' }} role="alert">
           {error}
         </span>
       )}
@@ -376,7 +351,7 @@ function ActorBlock({
       </div>
       {showRepresentante && bio && (
         <div>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] opacity-50">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] opacity-50">
             Representante legal
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -389,7 +364,7 @@ function ActorBlock({
       )}
       {!hideValidacion ? (
         <div className="space-y-3 border-t pt-3" style={{ borderColor: BORDER }}>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] opacity-60">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-60">
             Validación de identidad
           </p>
           <IdentidadStatusBanner bio={bio} firmaBaul={firmaBaul} />
@@ -528,7 +503,7 @@ export default function MatriculaResumen({
             <div className="text-right">
               <label
                 htmlFor="fur-fecha-tramite"
-                className="mb-0.5 block text-[10px] font-semibold uppercase tracking-[0.2em] opacity-60"
+                className="mb-0.5 block text-xs font-semibold uppercase tracking-[0.2em] opacity-60"
               >
                 Fecha del trámite
               </label>
@@ -545,7 +520,7 @@ export default function MatriculaResumen({
             </div>
           ) : null}
           <span
-            className="rounded-full px-3 py-1 text-[11px] font-semibold"
+            className="rounded-full px-3 py-1 text-xs font-semibold"
             style={{ background: `color-mix(in srgb, ${tone} 14%, transparent)`, color: tone }}
           >
             {estadoLabel(status)}
@@ -573,7 +548,7 @@ export default function MatriculaResumen({
         </div>
         {specs.length > 0 ? (
           <div className="mt-4">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] opacity-50">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] opacity-50">
               Especificaciones técnicas
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -661,7 +636,7 @@ export default function MatriculaResumen({
                       style={{ borderColor: BORDER, background: 'rgba(85,126,255,0.04)' }}
                     >
                       <p
-                        className="text-[10px] font-semibold uppercase tracking-[0.2em]"
+                        className="text-xs font-semibold uppercase tracking-[0.2em]"
                         style={{ color: BLUE }}
                       >
                         {label}

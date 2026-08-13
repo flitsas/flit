@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { PrendaForm, PRENDA_DECISION_LABELS } from './PrendaForm';
 import type { PrendaData, PrendaDecision } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_CARD } from './wizard-field-styles';
 
 /** En la modificación post-registro se ofrecen todas las decisiones de gestión. */
 const ALL_DECISIONS: PrendaDecision[] = [
@@ -49,13 +50,13 @@ export function PrendaModificar({ instanceId }: { instanceId: string }) {
 
   return (
     <section
-      className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
+      className={WIZARD_CARD}
       aria-label="Prenda del trámite"
     >
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-bold">Prenda / gravamen</h3>
-          <p className="text-[11px] opacity-60">
+          <p className="text-xs opacity-60">
             Vigente: {PRENDA_DECISION_LABELS[prenda.decision]}
             {prenda.acreedorNombre ? ` · ${prenda.acreedorNombre}` : ''}
           </p>

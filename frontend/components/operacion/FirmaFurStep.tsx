@@ -1,9 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Check,
-  ChevronDown,
   Copy,
   RefreshCw,
   Search,
@@ -23,6 +22,7 @@ import { PRENDA_DECISION_LABELS } from './PrendaForm';
 import { prendaDocLabelFor, prendaDocTipoFor } from './prenda-document-tipos';
 import { summarizeDeclaredTransformations } from './VehicleTransformationsCard';
 import { InlineAlert } from '@/components/atom/InlineAlert';
+import { WizardAccordion } from './WizardAccordion';
 import type {
   Actor,
   BiometricParte,
@@ -39,6 +39,7 @@ import type {
   TransitOfficeOption,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_INPUT, WIZARD_CARD } from './wizard-field-styles';
 
 /** Estado de la pre-generación del paquete al entrar al paso FUR (Feature #11066). */
 export type PaqueteDocsStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -77,16 +78,16 @@ const RNMC_STATUS_STYLE: Record<string, { dot: string; text: string }> = {
  */
 function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: boolean }) {
   return (
-    <div className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]">
+    <div className={WIZARD_CARD}>
       <div className="mb-3 flex items-center gap-2">
         <Search className="h-4 w-4 opacity-60" aria-hidden="true" />
         <h3 className="text-sm font-semibold">Consulta RNMC — Medidas correctivas</h3>
         {loading && <RefreshCw className="h-3.5 w-3.5 animate-spin opacity-60" aria-hidden="true" />}
       </div>
       {loading && checks.length === 0 ? (
-        <p className="text-[11px] opacity-60">Consultando el RNMC de los actores…</p>
+        <p className="text-xs opacity-60">Consultando el RNMC de los actores…</p>
       ) : checks.length === 0 ? (
-        <p className="text-[11px] opacity-60">Sin resultados del RNMC para los actores del trámite.</p>
+        <p className="text-xs opacity-60">Sin resultados del RNMC para los actores del trámite.</p>
       ) : (
         <ul className="space-y-1.5" aria-label="Resultados RNMC por actor">
           {checks.map((c) => {
@@ -104,7 +105,7 @@ function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: b
                       {c.label}
                       {checkRoleSuffix(c.key)}
                     </span>
-                    <span className="text-[10px] uppercase font-bold" style={{ color: s.text }}>
+                    <span className="text-xs uppercase font-bold" style={{ color: s.text }}>
                       {c.status}
                     </span>
                     <span
@@ -114,7 +115,7 @@ function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: b
                       {sourceLabel(c.source)}
                     </span>
                   </div>
-                  {c.message && <p className="mt-0.5 text-[11px] opacity-70">{c.message}</p>}
+                  {c.message && <p className="mt-0.5 text-xs opacity-70">{c.message}</p>}
                 </div>
               </li>
             );
@@ -133,8 +134,7 @@ const ROL_OPTIONS: { value: ParticipantRol; label: string }[] = [
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const INPUT_BASE =
-  'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]';
+const INPUT_BASE = WIZARD_INPUT;
 
 /** Construye el magic-link absoluto a partir del path relativo del backend. */
 function absoluteLink(path: string): string {
@@ -166,7 +166,7 @@ function CopyLink({ link, label }: { link: string; label: string }) {
       <button
         type="button"
         onClick={() => void handleCopy()}
-        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-semibold text-white shrink-0"
+        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white shrink-0"
         style={{ background: '#557EFF' }}
         aria-label="Copiar enlace"
       >
@@ -653,7 +653,6 @@ export function PlacaPreasignadaSection({
   const [preassignEnabled, setPreassignEnabled] = useState<boolean | null>(null);
   // Mismo patrón de desplegable que MatriculaResumen (Vehículo, Comprador, …).
   const [open, setOpen] = useState(true);
-  const panelId = useId();
 
   const placa = plateValue.trim();
   // AC2 — el VIN ya tiene placa del RUNT (no la eligió el usuario): no aplica la preasignación.
@@ -765,48 +764,20 @@ export function PlacaPreasignadaSection({
     : plates;
 
   const shell = (children: ReactNode) => (
-    <div
-      className="overflow-hidden rounded-xl border bg-white dark:bg-[#0B0F14]"
-      style={{ borderColor: '#DFE5ED' }}
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
-        aria-expanded={open}
-        aria-controls={panelId}
-      >
-        <span className="flex items-center gap-2">
-          <span
-            className="h-4 w-1 rounded-full"
-            style={{ background: '#557EFF' }}
-            aria-hidden="true"
-          />
-          <span
-            className="text-xs font-bold uppercase tracking-[0.2em]"
-            style={{ color: '#557EFF' }}
-          >
-            Placa preasignada
-          </span>
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-          style={{ color: '#9AA5B1' }}
-          aria-hidden
+    <WizardAccordion
+      title="Placa preasignada"
+      open={open}
+      onOpenChange={setOpen}
+      icon={
+        <span
+          className="h-4 w-1 shrink-0 rounded-full"
+          style={{ background: '#557EFF' }}
+          aria-hidden="true"
         />
-      </button>
-      {open ? (
-        <div
-          id={panelId}
-          className="border-t px-4 py-3"
-          style={{ borderColor: '#DFE5ED' }}
-          role="region"
-          aria-label="Placa preasignada"
-        >
-          {children}
-        </div>
-      ) : null}
-    </div>
+      }
+    >
+      {children}
+    </WizardAccordion>
   );
 
   if (vinTienePlacaRunt) {
@@ -831,7 +802,7 @@ export function PlacaPreasignadaSection({
               type="button"
               disabled={saving}
               onClick={() => setChanging(true)}
-              className="rounded-lg border px-3 py-1 text-[11px] font-semibold disabled:opacity-50"
+              className="rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50"
             >
               Cambiar
             </button>
@@ -839,7 +810,7 @@ export function PlacaPreasignadaSection({
               type="button"
               disabled={saving}
               onClick={() => void clearPlate()}
-              className="rounded-lg border px-3 py-1 text-[11px] font-semibold disabled:opacity-50"
+              className="rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50"
             >
               Quitar placa
             </button>
@@ -866,12 +837,12 @@ export function PlacaPreasignadaSection({
 
   return shell(
     <div className="mt-2 flex flex-col gap-3">
-      <p className="text-[11px] opacity-70">
+      <p className="text-xs opacity-70">
         Selecciona una placa del rango asignado por el organismo de tránsito. Si no seleccionas ninguna, el
         trámite se enviará al OT para que asigne la placa.
       </p>
       {error && (
-        <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
           {error}
         </p>
       )}
@@ -881,7 +852,9 @@ export function PlacaPreasignadaSection({
         </p>
       ) : (
         <>
-          <div className="flex items-center gap-2 rounded-xl border px-3 py-2">
+          {/* El anillo de foco va en el contenedor (el input pinta el borde de todo el grupo):
+              con `outline-none` a secas este buscador no daba ninguna señal al tabular. */}
+          <div className="flex items-center gap-2 rounded-xl border border-[#DFE5ED] px-3 py-2 transition focus-within:border-[#557EFF] focus-within:ring-2 focus-within:ring-[#557EFF]/20 dark:border-white/15">
             <Search className="h-4 w-4 opacity-60" aria-hidden="true" />
             <input
               value={query}
@@ -907,9 +880,9 @@ export function PlacaPreasignadaSection({
         </>
       )}
       {/* HU #10805 — dígito de preferencia para radicar sin placa (guía para el OT; opcional). */}
-      <label className="mt-1 flex flex-col gap-1 text-[11px] font-semibold">
+      <label className="mt-1 flex flex-col gap-1 text-xs font-semibold">
         Dígito de preferencia (opcional)
-        <span className="text-[10px] font-normal opacity-70">
+        <span className="text-xs font-normal opacity-70">
           Si radicas sin placa, indica el número en el que prefieres que termine. El OT lo toma como
           guía: puede asignar una placa que termine en ese dígito u otra.
         </span>
@@ -933,7 +906,7 @@ export function PlacaPreasignadaSection({
         <button
           type="button"
           onClick={() => setChanging(false)}
-          className="self-start rounded-lg border px-3 py-1 text-[11px] font-semibold"
+          className="self-start rounded-lg border px-3 py-1 text-xs font-semibold"
         >
           Cancelar
         </button>
@@ -1035,7 +1008,7 @@ function OrganismoModal({
         <div className="flex items-start justify-between mb-3">
           <div>
             <h3 className="text-sm font-bold">Organismo de tránsito</h3>
-            <p className="text-[11px] opacity-70">
+            <p className="text-xs opacity-70">
               Elige dónde se radicará el trámite.
             </p>
           </div>
@@ -1052,12 +1025,12 @@ function OrganismoModal({
             className="mb-3 w-full text-left rounded-xl border p-3 disabled:opacity-50"
             style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' }}
           >
-            <p className="text-[10px] font-semibold uppercase" style={{ color: '#557EFF' }}>
+            <p className="text-xs font-semibold uppercase" style={{ color: '#557EFF' }}>
               Usar el organismo registrado en RUNT
             </p>
             <p className="text-xs font-semibold mt-0.5">{runtSuggestion.name}</p>
             {runtSuggestion.code && (
-              <p className="text-[11px] opacity-70">{runtSuggestion.code}</p>
+              <p className="text-xs opacity-70">{runtSuggestion.code}</p>
             )}
           </button>
         )}
@@ -1076,7 +1049,7 @@ function OrganismoModal({
         </div>
 
         {error && (
-          <p className="text-[11px] font-medium mb-2" style={{ color: '#FF4E00' }} role="alert">
+          <p className="text-xs font-medium mb-2" style={{ color: '#FF4E00' }} role="alert">
             {error}
           </p>
         )}
@@ -1091,23 +1064,23 @@ function OrganismoModal({
                 className="w-full text-left rounded-xl border p-2.5 hover:border-[#557EFF] disabled:opacity-50"
               >
                 <p className="text-xs font-semibold">{o.name}</p>
-                <p className="text-[11px] opacity-70">{o.code}</p>
+                <p className="text-xs opacity-70">{o.code}</p>
               </button>
             </li>
           ))}
           {loading && (
-            <li className="text-[11px] opacity-60 py-3 text-center">
+            <li className="text-xs opacity-60 py-3 text-center">
               Cargando organismos habilitados…
             </li>
           )}
           {!loading && offices.length === 0 && (
-            <li className="text-[11px] py-3 text-center" style={{ color: '#F9AC00' }}>
+            <li className="text-xs py-3 text-center" style={{ color: '#F9AC00' }}>
               Tu compañía no tiene organismos de tránsito habilitados. Contacta al
               administrador para habilitarlos.
             </li>
           )}
           {!loading && offices.length > 0 && results.length === 0 && (
-            <li className="text-[11px] opacity-60 py-3 text-center">
+            <li className="text-xs opacity-60 py-3 text-center">
               Sin resultados para «{query}».
             </li>
           )}
@@ -1278,7 +1251,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
         </div>
 
         {formError && (
-          <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }} role="alert">
+          <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
             {formError}
           </p>
         )}
@@ -1298,7 +1271,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
 
       {lastLink && (
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold" style={{ color: '#5B8A1F' }}>
+          <p className="text-xs font-semibold" style={{ color: '#5B8A1F' }}>
             Enlace de portal generado (DEV: sin envío de correo).
           </p>
           <CopyLink link={lastLink} label="Enlace de portal del participante" />
@@ -1316,7 +1289,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
           />
         ))}
         {participants !== null && participants.length === 0 && (
-          <li className="text-[11px] opacity-60">Aún no hay participantes invitados.</li>
+          <li className="text-xs opacity-60">Aún no hay participantes invitados.</li>
         )}
       </ul>
     </section>
@@ -1367,7 +1340,7 @@ function ParticipantRow({
           <p className="text-xs font-semibold capitalize">
             {p.rol} · {p.nombre}
           </p>
-          <p className="text-[11px] opacity-70 truncate">{p.email}</p>
+          <p className="text-xs opacity-70 truncate">{p.email}</p>
           <div className="mt-1 flex flex-wrap gap-1.5">
             <StatusChip
               ok={p.consentDado}
@@ -1398,7 +1371,7 @@ function ParticipantRow({
             type="button"
             onClick={() => void handleReinvite()}
             disabled={busy || !instanceId}
-            className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold shrink-0 disabled:opacity-50"
+            className="rounded-xl border px-3 py-1.5 text-xs font-semibold shrink-0 disabled:opacity-50"
             style={{ borderColor: '#557EFF', color: '#557EFF' }}
           >
             {busy ? 'Reinvitando…' : 'Reinvitar'}
@@ -1406,7 +1379,7 @@ function ParticipantRow({
         )}
       </div>
       {error && (
-        <p className="text-[11px] font-medium mt-1.5" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs font-medium mt-1.5" style={{ color: '#FF4E00' }} role="alert">
           {error}
         </p>
       )}
@@ -1518,7 +1491,7 @@ function PlateFlowCompleteSection({
     <div className="space-y-3 pt-2 border-t">
       <div>
         <h5 className="text-xs font-bold">Procesar trámite (Asignado → Terminado)</h5>
-        <p className="text-[11px] opacity-70">
+        <p className="text-xs opacity-70">
           Marca los checks opcionales si aplican y procesa el trámite. Sin pasar a Terminado el OT
           no puede aprobar ni rechazar.
         </p>

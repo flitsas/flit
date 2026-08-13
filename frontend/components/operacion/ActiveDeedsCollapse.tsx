@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { ChevronRight, FileText } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
+import { WizardAccordion } from './WizardAccordion';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { ActiveDeed } from '@/lib/api/types/procedure-runtime';
 
@@ -58,30 +59,15 @@ export function ActiveDeedsCollapse({ tenantId }: { tenantId?: string }) {
   };
 
   return (
-    <section className="rounded-2xl border bg-white dark:bg-[#0B0F14] overflow-hidden">
-      <button
-        type="button"
-        onClick={toggle}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        aria-expanded={open}
-        aria-controls="active-deeds-panel"
-      >
-        <ChevronRight
-          className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`}
-          style={{ color: '#557EFF' }}
-          aria-hidden
-        />
-        <FileText className="h-4 w-4 shrink-0" style={{ color: '#557EFF' }} aria-hidden />
-        <span
-          className="text-[11px] font-bold uppercase tracking-wide"
-          style={{ color: '#162744' }}
-        >
-          Escrituras vigentes de la compañía
-        </span>
-      </button>
-
-      {open && (
-        <div id="active-deeds-panel" className="border-t px-4 py-3">
+    // Controlado: `toggle` mantiene la carga perezosa de las escrituras al abrir.
+    <WizardAccordion
+      title="Escrituras vigentes de la compañía"
+      icon={<FileText className="h-4 w-4 shrink-0" style={{ color: '#557EFF' }} aria-hidden="true" />}
+      open={open}
+      onOpenChange={toggle}
+    >
+      {(
+        <>
           {loading && (
             <p className="text-xs opacity-70" role="status" aria-live="polite">
               Cargando escrituras…
@@ -111,19 +97,19 @@ export function ActiveDeedsCollapse({ tenantId }: { tenantId?: string }) {
                     <p className="truncate text-xs font-semibold" style={{ color: '#162744' }}>
                       {deed.name}
                     </p>
-                    <p className="text-[11px] font-mono opacity-60">NIT {deed.nit}</p>
+                    <p className="text-xs font-mono opacity-60">NIT {deed.nit}</p>
                     {deed.representativeName ? (
-                      <p className="truncate text-[11px]" style={{ color: '#162744' }}>
+                      <p className="truncate text-xs" style={{ color: '#162744' }}>
                         RL: {deed.representativeName}
                         {deed.representativeDocumentType && deed.representativeDocumentNumber
                           ? ` · ${deed.representativeDocumentType} ${deed.representativeDocumentNumber}`
                           : ''}
                       </p>
                     ) : (
-                      <p className="truncate text-[11px] opacity-50">Sin RL vinculado</p>
+                      <p className="truncate text-xs opacity-50">Sin RL vinculado</p>
                     )}
                     {deed.description && (
-                      <p className="truncate text-[11px] opacity-70">{deed.description}</p>
+                      <p className="truncate text-xs opacity-70">{deed.description}</p>
                     )}
                   </div>
                   <StatusBadge
@@ -135,8 +121,8 @@ export function ActiveDeedsCollapse({ tenantId }: { tenantId?: string }) {
               ))}
             </ul>
           )}
-        </div>
+        </>
       )}
-    </section>
+    </WizardAccordion>
   );
 }

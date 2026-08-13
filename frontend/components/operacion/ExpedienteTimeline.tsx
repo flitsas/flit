@@ -52,8 +52,8 @@ export default function ExpedienteTimeline({ statusHistory: rawHistory }: Props)
                   <span className="ml-1 font-normal opacity-50">desde {estadoLabel(e.fromStatus)}</span>
                 ) : null}
               </p>
-              <p className="text-[11px] opacity-60">{fmt(e.changedAt)}</p>
-              {e.reason && <p className="mt-0.5 text-[11px] opacity-70">{e.reason}</p>}
+              <p className="text-xs opacity-60">{fmt(e.changedAt)}</p>
+              {e.reason && <p className="mt-0.5 text-xs opacity-70">{e.reason}</p>}
             </li>
           ))}
         </ol>

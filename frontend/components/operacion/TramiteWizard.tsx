@@ -41,12 +41,13 @@ import { EstadoTimelinePanel } from './EstadoTimeline';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
-import { blockerCopy, identidadAutomaticaCopy } from './wizard-copy';
+import { blockerCopy, identidadAutomaticaCopy, stepLabelCopy } from './wizard-copy';
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
 import { VehicleTransformationsCard } from './VehicleTransformationsCard';
 import { EstadoAcciones } from './EstadoAcciones';
 import { WizardStepTracker } from './WizardStepTracker';
+import { Modal } from '@/components/atom/Modal';
 import {
   isTraspasoActorStepKey,
   nextIndexAfterUnifiedActores,
@@ -91,6 +92,7 @@ import type {
   WizardModalidad,
   WizardStep,
 } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_CARD } from './wizard-field-styles';
 
 /**
  * El wizard es server-driven: una vez creada la instancia, GET /wizard decide
@@ -502,6 +504,14 @@ export function TramiteWizard(props: Props) {
   // re-saltar en cada refresh posterior (p.ej. tras "Guardar y continuar").
   const stepInitializedRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
+  /**
+   * Trámite radicado → modal de acuse del diseño. La placa puede no existir todavía: en matrícula
+   * inicial la asigna el organismo, así que el modal cae al radicado, que siempre está.
+   */
+  const [radicado, setRadicado] = useState<{
+    placa: string | null;
+    referencia: string | null;
+  } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   // Feature #11066 — estado informativo del paquete (FUR/certs/impronta). No bloquea Preparar.
   const [paqueteDocsStatus, setPaqueteDocsStatus] = useState<
@@ -771,13 +781,16 @@ export function TramiteWizard(props: Props) {
 
       await tramitesClient.transitionInstance(instanceId, 'entregado');
       telemetry.trackComplete();
-      show(
-        modalidad === 'traspaso'
-          ? 'Traspaso enviado a tránsito correctamente.'
-          : 'Matrícula inicial enviada a tránsito correctamente.',
-        'success',
-      );
-      onExit();
+      // Flujo del diseño: al radicar se abre el modal de trámite completado en vez de salir de
+      // golpe con un toast. El gestor confirma qué quedó radicado y sale desde el CTA. La
+      // transición ya ocurrió: el modal es acuse de recibo, no un paso más que haya que aprobar.
+      const placaRadicada =
+        state.detail?.fieldValues?.find((f) => f.fieldKey === 'placa')?.valueText?.trim() || null;
+      setRadicado({
+        placa: placaRadicada,
+        referencia: referenceNumber ?? state.detail?.referenceNumber ?? null,
+      });
+      setSubmitting(false);
     } catch (err) {
       setSubmitError(
         err instanceof Error ? err.message : 'Error al enviar el trámite',
@@ -1091,7 +1104,7 @@ export function TramiteWizard(props: Props) {
             <h1 className="truncate text-lg font-bold sm:text-xl" style={{ color: '#557EFF' }}>
               {displayTitle}
             </h1>
-            <p className="mt-0.5 truncate text-[11px]" style={{ color: '#9AA5B1' }}>
+            <p className="mt-0.5 truncate text-xs" style={{ color: '#9AA5B1' }}>
               {displaySubtitle}
             </p>
           </div>
@@ -1111,7 +1124,7 @@ export function TramiteWizard(props: Props) {
         </div>
 
         {steps.length === 0 ? (
-          <p className="text-[11px] opacity-60">
+          <p className="text-xs opacity-60">
             {wizardLoading ? 'Cargando pasos…' : 'Sin pasos disponibles.'}
           </p>
         ) : (
@@ -1202,10 +1215,13 @@ export function TramiteWizard(props: Props) {
             <div className="space-y-6">
               {activeStep.key !== 'fur' && activeStep.key !== 'identidad' && (
                 <div>
+                  {/* Mismo nombre que el stepper: antes el asistente decía "Actores" arriba y
+                      otra cosa en la píldora del paso, o "Resumen del trámite" en un paso donde
+                      lo que se hace es generar el FUR y el expediente. */}
                   <h2 className="text-base font-bold">
                     {modalidad === 'traspaso' && isTraspasoActorStepKey(activeStep.key)
-                      ? 'Actores'
-                      : activeStep.label}
+                      ? stepLabelCopy('actores', 'Actores')
+                      : stepLabelCopy(activeStep.key, activeStep.label)}
                   </h2>
                   {(activeStep.key === 'documentos' && modalidad !== 'traspaso'
                     ? DOCUMENTOS_SUBTITLE_MATRICULA
@@ -1412,6 +1428,53 @@ export function TramiteWizard(props: Props) {
           <AvisosCorreoPanel instanceId={instanceId} />
         </>
       ) : null}
+
+      {/* Acuse de radicación — patrón "trámite completado" del diseño: título de éxito, el
+          identificador en grande con tracking amplio, mensaje de confirmación y CTA degradado.
+          Sustituye al toast + salida inmediata: el gestor ve QUÉ quedó radicado antes de salir. */}
+      <Modal
+        open={!!radicado}
+        onClose={() => {
+          setRadicado(null);
+          onExit();
+        }}
+        title="¡Trámite completado!"
+        titleClassName="text-lg font-bold text-[#557EFF]"
+        size="sm"
+      >
+        <div className="text-center">
+          <p className="text-xs uppercase tracking-wide opacity-55">
+            {radicado?.placa ? 'Placa asociada' : 'Radicado'}
+          </p>
+          <p
+            className="mt-1 text-3xl font-bold"
+            style={{ color: '#162744', letterSpacing: radicado?.placa ? '0.35em' : '0.12em' }}
+          >
+            {radicado?.placa ?? radicado?.referencia ?? '—'}
+          </p>
+          {/* En matrícula inicial la placa la asigna el organismo: se dice, en vez de dejar un
+              hueco que parezca un dato perdido. */}
+          {!radicado?.placa ? (
+            <p className="mt-2 text-xs opacity-60">
+              La placa la asigna el organismo de tránsito.
+            </p>
+          ) : null}
+          <p className="mt-4 text-xs opacity-70">
+            El trámite fue validado y enviado correctamente al organismo de tránsito.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setRadicado(null);
+              onExit();
+            }}
+            className="mt-5 w-full rounded-xl py-2.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+          >
+            Ir al listado de trámites
+          </button>
+        </div>
+      </Modal>
     </div>
    </WizardReadOnlyProvider>
   );
@@ -1518,13 +1581,13 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
           <p className="truncate text-base font-bold">{title}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             {year && (
-              <span className="inline-flex items-center gap-1 text-[11px] opacity-70">
+              <span className="inline-flex items-center gap-1 text-xs opacity-70">
                 <Calendar className="h-3 w-3" /> Modelo {year}
               </span>
             )}
             {estado && (
               <span
-                className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                className="rounded-full px-2 py-0.5 text-xs font-bold"
                 style={
                   estadoActivo
                     ? { background: 'rgba(140,198,63,0.15)', color: '#8CC63F' }
@@ -1553,7 +1616,7 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
               >
                 <Icon className="h-3.5 w-3.5 shrink-0 opacity-40" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] uppercase opacity-50">{d.label}</p>
+                  <p className="text-xs uppercase opacity-50">{d.label}</p>
                   <p className="truncate text-xs font-semibold">{d.value}</p>
                 </div>
               </div>
@@ -1567,7 +1630,7 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
         <div
           className="border-t px-4 py-3"
         >
-          <p className="mb-2 text-[10px] font-semibold uppercase opacity-50">
+          <p className="mb-2 text-xs font-semibold uppercase opacity-50">
             Documentos del vehículo
           </p>
           <div className="flex flex-wrap gap-3">
@@ -1577,16 +1640,16 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
               >
                 <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#557EFF' }} />
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase" style={{ color: '#557EFF' }}>
+                  <p className="text-xs font-bold uppercase" style={{ color: '#557EFF' }}>
                     SOAT
                   </p>
                   {soatVencimiento && (
-                    <p className="text-[11px] font-semibold">
+                    <p className="text-xs font-semibold">
                       Vence: {formatDateOnly(soatVencimiento)}
                     </p>
                   )}
                   {soatAseguradora && (
-                    <p className="truncate text-[10px] opacity-60">{soatAseguradora}</p>
+                    <p className="truncate text-xs opacity-60">{soatAseguradora}</p>
                   )}
                 </div>
               </div>
@@ -1597,10 +1660,10 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
               >
                 <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#8CC63F' }} />
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase" style={{ color: '#8CC63F' }}>
+                  <p className="text-xs font-bold uppercase" style={{ color: '#8CC63F' }}>
                     Tecno-mecánica
                   </p>
-                  <p className="text-[11px] font-semibold">
+                  <p className="text-xs font-semibold">
                     Vence: {formatDateOnly(rtmVencimiento)}
                   </p>
                 </div>
@@ -1685,7 +1748,7 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
     <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-2">
       <div>
         <p className="text-xs font-semibold opacity-80">Observaciones del trámite</p>
-        <p className="text-[11px] opacity-55">
+        <p className="text-xs opacity-55">
           Se incluirán en el recuadro de observaciones del FUR. Puedes editarlas también en el paso
           final antes de preparar el expediente.
         </p>
@@ -1702,7 +1765,7 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
         className="w-full resize-none rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14]"
       />
       {saving && (
-        <p className="text-[10px] opacity-50" role="status" aria-live="polite">
+        <p className="text-xs opacity-50" role="status" aria-live="polite">
           Guardando…
         </p>
       )}
@@ -1713,8 +1776,8 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
           el formulario necesita. */}
       {(preview.manual || preview.auto.length > 0) && (
         <div className="rounded-xl bg-[#F4F6FA] px-3 py-2 dark:bg-[#131A22]">
-          <p className="text-[10px] font-bold uppercase opacity-55">Así quedarán en el FUR</p>
-          <div className="mt-1 space-y-0.5 text-[11px] leading-relaxed">
+          <p className="text-xs font-bold uppercase opacity-55">Así quedarán en el FUR</p>
+          <div className="mt-1 space-y-0.5 text-xs leading-relaxed">
             {preview.manual && (
               <p className="whitespace-pre-line break-words">{preview.manual}</p>
             )}
@@ -2405,7 +2468,7 @@ function ConsultaStep({
       {/* HU #11199 — secretaría ANTES de consultar VIN (matrícula). Guía de documentos: enlace
           discreto → panel lateral (no ocupa el layout del paso 1). */}
       {eligeSecretaria && (
-        <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]">
+        <div className={WIZARD_CARD}>
           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-semibold">Secretaría de tránsito</p>
             <ProcedureDocsPreviewInformativo
@@ -2424,11 +2487,11 @@ function ConsultaStep({
             disabled={readOnly}
             describedBy="consulta-secretaria-aviso"
           />
-          <p id="consulta-secretaria-aviso" className="mt-2 text-[11px] leading-tight opacity-70">
+          <p id="consulta-secretaria-aviso" className="mt-2 text-xs leading-tight opacity-70">
             {SECRETARIA_LISTA_AVISO}
           </p>
           {secretariasError && (
-            <p className="mt-1 text-[11px] leading-tight" style={{ color: '#E5484D' }}>
+            <p className="mt-1 text-xs leading-tight" style={{ color: '#E5484D' }}>
               {secretariasError}
             </p>
           )}
@@ -2441,7 +2504,7 @@ function ConsultaStep({
       )}
       {isVin ? (
         <div
-          className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
+          className={WIZARD_CARD}
         >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
@@ -2465,7 +2528,7 @@ function ConsultaStep({
         </div>
       ) : (
         <div
-          className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
+          className={WIZARD_CARD}
         >
           {/* Una sola fila de consulta (mismo patrón que la rama VIN de arriba): cada campo ocupa
               el ancho que pide su dato —placa 6 caracteres, tipo de documento una sigla— y el
@@ -2556,7 +2619,7 @@ function ConsultaStep({
           {ownerDocLocked && (
             <p
               id="consulta-owner-doc-locked"
-              className="mt-3 max-w-4xl text-[11px] leading-tight opacity-70"
+              className="mt-3 max-w-4xl text-xs leading-tight opacity-70"
             >
               Tu compañía solo tramita vehículos propios, así que el propietario queda fijo en su
               NIT y no se puede editar durante el trámite.
@@ -2565,7 +2628,7 @@ function ConsultaStep({
           {/* La sugerencia habla de la consulta completa, no solo del selector: fuera de la fila
               se lee en una línea y deja de descuadrar la altura de esa columna. */}
           {!hideOwnerDocType && ownerDocTypeSuggested && (
-            <p className="mt-3 max-w-4xl text-[11px] leading-tight opacity-70">
+            <p className="mt-3 max-w-4xl text-xs leading-tight opacity-70">
               No se encontró el vehículo en RUNT. Si es maquinaria o remolque, verifica el tipo de
               documento del propietario (p. ej. NIT) y vuelve a consultar.
             </p>
@@ -2575,7 +2638,7 @@ function ConsultaStep({
 
       {error && (
         <p
-          className="text-[11px] font-medium"
+          className="text-xs font-medium"
           style={{ color: '#FF4E00' }}
           role="alert"
           aria-live="polite"
@@ -2647,11 +2710,11 @@ function ConsultaStep({
       {eligeTipoServicio && hasVehicleData && (
         <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
           {tiposServicioLoading ? (
-            <p className="text-[11px] opacity-60" role="status" aria-live="polite">
+            <p className="text-xs opacity-60" role="status" aria-live="polite">
               Cargando tipos de servicio…
             </p>
           ) : tiposServicioError ? (
-            <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }} role="alert">
+            <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
               {tiposServicioError}
             </p>
           ) : (
@@ -2718,7 +2781,7 @@ function ConsultaStep({
                 {ruesError && (
                   <p
                     id="tramite-rues-error"
-                    className="mt-1.5 text-[11px] font-medium leading-tight"
+                    className="mt-1.5 text-xs font-medium leading-tight"
                     style={{ color: '#FF4E00' }}
                     role="alert"
                     aria-live="polite"
@@ -2768,7 +2831,7 @@ function ConsultaStep({
                 {razonSocialDesdeDirectorio && (
                   <p
                     id="tramite-razon-social-origen"
-                    className="mt-1.5 flex items-center gap-1 text-[11px] leading-tight"
+                    className="mt-1.5 flex items-center gap-1 text-xs leading-tight"
                     style={{ color: '#557EFF' }}
                     role="status"
                     aria-live="polite"
@@ -2811,7 +2874,7 @@ function ConsultaStep({
       {hasVehicleData && !isVin && (
         <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
           <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
-          <p className="text-[11px] opacity-55 -mt-1.5">
+          <p className="text-xs opacity-55 -mt-1.5">
             Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente.
           </p>
 

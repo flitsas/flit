@@ -125,7 +125,7 @@ export function VehicleTransformationsCard({
           Transformaciones del vehículo
         </p>
       </div>
-      <p className="text-[11px] opacity-55 -mt-1">
+      <p className="text-xs opacity-55 -mt-1">
         Declara un cambio de color, combustible o carrocería frente al RUNT. Se registrará en el
         FUR. La carrocería puede requerir factura como documento de soporte.
       </p>
@@ -175,7 +175,7 @@ export function VehicleTransformationsCard({
       <p
         aria-live="polite"
         className={cn(
-          'rounded-xl px-3 py-2 text-[11px]',
+          'rounded-xl px-3 py-2 text-xs',
           changes.length > 0
             ? 'font-medium'
             : 'opacity-55',
@@ -277,7 +277,7 @@ function TransformationRow({
               onChange={onSelect}
             />
           ) : options.length === 0 && emptyMessage ? (
-            <p className="text-[11px] opacity-55">{emptyMessage}</p>
+            <p className="text-xs opacity-55">{emptyMessage}</p>
           ) : (
             <CatalogSearchSelect
               id={selectId}
@@ -290,7 +290,7 @@ function TransformationRow({
             />
           )}
           {changed && (
-            <p className="flex items-center gap-1.5 text-[11px]" style={{ color: '#557EFF' }}>
+            <p className="flex items-center gap-1.5 text-xs" style={{ color: '#557EFF' }}>
               <span className="opacity-70">{up(runtValue)}</span>
               <ArrowRight aria-hidden="true" className="h-3 w-3" />
               <span className="font-semibold">{up(effectiveValue)}</span>

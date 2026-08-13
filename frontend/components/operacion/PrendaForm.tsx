@@ -11,6 +11,7 @@ import { PrendaDocumentUpload } from './PrendaDocumentUpload';
 import { prendaDocTipoFor } from './prenda-document-tipos';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import type { FieldValue, PrendaDecision, WizardModalidad } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_INPUT, WIZARD_CARD } from './wizard-field-styles';
 
 /** Handle imperativo: la shell del wizard dispara guardar+validar. */
 export type PrendaFormHandle = WizardStepFormHandle;
@@ -110,8 +111,7 @@ interface Props {
   onDocumentGateChange?: (ready: boolean) => void;
 }
 
-const INPUT_BASE =
-  'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF] aria-[invalid=true]:border-[#FF4E00]';
+const INPUT_BASE = WIZARD_INPUT;
 
 function byKey(fields: FieldValue[], key: string): string {
   return fields.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
@@ -203,7 +203,7 @@ function RuntField({ label, value }: { label: string; value: string | null | und
   if (!value?.trim()) return null;
   return (
     <div>
-      <dt className="text-[10px] font-bold uppercase opacity-55">{label}</dt>
+      <dt className="text-xs font-bold uppercase opacity-55">{label}</dt>
       <dd className="font-semibold">{value}</dd>
     </div>
   );
@@ -364,14 +364,14 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
+      className={WIZARD_CARD}
       aria-label="Prenda o gravamen del trámite"
       noValidate
     >
       {!hideHeader && (
         <div className="mb-3">
           <h4 className="text-sm font-bold">Prenda / gravamen</h4>
-          <p className="text-[11px] opacity-60">
+          <p className="text-xs opacity-60">
             Declara si el vehículo tiene prenda. Si registras, solicitas o levantas, adjunta el
             certificado en esta sección.
           </p>
@@ -424,7 +424,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                             key={`${item.idPrenda ?? 'p'}-${idx}`}
                             className="rounded-lg border px-3 py-2"
                           >
-                            <p className="mb-2 text-[10px] font-bold uppercase opacity-55">
+                            <p className="mb-2 text-xs font-bold uppercase opacity-55">
                               Prenda {item.idPrenda ? `#${item.idPrenda}` : idx + 1}
                             </p>
                             <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -567,11 +567,11 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
       {!readOnly && !embeddedInWizard && (
         <div className="flex items-center justify-between gap-3 mt-4">
           {saved ? (
-            <span className="text-[11px] font-semibold" style={{ color: '#8CC63F' }} role="status" aria-live="polite">
+            <span className="text-xs font-semibold" style={{ color: '#8CC63F' }} role="status" aria-live="polite">
               Decisión de prenda guardada ✓
             </span>
           ) : (
-            <span className="text-[11px] opacity-50">{loading ? 'Cargando…' : ''}</span>
+            <span className="text-xs opacity-50">{loading ? 'Cargando…' : ''}</span>
           )}
           <button
             type="submit"

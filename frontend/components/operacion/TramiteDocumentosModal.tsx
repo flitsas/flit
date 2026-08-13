@@ -249,7 +249,7 @@ export function TramiteDocumentosModal({
                     <p className="truncate text-xs font-semibold text-[#162744] dark:text-white">
                       {documentLabel(d.tipo)}
                     </p>
-                    <p className="truncate text-[10px] opacity-60">
+                    <p className="truncate text-xs opacity-60">
                       {d.filename} · {formatFecha(d.uploadedAt)}
                     </p>
                   </div>

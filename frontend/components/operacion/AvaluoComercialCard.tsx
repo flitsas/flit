@@ -70,18 +70,18 @@ export function AvaluoComercialCard({ instanceId, disabled = false, accepted = f
       <div className="flex items-center justify-between gap-3 mb-3">
         <div>
           <h4 className="text-sm font-bold">Avalúo comercial</h4>
-          <p className="text-[11px] opacity-60">
+          <p className="text-xs opacity-60">
             Valor de venta sugerido a partir de fuentes de avalúo.
           </p>
         </div>
         {sugerido != null && (
           <div className="text-right">
-            <div className="text-[10px] uppercase tracking-wide opacity-50">Sugerido</div>
+            <div className="text-xs uppercase tracking-wide opacity-50">Sugerido</div>
             <div className="text-sm font-bold font-mono" style={{ color: '#557EFF' }}>
               {formatCOP(sugerido)}
             </div>
             {fuente && (
-              <div className="text-[10px] opacity-60">{SOURCE_LABELS[fuente] ?? fuente}</div>
+              <div className="text-xs opacity-60">{SOURCE_LABELS[fuente] ?? fuente}</div>
             )}
           </div>
         )}
@@ -94,7 +94,7 @@ export function AvaluoComercialCard({ instanceId, disabled = false, accepted = f
           ))}
         </div>
       ) : error ? (
-        <p className="text-[11px] opacity-60" role="status">
+        <p className="text-xs opacity-60" role="status">
           {error} Puedes ingresar el valor manualmente.
         </p>
       ) : (
@@ -112,7 +112,7 @@ export function AvaluoComercialCard({ instanceId, disabled = false, accepted = f
           </ul>
 
           {sugerido != null && accepted && (
-            <p className="mt-3 text-right text-[11px] opacity-60" role="status">
+            <p className="mt-3 text-right text-xs opacity-60" role="status">
               Valor sugerido aceptado.
             </p>
           )}
@@ -156,10 +156,10 @@ function SourceRow({
       <div className="min-w-0">
         <div className="text-xs font-semibold">{label}</div>
         {source.source === 'mercado_libre' && source.muestras != null && ok && (
-          <div className="text-[10px] opacity-50">Mediana de {source.muestras} publicaciones</div>
+          <div className="text-xs opacity-50">Mediana de {source.muestras} publicaciones</div>
         )}
         {!ok && (
-          <div className="text-[10px] opacity-50">
+          <div className="text-xs opacity-50">
             {source.status === 'no_data' ? 'Sin datos' : 'No disponible'}
           </div>
         )}
@@ -171,7 +171,7 @@ function SourceRow({
             type="button"
             disabled={disabled}
             onClick={onUse}
-            className="text-[11px] font-semibold disabled:opacity-40"
+            className="text-xs font-semibold disabled:opacity-40"
             style={{ color: '#557EFF' }}
           >
             Usar

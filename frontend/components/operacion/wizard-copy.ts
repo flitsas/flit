@@ -165,3 +165,34 @@ export function reasonCopy(code: string): string {
 export function blockerCopy(code: string): string {
   return BLOCKER_COPY[code] ?? humanize(code);
 }
+
+/**
+ * Nombre del paso en la nomenclatura de la propuesta de diseño.
+ *
+ * El backend manda el label junto a cada paso; esto NO lo sustituye como fuente de verdad de la
+ * estructura —los pasos, su orden y su estado siguen viniendo del servidor—, solo unifica cómo se
+ * escriben en pantalla. La misma etapa se llamaba distinto según la modalidad ("Consulta VIN" vs
+ * "Consulta del vehículo") y el paso final aparecía como "Resumen del trámite" pese a ser donde se
+ * genera el FUR y el expediente.
+ *
+ * `actores` es la clave del paso visual que fusiona vendedor+comprador en traspaso.
+ */
+const STEP_LABEL_DISENO: Record<string, string> = {
+  consulta: 'Trámite y Vehículo',
+  consulta_vin: 'Consulta VIN y Placa',
+  actores: 'Actores y Validación',
+  vendedor: 'Actores y Validación',
+  comprador: 'Comprador y Rep. Legal',
+  documentos: 'Documentos',
+  comercial: 'Datos Comerciales',
+  identidad: 'Identidad',
+  fur: 'FUR y Expediente',
+};
+
+/**
+ * Etiqueta a mostrar para un paso. Cae al label del servidor cuando la clave no está mapeada:
+ * un paso nuevo en backend aparece con su nombre, nunca en blanco.
+ */
+export function stepLabelCopy(key: string, serverLabel: string): string {
+  return STEP_LABEL_DISENO[key] ?? serverLabel;
+}

@@ -218,7 +218,7 @@ export function BiometricStep({
       type="button"
       onClick={() => void handleRefresh()}
       disabled={loading || !instanceId}
-      className="flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+      className="flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
       style={{ borderColor: '#557EFF', color: '#557EFF' }}
       aria-label="Actualizar estado biométrico"
     >
@@ -462,12 +462,12 @@ function HistorialValidaciones({
 
   return (
     <div className="mt-3 space-y-2 border-t pt-3">
-      <p className="text-[11px] font-semibold opacity-70">
+      <p className="text-xs font-semibold opacity-70">
         Historial de validaciones ({historial.length})
       </p>
       <ul className="space-y-2">
         {historial.map((v) => (
-          <li key={v.id} className="rounded-lg border p-2 text-[11px]" style={{ borderColor: '#EEF1F6' }}>
+          <li key={v.id} className="rounded-lg border p-2 text-xs" style={{ borderColor: '#EEF1F6' }}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
                 <StatusBadge label={ESTADO_LABEL[v.status] ?? v.status} tone={ESTADO_TONE[v.status] ?? 'neutral'} />
@@ -517,7 +517,7 @@ function VaultCoveredView() {
         <p className="text-xs font-bold" style={{ color: '#557EFF' }}>
           Firma electrónica (baúl)
         </p>
-        <p className="text-[11px] opacity-70">
+        <p className="text-xs opacity-70">
           Identidad cubierta por la firma electrónica del baúl. No requiere validación biométrica.
         </p>
       </div>
@@ -544,7 +544,7 @@ function VerifiedView({ validation: v }: { validation: BiometricValidation }) {
           <p className="text-xs font-bold" style={{ color: '#5B8A1F' }}>
             Identidad verificada — {v.score ?? 95}/100
           </p>
-          <p className="text-[11px] opacity-70">{v.name}</p>
+          <p className="text-xs opacity-70">{v.name}</p>
         </div>
       </div>
       {/*
@@ -596,7 +596,7 @@ function KyverumPendingView({
           real y que el cliente puede volver a intentar en su móvil, sin marcar la validación como rechazada. */}
       {v.ultimoIntentoMotivo && (
         <div
-          className="rounded-xl p-2.5 text-[11px]"
+          className="rounded-xl p-2.5 text-xs"
           style={{ background: 'rgba(178,106,0,0.08)', border: '1px solid rgba(178,106,0,0.3)', color: '#B26A00' }}
           role="status"
           aria-live="polite"
@@ -611,7 +611,7 @@ function KyverumPendingView({
         </div>
       )}
 
-      <p className="text-[11px] opacity-70">
+      <p className="text-xs opacity-70">
         Enviamos el enlace de captura al correo del cliente ({v.email}). También puedes compartirlo:
       </p>
 
@@ -625,7 +625,7 @@ function KyverumPendingView({
             href={captureUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex w-fit items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="flex w-fit items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             style={{ background: '#557EFF' }}
           >
             <ExternalLink className="h-3 w-3" aria-hidden />
@@ -635,7 +635,7 @@ function KyverumPendingView({
             <button
               type="button"
               onClick={() => void copy()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{ borderColor: '#557EFF', color: '#557EFF' }}
               aria-label="Copiar enlace de captura"
             >
@@ -648,7 +648,7 @@ function KyverumPendingView({
             href={captureUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="block truncate text-[11px] underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="block truncate text-xs underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             style={{ color: '#557EFF' }}
             title={captureUrl}
           >
@@ -710,14 +710,14 @@ function ReconcileAction({
 
   return (
     <div className="space-y-1.5 border-t pt-3">
-      <p className="text-[11px] opacity-60">
+      <p className="text-xs opacity-60">
         ¿La captura ya se completó y sigue en espera? Consulta el estado directamente al proveedor.
       </p>
       <button
         type="button"
         onClick={() => void handleReconcile()}
         disabled={submitting || !instanceId}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold border disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
         style={{ borderColor: '#557EFF', color: '#557EFF' }}
         aria-label="Actualizar estado de la validación consultando al proveedor"
       >
@@ -725,12 +725,12 @@ function ReconcileAction({
         {submitting ? 'Consultando…' : 'Actualizar estado'}
       </button>
       {info && (
-        <p className="text-[11px] opacity-70" role="status" aria-live="polite">
+        <p className="text-xs opacity-70" role="status" aria-live="polite">
           {info}
         </p>
       )}
       {error && (
-        <p className="text-[11px]" style={{ color: '#FF4E00' }} role="alert" aria-live="polite">
+        <p className="text-xs" style={{ color: '#FF4E00' }} role="alert" aria-live="polite">
           {error}
         </p>
       )}
@@ -763,18 +763,18 @@ function RejectedView({
       >
         <XCircle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: '#FF4E00' }} aria-hidden />
         <div className="space-y-1">
-          <p className="text-[11px] font-semibold" style={{ color: '#FF4E00' }}>
+          <p className="text-xs font-semibold" style={{ color: '#FF4E00' }}>
             {expirado
               ? 'El enlace de validación expiró.'
               : `Validación no aprobada${v.score != null ? ` (${v.score}/100)` : ''}.`}
           </p>
           {/* AC5 — expiración: muestra cuándo venció el enlace. */}
           {expirado && v.expiresAt && (
-            <p className="text-[11px] opacity-80">Venció el {formatFecha(v.expiresAt)}.</p>
+            <p className="text-xs opacity-80">Venció el {formatFecha(v.expiresAt)}.</p>
           )}
           {/* AC4 — rechazo con motivo: detalle sanitizado del proveedor (sin PII). */}
           {!expirado && v.rejectionReason && (
-            <p className="text-[11px] opacity-80">Motivo: {v.rejectionReason}</p>
+            <p className="text-xs opacity-80">Motivo: {v.rejectionReason}</p>
           )}
         </div>
       </div>
@@ -864,29 +864,29 @@ function StartAction({
   // En solo lectura no se inicia: solo se informa que la identidad quedó pendiente.
   if (readOnly) {
     return (
-      <p className="text-[11px] opacity-60">Validación de identidad pendiente.</p>
+      <p className="text-xs opacity-60">Validación de identidad pendiente.</p>
     );
   }
 
   return (
     <div className="space-y-3">
       {!label && (
-        <p className="text-[11px] font-medium opacity-70">
+        <p className="text-xs font-medium opacity-70">
           Aún no se ha iniciado la validación de identidad de esta parte.
         </p>
       )}
-      <p className="text-[11px] opacity-60">
+      <p className="text-xs opacity-60">
         {isKyverum
           ? 'Inicia la validación: el cliente recibirá el enlace de captura por correo y aquí podrás compartir el enlace/QR.'
           : 'Mock de esta iteración: simula la validación biométrica de esta parte.'}
       </p>
       {conflictMsg && (
-        <p className="rounded-lg border px-2 py-1.5 text-[11px]" style={{ borderColor: '#5B8A1F', color: '#3F5F14' }} role="status">
+        <p className="rounded-lg border px-2 py-1.5 text-xs" style={{ borderColor: '#5B8A1F', color: '#3F5F14' }} role="status">
           {conflictMsg}
         </p>
       )}
       {error && (
-        <p className="text-[11px] text-[#FF4E00]" role="alert">{error}</p>
+        <p className="text-xs text-[#FF4E00]" role="alert">{error}</p>
       )}
       {!conflictMsg && (
         <button
@@ -901,7 +901,7 @@ function StartAction({
       )}
       {confirmOpen && (
         <div
-          className="rounded-xl border p-3 text-[11px]"
+          className="rounded-xl border p-3 text-xs"
           style={{ borderColor: '#557EFF' }}
           role="alertdialog"
           aria-label="Confirmar envío de validación"

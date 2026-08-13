@@ -280,19 +280,19 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
           className="absolute right-0 z-40 mt-1.5 w-56 rounded-xl border bg-white p-2.5 text-left shadow-lg dark:bg-[#0B0F14]"
           style={{ borderColor: palette.border }}
         >
-          <p className="text-[11px] font-bold" style={{ color: palette.color }}>
+          <p className="text-xs font-bold" style={{ color: palette.color }}>
             OCR — {palette.label}
           </p>
           {ocr.motivo && (
-            <p className="mt-1 text-[10px] leading-snug opacity-80">{ocr.motivo}</p>
+            <p className="mt-1 text-xs leading-snug opacity-80">{ocr.motivo}</p>
           )}
           {(tipoDocumento || recorte) && (
-            <p className="mt-1 text-[10px] opacity-60">
+            <p className="mt-1 text-xs opacity-60">
               {[tipoDocumento, recorte].filter(Boolean).join(' · ')}
             </p>
           )}
           {fields.length > 0 && (
-            <p className="mt-1.5 text-[10px] font-medium" style={{ color: '#557EFF' }}>
+            <p className="mt-1.5 text-xs font-medium" style={{ color: '#557EFF' }}>
               Clic para ver {fields.length} campo{fields.length === 1 ? '' : 's'}
             </p>
           )}
@@ -327,7 +327,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
                   style={{ color: '#162744' }}
                 >
                   OCR — {nombre}
-                  <span className="mt-0.5 block text-[11px] font-bold" style={{ color: palette.color }}>
+                  <span className="mt-0.5 block text-xs font-bold" style={{ color: palette.color }}>
                     {palette.label}
                   </span>
                 </h3>
@@ -335,32 +335,32 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
               <button
                 type="button"
                 onClick={() => setDetailOpen(false)}
-                className="rounded-lg px-2 py-1 text-[11px] font-medium opacity-70 hover:opacity-100"
+                className="rounded-lg px-2 py-1 text-xs font-medium opacity-70 hover:opacity-100"
               >
                 Cerrar
               </button>
             </div>
             {ocr.motivo && (
-              <p className="mb-2 text-[11px] font-medium" style={{ color: palette.color }}>
+              <p className="mb-2 text-xs font-medium" style={{ color: palette.color }}>
                 {ocr.motivo}
               </p>
             )}
             {(tipoDocumento || recorte) && (
-              <p className="mb-2 text-[10px] opacity-60">
+              <p className="mb-2 text-xs opacity-60">
                 {[tipoDocumento, recorte].filter(Boolean).join(' · ')}
               </p>
             )}
             {fields.length === 0 ? (
-              <p className="text-[11px] opacity-55">Sin campos adicionales detectados.</p>
+              <p className="text-xs opacity-55">Sin campos adicionales detectados.</p>
             ) : (
               <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
                 {fields.map(({ field, value }) => (
-                  <div key={field.label} className="flex items-baseline gap-1.5 text-[11px]">
+                  <div key={field.label} className="flex items-baseline gap-1.5 text-xs">
                     <dt className="shrink-0 opacity-60">{field.label}:</dt>
                     {field.kind === 'state' ? (
                       <dd>
                         <span
-                          className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                          className="rounded px-1.5 py-0.5 text-xs font-semibold"
                           style={stateChipStyle(value)}
                         >
                           {value.replace(/_/g, ' ')}
@@ -485,7 +485,7 @@ export function DocumentSlot({
           <p className="text-xs font-bold leading-snug">{item.label}</p>
           {item.obligatorio ? (
             <span
-              className="mt-0.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+              className="mt-0.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide"
               style={{
                 background: 'rgba(255,78,0,0.14)',
                 color: '#FF4E00',
@@ -496,12 +496,12 @@ export function DocumentSlot({
               Obligatorio
             </span>
           ) : (
-            <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide opacity-50">
+            <p className="mt-0.5 text-xs font-medium uppercase tracking-wide opacity-50">
               Opcional
             </p>
           )}
           {attachment && (
-            <p className="mt-1 truncate text-[11px] opacity-70">
+            <p className="mt-1 truncate text-xs opacity-70">
               {attachment.filename} · {formatSize(attachment.sizeBytes)}
             </p>
           )}
@@ -511,7 +511,7 @@ export function DocumentSlot({
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
         <span
-          className="rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
+          className="rounded-full px-2.5 py-1 text-xs font-bold text-white"
           style={{ background: done ? '#8CC63F' : '#9AA5B1' }}
         >
           {done ? 'Adjunto' : 'Sin adjuntar'}
@@ -522,7 +522,7 @@ export function DocumentSlot({
             <button
               type="button"
               onClick={() => onPreview(attachment)}
-              className="text-[11px] font-semibold"
+              className="text-xs font-semibold"
               style={{ color: '#557EFF' }}
               aria-label={`Previsualizar ${item.label}`}
             >
@@ -554,7 +554,7 @@ export function DocumentSlot({
               type="button"
               onClick={() => inputRef.current?.click()}
               disabled={busy}
-              className="text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+              className="text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
               style={{ color: '#557EFF' }}
             >
               {analyzing
@@ -570,7 +570,7 @@ export function DocumentSlot({
                 type="button"
                 onClick={() => onRemove(attachment.id)}
                 disabled={busy}
-                className="text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                className="text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ color: '#FF4E00' }}
                 aria-label={`Borrar ${item.label}`}
               >
@@ -582,7 +582,7 @@ export function DocumentSlot({
       </div>
 
       {canDefer && (
-        <label className="mt-2 flex items-start gap-2 text-[11px] cursor-pointer">
+        <label className="mt-2 flex items-start gap-2 text-xs cursor-pointer">
           <input
             type="checkbox"
             checked={deferred}
@@ -603,7 +603,7 @@ export function DocumentSlot({
 
       {localError && (
         <p
-          className="mt-1.5 text-[10px]"
+          className="mt-1.5 text-xs"
           style={{ color: '#FF4E00' }}
           role="alert"
           aria-live="polite"
@@ -737,7 +737,7 @@ export function DocumentChecklist({
         ) : (
           <div>
             <h4 className="text-sm font-bold">Documentos requeridos</h4>
-            <p className="text-[11px] opacity-60">
+            <p className="text-xs opacity-60">
               Adjunta los documentos que exige el trámite ({ALLOWED_LABEL}, máx
               20 MB).
             </p>
@@ -745,7 +745,7 @@ export function DocumentChecklist({
         )}
         {checklist && (
           <span
-            className="shrink-0 rounded-full px-3 py-1 text-[11px] font-bold"
+            className="shrink-0 rounded-full px-3 py-1 text-xs font-bold"
             style={
               checklist.completo
                 ? { background: 'rgba(140,198,63,0.15)', color: '#8CC63F' }
@@ -808,7 +808,7 @@ export function DocumentChecklist({
                   role="radio"
                   aria-checked={selected}
                   onClick={() => setUploadMode(opt.value)}
-                  className="rounded-full px-3 py-1.5 text-[11px] font-semibold border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  className="rounded-full px-3 py-1.5 text-xs font-semibold border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
                   style={
                     selected
                       ? { borderColor: '#557EFF', background: 'rgba(85,126,255,0.12)', color: '#557EFF' }
@@ -820,7 +820,7 @@ export function DocumentChecklist({
               );
             })}
           </div>
-          <p className="text-[11px] opacity-60" role="note">
+          <p className="text-xs opacity-60" role="note">
             {uploadMode === 'individual'
               ? 'Puedes cargar cada documento en su casilla, uno a uno. También puedes cambiar a Masivo para subir varios archivos juntos.'
               : 'Carga varios archivos a la vez: el sistema los clasifica y tú confirmas. Las casillas de abajo siguen disponibles por si falta alguno.'}
@@ -877,7 +877,7 @@ export function DocumentChecklist({
       )}
 
       {items.length === 0 ? (
-        <p className="text-[11px] opacity-60">
+        <p className="text-xs opacity-60">
           {state.loading
             ? 'Cargando documentos requeridos…'
             : 'Este trámite no requiere documentos.'}

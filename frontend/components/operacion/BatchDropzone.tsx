@@ -98,14 +98,14 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
           : 'Arrastra aquí para importar'}
       </p>
 
-      <p className="mt-1 text-[11px] opacity-60">
+      <p className="mt-1 text-xs opacity-60">
         {busy
           ? 'Estamos identificando qué documento hay en cada página. Puede tardar un momento.'
           : `O selecciona archivos, una carpeta o un .zip. Repartimos cada documento en su casilla y te lo mostramos antes de adjuntarlo. Máx ${BATCH_MAX_FILES} archivos · ${BATCH_MAX_TOTAL_BYTES / (1024 * 1024)} MB.`}
       </p>
 
       {descartados > 0 && !busy && (
-        <p className="mt-1 text-[11px] font-medium" style={{ color: '#C23B22' }} role="alert">
+        <p className="mt-1 text-xs font-medium" style={{ color: '#C23B22' }} role="alert">
           {descartados === 1
             ? 'Ese archivo no es de un tipo que podamos leer. Admitimos PDF, JPG, PNG o .zip.'
             : `Ninguno de los ${descartados} archivos es de un tipo que podamos leer. Admitimos PDF, JPG, PNG o .zip.`}
@@ -138,7 +138,7 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
           type="button"
           onClick={() => filesRef.current?.click()}
           disabled={inactivo}
-          className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
           style={{ borderColor: '#557EFF', color: '#557EFF' }}
         >
           <Upload className="h-3.5 w-3.5" aria-hidden="true" />
@@ -149,7 +149,7 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
           type="button"
           onClick={() => folderRef.current?.click()}
           disabled={inactivo}
-          className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
           style={{ borderColor: '#557EFF', color: '#557EFF' }}
         >
           <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />

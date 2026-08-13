@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useId, useState } from 'react';
-import { ChevronDown, UserCheck } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { UserCheck } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { WizardAccordion } from './WizardAccordion';
 import { formatFecha } from '@/lib/format/date';
 import type { MandateSignerSelection } from '@/lib/api/types/procedure-runtime';
 
@@ -33,7 +34,6 @@ export function MandatarioSection({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(defaultOpen);
-  const panelId = useId();
 
   const load = useCallback(async () => {
     try {
@@ -105,24 +105,24 @@ export function MandatarioSection({
                   <UserCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   {o.nombre}
                 </span>
-                <span className="block text-[11px] opacity-70">
+                <span className="block text-xs opacity-70">
                   {o.tipoDocumento} {o.documento}
                 </span>
                 {o.firmaFisica ? (
-                  <span className="block text-[11px]" style={{ color: '#5B8A1F' }}>
+                  <span className="block text-xs" style={{ color: '#5B8A1F' }}>
                     Firma de forma física
                   </span>
                 ) : o.firmaBaulVigente ? (
-                  <span className="block text-[11px]" style={{ color: '#5B8A1F' }}>
+                  <span className="block text-xs" style={{ color: '#5B8A1F' }}>
                     Firma del baúl vigente
                   </span>
                 ) : o.identidadVigente ? (
-                  <span className="block text-[11px]" style={{ color: '#5B8A1F' }}>
+                  <span className="block text-xs" style={{ color: '#5B8A1F' }}>
                     Identidad vigente
                     {o.identidadHasta ? ` hasta el ${formatFecha(o.identidadHasta)}` : ''}
                   </span>
                 ) : (
-                  <span className="block text-[11px]" style={{ color: '#F9AC00' }}>
+                  <span className="block text-xs" style={{ color: '#F9AC00' }}>
                     Sin firma del baúl ni identidad vigentes. Puedes dejar el trámite marcado para
                     firmar más adelante.
                   </span>
@@ -134,7 +134,7 @@ export function MandatarioSection({
       </div>
 
       {error ? (
-        <p className="text-[11px] leading-tight" style={{ color: '#E5484D' }} role="alert">
+        <p className="text-xs leading-tight" style={{ color: '#E5484D' }} role="alert">
           {error}
         </p>
       ) : null}
@@ -151,41 +151,15 @@ export function MandatarioSection({
   }
 
   return (
-    <div
-      className="overflow-hidden rounded-xl border bg-white dark:bg-[#0B0F14]"
-      style={{ borderColor: BORDER }}
-      data-testid="mandatario-section"
+    <WizardAccordion
+      title="Mandatario"
+      regionLabel="Mandatario que firma"
+      open={open}
+      onOpenChange={setOpen}
+      icon={<span className="h-4 w-1 shrink-0 rounded-full" style={{ background: BLUE }} aria-hidden="true" />}
+      testId="mandatario-section"
     >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
-        aria-expanded={open}
-        aria-controls={panelId}
-      >
-        <span className="flex items-center gap-2">
-          <span className="h-4 w-1 rounded-full" style={{ background: BLUE }} aria-hidden="true" />
-          <span className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: BLUE }}>
-            Mandatario
-          </span>
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-          style={{ color: '#9AA5B1' }}
-          aria-hidden
-        />
-      </button>
-      {open ? (
-        <div
-          id={panelId}
-          className="border-t px-4 py-3"
-          style={{ borderColor: BORDER }}
-          role="region"
-          aria-label="Mandatario que firma"
-        >
-          {body}
-        </div>
-      ) : null}
-    </div>
+      {body}
+    </WizardAccordion>
   );
 }

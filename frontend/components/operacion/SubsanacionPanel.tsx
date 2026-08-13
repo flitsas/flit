@@ -170,7 +170,7 @@ export function SubsanacionPanel({
       </div>
 
       <div>
-        <p className="text-[10px] font-semibold uppercase opacity-60 mb-2">
+        <p className="text-xs font-semibold uppercase opacity-60 mb-2">
           Checklist de ítems a subsanar
         </p>
         {hasChecklist ? (
@@ -267,16 +267,16 @@ export function SubsanacionPanel({
       </div>
 
       {hasUnsavedChanges ? (
-        <p className="text-[11px] opacity-70">
+        <p className="text-xs opacity-70">
           Hay cambios sin guardar. Usa Guardar y continuar; después podrás re-radicar.
         </p>
       ) : !canReradicar ? (
-        <p className="text-[11px] opacity-70">
+        <p className="text-xs opacity-70">
           Edita lo necesario y pulsa Guardar y continuar para habilitar Re-radicar. Si no hace falta
           corregir, usa Cancelar.
         </p>
       ) : (
-        <p className="text-[11px] opacity-70" role="status">
+        <p className="text-xs opacity-70" role="status">
           Cambios guardados. Ya puedes re-radicar.
         </p>
       )}

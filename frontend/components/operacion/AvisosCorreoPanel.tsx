@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { WizardAccordion } from './WizardAccordion';
 import type { NotificationDispatchItem } from '@/lib/api/types/procedure-runtime';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -54,87 +55,53 @@ export function AvisosCorreoPanel({ instanceId }: { instanceId: string | null })
   if (!instanceId) return null;
 
   return (
-    <section
-      style={{
-        margin: '8px auto 24px',
-        maxWidth: 960,
-        padding: '0 16px',
-      }}
+    // Acordeón compartido del wizard. En modo CONTROLADO: `open` sigue viviendo aquí porque el
+    // efecto de carga en diferido depende de él (los avisos se piden al abrir, no al montar).
+    <WizardAccordion
+      title="Avisos de correo"
+      regionLabel="Avisos de correo del trámite"
+      open={open}
+      onOpenChange={setOpen}
     >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          color: '#475569',
-          fontSize: 13,
-          fontWeight: 600,
-          cursor: 'pointer',
-          padding: 0,
-        }}
-      >
-        {open ? '▾' : '▸'} Avisos de correo
-      </button>
-
-      {open ? (
-        <div
-          style={{
-            marginTop: 12,
-            background: '#fff',
-            border: '1px solid #e2e8f0',
-            borderRadius: 12,
-            padding: 16,
-          }}
-          role="region"
-          aria-label="Avisos de correo del trámite"
-        >
-          {loading && !items ? (
-            <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>Cargando avisos…</p>
-          ) : error ? (
-            <p style={{ margin: 0, fontSize: 13, color: '#FF4E00' }} role="alert">
-              {error}
-            </p>
-          ) : !items || items.length === 0 ? (
-            <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>
-              Este trámite aún no tiene avisos de correo registrados.
-            </p>
-          ) : (
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {items.map((item) => (
-                <li
-                  key={item.id}
-                  style={{
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 10,
-                    padding: '10px 12px',
-                    fontSize: 13,
-                    color: '#162744',
-                  }}
-                >
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' }}>
-                    <strong>
-                      {item.recipientRole} · {KIND_LABEL[item.recipientKind] ?? item.recipientKind}
-                    </strong>
-                    <span style={{ fontWeight: 600, color: statusColor(item.status) }}>
-                      {STATUS_LABEL[item.status] ?? item.status}
-                    </span>
-                  </div>
-                  <div style={{ marginTop: 4, color: '#475569' }}>
-                    {item.recipientName ? `${item.recipientName} · ` : null}
-                    {item.recipientMasked ?? 'Sin correo'}
-                  </div>
-                  {item.failureReason ? (
-                    <div style={{ marginTop: 4, color: '#B45309' }}>{item.failureReason}</div>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ) : null}
-    </section>
+      {loading && !items ? (
+        <p className="text-xs opacity-70">Cargando avisos…</p>
+      ) : error ? (
+        <p className="text-xs" style={{ color: '#FF4E00' }} role="alert">
+          {error}
+        </p>
+      ) : !items || items.length === 0 ? (
+        <p className="text-xs opacity-70">
+          Este trámite aún no tiene avisos de correo registrados.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-2.5">
+          {items.map((item) => (
+            <li
+              key={item.id}
+              className="rounded-xl border px-3 py-2.5 text-xs text-[#162744] dark:text-white/85"
+            >
+              <div className="flex flex-wrap justify-between gap-2">
+                <strong>
+                  {item.recipientRole} · {KIND_LABEL[item.recipientKind] ?? item.recipientKind}
+                </strong>
+                <span className="font-semibold" style={{ color: statusColor(item.status) }}>
+                  {STATUS_LABEL[item.status] ?? item.status}
+                </span>
+              </div>
+              <div className="mt-1 opacity-70">
+                {item.recipientName ? `${item.recipientName} · ` : null}
+                {item.recipientMasked ?? 'Sin correo'}
+              </div>
+              {item.failureReason ? (
+                <div className="mt-1" style={{ color: '#B45309' }}>
+                  {item.failureReason}
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </WizardAccordion>
   );
 }
 

@@ -121,7 +121,7 @@ export function PrendaDocumentUpload({
     <div className="space-y-2" aria-label="Documento de soporte de prenda">
       <p className="text-xs font-semibold">Documento de soporte</p>
       {error && (
-        <p className="text-[11px]" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs" style={{ color: '#FF4E00' }} role="alert">
           {error}
         </p>
       )}

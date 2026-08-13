@@ -3,9 +3,9 @@
 import { useMemo, useState } from 'react';
 import { Building2, Search, X } from 'lucide-react';
 import type { TransitOfficeOption } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_INPUT } from './wizard-field-styles';
 
-const INPUT_BASE =
-  'w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] dark:bg-[#0B0F14]';
+const INPUT_BASE = WIZARD_INPUT;
 
 /**
  * Selector de organismo/secretaría con buscador interno (mismo patrón del modal del paso FUR).
@@ -58,7 +58,7 @@ export function TransitOfficeSearchPicker({
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-semibold"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold"
             style={{ borderColor: '#557EFF', color: '#557EFF' }}
             aria-label={
               selected ? 'Cambiar secretaría de tránsito' : 'Seleccionar secretaría de tránsito'
@@ -79,7 +79,7 @@ export function TransitOfficeSearchPicker({
             <p className="truncate text-xs font-semibold" style={{ color: '#162744' }}>
               {selected.name}
             </p>
-            <p className="truncate text-[11px] opacity-70">
+            <p className="truncate text-xs opacity-70">
               {[selected.cityCode, selected.code].filter(Boolean).join(' · ')}
             </p>
           </div>
@@ -105,7 +105,7 @@ export function TransitOfficeSearchPicker({
             <div className="mb-3 flex items-start justify-between">
               <div>
                 <h3 className="text-sm font-bold">Secretaría de tránsito</h3>
-                <p className="text-[11px] opacity-70">
+                <p className="text-xs opacity-70">
                   Busca y elige dónde se radicará el trámite.
                 </p>
               </div>
@@ -146,25 +146,25 @@ export function TransitOfficeSearchPicker({
                     className="w-full rounded-xl border p-2.5 text-left hover:border-[#557EFF]"
                   >
                     <p className="text-xs font-semibold">{o.name}</p>
-                    <p className="text-[11px] opacity-70">
+                    <p className="text-xs opacity-70">
                       {[o.code, o.cityCode].filter(Boolean).join(' · ')}
                     </p>
                   </button>
                 </li>
               ))}
               {loading && (
-                <li className="py-3 text-center text-[11px] opacity-60">
+                <li className="py-3 text-center text-xs opacity-60">
                   Cargando organismos habilitados…
                 </li>
               )}
               {!loading && offices.length === 0 && (
-                <li className="py-3 text-center text-[11px]" style={{ color: '#F9AC00' }}>
+                <li className="py-3 text-center text-xs" style={{ color: '#F9AC00' }}>
                   Tu compañía no tiene organismos de tránsito habilitados. Contacta al
                   administrador para habilitarlos.
                 </li>
               )}
               {!loading && offices.length > 0 && results.length === 0 && (
-                <li className="py-3 text-center text-[11px] opacity-60">
+                <li className="py-3 text-center text-xs opacity-60">
                   Sin resultados para «{query}».
                 </li>
               )}

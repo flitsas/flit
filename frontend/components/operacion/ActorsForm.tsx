@@ -39,6 +39,7 @@ import type {
   RuesPersonLookupResult,
   RuntPersonLookupResult,
 } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_INPUT } from './wizard-field-styles';
 
 export type ActorsModalidad = 'matricula_inicial' | 'traspaso';
 
@@ -241,8 +242,7 @@ function normalizeActors(actors: ProcedureActor[]): ProcedureActor[] {
   });
 }
 
-const INPUT_BASE =
-  'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF] aria-[invalid=true]:border-[#FF4E00]';
+const INPUT_BASE = WIZARD_INPUT;
 
 const GRADIENT = 'linear-gradient(135deg,#557EFF,#00DBD5)';
 
@@ -1239,7 +1239,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     <div className="flex items-center justify-between gap-3 mt-4">
       {state.saved ? (
         <span
-          className="text-[11px] font-semibold"
+          className="text-xs font-semibold"
           style={{ color: OK_FG }}
           role="status"
           aria-live="polite"
@@ -1298,7 +1298,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           })}
         </div>
         {current === 'natural' && (
-          <p className="text-[10px] mt-1 opacity-60">
+          <p className="text-xs mt-1 opacity-60">
             La cédula se toma de la validación de identidad; no se carga manualmente.
           </p>
         )}
@@ -1587,7 +1587,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     if (runtState.status === 'not_found') {
       return (
         <div
-          className="rounded-xl p-3 text-[11px] border"
+          className="rounded-xl p-3 text-xs border"
           style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
           role="alert"
           aria-live="polite"
@@ -1617,7 +1617,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     ) {
       return (
         <div
-          className="rounded-xl p-3 text-[11px] border opacity-90"
+          className="rounded-xl p-3 text-xs border opacity-90"
           style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)', color: '#162744' }}
           role="status"
           aria-live="polite"
@@ -1665,11 +1665,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             Representante legal y/o apoderado
           </p>
           {isPreloaded ? (
-            <p className="text-[10px] mt-0.5" style={{ color: INLINE_ALERT_TONES.info.color }}>
+            <p className="text-xs mt-0.5" style={{ color: INLINE_ALERT_TONES.info.color }}>
               Datos precargados desde el directorio / RUES. Puedes editarlos si es necesario.
             </p>
           ) : (
-            <p className="text-[10px] opacity-60">
+            <p className="text-xs opacity-60">
               Persona natural que representa a la empresa. Puedes consultarla en el RUNT o registrarla
               manualmente.
             </p>
@@ -1720,7 +1720,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   type="button"
                   onClick={() => void handleRlLookup(index)}
                   disabled={rlState.status === 'loading' || !(rl.numeroDocumento ?? '').trim() || !instanceId}
-                  className="shrink-0 rounded-xl px-3 py-1.5 text-[11px] font-semibold border disabled:opacity-50"
+                  className="shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold border disabled:opacity-50"
                   style={{ borderColor: '#557EFF', color: '#557EFF' }}
                 >
                   {rlState.status === 'loading' ? 'Consultando…' : 'Consultar RUNT'}
@@ -1731,7 +1731,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   type="button"
                   onClick={() => void handleRlLookup(index)}
                   disabled={rlState.status === 'loading' || !(rl.numeroDocumento ?? '').trim() || !instanceId}
-                  className="shrink-0 rounded-xl px-3 py-1.5 text-[11px] font-semibold border disabled:opacity-50 opacity-60"
+                  className="shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold border disabled:opacity-50 opacity-60"
                   style={{ borderColor: '#9AA5B1', color: '#9AA5B1' }}
                   title="Datos ya precargados. Consulta RUNT solo si necesitas actualizar."
                 >
@@ -1740,17 +1740,17 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               )}
             </div>
             {rlState.status === 'found' && (
-              <p className="text-[10px] mt-1" style={{ color: INLINE_ALERT_TONES.info.color }}>
+              <p className="text-xs mt-1" style={{ color: INLINE_ALERT_TONES.info.color }}>
                 Representante encontrado en RUNT.
               </p>
             )}
             {rlState.status === 'not_found' && (
-              <p className="text-[10px] mt-1 opacity-70">
+              <p className="text-xs mt-1 opacity-70">
                 No se encontró en RUNT — completa los datos manualmente.
               </p>
             )}
             {rlState.status === 'error' && (
-              <p className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
+              <p className="text-xs mt-1" style={{ color: '#FF4E00' }}>
                 No se pudo consultar RUNT. Puedes registrarlo manualmente.
               </p>
             )}
@@ -1783,7 +1783,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               aria-invalid={!!rlErrors.representanteLegal}
             />
             {rlErrors.representanteLegal && (
-              <p className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
+              <p className="text-xs mt-1" style={{ color: '#FF4E00' }}>
                 {rlErrors.representanteLegal}
               </p>
             )}
@@ -1830,7 +1830,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           onChange={(e) => setIssueDates((prev) => ({ ...prev, [index]: e.target.value }))}
           className={INPUT_BASE}
         />
-        <p className="text-[10px] mt-1 opacity-60">
+        <p className="text-xs mt-1 opacity-60">
           Requerida para la consulta RNMC (medidas correctivas) cuando el organismo de tránsito la
           exige.
         </p>
@@ -1849,7 +1849,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const c = contactLookup[index] ?? { status: 'idle' };
     if (c.status === 'loading') {
       return (
-        <p className="text-[10px] opacity-70" role="status" aria-live="polite">
+        <p className="text-xs opacity-70" role="status" aria-live="polite">
           Buscando datos de contacto conocidos de esta persona…
         </p>
       );
@@ -1857,7 +1857,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     if (c.status === 'found') {
       return (
         <p
-          className="text-[10px]"
+          className="text-xs"
           style={{ color: INLINE_ALERT_TONES.info.color }}
           role="status"
           aria-live="polite"
@@ -1869,7 +1869,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     }
     if (c.status === 'error') {
       return (
-        <p className="text-[10px] opacity-70" role="status" aria-live="polite">
+        <p className="text-xs opacity-70" role="status" aria-live="polite">
           No se pudo precargar el contacto conocido — completa los datos manualmente.
         </p>
       );
@@ -1902,7 +1902,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         <section className="rounded-2xl border bg-white dark:bg-[#0B0F14] overflow-hidden">
           <div className={sectionHeader} style={{ background: 'rgba(85,126,255,0.04)' }}>
             <UserRound className="h-4 w-4" style={{ color: '#557EFF' }} />
-            <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#162744' }}>
+            <span className="text-xs font-bold uppercase tracking-wide" style={{ color: '#162744' }}>
               {`Identificación · ${ROL_LABEL[actor.rol]}`}
             </span>
           </div>
@@ -1931,7 +1931,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   style={docLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
                 />
                 {errors.numeroDocumento && (
-                  <p id="comprador-numeroDoc-err" className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
+                  <p id="comprador-numeroDoc-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
                     {errors.numeroDocumento}
                   </p>
                 )}
@@ -1962,7 +1962,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         {/* Sección B — Datos de contacto */}
         <section className="rounded-2xl border bg-white dark:bg-[#0B0F14]">
           <div className="border-b px-4 py-3 flex flex-col gap-1" style={{ background: 'rgba(85,126,255,0.04)' }}>
-            <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#162744' }}>
+            <span className="text-xs font-bold uppercase tracking-wide" style={{ color: '#162744' }}>
               Datos de contacto
             </span>
             {contactLookupHint(0)}
@@ -1986,7 +1986,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 style={razonLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
               />
               {errors.nombreCompleto && (
-                <p id="comprador-nombre-err" className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
+                <p id="comprador-nombre-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
                   {errors.nombreCompleto}
                 </p>
               )}
@@ -2025,7 +2025,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 className={INPUT_BASE}
               />
               {errors.email && (
-                <p id="comprador-email-err" className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
+                <p id="comprador-email-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
                   {errors.email}
                 </p>
               )}
@@ -2122,7 +2122,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         {isJuridical(actor) && (
           <section className="rounded-2xl border bg-white dark:bg-[#0B0F14] overflow-hidden">
             <div className={sectionHeader} style={{ background: 'rgba(85,126,255,0.04)' }}>
-              <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#162744' }}>
+              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: '#162744' }}>
                 Representante legal
               </span>
             </div>
@@ -2159,7 +2159,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       {!embeddedInWizard && (
         <div className="mb-3">
           <h4 className="text-sm font-bold">Actores del trámite</h4>
-          <p className="text-[11px] opacity-60">
+          <p className="text-xs opacity-60">
             {modalidad === 'matricula_inicial'
               ? 'Registra los datos del comprador (propietario inicial).'
               : 'Registra los datos del vendedor y del comprador.'}
@@ -2239,7 +2239,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     style={docLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
                   />
                   {errors.numeroDocumento && (
-                    <p id={`${prefix}-numeroDoc-err`} className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
+                    <p id={`${prefix}-numeroDoc-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
                       {errors.numeroDocumento}
                     </p>
                   )}
@@ -2249,7 +2249,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       type="button"
                       onClick={() => void handleIdentityLookup(index)}
                       disabled={runtState.status === 'loading' || !actor.numeroDocumento.trim() || !instanceId}
-                      className="mt-2 px-3 py-1.5 rounded-xl text-[11px] font-semibold border disabled:opacity-50"
+                      className="mt-2 px-3 py-1.5 rounded-xl text-xs font-semibold border disabled:opacity-50"
                       style={{ borderColor: '#557EFF', color: '#557EFF' }}
                     >
                       {runtState.status === 'loading'
@@ -2284,7 +2284,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     style={razonLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
                   />
                   {errors.nombreCompleto && (
-                    <p id={`${prefix}-nombre-err`} className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
+                    <p id={`${prefix}-nombre-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
                       {errors.nombreCompleto}
                     </p>
                   )}
@@ -2309,7 +2309,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     className={INPUT_BASE}
                   />
                   {errors.email && (
-                    <p id={`${prefix}-email-err`} className="text-[10px] mt-1" style={{ color: '#FF4E00' }}>
+                    <p id={`${prefix}-email-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
                       {errors.email}
                     </p>
                   )}

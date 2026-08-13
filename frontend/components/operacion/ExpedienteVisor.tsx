@@ -1,7 +1,7 @@
 'use client';
 
-import { useId, useState, type ReactNode } from 'react';
-import { ChevronDown, Download, FileText } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { Download, FileText } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
   openLoadingDocumentTab,
@@ -9,6 +9,7 @@ import {
   showDocumentTabError,
 } from '@/lib/documents/open-document-tab';
 import { documentLabel } from '@/lib/tramites/document-labels';
+import { WizardAccordion } from './WizardAccordion';
 import type {
   InstanceStatus,
   ProcedureAttachment,
@@ -48,44 +49,16 @@ function ExpedienteDisclosure({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const panelId = useId();
 
   return (
-    <div
-      className="overflow-hidden rounded-xl border bg-white dark:bg-[#0B0F14]"
-      style={{ borderColor: BORDER }}
+    <WizardAccordion
+      title={title}
+      open={open}
+      onOpenChange={setOpen}
+      icon={<span className="h-4 w-1 shrink-0 rounded-full" style={{ background: BLUE }} aria-hidden="true" />}
     >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
-        aria-expanded={open}
-        aria-controls={panelId}
-      >
-        <span className="flex items-center gap-2">
-          <span className="h-4 w-1 rounded-full" style={{ background: BLUE }} aria-hidden="true" />
-          <span className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: BLUE }}>
-            {title}
-          </span>
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-          style={{ color: '#9AA5B1' }}
-          aria-hidden
-        />
-      </button>
-      {open ? (
-        <div
-          id={panelId}
-          className="border-t px-4 py-4"
-          style={{ borderColor: BORDER }}
-          role="region"
-          aria-label={title}
-        >
-          {children}
-        </div>
-      ) : null}
-    </div>
+      {children}
+    </WizardAccordion>
   );
 }
 
@@ -309,7 +282,7 @@ function DocumentosSection({
           ))}
         </ul>
       ) : (
-        <p className="text-[11px] opacity-60">No se han cargado documentos.</p>
+        <p className="text-xs opacity-60">No se han cargado documentos.</p>
       )}
 
       <div className="mt-4 space-y-3 border-t pt-4" style={{ borderColor: BORDER }}>
@@ -317,7 +290,7 @@ function DocumentosSection({
           <h5 className="text-xs font-bold" style={{ color: '#162744' }}>
             Expediente consolidado
           </h5>
-          <p className="mt-1 text-[11px] opacity-70">
+          <p className="mt-1 text-xs opacity-70">
             Un solo PDF con el FUR, el certificado de identidad, la impronta y los documentos
             cargados en el trámite
             {modalidad === 'traspaso' ? ' (incluye el contrato de compraventa)' : ''}. Al generarlo se
@@ -337,7 +310,7 @@ function DocumentosSection({
         )}
 
         {estadoFinal ? (
-          <p className="text-[11px] font-medium" style={{ color: '#557EFF' }} role="status">
+          <p className="text-xs font-medium" style={{ color: '#557EFF' }} role="status">
             El trámite ya está {status === 'aprobado' ? 'aprobado' : 'anulado'}: su documentación es
             definitiva. Puedes consultarla y descargarla.
           </p>
@@ -403,7 +376,7 @@ function DocRow({
           ) : null}
         </p>
         {d.sha256 ? (
-          <p className="mt-0.5 truncate font-mono text-[10px] opacity-45" title={d.sha256}>
+          <p className="mt-0.5 truncate font-mono text-xs opacity-45" title={d.sha256}>
             SHA-256 {d.sha256}
           </p>
         ) : null}
@@ -411,7 +384,7 @@ function DocRow({
       <button
         type="button"
         disabled={!instanceId || busy}
-        className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-[11px] font-semibold text-white disabled:opacity-50"
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
         style={{ background: BLUE }}
         aria-label={`Ver ${filename || label}`}
         onClick={async () => {

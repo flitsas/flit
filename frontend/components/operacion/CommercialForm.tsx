@@ -10,6 +10,7 @@ import type {
   CommercialCausal,
   CommercialData,
 } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_INPUT, WIZARD_CARD } from './wizard-field-styles';
 
 /** Handle imperativo: la shell del wizard dispara guardar+validar. */
 export type CommercialFormHandle = WizardStepFormHandle;
@@ -37,8 +38,7 @@ const CAUSAL_OPTIONS: { value: CommercialCausal; label: string }[] = [
   { value: 'ADJUDICACION', label: 'Adjudicación' },
 ];
 
-const INPUT_BASE =
-  'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF] aria-[invalid=true]:border-[#FF4E00]';
+const INPUT_BASE = WIZARD_INPUT;
 
 const EMPTY: CommercialData = {
   valorVenta: null,
@@ -146,14 +146,14 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
+      className={WIZARD_CARD}
       aria-label="Datos comerciales del trámite"
       noValidate
     >
       {!hideHeader && (
         <div className="mb-3">
           <h4 className="text-sm font-bold">Datos comerciales</h4>
-          <p className="text-[11px] opacity-60">
+          <p className="text-xs opacity-60">
             Valor de la venta, causal e impuestos del traspaso.
           </p>
         </div>
@@ -320,7 +320,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
         <div className="flex items-center justify-between gap-3 mt-4">
           {saved ? (
             <span
-              className="text-[11px] font-semibold"
+              className="text-xs font-semibold"
               style={{ color: '#8CC63F' }}
               role="status"
               aria-live="polite"
@@ -328,7 +328,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
               Datos comerciales guardados ✓
             </span>
           ) : (
-            <span className="text-[11px] opacity-50">
+            <span className="text-xs opacity-50">
               {loading ? 'Cargando…' : ''}
             </span>
           )}
