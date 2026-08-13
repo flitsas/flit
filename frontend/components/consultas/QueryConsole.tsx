@@ -490,7 +490,7 @@ export function QueryConsole<TRow>({
     <div className="flex flex-col gap-6 lg:flex-row" data-testid={rootTestId ?? `${prefix}-tab`}>
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         <Section
-          title="Qué quiere ver"
+          title="Qué quieres ver"
           testId={`${prefix}-filtros-seccion`}
           hint="Los filtros se combinan con «y». Dentro de un mismo campo, varios valores se combinan con «o» — por eso una lista de placas funciona pegándola tal cual."
         >
@@ -663,7 +663,7 @@ export function QueryConsole<TRow>({
             <Empty>
               {busy
                 ? "Consultando…"
-                : `Ningún ${singular} cumple estos filtros. Quite alguna ficha o amplíe el periodo.`}
+                : `Ningún ${singular} cumple estos filtros. Quita alguna ficha o amplía el periodo.`}
             </Empty>
           ) : (
             <>
