@@ -346,10 +346,11 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     expect(fecha.value).toBe(`${yyyy}-${mm}-${dd}`);
     expect(fecha).toBeDisabled();
     expect(fecha).toHaveAttribute('readonly');
-    // Debe ir antes del bloque Vehículo (visible al inicio).
-    const vehiculoBtn = within(resumen).getByRole('button', { name: /Vehículo/i });
+    // Debe ir antes del bloque Vehículo (visible al inicio). Vehículo ya no es un acordeón
+    // (rediseño: tarjeta siempre abierta), así que se ubica por su región, no por su botón.
+    const vehiculoRegion = within(resumen).getByRole('region', { name: /Vehículo/i });
     expect(
-      fecha.compareDocumentPosition(vehiculoBtn) & Node.DOCUMENT_POSITION_FOLLOWING,
+      fecha.compareDocumentPosition(vehiculoRegion) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     await waitFor(() =>
       expect(mocks.patchFieldValues).toHaveBeenCalledWith(
@@ -641,7 +642,8 @@ describe('FirmaFurStep — resumen / expediente', () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
     const resumen = await screen.findByRole('region', { name: 'Resumen del trámite' });
     const visor = await screen.findByRole('region', { name: 'Expediente digital' });
-    expect(within(resumen).getByRole('button', { name: 'Vehículo' })).toBeInTheDocument();
+    // Vehículo ya no es un acordeón (rediseño: tarjeta siempre abierta).
+    expect(within(resumen).getByRole('region', { name: 'Vehículo' })).toBeInTheDocument();
     expect(within(visor).getByRole('button', { name: 'Documentos' })).toBeInTheDocument();
     expect(within(visor).getByText('No se han cargado documentos.')).toBeInTheDocument();
     expect(within(visor).queryByRole('button', { name: 'Vehículo' })).toBeNull();
@@ -661,8 +663,9 @@ describe('FirmaFurStep — resumen / expediente', () => {
     const resumen = await screen.findByRole('region', { name: 'Resumen del trámite' });
     const visor = await screen.findByRole('region', { name: 'Expediente digital' });
 
-    expect(within(resumen).getByRole('button', { name: 'Vendedor' })).toBeInTheDocument();
-    expect(within(resumen).getByRole('button', { name: 'Comprador' })).toBeInTheDocument();
+    // Vendedor/Comprador ya no son acordeones (rediseño: tarjetas siempre abiertas en dos columnas).
+    expect(within(resumen).getByRole('region', { name: 'Vendedor' })).toBeInTheDocument();
+    expect(within(resumen).getByRole('region', { name: 'Comprador' })).toBeInTheDocument();
     expect(within(resumen).getByText('Ana Vendedora')).toBeInTheDocument();
     expect(within(resumen).getByText('Beto Comprador')).toBeInTheDocument();
     expect(await within(resumen).findByRole('group', { name: 'Biométrica Vendedor' })).toBeInTheDocument();

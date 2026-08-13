@@ -93,6 +93,7 @@ import { WizardModal } from './WizardModal';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
+import { InlineAlert } from '@/components/atom/InlineAlert';
 
 /**
  * El wizard es server-driven: una vez creada la instancia, GET /wizard decide
@@ -1343,23 +1344,17 @@ export function TramiteWizard(props: Props) {
 
           {/* Bloqueos de envío traducidos (en el paso de decisión). */}
           {isDecisionStep && blockers.length > 0 && (
-            <div
-              className="mt-6 rounded-xl border p-3 text-xs"
-              style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)' }}
-              role="status"
-              aria-live="polite"
+            <InlineAlert
+              tone="error"
+              title="Requisitos pendientes antes del envío"
+              className="mt-6"
             >
-              <p className="mb-1 font-semibold" style={{ color: 'var(--badge-warning-fg)' }}>
-                Antes de enviar, resuelve:
-              </p>
               <ul className="space-y-0.5" aria-label="Bloqueos de envío">
                 {blockers.map((b) => (
-                  <li key={b} style={{ color: 'var(--badge-warning-fg)' }}>
-                    • {blockerCopy(b)}
-                  </li>
+                  <li key={b}>• {blockerCopy(b)}</li>
                 ))}
               </ul>
-            </div>
+            </InlineAlert>
           )}
         </div>
 

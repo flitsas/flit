@@ -9,6 +9,7 @@ import {
   showDocumentTabError,
 } from '@/lib/documents/open-document-tab';
 import { documentLabel } from '@/lib/tramites/document-labels';
+import { StatusBadge } from '@/components/atom/StatusBadge';
 import { WizardAccordion } from './WizardAccordion';
 import { WizardCardHeader } from './wizard-atoms';
 import type {
@@ -277,7 +278,12 @@ function DocumentosSection({
   return (
     <ExpedienteDisclosure title="Documentos">
       {attachments.length > 0 ? (
-        <ul className="space-y-2.5" aria-label="Documentos del expediente (visor)">
+        // Rejilla (propuesta, «Documentos cargados»): sigue siendo una lista semántica, la rejilla es
+        // solo el `className` — `<ul>`/`<li>` no cambian.
+        <ul
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+          aria-label="Documentos del expediente (visor)"
+        >
           {attachments.map((a) => (
             <DocRow key={a.id} instanceId={instanceId} attachment={a} />
           ))}
@@ -355,32 +361,40 @@ function DocRow({
   const [busy, setBusy] = useState(false);
   const label = documentLabel(d.tipo) || d.filename || d.tipo || 'Documento';
   const filename = d.filename?.trim() || '';
+  // Truncado a 24 caracteres con elipsis (propuesta): la rejilla es un vistazo, no el detalle
+  // forense. El hash completo sigue disponible en el `title` (tooltip nativo).
+  const shaShort = d.sha256 && d.sha256.length > 24 ? `${d.sha256.slice(0, 24)}…` : d.sha256;
 
   return (
     <li
-      className="flex items-center gap-3 rounded-2xl border bg-white px-4 py-3 dark:bg-[#162744]"
+      className="flex flex-col gap-3 rounded-2xl border bg-white p-4 dark:bg-[#162744]"
       style={{ borderColor: BORDER }}
     >
-      <FileText className="h-5 w-5 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs">
-          <span className="font-semibold" style={{ color: '#162744' }}>
-            {label}
-          </span>
-          {filename ? (
-            <span className="font-normal opacity-55"> · {filename}</span>
-          ) : null}
+      <div className="flex items-start justify-between gap-2">
+        <FileText className="h-5 w-5 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
+        {/* Todo documento de esta lista ya se generó/cargó con éxito —si no, no estaría en el
+            expediente—: el badge afirma ese hecho, no simula un estado variable que este dato no
+            tiene (a diferencia del OCR pendiente/erróneo de la carga, que es otra pantalla). */}
+        <StatusBadge label="Cargado" tone="success" />
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-xs font-semibold" style={{ color: '#162744' }} title={label}>
+          {label}
         </p>
+        {filename ? <p className="truncate text-xs opacity-70">{filename}</p> : null}
         {d.sha256 ? (
-          <p className="mt-0.5 truncate font-mono text-xs opacity-45" title={d.sha256}>
-            SHA-256 {d.sha256}
+          <p className="mt-1 truncate font-mono text-xs opacity-70" title={d.sha256}>
+            SHA-256 {shaShort}
           </p>
         ) : null}
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: '#EEF5FF' }} aria-hidden="true">
+        <div className="h-full w-full rounded-full" style={{ background: '#8CC63F' }} />
       </div>
       <button
         type="button"
         disabled={!instanceId || busy}
-        className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+        className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
         style={{ background: BLUE }}
         aria-label={`Ver ${filename || label}`}
         onClick={async () => {

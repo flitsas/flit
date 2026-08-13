@@ -23,7 +23,6 @@ import { prendaDocLabelFor, prendaDocTipoFor } from './prenda-document-tipos';
 import { summarizeDeclaredTransformations } from './VehicleTransformationsCard';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { StatusBadge } from '@/components/atom/StatusBadge';
-import { WizardAccordion } from './WizardAccordion';
 import { WizardCardHeader } from './wizard-atoms';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import type {
@@ -125,6 +124,29 @@ function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: b
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * Ficha informativa del organismo de tránsito ya resuelto (paso 1, HU #11199, o RUNT en traspaso).
+ * Solo lectura: no repite el buscador ni el modal de selección —eso ya se resolvió antes de llegar
+ * aquí— por eso NO es una región nombrada «Organismo de tránsito»: ese landmark identificaba al
+ * selector editable que se retiró (B11/HU #10659, AC4/HU #11199) y varios tests fijan a propósito
+ * que ya no vuelva a aparecer. Esta es solo la nota de contexto junto a la preasignación de placa,
+ * como en la propuesta («Organismo de tránsito y preasignación de placa», Step5).
+ */
+function OrganismoInfoCard({ name }: { name: string }) {
+  return (
+    <div className={WIZARD_CARD}>
+      <WizardCardHeader title="Organismo de tránsito" level="h4" className="mb-2" />
+      <p className="text-sm font-semibold" style={{ color: '#162744' }}>
+        {name || 'Sin seleccionar'}
+      </p>
+      {/* El gestor solo llega a este paso con un OT que ya pasó la re-confirmación contra grants y
+          catálogo (HU #11199): el convenio activo y la radicación electrónica son una garantía del
+          sistema en este punto, no un dato que haya que consultar aparte. */}
+      <p className="mt-1 text-xs opacity-70">Convenio activo · Radicación electrónica habilitada</p>
     </div>
   );
 }
@@ -574,20 +596,25 @@ export function FirmaFurStep({
       />
 
       {/* HU #10799 — selección de placa preasignada como SECCIÓN explícita (Flujo A), solo en matrícula
-          inicial y una vez elegido el OT. No aplica si el VIN ya tiene placa del RUNT (AC2). */}
+          inicial y una vez elegido el OT. No aplica si el VIN ya tiene placa del RUNT (AC2).
+          Emparejada con el organismo en `grid lg:grid-cols-2` (propuesta, Step5: «Organismo de
+          tránsito y preasignación de placa»). */}
       {modalidad === 'matricula_inicial' && organismoSelected && organismo.id && instanceId && (
-        <PlacaPreasignadaSection
-          instanceId={instanceId}
-          organismoId={organismo.id}
-          plateValue={fv('plate')}
-          plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
-          preferredDigitValue={fv('plate_preferred_last_digit')}
-          readOnly={readOnly}
-          onRefresh={() => {
-            void loadDetail();
-            onRefresh?.();
-          }}
-        />
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <OrganismoInfoCard name={organismo.name} />
+          <PlacaPreasignadaSection
+            instanceId={instanceId}
+            organismoId={organismo.id}
+            plateValue={fv('plate')}
+            plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
+            preferredDigitValue={fv('plate_preferred_last_digit')}
+            readOnly={readOnly}
+            onRefresh={() => {
+              void loadDetail();
+              onRefresh?.();
+            }}
+          />
+        </div>
       )}
 
       <ExpedienteVisor
@@ -654,8 +681,6 @@ export function PlacaPreasignadaSection({
   const [savingDigit, setSavingDigit] = useState(false);
   // HU #10806 (AC3) — ¿la ruta de preasignación está activa para esta compañía/OT? null = cargando.
   const [preassignEnabled, setPreassignEnabled] = useState<boolean | null>(null);
-  // Mismo patrón de desplegable que MatriculaResumen (Vehículo, Comprador, …).
-  const [open, setOpen] = useState(true);
 
   const placa = plateValue.trim();
   // AC2 — el VIN ya tiene placa del RUNT (no la eligió el usuario): no aplica la preasignación.
@@ -766,21 +791,21 @@ export function PlacaPreasignadaSection({
     ? plates.filter((p) => p.plate.toLowerCase().includes(query.trim().toLowerCase()))
     : plates;
 
+  // Tarjeta siempre abierta (rediseño): en la propuesta, «Organismo de tránsito y preasignación de
+  // placa» es una tarjeta fija, no un desplegable — el gestor la necesita visible junto al organismo,
+  // no detrás de un clic. Mismo tratamiento que `ResumenCard` de `MatriculaResumen`.
   const shell = (children: ReactNode) => (
-    <WizardAccordion
-      title="Placa preasignada"
-      open={open}
-      onOpenChange={setOpen}
-      icon={
+    <section aria-label="Placa preasignada" className={WIZARD_CARD}>
+      <div className="mb-3 flex items-center gap-2">
         <span
           className="h-4 w-1 shrink-0 rounded-full"
           style={{ background: '#557EFF' }}
           aria-hidden="true"
         />
-      }
-    >
+        <WizardCardHeader title="Placa preasignada" level="h4" className="" />
+      </div>
       {children}
-    </WizardAccordion>
+    </section>
   );
 
   if (vinTienePlacaRunt) {

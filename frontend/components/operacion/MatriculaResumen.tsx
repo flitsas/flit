@@ -14,6 +14,7 @@ import { formatDateOnly } from '@/lib/format/date-only';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { WizardAccordion } from './WizardAccordion';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
+import { WIZARD_CARD } from './wizard-field-styles';
 import { BiometricStep } from './BiometricStep';
 import { MandatarioSection } from './MandatarioSection';
 import { openAttachmentInNewTab } from './ExpedienteVisor';
@@ -128,6 +129,34 @@ function ResumenDisclosure({
  */
 function Field({ label, value }: { label: string; value?: string | null }) {
   return <WizardPair label={label} value={value || '—'} />;
+}
+
+/**
+ * Tarjeta de sección siempre visible (no colapsable). Mismo tratamiento que `ResumenDisclosure`
+ * (radio, borde, franja azul junto al título) pero sin plegado: Vehículo y Vendedor/Comprador son
+ * lo primero que el gestor repasa antes de radicar —en la propuesta van en `grid lg:grid-cols-2`
+ * siempre abiertas—, así que dejarlas detrás de un acordeón les añadía un clic que la referencia no
+ * pide. Lo que sigue siendo genuinamente secundario y largo (mandatario, transformaciones, prenda)
+ * se queda en `ResumenDisclosure`.
+ */
+function ResumenCard({
+  title,
+  children,
+  className = '',
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section aria-label={title} className={`${WIZARD_CARD} ${className}`}>
+      <div className="mb-3 flex items-center gap-2">
+        <span className="h-4 w-1 shrink-0 rounded-full" style={{ background: BLUE }} aria-hidden="true" />
+        <WizardCardHeader title={title} level="h4" className="" />
+      </div>
+      {children}
+    </section>
+  );
 }
 
 function PrendaDocumentoVerButton({
@@ -540,7 +569,7 @@ export default function MatriculaResumen({
         </div>
       </div>
 
-      <ResumenDisclosure title="Vehículo">
+      <ResumenCard title="Vehículo">
         {placa ? (
           <div className="mb-3 flex flex-wrap items-center gap-3">
             <span className="font-mono text-2xl font-bold tracking-widest" style={{ color: tone }}>
@@ -573,50 +602,56 @@ export default function MatriculaResumen({
         {!placa && !vehiculo && !vin && specs.length === 0 ? (
           <p className="text-xs opacity-70">Sin datos de vehículo.</p>
         ) : null}
-      </ResumenDisclosure>
+      </ResumenCard>
 
-      {vendedor ? (
-        <ResumenDisclosure title="Vendedor">
-          <div className="space-y-4">
-            <ActorBlock
-              actor={vendedor}
-              bio={vendedorBio}
-              firmaBaul={vendedorFirmaBaul}
-              certLabel="Certificado ID · Vendedor"
-              instanceId={instanceId}
-              certCache={certCache}
-              showRepresentante={vendedor.tipoDoc === 'NIT'}
-              hideValidacion={showBioVendedor}
-            />
-            {showBioVendedor ? embedBiometric('vendedor') : null}
-          </div>
-        </ResumenDisclosure>
-      ) : null}
-
-      {comprador || (!vendedor && partesTxt) ? (
-        <ResumenDisclosure title="Comprador">
-          {comprador ? (
+      {/* Vendedor/Comprador en `grid lg:grid-cols-2` (propuesta, Step5): las dos partes se repasan
+          juntas antes de radicar. Con una sola parte (matrícula inicial) Comprador ocupa las dos
+          columnas — media tarjeta y un hueco en blanco al lado no era el patrón, era un accidente
+          de la grilla. */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {vendedor ? (
+          <ResumenCard title="Vendedor">
             <div className="space-y-4">
               <ActorBlock
-                actor={comprador}
-                bio={compradorBio}
-                firmaBaul={compradorFirmaBaul}
-                certLabel="Certificado ID · Comprador"
+                actor={vendedor}
+                bio={vendedorBio}
+                firmaBaul={vendedorFirmaBaul}
+                certLabel="Certificado ID · Vendedor"
                 instanceId={instanceId}
                 certCache={certCache}
-                showRepresentante={comprador.tipoDoc === 'NIT'}
-                hideValidacion={showBioComprador}
+                showRepresentante={vendedor.tipoDoc === 'NIT'}
+                hideValidacion={showBioVendedor}
               />
-              {showBioComprador ? embedBiometric('comprador') : null}
+              {showBioVendedor ? embedBiometric('vendedor') : null}
             </div>
-          ) : (
-            <p className="text-xs opacity-70">
-              {modalidad === 'traspaso' ? 'Partes: ' : 'Comprador: '}
-              {partesTxt}
-            </p>
-          )}
-        </ResumenDisclosure>
-      ) : null}
+          </ResumenCard>
+        ) : null}
+
+        {comprador || (!vendedor && partesTxt) ? (
+          <ResumenCard title="Comprador" className={vendedor ? '' : 'lg:col-span-2'}>
+            {comprador ? (
+              <div className="space-y-4">
+                <ActorBlock
+                  actor={comprador}
+                  bio={compradorBio}
+                  firmaBaul={compradorFirmaBaul}
+                  certLabel="Certificado ID · Comprador"
+                  instanceId={instanceId}
+                  certCache={certCache}
+                  showRepresentante={comprador.tipoDoc === 'NIT'}
+                  hideValidacion={showBioComprador}
+                />
+                {showBioComprador ? embedBiometric('comprador') : null}
+              </div>
+            ) : (
+              <p className="text-xs opacity-70">
+                {modalidad === 'traspaso' ? 'Partes: ' : 'Comprador: '}
+                {partesTxt}
+              </p>
+            )}
+          </ResumenCard>
+        ) : null}
+      </div>
 
       {instanceId ? (
         <MandatarioSection
