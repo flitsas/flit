@@ -34,6 +34,7 @@ import { DeclaracionesTramite } from './DeclaracionesTramite';
 import { EstadoAcciones } from './EstadoAcciones';
 import { WizardStepTracker } from './WizardStepTracker';
 import { Modal } from '@/components/atom/Modal';
+import { StatusBadge } from '@/components/atom/StatusBadge';
 import {
   isTraspasoActorStepKey,
   nextIndexAfterUnifiedActores,
@@ -79,11 +80,17 @@ import type {
   WizardModalidad,
   WizardStep,
 } from '@/lib/api/types/procedure-runtime';
-import { WIZARD_BTN, WIZARD_CARD, WIZARD_CTA_GRADIENT, WIZARD_LABEL } from './wizard-field-styles';
+import {
+  WIZARD_BTN,
+  WIZARD_CARD,
+  WIZARD_CTA_GRADIENT,
+  WIZARD_INPUT,
+  WIZARD_LABEL,
+} from './wizard-field-styles';
 import { WizardAccordion } from './WizardAccordion';
 import { WizardHelpRail } from './WizardHelpRail';
 import { WizardModal } from './WizardModal';
-import { estadoLabel } from '@/lib/tramites/estados';
+import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 
@@ -1162,34 +1169,43 @@ export function TramiteWizard(props: Props) {
 
         {/* Franja de identidad del expediente (propuesta): referencia, tipo, identificador y
             estado, centrada bajo los pasos. Solo aparece cuando hay algo que identificar — antes
-            de crear el trámite no hay referencia ni vehículo consultado. */}
+            de crear el trámite no hay referencia ni vehículo consultado.
+            B1 (guardián de diseño) — el relleno sólido `#557EFF` con texto blanco a 12px daba
+            3.61:1 (rótulos en white/80, 2.88:1): el mismo patrón que ya se retiró de `WizardPill`
+            por insuficiente. Pasa a forma tintada (fondo `rgba(85,126,255,0.14)`, texto principal
+            `--badge-info-fg`, rótulos en `#59677D` — `color.text.secondary` del sistema), como el
+            resto de badges. */}
         {(refLabel || identificador) && (
           <div
-            className="mx-auto flex w-fit max-w-full flex-wrap items-center justify-center gap-x-6 gap-y-1 rounded-xl px-4 py-2.5 text-white"
-            style={{ background: '#557EFF' }}
+            className="mx-auto flex w-fit max-w-full flex-wrap items-center justify-center gap-x-6 gap-y-1 rounded-xl px-4 py-2.5"
+            style={{ background: 'rgba(85,126,255,0.14)', color: 'var(--badge-info-fg)' }}
           >
             {refLabel && (
               <p className="text-xs">
-                <span className="font-medium uppercase text-white/80">ID trámite: </span>
+                <span className="font-medium uppercase" style={{ color: '#59677D' }}>
+                  ID trámite:{' '}
+                </span>
                 <span className="font-semibold">{refLabel}</span>
               </p>
             )}
             <p className="text-xs">
-              <span className="font-medium uppercase text-white/80">Tipo: </span>
+              <span className="font-medium uppercase" style={{ color: '#59677D' }}>
+                Tipo:{' '}
+              </span>
               <span className="font-semibold">{modalidadLabel}</span>
             </p>
             {identificador && (
               <p className="text-xs">
-                <span className="font-medium uppercase text-white/80">Identificador: </span>
+                <span className="font-medium uppercase" style={{ color: '#59677D' }}>
+                  Identificador:{' '}
+                </span>
                 <span className="font-semibold">
                   {identificadorLabel}: {identificador}
                 </span>
               </p>
             )}
             {estadoTramite && (
-              <span className="rounded-full border border-white/30 bg-white/15 px-2.5 py-0.5 text-xs font-semibold">
-                {estadoLabel(estadoTramite)}
-              </span>
+              <StatusBadge label={estadoLabel(estadoTramite)} {...estadoChipStyle(estadoTramite)} />
             )}
           </div>
         )}
@@ -1208,7 +1224,7 @@ export function TramiteWizard(props: Props) {
           role="status"
           aria-live="polite"
         >
-          <Shield className="mt-0.5 h-4 w-4 shrink-0" style={{ color: '#F9AC00' }} aria-hidden="true" />
+          <Shield className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
           <span>
             <span className="font-semibold" style={{ color: '#B45309' }}>
               Borrador finalizado — esperando validación del cliente.
@@ -1321,12 +1337,12 @@ export function TramiteWizard(props: Props) {
               role="status"
               aria-live="polite"
             >
-              <p className="mb-1 font-semibold" style={{ color: '#F9AC00' }}>
+              <p className="mb-1 font-semibold" style={{ color: 'var(--badge-warning-fg)' }}>
                 Antes de enviar, resuelve:
               </p>
               <ul className="space-y-0.5" aria-label="Bloqueos de envío">
                 {blockers.map((b) => (
-                  <li key={b} style={{ color: '#F9AC00' }}>
+                  <li key={b} style={{ color: 'var(--badge-warning-fg)' }}>
                     • {blockerCopy(b)}
                   </li>
                 ))}
@@ -1371,8 +1387,8 @@ export function TramiteWizard(props: Props) {
                 <button
                   onClick={() => void handleRadicarTramite()}
                   disabled={submitting}
-                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                  style={{ background: WIZARD_CTA_GRADIENT }}
                   title="Entrega el trámite al organismo de tránsito"
                 >
                   {submitting ? 'Radicando…' : 'Radicar trámite'}
@@ -1408,8 +1424,8 @@ export function TramiteWizard(props: Props) {
                     })();
                   }}
                   disabled={continuing}
-                  className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                  style={{ background: WIZARD_CTA_GRADIENT }}
                   title="Guarda los cambios de este paso y habilita Re-radicar"
                 >
                   {continuing ? 'Guardando…' : 'Guardar y continuar'}
@@ -1418,8 +1434,8 @@ export function TramiteWizard(props: Props) {
                 <button
                   onClick={() => void handleRadicarTramite()}
                   disabled={submitting}
-                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                  style={{ background: WIZARD_CTA_GRADIENT }}
                   title="Prepara y radica el trámite en un solo paso (queda en entregado)"
                 >
                   {submitting ? 'Radicando…' : 'Radicar trámite'}
@@ -1428,8 +1444,8 @@ export function TramiteWizard(props: Props) {
                 <button
                   onClick={() => void handleRadicarTramite()}
                   disabled
-                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                  style={{ background: WIZARD_CTA_GRADIENT }}
                   title="Disponible cuando el cliente valide su identidad"
                 >
                   Radicar trámite
@@ -1438,8 +1454,8 @@ export function TramiteWizard(props: Props) {
                 <button
                   onClick={() => void handleFinalizeDraft()}
                   disabled={!canSubmit || submitting}
-                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                  style={{ background: WIZARD_CTA_GRADIENT }}
                 >
                   {submitting ? 'Finalizando…' : 'Finalizar'}
                 </button>
@@ -1448,8 +1464,8 @@ export function TramiteWizard(props: Props) {
               <button
                 onClick={() => goToStep(activeIndex + 1)}
                 disabled={!canNavigateToStep(steps, activeIndex + 1, navViewOnly)}
-                className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                style={{ background: WIZARD_CTA_GRADIENT }}
               >
                 Continuar
                 <ChevronRight className="h-3 w-3" />
@@ -1803,9 +1819,9 @@ function VehicleDataCard({
               <div
                 className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2"
               >
-                <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#8CC63F' }} />
+                <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--flit-success-ink)' }} />
                 <div className="min-w-0">
-                  <p className="text-xs font-bold uppercase" style={{ color: '#8CC63F' }}>
+                  <p className="text-xs font-bold uppercase" style={{ color: 'var(--flit-success-ink)' }}>
                     Tecno-mecánica
                   </p>
                   <p className="text-xs font-semibold">
@@ -1904,7 +1920,7 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
         disabled={readOnly || saving}
         rows={3}
         placeholder="Ingresa observaciones relevantes para el FUR…"
-        className="w-full resize-none rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#162744]"
+        className={`${WIZARD_INPUT} resize-none`}
       />
       {saving && (
         <p className="text-xs opacity-50" role="status" aria-live="polite">
@@ -2363,8 +2379,9 @@ function ConsultaStep({
     router.push(`/tramites/${duplicateInstanceId}`);
   };
 
-  const inputClass =
-    'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#162744] text-xs outline-none focus:border-[#557EFF]';
+  // B4 (guardián de diseño) — misma clase duplicada a mano en dos sitios, ambas sin `focus:ring`.
+  // Se usa `WIZARD_INPUT`, la única fuente para el anillo de foco de 2px.
+  const inputClass = WIZARD_INPUT;
 
   const loading = preflightLoading || persisting;
   // Con creación diferida el semáforo vive en memoria (no hay snapshot persistido que releer).
@@ -3134,41 +3151,34 @@ function ConsultaStep({
         </WizardAccordion>
       )}
 
-      {/* Confirmación de cambio de tipo de trámite (propuesta: modal "Cambiar tipo de trámite"). */}
+      {/* Confirmación de cambio de tipo de trámite (propuesta: modal "Cambiar tipo de trámite").
+          B5/B6 (guardián de diseño) — migrado a `WizardModal`: overlay opaco de marca (antes
+          `bg-[#162744]/40 backdrop-blur-sm`, uno de los cuatro overlays distintos del asistente) y
+          trampa de foco + retorno de foco + Escape, en vez de un `<div role="dialog">` a mano. */}
       {pendingTipo && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-[#162744]/40 p-4 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="cambiar-tipo-titulo"
-        >
-          <div className="w-full max-w-md rounded-2xl border bg-white p-5 dark:bg-[#162744]">
-            <h3 id="cambiar-tipo-titulo" className="text-sm font-bold" style={{ color: '#557EFF' }}>
-              Cambiar tipo de trámite
-            </h3>
-            <p className="mt-2 text-xs leading-relaxed opacity-80">
-              ¿Deseas cambiar el tipo de trámite? Se actualizarán las validaciones y los documentos
-              requeridos, y se perderá lo capturado en este paso.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setPendingTipo(null)}
-                className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => router.push(`/tramites/nuevo/${pendingTipo}`)}
-                className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-              >
-                Sí, cambiar
-              </button>
-            </div>
+        <WizardModal title="Cambiar tipo de trámite" onClose={() => setPendingTipo(null)}>
+          <p className="text-xs leading-relaxed opacity-80">
+            ¿Deseas cambiar el tipo de trámite? Se actualizarán las validaciones y los documentos
+            requeridos, y se perderá lo capturado en este paso.
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPendingTipo(null)}
+              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push(`/tramites/nuevo/${pendingTipo}`)}
+              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+            >
+              Sí, cambiar
+            </button>
           </div>
-        </div>
+        </WizardModal>
       )}
     </div>
   );

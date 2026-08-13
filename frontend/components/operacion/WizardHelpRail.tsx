@@ -17,10 +17,9 @@ import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
  * pide de verdad —elegir el tipo y consultar el vehículo—, y el gestor tenía que plegarlos cada vez
  * para llegar a lo suyo. En el carril siguen a un clic sin costar altura.
  *
- * Los paneles se renderizan FUERA del carril, como en el diseño. No es cosmético: el carril lleva
- * `backdrop-filter`, y eso convierte al elemento en bloque contenedor de sus descendientes
- * `position: fixed` — un panel `fixed inset-0` dentro del carril se posiciona respecto al icono, no
- * respecto al viewport, y no llega a verse.
+ * Los paneles se renderizan FUERA del carril, como en el diseño: siguen como hermanos del `<div>`
+ * del carril y no dentro de él, para que un panel `fixed inset-0` se posicione respecto al
+ * viewport y no quede anidado en un contenedor que no es la raíz del documento.
  */
 export function WizardHelpRail({
   modalidad,
@@ -43,7 +42,9 @@ export function WizardHelpRail({
         // `fixed` y no `sticky`: el carril acompaña al gestor durante todo el paso, que puede ser
         // largo cuando la consulta trae el pre-vuelo entero. El contenedor del paso reserva el
         // espacio con `pr-16` para que nunca tape contenido.
-        className="fixed right-4 top-1/3 z-30 flex flex-col gap-2 rounded-2xl border bg-white/90 p-1.5 shadow-[0_8px_24px_rgba(15,23,20,0.12)] backdrop-blur-md dark:bg-[#162744]/90"
+        // B6 (guardián de diseño) — el único blur autorizado es el del overlay de modal (y el del
+        // dock); este carril lo llevaba sin ser un overlay.
+        className="fixed right-4 top-1/3 z-30 flex flex-col gap-2 rounded-2xl border bg-white/90 p-1.5 shadow-[0_8px_24px_rgba(15,23,20,0.12)] dark:bg-[#162744]/90"
         role="group"
         aria-label="Consultas del trámite"
       >

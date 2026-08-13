@@ -13,6 +13,7 @@ import { WizardAccordion } from './WizardAccordion';
 import { WizardCardHeader } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { WIZARD_INPUT } from './wizard-field-styles';
 
 /** El proveedor RUES respondió y no existe empresa con ese NIT — distinto del fallo transitorio 503. */
 const RUES_NO_ENCONTRADO =
@@ -22,8 +23,10 @@ const RUES_NO_ENCONTRADO =
 const RUES_NO_DISPONIBLE =
   'El RUES no respondió en este momento. No es un error tuyo: puedes reintentar en unos segundos.';
 
-const inputClass =
-  'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#162744] text-xs outline-none focus:border-[#557EFF]';
+// B4 (guardián de diseño) — antes duplicaba a mano la clase de campo del wizard (sin `focus:ring`,
+// solo cambio de borde). Se usa `WIZARD_INPUT` (`wizard-field-styles.ts`), la única fuente para el
+// anillo de foco de 2px que exige el sistema.
+const inputClass = WIZARD_INPUT;
 
 /**
  * Declaraciones del paso de requisitos: TIPO DE SERVICIO (casilla 18 del FUR, con la empresa

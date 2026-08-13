@@ -117,6 +117,11 @@
   --badge-neutral-fg: #445569;
   --badge-neutral-border: rgba(223, 229, 237, 0.9);
 
+  /* Tinta legible del verde de marca (#8CC63F, 2.05:1 sobre blanco) cuando ese verde se usa como
+     color de TEXTO — auditoría de accesibilidad del asistente de trámites. El verde de marca sigue
+     valiendo como relleno de punto/borde/fondo tintado; esta variable es solo para texto. */
+  --flit-success-ink: #4a7019;
+
   /* Tabla card-list (HU #10844) — tokens de superficie para que el DataTable se lea como
      tarjeta en CUALQUIER fondo (página tintada app-bg o panel blanco). La cabecera usa el
      gris de marca #DFE5ED (== CompanyListTable, la tabla de referencia), NO el --muted casi
@@ -199,6 +204,10 @@
   --badge-neutral-bg: rgba(255, 255, 255, 0.08);
   --badge-neutral-fg: #cbd5e1;
   --badge-neutral-border: rgba(255, 255, 255, 0.15);
+
+  /* Verde de marca como texto: sobre el fondo oscuro el mismo tono ya es legible (no necesita el
+     oscurecimiento que sí requiere sobre blanco). */
+  --flit-success-ink: #8cc63f;
 
   /* Tabla card-list — variantes para modo oscuro (HU #10844). */
   --table-header-bg: rgba(255, 255, 255, 0.06);

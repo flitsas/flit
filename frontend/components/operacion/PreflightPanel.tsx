@@ -133,8 +133,8 @@ export function preflightOverall(overall: string | null | undefined) {
 }
 
 const OVERALL: Record<string, { label: string; bg: string; color: string }> = {
-  green: { label: 'Pre-vuelo en verde', bg: 'rgba(140,198,63,0.15)', color: '#8CC63F' },
-  yellow: { label: 'Pre-vuelo con advertencias', bg: 'rgba(249,172,0,0.15)', color: '#F9AC00' },
+  green: { label: 'Pre-vuelo en verde', bg: 'rgba(140,198,63,0.15)', color: 'var(--flit-success-ink)' },
+  yellow: { label: 'Pre-vuelo con advertencias', bg: 'rgba(249,172,0,0.15)', color: 'var(--badge-warning-fg)' },
   red: { label: 'Pre-vuelo con bloqueos', bg: 'rgba(255,78,0,0.15)', color: '#FF4E00' },
 };
 
@@ -459,7 +459,7 @@ export function PreflightPanel({
           role="status"
           aria-live="polite"
         >
-          <p className="text-xs font-bold" style={{ color: '#F9AC00' }}>
+          <p className="text-xs font-bold" style={{ color: 'var(--badge-warning-fg)' }}>
             Advertencias del pre-vuelo
           </p>
           <ul className="mt-1.5 space-y-2">

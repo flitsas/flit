@@ -59,7 +59,7 @@ export function CatalogSearchSelect({
           setOpen((v) => !v);
           setTimeout(() => inputRef.current?.focus(), 0);
         }}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#162744]"
+        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none transition focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-60 dark:bg-[#162744]"
       >
         <span className={display ? 'font-medium' : 'opacity-50'}>
           {display || 'Selecciona…'}
@@ -84,7 +84,7 @@ export function CatalogSearchSelect({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={placeholder}
-              className="w-full rounded-lg border bg-transparent py-1.5 pl-8 pr-2 text-xs outline-none focus:border-[#557EFF]"
+              className="w-full rounded-lg border bg-transparent py-1.5 pl-8 pr-2 text-xs outline-none transition focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
               aria-label={`Buscar en ${label}`}
               autoComplete="off"
             />

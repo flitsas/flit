@@ -324,7 +324,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
           {saved ? (
             <span
               className="text-xs font-semibold"
-              style={{ color: '#8CC63F' }}
+              style={{ color: 'var(--flit-success-ink)' }}
               role="status"
               aria-live="polite"
             >

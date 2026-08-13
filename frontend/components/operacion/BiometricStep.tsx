@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Check,
   Copy,
@@ -18,6 +18,7 @@ import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { WizardCardHeader } from './wizard-atoms';
 import { WizardAccordion } from './WizardAccordion';
 import { WIZARD_CARD } from './wizard-field-styles';
+import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import type {
   BiometricEstado,
   BiometricParte,
@@ -760,6 +761,13 @@ function StartAction({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [conflictMsg, setConflictMsg] = useState<string | null>(null);
   const readOnly = useWizardReadOnly();
+  // B5 (guardián de diseño) — el `alertdialog` de confirmación no tenía trampa de foco, retorno de
+  // foco ni Escape.
+  const confirmDialogRef = useRef<HTMLDivElement>(null);
+  useWizardFocusTrap(confirmDialogRef, {
+    active: confirmOpen,
+    onEscape: () => setConfirmOpen(false),
+  });
 
   const isKyverum = provider === KYVERUM;
   const buttonLabel =
@@ -840,9 +848,12 @@ function StartAction({
       )}
       {confirmOpen && (
         <div
-          className="rounded-xl border p-3 text-xs"
+          ref={confirmDialogRef}
+          tabIndex={-1}
+          className="rounded-xl border p-3 text-xs outline-none focus:ring-0"
           style={{ borderColor: '#557EFF' }}
           role="alertdialog"
+          aria-modal="true"
           aria-label="Confirmar envío de validación"
         >
           <p>

@@ -124,7 +124,7 @@ export function SubsanacionPanel({
         aria-live="polite"
         aria-busy="true"
       >
-        <Loader2 className="h-4 w-4 shrink-0 animate-spin" style={{ color: '#F9AC00' }} aria-hidden="true" />
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
         <span>Cargando el detalle de la subsanación…</span>
       </div>
     );
@@ -151,7 +151,7 @@ export function SubsanacionPanel({
       aria-labelledby="subsanacion-heading"
     >
       <div className="flex items-start gap-2">
-        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#F9AC00' }} aria-hidden="true" />
+        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
         <div className="min-w-0">
           <h3 id="subsanacion-heading" className="text-sm font-bold" style={{ color: '#B45309' }}>
             Trámite en subsanación

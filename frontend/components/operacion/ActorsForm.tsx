@@ -12,6 +12,7 @@ import { AlertTriangle, Info, Search } from 'lucide-react';
 import { INLINE_ALERT_TONES, type InlineAlertTone } from '@/components/atom/InlineAlert';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { Modal } from '@/components/atom/Modal';
+import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import { FineDetailList } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import type { WizardStepFormHandle } from './wizard-step-form';
@@ -2505,8 +2506,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
 /**
  * HU #10886 (AC1) — modal de confirmación del reenvío de validación de identidad al editar el
  * correo del sujeto de identidad de una o más partes. Sin confirmación explícita el PUT de actores
- * NO se envía. Foco atrapado dentro del panel (Tab/Shift+Tab cicla entre Cancelar/Continuar);
- * Escape/backdrop del `Modal` compartido equivalen a "Cancelar".
+ * NO se envía. Foco atrapado dentro del panel (Tab/Shift+Tab cicla entre Cancelar/Continuar) y
+ * devuelto al disparador al cerrar (`useWizardFocusTrap`, B5 guardián de diseño — la trampa vivía
+ * aquí a mano y le faltaba justamente el retorno de foco); Escape/backdrop del `Modal` compartido
+ * equivalen a "Cancelar".
  */
 function EmailReenvioConfirmModal({
   changes,
@@ -2520,26 +2523,7 @@ function EmailReenvioConfirmModal({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cancelRef = useRef<HTMLButtonElement | null>(null);
 
-  useEffect(() => {
-    cancelRef.current?.focus();
-  }, []);
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== 'Tab' || !containerRef.current) return;
-    const focusables = containerRef.current.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    );
-    if (focusables.length === 0) return;
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  };
+  useWizardFocusTrap(containerRef, { active: true, onEscape: onCancel, initialFocusRef: cancelRef });
 
   return (
     <Modal
@@ -2550,7 +2534,7 @@ function EmailReenvioConfirmModal({
       iconBg="#B26A00"
       size="sm"
     >
-      <div ref={containerRef} onKeyDown={handleKeyDown} className="space-y-4">
+      <div ref={containerRef} className="space-y-4">
         <div className="space-y-2 text-xs" role="alert">
           {changes.map((c) => (
             <p key={c.rol}>

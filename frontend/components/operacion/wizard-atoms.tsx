@@ -19,7 +19,10 @@ import type { ReactNode } from 'react';
 export function WizardPair({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <p className="text-xs uppercase tracking-wide opacity-55">{label}</p>
+      {/* opacity-70 es el piso del sistema sobre texto (ver comentario en `WizardCardHeader`);
+          estaba en 0.55 (3.57:1) y se propagaba a todas las grillas consolidadas que usan este
+          átomo. */}
+      <p className="text-xs uppercase tracking-wide opacity-70">{label}</p>
       <p className="mt-0.5 truncate text-xs font-semibold" title={value}>
         {value}
       </p>

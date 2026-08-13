@@ -24,6 +24,7 @@ import { summarizeDeclaredTransformations } from './VehicleTransformationsCard';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { WizardAccordion } from './WizardAccordion';
 import { WizardCardHeader } from './wizard-atoms';
+import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import type {
   Actor,
   BiometricParte,
@@ -858,8 +859,8 @@ export function PlacaPreasignadaSection({
         </p>
       ) : (
         <>
-          {/* El anillo de foco va en el contenedor (el input pinta el borde de todo el grupo):
-              con `outline-none` a secas este buscador no daba ninguna señal al tabular. */}
+          {/* El anillo de foco va en el contenedor (el input pinta el borde de todo el grupo),
+              con `focus-within:ring-2`: así el buscador sí da una señal clara al tabular. */}
           <div className="flex items-center gap-2 rounded-xl border border-[#DFE5ED] px-3 py-2 transition focus-within:border-[#557EFF] focus-within:ring-2 focus-within:ring-[#557EFF]/20 dark:border-white/15">
             <Search className="h-4 w-4 opacity-60" aria-hidden="true" />
             <input
@@ -867,7 +868,7 @@ export function PlacaPreasignadaSection({
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Buscar placa…"
               aria-label="Buscar placa disponible"
-              className="w-full bg-transparent text-xs outline-none"
+              className="w-full bg-transparent text-xs outline-none focus:ring-0"
             />
           </div>
           <div className="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
@@ -941,6 +942,11 @@ function OrganismoModal({
   // solo puede elegir de esta lista; ya no es un catálogo estático del frontend.
   const [offices, setOffices] = useState<TransitOfficeOption[]>([]);
   const [loading, setLoading] = useState(true);
+  // B5 (guardián de diseño) — trampa de foco + retorno de foco + Escape. El foco inicial va al
+  // buscador (antes `autoFocus` nativo), no al primer focusable del DOM (el botón Cerrar).
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useWizardFocusTrap(dialogRef, { active: true, onEscape: onClose, initialFocusRef: searchInputRef });
 
   useEffect(() => {
     let active = true;
@@ -1003,13 +1009,16 @@ function OrganismoModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4"
+      // B6 (guardián de diseño) — overlay único del sistema (antes `bg-black/40 backdrop-blur-sm`).
+      className="fixed inset-0 z-50 grid place-items-center bg-[rgba(22,39,68,0.45)] backdrop-blur-[6px] px-4"
       role="dialog"
       aria-modal="true"
       aria-label="Seleccionar organismo de tránsito"
     >
       <div
-        className="bg-white dark:bg-[#162744] rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh]"
+        ref={dialogRef}
+        tabIndex={-1}
+        className="bg-white dark:bg-[#162744] rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh] outline-none focus:ring-0"
       >
         <div className="flex items-start justify-between mb-3">
           <div>
@@ -1044,13 +1053,13 @@ function OrganismoModal({
         <div className="relative mb-3">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 opacity-50" aria-hidden="true" />
           <input
+            ref={searchInputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar por nombre o código…"
             aria-label="Buscar organismo de tránsito"
             className={`${INPUT_BASE} pl-9`}
-            autoFocus
           />
         </div>
 
@@ -1080,7 +1089,7 @@ function OrganismoModal({
             </li>
           )}
           {!loading && offices.length === 0 && (
-            <li className="text-xs py-3 text-center" style={{ color: '#F9AC00' }}>
+            <li className="text-xs py-3 text-center" style={{ color: 'var(--badge-warning-fg)' }}>
               Tu compañía no tiene organismos de tránsito habilitados. Contacta al
               administrador para habilitarlos.
             </li>
@@ -1365,7 +1374,7 @@ function ParticipantRow({
             ) : (
               <span
                 className="rounded-full px-2 py-0.5 text-xs font-bold"
-                style={{ background: 'rgba(249,172,0,0.15)', color: '#F9AC00' }}
+                style={{ background: 'rgba(249,172,0,0.15)', color: 'var(--badge-warning-fg)' }}
               >
                 Pendiente
               </span>

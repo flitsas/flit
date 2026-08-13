@@ -198,7 +198,7 @@ export function WizardStepTracker({
                         <span
                           key={r}
                           className="block truncate text-xs"
-                          style={{ color: '#F9AC00' }}
+                          style={{ color: 'var(--badge-warning-fg)' }}
                           title={reasonCopy(r)}
                         >
                           • {reasonCopy(r)}

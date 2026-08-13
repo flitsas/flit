@@ -565,7 +565,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
       {!readOnly && !embeddedInWizard && (
         <div className="flex items-center justify-between gap-3 mt-4">
           {saved ? (
-            <span className="text-xs font-semibold" style={{ color: '#8CC63F' }} role="status" aria-live="polite">
+            <span className="text-xs font-semibold" style={{ color: 'var(--flit-success-ink)' }} role="status" aria-live="polite">
               Decisión de prenda guardada ✓
             </span>
           ) : (

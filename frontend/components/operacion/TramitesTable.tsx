@@ -58,7 +58,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 
 const FILTER_INPUT_CLS =
-  'mt-1 w-full rounded-xl border border-[#DFE5ED] bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF] dark:border-white/15';
+  'mt-1 w-full rounded-xl border border-[#DFE5ED] bg-transparent px-3 py-2 text-xs outline-none transition focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 dark:border-white/15';
 const FILTER_FORM_CLS =
   'grid grid-cols-1 gap-3 rounded-2xl border bg-white p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 dark:bg-[#162744]';
 /** Tope del camino filtrado del backend (mismo MaxItems del API). */

@@ -122,7 +122,7 @@ export function MandatarioSection({
                     {o.identidadHasta ? ` hasta el ${formatFecha(o.identidadHasta)}` : ''}
                   </span>
                 ) : (
-                  <span className="block text-xs" style={{ color: '#F9AC00' }}>
+                  <span className="block text-xs" style={{ color: 'var(--badge-warning-fg)' }}>
                     Sin firma del baúl ni identidad vigentes. Puedes dejar el trámite marcado para
                     firmar más adelante.
                   </span>

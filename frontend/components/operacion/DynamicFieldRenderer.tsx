@@ -169,7 +169,7 @@ export function DynamicFieldRenderer({ field, value, onChange }: Props) {
           {isLocked && (
             <span
               className="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded"
-              style={{ background: 'rgba(249,172,0,0.15)', color: '#F9AC00' }}
+              style={{ background: 'rgba(249,172,0,0.15)', color: 'var(--badge-warning-fg)' }}
               title={lockReason ?? 'Campo bloqueado'}
             >
               <Lock className="h-3 w-3" aria-hidden="true" /> Bloqueado

@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import { Eye, FileText, Info } from 'lucide-react';
 import {
   resumirVins,
@@ -220,6 +221,12 @@ function recorteLabel(data: Record<string, unknown> | null): string | null {
 export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
+  // B5 (guardián de diseño) — trampa de foco + retorno de foco + Escape del modal de detalle OCR.
+  const ocrDialogRef = useRef<HTMLDivElement>(null);
+  useWizardFocusTrap(ocrDialogRef, {
+    active: detailOpen,
+    onEscape: () => setDetailOpen(false),
+  });
   const palette =
     ocr.status === 'verified'
       ? {
@@ -305,14 +312,19 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
 
       {detailOpen && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4 backdrop-blur-sm"
+          // B6 (guardián de diseño) — overlay único del sistema: `rgba(22,39,68,0.45)` +
+          // `backdrop-blur-[6px]` (antes `bg-black/40 backdrop-blur-sm`, uno de los cuatro
+          // overlays distintos del asistente).
+          className="fixed inset-0 z-50 grid place-items-center bg-[rgba(22,39,68,0.45)] px-4 backdrop-blur-[6px]"
           role="dialog"
           aria-modal="true"
           aria-labelledby={`ocr-detail-title-${tipo}`}
           onClick={() => setDetailOpen(false)}
         >
           <div
-            className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-white p-4 shadow-xl dark:bg-[#162744]"
+            ref={ocrDialogRef}
+            tabIndex={-1}
+            className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-white p-4 shadow-xl outline-none focus:ring-0 dark:bg-[#162744]"
             style={{ borderColor: palette.border }}
             onClick={(e) => e.stopPropagation()}
           >

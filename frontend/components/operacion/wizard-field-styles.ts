@@ -18,8 +18,7 @@
  *   cada formulario se acuerde de pintarlo.
  */
 export const WIZARD_INPUT =
-  'w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none transition ' +
-  'focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 ' +
+  'w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none transition focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 ' +
   'aria-[invalid=true]:border-[#FF4E00] ' +
   'disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#162744]';
 
@@ -46,15 +45,23 @@ export const WIZARD_CARD = 'rounded-2xl border bg-white p-4 dark:bg-[#162744]';
 /**
  * Botón de acción del pie del asistente (`BTN` de la propuesta): 44 px de alto, 13px semibold.
  * Los 44 px no son estéticos — es el objetivo táctil mínimo, y el pie es donde se cancela y se
- * avanza.
+ * avanza. B7 (guardián de diseño) — es el único tamaño de CTA del pie: antes convivía con un
+ * segundo botón a `px-5 py-2`/12px en 6 de las 8 ramas del footer, que quedó unificado a este.
+ *
+ * NO trae un `focus-visible:ring-[hex]` por defecto a propósito: el pie combina botones de tono
+ * distinto (el CTA azul, "Cancelar trámite" en rojo, "Anterior" en navy) y dos utilidades
+ * `ring-color` con el mismo valor arbitrary-value en el mismo elemento no tienen un orden de
+ * cascada garantizado por el nombre de la clase en Tailwind 4 (depende del orden de generación del
+ * CSS, no del orden en el `className`). Cada uso de `WIZARD_BTN` DEBE declarar su propio
+ * `focus-visible:ring-[hex]` — todos los usos actuales del repo lo hacen.
  */
 export const WIZARD_BTN =
   'h-11 w-auto rounded-xl px-6 text-[13px] font-semibold transition ' +
   'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2';
 
 /**
- * Degradado del CTA primario del asistente. La propuesta lo hace azul→azul; el token
- * `gradient.primary` del guardián (azul→cian) es el del CTA general del producto. Se sigue el repo
- * por decisión explícita para este rediseño, y queda anotado el desvío.
+ * Degradado del CTA primario del asistente: token FLIT `gradient.primary` (azul→cian), el mismo
+ * del CTA general del producto. Antes era azul→`#2563EB` (blue-600 de Tailwind, no un token FLIT):
+ * B7 (guardián de diseño) lo corrige al degradado de marca.
  */
-export const WIZARD_CTA_GRADIENT = 'linear-gradient(to right, #557EFF, #2563EB)';
+export const WIZARD_CTA_GRADIENT = 'linear-gradient(135deg, #557EFF 0%, #00DBD5 100%)';
