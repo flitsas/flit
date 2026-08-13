@@ -40,9 +40,9 @@ public static class SuperAdminQueriesEndpoints
         group.MapPost("/run", RunAsync)
             .WithName("SuperAdminQueryRun")
             .WithSummary("Ejecuta una consulta sobre todas las compañías y devuelve una página")
-            .WithDescription("Sin un filtro de «Compañía» y sin acotar la fecha a un rango corto, "
-                + "la consulta se rechaza con 400: barrer toda la plataforma sin acotar solo "
-                + "devolvería una porción arbitraria del universo, no el resultado completo.")
+            .WithDescription("Antes de cargar filas, cuenta cuántas habría — si ese universo real "
+                + "supera el tope de cordura, se rechaza con 400 en vez de devolver una porción "
+                + "arbitraria de la plataforma.")
             .Produces<CompanyQueryResultDto>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)

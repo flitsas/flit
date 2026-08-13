@@ -49,26 +49,33 @@ public sealed class SavedQueryNameTakenException : Exception
 }
 
 /// <summary>
-/// SuperAdmin pidió correr sobre «todas las compañías» sin un filtro de
-/// <c>CompanyQueryFieldCatalog.Compania</c> ni un rango de fecha acotado.
+/// SuperAdmin pidió correr una consulta de SuperAdmin cuyo universo —lo que habría que cargar a
+/// memoria para resolverla, antes de aplicar el resto de los filtros— supera
+/// <see cref="QueryLimits.MaxUniverso"/>.
 ///
-/// <para>Sin una de las dos cosas, la consulta barre la plataforma entera contra un tope de cordura
-/// (<see cref="QueryLimits.MaxUniverso"/>) que se aplica SIN <c>ORDER BY</c>: el usuario vería una
-/// porción arbitraria del universo y lo leería como el resultado completo. Es preferible pedir que
-/// acote antes de correr, a devolver un resultado que se parece a la respuesta pero no lo es.</para>
+/// <para>El aviso lleva el conteo real de la consulta, no una regla fija de días: se calcula con un
+/// <c>COUNT</c> en la base antes de cargar una sola fila, así que solo aparece cuando de verdad hace
+/// falta acotar — no por adivinar de antemano que la plataforma tiene demasiados datos. Cargar ese
+/// universo igual, sin acotar, correría contra un tope que se aplica SIN <c>ORDER BY</c>: el usuario
+/// vería una porción arbitraria y la leería como el resultado completo.</para>
 /// </summary>
 public sealed class SuperAdminQueryTooBroadException : Exception
 {
-    public SuperAdminQueryTooBroadException(int maxDias)
+    public SuperAdminQueryTooBroadException(int total, int max)
         : base(
-            "Esta consulta cruza todas las compañías sin acotar: elige una o varias compañías, "
-            + $"o un rango de fecha de máximo {maxDias} días.") =>
-        MaxDias = maxDias;
+            $"Esta consulta trae unos {total:N0} trámites, más de lo que se puede traer de una vez "
+            + $"(máximo {max:N0}). Acótala eligiendo una o varias compañías, o un rango de fecha más corto.")
+    {
+        Total = total;
+        Max = max;
+    }
 
     public SuperAdminQueryTooBroadException()
-        : this(QueryLimits.MaxDiasSinAcotarCompania)
+        : this(QueryLimits.MaxUniverso + 1, QueryLimits.MaxUniverso)
     {
     }
 
-    public int MaxDias { get; }
+    public int Total { get; }
+
+    public int Max { get; }
 }

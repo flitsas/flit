@@ -127,15 +127,43 @@ public sealed class SuperAdminQueryRepositoryTests
         result.Filas.Should().ContainSingle().Which.ReferenceNumber.Should().Be("REF-TESLA");
     }
 
-    [Fact] // Sin acotar por compañía ni por fecha, la consulta se rechaza en vez de devolver una
-           // porción arbitraria del universo que se leería como el resultado completo.
-    public async Task SinAcotarPorCompaniaNiPorFecha_SeRechaza()
+    [Fact] // Sin acotar por compañía ni por fecha, pero con pocos trámites en toda la plataforma, la
+           // consulta corre igual: el aviso no es una regla fija, es un conteo real.
+    public async Task SinAcotarPorCompaniaNiPorFecha_YConPocosTramites_NoSeRechaza()
     {
         var db = NewDbName();
 
         await using (var seed = NewContext(db))
         {
             SeedCatalogos(seed);
+            Tramite(seed, "REF-TESLA", Tesla, "ABC123");
+            Tramite(seed, "REF-RENTING", Renting, "DEF456");
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var definicionAmplia = new QueryDefinition(
+            new QueryDateFilter(CompanyQueryDateField.Creacion, QueryRangePreset.AnioActual), [], []);
+
+        var result = await RunAsync(db, definicionAmplia);
+
+        result.Total.Should().Be(2);
+    }
+
+    [Fact] // Sin acotar por compañía ni por fecha, y con más trámites que el tope de cordura en toda
+           // la plataforma, la consulta se rechaza con el conteo real — no con una regla de días.
+    public async Task SinAcotarPorCompaniaNiPorFecha_YSuperaElTope_SeRechazaConElConteoReal()
+    {
+        var db = NewDbName();
+        var total = QueryLimits.MaxUniverso + 1;
+
+        await using (var seed = NewContext(db))
+        {
+            SeedCatalogos(seed);
+            for (var i = 0; i < total; i++)
+            {
+                Tramite(seed, $"REF-{i:D6}", i % 2 == 0 ? Tesla : Renting, $"PLA{i:D3}");
+            }
+
             await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -144,12 +172,15 @@ public sealed class SuperAdminQueryRepositoryTests
 
         var act = () => RunAsync(db, definicionAmplia);
 
-        await act.Should().ThrowAsync<SuperAdminQueryTooBroadException>();
+        var excepcion = await act.Should().ThrowAsync<SuperAdminQueryTooBroadException>();
+        excepcion.Which.Total.Should().Be(total);
+        excepcion.Which.Max.Should().Be(QueryLimits.MaxUniverso);
     }
 
-    [Fact] // Acotar por compañía es suficiente para levantar la exigencia, aunque el rango de fecha
-           // siga siendo amplio: ya no se está barriendo TODA la plataforma.
-    public async Task AcotarPorCompania_LevantaLaExigenciaDeFecha()
+    [Fact] // Acotar por compañía reduce el universo que se cuenta a esa compañía nomás — por eso
+           // levanta la exigencia aunque el rango de fecha siga siendo amplio y la plataforma entera
+           // supere el tope: lo que importa es lo que de verdad se va a cargar.
+    public async Task AcotarPorCompania_CuentaSoloEsaCompania()
     {
         var db = NewDbName();
 
@@ -157,6 +188,11 @@ public sealed class SuperAdminQueryRepositoryTests
         {
             SeedCatalogos(seed);
             Tramite(seed, "REF-TESLA", Tesla, "ABC123");
+            for (var i = 0; i < QueryLimits.MaxUniverso + 1; i++)
+            {
+                Tramite(seed, $"REF-RENTING-{i:D6}", Renting, $"PLB{i:D3}");
+            }
+
             await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 

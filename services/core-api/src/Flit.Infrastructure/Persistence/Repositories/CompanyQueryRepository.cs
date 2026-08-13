@@ -2,6 +2,7 @@ using System.Text.Json;
 using Flit.Analytics.Application.CompanyQueries;
 using Flit.Infrastructure.Persistence.Entities.Analytics;
 using Flit.Queries.Domain;
+using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.EntityFrameworkCore;
@@ -61,11 +62,13 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
     /// Igual que <see cref="ExecuteAsync(Guid, QueryRequest, CancellationToken)"/> pero sobre una
     /// LISTA de compañías a la vez — el motor de SuperAdmin, que corre sin tenant único.
     ///
-    /// <para><c>exigirAcotar</c> en <c>true</c> rechaza la consulta si no hay un filtro de
-    /// <see cref="CompanyQueryFieldCatalog.Compania"/> NI un rango de fecha acotado (≤ 90 días): sin
-    /// eso, «todas las compañías» sin más equivale a barrer toda la plataforma, y el tope de
-    /// <see cref="QueryLimits.MaxUniverso"/> se aplicaría sin <c>ORDER BY</c> — se vería una porción
-    /// arbitraria en vez de un error claro pidiendo acotar.</para>
+    /// <para><c>exigirAcotar</c> en <c>true</c> primero CUENTA (en SQL, sin cargar filas) cuántos
+    /// trámites habría que traer a memoria para resolver la consulta, y solo la rechaza si ese
+    /// conteo real supera <see cref="QueryLimits.MaxUniverso"/> — no una regla fija de días. Si un
+    /// filtro de <see cref="CompanyQueryFieldCatalog.Compania"/> ya acota a una o varias compañías,
+    /// ese conteo se hace sobre esas nomás. Sin el conteo, «todas las compañías» sin más podría
+    /// barrer la plataforma entera y el tope se aplicaría sin <c>ORDER BY</c> — el usuario vería una
+    /// porción arbitraria del universo en vez de un error claro pidiendo acotar.</para>
     /// </summary>
     public Task<CompanyQueryResultDto> ExecuteForSuperAdminAsync(
         QueryRequest request,
@@ -88,12 +91,18 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
 
         if (exigirAcotar)
         {
-            var acotaCompania = definition.Condiciones.Any(c => c.FieldId == CompanyQueryFieldCatalog.Compania);
-            var dentroDeRango = hasta.DayNumber - desde.DayNumber + 1 <= QueryLimits.MaxDiasSinAcotarCompania;
+            // Un filtro de Compañía es, en el fondo, una lista más corta de tenants: empujarlo aquí
+            // (y no dejarlo solo como condición en memoria) es lo que hace que el conteo de abajo —y
+            // la carga real, más adelante— reflejen el tamaño de verdad de lo que se pidió.
+            tenantIds = NarrowByCompania(tenantIds, definition.Condiciones);
 
-            if (!acotaCompania && !dentroDeRango)
+            var universo = await UniversoQuery(tenantIds, definition)
+                .CountAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            if (universo > QueryLimits.MaxUniverso)
             {
-                throw new SuperAdminQueryTooBroadException(QueryLimits.MaxDiasSinAcotarCompania);
+                throw new SuperAdminQueryTooBroadException(universo, QueryLimits.MaxUniverso);
             }
         }
 
@@ -144,10 +153,13 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
 
     // ── Carga ─────────────────────────────────────────────────────────────────────────────────
 
-    private async Task<List<CompanyRow>> LoadRowsAsync(
-        IReadOnlyList<Guid> tenantIds,
-        QueryDefinition definition,
-        CancellationToken cancellationToken)
+    /// <summary>
+    /// El universo sin resolver: qué trámites entrarían a memoria para esta consulta, antes de
+    /// cargar una sola fila. La usan tanto el conteo de <see cref="ExecuteAsync"/> como
+    /// <see cref="LoadRowsAsync"/> — las dos tienen que estar de acuerdo en qué es «el universo», o
+    /// el conteo podría decir que sí cabe y la carga real traer algo distinto.
+    /// </summary>
+    private IQueryable<ProcedureInstance> UniversoQuery(IReadOnlyList<Guid> tenantIds, QueryDefinition definition)
     {
         var query = _context.ProcedureInstances
             .AsNoTracking()
@@ -175,7 +187,44 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             };
         }
 
-        var instances = await query
+        return query;
+    }
+
+    /// <summary>
+    /// Reduce la lista de tenants a los que de verdad pueden salir en el resultado, según el filtro
+    /// de <see cref="CompanyQueryFieldCatalog.Compania"/> si lo hay — «es alguno» se queda solo con
+    /// esas, «no es ninguno» las descarta de la lista. Así el filtro deja de ser solo una condición
+    /// en memoria y empieza a acotar también el universo que se cuenta y se carga.
+    /// </summary>
+    private static IReadOnlyList<Guid> NarrowByCompania(
+        IReadOnlyList<Guid> tenantIds, IReadOnlyList<QueryCondition> condiciones)
+    {
+        var condicion = condiciones.FirstOrDefault(c => c.FieldId == CompanyQueryFieldCatalog.Compania);
+        if (condicion is null)
+        {
+            return tenantIds;
+        }
+
+        var valores = condicion.Values
+            .Select(v => Guid.TryParse(v, out var id) ? id : (Guid?)null)
+            .Where(id => id is not null)
+            .Select(id => id!.Value)
+            .ToHashSet();
+
+        return condicion.Operator switch
+        {
+            QueryOperator.EsAlguno => tenantIds.Where(valores.Contains).ToList(),
+            QueryOperator.NoEsNinguno => tenantIds.Where(id => !valores.Contains(id)).ToList(),
+            _ => tenantIds,
+        };
+    }
+
+    private async Task<List<CompanyRow>> LoadRowsAsync(
+        IReadOnlyList<Guid> tenantIds,
+        QueryDefinition definition,
+        CancellationToken cancellationToken)
+    {
+        var instances = await UniversoQuery(tenantIds, definition)
             .Select(p => new InstanceRow(
                 p.Id,
                 p.TenantId,
