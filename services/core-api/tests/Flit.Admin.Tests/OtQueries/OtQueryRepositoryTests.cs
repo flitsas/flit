@@ -284,6 +284,45 @@ public sealed class OtQueryRepositoryTests
         porRadicacion!.Total.Should().Be(2);
     }
 
+    [Fact] // «Fecha de aprobación» tiene que excluir lo rechazado: los dos decidieron, pero solo uno
+           // aprobó, y confundirlos mezclaría rechazados en un reporte de aprobados.
+    public async Task FechaDeAprobacion_ExcluyeLoRechazadoAunqueTambienHayaDecidido()
+    {
+        var db = NewDbName();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedScope(seed);
+
+            var aprobado = Radicar(seed, "REF-APROBADO", placa: "AAA111", radicadoEn: Hace(10),
+                status: TramiteEstado.Aprobado);
+            Decidir(seed, aprobado, TramiteEstado.Aprobado, Hace(2));
+
+            var rechazado = Radicar(seed, "REF-RECHAZADO", placa: "BBB222", radicadoEn: Hace(10),
+                status: TramiteEstado.Rechazado);
+            Decidir(seed, rechazado, TramiteEstado.Rechazado, Hace(2));
+
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var porDecision = await RunAsync(db, new QueryDefinition(
+            new QueryDateFilter(OtQueryDateField.Decision, QueryRangePreset.Ultimos30),
+            [],
+            []));
+        porDecision!.Total.Should().Be(2);
+
+        var porAprobacion = await RunAsync(db, new QueryDefinition(
+            new QueryDateFilter(OtQueryDateField.Aprobacion, QueryRangePreset.Ultimos30),
+            [],
+            []));
+
+        var fila = porAprobacion!.Filas.Should().ContainSingle().Subject;
+        fila.ReferenceNumber.Should().Be("REF-APROBADO");
+        fila.AprobadoEn.Should().NotBeNull();
+
+        porDecision.Filas.Single(f => f.ReferenceNumber == "REF-RECHAZADO").AprobadoEn.Should().BeNull();
+    }
+
     [Fact] // Un organismo no puede ver los trámites de una empresa sin convenio, venga la consulta
            // como venga. Es el límite que ninguna condición del usuario puede aflojar.
     public async Task Alcance_NoDevuelveTramitesDeEmpresasSinConvenio()

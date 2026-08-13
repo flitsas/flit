@@ -97,6 +97,7 @@ function row(overrides: Partial<OtQueryRow> = {}): OtQueryRow {
     radicadoEn: "2026-08-01T14:00:00Z",
     ultimaRadicacionEn: "2026-08-01T14:00:00Z",
     decididoEn: null,
+    aprobadoEn: null,
     actualizadoEn: "2026-08-02T14:00:00Z",
     decididoPor: null,
     horasHastaDecision: null,

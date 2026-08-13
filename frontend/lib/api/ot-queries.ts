@@ -36,11 +36,12 @@ import type {
 import { QUERY_MAX_PAGE_SIZE, QUERY_PAGE_SIZE } from "./queries";
 
 /** Sobre qué fecha del trámite se aplica el rango. Esto sí es propio del organismo. */
-export type OtQueryDateFieldId = "radicacion" | "decision" | "actualizacion";
+export type OtQueryDateFieldId = "radicacion" | "decision" | "aprobacion" | "actualizacion";
 
 export const DATE_FIELD_LABEL: Record<OtQueryDateFieldId, string> = {
   radicacion: "Fecha de radicación",
   decision: "Fecha de decisión",
+  aprobacion: "Fecha de aprobación",
   actualizacion: "Última actualización",
 };
 
@@ -70,6 +71,7 @@ export interface OtQueryRow {
   radicadoEn: string | null;
   ultimaRadicacionEn: string | null;
   decididoEn: string | null;
+  aprobadoEn: string | null;
   actualizadoEn: string | null;
   decididoPor: string | null;
   horasHastaDecision: number | null;
