@@ -106,19 +106,6 @@ async function elegirSecretaria(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('option', { name: /Medellín/ }));
 }
 
-/** Tipo de servicio (sección 18 del FUR): requisito independiente de la secretaría/VIN. */
-const TIPOS_SERVICIO = [
-  { id: 'ts-particular', code: 'PARTICULAR', name: 'Particular', sortOrder: 1 },
-  { id: 'ts-publico', code: 'PUBLICO', name: 'Público', sortOrder: 2 },
-];
-
-async function elegirTipoServicio(
-  user: ReturnType<typeof userEvent.setup>,
-  code = 'PARTICULAR',
-) {
-  await user.selectOptions(await screen.findByLabelText('Tipo de servicio'), code);
-}
-
 function renderNuevaMatricula() {
   return render(
     <TramiteWizard
@@ -136,7 +123,6 @@ beforeEach(() => {
   mocks.runPreflightPreview.mockResolvedValue(PREVIEW_RESULT);
   mocks.getConsultationConfig.mockResolvedValue({ vehiclePlate: 'kyverum_runt', onlyOwnVehicles: false });
   mocks.listTransitOffices.mockResolvedValue(SECRETARIAS);
-  mocks.listVehicleServiceTypes.mockResolvedValue(TIPOS_SERVICIO);
   mocks.setCurrentStep.mockResolvedValue({ id: 'inst-1', currentStep: 'documentos' });
   mocks.patchFieldValues.mockResolvedValue({ id: 'inst-1', fieldValues: [] });
   mocks.createInstanceFromConsulta.mockResolvedValue({
@@ -250,7 +236,6 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
         name: /Asumo el riesgo de rechazo en el organismo de tránsito/i,
       }),
     );
-    await elegirTipoServicio(user);
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled(),
@@ -265,7 +250,6 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
     await elegirSecretaria(user);
-    await elegirTipoServicio(user);
 
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
 
@@ -284,9 +268,21 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     expect(routerReplace).toHaveBeenCalledWith('/tramites/inst-1?t=tenant-1');
   });
 
-  // El paso 1 conserva los controles (transformaciones, paz y salvo, riesgo). Lo único que cambia
-  // es cuándo se guardan: en vez de un PATCH inmediato, viajan con la creación al continuar.
-  it('las transformaciones marcadas en el paso 1 se persisten al crear el trámite', async () => {
+  // Lo que se marca en el paso 1 (paz y salvo, aceptación de riesgo) no se pierde por no existir
+  // todavía el trámite: se anota en memoria y viaja con la creación al continuar. Las
+  // transformaciones y el tipo de servicio ya NO se declaran aquí — viven en el paso de requisitos,
+  // contra el trámite ya creado (ver DeclaracionesTramite).
+  it('lo marcado en el paso 1 se persiste al crear el trámite', async () => {
+    mocks.runPreflightPreview.mockResolvedValue({
+      ...PREVIEW_RESULT,
+      preflight: {
+        overall: 'red' as const,
+        checks: [
+          { key: 'soat', label: 'SOAT', status: 'fail' as const, source: 'verifik', message: 'SOAT vencido' },
+        ],
+        createdAt: '2026-08-06T00:00:00Z',
+      },
+    });
     const user = userEvent.setup();
     renderNuevaMatricula();
 
@@ -295,15 +291,13 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
     await elegirSecretaria(user);
 
-    // Las transformaciones viven en un acordeón plegado (la mayoría de trámites no declara
-    // ninguna): hay que abrirlo antes de marcar la carrocería.
     await user.click(
-      await screen.findByRole('button', { name: /Transformaciones y condiciones del trámite/ }),
+      await screen.findByRole('checkbox', {
+        name: /Asumo el riesgo de rechazo en el organismo de tránsito/i,
+      }),
     );
-    await user.click(await screen.findByRole('checkbox', { name: /Cambió la carrocería/ }));
     // Sin trámite todavía: no se persiste nada en este momento.
     expect(mocks.patchFieldValues).not.toHaveBeenCalled();
-    await elegirTipoServicio(user);
 
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
 
@@ -312,7 +306,7 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
       expect(mocks.patchFieldValues).toHaveBeenCalledWith(
         'inst-1',
         expect.arrayContaining([
-          expect.objectContaining({ fieldKey: 'cambio_carroceria', valueText: 'true' }),
+          expect.objectContaining({ fieldKey: 'riesgo_aceptado', valueText: 'true' }),
         ]),
         'tenant-1',
       ),
@@ -335,7 +329,6 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
     await elegirSecretaria(user);
-    await elegirTipoServicio(user);
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Continuar/ })).not.toBeDisabled(),
     );
@@ -355,7 +348,6 @@ describe('CF-02 — el trámite se crea al pasar al segundo paso', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
     await elegirSecretaria(user);
-    await elegirTipoServicio(user);
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Ya existe un trámite en proceso');

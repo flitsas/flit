@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
-  Info,
   RefreshCw,
   Search,
   Shield,
@@ -33,7 +32,7 @@ import { FirmaFurStep } from './FirmaFurStep';
 import { blockerCopy, identidadAutomaticaCopy, stepLabelCopy } from './wizard-copy';
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
-import { VehicleTransformationsCard } from './VehicleTransformationsCard';
+import { DeclaracionesTramite } from './DeclaracionesTramite';
 import { EstadoAcciones } from './EstadoAcciones';
 import { WizardStepTracker } from './WizardStepTracker';
 import { Modal } from '@/components/atom/Modal';
@@ -48,7 +47,6 @@ import {
   getDuplicateActiveProcedureId,
   getVehicleStateBlock,
   isTransitOfficeUnavailable,
-  isRuesPreviewUnavailable,
   type VehicleStateBlockInfo,
 } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
@@ -77,7 +75,6 @@ import type {
   ProcedureInstanceSummary,
   StatusHistory,
   TransitOfficeOption,
-  VehicleServiceTypeOption,
   WizardModalidad,
   WizardStep,
 } from '@/lib/api/types/procedure-runtime';
@@ -145,41 +142,12 @@ type PendingConsulta = {
 };
 
 /**
- * Captura del TIPO DE SERVICIO en el paso 1 (solo matrícula inicial, sección 18 del FUR). Igual que
- * `PendingConsulta`, solo existe MIENTRAS el trámite no se ha creado: no hay contrato de backend para
- * leerlo o editarlo después de la creación (`createInstanceFromConsulta` es el único punto que lo
- * recibe), así que la tarjeta que lo captura no vuelve a aparecer en un borrador ya existente —ver
- * `eligeTipoServicio` en `ConsultaStep`, misma condición exacta que `eligeSecretaria` (HU #11199).
- */
-type TipoServicioInfo = {
-  tipoServicioCode: string | null;
-  /** Solo con `tipoServicioCode === 'PUBLICO'`; null en cualquier otro tipo. */
-  empresaVinculadoraNit: string | null;
-  /** Solo lectura: la llena la consulta RUES. null hasta que la consulta encuentre la empresa. */
-  empresaVinculadoraRazonSocial: string | null;
-};
-
-const TIPO_SERVICIO_INFO_VACIO: TipoServicioInfo = {
-  tipoServicioCode: null,
-  empresaVinculadoraNit: null,
-  empresaVinculadoraRazonSocial: null,
-};
-
-/**
  * HU #11199 (AC3) — el listado solo trae los organismos ACTIVOS en FLIT y habilitados para la
  * compañía, así que hay que decir qué hacer cuando el que se busca no aparece: de otro modo el
  * gestor concluye que FLIT no lo cubre y abandona el trámite.
  */
 const SECRETARIA_LISTA_AVISO =
   'Solo se muestran los organismos de tránsito activos en FLIT. Si el organismo donde vas a radicar no aparece en la lista, solicita al administrador que lo agregue y lo active.';
-
-/** El proveedor RUES respondió y no existe empresa con ese NIT — distinto del fallo transitorio 503. */
-const RUES_NO_ENCONTRADO =
-  'No se encontró una empresa con ese NIT en el RUES. Verifica el número e inténtalo de nuevo.';
-
-/** 503 del proveedor RUES: fallo transitorio, no es un error del operador — se ofrece reintentar. */
-const RUES_NO_DISPONIBLE =
-  'El RUES no respondió en este momento. No es un error tuyo: puedes reintentar en unos segundos.';
 
 /**
  * HU #11200 (AC2/AC3) — el vehículo está matriculado en un organismo donde la compañía no puede
@@ -349,10 +317,10 @@ export function TramiteWizard(props: Props) {
     }
   }, []);
 
-  // Tipo de servicio + empresa vinculadora elegidos en el paso 1 (solo matrícula inicial). A
-  // diferencia de `pendingConsulta`, es independiente de la consulta RUNT del vehículo: editar el VIN
-  // no debe borrar el tipo de servicio ya elegido, así que vive en su propio estado.
-  const [tipoServicioInfo, setTipoServicioInfo] = useState<TipoServicioInfo>(TIPO_SERVICIO_INFO_VACIO);
+  // Tipo de servicio (casilla 18 del FUR): completo o no, tal como lo reporta el paso de requisitos,
+  // que es donde se captura desde el rediseño. Arranca en `true` — mientras el paso no se monta no
+  // hay nada que gatear — y `DeclaracionesTramite` lo corrige en cuanto se abre.
+  const [tipoServicioGateOk, setTipoServicioGateOk] = useState(true);
 
   // Estado de la instancia existente + sello de borrador finalizado (HU #10350). Se derivan
   // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
@@ -832,6 +800,11 @@ export function TramiteWizard(props: Props) {
     (isActorStep && !actorsConsultationReady) ||
     // Certificado de prenda obligatorio sin adjuntar: no Continuar.
     (isPrendaStep && !prendaDocGateOk) ||
+    // Tipo de servicio (casilla 18 del FUR, solo matrícula inicial): sin tipo elegido no se avanza
+    // del paso de requisitos; si el tipo es PÚBLICO, tampoco hasta que la consulta devuelva la razón
+    // social de la empresa vinculadora (casilla 19). Misma regla que antes gobernaba el paso 1, en el
+    // paso donde ahora se captura — ver `DeclaracionesTramite`.
+    (activeStep?.key === 'documentos' && modalidad !== 'traspaso' && !tipoServicioGateOk) ||
     // CF-02 — sin trámite creado, "Continuar" es justamente lo que lo crea: se habilita en cuanto la
     // consulta del vehículo salió bien (sin bloqueos), que es el único requisito del paso 1.
     // Sin instancia no hay gates de backend que evaluar (WizardStateQuery necesita la instancia), así
@@ -842,14 +815,7 @@ export function TramiteWizard(props: Props) {
         // Vehículo inexistente en RUNT o consulta no verificable: bloqueo DURO, sin escape.
         pendingConsulta.hardBlocked === true ||
         // Rojo subsanable (SOAT/RTM/comparendos): solo se avanza aceptando el riesgo.
-        (pendingConsulta.red === true && !pendingRiesgoAceptado) ||
-        // Tipo de servicio (paso 1, solo matrícula inicial, sección 18 del FUR): sin tipo elegido no
-        // se avanza; si el tipo es PUBLICO, tampoco hasta que la consulta RUES devuelva la razón
-        // social de la empresa vinculadora (campo de solo lectura, ver ConsultaStep).
-        (entryModalidad === 'matricula_inicial' &&
-          (!tipoServicioInfo.tipoServicioCode ||
-            (tipoServicioInfo.tipoServicioCode === 'PUBLICO' &&
-              !tipoServicioInfo.empresaVinculadoraRazonSocial)))
+        (pendingConsulta.red === true && !pendingRiesgoAceptado)
       : !isSavableStep && activeStep.status !== 'complete' && !nextStepNavigable);
 
   // "Guardar y continuar" para pasos con form embebido: valida + persiste (vía
@@ -873,11 +839,9 @@ export function TramiteWizard(props: Props) {
           previewToken: pendingConsulta.previewToken,
           // HU #11199 — la secretaría elegida en el paso 1 queda escrita con el trámite.
           transitOfficeId: pendingConsulta.transitOfficeId,
-          // Tipo de servicio (paso 1, matrícula inicial): mismo patrón que transitOfficeId — se
-          // elige antes de que exista el trámite y viaja explícito a la creación.
-          tipoServicioCode: tipoServicioInfo.tipoServicioCode,
-          empresaVinculadoraNit: tipoServicioInfo.empresaVinculadoraNit,
-          empresaVinculadoraRazonSocial: tipoServicioInfo.empresaVinculadoraRazonSocial,
+          // El tipo de servicio (casilla 18) ya no viaja aquí: se captura en el paso de requisitos,
+          // contra el trámite ya creado. El backend lo sigue aceptando (opcional) por compatibilidad
+          // con clientes anteriores; sin él simplemente no escribe `vehicle_service` al crear.
         });
 
         // Condiciones marcadas en el paso 1 (leasing, carrocería, paz y salvo, riesgo,
@@ -1267,7 +1231,7 @@ export function TramiteWizard(props: Props) {
                 seedPlaca={seedPlaca}
                 onPreviewDone={handlePreviewDone}
                 onPendingFieldValues={collectPendingFieldValues}
-                onTipoServicioChange={setTipoServicioInfo}
+                onTipoServicioGateChange={setTipoServicioGateOk}
                 paqueteDocsStatus={paqueteDocsStatus}
                 onPaqueteStatusChange={setPaqueteDocsStatus}
                 onMarkDirty={() => setHasUnsavedChanges(true)}
@@ -1921,7 +1885,6 @@ function ConsultaStep({
   seedPlaca,
   onPreviewDone,
   onPendingFieldValues,
-  onTipoServicioChange,
   esMigrado = false,
 }: {
   step: WizardStep;
@@ -1937,9 +1900,6 @@ function ConsultaStep({
   onPreviewDone?: (consulta: PendingConsulta | null) => void;
   /** CF-02 — condiciones marcadas antes de existir el trámite; el shell las guarda al crearlo. */
   onPendingFieldValues?: (items: { fieldKey: string; valueText: string }[]) => void;
-  /** Tipo de servicio + empresa vinculadora elegidos aquí (solo matrícula inicial); el shell los
-   * gatea y los envía a la creación del trámite. */
-  onTipoServicioChange?: (info: TipoServicioInfo) => void;
   /** Migración V1→V2 — explica en el panel por qué el pre-vuelo llega vacío. */
   esMigrado?: boolean;
 }) {
@@ -1954,10 +1914,6 @@ function ConsultaStep({
   // preflight no pudo verificar el impuesto vehicular (check 'impuesto' en unknown/warn).
   const [pazSalvoSaving, setPazSalvoSaving] = useState(false);
   const [riesgoSaving, setRiesgoSaving] = useState(false);
-  // Banderas manuales del vehículo (leasing / cambio de carrocería / acción de prenda) que
-  // alimentan el motor de reglas condicionales del checklist (RF33/37/38) vía field_values.
-  const [atributosSaving, setAtributosSaving] = useState(false);
-
   // R3 (HU #10539) — el CTA "Iniciar traspaso" siembra el vehículo por query param. Con la creación
   // diferida ya no hay instancia donde persistirlo: simplemente prellena el input del paso 1.
   const [vin, setVin] = useState(seedVin ?? '');
@@ -2023,128 +1979,6 @@ function ConsultaStep({
       active = false;
     };
   }, [eligeSecretaria]);
-
-  // Tipo de servicio (sección 18 del FUR) — MISMA condición exacta que `eligeSecretaria` (HU #11199):
-  // solo matrícula inicial y solo mientras el trámite no existe. No hay contrato de backend para
-  // leer/editar el tipo de servicio de un trámite ya creado (`createInstanceFromConsulta` es el único
-  // punto que lo recibe), así que la tarjeta NO vuelve a aparecer en un borrador retomado — decisión
-  // documentada aquí porque no hay "elsewhere" (como sí lo hay para la secretaría, que se reubica en
-  // el paso del FUR) donde ofrecer editarlo después.
-  const eligeTipoServicio = deferred && deferredModalidad === 'matricula_inicial';
-  const [tiposServicio, setTiposServicio] = useState<VehicleServiceTypeOption[]>([]);
-  // Estado inicial derivado de `eligeTipoServicio` (estable durante el ciclo de vida del componente,
-  // igual que `instanceDetailLoading` más arriba): evita un setState síncrono dentro del efecto.
-  const [tiposServicioLoading, setTiposServicioLoading] = useState(() => eligeTipoServicio);
-  const [tiposServicioError, setTiposServicioError] = useState<string | null>(null);
-  const [tipoServicioCode, setTipoServicioCode] = useState('');
-  const [empresaVinculadoraNit, setEmpresaVinculadoraNit] = useState('');
-  const [empresaVinculadoraRazonSocial, setEmpresaVinculadoraRazonSocial] = useState<string | null>(
-    null,
-  );
-  const [ruesLoading, setRuesLoading] = useState(false);
-  const [ruesError, setRuesError] = useState<string | null>(null);
-  const [ruesUnavailable, setRuesUnavailable] = useState(false);
-  /** La razón social salió del directorio de la compañía, no del RUES: hay que decirlo. */
-  const [razonSocialDesdeDirectorio, setRazonSocialDesdeDirectorio] = useState(false);
-
-  useEffect(() => {
-    if (!eligeTipoServicio) return;
-    let active = true;
-    void tramitesClient
-      .listVehicleServiceTypes()
-      .then((list) => {
-        if (active) setTiposServicio(list);
-      })
-      .catch(() => {
-        if (active) setTiposServicioError('No se pudieron cargar los tipos de servicio.');
-      })
-      .finally(() => {
-        if (active) setTiposServicioLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [eligeTipoServicio]);
-
-  // Notifica al shell el estado vigente (código + NIT/razón social solo si PUBLICO) para que gatee
-  // "Continuar" y lo envíe a la creación del trámite — mismo patrón que `onPreviewDone`.
-  const emitTipoServicio = (code: string, nit: string, razonSocial: string | null) => {
-    onTipoServicioChange?.({
-      tipoServicioCode: code || null,
-      empresaVinculadoraNit: code === 'PUBLICO' ? nit.trim() || null : null,
-      empresaVinculadoraRazonSocial: code === 'PUBLICO' ? razonSocial : null,
-    });
-  };
-
-  const handleTipoServicioChange = (code: string) => {
-    setTipoServicioCode(code);
-    setEmpresaVinculadoraNit('');
-    setEmpresaVinculadoraRazonSocial(null);
-    setRuesError(null);
-    setRuesUnavailable(false);
-    emitTipoServicio(code, '', null);
-  };
-
-  const handleEmpresaVinculadoraNitChange = (nit: string) => {
-    setEmpresaVinculadoraNit(nit);
-    // Editar el NIT invalida la razón social ya encontrada: exige una nueva consulta RUES.
-    setEmpresaVinculadoraRazonSocial(null);
-    setRuesError(null);
-    setRuesUnavailable(false);
-    emitTipoServicio(tipoServicioCode, nit, null);
-  };
-
-  /**
-   * Misma escalera que usa el actor jurídico (HU #10906, R3): PRIMERO el directorio de la compañía,
-   * y solo si el NIT no está ahí se gasta una consulta al proveedor externo. Dos motivos: es
-   * instantáneo cuando la empresa ya se consultó antes, y deja de depender de que el RUES esté arriba
-   * para el caso más común. Si el directorio falla no se bloquea nada — se cae al RUES, que es lo que
-   * se hacía antes de este cambio.
-   */
-  const handleConsultarRues = async () => {
-    const nit = empresaVinculadoraNit.trim();
-    if (!nit) {
-      setRuesError('Ingresa el NIT de la empresa vinculadora antes de consultar.');
-      return;
-    }
-    setRuesLoading(true);
-    setRuesError(null);
-    setRuesUnavailable(false);
-    setRazonSocialDesdeDirectorio(false);
-    try {
-      const preload = await tramitesClient
-        .lookupLegalRepresentativeByNit(nit)
-        .catch(() => null); // el directorio es un atajo, no un requisito: su fallo no corta el flujo
-      const razonSocialDirectorio = preload?.company.razonSocial?.trim();
-      if (razonSocialDirectorio) {
-        setEmpresaVinculadoraRazonSocial(razonSocialDirectorio);
-        setRazonSocialDesdeDirectorio(true);
-        emitTipoServicio(tipoServicioCode, preload!.company.nit || nit, razonSocialDirectorio);
-        return;
-      }
-
-      const result = await tramitesClient.ruesPreview({ documentNumber: nit });
-      if (result.found) {
-        const razonSocial = result.razonSocial ?? '';
-        setEmpresaVinculadoraRazonSocial(razonSocial);
-        emitTipoServicio(tipoServicioCode, nit, razonSocial);
-      } else {
-        setEmpresaVinculadoraRazonSocial(null);
-        setRuesError(RUES_NO_ENCONTRADO);
-        emitTipoServicio(tipoServicioCode, nit, null);
-      }
-    } catch (err) {
-      setEmpresaVinculadoraRazonSocial(null);
-      emitTipoServicio(tipoServicioCode, nit, null);
-      if (isRuesPreviewUnavailable(err)) {
-        setRuesUnavailable(true);
-      } else {
-        setRuesError(err instanceof Error ? err.message : 'No se pudo consultar el RUES.');
-      }
-    } finally {
-      setRuesLoading(false);
-    }
-  };
 
   // FEATURE 02 — política "solo vehículos propios" por familia (MATRICULAS | TRASPASO) y NIT del tenant.
   // En traspaso (placa) se autorrellena el documento del propietario con el NIT y, si se edita a otro,
@@ -2507,58 +2341,12 @@ function ConsultaStep({
     }
   };
 
-  // Banderas manuales que gatillan documentos condicionales (el backend las lee en
-  // TramiteDocumentContextMapper). Leasing solo aplica en traspaso. La prenda se gestiona aparte con
-  // PrendaForm (Feature #10585). Carrocería se mueve a VehicleTransformationsCard (P2/P3).
-  const esLeasing = fieldValues.find((f) => f.fieldKey === 'es_leasing')?.valueText === 'true';
-
   // Hay datos del vehículo cuando el RUNT ya respondió: permite mostrar condiciones y pre-vuelo.
   const hasVehicleData = fieldValues.some(
     (f) =>
       ['plate', 'vin', 'vehicle_brand', 'vehicle_line', 'vehicle_year'].includes(f.fieldKey) &&
       (f.valueText ?? '').trim() !== '',
   );
-
-  const saveAtributo = async (fieldKey: string, valueText: string) => {
-    if (deferred) {
-      upsertLocal([{ fieldKey, valueText }]);
-      return;
-    }
-    if (!instanceId) return;
-    setAtributosSaving(true);
-    try {
-      await tramitesClient.patchFieldValues(instanceId, [
-        { formFieldId: null, fieldKey, valueText, valueJson: null },
-      ]);
-      await loadInstance();
-      onRefresh();
-    } finally {
-      setAtributosSaving(false);
-    }
-  };
-
-  // A4/B4 (HU #10674) — transformaciones color/combustible: patch atómico de varias claves
-  // (efectivo + flag) en una sola llamada, para que el valor declarado y su bandera queden
-  // consistentes tras la re-consulta del RUNT (el backend no pisa el efectivo si el flag está activo).
-  const saveTransformacion = async (items: { fieldKey: string; valueText: string }[]) => {
-    if (items.length === 0) return;
-    if (deferred) {
-      upsertLocal(items);
-      return;
-    }
-    if (!instanceId) return;
-    setAtributosSaving(true);
-    try {
-      await tramitesClient.patchFieldValues(
-        instanceId,
-        items.map((i) => ({ formFieldId: null, fieldKey: i.fieldKey, valueText: i.valueText, valueJson: null })),
-      );
-      await loadInstance();
-      onRefresh();
-    } finally {
-      setAtributosSaving(false);
-    }
-  };
 
   // R3 (HU #10539) — CTA "Iniciar traspaso": navega a la ruta de traspaso sembrando el vehículo
   // (placa/VIN) por query param; la página `nuevo/traspaso` crea la instancia y persiste el seed.
@@ -3001,227 +2789,6 @@ function ConsultaStep({
         </WizardAccordion>
       )}
 
-      {/* Tipo de servicio (sección 18 del FUR) — solo matrícula inicial, solo mientras el trámite no
-          existe (ver `eligeTipoServicio`) y SOLO DESPUÉS de consultar el vehículo: antes de la
-          consulta no hay nada que clasificar, y aparecer de entrada empujaba la consulta —que es la
-          tarea real del paso— hacia abajo. Mismo criterio de `hasVehicleData` que ya usan
-          VehicleDataCard y VehicleTransformationsCard, para que las tres aparezcan juntas.
-          Seis valores fijos: un <select> simple es más accesible y más rápido de operar que un
-          combobox con buscador (SearchableSelect) pensado para catálogos largos, como ya se decidió
-          para "Tipo documento propietario" arriba en este mismo paso. */}
-      {eligeTipoServicio && hasVehicleData && (
-        <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
-          {tiposServicioLoading ? (
-            <p className="text-xs opacity-60" role="status" aria-live="polite">
-              Cargando tipos de servicio…
-            </p>
-          ) : tiposServicioError ? (
-            <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
-              {tiposServicioError}
-            </p>
-          ) : (
-            <div className="sm:max-w-xs">
-              <label htmlFor="tramite-tipo-servicio" className="mb-1.5 block text-xs font-semibold">
-                Tipo de servicio
-              </label>
-              <select
-                id="tramite-tipo-servicio"
-                value={tipoServicioCode}
-                onChange={(e) => handleTipoServicioChange(e.target.value)}
-                disabled={readOnly}
-                className={`${inputClass} disabled:opacity-60`}
-              >
-                <option value="">Selecciona…</option>
-                {tiposServicio.map((t) => (
-                  <option key={t.id} value={t.code}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Empresa vinculadora: dos columnas alineadas. El botón va PEGADO al NIT porque actúa
-              sobre él, y el error se pinta bajo ese mismo campo — no suelto al final de la tarjeta,
-              donde el operador no sabía a cuál de los dos campos se refería. */}
-          {tipoServicioCode === 'PUBLICO' && (
-            <div className="grid max-w-3xl gap-4 sm:grid-cols-2">
-              <div>
-                <label
-                  htmlFor="tramite-empresa-vinculadora-nit"
-                  className="mb-1.5 block text-xs font-semibold"
-                >
-                  NIT empresa vinculadora
-                </label>
-                <div className="flex items-stretch gap-2">
-                  <input
-                    id="tramite-empresa-vinculadora-nit"
-                    type="text"
-                    inputMode="numeric"
-                    value={empresaVinculadoraNit}
-                    onChange={(e) => handleEmpresaVinculadoraNitChange(e.target.value)}
-                    disabled={readOnly}
-                    className={`${inputClass} min-w-0 flex-1 disabled:opacity-60`}
-                    placeholder="Ej. 900123456"
-                    aria-describedby={ruesError ? 'tramite-rues-error' : undefined}
-                    aria-invalid={ruesError ? true : undefined}
-                  />
-                  {!readOnly && (
-                    <button
-                      type="button"
-                      onClick={() => void handleConsultarRues()}
-                      disabled={ruesLoading || !empresaVinculadoraNit.trim()}
-                      className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                      style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-                      aria-label="Buscar empresa en RUES"
-                    >
-                      <Search className="h-3.5 w-3.5" aria-hidden="true" />
-                      {ruesLoading ? 'Consultando…' : 'Buscar'}
-                    </button>
-                  )}
-                </div>
-                {ruesError && (
-                  <p
-                    id="tramite-rues-error"
-                    className="mt-1.5 text-xs font-medium leading-tight"
-                    style={{ color: '#FF4E00' }}
-                    role="alert"
-                    aria-live="polite"
-                  >
-                    {ruesError}
-                  </p>
-                )}
-              </div>
-
-              {/* Fila completa: las razones sociales del RUES llegan largas (la de Bancolombia son
-                  79 caracteres, con su cláusula de denominación alterna) y a media rejilla no se
-                  leen. */}
-              {/* El campo NO existe hasta que se consulta. Un recuadro vacío con "la trae el RUES"
-                  ocupa sitio para no decir nada y se lee como un dato pendiente de llenar, cuando en
-                  realidad no hay nada que el gestor pueda hacer ahí: aparece solo, con el nombre
-                  dentro, en cuanto el directorio o el RUES responden. `null` es exactamente eso —
-                  "todavía no se ha consultado" — y vuelve a null al cambiar el NIT, así que el campo
-                  también desaparece si el gestor corrige el número. */}
-              {empresaVinculadoraRazonSocial !== null && (
-              <div className="sm:col-span-2">
-                <label
-                  htmlFor="tramite-empresa-vinculadora-razon-social"
-                  className="mb-1.5 block text-xs font-semibold"
-                >
-                  Razón social
-                </label>
-                {/* `output`, no `input`: el dato NO se edita, y un campo de una línea recorta el
-                    nombre dejando el resto accesible solo moviendo el cursor — en un campo de solo
-                    lectura, inalcanzable. `output` envuelve el texto, es etiquetable (conserva el
-                    `htmlFor` de arriba) y su rol implícito `status` anuncia el valor cuando el RUES
-                    responde, que es justo cuando el gestor quiere oírlo. */}
-                <output
-                  id="tramite-empresa-vinculadora-razon-social"
-                  aria-describedby={razonSocialDesdeDirectorio ? 'tramite-razon-social-origen' : undefined}
-                  className={`block w-full whitespace-pre-line break-words rounded-xl border bg-[#F4F6FA] px-3 py-2 text-xs leading-relaxed dark:bg-[#131A22] ${
-                    empresaVinculadoraRazonSocial ? '' : 'opacity-60'
-                  }`}
-                >
-                  {/* Aquí ya se consultó (el `null` no llega: el campo entero no se pinta). Falta
-                      distinguir el otro vacío, que sí es un resultado: el RUES respondió `found` SIN
-                      razón social, y la consulta lo guarda como cadena vacía. Sin este `||` el
-                      recuadro aparecería colapsado a puro padding justo cuando hay algo que explicar. */}
-                  {empresaVinculadoraRazonSocial || 'El RUES no reportó razón social para este NIT'}
-                </output>
-                {/* De dónde salió el dato, con el mismo criterio honesto del actor jurídico: si vino
-                    del directorio NO se consultó el RUES, y el gestor tiene derecho a saberlo. */}
-                {razonSocialDesdeDirectorio && (
-                  <p
-                    id="tramite-razon-social-origen"
-                    className="mt-1.5 flex items-center gap-1 text-xs leading-tight"
-                    style={{ color: '#557EFF' }}
-                    role="status"
-                    aria-live="polite"
-                  >
-                    <Info className="h-3 w-3 shrink-0" aria-hidden="true" />
-                    Precargado desde el directorio de la compañía
-                  </p>
-                )}
-              </div>
-              )}
-            </div>
-          )}
-
-          {ruesUnavailable && (
-            <div
-              className="flex flex-col gap-2 rounded-xl p-3 sm:flex-row sm:items-center sm:justify-between"
-              style={{ background: 'rgba(255,78,0,0.08)', border: '1px solid rgba(255,78,0,0.30)' }}
-              role="alert"
-              aria-live="assertive"
-            >
-              <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>
-                {RUES_NO_DISPONIBLE}
-              </span>
-              <button
-                type="button"
-                onClick={() => void handleConsultarRues()}
-                className="shrink-0 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-                aria-label="Reintentar consulta al RUES"
-              >
-                Reintentar
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Transformaciones y condiciones, juntas en un acordeón como en la propuesta: las dos
-          declaran lo mismo —en qué se aparta el vehículo de lo que dice el RUNT— y las dos ajustan
-          el checklist de documentos. Separadas en dos tarjetas se leían como temas distintos.
-          Plegado por defecto: en la mayoría de trámites no hay nada que declarar. */}
-      <WizardAccordion title="Transformaciones y condiciones del trámite">
-        {hasVehicleData ? (
-          <div className="space-y-4">
-            <VehicleTransformationsCard
-              fieldValues={fieldValues}
-              readOnly={readOnly}
-              saving={atributosSaving}
-              onPatch={saveTransformacion}
-              bare
-            />
-
-            {/* Condiciones: en traspaso el leasing; en matrícula ya no hay flags aquí (carrocería
-                vive en Transformaciones). Solo se pinta el bloque si hay algo que marcar. */}
-            {!isVin && (
-              <div className="space-y-2 border-t pt-4">
-                <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
-                <p className="-mt-1 text-xs opacity-55">
-                  Marca las condiciones que apliquen; el checklist de documentos se ajusta
-                  automáticamente.
-                </p>
-                <label className="flex items-start gap-2.5">
-                  <input
-                    type="checkbox"
-                    checked={esLeasing}
-                    onChange={(e) =>
-                      void saveAtributo('es_leasing', e.target.checked ? 'true' : 'false')
-                    }
-                    disabled={readOnly || atributosSaving}
-                    className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
-                  />
-                  <span className="text-xs">
-                    <span className="font-semibold">Vehículo en leasing</span>
-                    <span className="mt-0.5 block opacity-55">
-                      Exige contrato de leasing y declaración de la arrendadora.
-                    </span>
-                  </span>
-                </label>
-              </div>
-            )}
-          </div>
-        ) : (
-          <p className="text-xs opacity-60">
-            Consulta el vehículo para declarar transformaciones o condiciones del trámite.
-          </p>
-        )}
-      </WizardAccordion>
-
       {mostrarPazSalvo && (
         <label
           className="flex items-start gap-2.5 rounded-2xl border p-4 bg-white dark:bg-[#0B0F14]"
@@ -3349,7 +2916,7 @@ function StepBody({
   seedPlaca,
   onPreviewDone,
   onPendingFieldValues,
-  onTipoServicioChange,
+  onTipoServicioGateChange,
   paqueteDocsStatus = 'idle',
   onPaqueteStatusChange,
   onMarkDirty,
@@ -3367,8 +2934,8 @@ function StepBody({
   onPreviewDone?: (consulta: PendingConsulta | null) => void;
   /** CF-02 — condiciones marcadas en el paso 1 antes de existir el trámite; se guardan al crearlo. */
   onPendingFieldValues?: (items: { fieldKey: string; valueText: string }[]) => void;
-  /** Tipo de servicio + empresa vinculadora elegidos en el paso 1 (solo matrícula inicial). */
-  onTipoServicioChange?: (info: TipoServicioInfo) => void;
+  /** Gate Continuar: tipo de servicio (+ empresa vinculadora si es PÚBLICO) completo en requisitos. */
+  onTipoServicioGateChange?: (ok: boolean) => void;
   preflight: PreflightSnapshot | null;
   preflightLoading: boolean;
   onRunPreflight: () => Promise<void>;
@@ -3422,7 +2989,6 @@ function StepBody({
           seedPlaca={seedPlaca}
           onPreviewDone={onPreviewDone}
           onPendingFieldValues={onPendingFieldValues}
-          onTipoServicioChange={onTipoServicioChange}
           esMigrado={esMigrado}
         />
       );
@@ -3430,10 +2996,23 @@ function StepBody({
     // Paso 2 de ambas modalidades = Datos y Documentos del Trámite (traspaso ya no usa 'validacion':
     // el semáforo del preflight vive en el paso 1). hideHeader: el h2 + subtítulo
     // ya pintan el título del paso.
-    // Orden: Prenda (radios) → Observaciones → Checklist documentos.
+    // Orden del repo de diseño (MatriculaInicial, Step 3): Tipo de servicio → Transformaciones y
+    // condiciones → Prenda (radios) → Observaciones → Checklist documentos.
     case 'documentos':
       return (
         <div className="space-y-4">
+          {/* Tipo de servicio (casilla 18) y transformaciones/condiciones del vehículo. Vivían en el
+              paso 1; aquí es donde las pone el diseño y donde tienen sentido: son requisitos que se
+              declaran sobre el vehículo ya consultado y ajustan el checklist de abajo. */}
+          <DeclaracionesTramite
+            instanceId={instanceId}
+            modalidad={modalidad}
+            onChanged={() => {
+              onMarkDirty?.();
+              onRefresh?.();
+            }}
+            onTipoServicioGateChange={onTipoServicioGateChange}
+          />
           {/* R4 (HU #10596) — en matrícula la prenda es declarativa: se registra aquí
               (informativa, no bloquea la radicación). En traspaso el gate va en el paso
               comercial (HU #10598), no en documentos. Persistencia vía Continuar (embedded). */}

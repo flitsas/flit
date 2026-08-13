@@ -102,26 +102,12 @@ async function elegirSecretaria(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('option', { name: /Medellín/ }));
 }
 
-/** Tipo de servicio (sección 18 del FUR): requisito independiente de la secretaría, ver TramiteWizard. */
-const TIPOS_SERVICIO = [
-  { id: 'ts-particular', code: 'PARTICULAR', name: 'Particular', sortOrder: 1 },
-  { id: 'ts-publico', code: 'PUBLICO', name: 'Público', sortOrder: 2 },
-];
-
-async function elegirTipoServicio(
-  user: ReturnType<typeof userEvent.setup>,
-  code = 'PARTICULAR',
-) {
-  await user.selectOptions(await screen.findByLabelText('Tipo de servicio'), code);
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
   transitOfficeUnavailable.value = false;
   mocks.runPreflightPreview.mockResolvedValue(PREVIEW_RESULT);
   mocks.getConsultationConfig.mockResolvedValue({ vehiclePlate: 'kyverum_runt', onlyOwnVehicles: false });
   mocks.listTransitOffices.mockResolvedValue(SECRETARIAS);
-  mocks.listVehicleServiceTypes.mockResolvedValue(TIPOS_SERVICIO);
   mocks.setCurrentStep.mockResolvedValue({ id: 'inst-1', currentStep: 'documentos' });
   mocks.createInstanceFromConsulta.mockResolvedValue({
     instance: {
@@ -141,20 +127,16 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     const user = userEvent.setup();
     renderNuevo();
 
+    // La tarjeta de radicación aparece CON el resultado de la consulta: primero se identifica el
+    // vehículo, después se elige dónde radicarlo.
+    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+    await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
+
     const campo = await screen.findByRole('combobox', { name: /secretaría de tránsito/i });
     await user.click(campo);
     expect(await screen.findByRole('option', { name: /Medellín/ })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /Envigado/ })).toBeInTheDocument();
-  });
-
-  it('AC2: sin secretaría la consulta por VIN no se habilita', async () => {
-    const user = userEvent.setup();
-    renderNuevo();
-
-    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
-
-    expect(screen.getByRole('button', { name: 'Consultar RUNT' })).toBeDisabled();
-    expect(mocks.runPreflightPreview).not.toHaveBeenCalled();
   });
 
   it('la consulta corre sin secretaría: el organismo se elige después', async () => {
@@ -175,7 +157,12 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
   });
 
   it('AC3: se advierte que solo hay organismos activos y qué hacer si falta el buscado', async () => {
+    const user = userEvent.setup();
     renderNuevo();
+
+    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+    await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
 
     expect(
       await screen.findByText(/Solo se muestran los organismos de tránsito activos en FLIT/),
@@ -207,7 +194,6 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
     await elegirSecretaria(user);
-    await elegirTipoServicio(user);
 
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
 
@@ -226,7 +212,6 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(1));
     await elegirSecretaria(user);
-    await elegirTipoServicio(user);
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
 
     // La consulta ya no se corre contra el organismo, así que corregirlo no la invalida: borrarla
