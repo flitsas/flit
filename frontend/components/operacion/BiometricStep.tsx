@@ -714,7 +714,7 @@ function HistorialValidaciones({
     return (
       <div className="mt-3">
         <WizardAccordion title="Ver trazabilidad de validación" defaultOpen>
-          <IdentityValidationTrackingPanel validationId={v.id} />
+          <IdentityValidationTrackingPanel validationId={v.id} embebido />
         </WizardAccordion>
       </div>
     );
@@ -739,6 +739,9 @@ function HistorialValidaciones({
                   {formatFecha(v.validatedAt ?? v.expiresAt)}
                 </span>
               </div>
+              {/* Aquí SÍ conserva su propio desplegable: son varias validaciones en una lista, y
+                  sin él se abrirían todas las bitácoras a la vez. El modo embebido es solo para el
+                  caso de una sola validación, donde el acordeón de arriba ya hace de desplegable. */}
               {v.provider === KYVERUM && <IdentityValidationTrackingPanel validationId={v.id} />}
             </li>
           ))}

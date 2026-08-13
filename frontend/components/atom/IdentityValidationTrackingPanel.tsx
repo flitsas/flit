@@ -62,6 +62,30 @@ function auditOutcomeText(outcome: string): string {
  * La bitácora del backend es diagnóstico de soporte y no trae una descripción redactada por
  * evento; esto compone la mejor frase posible con lo que sí manda, sin inventar nada.
  */
+/**
+ * ¿El evento fue bien? Gobierna el verde de la columna «Resultado», como en la referencia.
+ * Se decide por el `outcome` conocido y no por ausencia de error: un `outcome` nuevo del proveedor
+ * no debe pintarse en verde solo porque todavía no tenga etiqueta.
+ */
+function eventoCorrecto(e: IdentityAuditEvent): boolean {
+  return ['ok', 'received', 'aprobado'].includes(e.outcome);
+}
+
+/**
+ * Columna «Cifrado».
+ *
+ * La referencia muestra ahí el algoritmo (`AES-256`, `SHA-256`). El contrato del backend NO lo
+ * manda: `IdentityAuditEvent` solo trae `decryptOk`, es decir si el cuerpo cifrado del proveedor se
+ * pudo descifrar. Se conserva el nombre de columna de la referencia porque habla de lo mismo —la
+ * capa de cifrado del envío— pero el valor dice lo que de verdad se sabe: que se verificó, que
+ * falló, o que ese evento no cifra nada. Inventar «AES-256» sería afirmar un algoritmo que este
+ * frontend no conoce, en la pantalla que certifica una identidad.
+ */
+function auditCifradoText(e: IdentityAuditEvent): string {
+  if (e.decryptOk == null) return 'No aplica';
+  return e.decryptOk ? 'Verificado' : 'Falló';
+}
+
 function auditDetailText(e: IdentityAuditEvent): string {
   if (e.errorType) return e.errorType;
   if (e.message) return e.message;
@@ -87,14 +111,22 @@ export function IdentityValidationTrackingPanel({
   validationId,
   refreshKey = 0,
   defaultOpen = false,
+  embebido = false,
 }: {
   validationId: string;
   /** Cuando cambia (p. ej. cada poll del detalle), recarga la bitácora si el panel está abierto. */
   refreshKey?: number;
   /** Abrir el disclosure al montar (detalle en vivo de prevalidación). */
   defaultOpen?: boolean;
+  /**
+   * Oculta el botón «Ver tracking» propio del panel. Se usa cuando quien lo embebe YA ofrece el
+   * desplegable —el asistente lo mete dentro del acordeón «Ver trazabilidad de validación»—, donde
+   * el botón propio obligaba a un segundo clic para ver la misma tabla: dos desplegables anidados
+   * para un solo contenido. Los demás consumidores (Validaciones, Prevalidaciones) lo conservan.
+   */
+  embebido?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useState(defaultOpen || embebido);
   const [events, setEvents] = useState<IdentityAuditEvent[] | null>(null);
   const [referenced, setReferenced] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -126,7 +158,8 @@ export function IdentityValidationTrackingPanel({
   };
 
   return (
-    <div className="mt-3 border-t pt-3">
+    <div className={embebido ? "" : "mt-3 border-t pt-3"}>
+      {!embebido && (
       <button
         type="button"
         onClick={toggle}
@@ -141,6 +174,7 @@ export function IdentityValidationTrackingPanel({
         />
         Ver tracking
       </button>
+      )}
 
       {open && (
         <div className="mt-2 space-y-2">
@@ -172,29 +206,41 @@ export function IdentityValidationTrackingPanel({
             <p className="text-xs opacity-60">Sin eventos registrados todavía.</p>
           )}
           {events && events.length > 0 && (
+            // La referencia del diseño reserva un ancho mínimo y deja que la tabla ruede en
+            // horizontal: son cinco columnas y la última es texto largo. Sin el mínimo, «Detalle»
+            // se estrangula hasta una palabra por línea en cuanto la tarjeta va a media pantalla.
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[520px] text-left text-xs">
+                {/* Cabecera rellena en versalitas, como en la referencia: la fila de títulos se
+                    separa de los datos por fondo, no por opacidad — que además incumplía el piso. */}
                 <thead>
-                  <tr className="opacity-60">
-                    <th scope="col" className="py-1 pr-2 font-semibold">Fecha</th>
-                    <th scope="col" className="py-1 pr-2 font-semibold">Etapa</th>
-                    <th scope="col" className="py-1 pr-2 font-semibold">Resultado</th>
-                    <th scope="col" className="py-1 pr-2 font-semibold">Descifrado</th>
-                    <th scope="col" className="py-1 pr-2 font-semibold">Detalle</th>
+                  <tr style={{ background: '#EEF5FF', color: '#59677D' }}>
+                    <th scope="col" className="rounded-l-lg px-3 py-2 font-semibold uppercase tracking-wide">
+                      Fecha
+                    </th>
+                    <th scope="col" className="px-3 py-2 font-semibold uppercase tracking-wide">Etapa</th>
+                    <th scope="col" className="px-3 py-2 font-semibold uppercase tracking-wide">Resultado</th>
+                    <th scope="col" className="px-3 py-2 font-semibold uppercase tracking-wide">Cifrado</th>
+                    <th scope="col" className="rounded-r-lg px-3 py-2 font-semibold uppercase tracking-wide">
+                      Detalle
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {events.map((e, i) => (
                     <tr key={i} className="border-t align-top" style={{ borderColor: FLIT.border.soft }}>
-                      <td className="whitespace-nowrap py-1 pr-2 opacity-70">{formatFecha(e.occurredAt)}</td>
-                      <td className="py-1 pr-2 font-medium">{auditStageLabel(e.stage)}</td>
-                      <td className="py-1 pr-2">{auditOutcomeLabel(e)}</td>
-                      <td className="py-1 pr-2">
-                        {e.decryptOk == null ? '—' : e.decryptOk ? 'OK' : 'Falló'}
+                      <td className="whitespace-nowrap px-3 py-2.5 opacity-70">{formatFecha(e.occurredAt)}</td>
+                      <td className="px-3 py-2.5 font-medium">{auditStageLabel(e.stage)}</td>
+                      {/* El resultado en verde cuando fue bien, como en la referencia: es la columna
+                          que se barre en diagonal para ver si algo se torció. */}
+                      <td
+                        className="px-3 py-2.5 font-semibold"
+                        style={eventoCorrecto(e) ? { color: 'var(--flit-success-ink)' } : undefined}
+                      >
+                        {auditOutcomeLabel(e)}
                       </td>
-                      <td className="py-1 pr-2 opacity-70">
-                        {auditDetailText(e)}
-                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5">{auditCifradoText(e)}</td>
+                      <td className="px-3 py-2.5 opacity-70">{auditDetailText(e)}</td>
                     </tr>
                   ))}
                 </tbody>
