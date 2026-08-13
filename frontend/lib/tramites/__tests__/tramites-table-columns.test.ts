@@ -22,20 +22,55 @@ describe('buildTramitesGridLayout', () => {
   it('incluye lo operativo y deja opcionales fuera del default', () => {
     expect(DEFAULT_TRAMITES_VISIBLE_COLUMNS).toEqual([
       'radicado',
+      'vin',
       'placa',
-      'tramite',
       'propietario',
       'comprador',
-      'paso',
-      'estado',
-      'fechaCreacion',
+      'firmado',
+      'tramite',
       'secretaria',
+      'gestor',
+      'fuente',
     ]);
-    for (const optional of ['vin', 'vehiculo', 'gestor', 'fuente', 'firmaVendedor', 'firmaComprador']) {
-      expect(DEFAULT_TRAMITES_VISIBLE_COLUMNS).not.toContain(optional);
+    // Fuera del default porque su dato viaja apilado dentro de `radicado` (fechas), `placa`
+    // (vehículo) y `tramite` (estado, paso). Siguen existiendo en el catálogo: activarlas desde
+    // el selector MUEVE el dato a su columna, no lo duplica.
+    for (const compuesta of ['vehiculo', 'paso', 'estado', 'fechaCreacion', 'fechaActualizacion']) {
+      expect(DEFAULT_TRAMITES_VISIBLE_COLUMNS).not.toContain(compuesta);
+      expect(TRAMITES_COLUMNS.map((c) => c.key)).toContain(compuesta);
     }
+    // La acreditación por parte va dentro de la celda del actor, nunca como columna propia.
     expect(TRAMITES_COLUMNS.map((c) => c.key)).not.toContain('firmaVendedor');
     expect(TRAMITES_COLUMNS.map((c) => c.key)).not.toContain('firmaComprador');
+  });
+
+  it('el orden del catálogo es el orden real de la tabla: primero el listado, luego los desgloses', () => {
+    const keys = TRAMITES_COLUMNS.map((c) => c.key);
+    // Las 10 del listado van al frente, en el orden en que se leen de izquierda a derecha.
+    expect(keys.slice(0, 10)).toEqual([
+      'radicado',
+      'vin',
+      'placa',
+      'propietario',
+      'comprador',
+      'firmado',
+      'tramite',
+      'secretaria',
+      'gestor',
+      'fuente',
+    ]);
+    // Y son exactamente las visibles por defecto: la tabla en reposo == el grupo "Listado".
+    expect(keys.slice(0, 10)).toEqual([...DEFAULT_TRAMITES_VISIBLE_COLUMNS]);
+  });
+
+  it('cada columna declara su grupo para el desplegable, sin mezclar los dos bloques', () => {
+    const grupos = TRAMITES_COLUMNS.map((c) => c.group);
+    expect(grupos.every(Boolean)).toBe(true);
+    // Una vez que empieza el segundo grupo no se vuelve al primero: si se intercalaran, la lista
+    // del selector volvería a leerse revuelta.
+    const primerDesglose = grupos.indexOf('Desglose adicional');
+    expect(primerDesglose).toBeGreaterThan(0);
+    expect(grupos.slice(primerDesglose).every((g) => g === 'Desglose adicional')).toBe(true);
   });
 
   it('reserva la pista del checkbox solo cuando includeSelectColumn es true', () => {

@@ -13,6 +13,12 @@ import { Columns3 } from 'lucide-react';
 export interface ColumnOption {
   key: string;
   label: string;
+  /**
+   * Agrupación opcional para el desplegable. Solo afecta a cómo se LISTAN las columnas aquí; el
+   * orden real en la tabla lo sigue mandando el arreglo `columns`. Sirve para separar las
+   * columnas base de las adicionales cuando el catálogo crece y la lista plana se lee revuelta.
+   */
+  group?: string;
 }
 
 export interface ColumnSelectorProps {
@@ -64,6 +70,16 @@ export function ColumnSelector({
     };
   }, [open]);
 
+  // Grupos en orden de primera aparición, conservando dentro de cada uno el orden del catálogo
+  // (que es el orden real de la tabla). Sin `group` queda un único bloque sin encabezado.
+  const grupos: { nombre: string | null; columnas: readonly ColumnOption[] }[] = [];
+  for (const col of columns) {
+    const nombre = col.group ?? null;
+    const ultimo = grupos.find((g) => g.nombre === nombre);
+    if (ultimo) (ultimo.columnas as ColumnOption[]).push(col);
+    else grupos.push({ nombre, columnas: [col] });
+  }
+
   const toggle = (key: string) => {
     const isChecked = visible.includes(key);
     if (isChecked && visible.length <= 1) return; // impide dejar cero columnas visibles
@@ -99,39 +115,69 @@ export function ColumnSelector({
           role="dialog"
           aria-label={`Elegir columnas visibles de ${label.toLowerCase()}`}
           aria-describedby={hintId}
-          className="absolute right-0 top-full z-20 mt-1 w-64 rounded-xl border bg-white p-3 shadow-lg dark:bg-[#162744]"
+          className="absolute right-0 top-full z-20 mt-1 flex max-h-[min(70vh,28rem)] w-72 flex-col overflow-hidden rounded-xl border bg-white shadow-lg dark:bg-[#162744]"
         >
-          <fieldset className="flex flex-col gap-1">
-            <legend className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wide opacity-60">
+          {/* Cabecera y aviso quedan FIJOS; solo scrollea la lista. El scroll va en un `div`, no
+              en el `<fieldset>`: fieldset no funciona como contenedor flex con overflow y la
+              lista se desbordaba fuera del panel, encimándose con el aviso. */}
+          <div className="flex shrink-0 items-baseline justify-between gap-2 border-b px-4 py-2.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wide opacity-60">
               {label}
-            </legend>
-            {columns.map((col) => {
-              const checked = visible.includes(col.key);
-              const isOnlyChecked = checked && visible.length <= 1;
-              const checkboxId = `${panelId}-${col.key}`;
-              return (
-                <label
-                  key={col.key}
-                  htmlFor={checkboxId}
-                  className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition hover:bg-[#557EFF]/10 ${
-                    isOnlyChecked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
-                  }`}
-                  title={isOnlyChecked ? 'Debes mantener al menos una columna visible' : undefined}
-                >
-                  <input
-                    id={checkboxId}
-                    type="checkbox"
-                    checked={checked}
-                    disabled={isOnlyChecked}
-                    onChange={() => toggle(col.key)}
-                    className="h-3.5 w-3.5 accent-[#557EFF]"
-                  />
-                  {col.label}
-                </label>
-              );
-            })}
-          </fieldset>
-          <p id={hintId} className="mt-2 border-t pt-2 text-[10px] opacity-60">
+            </span>
+            <span className="text-[11px] tabular-nums opacity-50">
+              {visible.length} de {columns.length}
+            </span>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+            <fieldset className="flex flex-col gap-0.5">
+              {/* El título visible vive en la cabecera fija; la leyenda queda para lector de
+                  pantalla, que sí necesita el nombre del grupo de checkboxes. */}
+              <legend className="sr-only">{label}</legend>
+              {grupos.map((grupo, gi) => (
+                <div key={grupo.nombre ?? `grupo-${gi}`} className="flex flex-col gap-0.5">
+                  {grupo.nombre ? (
+                    <p
+                      className={`px-2 text-[10px] font-semibold uppercase tracking-wide opacity-45 ${
+                        gi === 0 ? 'pb-1' : 'pb-1 pt-2'
+                      }`}
+                    >
+                      {grupo.nombre}
+                    </p>
+                  ) : null}
+                  {grupo.columnas.map((col) => {
+                    const checked = visible.includes(col.key);
+                    const isOnlyChecked = checked && visible.length <= 1;
+                    const checkboxId = `${panelId}-${col.key}`;
+                    return (
+                      <label
+                        key={col.key}
+                        htmlFor={checkboxId}
+                        className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-xs transition hover:bg-[#557EFF]/10 ${
+                          isOnlyChecked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                        }`}
+                        title={
+                          isOnlyChecked ? 'Debes mantener al menos una columna visible' : undefined
+                        }
+                      >
+                        <input
+                          id={checkboxId}
+                          type="checkbox"
+                          checked={checked}
+                          disabled={isOnlyChecked}
+                          onChange={() => toggle(col.key)}
+                          className="h-3.5 w-3.5 shrink-0 accent-[#557EFF]"
+                        />
+                        <span className="min-w-0 flex-1 truncate">{col.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ))}
+            </fieldset>
+          </div>
+
+          <p id={hintId} className="shrink-0 border-t px-4 py-2 text-[10px] opacity-60">
             Debes mantener al menos una columna visible.
           </p>
         </div>
