@@ -1517,14 +1517,22 @@ describe('TramiteWizard — inventario del paso de Requisitos', () => {
   }
 
   it('matrícula: mantiene las cuatro secciones del paso', async () => {
+    // La tarjeta de trámites simultáneos, como `VehicleDataCard`, solo se pinta con datos del
+    // vehículo ya consultados (paridad con el paso 1) — a diferencia del viejo acordeón, que
+    // mostraba su cabecera aunque el contenido estuviera vacío.
+    mocks.getInstance.mockResolvedValue({
+      id: 'inst-1',
+      fieldValues: [
+        { formFieldId: '', fieldKey: 'plate', valueText: 'ABC123', valueJson: null, source: 'consultation' },
+        { formFieldId: '', fieldKey: 'vehicle_color', valueText: 'PLATA', valueJson: null, source: 'consultation' },
+      ],
+    });
     await irARequisitos();
 
     // 1 · Declaraciones: tipo de servicio (casilla 18 del FUR).
     expect(await screen.findByLabelText('Tipo de servicio')).toBeInTheDocument();
-    // 2 · Transformaciones y condiciones, plegadas en su acordeón.
-    expect(
-      screen.getByRole('button', { name: /Transformaciones y condiciones del trámite/ }),
-    ).toBeInTheDocument();
+    // 2 · Trámites simultáneos (color/combustible/carrocería), tarjeta siempre visible.
+    expect(screen.getByLabelText('Agregar trámite simultáneo')).toBeInTheDocument();
     // 3 · Observaciones que viajan al FUR.
     expect(screen.getByLabelText(/Observaciones del trámite/)).toBeInTheDocument();
     // 4 · Checklist de documentos.
@@ -1553,10 +1561,8 @@ describe('TramiteWizard — inventario del paso de Requisitos', () => {
     expect(await screen.findByRole('region', { name: 'Documentos del trámite' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Tipo de servicio')).toBeNull();
 
-    // El leasing vive dentro del acordeón de condiciones: hay que abrirlo para inventariarlo.
-    await user.click(
-      screen.getByRole('button', { name: /Transformaciones y condiciones del trámite/ }),
-    );
+    // El leasing ya no vive dentro de un acordeón: tiene su propia tarjeta con encabezado real,
+    // separada de los trámites simultáneos.
     expect(await screen.findByText('Vehículo en leasing')).toBeInTheDocument();
   });
 });

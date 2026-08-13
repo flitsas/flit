@@ -14,7 +14,7 @@ import { BatchReviewPanel } from './BatchReviewPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { WizardCardHeader, WizardSegmented } from './wizard-atoms';
 import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
-import { StatusBadge } from '@/components/atom/StatusBadge';
+import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { isPrendaManagedChecklistTipo } from './prenda-document-tipos';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -196,13 +196,19 @@ export function tipoLabel(tipo: string): string {
   return TIPO_LABEL[tipo] ?? tipo;
 }
 
-/** Colores del chip de estado (coincide / no_coincide / no_aplica / no_verificado). */
-function stateChipStyle(value: string): { color: string; background: string } {
+/**
+ * Tono semántico del chip de estado (coincide / no_coincide / no_aplica / no_verificado).
+ *
+ * B4 (guardián de diseño) — antes pintaba con hex propios fuera de la paleta autorizada
+ * (`#3B8A00` 3.8:1, `#B77900` 3.2:1, `#F9AC00` fuera de token). Ahora resuelve un tono de
+ * `StatusBadge`, la única fuente de color de estado del sistema.
+ */
+function ocrFieldTone(value: string): StatusTone {
   const v = value.toLowerCase();
-  if (v === 'coincide') return { color: '#3B8A00', background: 'rgba(140,198,63,0.20)' };
-  if (v === 'no_coincide') return { color: '#FF4E00', background: 'rgba(255,78,0,0.12)' };
-  if (v === 'no_aplica') return { color: '#5B6472', background: 'rgba(120,130,145,0.15)' };
-  return { color: '#B77900', background: 'rgba(249,172,0,0.18)' }; // no_verificado / otros
+  if (v === 'coincide') return 'success';
+  if (v === 'no_coincide') return 'danger';
+  if (v === 'no_aplica') return 'neutral';
+  return 'warning'; // no_verificado / otros
 }
 
 /** Chip "PDF recortado (X/Y págs)" cuando el OCR recortó un subconjunto de páginas. */
@@ -227,27 +233,22 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
     active: detailOpen,
     onEscape: () => setDetailOpen(false),
   });
-  const palette =
-    ocr.status === 'verified'
-      ? {
-          color: '#3B8A00',
-          border: '#8CC63F',
-          bg: 'rgba(140,198,63,0.12)',
-          label: 'Verificado',
-        }
-      : ocr.status === 'rejected'
-        ? {
-            color: '#FF4E00',
-            border: '#FF4E00',
-            bg: 'rgba(255,78,0,0.10)',
-            label: 'Rechazado',
-          }
-        : {
-            color: '#B77900',
-            border: '#F9AC00',
-            bg: 'rgba(249,172,0,0.14)',
-            label: 'No analizado',
-          };
+  // B4 (guardián de diseño) — antes traía hex propios fuera de la paleta autorizada (`#3B8A00`
+  // 3.8:1, `#B77900` 3.2:1, `#F9AC00` fuera de token). El tono sale de `--badge-*`
+  // (`globals.css`), la misma fuente que usa `StatusBadge`, y queda theme-aware de paso.
+  const ocrTone: StatusTone =
+    ocr.status === 'verified' ? 'success' : ocr.status === 'rejected' ? 'danger' : 'warning';
+  const palette = {
+    color: `var(--badge-${ocrTone}-fg)`,
+    border: `var(--badge-${ocrTone}-border)`,
+    bg: `var(--badge-${ocrTone}-bg)`,
+    label:
+      ocr.status === 'verified'
+        ? 'Verificado'
+        : ocr.status === 'rejected'
+          ? 'Rechazado'
+          : 'No analizado',
+  };
 
   const data = ocr.data;
   const nombre = TIPO_LABEL[tipo] ?? tipo;
@@ -298,7 +299,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
             <p className="mt-1 text-xs leading-snug opacity-80">{ocr.motivo}</p>
           )}
           {(tipoDocumento || recorte) && (
-            <p className="mt-1 text-xs opacity-60">
+            <p className="mt-1 text-xs opacity-70">
               {[tipoDocumento, recorte].filter(Boolean).join(' · ')}
             </p>
           )}
@@ -362,25 +363,20 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
               </p>
             )}
             {(tipoDocumento || recorte) && (
-              <p className="mb-2 text-xs opacity-60">
+              <p className="mb-2 text-xs opacity-70">
                 {[tipoDocumento, recorte].filter(Boolean).join(' · ')}
               </p>
             )}
             {fields.length === 0 ? (
-              <p className="text-xs opacity-55">Sin campos adicionales detectados.</p>
+              <p className="text-xs opacity-70">Sin campos adicionales detectados.</p>
             ) : (
               <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
                 {fields.map(({ field, value }) => (
                   <div key={field.label} className="flex items-baseline gap-1.5 text-xs">
-                    <dt className="shrink-0 opacity-60">{field.label}:</dt>
+                    <dt className="shrink-0 opacity-70">{field.label}:</dt>
                     {field.kind === 'state' ? (
                       <dd>
-                        <span
-                          className="rounded px-1.5 py-0.5 text-xs font-semibold"
-                          style={stateChipStyle(value)}
-                        >
-                          {value.replace(/_/g, ' ')}
-                        </span>
+                        <StatusBadge tone={ocrFieldTone(value)} label={value.replace(/_/g, ' ')} />
                       </dd>
                     ) : (
                       <dd
@@ -506,7 +502,7 @@ export function DocumentSlot({
           />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold leading-snug">{item.label}</p>
-            <p className="mt-1 text-xs opacity-55">
+            <p className="mt-1 text-xs opacity-70">
               {ALLOWED_LABEL}
               {item.maxSizeBytes ? ` · hasta ${formatSize(item.maxSizeBytes)}` : ''}
             </p>
@@ -521,19 +517,20 @@ export function DocumentSlot({
             antes que su nombre cuando se barre la grilla en diagonal. */}
         <div className="flex shrink-0 flex-col items-end gap-1">
           {item.obligatorio ? (
-            <span
-              className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide"
-              style={{
-                background: 'rgba(255,78,0,0.14)',
-                color: '#FF4E00',
-                border: '1px solid rgba(255,78,0,0.40)',
-              }}
-            >
-              <span aria-hidden="true">●</span>
-              Obligatorio
-            </span>
+            // B4 (guardián de diseño) — el badge iba en `#FF4E00` sobre `rgba(255,78,0,0.14)`
+            // (3.0:1). `StatusBadge tone="danger"` resuelve la paleta con contraste AA.
+            <StatusBadge
+              tone="danger"
+              className="uppercase tracking-wide"
+              label={
+                <span className="inline-flex items-center gap-1">
+                  <span aria-hidden="true">●</span>
+                  Obligatorio
+                </span>
+              }
+            />
           ) : (
-            <span className="whitespace-nowrap text-xs font-medium uppercase tracking-wide opacity-50">
+            <span className="whitespace-nowrap text-xs font-medium uppercase tracking-wide opacity-70">
               Opcional
             </span>
           )}
@@ -645,7 +642,7 @@ export function DocumentSlot({
           <span className="opacity-80">
             La impronta se generará automáticamente en el paso de firma (FUR).
             {deferred && (
-              <span className="block opacity-60">
+              <span className="block opacity-70">
                 Marcada como diferida — se generará más adelante; no necesitas cargarla aquí.
               </span>
             )}
@@ -868,7 +865,7 @@ export function DocumentChecklist({
             ]}
             onChange={setUploadMode}
           />
-          <p className="text-xs opacity-60" role="note">
+          <p className="text-xs opacity-70" role="note">
             {uploadMode === 'individual'
               ? 'Puedes cargar cada documento en su casilla, uno a uno. También puedes cambiar a Masivo para subir varios archivos juntos.'
               : 'Carga varios archivos a la vez: el sistema los clasifica y tú confirmas. Las casillas de abajo siguen disponibles por si falta alguno.'}
@@ -925,7 +922,7 @@ export function DocumentChecklist({
       )}
 
       {items.length === 0 ? (
-        <p className="text-xs opacity-60">
+        <p className="text-xs opacity-70">
           {state.loading
             ? 'Cargando documentos requeridos…'
             : 'Este trámite no requiere documentos.'}

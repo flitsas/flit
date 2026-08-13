@@ -1,6 +1,7 @@
 'use client';
 
-import { ArrowRight, Fuel, Layers, Palette, Wand2 } from 'lucide-react';
+import { useId, useState } from 'react';
+import { ArrowRight, Fuel, Layers, Palette, X } from 'lucide-react';
 import type { FieldValue } from '@/lib/api/types/procedure-runtime';
 import { cn } from '@/lib/utils';
 import {
@@ -9,41 +10,57 @@ import {
 import { getBodyworksForVehicleClass, normalizeVehicleClass } from '@/lib/catalogs/bodywork-by-class';
 import { CatalogSearchSelect } from './CatalogSearchSelect';
 import { VehicleColorSearchSelect } from './VehicleColorSearchSelect';
+import { WizardCardHeader } from './wizard-atoms';
+import { WizardModal } from './WizardModal';
+import { WIZARD_INPUT } from './wizard-field-styles';
 
 /**
- * Tarjeta "Transformaciones del vehículo" (A4/B4 · HU #10674 · ADR-0029 + P2/P3).
+ * Tarjeta "Trámites Simultáneos (Opcional)" (A4/B4 · HU #10674 · ADR-0029 + P2/P3 — gramática del
+ * repo de diseño: `MatriculaInicial.tsx`, Step 3 «Documentos y requisitos del trámite»).
  *
- * Permite DECLARAR, durante MI/TR, un cambio de color, combustible o carrocería del vehículo
- * frente al dato del RUNT. El valor RUNT queda como snapshot inmutable (`*_runt`) y el efectivo
- * es el que viaja al FUR; el flag `cambio_*` marca la declaración.
+ * Mismo dato y misma regla de negocio que antes tenía el acordeón "Transformaciones y condiciones
+ * del trámite": DECLARAR, durante MI/TR, un cambio de color, combustible o carrocería del vehículo
+ * frente al dato del RUNT. Lo que cambia es la gramática — un `<select>` que agrega chips, calcado
+ * de la tarjeta que la propuesta pone en el paso de requisitos — en vez de tres casillas de
+ * verificación.
  *
- * Cuatro estados de cada fila:
- *  1. RUNT sin cambio (toggle apagado) — se muestra el valor del RUNT en solo lectura.
- *  2. Declarando (toggle encendido) — se habilita el selector del nuevo valor.
- *  3. Cambio declarado — el efectivo difiere del RUNT: se pinta el diff `RUNT → NUEVO`.
- *  4. Bloqueado — `readOnly` (post-envío) o `saving` en curso deshabilitan los controles.
+ * Con una diferencia deliberada frente a la propuesta: sus chips son decorativos (un trámite
+ * simultáneo ahí solo habilita un documento soporte). Aquí el VALOR hace falta —es lo que viaja al
+ * FUR—, así que cada subtrámite seleccionado abre debajo su propio campo (el color nuevo, el
+ * combustible, la carrocería) y no se pierde nunca.
  *
- * WCAG 2.1 AA: cada control tiene label asociado, el grupo usa `role="group"` con
- * `aria-labelledby`, el resumen es `aria-live="polite"` y el foco usa el anillo de marca.
+ * El valor RUNT queda como snapshot inmutable (`*_runt`) y el efectivo es el que viaja al FUR; el
+ * flag `cambio_*` marca la declaración — EXACTAMENTE los mismos `field_values` de siempre
+ * (`cambio_color`/`vehicle_color`, `cambio_combustible`/`vehicle_fuel`,
+ * `cambio_carroceria`/`vehicle_body_type`), con el mismo PATCH atómico de bandera+valor. Marcar un
+ * subtrámite equivale a poner su bandera en `true`; quitarlo (con confirmación), a `false` — y
+ * restaura el efectivo al snapshot RUNT, igual que hacía el toggle que reemplaza.
+ *
+ * Dos exclusiones deliberadas del catálogo de la propuesta:
+ *  - "Inscribir Prenda" no está: en FLIT tiene tarjeta propia con decisiones de gestión y su gate
+ *    (`PrendaForm`, Feature #10585). Ponerla aquí duplicaría la misma decisión en dos sitios.
+ *  - "Blindaje" no está: no existe ni bandera, ni documento, ni regla de backend para él en FLIT.
+ *
+ * WCAG 2.1 AA: el `<select>` de agregar y cada campo de valor tienen su label asociado; los chips
+ * viven en una región `aria-live`; quitar un subtrámite pide confirmación (`WizardModal`, con
+ * trampa de foco) antes de borrar su bandera y su valor.
  */
 export function VehicleTransformationsCard({
   fieldValues,
   readOnly,
   saving,
   onPatch,
-  bare = false,
 }: {
   fieldValues: FieldValue[];
   readOnly: boolean;
   saving: boolean;
   onPatch: (items: { fieldKey: string; valueText: string }[]) => Promise<void>;
-  /**
-   * Se monta dentro de un acordeón que ya pinta la tarjeta y el título. Quita el marco y la
-   * cabecera propia; el texto de ayuda se conserva, porque explica qué se declara aquí y eso el
-   * título del acordeón no lo dice.
-   */
-  bare?: boolean;
 }) {
+  // Hooks primero, SIEMPRE — el `return null` de abajo (sin datos de vehículo) es condicional y
+  // React exige que el orden de hooks no dependa de una rama.
+  const headingId = useId();
+  const [pendienteQuitar, setPendienteQuitar] = useState<SubtramiteKey | null>(null);
+
   const byKey = (key: string) =>
     fieldValues.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
 
@@ -86,7 +103,7 @@ export function VehicleTransformationsCard({
         ])
       : onPatch([
           { fieldKey: 'cambio_color', valueText: 'false' },
-          // Al desactivar se restaura el efectivo al snapshot RUNT (no queda un cambio implícito).
+          // Al quitar se restaura el efectivo al snapshot RUNT (no queda un cambio implícito).
           { fieldKey: 'vehicle_color', valueText: colorRunt },
         ]);
 
@@ -112,91 +129,149 @@ export function VehicleTransformationsCard({
           { fieldKey: 'vehicle_body_type', valueText: bodyworkRunt },
         ]);
 
+  // El mapeo uno a uno del catálogo de la propuesta: mismas tres etiquetas, mismas tres banderas.
+  const subtramites: SubtramiteItem[] = [
+    {
+      key: 'color',
+      optionLabel: 'Cambio de Color',
+      valueLabel: 'Nuevo color',
+      icon: Palette,
+      runtValue: colorRunt,
+      effectiveValue: colorEff,
+      active: colorActive,
+      colorCatalog: true,
+      onToggle: (on) => void setColor(on),
+      onSelect: (v) => void setColor(true, v),
+    },
+    {
+      key: 'combustible',
+      optionLabel: 'Conversiones de Combustible',
+      valueLabel: 'Nuevo combustible',
+      icon: Fuel,
+      runtValue: fuelRunt,
+      effectiveValue: fuelEff,
+      active: fuelActive,
+      options: VEHICLE_FUEL_CATALOG,
+      onToggle: (on) => void setFuel(on),
+      onSelect: (v) => void setFuel(true, v),
+    },
+    {
+      key: 'carroceria',
+      optionLabel: 'Cambio de Carrocería',
+      valueLabel: 'Nueva carrocería',
+      icon: Layers,
+      runtValue: bodyworkRunt,
+      effectiveValue: bodyworkEff,
+      active: bodyworkActive,
+      options: bodyworkOptions,
+      emptyMessage: bodyworkEmptyMessage,
+      onToggle: (on) => void setBodywork(on),
+      onSelect: (v) => void setBodywork(true, v),
+    },
+  ];
+
+  const seleccionados = subtramites.filter((s) => s.active);
+  const disponibles = subtramites.filter((s) => !s.active);
+  const itemAQuitar = subtramites.find((s) => s.key === pendienteQuitar) ?? null;
+
+  const handleAgregar = (key: string) => {
+    subtramites.find((s) => s.key === key)?.onToggle(true);
+  };
+
+  const confirmarQuitar = () => {
+    itemAQuitar?.onToggle(false);
+    setPendienteQuitar(null);
+  };
+
   // El resumen refleja lo que se imprime en el FUR: solo el valor NUEVO.
   const changes = summarizeDeclaredTransformations(fieldValues);
 
   return (
     <section
-      aria-labelledby="veh-transf-title"
-      className={
-        bare ? 'space-y-3' : 'space-y-3 rounded-2xl border bg-white p-4 dark:bg-[#162744]'
-      }
+      aria-labelledby={headingId}
+      className="space-y-3 rounded-2xl border bg-white p-4 dark:bg-[#162744]"
     >
-      {/* Embebido, el título vive en la cabecera del acordeón. Se conserva un rótulo oculto porque
-          el `role="group"` de abajo lo referencia por `aria-labelledby`. */}
-      {bare ? (
-        <p id="veh-transf-title" className="sr-only">
-          Transformaciones del vehículo
-        </p>
-      ) : (
-        <div className="flex items-center gap-2">
-          <span
-            aria-hidden="true"
-            className="grid h-7 w-7 place-items-center rounded-lg"
-            style={{ background: 'rgba(85,126,255,0.10)' }}
-          >
-            <Wand2 className="h-4 w-4" style={{ color: '#557EFF' }} />
-          </span>
-          <p id="veh-transf-title" className="text-xs font-semibold opacity-80">
-            Transformaciones del vehículo
-          </p>
+      <WizardCardHeader
+        id={headingId}
+        title="Trámites Simultáneos (Opcional)"
+        subtitle="Al seleccionar un trámite simultáneo se habilita de inmediato su documento soporte. Se declara frente al RUNT y se registra en el FUR."
+      />
+
+      <div>
+        <label htmlFor="tramite-simultaneo-agregar" className="mb-1.5 block text-xs font-semibold">
+          Agregar trámite simultáneo
+        </label>
+        <select
+          id="tramite-simultaneo-agregar"
+          value=""
+          onChange={(e) => {
+            if (e.target.value) handleAgregar(e.target.value);
+          }}
+          disabled={disabled || disponibles.length === 0}
+          className={`${WIZARD_INPUT} disabled:opacity-60`}
+        >
+          <option value="">
+            {disponibles.length === 0 ? 'No hay más trámites simultáneos disponibles' : 'Selecciona…'}
+          </option>
+          {disponibles.map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.optionLabel}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Chips de los seleccionados. El fondo `#EEF5FF`/borde `#DFE5ED` es el mismo par que usa
+          `WizardSegmented` para la pista del control: hunde el bloque lo justo sobre la tarjeta
+          blanca, sin inventar un gris nuevo. */}
+      <div
+        className="flex min-h-11 flex-wrap items-center gap-2 rounded-xl border p-2"
+        style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
+        aria-live="polite"
+      >
+        {seleccionados.length === 0 ? (
+          <span className="px-1 text-xs opacity-70">Sin trámites simultáneos seleccionados</span>
+        ) : (
+          seleccionados.map((s) => (
+            <span
+              key={s.key}
+              className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium"
+              style={{
+                background: 'var(--badge-info-bg)',
+                color: 'var(--badge-info-fg)',
+                borderColor: 'var(--badge-info-border)',
+              }}
+            >
+              {s.optionLabel}
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => setPendienteQuitar(s.key)}
+                  disabled={disabled}
+                  aria-label={`Quitar ${s.optionLabel}`}
+                  className="rounded-full opacity-70 transition hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:cursor-not-allowed"
+                >
+                  <X className="h-3 w-3" aria-hidden="true" />
+                </button>
+              )}
+            </span>
+          ))
+        )}
+      </div>
+
+      {/* Bajo los chips, un bloque por subtrámite seleccionado con su campo de valor. La propuesta
+          no lo tiene —sus chips son decorativos—, pero FLIT necesita capturar el valor efectivo. */}
+      {seleccionados.length > 0 && (
+        <div className="space-y-2.5">
+          {seleccionados.map((s) => (
+            <SubtramiteValueBlock key={s.key} item={s} disabled={disabled} />
+          ))}
         </div>
       )}
-      <p className={`text-xs opacity-55 ${bare ? '' : '-mt-1'}`}>
-        Declara un cambio de color, combustible o carrocería frente al RUNT. Se registrará en el
-        FUR. La carrocería puede requerir factura como documento de soporte.
-      </p>
-
-      <div role="group" aria-labelledby="veh-transf-title" className="space-y-2.5">
-        <TransformationRow
-          idPrefix="transf-color"
-          icon={Palette}
-          label="Color"
-          runtValue={colorRunt}
-          effectiveValue={colorEff}
-          active={colorActive}
-          colorCatalog
-          disabled={disabled}
-          onToggle={(on) => void setColor(on)}
-          onSelect={(v) => void setColor(true, v)}
-        />
-        <TransformationRow
-          idPrefix="transf-fuel"
-          icon={Fuel}
-          label="Combustible"
-          runtValue={fuelRunt}
-          effectiveValue={fuelEff}
-          active={fuelActive}
-          options={VEHICLE_FUEL_CATALOG}
-          disabled={disabled}
-          onToggle={(on) => void setFuel(on)}
-          onSelect={(v) => void setFuel(true, v)}
-        />
-        <TransformationRow
-          idPrefix="transf-bodywork"
-          icon={Layers}
-          label="Carrocería"
-          toggleLabel="Cambió la carrocería"
-          selectLabel="Nueva carrocería"
-          runtValue={bodyworkRunt}
-          effectiveValue={bodyworkEff}
-          active={bodyworkActive}
-          options={bodyworkOptions}
-          emptyMessage={bodyworkEmptyMessage}
-          disabled={disabled}
-          onToggle={(on) => void setBodywork(on)}
-          onSelect={(v) => void setBodywork(true, v)}
-        />
-      </div>
 
       <p
         aria-live="polite"
-        className={cn(
-          'rounded-xl px-3 py-2 text-xs',
-          changes.length > 0
-            ? 'font-medium'
-            : 'opacity-55',
-        )}
+        className={cn('rounded-xl px-3 py-2 text-xs', changes.length > 0 ? 'font-medium' : 'opacity-70')}
         style={
           changes.length > 0
             ? { background: 'rgba(85,126,255,0.08)', color: '#557EFF' }
@@ -207,113 +282,106 @@ export function VehicleTransformationsCard({
           ? `Se registrará en el FUR — ${changes.join(' · ')}`
           : 'Sin transformaciones declaradas: se registrará el dato del RUNT.'}
       </p>
+
+      {itemAQuitar && (
+        <WizardModal title="Eliminar trámite simultáneo" onClose={() => setPendienteQuitar(null)}>
+          <p className="text-xs leading-relaxed opacity-80">
+            ¿Estás seguro de eliminar «{itemAQuitar.optionLabel}»? Se removerán los requisitos
+            asociados y se restaurará el dato del RUNT.
+          </p>
+          <div className="mt-6 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPendienteQuitar(null)}
+              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={confirmarQuitar}
+              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00] focus-visible:ring-offset-2"
+              style={{ background: '#FF4E00' }}
+            >
+              Sí, eliminar
+            </button>
+          </div>
+        </WizardModal>
+      )}
     </section>
   );
 }
 
-function TransformationRow({
-  idPrefix,
-  icon: Icon,
-  label,
-  toggleLabel,
-  selectLabel,
-  runtValue,
-  effectiveValue,
-  active,
-  options = [],
-  colorCatalog = false,
-  emptyMessage,
-  disabled,
-  onToggle,
-  onSelect,
-}: {
-  idPrefix: string;
+type SubtramiteKey = 'color' | 'combustible' | 'carroceria';
+
+interface SubtramiteItem {
+  key: SubtramiteKey;
+  /** Texto del `<option>` del selector y del chip — igual al catálogo de la propuesta. */
+  optionLabel: string;
+  /** Label del campo de valor bajo el chip (p. ej. "Nuevo color"). */
+  valueLabel: string;
   icon: typeof Palette;
-  label: string;
-  /** Etiqueta del checkbox de toggle. Por defecto: `"Cambió el ${label.toLowerCase()}"`. */
-  toggleLabel?: string;
-  /** Etiqueta del selector cuando está activo. Por defecto: `"Nuevo ${label.toLowerCase()}"`. */
-  selectLabel?: string;
   runtValue: string;
   effectiveValue: string;
   active: boolean;
   options?: readonly string[];
   /** Usa el catálogo persistido de colores (API) en lugar de `options` locales. */
   colorCatalog?: boolean;
-  /** Mensaje cuando `active && options.length === 0` (clase desconocida o sin clase). */
+  /** Mensaje cuando `options` viene vacío (clase de carrocería desconocida o sin clase). */
   emptyMessage?: string;
-  disabled: boolean;
   onToggle: (on: boolean) => void;
   onSelect: (value: string) => void;
-}) {
-  const toggleId = `${idPrefix}-toggle`;
-  const selectId = `${idPrefix}-select`;
-  const hintId = `${idPrefix}-hint`;
-  const changed = active && isChanged(runtValue, effectiveValue);
-  const computedToggleLabel = toggleLabel ?? `Cambió el ${label.toLowerCase()}`;
-  const computedSelectLabel = selectLabel ?? `Nuevo ${label.toLowerCase()}`;
-  // El efectivo siempre debe ser una opción válida del selector aunque el catálogo placeholder
-  // no lo incluya (p. ej. un color del RUNT fuera de la lista).
-  const selectOptions = mergeOption(options, effectiveValue || runtValue);
+}
+
+/** Bloque de valor de un subtrámite seleccionado: RUNT, selector del nuevo valor y diff si cambió. */
+function SubtramiteValueBlock({ item, disabled }: { item: SubtramiteItem; disabled: boolean }) {
+  const Icon = item.icon;
+  const selectId = `tramite-simultaneo-${item.key}-valor`;
+  const hintId = `${selectId}-hint`;
+  const changed = isChanged(item.runtValue, item.effectiveValue);
+  // El efectivo siempre debe ser una opción válida del selector aunque el catálogo placeholder no
+  // lo incluya (p. ej. un color del RUNT fuera de la lista).
+  const selectOptions = mergeOption(item.options ?? [], item.effectiveValue || item.runtValue);
 
   return (
-    <div className="rounded-xl border p-3 space-y-2">
-      <div className="flex items-start gap-2.5">
-        <input
-          id={toggleId}
-          type="checkbox"
-          checked={active}
-          onChange={(e) => onToggle(e.target.checked)}
-          disabled={disabled}
-          aria-describedby={hintId}
-          className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
-        />
-        <div className="min-w-0 text-xs">
-          <label
-            htmlFor={toggleId}
-            className="flex cursor-pointer items-center gap-1.5 font-semibold"
-          >
-            <Icon aria-hidden="true" className="h-3.5 w-3.5 opacity-70" />
-            {computedToggleLabel}
-          </label>
-          <span id={hintId} className="mt-0.5 block opacity-55">
-            {`RUNT: ${up(runtValue) || '—'}`}
-          </span>
-        </div>
+    <div className="rounded-xl border p-3 space-y-1.5">
+      <div className="flex items-center gap-1.5 text-xs font-semibold">
+        <Icon aria-hidden="true" className="h-3.5 w-3.5 opacity-70" />
+        {item.optionLabel}
       </div>
+      <span id={hintId} className="block text-xs opacity-70">
+        {`RUNT: ${up(item.runtValue) || '—'}`}
+      </span>
 
-      {active && (
-        <div className="pl-6 space-y-1.5">
-          {colorCatalog ? (
-            <VehicleColorSearchSelect
-              id={selectId}
-              label={computedSelectLabel}
-              value={effectiveValue}
-              disabled={disabled}
-              placeholder={`Buscar ${label.toLowerCase()}…`}
-              onChange={onSelect}
-            />
-          ) : options.length === 0 && emptyMessage ? (
-            <p className="text-xs opacity-55">{emptyMessage}</p>
-          ) : (
-            <CatalogSearchSelect
-              id={selectId}
-              label={computedSelectLabel}
-              value={effectiveValue}
-              options={selectOptions}
-              disabled={disabled}
-              placeholder={`Buscar ${label.toLowerCase()}…`}
-              onChange={onSelect}
-            />
-          )}
-          {changed && (
-            <p className="flex items-center gap-1.5 text-xs" style={{ color: '#557EFF' }}>
-              <span className="opacity-70">{up(runtValue)}</span>
-              <ArrowRight aria-hidden="true" className="h-3 w-3" />
-              <span className="font-semibold">{up(effectiveValue)}</span>
-            </p>
-          )}
-        </div>
+      {item.colorCatalog ? (
+        <VehicleColorSearchSelect
+          id={selectId}
+          label={item.valueLabel}
+          value={item.effectiveValue}
+          disabled={disabled}
+          placeholder="Buscar color…"
+          onChange={item.onSelect}
+        />
+      ) : (item.options ?? []).length === 0 && item.emptyMessage ? (
+        <p className="text-xs opacity-70">{item.emptyMessage}</p>
+      ) : (
+        <CatalogSearchSelect
+          id={selectId}
+          label={item.valueLabel}
+          value={item.effectiveValue}
+          options={selectOptions}
+          disabled={disabled}
+          placeholder={`Buscar ${item.valueLabel.toLowerCase()}…`}
+          onChange={item.onSelect}
+        />
+      )}
+
+      {changed && (
+        <p className="flex items-center gap-1.5 text-xs" style={{ color: '#557EFF' }}>
+          <span className="opacity-70">{up(item.runtValue)}</span>
+          <ArrowRight aria-hidden="true" className="h-3 w-3" />
+          <span className="font-semibold">{up(item.effectiveValue)}</span>
+        </p>
       )}
     </div>
   );
@@ -334,6 +402,10 @@ function up(value: string): string {
 /**
  * Transformaciones declaradas (color / combustible / carrocería) listas para el FUR
  * y el resumen del trámite. Vacío si no hay cambios frente al RUNT.
+ *
+ * Sin cambios de contrato ni de lógica frente a la versión anterior de este archivo: sigue leyendo
+ * exactamente las mismas seis claves (`cambio_*` + `vehicle_*` efectivo/RUNT). La usa
+ * `FirmaFurStep` para el resumen del FUR — no depende de la gramática de esta tarjeta.
  */
 export function summarizeDeclaredTransformations(fieldValues: FieldValue[]): string[] {
   const byKey = (key: string) =>

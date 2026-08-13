@@ -83,11 +83,11 @@ beforeEach(() => {
 });
 
 describe('Tipo de servicio — paso de requisitos (solo matrícula inicial)', () => {
-  it('NO aparece en traspaso; las transformaciones sí', async () => {
+  it('NO aparece en traspaso; los trámites simultáneos sí', async () => {
     renderDeclaraciones('traspaso');
 
     expect(
-      await screen.findByRole('button', { name: /Transformaciones y condiciones del trámite/ }),
+      await screen.findByLabelText('Agregar trámite simultáneo'),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText('Tipo de servicio')).not.toBeInTheDocument();
     expect(mocks.listVehicleServiceTypes).not.toHaveBeenCalled();

@@ -9,7 +9,6 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import { VehicleTransformationsCard } from './VehicleTransformationsCard';
-import { WizardAccordion } from './WizardAccordion';
 import { WizardCardHeader } from './wizard-atoms';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
@@ -278,7 +277,7 @@ export function DeclaracionesTramite({
           />
 
           {tiposServicioLoading ? (
-            <p className="text-xs opacity-60" role="status" aria-live="polite">
+            <p className="text-xs opacity-70" role="status" aria-live="polite">
               Cargando tipos de servicio…
             </p>
           ) : tiposServicioError ? (
@@ -386,8 +385,8 @@ export function DeclaracionesTramite({
                     aria-describedby={
                       razonSocialDesdeDirectorio ? 'tramite-razon-social-origen' : undefined
                     }
-                    className={`block w-full whitespace-pre-line break-words rounded-xl border bg-[#F4F6FA] px-3 py-2 text-xs leading-relaxed dark:bg-[#131A22] ${
-                      empresaVinculadoraRazonSocial ? '' : 'opacity-60'
+                    className={`block w-full whitespace-pre-line break-words rounded-xl border bg-[#EEF5FF] px-3 py-2 text-xs leading-relaxed dark:bg-[#162744] ${
+                      empresaVinculadoraRazonSocial ? '' : 'opacity-70'
                     }`}
                   >
                     {/* Aquí ya se consultó (el `null` no llega: el campo entero no se pinta). Falta
@@ -445,53 +444,49 @@ export function DeclaracionesTramite({
         </div>
       )}
 
-      {/* Transformaciones y condiciones, juntas en un acordeón como en la propuesta: las dos
-          declaran lo mismo —en qué se aparta el vehículo de lo que dice el RUNT— y las dos ajustan
-          el checklist de documentos. Separadas en dos tarjetas se leían como temas distintos.
-          Plegado por defecto: en la mayoría de trámites no hay nada que declarar. */}
-      <WizardAccordion title="Transformaciones y condiciones del trámite">
-        <div className="space-y-4">
-          <VehicleTransformationsCard
-            fieldValues={fieldValues}
-            readOnly={readOnly}
-            saving={saving}
-            onPatch={saveTransformacion}
-            bare
-          />
+      {/* Trámites simultáneos: la tarjeta de la propuesta (`MatriculaInicial`, Step 3) sobre la
+          funcionalidad que FLIT ya tenía —declarar color/combustible/carrocería frente al RUNT—.
+          No es una función nueva: es la misma bandera+valor (`cambio_*`/`vehicle_*`) con otra
+          gramática (selector + chips en vez de casillas de verificación). Ya no vive en un
+          acordeón: la propuesta la pone como tarjeta siempre visible. */}
+      <VehicleTransformationsCard
+        fieldValues={fieldValues}
+        readOnly={readOnly}
+        saving={saving}
+        onPatch={saveTransformacion}
+      />
 
-          {/* Condiciones: en traspaso el leasing; en matrícula ya no hay flags aquí (carrocería
-              vive en Transformaciones). Solo se pinta el bloque si hay algo que marcar. */}
-          {!esMatricula && (
-            <div className="space-y-2 border-t pt-4">
-              <WizardCardHeader
-                title="Condiciones del trámite"
-                level="h4"
-                className=""
-                subtitle="Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente."
-              />
-              <label className="flex items-start gap-2.5">
-                <input
-                  type="checkbox"
-                  checked={esLeasing}
-                  onChange={(e) =>
-                    void persistir([
-                      { fieldKey: 'es_leasing', valueText: e.target.checked ? 'true' : 'false' },
-                    ])
-                  }
-                  disabled={readOnly || saving}
-                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
-                />
-                <span className="text-xs">
-                  <span className="font-semibold">Vehículo en leasing</span>
-                  <span className="mt-0.5 block opacity-55">
-                    Exige contrato de leasing y declaración de la arrendadora.
-                  </span>
-                </span>
-              </label>
-            </div>
-          )}
+      {/* Leasing: condición del vehículo (solo traspaso), no un trámite simultáneo — no comparte
+          el selector de arriba. Antes vivía como casilla suelta dentro del mismo acordeón que las
+          transformaciones; con tarjeta propia queda con su propio encabezado real, independiente
+          de la sección vecina. */}
+      {!esMatricula && (
+        <div className="space-y-2 rounded-2xl border bg-white p-4 dark:bg-[#162744]">
+          <WizardCardHeader
+            title="Condiciones del trámite"
+            subtitle="Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente."
+          />
+          <label className="flex items-start gap-2.5">
+            <input
+              type="checkbox"
+              checked={esLeasing}
+              onChange={(e) =>
+                void persistir([
+                  { fieldKey: 'es_leasing', valueText: e.target.checked ? 'true' : 'false' },
+                ])
+              }
+              disabled={readOnly || saving}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
+            />
+            <span className="text-xs">
+              <span className="font-semibold">Vehículo en leasing</span>
+              <span className="mt-0.5 block opacity-70">
+                Exige contrato de leasing y declaración de la arrendadora.
+              </span>
+            </span>
+          </label>
         </div>
-      </WizardAccordion>
+      )}
     </div>
   );
 }
