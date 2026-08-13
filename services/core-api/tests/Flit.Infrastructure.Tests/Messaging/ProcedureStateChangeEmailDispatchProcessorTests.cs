@@ -3,8 +3,10 @@ using Flit.Infrastructure.Messaging;
 using Flit.Infrastructure.Notifications;
 using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Tramites.Estados;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -206,6 +208,58 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
         sender.Messages.Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task Rechazado_IncluyeCausalesYObservacionDelUltimoEvento()
+    {
+        var dbName = NewDbName();
+        await SeedInstanceAsync(dbName);
+        await SeedRejectionAsync(
+            dbName,
+            older: ("Fotos borrosas", "Evento viejo"),
+            latest: (["Improntas no coinciden", "Documentos ilegibles"], "Adjuntar SOAT vigente."));
+        await SeedDispatchAsync(
+            dbName, "persona", "Ana", "ana@flit.test",
+            templateKey: "tramites.rechazado");
+
+        var sender = new RecordingSender();
+        var processor = NewProcessor(dbName, sender, NotificationChannel.FlitSmtp);
+
+        await processor.ProcessPendingAsync(Ct);
+
+        sender.Messages.Should().ContainSingle();
+        var html = sender.Messages[0].HtmlBody;
+        html.Should().Contain("Motivo de rechazo");
+        html.Should().Contain("Documentos ilegibles; Improntas no coinciden");
+        html.Should().Contain("Adjuntar SOAT vigente.");
+        html.Should().NotContain("Fotos borrosas");
+        html.Should().NotContain("Evento viejo");
+        sender.Messages[0].TemplateKey.Should().Be("tramites.rechazado");
+    }
+
+    [Fact]
+    public async Task Rechazado_SinCausales_SoloObservacion()
+    {
+        var dbName = NewDbName();
+        await SeedInstanceAsync(dbName);
+        await SeedRejectionAsync(
+            dbName,
+            older: null,
+            latest: ([], "Rechazo de secretaría sin catálogo."));
+        await SeedDispatchAsync(
+            dbName, "persona", "Ana", "ana@flit.test",
+            templateKey: "tramites.rechazado");
+
+        var sender = new RecordingSender();
+        var processor = NewProcessor(dbName, sender, NotificationChannel.FlitSmtp);
+
+        await processor.ProcessPendingAsync(Ct);
+
+        var html = sender.Messages[0].HtmlBody;
+        html.Should().NotContain("Motivo de rechazo");
+        html.Should().Contain("Observación");
+        html.Should().Contain("Rechazo de secretaría sin catálogo.");
+    }
+
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
@@ -305,16 +359,18 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
     }
 
     private static async Task SeedDispatchAsync(
-        string dbName, string kind, string name, string email, int attempts = 0)
+        string dbName, string kind, string name, string email, int attempts = 0,
+        string templateKey = "tramites.aprobado")
     {
         await using var db = NewContext(dbName);
         db.ProcedureStateChangeEmailDispatches.Add(
-            NewDispatch(kind, name, email, status: "pendiente", attempts));
+            NewDispatch(kind, name, email, status: "pendiente", attempts, templateKey));
         await db.SaveChangesAsync(Ct);
     }
 
     private static ProcedureStateChangeEmailDispatch NewDispatch(
-        string kind, string name, string? email, string status, int attempts = 0) => new()
+        string kind, string name, string? email, string status, int attempts = 0,
+        string templateKey = "tramites.aprobado") => new()
         {
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
@@ -324,7 +380,7 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
             RecipientName = name,
             RecipientRole = "comprador",
             RecipientKind = kind,
-            TemplateKey = "tramites.aprobado",
+            TemplateKey = templateKey,
             Status = status,
             Attempts = attempts,
             QueuedAt = DateTimeOffset.UtcNow,
@@ -332,6 +388,90 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
             ProcessedAt = status == "omitido" ? DateTimeOffset.UtcNow : null,
             FailureReason = status == "omitido" ? "Sin correo para la persona" : null,
         };
+
+    private static async Task SeedRejectionAsync(
+        string dbName,
+        (string Causal, string Observacion)? older,
+        (IReadOnlyList<string> Causales, string Observacion) latest)
+    {
+        await using var db = NewContext(dbName);
+        var now = DateTimeOffset.UtcNow;
+
+        if (older is { } oldEvent)
+        {
+            var oldHistoryId = Guid.NewGuid();
+            db.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
+            {
+                Id = oldHistoryId,
+                TenantId = TenantId,
+                ProcedureInstanceId = InstanceId,
+                FromStatus = TramiteEstado.Entregado,
+                ToStatus = TramiteEstado.Rechazado,
+                ChangedAt = now.AddDays(-2),
+                Reason = oldEvent.Observacion,
+                Metadata = "{}",
+            });
+            var oldReasonId = Guid.NewGuid();
+            db.RejectionReasons.Add(new RejectionReason
+            {
+                Id = oldReasonId,
+                Code = "OLD",
+                Description = oldEvent.Causal,
+                Modalidad = "matricula_inicial",
+                SortOrder = 1,
+                IsActive = true,
+                CreatedAt = now,
+            });
+            db.ProcedureInstanceRejectionReasons.Add(new ProcedureInstanceRejectionReason
+            {
+                Id = Guid.NewGuid(),
+                TenantId = TenantId,
+                ProcedureInstanceId = InstanceId,
+                StatusHistoryId = oldHistoryId,
+                RejectionReasonId = oldReasonId,
+                CreatedAt = now.AddDays(-2),
+            });
+        }
+
+        var historyId = Guid.NewGuid();
+        db.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
+        {
+            Id = historyId,
+            TenantId = TenantId,
+            ProcedureInstanceId = InstanceId,
+            FromStatus = TramiteEstado.Entregado,
+            ToStatus = TramiteEstado.Rechazado,
+            ChangedAt = now.AddMinutes(-5),
+            Reason = latest.Observacion,
+            Metadata = "{}",
+        });
+
+        for (var i = 0; i < latest.Causales.Count; i++)
+        {
+            var reasonId = Guid.NewGuid();
+            db.RejectionReasons.Add(new RejectionReason
+            {
+                Id = reasonId,
+                Code = $"NEW{i}",
+                Description = latest.Causales[i],
+                Modalidad = "matricula_inicial",
+                SortOrder = 10 + i,
+                IsActive = true,
+                CreatedAt = now,
+            });
+            db.ProcedureInstanceRejectionReasons.Add(new ProcedureInstanceRejectionReason
+            {
+                Id = Guid.NewGuid(),
+                TenantId = TenantId,
+                ProcedureInstanceId = InstanceId,
+                StatusHistoryId = historyId,
+                RejectionReasonId = reasonId,
+                CreatedAt = now.AddMinutes(-5),
+            });
+        }
+
+        await db.SaveChangesAsync(Ct);
+    }
 
     private sealed class RecordingSender : IEmailSender
     {
