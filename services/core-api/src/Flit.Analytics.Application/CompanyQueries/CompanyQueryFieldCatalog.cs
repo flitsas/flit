@@ -36,11 +36,19 @@ public sealed class CompanyQueryFieldCatalog : IQueryFieldCatalog
     public const string MetodoPago = "metodo_pago";
     public const string TipoTraspaso = "tipo_traspaso";
 
+    /// <summary>
+    /// Solo para SuperAdmin en modo «todas las compañías» (<c>ExecuteForSuperAdminAsync</c>).
+    /// Se excluye del catálogo que ve una empresa normal (<see cref="CompanyQueryRepository.GetFieldsAsync"/>)
+    /// porque para ella el campo no dice nada: todas sus filas son de su propia compañía.
+    /// </summary>
+    public const string Compania = "compania";
+
     public const string GrupoVehiculo = "Vehículo";
     public const string GrupoPersonas = "Personas";
     public const string GrupoTramite = "Trámite";
     public const string GrupoCaracteristicas = "Características";
     public const string GrupoComercial = "Comercial";
+    public const string GrupoAlcance = "Alcance";
 
     private CompanyQueryFieldCatalog()
     {
@@ -160,6 +168,11 @@ public sealed class CompanyQueryFieldCatalog : IQueryFieldCatalog
             OpcionOperators, TipoTraspasoOptions,
             "En matrícula inicial no aplica; esos trámites no coinciden con ninguno.",
             AdmiteLista: true),
+
+        // Las opciones las pone el repositorio con las compañías activas de la plataforma. Sin
+        // condición, la consulta corre sobre todas; con ella, se acota a una o varias.
+        new(Compania, "Compañía", QueryFieldKind.Opcion, GrupoAlcance, OpcionOperators, [],
+            "Sin elegir ninguna, la consulta corre sobre todas las compañías.", AdmiteLista: true),
     ];
 
     // ── IQueryFieldCatalog ────────────────────────────────────────────────────────────────────

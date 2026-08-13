@@ -47,3 +47,28 @@ public sealed class SavedQueryNameTakenException : Exception
 
     public string Nombre { get; }
 }
+
+/// <summary>
+/// SuperAdmin pidió correr sobre «todas las compañías» sin un filtro de
+/// <c>CompanyQueryFieldCatalog.Compania</c> ni un rango de fecha acotado.
+///
+/// <para>Sin una de las dos cosas, la consulta barre la plataforma entera contra un tope de cordura
+/// (<see cref="QueryLimits.MaxUniverso"/>) que se aplica SIN <c>ORDER BY</c>: el usuario vería una
+/// porción arbitraria del universo y lo leería como el resultado completo. Es preferible pedir que
+/// acote antes de correr, a devolver un resultado que se parece a la respuesta pero no lo es.</para>
+/// </summary>
+public sealed class SuperAdminQueryTooBroadException : Exception
+{
+    public SuperAdminQueryTooBroadException(int maxDias)
+        : base(
+            "Esta consulta cruza todas las compañías sin acotar: elige una o varias compañías, "
+            + $"o un rango de fecha de máximo {maxDias} días.") =>
+        MaxDias = maxDias;
+
+    public SuperAdminQueryTooBroadException()
+        : this(QueryLimits.MaxDiasSinAcotarCompania)
+    {
+    }
+
+    public int MaxDias { get; }
+}

@@ -41,16 +41,44 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
         new(CompanyQueryFieldCatalog.Instance, Accessor, DateOf);
 
     private readonly FlitDbContext _context;
+    private readonly SuperAdminTenantScope _superAdminScope;
 
-    public CompanyQueryRepository(FlitDbContext context) =>
+    public CompanyQueryRepository(FlitDbContext context)
+    {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _superAdminScope = new SuperAdminTenantScope(_context);
+    }
 
     // ── Ejecución ─────────────────────────────────────────────────────────────────────────────
 
-    public async Task<CompanyQueryResultDto> ExecuteAsync(
+    public Task<CompanyQueryResultDto> ExecuteAsync(
         Guid tenantId,
         QueryRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ExecuteAsync([tenantId], request, exigirAcotar: false, cancellationToken);
+
+    /// <summary>
+    /// Igual que <see cref="ExecuteAsync(Guid, QueryRequest, CancellationToken)"/> pero sobre una
+    /// LISTA de compañías a la vez — el motor de SuperAdmin, que corre sin tenant único.
+    ///
+    /// <para><c>exigirAcotar</c> en <c>true</c> rechaza la consulta si no hay un filtro de
+    /// <see cref="CompanyQueryFieldCatalog.Compania"/> NI un rango de fecha acotado (≤ 90 días): sin
+    /// eso, «todas las compañías» sin más equivale a barrer toda la plataforma, y el tope de
+    /// <see cref="QueryLimits.MaxUniverso"/> se aplicaría sin <c>ORDER BY</c> — se vería una porción
+    /// arbitraria en vez de un error claro pidiendo acotar.</para>
+    /// </summary>
+    public Task<CompanyQueryResultDto> ExecuteForSuperAdminAsync(
+        QueryRequest request,
+        CancellationToken cancellationToken = default) =>
+        _superAdminScope.ExecuteAsync(
+            tenantIds => ExecuteAsync(tenantIds, request, exigirAcotar: true, cancellationToken),
+            cancellationToken);
+
+    private async Task<CompanyQueryResultDto> ExecuteAsync(
+        IReadOnlyList<Guid> tenantIds,
+        QueryRequest request,
+        bool exigirAcotar,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -58,7 +86,18 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
         var today = BogotaDays.Today();
         var (desde, hasta) = QueryRangePreset.Resolve(definition.Fechas, today);
 
-        var rows = await LoadRowsAsync(tenantId, definition, cancellationToken).ConfigureAwait(false);
+        if (exigirAcotar)
+        {
+            var acotaCompania = definition.Condiciones.Any(c => c.FieldId == CompanyQueryFieldCatalog.Compania);
+            var dentroDeRango = hasta.DayNumber - desde.DayNumber + 1 <= QueryLimits.MaxDiasSinAcotarCompania;
+
+            if (!acotaCompania && !dentroDeRango)
+            {
+                throw new SuperAdminQueryTooBroadException(QueryLimits.MaxDiasSinAcotarCompania);
+            }
+        }
+
+        var rows = await LoadRowsAsync(tenantIds, definition, cancellationToken).ConfigureAwait(false);
 
         var condiciones = definition.Condiciones
             .Select(c => (Condition: c, Predicate: Engine.BuildPredicate(c)))
@@ -88,6 +127,10 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
 
         var cobertura = Engine.BuildCoverage(definition, rows, matched, condiciones, from, to);
 
+        var empresas = await ResolveTenantNamesAsync(
+            ordered.Select(r => r.Instance.TenantId).Distinct().ToList(), cancellationToken)
+            .ConfigureAwait(false);
+
         return new CompanyQueryResultDto(
             Total: matched.Count,
             Page: page,
@@ -95,20 +138,20 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             Desde: desde,
             Hasta: hasta,
             TotalPeriodoAnterior: anterior,
-            Filas: ordered.Select(ToDto).ToList(),
+            Filas: ordered.Select(r => ToDto(r, empresas)).ToList(),
             Cobertura: cobertura);
     }
 
     // ── Carga ─────────────────────────────────────────────────────────────────────────────────
 
     private async Task<List<CompanyRow>> LoadRowsAsync(
-        Guid tenantId,
+        IReadOnlyList<Guid> tenantIds,
         QueryDefinition definition,
         CancellationToken cancellationToken)
     {
         var query = _context.ProcedureInstances
             .AsNoTracking()
-            .Where(p => p.DeletedAt == null && p.TenantId == tenantId);
+            .Where(p => p.DeletedAt == null && tenantIds.Contains(p.TenantId));
 
         var identificador = definition.Condiciones.FirstOrDefault(c =>
             c.Operator == QueryOperator.EsAlguno && CompanyQueryFieldCatalog.IsIdentifier(c.FieldId));
@@ -135,6 +178,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
         var instances = await query
             .Select(p => new InstanceRow(
                 p.Id,
+                p.TenantId,
                 p.ReferenceNumber,
                 p.Plate,
                 p.Vin,
@@ -384,6 +428,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
         CompanyQueryFieldCatalog.TipoTramite => r => [r.Instance.ProcedureTypeId.ToString()],
         CompanyQueryFieldCatalog.Estado => r => [r.Instance.Status],
         CompanyQueryFieldCatalog.RadicadoPor => r => [r.Instance.CreatedByUserId.ToString()],
+        CompanyQueryFieldCatalog.Compania => r => [r.Instance.TenantId.ToString()],
         CompanyQueryFieldCatalog.Prioritario => r => [Bool(r.Instance.Prioritario)],
         CompanyQueryFieldCatalog.EnSubsanacion => r => [Bool(r.Instance.SubsanacionActiva)],
         CompanyQueryFieldCatalog.Prenda => r => [Bool(r.TienePrenda)],
@@ -435,6 +480,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             CompanyQuerySort.Estado => r => r.Instance.Status,
             CompanyQuerySort.Organismo => r => r.OrganismoNombre,
             CompanyQuerySort.Tipo => r => r.TipoNombre,
+            CompanyQuerySort.Compania => r => r.Instance.TenantId,
             _ => r => r.Instance.CreatedAt,
         };
 
@@ -445,7 +491,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
 
     // ── Proyección ────────────────────────────────────────────────────────────────────────────
 
-    private static CompanyQueryRowDto ToDto(CompanyRow row) =>
+    private static CompanyQueryRowDto ToDto(CompanyRow row, IReadOnlyDictionary<Guid, string> empresas) =>
         new(
             ProcedureInstanceId: row.Instance.Id,
             ReferenceNumber: row.Instance.ReferenceNumber,
@@ -453,6 +499,8 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             Vin: row.Instance.Vin,
             TransitOfficeId: row.Instance.TransitOfficeId,
             TransitOfficeName: row.OrganismoNombre,
+            CompaniaId: row.Instance.TenantId,
+            CompaniaNombre: empresas.GetValueOrDefault(row.Instance.TenantId, "(compañía retirada)"),
             ProcedureTypeId: row.Instance.ProcedureTypeId,
             ProcedureTypeName: row.TipoNombre,
             Modalidad: row.Instance.Modalidad,
@@ -480,18 +528,53 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             DiasEnOrganismo: row.DiasEnOrganismo,
             Devoluciones: row.Devoluciones);
 
+    // ── Resolución de nombres ─────────────────────────────────────────────────────────────────
+
+    private async Task<Dictionary<Guid, string>> ResolveTenantNamesAsync(
+        List<Guid> tenantIds,
+        CancellationToken cancellationToken) =>
+        tenantIds.Count == 0
+            ? []
+            : await _context.Tenants
+                .AsNoTracking()
+                .Where(t => tenantIds.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id, t => t.LegalName, cancellationToken)
+                .ConfigureAwait(false);
+
     // ── Catálogo de campos ────────────────────────────────────────────────────────────────────
 
     public async Task<IReadOnlyList<QueryFieldDto>> GetFieldsAsync(
         Guid tenantId,
         CancellationToken cancellationToken = default)
     {
+        var fields = await GetFieldsAsync([tenantId], cancellationToken).ConfigureAwait(false);
+
+        // «Compañía» solo existe para SuperAdmin viendo varias a la vez: para una empresa normal
+        // todas sus filas son de sí misma, así que el filtro no dice nada — se le quita de encima
+        // del catálogo, no solo se le deja sin opciones.
+        return fields.Where(f => f.Id != CompanyQueryFieldCatalog.Compania).ToList();
+    }
+
+    /// <summary>
+    /// El mismo catálogo, pero con «Compañía» resuelta a las compañías activas de la plataforma
+    /// (gestoras, no organismos). Solo lo usa el motor de SuperAdmin.
+    /// </summary>
+    public Task<IReadOnlyList<QueryFieldDto>> GetFieldsForSuperAdminAsync(
+        CancellationToken cancellationToken = default) =>
+        _superAdminScope.ExecuteAsync(
+            tenantIds => GetFieldsAsync(tenantIds, cancellationToken),
+            cancellationToken);
+
+    private async Task<IReadOnlyList<QueryFieldDto>> GetFieldsAsync(
+        IReadOnlyList<Guid> tenantIds,
+        CancellationToken cancellationToken)
+    {
         // Las opciones salen de lo que esta empresa TIENE, no de los catálogos completos del
         // sistema. Ofrecer un organismo con el que nunca ha tramitado, o un tipo que no usa, es
         // ofrecer un filtro que solo puede devolver cero — y el usuario lo lee como un fallo.
         var propios = _context.ProcedureInstances
             .AsNoTracking()
-            .Where(p => p.DeletedAt == null && p.TenantId == tenantId);
+            .Where(p => p.DeletedAt == null && tenantIds.Contains(p.TenantId));
 
         var oficinaIds = await propios
             .Where(p => p.TransitOfficeId != null)
@@ -561,6 +644,20 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             .Select(p => new QueryFieldOptionDto(p, p))
             .ToList();
 
+        // Solo tiene sentido con más de una compañía en juego (el motor de SuperAdmin); para el
+        // caso normal de una empresa sola, GetFieldsAsync(Guid,...) descarta el campo después.
+        var companiaOptions = tenantIds.Count <= 1
+            ? []
+            : (await _context.Tenants
+                    .AsNoTracking()
+                    .Where(t => tenantIds.Contains(t.Id))
+                    .Select(t => new { t.Id, t.LegalName })
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false))
+                .OrderBy(t => t.LegalName, StringComparer.OrdinalIgnoreCase)
+                .Select(t => new QueryFieldOptionDto(t.Id.ToString(), t.LegalName))
+                .ToList();
+
         return CompanyQueryFieldCatalog.Fields
             .Select(f => f.Id switch
             {
@@ -568,6 +665,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
                 CompanyQueryFieldCatalog.TipoTramite => f with { Options = tipoOptions },
                 CompanyQueryFieldCatalog.RadicadoPor => f with { Options = usuarioOptions },
                 CompanyQueryFieldCatalog.MetodoPago => f with { Options = pagoOptions },
+                CompanyQueryFieldCatalog.Compania => f with { Options = companiaOptions },
                 _ => f,
             })
             .ToList();
@@ -728,6 +826,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
 
     private sealed record InstanceRow(
         Guid Id,
+        Guid TenantId,
         string ReferenceNumber,
         string? Plate,
         string? Vin,

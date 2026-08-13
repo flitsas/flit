@@ -133,6 +133,13 @@ public static class QueryLimits
 
     /// <summary>Trámites que se traen cuando la consulta no acota por identificador. Tope de cordura.</summary>
     public const int MaxUniverso = 20_000;
+
+    /// <summary>
+    /// Días de rango que SuperAdmin puede consultar sobre TODAS las compañías sin elegir ninguna en
+    /// particular. Pasado esto, tiene que acotar por compañía o por un rango más corto — ver
+    /// <see cref="SuperAdminQueryTooBroadException"/>.
+    /// </summary>
+    public const int MaxDiasSinAcotarCompania = 90;
 }
 
 /// <summary>Parámetros de ejecución: la definición más la página que se quiere ver.</summary>
