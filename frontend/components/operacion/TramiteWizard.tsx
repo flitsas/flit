@@ -500,6 +500,31 @@ export function TramiteWizard(props: Props) {
    */
   const [subsanacionSavedEdits, setSubsanacionSavedEdits] = useState(false);
 
+  /**
+   * Cabecera compacta al hacer scroll: el título y su descripción se pliegan y el seguimiento de
+   * pasos se queda. Es información que solo hace falta al llegar —una vez dentro, lo que el gestor
+   * necesita ver es en qué paso está—, y en pantallas de portátil el bloque completo se comía un
+   * tercio del alto útil del formulario.
+   *
+   * Se resuelve con un centinela y un IntersectionObserver en vez de escuchar el scroll: el
+   * observador no corre en cada píxel movido, solo cuando el centinela cruza el borde.
+   */
+  const centinelaCabeceraRef = useRef<HTMLDivElement | null>(null);
+  const [cabeceraCompacta, setCabeceraCompacta] = useState(false);
+
+  useEffect(() => {
+    const centinela = centinelaCabeceraRef.current;
+    if (!centinela || typeof IntersectionObserver === 'undefined') return;
+    // El scroll no es el de la ventana: el contenido vive dentro del contenedor del Shell.
+    const contenedor = document.querySelector('[data-shell-scroll]');
+    const observador = new IntersectionObserver(
+      ([entrada]) => setCabeceraCompacta(!entrada.isIntersecting),
+      { root: contenedor ?? null },
+    );
+    observador.observe(centinela);
+    return () => observador.disconnect();
+  }, []);
+
   // Preflight local (semáforo) para los pasos consulta/validación.
   const [preflight, setPreflight] = useState<PreflightSnapshot | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
@@ -1069,19 +1094,35 @@ export function TramiteWizard(props: Props) {
           velo impide el doble envío y el mensaje nombra al organismo de tránsito, para que la
           demora se lea como lo que es —un tercero respondiendo— y no como un cuelgue. */}
       {submitting && <CarLoaderModal mode="radicacion" />}
+      {/* Centinela del colapso: mientras se ve, la cabecera va completa; al salir de cuadro el
+          asistente ya está en marcha y el título deja sitio a los pasos. Va FUERA del bloque
+          sticky —si estuviera dentro nunca saldría de vista— y mide un píxel: no ocupa hueco. */}
+      <div ref={centinelaCabeceraRef} aria-hidden="true" className="h-px" />
       {/* Título + seguimiento fijos al scroll de main; fondo sólido app-bg (no transparente). */}
       <div className="sticky top-0 z-30 -mx-1 space-y-3 bg-[#eef5ff] px-1 pb-3 pt-1 dark:bg-[#0a1428]">
         <div
-          className="flex items-center justify-between gap-3 rounded-2xl border border-[#DFE5ED] bg-white px-5 py-4 dark:border-[#1A1F2B] dark:bg-[#0B0F14]"
+          className={`flex items-center justify-between gap-3 rounded-2xl border border-[#DFE5ED] bg-white px-5 transition-[padding] duration-200 motion-reduce:transition-none dark:border-[#1A1F2B] dark:bg-[#0B0F14] ${
+            cabeceraCompacta ? 'py-2' : 'py-4'
+          }`}
           style={{ boxShadow: '0 8px 24px rgba(22, 39, 68, 0.08)' }}
         >
-          <div className="min-w-0">
-            <h1 className="truncate text-lg font-bold sm:text-xl" style={{ color: '#557EFF' }}>
-              {displayTitle}
-            </h1>
-            <p className="mt-0.5 truncate text-xs" style={{ color: '#9AA5B1' }}>
-              {displaySubtitle}
-            </p>
+          {/* Colapso por `grid-template-rows`, no por `display:none`: el h1 y su descripción siguen
+              en el documento y en el árbol de accesibilidad, así que el lector de pantalla puede
+              seguir anunciando de qué trámite se trata aunque en pantalla no se vean. El dato
+              tampoco se pierde a la vista: la franja azul de abajo repite tipo, id y estado. */}
+          <div
+            className={`grid min-w-0 transition-[grid-template-rows] duration-200 motion-reduce:transition-none ${
+              cabeceraCompacta ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'
+            }`}
+          >
+            <div className="min-w-0 overflow-hidden">
+              <h1 className="truncate text-lg font-bold sm:text-xl" style={{ color: '#557EFF' }}>
+                {displayTitle}
+              </h1>
+              <p className="mt-0.5 truncate text-xs" style={{ color: '#9AA5B1' }}>
+                {displaySubtitle}
+              </p>
+            </div>
           </div>
           <button
             onClick={() => {
