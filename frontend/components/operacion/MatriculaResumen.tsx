@@ -12,6 +12,7 @@ import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { formatDateOnly } from '@/lib/format/date-only';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { WizardAccordion } from './WizardAccordion';
+import { WizardPair } from './wizard-atoms';
 import { BiometricStep } from './BiometricStep';
 import { MandatarioSection } from './MandatarioSection';
 import { openAttachmentInNewTab } from './ExpedienteVisor';
@@ -116,15 +117,13 @@ function ResumenDisclosure({
   );
 }
 
+/**
+ * Rótulo/valor de las grillas del resumen. Delega en `WizardPair` (el átomo del kit para grillas de
+ * datos consolidados, pensado justamente para esta pantalla): la única diferencia es el fallback a
+ * «—» cuando el dato no llegó, para no dejar la celda muda.
+ */
 function Field({ label, value }: { label: string; value?: string | null }) {
-  return (
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-60">{label}</p>
-      <p className="break-words text-xs font-medium" style={{ color: '#162744' }}>
-        {value || '—'}
-      </p>
-    </div>
-  );
+  return <WizardPair label={label} value={value || '—'} />;
 }
 
 function PrendaDocumentoVerButton({
@@ -141,7 +140,7 @@ function PrendaDocumentoVerButton({
 
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-60">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-70">{label}</p>
       <div className="mt-1.5 flex flex-col gap-1">
         <button
           type="button"
@@ -303,7 +302,7 @@ function CertificadoIdButton({
         {busy ? 'Abriendo…' : label}
       </button>
       {!aprobado && (
-        <span className="text-xs opacity-60">
+        <span className="text-xs opacity-70">
           El certificado estará disponible cuando la validación sea aprobada.
         </span>
       )}
@@ -351,7 +350,7 @@ function ActorBlock({
       </div>
       {showRepresentante && bio && (
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] opacity-50">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
             Representante legal
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -364,7 +363,7 @@ function ActorBlock({
       )}
       {!hideValidacion ? (
         <div className="space-y-3 border-t pt-3" style={{ borderColor: BORDER }}>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-60">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
             Validación de identidad
           </p>
           <IdentidadStatusBanner bio={bio} firmaBaul={firmaBaul} />
@@ -421,8 +420,14 @@ export default function MatriculaResumen({
         : soatEstado === 'unknown'
           ? 'No reportado'
           : '—';
+  // Mismos tokens semánticos que StatusBadge (`--badge-success-fg` / `--badge-danger-fg` de
+  // globals.css), no hex sueltos: quedan theme-aware en vez de fijos para modo oscuro.
   const soatColor =
-    soatEstado === 'vigente' ? '#15803d' : soatEstado === 'vencido' ? '#c2410c' : undefined;
+    soatEstado === 'vigente'
+      ? 'var(--badge-success-fg)'
+      : soatEstado === 'vencido'
+        ? 'var(--badge-danger-fg)'
+        : undefined;
   const resumenTitulo = 'Resumen del trámite';
   const partesTxt = [vendedor?.nombre, comprador?.nombre].filter(Boolean).join(' · ');
   const hasExtras = transformaciones.length > 0 || !!prenda;
@@ -503,7 +508,7 @@ export default function MatriculaResumen({
             <div className="text-right">
               <label
                 htmlFor="fur-fecha-tramite"
-                className="mb-0.5 block text-xs font-semibold uppercase tracking-[0.2em] opacity-60"
+                className="mb-0.5 block text-xs font-semibold uppercase tracking-[0.2em] opacity-70"
               >
                 Fecha del trámite
               </label>
@@ -548,7 +553,7 @@ export default function MatriculaResumen({
         </div>
         {specs.length > 0 ? (
           <div className="mt-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] opacity-50">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
               Especificaciones técnicas
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -559,7 +564,7 @@ export default function MatriculaResumen({
           </div>
         ) : null}
         {!placa && !vehiculo && !vin && specs.length === 0 ? (
-          <p className="text-xs opacity-60">Sin datos de vehículo.</p>
+          <p className="text-xs opacity-70">Sin datos de vehículo.</p>
         ) : null}
       </ResumenDisclosure>
 

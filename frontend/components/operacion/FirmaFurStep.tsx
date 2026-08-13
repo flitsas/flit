@@ -23,6 +23,7 @@ import { prendaDocLabelFor, prendaDocTipoFor } from './prenda-document-tipos';
 import { summarizeDeclaredTransformations } from './VehicleTransformationsCard';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { WizardAccordion } from './WizardAccordion';
+import { WizardCardHeader } from './wizard-atoms';
 import type {
   Actor,
   BiometricParte,
@@ -79,15 +80,20 @@ const RNMC_STATUS_STYLE: Record<string, { dot: string; text: string }> = {
 function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: boolean }) {
   return (
     <div className={WIZARD_CARD}>
-      <div className="mb-3 flex items-center gap-2">
-        <Search className="h-4 w-4 opacity-60" aria-hidden="true" />
-        <h3 className="text-sm font-semibold">Consulta RNMC — Medidas correctivas</h3>
-        {loading && <RefreshCw className="h-3.5 w-3.5 animate-spin opacity-60" aria-hidden="true" />}
-      </div>
+      <WizardCardHeader
+        title="Consulta RNMC — Medidas correctivas"
+        action={
+          loading ? (
+            <RefreshCw className="h-3.5 w-3.5 animate-spin opacity-70" aria-hidden="true" />
+          ) : (
+            <Search className="h-4 w-4 opacity-70" aria-hidden="true" />
+          )
+        }
+      />
       {loading && checks.length === 0 ? (
-        <p className="text-xs opacity-60">Consultando el RNMC de los actores…</p>
+        <p className="text-xs opacity-70">Consultando el RNMC de los actores…</p>
       ) : checks.length === 0 ? (
-        <p className="text-xs opacity-60">Sin resultados del RNMC para los actores del trámite.</p>
+        <p className="text-xs opacity-70">Sin resultados del RNMC para los actores del trámite.</p>
       ) : (
         <ul className="space-y-1.5" aria-label="Resultados RNMC por actor">
           {checks.map((c) => {
@@ -1488,56 +1494,52 @@ function PlateFlowCompleteSection({
   if (plateFlowStatus !== 'asignado') return null;
 
   return (
-    <div className="space-y-3 pt-2 border-t">
-      <div>
-        <h5 className="text-xs font-bold">Procesar trámite (Asignado → Terminado)</h5>
-        <p className="text-xs opacity-70">
-          Marca los checks opcionales si aplican y procesa el trámite. Sin pasar a Terminado el OT
-          no puede aprobar ni rechazar.
-        </p>
+    <div className={WIZARD_CARD}>
+      <WizardCardHeader
+        title="Procesar trámite (Asignado → Terminado)"
+        subtitle="Marca los checks opcionales si aplican y procesa el trámite. Sin pasar a Terminado el OT no puede aprobar ni rechazar."
+      />
+
+      <div className="space-y-3">
+        <label className="flex cursor-pointer items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[#557EFF]"
+            checked={soatPagado}
+            onChange={(e) => setSoatPagado(e.target.checked)}
+            disabled={working}
+          />
+          SOAT pagado
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[#557EFF]"
+            checked={impuestoPagado}
+            onChange={(e) => setImpuestoPagado(e.target.checked)}
+            disabled={working}
+          />
+          Impuesto departamental pagado
+        </label>
+
+        <button
+          type="button"
+          disabled={working}
+          onClick={() => void completar()}
+          className="rounded-lg px-3.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+          style={{ background: '#557EFF' }}
+        >
+          {working ? 'Procesando…' : 'Marcar como Terminado'}
+        </button>
+
+        {msg ? <InlineAlert tone="success">{msg}</InlineAlert> : null}
+        {warning ? (
+          <InlineAlert tone="warning" title="Trámite enviado al OT con advertencia">
+            {warning}
+          </InlineAlert>
+        ) : null}
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
       </div>
-
-      <label className="flex cursor-pointer items-center gap-2 text-xs">
-        <input
-          type="checkbox"
-          className="h-4 w-4 accent-[#557EFF]"
-          checked={soatPagado}
-          onChange={(e) => setSoatPagado(e.target.checked)}
-          disabled={working}
-        />
-        SOAT pagado
-      </label>
-      <label className="flex cursor-pointer items-center gap-2 text-xs">
-        <input
-          type="checkbox"
-          className="h-4 w-4 accent-[#557EFF]"
-          checked={impuestoPagado}
-          onChange={(e) => setImpuestoPagado(e.target.checked)}
-          disabled={working}
-        />
-        Impuesto departamental pagado
-      </label>
-
-      <button
-        type="button"
-        disabled={working}
-        onClick={() => void completar()}
-        className="rounded-lg bg-[#557eff] px-3.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-      >
-        {working ? 'Procesando…' : 'Marcar como Terminado'}
-      </button>
-
-      {msg ? <p className="m-0 text-xs text-green-700">{msg}</p> : null}
-      {warning ? (
-        <InlineAlert tone="warning" title="Trámite enviado al OT con advertencia">
-          {warning}
-        </InlineAlert>
-      ) : null}
-      {error ? (
-        <p role="alert" className="m-0 text-xs text-orange-700">
-          {error}
-        </p>
-      ) : null}
     </div>
   );
 }

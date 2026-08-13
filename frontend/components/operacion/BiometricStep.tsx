@@ -8,13 +8,16 @@ import {
   FileSignature,
   RefreshCw,
   RotateCcw,
-  XCircle,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { tramitesClient, getIdentitySendConflict } from '@/lib/api/tramites-client';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
+import { InlineAlert } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { WizardCardHeader } from './wizard-atoms';
+import { WizardAccordion } from './WizardAccordion';
+import { WIZARD_CARD } from './wizard-field-styles';
 import type {
   BiometricEstado,
   BiometricParte,
@@ -227,10 +230,15 @@ export function BiometricStep({
     </button>
   ) : null;
 
+  // Feature 05 (rediseño) — la rejilla de partes es de dos columnas SOLO cuando hay dos partes
+  // (traspaso: vendedor + comprador); con una sola (matrícula inicial) se queda en una columna para
+  // no dejar una mitad de tarjeta vacía.
+  const gridClass = partes.length > 1 ? 'lg:grid-cols-2' : '';
+
   const partesContent = initialLoading ? (
-    <BiometricSkeleton partes={partes} nested={pagePanel} />
+    <BiometricSkeleton partes={partes} gridClass={gridClass} />
   ) : (
-    <div className="space-y-4">
+    <div className={`grid grid-cols-1 gap-4 ${gridClass}`}>
       {partes.map((parte) => {
         const matches = (validations ?? []).filter((v) =>
           modalidad === 'traspaso'
@@ -250,7 +258,6 @@ export function BiometricStep({
               firmaBaulServidor.includes(parte) || vaultCoveredPartes.includes(parte)
             }
             onChanged={() => void handleRefresh()}
-            nested={pagePanel}
           />
         );
       })}
@@ -259,32 +266,11 @@ export function BiometricStep({
 
   if (pagePanel) {
     return (
-      <div
-        className="rounded-2xl border bg-white p-5 dark:bg-[#162744]"
-        style={{ borderColor: '#DFE5ED' }}
-      >
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-base font-bold" style={{ color: '#162744' }}>
-              {heading}
-            </h2>
-            {headingSubtitle ? (
-              <p className="mt-1 text-xs opacity-60">{headingSubtitle}</p>
-            ) : null}
-          </div>
-          {refreshButton}
+      <div className="space-y-4">
+        <div className={WIZARD_CARD}>
+          <WizardCardHeader title={heading ?? ''} subtitle={headingSubtitle} action={refreshButton} />
+          {error && <InlineAlert tone="error">{error}</InlineAlert>}
         </div>
-
-        {error && (
-          <div
-            className="mb-4 rounded-xl border p-3 text-xs"
-            style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
-            role="alert"
-            aria-live="polite"
-          >
-            {error}
-          </div>
-        )}
 
         {partesContent}
       </div>
@@ -296,10 +282,7 @@ export function BiometricStep({
       {/* En resumen (hideIntro) no se muestra la franja vacía con solo "Actualizar":
           el polling / "Actualizar estado" por tarjeta bastan. */}
       {!hideIntro && (
-        <div
-          className="flex items-start justify-between gap-3 rounded-2xl border bg-white px-4 py-3 dark:bg-[#162744]"
-          style={{ borderColor: '#DFE5ED' }}
-        >
+        <div className={`${WIZARD_CARD} flex items-start justify-between gap-3`}>
           <p className="text-xs opacity-70">
             Validación de identidad de cada parte. Al iniciarla, el cliente recibe el enlace de captura
             por correo; el resultado se actualiza automáticamente.
@@ -308,16 +291,7 @@ export function BiometricStep({
         </div>
       )}
 
-      {error && (
-        <div
-          className="rounded-xl border bg-white p-3 text-xs dark:bg-[#162744]"
-          style={{ borderColor: '#FF4E00', color: '#FF4E00' }}
-          role="alert"
-          aria-live="polite"
-        >
-          {error}
-        </div>
-      )}
+      {error && <InlineAlert tone="error">{error}</InlineAlert>}
 
       {partesContent}
     </div>
@@ -330,25 +304,21 @@ export function BiometricStep({
  */
 function BiometricSkeleton({
   partes,
-  nested = false,
+  gridClass = '',
 }: {
   partes: BiometricParte[];
-  nested?: boolean;
+  gridClass?: string;
 }) {
   return (
-    <div className="space-y-4" role="status" aria-live="polite" aria-busy="true">
+    <div
+      className={`grid grid-cols-1 gap-4 ${gridClass}`}
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
       <span className="sr-only">Cargando validaciones de identidad…</span>
       {partes.map((parte) => (
-        <div
-          key={parte}
-          className={
-            nested
-              ? 'rounded-xl border p-4'
-              : 'rounded-2xl border bg-white p-4 dark:bg-[#162744]'
-          }
-          style={{ borderColor: '#DFE5ED' }}
-          aria-hidden="true"
-        >
+        <div key={parte} className={WIZARD_CARD} aria-hidden="true">
           <div className="mb-3 h-3 w-24 animate-pulse rounded bg-black/10 dark:bg-white/10" />
           <div className="h-12 w-full animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
         </div>
@@ -366,7 +336,6 @@ function ParteCard({
   historial,
   vaultCovered,
   onChanged,
-  nested = false,
 }: {
   parte: BiometricParte;
   instanceId: string | null;
@@ -376,26 +345,15 @@ function ParteCard({
   historial: BiometricValidation[];
   vaultCovered: boolean;
   onChanged: () => void;
-  /** Dentro del panel blanco del paso Identidad: sin segundo fondo blanco. */
-  nested?: boolean;
 }) {
   const estado = validation?.status;
   return (
-    <fieldset
-      className={
-        nested
-          ? 'rounded-xl border p-4'
-          : 'rounded-2xl border bg-white p-5 dark:bg-[#162744]'
-      }
-      style={{ borderColor: '#DFE5ED' }}
-      aria-label={`Biométrica ${PARTE_LABEL[parte]}`}
-    >
-      <legend
-        className="px-2 text-xs font-bold"
-        style={{ color: '#162744' }}
-      >
-        {PARTE_LABEL[parte]}
-      </legend>
+    <div role="group" aria-label={`Biométrica ${PARTE_LABEL[parte]}`} className={WIZARD_CARD}>
+      {/* Sin StatusBadge en la cabecera a propósito: el componente fija `role="status"`, y AC8 exige
+          que ese rol quede libre para el placeholder de carga — cada vista de estado ya lo anuncia
+          por su cuenta (VaultCoveredView/VerifiedView/KyverumPendingView/RejectedView, cada una con
+          su propio role="status"/"alert"). Duplicarlo aquí encima habría sido ruido, no señal nueva. */}
+      <WizardCardHeader title={PARTE_LABEL[parte]} />
 
       {/* HU #10646 — actor jurídico (NIT) cubierto por la firma del baúl: la identidad ya está
           satisfecha server-side; se presenta como firma electrónica y se omite toda la biométrica. */}
@@ -432,7 +390,7 @@ function ParteCard({
       {/* CF-08 (Feature #11004, HU #11009) — historial completo de la parte (ya NO se limita a
           matches[matches.length-1]); no aplica a la cobertura por baúl (no hay biométrica que auditar). */}
       {!vaultCovered && <HistorialValidaciones historial={historial} vigenteId={validation?.id ?? null} />}
-    </fieldset>
+    </div>
   );
 }
 
@@ -457,38 +415,47 @@ function HistorialValidaciones({
   // esta HU, sin el encabezado ni la fila de estado/fecha duplicada.
   if (historial.length === 1) {
     const [v] = historial;
-    return v.provider === KYVERUM ? <IdentityValidationTrackingPanel validationId={v.id} /> : null;
+    if (v.provider !== KYVERUM) return null;
+    return (
+      <div className="mt-3">
+        <WizardAccordion title="Ver trazabilidad de validación" defaultOpen>
+          <IdentityValidationTrackingPanel validationId={v.id} />
+        </WizardAccordion>
+      </div>
+    );
   }
 
   return (
-    <div className="mt-3 space-y-2 border-t pt-3">
-      <p className="text-xs font-semibold opacity-70">
-        Historial de validaciones ({historial.length})
-      </p>
-      <ul className="space-y-2">
-        {historial.map((v) => (
-          <li key={v.id} className="rounded-lg border p-2 text-xs" style={{ borderColor: '#EEF1F6' }}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5">
-                <StatusBadge label={ESTADO_LABEL[v.status] ?? v.status} tone={ESTADO_TONE[v.status] ?? 'neutral'} />
-                {v.id === vigenteId && (
-                  <span
-                    className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
-                    style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
-                  >
-                    Vigente
-                  </span>
-                )}
-                {v.score != null && <span className="opacity-60">{v.score}/100</span>}
+    <div className="mt-3">
+      <WizardAccordion title="Ver trazabilidad de validación" defaultOpen>
+        <p className="text-xs font-semibold opacity-70">
+          Historial de validaciones ({historial.length})
+        </p>
+        <ul className="mt-2 space-y-2">
+          {historial.map((v) => (
+            <li key={v.id} className="rounded-lg border p-2 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <StatusBadge label={ESTADO_LABEL[v.status] ?? v.status} tone={ESTADO_TONE[v.status] ?? 'neutral'} />
+                  {v.id === vigenteId && (
+                    <span
+                      className="rounded-full px-1.5 py-0.5 text-xs font-semibold"
+                      style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+                    >
+                      Vigente
+                    </span>
+                  )}
+                  {v.score != null && <span className="opacity-70">{v.score}/100</span>}
+                </div>
+                <span className="opacity-70">
+                  {formatFecha(v.validatedAt ?? v.expiresAt)}
+                </span>
               </div>
-              <span className="opacity-60">
-                {formatFecha(v.validatedAt ?? v.expiresAt)}
-              </span>
-            </div>
-            {v.provider === KYVERUM && <IdentityValidationTrackingPanel validationId={v.id} />}
-          </li>
-        ))}
-      </ul>
+              {v.provider === KYVERUM && <IdentityValidationTrackingPanel validationId={v.id} />}
+            </li>
+          ))}
+        </ul>
+      </WizardAccordion>
     </div>
   );
 }
@@ -595,20 +562,12 @@ function KyverumPendingView({
       {/* Un intento no pasó pero la validación SIGUE abierta (Kyverum permite reintentar): se informa el motivo
           real y que el cliente puede volver a intentar en su móvil, sin marcar la validación como rechazada. */}
       {v.ultimoIntentoMotivo && (
-        <div
-          className="rounded-xl p-2.5 text-xs"
-          style={{ background: 'rgba(178,106,0,0.08)', border: '1px solid rgba(178,106,0,0.3)', color: '#B26A00' }}
-          role="status"
-          aria-live="polite"
-        >
-          <span className="font-semibold">
-            Intento {v.intentos} de {v.maxIntentos} no pasó.
-          </span>{' '}
+        <InlineAlert tone="warning" title={`Intento ${v.intentos} de ${v.maxIntentos} no pasó.`}>
           {v.ultimoIntentoMotivo}{' '}
           {v.maxIntentos - v.intentos > 0
             ? `Quedan ${v.maxIntentos - v.intentos} intento(s): el cliente puede reintentar en su móvil (aquí se actualiza al aprobar o al agotar los intentos).`
             : ''}
-        </div>
+        </InlineAlert>
       )}
 
       <p className="text-xs opacity-70">
@@ -710,7 +669,7 @@ function ReconcileAction({
 
   return (
     <div className="space-y-1.5 border-t pt-3">
-      <p className="text-xs opacity-60">
+      <p className="text-xs opacity-70">
         ¿La captura ya se completó y sigue en espera? Consulta el estado directamente al proveedor.
       </p>
       <button
@@ -729,11 +688,7 @@ function ReconcileAction({
           {info}
         </p>
       )}
-      {error && (
-        <p className="text-xs" style={{ color: '#FF4E00' }} role="alert" aria-live="polite">
-          {error}
-        </p>
-      )}
+      {error && <InlineAlert tone="error">{error}</InlineAlert>}
     </div>
   );
 }
@@ -755,29 +710,19 @@ function RejectedView({
   const expirado = v.status === 'expirado' || v.expired;
   return (
     <div className="space-y-3">
-      <div
-        className="flex items-start gap-2 rounded-xl p-3"
-        style={{ background: 'rgba(255,78,0,0.06)', border: '1px solid rgba(255,78,0,0.3)' }}
-        role="alert"
-        aria-live="polite"
+      <InlineAlert
+        tone="error"
+        title={
+          expirado
+            ? 'El enlace de validación expiró.'
+            : `Validación no aprobada${v.score != null ? ` (${v.score}/100)` : ''}.`
+        }
       >
-        <XCircle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: '#FF4E00' }} aria-hidden />
-        <div className="space-y-1">
-          <p className="text-xs font-semibold" style={{ color: '#FF4E00' }}>
-            {expirado
-              ? 'El enlace de validación expiró.'
-              : `Validación no aprobada${v.score != null ? ` (${v.score}/100)` : ''}.`}
-          </p>
-          {/* AC5 — expiración: muestra cuándo venció el enlace. */}
-          {expirado && v.expiresAt && (
-            <p className="text-xs opacity-80">Venció el {formatFecha(v.expiresAt)}.</p>
-          )}
-          {/* AC4 — rechazo con motivo: detalle sanitizado del proveedor (sin PII). */}
-          {!expirado && v.rejectionReason && (
-            <p className="text-xs opacity-80">Motivo: {v.rejectionReason}</p>
-          )}
-        </div>
-      </div>
+        {/* AC5 — expiración: muestra cuándo venció el enlace. */}
+        {expirado && v.expiresAt && <p>Venció el {formatFecha(v.expiresAt)}.</p>}
+        {/* AC4 — rechazo con motivo: detalle sanitizado del proveedor (sin PII). */}
+        {!expirado && v.rejectionReason && <p>Motivo: {v.rejectionReason}</p>}
+      </InlineAlert>
       <StartAction
         parte={parte}
         instanceId={instanceId}
@@ -864,7 +809,7 @@ function StartAction({
   // En solo lectura no se inicia: solo se informa que la identidad quedó pendiente.
   if (readOnly) {
     return (
-      <p className="text-xs opacity-60">Validación de identidad pendiente.</p>
+      <p className="text-xs opacity-70">Validación de identidad pendiente.</p>
     );
   }
 
@@ -875,19 +820,13 @@ function StartAction({
           Aún no se ha iniciado la validación de identidad de esta parte.
         </p>
       )}
-      <p className="text-xs opacity-60">
+      <p className="text-xs opacity-70">
         {isKyverum
           ? 'Inicia la validación: el cliente recibirá el enlace de captura por correo y aquí podrás compartir el enlace/QR.'
           : 'Mock de esta iteración: simula la validación biométrica de esta parte.'}
       </p>
-      {conflictMsg && (
-        <p className="rounded-lg border px-2 py-1.5 text-xs" style={{ borderColor: '#5B8A1F', color: '#3F5F14' }} role="status">
-          {conflictMsg}
-        </p>
-      )}
-      {error && (
-        <p className="text-xs text-[#FF4E00]" role="alert">{error}</p>
-      )}
+      {conflictMsg && <InlineAlert tone="success">{conflictMsg}</InlineAlert>}
+      {error && <InlineAlert tone="error">{error}</InlineAlert>}
       {!conflictMsg && (
         <button
           type="button"

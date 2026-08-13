@@ -7,6 +7,8 @@ import type {
   AvaluoSource,
   SuggestedCommercialValue,
 } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_CARD } from './wizard-field-styles';
+import { WizardCardHeader } from './wizard-atoms';
 
 /** Etiquetas legibles por fuente; orden de render. */
 const SOURCE_LABELS: Record<string, string> = {
@@ -63,29 +65,24 @@ export function AvaluoComercialCard({ instanceId, disabled = false, accepted = f
   const fuente = data?.fuentePrincipal ?? null;
 
   return (
-    <section
-      className="rounded-2xl p-4 border mb-4 bg-white dark:bg-[#162744]"
-      aria-label="Avalúo comercial sugerido"
-    >
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <div>
-          <h4 className="text-sm font-bold">Avalúo comercial</h4>
-          <p className="text-xs opacity-60">
-            Valor de venta sugerido a partir de fuentes de avalúo.
-          </p>
-        </div>
-        {sugerido != null && (
-          <div className="text-right">
-            <div className="text-xs uppercase tracking-wide opacity-50">Sugerido</div>
-            <div className="text-sm font-bold font-mono" style={{ color: '#557EFF' }}>
-              {formatCOP(sugerido)}
+    <section className={WIZARD_CARD} aria-label="Avalúo comercial sugerido">
+      <WizardCardHeader
+        title="Avalúo comercial"
+        subtitle="Valor de venta sugerido a partir de fuentes de avalúo."
+        action={
+          sugerido != null ? (
+            <div className="text-right">
+              <div className="text-xs uppercase tracking-wide opacity-70">Sugerido</div>
+              <div className="text-sm font-bold font-mono" style={{ color: '#557EFF' }}>
+                {formatCOP(sugerido)}
+              </div>
+              {fuente && (
+                <div className="text-xs opacity-70">{SOURCE_LABELS[fuente] ?? fuente}</div>
+              )}
             </div>
-            {fuente && (
-              <div className="text-xs opacity-60">{SOURCE_LABELS[fuente] ?? fuente}</div>
-            )}
-          </div>
-        )}
-      </div>
+          ) : undefined
+        }
+      />
 
       {loading ? (
         <div className="space-y-2" aria-hidden="true">
@@ -94,7 +91,7 @@ export function AvaluoComercialCard({ instanceId, disabled = false, accepted = f
           ))}
         </div>
       ) : error ? (
-        <p className="text-xs opacity-60" role="status">
+        <p className="text-xs opacity-70" role="status">
           {error} Puedes ingresar el valor manualmente.
         </p>
       ) : (
@@ -112,7 +109,7 @@ export function AvaluoComercialCard({ instanceId, disabled = false, accepted = f
           </ul>
 
           {sugerido != null && accepted && (
-            <p className="mt-3 text-right text-xs opacity-60" role="status">
+            <p className="mt-3 text-right text-xs opacity-70" role="status">
               Valor sugerido aceptado.
             </p>
           )}
@@ -156,10 +153,10 @@ function SourceRow({
       <div className="min-w-0">
         <div className="text-xs font-semibold">{label}</div>
         {source.source === 'mercado_libre' && source.muestras != null && ok && (
-          <div className="text-xs opacity-50">Mediana de {source.muestras} publicaciones</div>
+          <div className="text-xs opacity-70">Mediana de {source.muestras} publicaciones</div>
         )}
         {!ok && (
-          <div className="text-xs opacity-50">
+          <div className="text-xs opacity-70">
             {source.status === 'no_data' ? 'Sin datos' : 'No disponible'}
           </div>
         )}
