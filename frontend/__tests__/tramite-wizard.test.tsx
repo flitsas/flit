@@ -765,7 +765,7 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
 
     // Reanuda en Identidad (frontera). Ya NO es paso terminal → "Continuar" (no "Finalizar").
     await screen.findByRole('heading', { level: 2, name: 'Identidad' });
-    expect(screen.getByRole('button', { name: /^Continuar$/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /^Continuar y guardar$/ })).toBeEnabled();
     expect(screen.queryByRole('button', { name: /^Finalizar$/ })).not.toBeInTheDocument();
     // El paso 5 (FUR) es navegable aunque la identidad esté pendiente.
     expect(screen.getByRole('button', { name: /^Paso 5: Resumen/ })).toBeEnabled();

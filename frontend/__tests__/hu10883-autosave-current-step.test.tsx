@@ -205,7 +205,7 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
 
     expect(mocks.setCurrentStep).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: /^Continuar$/ }));
+    await user.click(screen.getByRole('button', { name: /^Continuar y guardar$/ }));
 
     await waitFor(() =>
       expect(mocks.setCurrentStep).toHaveBeenCalledWith('inst-1', 'documentos'),
@@ -242,7 +242,7 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
     renderMatricula();
     await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
-    await user.click(screen.getByRole('button', { name: /^Continuar$/ }));
+    await user.click(screen.getByRole('button', { name: /^Continuar y guardar$/ }));
     await waitFor(() =>
       expect(mocks.setCurrentStep).toHaveBeenCalledWith('inst-1', 'documentos'),
     );
@@ -260,7 +260,7 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
     renderMatricula();
     await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
 
-    await user.click(screen.getByRole('button', { name: /^Continuar$/ }));
+    await user.click(screen.getByRole('button', { name: /^Continuar y guardar$/ }));
 
     // El wizard avanza igual (heading del paso 2) y no aparece ningún error visible.
     expect(await screen.findByRole('heading', { level: 2, name: 'Requisitos' })).toBeInTheDocument();

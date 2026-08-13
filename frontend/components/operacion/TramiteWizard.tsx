@@ -84,6 +84,7 @@ import type {
 import { WIZARD_CARD, WIZARD_LABEL } from './wizard-field-styles';
 import { WizardAccordion } from './WizardAccordion';
 import { WizardHelpRail } from './WizardHelpRail';
+import { WizardModal } from './WizardModal';
 import { estadoLabel } from '@/lib/tramites/estados';
 import { WizardPair, WizardPill } from './wizard-atoms';
 
@@ -199,26 +200,10 @@ const ORGANISMO_NO_DISPONIBLE =
  * subtítulo. El paso `fur` no pinta título/subtítulo aquí (el resumen tiene su propio encabezado).
  */
 const STEP_SUBTITLE: Record<string, string> = {
-  consulta_vin: 'Ingresa el VIN para consultar los datos del vehículo en el RUNT.',
-  consulta: 'Ingresa la placa y el propietario para consultar los datos del RUNT.',
-  // En traspaso la prenda va en Comercial (HU #10598); aquí solo observaciones + adjuntos.
-  documentos:
-    'Agrega observaciones y adjunta los documentos del trámite (PDF, JPG, PNG o WEBP, máx 20 MB).',
-  comercial:
-    'Valor de la venta, causal, impuestos del traspaso y decisión de prenda / gravamen.',
   identidad:
     'Validación de identidad de cada parte. La biométrica real llegará en una iteración futura; por ahora puedes simular la validación de cada parte.',
-  actores:
-    'Registra los datos del vendedor y del comprador. Cada parte en su tarjeta; consulta RUNT/RUES antes de continuar.',
-  vendedor:
-    'Registra los datos del vendedor y del comprador. Cada parte en su tarjeta; consulta RUNT/RUES antes de continuar.',
-  comprador:
-    'Registra los datos del vendedor y del comprador. Cada parte en su tarjeta; consulta RUNT/RUES antes de continuar.',
 };
 
-/** Subtítulo del paso Documentos en matrícula (incluye prenda declarativa, HU #10596). */
-const DOCUMENTOS_SUBTITLE_MATRICULA =
-  'Declara la prenda, agrega observaciones y adjunta los documentos del trámite (PDF, JPG, PNG o WEBP, máx 20 MB).';
 
 /**
  * ¿La validación de identidad está aprobada? (HU #10350) Se deriva del estado server-driven de los
@@ -506,6 +491,9 @@ export function TramiteWizard(props: Props) {
     referencia: string | null;
   } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Confirmación de "Cancelar trámite" (propuesta): salir pierde lo no guardado, y el botón vive
+  // junto al de avance, donde un clic de más es fácil.
+  const [confirmCancel, setConfirmCancel] = useState(false);
   // Feature #11066 — estado informativo del paquete (FUR/certs/impronta). No bloquea Preparar.
   const [paqueteDocsStatus, setPaqueteDocsStatus] = useState<
     'idle' | 'loading' | 'ready' | 'error'
@@ -1249,27 +1237,15 @@ export function TramiteWizard(props: Props) {
             </p>
           ) : (
             <div className="space-y-6">
-              {activeStep.key !== 'fur' && activeStep.key !== 'identidad' && (
-                <div>
-                  {/* Mismo nombre que el stepper: antes el asistente decía "Actores" arriba y
-                      otra cosa en la píldora del paso, o "Resumen del trámite" en un paso donde
-                      lo que se hace es generar el FUR y el expediente. */}
-                  <h2 className="text-base font-bold">
-                    {modalidad === 'traspaso' && isTraspasoActorStepKey(activeStep.key)
-                      ? stepLabelCopy('actores', 'Actores', 'traspaso')
-                      : stepLabelCopy(activeStep.key, activeStep.label, modalidad)}
-                  </h2>
-                  {(activeStep.key === 'documentos' && modalidad !== 'traspaso'
-                    ? DOCUMENTOS_SUBTITLE_MATRICULA
-                    : STEP_SUBTITLE[activeStep.key]) && (
-                    <p className="mt-1 text-xs opacity-60">
-                      {activeStep.key === 'documentos' && modalidad !== 'traspaso'
-                        ? DOCUMENTOS_SUBTITLE_MATRICULA
-                        : STEP_SUBTITLE[activeStep.key]}
-                    </p>
-                  )}
-                </div>
-              )}
+              {/* El título del paso deja de VERSE: en la propuesta el nombre vive en el asistente
+                  de arriba y cada tarjeta trae su propio encabezado, así que repetirlo dejaba dos
+                  rótulos seguidos diciendo lo mismo. Se conserva como encabezado accesible para no
+                  dejar el cuerpo del paso sin nombre en el árbol de encabezados. */}
+              <h2 className="sr-only">
+                {modalidad === 'traspaso' && isTraspasoActorStepKey(activeStep.key)
+                  ? stepLabelCopy('actores', 'Actores', 'traspaso')
+                  : stepLabelCopy(activeStep.key, activeStep.label, modalidad)}
+              </h2>
               <StepBody
                 step={activeStep}
                 modalidad={modalidad}
@@ -1440,23 +1416,64 @@ export function TramiteWizard(props: Props) {
                 <ChevronRight className="h-3 w-3" />
               </button>
             ) : (
-              <button
-                onClick={() => void handleContinue()}
-                disabled={continueDisabled}
-                className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-              >
-                {continuing
-                  ? 'Guardando…'
-                  : inSubsanacion || isSavableStep
-                    ? 'Guardar y continuar'
-                    : 'Continuar'}
-                <ChevronRight className="h-3 w-3" />
-              </button>
+              <>
+                {/* Cancelar trámite (propuesta): acción destructiva en naranja de alerta, junto al
+                    avance y no escondida en la cabecera, con confirmación porque se pierde lo no
+                    guardado. Solo mientras el trámite se está capturando: ya radicado no hay nada
+                    que cancelar desde aquí. */}
+                {!fullReadOnly && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmCancel(true)}
+                    className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00] focus-visible:ring-offset-2"
+                    style={{ background: '#FF4E00' }}
+                  >
+                    Cancelar trámite
+                  </button>
+                )}
+                <button
+                  onClick={() => void handleContinue()}
+                  disabled={continueDisabled}
+                  className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                >
+                  {continuing ? 'Guardando…' : 'Continuar y guardar'}
+                  <ChevronRight className="h-3 w-3" />
+                </button>
+              </>
             )}
             </div>
           </div>
         </section>
+
+      {confirmCancel && (
+        <WizardModal title="Cancelar trámite" onClose={() => setConfirmCancel(false)}>
+          <p className="text-xs leading-relaxed opacity-80">
+            ¿Deseas cancelar el trámite en curso? Los datos no guardados se perderán.
+          </p>
+          <div className="mt-6 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmCancel(false)}
+              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            >
+              Continuar editando
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                // Reportes2 HU-A — salida sin radicar = wizard_abandon.
+                if (!fullReadOnly) telemetry.trackAbandon();
+                onExit();
+              }}
+              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00] focus-visible:ring-offset-2"
+              style={{ background: '#FF4E00' }}
+            >
+              Sí, cancelar
+            </button>
+          </div>
+        </WizardModal>
+      )}
 
       {instanceId ? (
         <>
@@ -2770,6 +2787,9 @@ function ConsultaStep({
       {/* 3ª tarjeta: Organismo de Tránsito y Radicación (HU #11199 — solo matrícula y solo mientras
           el trámite no existe). La propuesta le da tarjeta propia después de la consulta: es una
           decisión de radicación, no un parámetro más del vehículo. */}
+      {/* NO se oculta hasta consultar: la consulta por VIN está gateada por haber elegido secretaría
+          (HU #11199, AC2 — `consultButton` se deshabilita sin `transitOfficeId`). Esconder la
+          tarjeta hasta después de consultar deja al gestor sin forma de consultar. */}
       {eligeSecretaria && (
         <div className={WIZARD_CARD}>
           <h3 className="text-sm font-bold" style={{ color: '#557EFF' }}>
