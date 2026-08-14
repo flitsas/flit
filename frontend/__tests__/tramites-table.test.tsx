@@ -169,8 +169,7 @@ describe('TramitesTable — paginación', () => {
     expect(within(nav).getByRole('button', { name: 'Página 2', current: 'page' })).toBeInTheDocument();
 
     // Buscar "Comprador" matchea las 23 (siguen 3 páginas) pero resetea a la 1.
-    // La búsqueda vive en el panel de filtros colapsable.
-    await userEvent.click(screen.getByRole('button', { name: /^Filtros/ }));
+    // La búsqueda vive en la tarjeta de filtros, siempre visible.
     await userEvent.type(
       screen.getByRole('searchbox', { name: 'Buscar trámites' }),
       'Comprador',
@@ -262,8 +261,7 @@ describe('TramitesTable — organismo de tránsito', () => {
     expect(screen.getByText('Secretaría de Movilidad Bogotá')).toBeInTheDocument();
     expect(screen.getByText('Cali — STTMP')).toBeInTheDocument();
 
-    // El buscador también filtra por organismo.
-    await userEvent.click(screen.getByRole('button', { name: /^Filtros/ }));
+    // El buscador también filtra por organismo (siempre visible en la tarjeta de filtros).
     await userEvent.type(
       screen.getByRole('searchbox', { name: 'Buscar trámites' }),
       'Cali',
@@ -876,26 +874,36 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
 });
 
 describe('TramitesTable — filtros y ordenamiento server-side', () => {
-  async function abrirFiltros() {
-    await userEvent.click(screen.getByRole('button', { name: /^Filtros/i }));
+  // Los filtros específicos (placa/actores/gestor/firmado) ya no están siempre en pantalla: hay
+  // que añadirlos primero desde "+ Agregar filtro específico" (popover con checkboxes). Se abre
+  // UNA vez y se marcan todos los pedidos: reabrir el disparador con el popover ya abierto lo
+  // cerraría (toggle).
+  async function agregarFiltrosEspecificos(...nombres: string[]) {
+    await userEvent.click(screen.getByRole('button', { name: '+ Agregar filtro específico' }));
+    for (const nombre of nombres) {
+      await userEvent.click(screen.getByRole('checkbox', { name: nombre }));
+    }
   }
 
-  it('aplica filtros de placa, actores, gestor, firmado y fechas al listado', async () => {
+  it('aplica filtros de placa, actores, gestor, firmado y rango de creación al listado', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
     render(<TramitesTable />);
     await screen.findByText('P0001');
     expect(mocks.listInstances).toHaveBeenCalledWith(undefined);
 
-    await abrirFiltros();
+    await agregarFiltrosEspecificos('Placa', 'Propietario / vendedor', 'Comprador', 'Gestor', 'Firmado');
+
     await userEvent.type(screen.getByLabelText('Filtrar por placa'), 'ABC123');
     await userEvent.type(screen.getByLabelText('Filtrar por propietario o vendedor'), 'Pérez');
     await userEvent.type(screen.getByLabelText('Filtrar por comprador'), 'García');
     await userEvent.type(screen.getByLabelText('Filtrar por gestor'), 'Ana');
     await userEvent.selectOptions(screen.getByLabelText('Filtrar por firma de compraventa'), 'true');
-    await userEvent.type(screen.getByLabelText('Fecha de creación desde'), '2026-01-01');
-    await userEvent.type(screen.getByLabelText('Fecha de creación hasta'), '2026-01-31');
-    await userEvent.type(screen.getByLabelText('Fecha de actualización desde'), '2026-02-01');
-    await userEvent.type(screen.getByLabelText('Fecha de actualización hasta'), '2026-02-28');
+
+    // Rango propio sobre "Fecha de creación" (opción por defecto de "Rango sobre").
+    await userEvent.selectOptions(screen.getByLabelText('Periodo'), 'Rango propio');
+    await userEvent.click(screen.getByRole('button', { name: 'Elegir rango de fechas propio' }));
+    await userEvent.type(screen.getByLabelText('Fecha inicial del rango propio'), '2026-01-01');
+    await userEvent.type(screen.getByLabelText('Fecha final del rango propio'), '2026-01-31');
 
     await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
 
@@ -909,8 +917,6 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
           firmado: true,
           createdFrom: '2026-01-01',
           createdTo: '2026-01-31',
-          updatedFrom: '2026-02-01',
-          updatedTo: '2026-02-28',
           take: 200,
           skip: 0,
         }),
@@ -918,15 +924,37 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     });
   });
 
-  it('mantiene los filtros colapsados por defecto y permite limpiarlos', async () => {
+  it('aplica un rango de fechas propio sobre la última actualización', async () => {
+    mocks.listInstances.mockResolvedValue(makeInstances(1));
+    render(<TramitesTable />);
+    await screen.findByText('P0001');
+
+    await userEvent.selectOptions(screen.getByLabelText('Rango sobre'), 'Última actualización');
+    await userEvent.selectOptions(screen.getByLabelText('Periodo'), 'Rango propio');
+    await userEvent.click(screen.getByRole('button', { name: 'Elegir rango de fechas propio' }));
+    await userEvent.type(screen.getByLabelText('Fecha inicial del rango propio'), '2026-02-01');
+    await userEvent.type(screen.getByLabelText('Fecha final del rango propio'), '2026-02-28');
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
+
+    await vi.waitFor(() => {
+      expect(mocks.listInstances).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          updatedFrom: '2026-02-01',
+          updatedTo: '2026-02-28',
+        }),
+      );
+    });
+  });
+
+  it('mantiene los filtros específicos ocultos por defecto y permite limpiarlos', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(1));
     render(<TramitesTable />);
     await screen.findByText('P0001');
 
     expect(screen.queryByLabelText('Filtrar por placa')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Limpiar filtros avanzados' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Empezar de cero' })).toBeDisabled();
 
-    await abrirFiltros();
+    await agregarFiltrosEspecificos('Placa');
     expect(screen.getByLabelText('Filtrar por placa')).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Filtrar por placa'), 'XYZ');
     await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
@@ -937,7 +965,7 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
       );
     });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Limpiar filtros avanzados' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Empezar de cero' }));
     await vi.waitFor(() => {
       expect(mocks.listInstances).toHaveBeenLastCalledWith(undefined);
     });

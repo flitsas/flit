@@ -247,8 +247,7 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     const list = await screen.findByRole('list', { name: /Trámites en curso/ });
     expect(within(list).getAllByRole('listitem')).toHaveLength(2);
 
-    // La búsqueda está oculta tras el botón "Buscar" (paridad con el diseño).
-    await user.click(screen.getByRole('button', { name: /^Filtros/ }));
+    // La búsqueda vive en la tarjeta de filtros, siempre visible.
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ABC123');
 
     const rows = within(
@@ -264,7 +263,6 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     render(<OperacionView onNewTramite={vi.fn()} />);
 
     await screen.findByRole('list', { name: /Trámites en curso/ });
-    await user.click(screen.getByRole('button', { name: /^Filtros/ }));
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'VIN-NEW-002');
 
     const rows = within(
@@ -307,7 +305,6 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     render(<OperacionView onNewTramite={vi.fn()} />);
 
     await screen.findByRole('list', { name: /Trámites en curso/ });
-    await user.click(screen.getByRole('button', { name: /^Filtros/ }));
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ZZZ-SIN-MATCH');
 
     // Ya no hay lista de resultados; aparece el vacío "Sin resultados".

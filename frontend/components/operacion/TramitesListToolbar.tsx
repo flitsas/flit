@@ -6,8 +6,9 @@ import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
 /**
  * Barra de tipo de trámite del listado (Track A). Tabs con subrayado por modalidad +
  * acciones de vista (prioritarios / actualizar), en el estilo de la pantalla principal
- * de trámites. El filtro por estado vive en la tira de KPIs (EstadoFunnel) y la
- * búsqueda desplegable en la fila de acciones (ambos en TramitesTable). Es presentacional.
+ * de trámites. El filtro por estado vive en la tira de KPIs (EstadoFunnel); compañía,
+ * periodo, filtros específicos, búsqueda y columnas viven en `TramitesFiltrosBar`, la
+ * tarjeta siempre visible que va justo debajo de esta fila. Es presentacional.
  *
  * Nota: el diseño dibuja además una pestaña "Otros trámites". No se incluye porque hoy
  * `WizardModalidad` solo tiene matrícula inicial y traspaso: una pestaña que no filtra
@@ -17,12 +18,6 @@ interface Props {
   modalidad: '' | WizardModalidad;
   onModalidadChange: (v: '' | WizardModalidad) => void;
   onRefresh: () => void;
-  /**
-   * Controles de filtro que comparten esta misma fila (compañía, Filtros, Limpiar, Columnas).
-   * Van como slot y no como props sueltas para que la fila siga siendo presentacional: la
-   * toolbar decide DÓNDE se colocan, no qué son.
-   */
-  actions?: React.ReactNode;
   loading?: boolean;
   /** ¿Hay algún filtro activo (búsqueda/modalidad/estado/compañía)? Lo calcula el contenedor. */
   hasActiveFilters: boolean;
@@ -43,7 +38,6 @@ export function TramitesListToolbar({
   modalidad,
   onModalidadChange,
   onRefresh,
-  actions,
   loading = false,
   hasActiveFilters,
   totalCount,
@@ -92,15 +86,6 @@ export function TramitesListToolbar({
           })}
         </div>
         <div className="flex flex-wrap items-center gap-1 pb-1">
-          {actions ? (
-            <>
-              {actions}
-              <span
-                className="mx-1 h-5 w-px bg-[#DFE5ED] dark:bg-white/10"
-                aria-hidden="true"
-              />
-            </>
-          ) : null}
           {/* HU #10536 — filtro "solo prioritarios". */}
           <button
             type="button"

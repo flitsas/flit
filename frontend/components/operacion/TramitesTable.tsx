@@ -9,15 +9,12 @@ import {
   ArrowUp,
   ArrowUpDown,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Eye,
   FileCheck,
   FileStack,
   FileText,
   Pause,
   Play,
-  Search,
   Star,
   X,
 } from 'lucide-react';
@@ -25,6 +22,12 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
+import {
+  TramitesFiltrosBar,
+  rangoDePeriodo,
+  type FiltroEspecificoKey,
+  type RangoSobre,
+} from './TramitesFiltrosBar';
 import { estadoChipStyle, estadoLabel, type EstadoTramite } from '@/lib/tramites/estados';
 import {
   TRAMITES_COLUMNS,
@@ -57,10 +60,6 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 
-const FILTER_INPUT_CLS =
-  'mt-1 w-full rounded-xl border border-[#DFE5ED] bg-transparent px-3 py-2 text-xs outline-none transition focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 dark:border-white/15';
-const FILTER_FORM_CLS =
-  'grid grid-cols-1 gap-3 rounded-2xl border bg-white p-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 dark:bg-[#162744]';
 /** Tope del camino filtrado del backend (mismo MaxItems del API). */
 const SERVER_LIST_TAKE = 200;
 
@@ -243,15 +242,24 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
 
   // Filtros server-side (mismo contrato que GET /instances). Borrador del form → se aplican
   // solo con "Aplicar filtros"; el sort sí recarga de inmediato al clic en cabecera.
+  // Qué filtros específicos están AÑADIDOS (visibles) en la tarjeta — controla tanto el campo
+  // real que se pinta como el chip de la fila inferior. Es independiente de si ya se aplicaron.
+  const [filtrosEspecificos, setFiltrosEspecificos] = useState<Set<FiltroEspecificoKey>>(
+    () => new Set(),
+  );
   const [placaFilter, setPlacaFilter] = useState('');
   const [vendedorFilter, setVendedorFilter] = useState('');
   const [compradorFilter, setCompradorFilter] = useState('');
   const [gestorFilter, setGestorFilter] = useState('');
   const [firmadoFilter, setFirmadoFilter] = useState<'' | 'true' | 'false'>('');
-  const [createdFromFilter, setCreatedFromFilter] = useState('');
-  const [createdToFilter, setCreatedToFilter] = useState('');
-  const [updatedFromFilter, setUpdatedFromFilter] = useState('');
-  const [updatedToFilter, setUpdatedToFilter] = useState('');
+  // "Rango sobre" + "Periodo" reemplazan a los 4 inputs de fecha sueltos: el usuario elige a qué
+  // campo apunta el rango (creación o actualización) y un periodo predefinido — o "Rango propio"
+  // con fechas propias. `rangoDePeriodo` (TramitesFiltrosBar) hace la conversión a
+  // createdFrom/createdTo o updatedFrom/updatedTo al pulsar "Aplicar filtros".
+  const [rangoSobre, setRangoSobre] = useState<RangoSobre>('created');
+  const [periodo, setPeriodo] = useState('Sin periodo');
+  const [rangoPropioDesde, setRangoPropioDesde] = useState('');
+  const [rangoPropioHasta, setRangoPropioHasta] = useState('');
   const [appliedPlaca, setAppliedPlaca] = useState('');
   const [appliedVendedor, setAppliedVendedor] = useState('');
   const [appliedComprador, setAppliedComprador] = useState('');
@@ -263,8 +271,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   const [appliedUpdatedTo, setAppliedUpdatedTo] = useState('');
   const [sortBy, setSortBy] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-  /** Panel de filtros avanzados colapsado por defecto para no saturar la pantalla. */
-  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Selector de columnas: persiste qué columnas ve el usuario (scope "tramites.columns"). Degrada
   // con elegancia — si la preferencia no carga o falla al guardar, la tabla sigue con el default
@@ -663,16 +669,43 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     hasServerFilters ||
     sortBy !== '';
 
+  /**
+   * Lo que el usuario ya tocó en la tarjeta de filtros pero TODAVÍA no aplicó: filtros específicos
+   * añadidos, un periodo elegido o fechas propias escritas. "Empezar de cero" tiene que poder
+   * borrarlo también — si solo mirara lo aplicado, quedaban chips a la vista con el botón apagado.
+   */
+  const hasDraftFilters =
+    filtrosEspecificos.size > 0 ||
+    periodo !== 'Sin periodo' ||
+    rangoPropioDesde !== '' ||
+    rangoPropioHasta !== '';
+
   const applyServerFilters = () => {
     setAppliedPlaca(placaFilter);
     setAppliedVendedor(vendedorFilter);
     setAppliedComprador(compradorFilter);
     setAppliedGestor(gestorFilter);
     setAppliedFirmado(firmadoFilter);
-    setAppliedCreatedFrom(createdFromFilter);
-    setAppliedCreatedTo(createdToFilter);
-    setAppliedUpdatedFrom(updatedFromFilter);
-    setAppliedUpdatedTo(updatedToFilter);
+
+    // "Periodo" → fechas: "Rango propio" usa lo que el usuario escribió en el popover; cualquier
+    // otro periodo predefinido se calcula con rangoDePeriodo. "Sin periodo" no filtra (null).
+    const rango =
+      periodo === 'Rango propio'
+        ? rangoPropioDesde || rangoPropioHasta
+          ? { desde: rangoPropioDesde, hasta: rangoPropioHasta }
+          : null
+        : rangoDePeriodo(periodo, new Date());
+    if (rangoSobre === 'created') {
+      setAppliedCreatedFrom(rango?.desde ?? '');
+      setAppliedCreatedTo(rango?.hasta ?? '');
+      setAppliedUpdatedFrom('');
+      setAppliedUpdatedTo('');
+    } else {
+      setAppliedUpdatedFrom(rango?.desde ?? '');
+      setAppliedUpdatedTo(rango?.hasta ?? '');
+      setAppliedCreatedFrom('');
+      setAppliedCreatedTo('');
+    }
     setPage(1);
   };
 
@@ -682,21 +715,59 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setPage(1);
   };
 
+  // Al desmarcar un filtro específico se limpia su valor (draft Y aplicado): no puede quedar un
+  // filtro activo en el backend con el campo escondido (invisible para el usuario).
+  const handleToggleFiltroEspecifico = (key: FiltroEspecificoKey) => {
+    setFiltrosEspecificos((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+        switch (key) {
+          case 'placa':
+            setPlacaFilter('');
+            setAppliedPlaca('');
+            break;
+          case 'vendedor':
+            setVendedorFilter('');
+            setAppliedVendedor('');
+            break;
+          case 'comprador':
+            setCompradorFilter('');
+            setAppliedComprador('');
+            break;
+          case 'gestor':
+            setGestorFilter('');
+            setAppliedGestor('');
+            break;
+          case 'firmado':
+            setFirmadoFilter('');
+            setAppliedFirmado('');
+            break;
+        }
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+    setPage(1);
+  };
+
   const clearFilters = () => {
     setSearch('');
     setModalidad('');
     setEstado('');
     setCompania('');
     setSoloPrioritarios(false);
+    setFiltrosEspecificos(new Set());
     setPlacaFilter('');
     setVendedorFilter('');
     setCompradorFilter('');
     setGestorFilter('');
     setFirmadoFilter('');
-    setCreatedFromFilter('');
-    setCreatedToFilter('');
-    setUpdatedFromFilter('');
-    setUpdatedToFilter('');
+    setRangoSobre('created');
+    setPeriodo('Sin periodo');
+    setRangoPropioDesde('');
+    setRangoPropioHasta('');
     setAppliedPlaca('');
     setAppliedVendedor('');
     setAppliedComprador('');
@@ -767,9 +838,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           </button>
         </div>
 
-        {/* Una sola fila: tabs de modalidad a la izquierda y TODOS los controles de filtro a la
-            derecha (compañía, Filtros, Limpiar, Columnas, prioritarios, actualizar). Antes eran
-            dos bandas apiladas que se comían el alto útil de la tabla. */}
+        {/* Tabs de modalidad + estrella de prioritarios + actualizar: sale la compañía/Filtros/
+            Limpiar/Columnas, que ahora viven en la tarjeta siempre visible de abajo. */}
         <TramitesListToolbar
           modalidad={modalidad}
           onModalidadChange={handleModalidadChange}
@@ -780,213 +850,51 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           filteredCount={filtered.length}
           soloPrioritarios={soloPrioritarios}
           onPrioritariosChange={handlePrioritariosChange}
-          actions={
-            <>
-              {/* #1 — Filtro por compañía (solo SuperAdmin, que ve trámites de todas las empresas). */}
-              {isAdmin && companias.length > 0 ? (
-                <div className="flex items-center gap-2">
-                  <label htmlFor="filtro-compania" className="text-xs font-semibold opacity-60">
-                    Compañía
-                  </label>
-                  <select
-                    id="filtro-compania"
-                    value={compania}
-                    onChange={(e) => handleCompaniaChange(e.target.value)}
-                    className="rounded-xl border px-3 py-1.5 text-xs"
-                    style={{ color: '#162744' }}
-                  >
-                    <option value="">Todas</option>
-                    {companias.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => setFiltersOpen((o) => !o)}
-                aria-expanded={filtersOpen}
-                aria-controls="tramites-filtros-panel"
-                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-[#162744] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:text-white"
-              >
-                {filtersOpen ? (
-                  <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
-                ) : (
-                  <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-                )}
-                Filtros
-                {hasServerFilters ? (
-                  <span className="ml-0.5 rounded-full bg-[#557EFF]/15 px-1.5 py-0.5 text-xs font-bold text-[#557EFF]">
-                    activos
-                  </span>
-                ) : null}
-              </button>
-              <button
-                type="button"
-                onClick={clearFilters}
-                disabled={!hasActiveFilters}
-                className="rounded-xl border px-3 py-1.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-40"
-                style={{ borderColor: '#557EFF', color: '#557EFF' }}
-                aria-label="Limpiar filtros avanzados"
-              >
-                Limpiar filtros
-              </button>
-              <ColumnSelector
-                columns={TRAMITES_COLUMNS}
-                visible={visibleColumns}
-                onChange={setVisibleColumns}
-                label="Columnas"
-                disabled={savingColumns}
-              />
-            </>
-          }
         />
 
-        {/* Panel desplegable de filtros server-side: placa, actores, gestor, firmado, fechas.
-            Solo existe en el DOM cuando está abierto, así no ocupa alto en reposo. */}
-        <div>
-          {filtersOpen ? (
-            <form
-              id="tramites-filtros-panel"
-              className={FILTER_FORM_CLS}
-              aria-label="Filtros de trámites"
-              onSubmit={(e) => {
-                e.preventDefault();
-                applyServerFilters();
-              }}
-            >
-          {/* Búsqueda libre client-side. Antes vivía en una píldora "Buscar" de la fila de
-              acciones; esa fila desapareció con el botón general, así que la búsqueda pasa aquí,
-              que es donde el usuario ya viene a filtrar. Ocupa el ancho completo de la grilla. */}
-          <label className="text-xs font-semibold text-[#162744] sm:col-span-2 md:col-span-3 lg:col-span-4 dark:text-white">
-            Búsqueda rápida
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40"
-                aria-hidden="true"
-              />
-              <input
-                type="search"
-                aria-label="Buscar trámites"
-                className={`${FILTER_INPUT_CLS} pl-9`}
-                value={search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                placeholder="Placa, VIN, referencia, comprador u organismo…"
-              />
-            </div>
-          </label>
-          <label className="text-xs font-semibold text-[#162744] dark:text-white">
-            Placa
-            <input
-              type="search"
-              aria-label="Filtrar por placa"
-              className={FILTER_INPUT_CLS}
-              value={placaFilter}
-              onChange={(e) => setPlacaFilter(e.target.value)}
-              placeholder="ABC123"
+        {/* Tarjeta de filtros SIEMPRE visible (composición de Reportes.tsx, valores FLIT): rango
+            de fechas por periodo, filtros específicos añadidos a demanda, búsqueda rápida,
+            aplicar/empezar de cero y, en la fila inferior, columnas + chips activos. */}
+        <TramitesFiltrosBar
+          rangoSobre={rangoSobre}
+          onRangoSobreChange={setRangoSobre}
+          periodo={periodo}
+          onPeriodoChange={setPeriodo}
+          rangoPropioDesde={rangoPropioDesde}
+          rangoPropioHasta={rangoPropioHasta}
+          onRangoPropioDesdeChange={setRangoPropioDesde}
+          onRangoPropioHastaChange={setRangoPropioHasta}
+          filtrosEspecificos={filtrosEspecificos}
+          onToggleFiltroEspecifico={handleToggleFiltroEspecifico}
+          placa={placaFilter}
+          onPlacaChange={setPlacaFilter}
+          vendedor={vendedorFilter}
+          onVendedorChange={setVendedorFilter}
+          comprador={compradorFilter}
+          onCompradorChange={setCompradorFilter}
+          gestor={gestorFilter}
+          onGestorChange={setGestorFilter}
+          firmado={firmadoFilter}
+          onFirmadoChange={setFirmadoFilter}
+          search={search}
+          onSearchChange={handleSearchChange}
+          onAplicar={applyServerFilters}
+          onEmpezarDeCero={clearFilters}
+          empezarDeCeroDisabled={!hasActiveFilters && !hasDraftFilters}
+          columnSelector={
+            <ColumnSelector
+              columns={TRAMITES_COLUMNS}
+              visible={visibleColumns}
+              onChange={setVisibleColumns}
+              label="Columnas"
+              disabled={savingColumns}
             />
-          </label>
-          <label className="text-xs font-semibold text-[#162744] dark:text-white">
-            Propietario / vendedor
-            <input
-              type="search"
-              aria-label="Filtrar por propietario o vendedor"
-              className={FILTER_INPUT_CLS}
-              value={vendedorFilter}
-              onChange={(e) => setVendedorFilter(e.target.value)}
-              placeholder="Nombre"
-            />
-          </label>
-          <label className="text-xs font-semibold text-[#162744] dark:text-white">
-            Comprador
-            <input
-              type="search"
-              aria-label="Filtrar por comprador"
-              className={FILTER_INPUT_CLS}
-              value={compradorFilter}
-              onChange={(e) => setCompradorFilter(e.target.value)}
-              placeholder="Nombre"
-            />
-          </label>
-          <label className="text-xs font-semibold text-[#162744] dark:text-white">
-            Gestor
-            <input
-              type="search"
-              aria-label="Filtrar por gestor"
-              className={FILTER_INPUT_CLS}
-              value={gestorFilter}
-              onChange={(e) => setGestorFilter(e.target.value)}
-              placeholder="Nombre"
-            />
-          </label>
-          <label className="text-xs font-semibold text-[#162744] dark:text-white">
-            Firmado
-            <select
-              aria-label="Filtrar por firma de compraventa"
-              className={FILTER_INPUT_CLS}
-              value={firmadoFilter}
-              onChange={(e) => setFirmadoFilter(e.target.value as '' | 'true' | 'false')}
-              title="Firma electrónica de la compraventa (completa o pendiente)"
-            >
-              <option value="">Todos</option>
-              <option value="true">Firmado</option>
-              <option value="false">Pendiente</option>
-            </select>
-          </label>
-          <label className="text-xs font-semibold text-[#162744] dark:text-white">
-            Creación desde
-            <input
-              type="date"
-              aria-label="Fecha de creación desde"
-              className={FILTER_INPUT_CLS}
-              value={createdFromFilter}
-              onChange={(e) => setCreatedFromFilter(e.target.value)}
-            />
-          </label>
-          <label className="text-xs font-semibold text-[#162744] dark:text-white">
-            Creación hasta
-            <input
-              type="date"
-              aria-label="Fecha de creación hasta"
-              className={FILTER_INPUT_CLS}
-              value={createdToFilter}
-              onChange={(e) => setCreatedToFilter(e.target.value)}
-            />
-          </label>
-          <label className="text-xs font-semibold text-[#162744] dark:text-white">
-            Actualización desde
-            <input
-              type="date"
-              aria-label="Fecha de actualización desde"
-              className={FILTER_INPUT_CLS}
-              value={updatedFromFilter}
-              onChange={(e) => setUpdatedFromFilter(e.target.value)}
-            />
-          </label>
-          <label className="text-xs font-semibold text-[#162744] dark:text-white">
-            Actualización hasta
-            <input
-              type="date"
-              aria-label="Fecha de actualización hasta"
-              className={FILTER_INPUT_CLS}
-              value={updatedToFilter}
-              onChange={(e) => setUpdatedToFilter(e.target.value)}
-            />
-          </label>
-          <div className="flex items-end gap-2 sm:col-span-2 md:col-span-3 lg:col-span-4">
-            <button
-              type="submit"
-              className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-              style={{ background: '#557EFF' }}
-            >
-              Aplicar filtros
-            </button>
-          </div>
-            </form>
-          ) : null}
-        </div>
+          }
+          isAdmin={isAdmin}
+          companias={companias}
+          compania={compania}
+          onCompaniaChange={handleCompaniaChange}
+        />
 
         {/* ICT (paridad v1 pause-unpause-massive) — barra de acción cuando hay trámites ICT seleccionados. */}
         {selectedIds.size > 0 ? (
