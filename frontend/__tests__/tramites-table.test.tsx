@@ -754,6 +754,54 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     expect(routerPush).not.toHaveBeenCalled();
   });
 
+  // La secuencia de pasos y sus nombres los fija la norma FLIT (prototype_rules, «Reglas de
+  // wizards y trámites»): trámite general con CINCO pasos y matrícula inicial con CUATRO, porque
+  // no tiene datos comerciales. «Prohibido reordenar o renombrar pasos sin HU que lo respalde»,
+  // así que esto se blinda en un test en vez de confiarlo a la revisión.
+  it('los pasos del detalle son los de la norma: cinco en traspaso, cuatro en matrícula inicial', async () => {
+    mocks.getInstance.mockResolvedValue({ id: 'rad-p', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([]);
+
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-p', referenceNumber: 'TR-P', placa: 'PASO01', estado: 'entregado' },
+    ]);
+    const { unmount } = render(<TramitesTable />);
+    await userEvent.click(await screen.findByText('PASO01'));
+    const tabsTraspaso = within(
+      await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
+    ).getAllByRole('tab');
+    expect(tabsTraspaso.map((t) => t.textContent)).toEqual([
+      '1. Trámite y vehículo',
+      '2. Actores y validación',
+      '3. Documentos',
+      '4. Datos comerciales',
+      '5. FUR y expediente',
+    ]);
+    unmount();
+
+    mocks.listInstances.mockResolvedValue([
+      {
+        ...base,
+        id: 'rad-m',
+        referenceNumber: 'MI-P',
+        placa: 'PASO02',
+        estado: 'entregado',
+        modalidad: 'matricula_inicial',
+      },
+    ]);
+    render(<TramitesTable />);
+    await userEvent.click(await screen.findByText('PASO02'));
+    const tabsMatricula = within(
+      await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
+    ).getAllByRole('tab');
+    expect(tabsMatricula.map((t) => t.textContent)).toEqual([
+      '1. Consulta VIN y placa',
+      '2. Comprador y rep. legal',
+      '3. Documentos',
+      '4. FUR y expediente',
+    ]);
+  });
+
   it('el botón del radicado de un trámite radicado abre el modal sin navegar', async () => {
     mocks.listInstances.mockResolvedValue([
       { ...base, id: 'rad-2', referenceNumber: 'TR-RAD2', placa: 'RAD002', estado: 'aprobado' },

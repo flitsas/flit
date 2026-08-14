@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Clock, Coins, Download, FileText, FolderCheck, Users } from 'lucide-react';
+import { Clock, Coins, Download, FileCheck2, FileText, FolderCheck, Users } from 'lucide-react';
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { StatusBadge } from '@/components/atom/StatusBadge';
@@ -49,19 +49,40 @@ const MODALIDAD_TITLE: Record<WizardModalidad, string> = {
   traspaso: 'Detalle de traspaso',
 };
 
-type SeccionId = 'trazabilidad' | 'documentos' | 'actores' | 'vehiculo' | 'comercial';
+type SeccionId = 'vehiculo' | 'actores' | 'documentos' | 'comercial' | 'expediente';
 
 /**
- * Secciones del detalle. Los iconos son los mismos que la propuesta asigna a cada bloque en su
- * stepper; lo que cambia es que aquí son PESTAÑAS de contenido y no pasos con progreso.
+ * Pasos del detalle. NO son una invención de esta pantalla: son la secuencia canónica que fija la
+ * norma FLIT (`prototype_rules.md`, «Reglas de wizards y trámites») y que la propuesta dibuja tal
+ * cual en su stepper —«Prohibido reordenar o renombrar pasos sin HU que lo respalde»—:
+ *
+ *   trámite general   Trámite y Vehículo → Actores y Validación → Documentos → Datos Comerciales → FUR y Expediente
+ *   matrícula inicial Consulta VIN y Placa → Comprador y Rep. Legal → Documentos → FUR y Expediente
+ *
+ * De ahí que la matrícula inicial tenga CUATRO pasos y el traspaso cinco: la matrícula no tiene
+ * datos comerciales. Lo que NO se copia de la propuesta es su marca de progreso, que sale de un
+ * `row.prog` inventado; y aquí además no haría falta: este modal solo se abre para trámites YA
+ * RADICADOS (el borrador va al asistente), así que los pasos de captura están cumplidos por
+ * construcción y lo único que varía es dónde está el expediente, que es el último paso.
  */
-const SECCIONES: { id: SeccionId; label: string; Icon: typeof Clock }[] = [
-  { id: 'trazabilidad', label: 'Trazabilidad', Icon: Clock },
-  { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
-  { id: 'actores', label: 'Actores y firmas', Icon: Users },
-  { id: 'vehiculo', label: 'Vehículo', Icon: FileText },
-  { id: 'comercial', label: 'Comercial y prenda', Icon: Coins },
-];
+const PASOS_POR_MODALIDAD: Record<
+  WizardModalidad,
+  { id: SeccionId; label: string; Icon: typeof Clock }[]
+> = {
+  traspaso: [
+    { id: 'vehiculo', label: 'Trámite y vehículo', Icon: FileText },
+    { id: 'actores', label: 'Actores y validación', Icon: Users },
+    { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
+    { id: 'comercial', label: 'Datos comerciales', Icon: Coins },
+    { id: 'expediente', label: 'FUR y expediente', Icon: FileCheck2 },
+  ],
+  matricula_inicial: [
+    { id: 'vehiculo', label: 'Consulta VIN y placa', Icon: FileText },
+    { id: 'actores', label: 'Comprador y rep. legal', Icon: Users },
+    { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
+    { id: 'expediente', label: 'FUR y expediente', Icon: FileCheck2 },
+  ],
+};
 
 function estadoChip(estado: InstanceSummary['estado']) {
   const style = estadoChipStyle(estado);
@@ -99,15 +120,15 @@ export function TramiteDetalleModal({
   const [attError, setAttError] = useState<string | null>(null);
   const [attReloadKey, setAttReloadKey] = useState(0);
 
-  // Sección activa del navegador. Se reinicia al cambiar de trámite: abrir otro expediente y
-  // encontrarse en la pestaña donde quedó el anterior desorienta más de lo que ahorra. El reinicio
-  // se hace AJUSTANDO EL ESTADO DURANTE EL RENDER (patrón de React para "resetear al cambiar una
-  // prop"), no desde un efecto: con el efecto se pintaría un fotograma con la pestaña vieja.
-  const [seccion, setSeccion] = useState<SeccionId>('trazabilidad');
+  // Paso activo. Arranca en el ÚLTIMO —«FUR y expediente»— y no en el primero: el trámite ya está
+  // radicado, así que ahí es literalmente donde está. Se reinicia al cambiar de trámite ajustando
+  // el estado DURANTE EL RENDER (patrón de React para "resetear al cambiar una prop"), no desde un
+  // efecto: con el efecto se pintaría un fotograma con el paso del trámite anterior.
+  const [seccion, setSeccion] = useState<SeccionId>('expediente');
   const [seccionDe, setSeccionDe] = useState<string | null>(instanceId);
   if (instanceId !== seccionDe) {
     setSeccionDe(instanceId);
-    setSeccion('trazabilidad');
+    setSeccion('expediente');
   }
 
   const preview = useAttachmentPreview(instanceId, tenantId);
@@ -165,6 +186,9 @@ export function TramiteDetalleModal({
   }, [open, instanceId, tenantId, attReloadKey]);
 
   const title = item ? MODALIDAD_TITLE[item.modalidad] : 'Detalle del trámite';
+  // La matrícula inicial tiene CUATRO pasos y el traspaso cinco: es la secuencia de la norma, no
+  // una simplificación (la matrícula no tiene datos comerciales).
+  const pasos = item ? PASOS_POR_MODALIDAD[item.modalidad] : PASOS_POR_MODALIDAD.traspaso;
   const chip = item ? estadoChip(item.estado) : null;
   const plateHint = item ? plateFlowHint(item.plateFlowStatus) : null;
   const systemAttachments = attachments.filter((a) => a.source === 'system');
@@ -243,23 +267,22 @@ export function TramiteDetalleModal({
                 </div>
               </div>
 
-              {/* Derecha — navegador de secciones + la sección activa.
-                  Es un `tablist`, NO el stepper del asistente: los pasos del wizard son cinco en
-                  matrícula y seis en traspaso, y en un trámite ya radicado dejaron de significar
-                  progreso. La propuesta reusa su stepper y marca los pasos completados con un
-                  porcentaje inventado (`row.prog`); aquí eso mentiría.
-                  Trazabilidad va primera y es la de por defecto: a un trámite radicado se entra a
-                  ver en qué va y qué quedó adjunto, no a releer las especificaciones del vehículo.
-                  Cada sección pide sus propios datos AL MONTARSE, así que abrir el modal no dispara
-                  las siete llamadas de golpe: solo las de la sección que se está mirando. */}
+              {/* Derecha — los pasos del trámite + el paso activo.
+                  La secuencia y sus nombres NO se eligen aquí: son los que fija la norma FLIT y que
+                  la propuesta dibuja igual (ver PASOS_POR_MODALIDAD). Se navega por ellos como
+                  `tablist`, con su número delante, y NO se marca "completado" paso a paso: la
+                  propuesta lo hace con un `row.prog` inventado, y en un trámite ya radicado —el
+                  único que abre este modal— los pasos de captura están cumplidos por construcción.
+                  Cada paso pide sus propios datos AL MONTARSE, así que abrir el modal no dispara
+                  las siete llamadas de golpe: solo las del paso que se está mirando. */}
               <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
                 <div
                   role="tablist"
-                  aria-label="Secciones del detalle"
+                  aria-label="Pasos del trámite"
                   className="flex flex-wrap items-center gap-1 border-b"
                   style={{ borderColor: BORDER }}
                 >
-                  {SECCIONES.map(({ id, label, Icon }) => {
+                  {pasos.map(({ id, label, Icon }, i) => {
                     const activa = id === seccion;
                     return (
                       <button
@@ -274,7 +297,7 @@ export function TramiteDetalleModal({
                         style={activa ? { color: BLUE } : { color: NAVY, opacity: 0.7 }}
                       >
                         <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                        {label}
+                        {i + 1}. {label}
                         {/* El activo se marca con color Y con subrayado: no depende solo del color. */}
                         {activa ? (
                           <span
@@ -294,7 +317,7 @@ export function TramiteDetalleModal({
                   aria-labelledby={`detalle-tab-${seccion}`}
                   className="flex min-w-0 flex-col gap-4"
                 >
-                {seccion !== 'trazabilidad' && instanceId ? (
+                {seccion !== 'expediente' && instanceId ? (
                   <>
                     {seccion === 'documentos' ? (
                       <TramiteDetalleDocumentos
@@ -303,8 +326,21 @@ export function TramiteDetalleModal({
                         item={item}
                       />
                     ) : null}
+                    {/* El paso se llama «Actores y VALIDACIÓN»: el estado de la validación de
+                        identidad es parte de él, no un apéndice de la trazabilidad. */}
                     {seccion === 'actores' ? (
-                      <TramiteDetalleActores instanceId={instanceId} tenantId={tenantId} item={item} />
+                      <>
+                        <TramiteDetalleActores
+                          instanceId={instanceId}
+                          tenantId={tenantId}
+                          item={item}
+                        />
+                        <TramiteDetalleIdentidad
+                          instanceId={instanceId}
+                          tenantId={tenantId}
+                          item={item}
+                        />
+                      </>
                     ) : null}
                     {seccion === 'vehiculo' ? (
                       <TramiteDetalleVehiculo instanceId={instanceId} tenantId={tenantId} item={item} />
@@ -319,7 +355,7 @@ export function TramiteDetalleModal({
                   </>
                 ) : null}
 
-                {seccion === 'trazabilidad' ? (
+                {seccion === 'expediente' ? (
                   <>
                 {loading ? <SeccionCargando etiqueta="Cargando trazabilidad" filas={3} /> : null}
                 {!loading && error ? (
@@ -392,16 +428,6 @@ export function TramiteDetalleModal({
                   ) : null}
                 </div>
 
-                {/* Tercer bloque de la trazabilidad: el estado de la validación de identidad, por
-                    parte. Vive aquí y no en su propia pestaña porque responde a la misma pregunta
-                    que la cronología y los archivos: en qué va el expediente. */}
-                {instanceId ? (
-                  <TramiteDetalleIdentidad
-                    instanceId={instanceId}
-                    tenantId={tenantId}
-                    item={item}
-                  />
-                ) : null}
                   </>
                 ) : null}
                 </div>
