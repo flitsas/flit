@@ -767,15 +767,18 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     ]);
     const { unmount } = render(<TramitesTable />);
     await userEvent.click(await screen.findByText('PASO01'));
+    // Se comparan los NOMBRES ACCESIBLES: llevan el ordinal, el rótulo y el estado del paso, que
+    // es justo el contrato que hay que blindar. El número visible lo pinta el círculo del stepper,
+    // no el rótulo. Un trámite «entregado» tiene la captura cumplida y el expediente pendiente.
     const tabsTraspaso = within(
       await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
     ).getAllByRole('tab');
-    expect(tabsTraspaso.map((t) => t.textContent)).toEqual([
-      '1. Trámite y vehículo',
-      '2. Actores y validación',
-      '3. Documentos',
-      '4. Datos comerciales',
-      '5. FUR y expediente',
+    expect(tabsTraspaso.map((t) => t.getAttribute('aria-label'))).toEqual([
+      'Paso 1: Trámite y vehículo — completado',
+      'Paso 2: Actores y validación — completado',
+      'Paso 3: Documentos — completado',
+      'Paso 4: Datos comerciales — completado',
+      'Paso 5: FUR y expediente — pendiente',
     ]);
     unmount();
 
@@ -794,11 +797,11 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     const tabsMatricula = within(
       await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
     ).getAllByRole('tab');
-    expect(tabsMatricula.map((t) => t.textContent)).toEqual([
-      '1. Consulta VIN y placa',
-      '2. Comprador y rep. legal',
-      '3. Documentos',
-      '4. FUR y expediente',
+    expect(tabsMatricula.map((t) => t.getAttribute('aria-label'))).toEqual([
+      'Paso 1: Consulta VIN y placa — completado',
+      'Paso 2: Comprador y rep. legal — completado',
+      'Paso 3: Documentos — completado',
+      'Paso 4: FUR y expediente — pendiente',
     ]);
   });
 

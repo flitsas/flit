@@ -12,8 +12,13 @@ import {
   type DisplayWizardStep,
 } from './wizard-actores-coalesce';
 
-/** Icono/marcador por status del paso (✓ / número activo / outline / 🔒). */
-function StepMarker({
+/**
+ * Icono/marcador por status del paso (✓ / número activo / outline / 🔒).
+ *
+ * Exportado para que el detalle del trámite dibuje su stepper con ESTE marcador y no con una
+ * segunda versión: los círculos del wizard y los del detalle son el mismo elemento del sistema.
+ */
+export function StepMarker({
   status,
   index,
   active = false,

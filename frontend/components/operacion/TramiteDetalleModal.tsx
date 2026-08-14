@@ -1,11 +1,24 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Clock, Coins, Download, FileCheck2, FileText, FolderCheck, Users } from 'lucide-react';
+import {
+  Clock,
+  Coins,
+  Download,
+  FileCheck2,
+  FileText,
+  FolderCheck,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import ExpedienteTimeline from './ExpedienteTimeline';
+// El círculo del stepper es el MISMO del asistente: verde con check si está cumplido, número azul
+// con halo si es el activo, contorno gris si está pendiente. Una segunda versión aquí habría hecho
+// que los dos steppers del producto se separaran con el tiempo.
+import { StepMarker } from './WizardStepTracker';
 import { plateFlowHint } from './TramitesTable';
 import { AttachmentPreview, useAttachmentPreview } from './TramiteDocumentosModal';
 // Vocabulario compartido por TODAS las secciones del detalle. El modal usa las mismas piezas que
@@ -189,6 +202,12 @@ export function TramiteDetalleModal({
   // La matrícula inicial tiene CUATRO pasos y el traspaso cinco: es la secuencia de la norma, no
   // una simplificación (la matrícula no tiene datos comerciales).
   const pasos = item ? PASOS_POR_MODALIDAD[item.modalidad] : PASOS_POR_MODALIDAD.traspaso;
+  // El paso por defecto («expediente») existe en las dos modalidades, así que el índice siempre
+  // resuelve; el `Math.max` solo cubre un id que dejara de existir en un cambio futuro.
+  const pasoActivoIndex = Math.max(
+    0,
+    pasos.findIndex((p) => p.id === seccion),
+  );
   const chip = item ? estadoChip(item.estado) : null;
   const plateHint = item ? plateFlowHint(item.plateFlowStatus) : null;
   const systemAttachments = attachments.filter((a) => a.source === 'system');
@@ -241,6 +260,66 @@ export function TramiteDetalleModal({
             ) : null}
             {plateHint ? <InlineAlert tone="info">{plateHint}</InlineAlert> : null}
 
+            {/* Stepper horizontal, en su propia tarjeta y a todo el ancho, como en la propuesta y
+                como manda la norma («círculos numerados y conector»). El marcador es el MISMO
+                `StepMarker` del asistente, no una segunda versión.
+                Marcar los pasos de captura como completados NO es progreso inventado: este modal
+                solo se abre para trámites ya radicados, así que están cumplidos por construcción —
+                por eso está radicado—. El último paso, «FUR y expediente», solo se da por completo
+                cuando el trámite quedó aprobado; entregado, rechazado o anulado no lo están. */}
+            <div
+              role="tablist"
+              aria-label="Pasos del trámite"
+              className="flex items-start overflow-x-auto rounded-[18px] border bg-white p-4 dark:bg-[#162744]"
+              style={{ borderColor: BORDER }}
+            >
+              {pasos.map((paso, i) => {
+                const activa = paso.id === seccion;
+                const esUltimo = i === pasos.length - 1;
+                const completo = esUltimo ? item.estado === 'aprobado' : true;
+                return (
+                  <div key={paso.id} className="flex flex-1 items-center last:flex-none">
+                    <button
+                      type="button"
+                      role="tab"
+                      id={`detalle-tab-${paso.id}`}
+                      aria-selected={activa}
+                      aria-controls={`detalle-panel-${paso.id}`}
+                      // El estado va en el nombre accesible y no como texto oculto dentro del
+                      // botón: así el círculo verde no es la única señal de "cumplido", y el
+                      // rótulo visible sigue siendo solo el rótulo.
+                      aria-label={`Paso ${i + 1}: ${paso.label} — ${completo ? 'completado' : 'pendiente'}`}
+                      onClick={() => setSeccion(paso.id)}
+                      className="flex shrink-0 flex-col items-center gap-1.5 rounded-xl px-2 py-1 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+                      style={activa ? { boxShadow: '0 0 0 1.5px #557EFF' } : undefined}
+                    >
+                      <StepMarker
+                        status={completo ? 'complete' : 'incomplete'}
+                        index={i}
+                        active={activa}
+                      />
+                      <span
+                        className="whitespace-nowrap text-xs font-medium"
+                        style={{ color: activa ? BLUE : completo ? NAVY : '#59677D' }}
+                      >
+                        {/* Sin el número delante: ya lo lleva el círculo, que es donde la norma lo
+                            pone («círculos numerados»). Con los dos, el paso activo mostraba el
+                            número repetido. */}
+                        {paso.label}
+                      </span>
+                    </button>
+                    {!esUltimo ? (
+                      <div
+                        className="mx-1 mt-[-18px] h-0.5 flex-1 rounded-full"
+                        style={{ background: completo ? '#8CC63F' : '#DFE5ED' }}
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               {/* Izquierda — tarjeta de vehículo. Se pinta con el resumen de la fila: no depende de
                   `getInstance`, así que está lista desde el primer render (sin foto: no hay dato de
@@ -276,39 +355,13 @@ export function TramiteDetalleModal({
                   Cada paso pide sus propios datos AL MONTARSE, así que abrir el modal no dispara
                   las siete llamadas de golpe: solo las del paso que se está mirando. */}
               <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
-                <div
-                  role="tablist"
-                  aria-label="Pasos del trámite"
-                  className="flex flex-wrap items-center gap-1 border-b"
-                  style={{ borderColor: BORDER }}
-                >
-                  {pasos.map(({ id, label, Icon }, i) => {
-                    const activa = id === seccion;
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        role="tab"
-                        id={`detalle-tab-${id}`}
-                        aria-selected={activa}
-                        aria-controls={`detalle-panel-${id}`}
-                        onClick={() => setSeccion(id)}
-                        className="relative inline-flex items-center gap-1.5 rounded-t-lg px-3 py-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
-                        style={activa ? { color: BLUE } : { color: NAVY, opacity: 0.7 }}
-                      >
-                        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                        {i + 1}. {label}
-                        {/* El activo se marca con color Y con subrayado: no depende solo del color. */}
-                        {activa ? (
-                          <span
-                            className="absolute inset-x-2 -bottom-px h-0.5 rounded-full"
-                            style={{ background: BLUE }}
-                            aria-hidden="true"
-                          />
-                        ) : null}
-                      </button>
-                    );
-                  })}
+                {/* Encabezado del paso activo, como en la propuesta: dice en cuál estás sin tener
+                    que volver la vista al stepper. */}
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
+                  <h3 className="text-sm font-bold" style={{ color: BLUE }}>
+                    {pasoActivoIndex + 1}. {pasos[pasoActivoIndex]?.label}
+                  </h3>
                 </div>
 
                 <div
