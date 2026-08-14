@@ -989,7 +989,10 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
 
       {processTarget && (
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          // Overlay FLIT (component.modal): rgba(22,39,68,0.45) + blur 6px. Antes era
+          // `bg-slate-900/40`, y la escala slate de Tailwind no es paleta de este producto.
+          className="fixed inset-0 z-[90] flex items-center justify-center px-4 backdrop-blur-[6px]"
+          style={{ background: 'rgba(22,39,68,0.45)' }}
           role="dialog"
           aria-modal="true"
           aria-labelledby="procesar-plate-title"
