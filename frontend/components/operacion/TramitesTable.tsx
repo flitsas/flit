@@ -1309,10 +1309,13 @@ function TableBody({
               {gridLayout.includeSelectColumn ? (
                 <th
                   scope="col"
-                  aria-hidden="true"
                   className="rounded-l-xl px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wider"
                   style={{ background: '#DFE5ED', color: '#162744' }}
-                />
+                >
+                  {/* Nombre real, no `aria-hidden`: ocultar una cabecera desalinea el recuento de
+                      columnas del lector de pantalla respecto a las celdas de cada fila. */}
+                  <span className="sr-only">Selección</span>
+                </th>
               ) : null}
               {visibleDefs.map((col, index) => (
                 <th
