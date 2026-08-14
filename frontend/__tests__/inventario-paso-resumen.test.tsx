@@ -407,7 +407,9 @@ describe('MatriculaResumen — inventario: actores del trámite', () => {
 });
 
 describe('MatriculaResumen — inventario: mandatario, transformaciones y prenda', () => {
-  it('el mandatario que firma conserva sus candidatos y el estado de su firma', async () => {
+  // El mandatario se retiró del resumen (decisión del usuario): el backend lo resuelve solo cuando
+  // no se elige a mano. Se fija la AUSENCIA para que no vuelva por descuido en un rediseño futuro.
+  it('el mandatario no se pinta en el resumen, ni siquiera con candidatos disponibles', async () => {
     mocks.listMandateSigners.mockResolvedValue({
       opciones: [
         { id: 'm-1', nombre: 'Juan Mandatario', tipoDocumento: 'CC', documento: '555', firmaBaulVigente: true, identidadVigente: false, firmaFisica: false, identidadHasta: null },
@@ -416,24 +418,12 @@ describe('MatriculaResumen — inventario: mandatario, transformaciones y prenda
       elegidoId: 'm-1',
       editable: true,
     });
-    const user = userEvent.setup();
     renderResumen();
 
-    // Plegado por defecto: el sistema lo resuelve solo, así que no reclama atención.
-    await user.click(await screen.findByRole('button', { name: 'Mandatario' }));
-
-    const mandatario = screen.getByRole('region', { name: 'Mandatario que firma' });
-    expect(within(mandatario).getByRole('radio', { name: /Juan Mandatario/ })).toBeChecked();
-    expect(within(mandatario).getByRole('radio', { name: /Luisa Apoderada/ })).toBeInTheDocument();
-    expect(within(mandatario).getByText('Firma del baúl vigente')).toBeInTheDocument();
-    expect(within(mandatario).getByText(/Sin firma del baúl ni identidad vigentes/)).toBeInTheDocument();
-  });
-
-  it('sin candidatos de mandato no se pinta una sección vacía', async () => {
-    renderResumen();
-
-    await waitFor(() => expect(mocks.listMandateSigners).toHaveBeenCalled());
+    expect(await screen.findByRole('region', { name: 'Vehículo' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Mandatario' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Mandatario que firma' })).toBeNull();
+    expect(screen.queryByText(/Juan Mandatario/)).toBeNull();
   });
 
   it('las transformaciones declaradas conservan qué cambió y a qué valor', async () => {
@@ -929,8 +919,11 @@ describe('FirmaFurStep — inventario: organismo de tránsito también en traspa
   });
 });
 
-describe('FirmaFurStep — inventario: trazabilidad cronológica del trámite', () => {
-  it('monta la línea de tiempo con el estado, su origen y el motivo, en una sola frase', async () => {
+// La trazabilidad cronológica se retiró del resumen (decisión del usuario): este paso es para
+// revisar antes de radicar, no para consultar el historial. Se fija la AUSENCIA, con historial
+// disponible, para que no vuelva por descuido en un rediseño futuro.
+describe('FirmaFurStep — inventario: la trazabilidad cronológica NO va en el resumen', () => {
+  it('no monta la línea de tiempo aunque el trámite ya tenga historial', async () => {
     mocks.getInstance.mockResolvedValue({
       ...DETALLE,
       statusHistory: [
@@ -945,21 +938,10 @@ describe('FirmaFurStep — inventario: trazabilidad cronológica del trámite', 
     });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
-    const timeline = await screen.findByRole('region', {
-      name: 'Línea de tiempo del expediente',
-    });
-    expect(within(timeline).getByText('Borrador')).toBeInTheDocument();
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(
-      within(timeline).getByText('Rechazado desde Entregado (Cargar documentos)'),
-    ).toBeInTheDocument();
-  });
-
-  it('sin historial todavía lo dice en vez de dejar la sección muda', async () => {
-    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-
-    const timeline = await screen.findByRole('region', {
-      name: 'Línea de tiempo del expediente',
-    });
-    expect(within(timeline).getByText('Sin eventos registrados todavía.')).toBeInTheDocument();
+      screen.queryByRole('region', { name: 'Línea de tiempo del expediente' }),
+    ).toBeNull();
+    expect(screen.queryByText('Rechazado desde Entregado (Cargar documentos)')).toBeNull();
   });
 });

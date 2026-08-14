@@ -17,7 +17,6 @@ import { WizardAccordion } from './WizardAccordion';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
 import { WIZARD_CARD, WIZARD_INPUT } from './wizard-field-styles';
 import { BiometricStep } from './BiometricStep';
-import { MandatarioSection } from './MandatarioSection';
 import { openAttachmentInNewTab } from './ExpedienteVisor';
 import { WizardReadOnlyProvider } from './WizardReadOnlyContext';
 
@@ -866,14 +865,8 @@ export default function MatriculaResumen({
           El organismo de tránsito + preasignación de placa lo pinta `FirmaFurStep` en su propia fila,
           debajo de este componente. El expediente consolidado (documentos + confirmaciones) vive en
           `ExpedienteVisor`, un componente distinto que el paso monta a continuación de este. */}
-      {instanceId ? (
-        <MandatarioSection
-          instanceId={instanceId}
-          onChanged={onBiometricRefresh}
-          asDisclosure
-          defaultOpen={false}
-        />
-      ) : null}
+      {/* Mandatario retirado del resumen (decisión del usuario). El backend lo resuelve solo cuando
+          no se elige a mano, que es lo que decía el propio subtítulo de la sección. */}
 
       {hasExtras ? (
         <>

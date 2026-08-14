@@ -16,7 +16,6 @@ import {
 } from '@/lib/api/admin-plate-ranges';
 import MatriculaResumen from './MatriculaResumen';
 import ExpedienteVisor from './ExpedienteVisor';
-import ExpedienteTimeline from './ExpedienteTimeline';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { PRENDA_DECISION_LABELS } from './PrendaForm';
@@ -704,9 +703,9 @@ export function FirmaFurStep({
         }}
       />
 
-      {/* HU #11007 (rediseño) — trazabilidad cronológica del trámite: el dato ya estaba cargado
-          (`statusHistory` de `getInstance`) y se descartaba sin pintarse. */}
-      <ExpedienteTimeline statusHistory={detail?.statusHistory ?? []} />
+      {/* La trazabilidad cronológica del trámite NO va en el resumen (decisión del usuario): este
+          paso es para revisar antes de radicar, no para consultar el historial. `ExpedienteTimeline`
+          se conserva sin montar aquí — es la pieza natural del modal de detalle del trámite. */}
 
       {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
 
