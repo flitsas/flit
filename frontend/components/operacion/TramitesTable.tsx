@@ -184,13 +184,18 @@ function stepLabel(item: InstanceSummary): string {
  * Acreditación de una parte (identidad validada o firma del baúl) en la columna "Firmas".
  *
  * El diseño la dibuja como TEXTO PLANO de color, no como píldora, así que aquí solo se necesita
- * etiqueta + color. Se conserva el matiz de cada estado y se usa la variante con la luminosidad
- * ajustada para texto: los tonos puros del diseño (`#16A34A`, `#F9AC00`) no llegan al contraste
- * mínimo sobre blanco y un texto sin fondo tintado no tiene dónde apoyarse.
+ * etiqueta + color, y se usan los tonos EXACTOS de la propuesta por decisión expresa del usuario.
+ *
+ * DEUDA DE CONTRASTE CONOCIDA: sobre blanco, `#F9AC00` da 1.9:1 y `#16A34A` 3.3:1, por debajo del
+ * 4.5:1 que pide AA para texto. Se asume a sabiendas: el estado nunca depende solo del color —la
+ * etiqueta lo dice— pero la legibilidad sigue siendo peor de lo que exige la norma. Se documentó
+ * junto a las otras dos deudas de contraste abiertas (blanco sobre `#8CC63F` y sobre `#FF4E00`).
  */
 const FIRMA_TEXTO: Record<FirmaParteEstado, { label: string; color: string }> = {
-  firmado: { label: 'Firmado', color: '#15803D' },
-  pendiente: { label: 'Pendiente', color: '#B45309' },
+  firmado: { label: 'Firmado', color: '#16A34A' },
+  pendiente: { label: 'Sin firma', color: '#F9AC00' },
+  // La propuesta no dibuja una firma rechazada, así que no hay "tono exacto" que copiar: se queda
+  // el naranja de marca en su variante para texto, que sí cumple contraste.
   rechazado: { label: 'Rechazado', color: '#C2410C' },
 };
 
@@ -1524,9 +1529,13 @@ function FirmaParteLinea({
   rotulo: string;
   estado?: FirmaParteEstado | null;
 }) {
+  // Fragmento de DOS celdas, no una línea cerrada: la rejilla vive en el contenedor (ver la celda
+  // `firmado`), y así el valor de vendedor y el de comprador quedan alineados en la misma columna.
+  // Con la línea corrida anterior ("Vendedor: …" / "Comprador: …") los valores bailaban, porque
+  // los dos rótulos no miden lo mismo, y la columna no se podía barrer en vertical.
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <span className="shrink-0 text-xs text-[#162744]/55 dark:text-white/45">{rotulo}:</span>
+    <>
+      <span className="shrink-0 text-xs text-[#162744]/70 dark:text-white/70">{rotulo}</span>
       {estado ? (
         <span
           className="truncate text-xs font-semibold"
@@ -1535,9 +1544,9 @@ function FirmaParteLinea({
           {FIRMA_TEXTO[estado].label}
         </span>
       ) : (
-        <span className="truncate text-xs text-[#162744]/45 dark:text-white/35">Sin registrar</span>
+        <span className="truncate text-xs text-[#162744]/70 dark:text-white/70">Sin registrar</span>
       )}
-    </span>
+    </>
   );
 }
 
@@ -1775,7 +1784,7 @@ function TramiteRow({
     // matrícula inicial no tiene vendedor, así que se muestra solo el comprador en lugar de gastar
     // una línea en un "No aplica" repetido en todas las filas.
     firmado: (
-      <span className="flex min-w-0 flex-col gap-1">
+      <span className="grid min-w-0 grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
         {item.modalidad === 'traspaso' ? (
           <FirmaParteLinea rotulo="Vendedor" estado={item.firmaVendedorEstado} />
         ) : null}

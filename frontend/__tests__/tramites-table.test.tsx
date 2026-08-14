@@ -583,13 +583,18 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    const rows = screen.getByRole('table', { name: 'Trámites en curso' });
-    expect(within(rows).getByText('Vendedor:')).toBeInTheDocument();
-    expect(within(rows).getByText('Comprador:')).toBeInTheDocument();
-    expect(within(rows).getByText('Firmado')).toBeInTheDocument();
-    expect(within(rows).getByText('Rechazado')).toBeInTheDocument();
+    // El rótulo ya no lleva dos puntos —rótulo y valor se alinean en dos columnas dentro de la
+    // celda, y el separador lo da la rejilla—, así que se busca dentro de la FILA de datos y no
+    // de la tabla entera: "Comprador" es también el texto de una cabecera ordenable. Lo que se
+    // comprueba sigue siendo lo mismo: que cada acreditación diga de qué parte es.
+    const tabla = screen.getByRole('table', { name: 'Trámites en curso' });
+    const fila = within(tabla).getAllByRole('row')[1];
+    expect(within(fila).getByText('Vendedor')).toBeInTheDocument();
+    expect(within(fila).getByText('Comprador')).toBeInTheDocument();
+    expect(within(fila).getByText('Firmado')).toBeInTheDocument();
+    expect(within(fila).getByText('Rechazado')).toBeInTheDocument();
     // El chip ya no se repite junto al nombre del actor: existe una sola vez por parte.
-    expect(within(rows).getAllByText('Firmado')).toHaveLength(1);
+    expect(within(fila).getAllByText('Firmado')).toHaveLength(1);
   });
 
   // La columna del vendedor se ata a la pestaña, no a la preferencia: en matrícula inicial no
@@ -635,11 +640,13 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    const rows = screen.getByRole('table', { name: 'Trámites en curso' });
-    expect(within(rows).queryByText('Vendedor:')).toBeNull();
-    expect(within(rows).getByText('Comprador:')).toBeInTheDocument();
+    // Acotado a la fila de datos: "Comprador" es también el texto de una cabecera ordenable.
+    const tabla = screen.getByRole('table', { name: 'Trámites en curso' });
+    const fila = within(tabla).getAllByRole('row')[1];
+    expect(within(fila).queryByText('Vendedor')).toBeNull();
+    expect(within(fila).getByText('Comprador')).toBeInTheDocument();
     // Parte existente pero sin acreditación registrada: se dice, no se deja un guion mudo.
-    expect(within(rows).getByText('Sin registrar')).toBeInTheDocument();
+    expect(within(fila).getByText('Sin registrar')).toBeInTheDocument();
   });
 });
 
