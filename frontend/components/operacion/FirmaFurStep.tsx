@@ -30,6 +30,7 @@ import type {
   Actor,
   BiometricParte,
   BiometricValidation,
+  ChecklistItemView,
   FieldValue,
   InstanceStatus,
   Participant,
@@ -260,6 +261,9 @@ export function FirmaFurStep({
   // Adjuntos + biométrica del expediente (alimentan MatriculaResumen y ExpedienteVisor).
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
   const [biometric, setBiometric] = useState<BiometricValidation[]>([]);
+  // Checklist de documentos requeridos por la tipología (rediseño «Documentos cargados», Step5):
+  // fuente de la rejilla de `ExpedienteVisor` — no los adjuntos ya generados (`attachments`).
+  const [checklist, setChecklist] = useState<ChecklistItemView[]>([]);
   // HU #11014 — partes cubiertas por la firma del baúl: el expediente las rotula como firmadas desde
   // el baúl en vez de hablar del certificado de validación de identidad.
   const [firmaBaulPartes, setFirmaBaulPartes] = useState<string[]>([]);
@@ -345,17 +349,19 @@ export function FirmaFurStep({
   const loadExpediente = useCallback(async () => {
     if (!instanceId) return;
     try {
-      // allSettled: si la biométrica falla (404 en estados tempranos) no se
-      // pierde el listado de adjuntos, y viceversa. Ambos son informativos.
-      const [att, bio] = await Promise.allSettled([
+      // allSettled: si la biométrica o el checklist fallan (404 en estados tempranos) no se
+      // pierde el listado de adjuntos, y viceversa. Los tres son informativos.
+      const [att, bio, chk] = await Promise.allSettled([
         tramitesClient.getAttachments(instanceId),
         tramitesClient.listBiometricExpediente(instanceId),
+        tramitesClient.getChecklist(instanceId),
       ]);
       if (att.status === 'fulfilled') setAttachments(att.value);
       if (bio.status === 'fulfilled') {
         setBiometric(bio.value.validations);
         setFirmaBaulPartes(bio.value.firmaBaulPartes);
       }
+      if (chk.status === 'fulfilled') setChecklist(chk.value.items);
     } catch {
       // El expediente es informativo; no bloquea el render del paso.
     }
@@ -576,11 +582,13 @@ export function FirmaFurStep({
   const transformacionesDeclaradas = summarizeDeclaredTransformations(detail?.fieldValues ?? []);
 
   // «Organismo de tránsito y preasignación de placa» (captura Step5) — este módulo sigue siendo
-  // quien tiene los datos (OT resuelto, catálogo de placas), pero ya no se pinta en su propia fila:
-  // viaja como `organismoSlot` para que `MatriculaResumen` lo coloque junto a «Estado de validación
-  // de identidad», en la MISMA `grid lg:grid-cols-2` de la captura. HU #10799 — la preasignación de
-  // placa (Flujo A) sigue exclusiva de matrícula inicial; el organismo se muestra en las dos.
-  const organismoSlot =
+  // quien tiene los datos (OT resuelto, catálogo de placas). Antes viajaba como `organismoSlot` para
+  // que `MatriculaResumen` lo pintara junto a «Estado de validación de identidad», en la MISMA `grid
+  // lg:grid-cols-2` de la captura; al retirarse esa tarjeta (rediseño, la identidad ya vive dentro de
+  // cada actor), el organismo vuelve a su propia fila del paso, debajo del resumen — visible en las
+  // DOS modalidades (HU #10659/#11199: en traspaso el OT lo fija el RUNT). HU #10799 — la
+  // preasignación de placa (Flujo A) sigue exclusiva de matrícula inicial.
+  const organismoRow =
     organismoSelected && instanceId ? (
       <div className="space-y-3">
         <OrganismoInfoCard name={organismo.name} />
@@ -599,7 +607,7 @@ export function FirmaFurStep({
           />
         )}
       </div>
-    ) : undefined;
+    ) : null;
 
   return (
     <div className="space-y-8">
@@ -676,12 +684,14 @@ export function FirmaFurStep({
         observacionesFur={fv('fur_observations') || null}
         prioritario={prioritario}
         onPrioritarioChange={instanceId ? handlePrioritarioChange : undefined}
-        organismoSlot={organismoSlot}
       />
+
+      {organismoRow}
 
       <ExpedienteVisor
         instanceId={instanceId}
         attachments={attachments}
+        checklist={checklist}
         modalidad={modalidad}
         status={detail?.status ?? 'borrador'}
         organismoNombre={organismo.name}

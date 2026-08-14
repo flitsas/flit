@@ -102,13 +102,6 @@ interface Props {
   prioritario?: boolean;
   /** Ausente cuando el trámite todavía no existe (sin `instanceId`, nada que marcar). */
   onPrioritarioChange?: (value: boolean) => void;
-  /**
-   * «Organismo de tránsito y preasignación de placa», ya montado por `FirmaFurStep` (es quien tiene
-   * los datos: `OrganismoInfoCard` + `PlacaPreasignadaSection`). Este componente no mueve esos datos
-   * de sitio — solo los coloca como segunda celda de la fila `grid lg:grid-cols-2` donde vive «Estado
-   * de validación de identidad» (captura Step5: las dos tarjetas comparten fila).
-   */
-  organismoSlot?: ReactNode;
 }
 
 const BORDER = '#DFE5ED';
@@ -461,6 +454,16 @@ function ActorBlock({
           />
         </div>
       ) : null}
+      {/*
+       * Trazabilidad + enlace de captura (antes la tarjeta compartida «Estado de validación de
+       * identidad» — se eliminó por duplicar lo que ya vive aquí, en la sección del propio actor).
+       * Se conserva siempre que hay una validación que auditar: el banner de arriba (o, cuando
+       * `hideValidacion`, la biométrica embebida) ya dice si está pendiente o verificada, así que el
+       * badge solo se repite cuando NINGUNA de las dos lo hizo.
+       */}
+      {bio ? (
+        <IdentityTrackingBlock bio={bio} actorNombre={actor.nombre} showBadge={hideValidacion} />
+      ) : null}
     </div>
   );
 }
@@ -515,26 +518,41 @@ function CapturaLinkCopy({ link, label }: { link: string; label: string }) {
 }
 
 /**
- * Bloque de identidad de UN actor dentro de «Estado de validación de identidad» (propuesta, Step5:
- * `Badge text={validado ? "Verificada" : "Pendiente"}`) — escalado a dos actores (comprador y, en
- * traspaso, vendedor) como bloques hermanos dentro de la MISMA tarjeta, no como filas propias de la
- * rejilla. Cuando la validación sigue pendiente y el proveedor mandó `captureUrl`, el enlace de
- * captura vive en el mismo bloque, en monoespaciada, con su botón «Copiar enlace».
+ * Trazabilidad técnica + enlace de captura de UN actor (antes vivían en la tarjeta compartida
+ * «Estado de validación de identidad», retirada por duplicar la validación que ya vive dentro de la
+ * sección de cada actor — la propuesta solo contempla un actor y no la embebe aparte). Se monta
+ * DENTRO de `ActorBlock`, así que nada de esto desaparece: solo cambia de contenedor.
  *
- * La bitácora técnica por evento (antes su propia tarjeta «Tracking de validación de identidad», con
- * la tabla siempre abierta) se conserva pero se pliega: un desplegable cerrado por defecto, no una
- * fila propia — así la segunda fila de la rejilla del paso queda como en la captura.
+ * `showBadge` pinta el badge (`Pendiente`/`Verificada`, propuesta Step5) solo cuando la sección del
+ * actor todavía no tiene un indicador de estado propio — es lo que pasa cuando la biométrica va
+ * embebida (`hideValidacion`): esa vista no repite el badge de `BiometricStep`. Cuando el banner de
+ * arriba ya lo dice (`!hideValidacion`), el badge se omite para no duplicarlo.
+ *
+ * El enlace de captura (monoespaciado, con «Copiar enlace») solo se pinta si la validación sigue
+ * pendiente y el proveedor mandó `captureUrl` — aunque la biométrica embebida ya ofrezca su propio
+ * QR, este enlace copiable es el mismo patrón de la captura Step5 y no se sustituye por el QR.
+ *
+ * La bitácora técnica por evento (antes su propia tarjeta con la tabla siempre abierta) se conserva
+ * plegada: un desplegable cerrado por defecto, no una fila propia.
  */
-function IdentityStatusBlock({ nombre, bio }: { nombre: string; bio: BiometricValidation }) {
+function IdentityTrackingBlock({
+  bio,
+  actorNombre,
+  showBadge,
+}: {
+  bio: BiometricValidation;
+  actorNombre?: string;
+  showBadge: boolean;
+}) {
   const pendiente = bio.status !== 'aprobado';
+  const nombre = actorNombre || bio.name;
   return (
-    <div className="min-w-0 rounded-xl border p-3" style={{ borderColor: BORDER }}>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="truncate text-xs font-bold">{nombre}</p>
+    <div className="space-y-3 border-t pt-3" style={{ borderColor: BORDER }}>
+      {showBadge ? (
         <StatusBadge label={pendiente ? 'Pendiente' : 'Verificada'} tone={pendiente ? 'warning' : 'success'} />
-      </div>
+      ) : null}
       {pendiente && bio.captureUrl ? (
-        <div className="mb-3">
+        <div>
           <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
             Enlace de captura
           </p>
@@ -571,7 +589,6 @@ export default function MatriculaResumen({
   observacionesFur = null,
   prioritario,
   onPrioritarioChange,
-  organismoSlot,
 }: Props) {
   const tone = estadoChipStyle(status).color;
   const soatEstado = (soat?.estado ?? '').toLowerCase();
@@ -842,36 +859,13 @@ export default function MatriculaResumen({
         ) : null}
       </div>
 
-      {/* Estado de validación de identidad | Organismo de tránsito y preasignación de placa (captura
-          Step5): MISMA fila `grid lg:grid-cols-2`. El organismo/placa los sigue montando
-          `FirmaFurStep` (es quien tiene esos datos) y llegan ya armados en `organismoSlot`; este
-          componente solo decide DÓNDE se pintan, no de dónde salen los datos.
-          Identidad: un bloque por actor dentro de la MISMA tarjeta (antes «Tracking de validación de
-          identidad», con una tabla siempre abierta por actor), apilados en vez de en su propia
-          rejilla interna — la tarjeta ahora ocupa media fila, no el ancho completo. */}
-      {((modalidad === 'traspaso' && vendedorBio) || compradorBio || organismoSlot) ? (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {(modalidad === 'traspaso' && vendedorBio) || compradorBio ? (
-            <ResumenCard title="Estado de validación de identidad">
-              <div className="space-y-4">
-                {modalidad === 'traspaso' && vendedorBio ? (
-                  <IdentityStatusBlock nombre={vendedor?.nombre || vendedorBio.name} bio={vendedorBio} />
-                ) : null}
-                {compradorBio ? (
-                  <IdentityStatusBlock nombre={comprador?.nombre || compradorBio.name} bio={compradorBio} />
-                ) : null}
-              </div>
-            </ResumenCard>
-          ) : null}
-          {organismoSlot}
-        </div>
-      ) : null}
-
       {/* Contenido nuestro sin equivalente en la captura: mandatario, transformaciones y prenda.
-          Plegados por defecto (antes Transformaciones/Prenda abrían solos) y DETRÁS de la fila de
-          identidad/organismo, para no colarse entre sus dos celdas — el expediente consolidado
-          (documentos + confirmaciones) vive en `ExpedienteVisor`, un componente distinto que el paso
-          monta a continuación de este. */}
+          Plegados por defecto (antes Transformaciones/Prenda abrían solos). El estado de validación
+          de identidad de cada actor vive dentro de su propia sección (Vendedor/Comprador, arriba) —
+          en FLIT no hay una tarjeta compartida aparte, a diferencia de la propuesta (un solo actor).
+          El organismo de tránsito + preasignación de placa lo pinta `FirmaFurStep` en su propia fila,
+          debajo de este componente. El expediente consolidado (documentos + confirmaciones) vive en
+          `ExpedienteVisor`, un componente distinto que el paso monta a continuación de este. */}
       {instanceId ? (
         <MandatarioSection
           instanceId={instanceId}

@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
   getFirmaPosterior: vi.fn(),
   marcarFirmaPosterior: vi.fn(),
   getActors: vi.fn(),
+  getChecklist: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -62,6 +63,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     getFirmaPosterior: mocks.getFirmaPosterior,
     marcarFirmaPosterior: mocks.marcarFirmaPosterior,
     getActors: mocks.getActors,
+    getChecklist: mocks.getChecklist,
   },
 }));
 
@@ -169,6 +171,7 @@ beforeEach(() => {
   mocks.listFirmas.mockResolvedValue([]);
   mocks.listParticipantes.mockResolvedValue([]);
   mocks.getAttachments.mockResolvedValue([]);
+  mocks.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true });
   mocks.getInstance.mockResolvedValue(INSTANCE_DETAIL);
   mocks.listBiometric.mockResolvedValue([]);
   mocks.listBiometricExpediente.mockResolvedValue({ validations: [], provider: 'mock', firmaBaulPartes: [] });
@@ -305,9 +308,19 @@ describe('FirmaFurStep — impronta (Feature #11066)', () => {
 
   it('con impronta existente la lista en Documentos del expediente', async () => {
     mocks.getAttachments.mockResolvedValue([IMPRONTA_DOC]);
+    // La rejilla sale del checklist (rediseño): el ítem se empareja con el adjunto por `docTipo`.
+    mocks.getChecklist.mockResolvedValue({
+      items: [
+        { key: 'impronta', label: 'Improntas de motor y chasis', obligatorio: true, docTipo: 'impronta', satisfied: true },
+      ],
+      faltanObligatorios: 0,
+      completo: true,
+    });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
     const docs = await screen.findByRole('list', { name: 'Documentos del expediente (visor)' });
-    expect(within(docs).getByText(/impronta\.pdf/i)).toBeInTheDocument();
+    expect(within(docs).getByText('Improntas de motor y chasis')).toBeInTheDocument();
+    expect(within(docs).getByText('Validado')).toBeInTheDocument();
+    expect(within(docs).getByText(/SHA-256/)).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Impronta de motor y chasis' })).not.toBeInTheDocument();
   });
 });
@@ -376,10 +389,16 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
 
   it('lista el FUR en Documentos del expediente y no vuelve a generarFur', async () => {
     mocks.getAttachments.mockResolvedValue([FUR_DOC]);
+    mocks.getChecklist.mockResolvedValue({
+      items: [{ key: 'fur', label: 'FUR', obligatorio: true, docTipo: 'fur', satisfied: true }],
+      faltanObligatorios: 0,
+      completo: true,
+    });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
     const docs = await screen.findByRole('list', { name: 'Documentos del expediente (visor)' });
-    expect(within(docs).getByText(/fur\.txt/i)).toBeInTheDocument();
+    expect(within(docs).getByText('FUR')).toBeInTheDocument();
+    expect(within(docs).getByText(/SHA-256 abc123/)).toBeInTheDocument();
     await waitFor(() => expect(mocks.generarImpronta).toHaveBeenCalled());
     expect(mocks.generarFur).not.toHaveBeenCalled();
   });
@@ -568,8 +587,13 @@ describe('FirmaFurStep — organismo de tránsito', () => {
 });
 
 describe('FirmaFurStep — descarga de documentos', () => {
-  it('abre un documento del expediente en nueva pestaña', async () => {
+  it('abre un documento del expediente en nueva pestaña con «Ver PDF»', async () => {
     mocks.getAttachments.mockResolvedValue([FUR_DOC]);
+    mocks.getChecklist.mockResolvedValue({
+      items: [{ key: 'fur', label: 'FUR', obligatorio: true, docTipo: 'fur', satisfied: true }],
+      faltanObligatorios: 0,
+      completo: true,
+    });
     mocks.downloadAttachment.mockResolvedValue({
       blob: new Blob(['x'], { type: 'text/plain' }),
       filename: 'fur.txt',
@@ -577,12 +601,24 @@ describe('FirmaFurStep — descarga de documentos', () => {
     });
     globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock');
     globalThis.URL.revokeObjectURL = vi.fn();
-    const openSpy = vi.fn(() => ({ focus: vi.fn() }));
+    // Ventana simulada completa (no solo `focus`): `openAttachmentInNewTab` abre la pestaña con el
+    // carrito (`openLoadingDocumentTab`, escribe en `win.document`) y luego navega con
+    // `win.location.replace(...)` — un stub incompleto deja una rejection sin capturar tras el test.
+    const fakeWin = {
+      opener: null as unknown,
+      closed: false,
+      document: { open: vi.fn(), write: vi.fn(), close: vi.fn() },
+      location: { replace: vi.fn() },
+      close: vi.fn(),
+      focus: vi.fn(),
+    };
+    const openSpy = vi.fn(() => fakeWin);
     vi.stubGlobal('open', openSpy);
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
     const docList = await screen.findByRole('list', { name: 'Documentos del expediente (visor)' });
-    await user.click(within(docList).getByRole('button', { name: /Descargar fur\.txt/i }));
+    // Rediseño (captura Step5): un solo botón «Ver PDF», no «Ver»/«Descargar».
+    await user.click(within(docList).getByRole('button', { name: /Ver PDF de FUR/i }));
     await waitFor(() =>
       expect(mocks.downloadAttachment).toHaveBeenCalledWith(
         INSTANCE,

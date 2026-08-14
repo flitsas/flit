@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Download, Eye, FileText } from 'lucide-react';
+import { Eye } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
   openLoadingDocumentTab,
@@ -13,6 +13,7 @@ import { StatusBadge } from '@/components/atom/StatusBadge';
 import { WizardCardHeader } from './wizard-atoms';
 import { WIZARD_CARD } from './wizard-field-styles';
 import type {
+  ChecklistItemView,
   InstanceStatus,
   ProcedureAttachment,
   WizardModalidad,
@@ -30,6 +31,13 @@ import type {
 interface Props {
   instanceId: string | null;
   attachments: ProcedureAttachment[];
+  /**
+   * «Documentos cargados» (rediseño, captura Step5) — el checklist de documentos REQUERIDOS por la
+   * tipología del trámite (`GET /instances/{id}/checklist`), no los adjuntos ya generados. Cada
+   * ítem se empareja con su adjunto por `docTipo` ↔ `ProcedureAttachment.tipo` para la huella y el
+   * botón «Ver PDF»; sin checklist (aún no cargó) la rejilla queda vacía, no cae a los adjuntos.
+   */
+  checklist?: ChecklistItemView[];
   modalidad?: WizardModalidad;
   status?: InstanceStatus;
   /** Nombre del organismo de tránsito ya elegido — casilla «Confirmo la radicación ante…». */
@@ -148,6 +156,7 @@ export async function openAttachmentInNewTab(
 export default function ExpedienteVisor({
   instanceId,
   attachments,
+  checklist = [],
   modalidad = 'matricula_inicial',
   status = 'borrador',
   organismoNombre,
@@ -158,7 +167,7 @@ export default function ExpedienteVisor({
 }: Props) {
   return (
     <section aria-label="Expediente digital" className="space-y-3">
-      <DocumentosCargadosCard instanceId={instanceId} attachments={attachments} />
+      <DocumentosCargadosCard instanceId={instanceId} attachments={attachments} checklist={checklist} />
       <ExpedienteConsolidadoCard
         instanceId={instanceId}
         attachments={attachments}
@@ -196,13 +205,21 @@ function consolidadoAvisoLabel(aviso: string): string {
 /**
  * «Documentos cargados» (rediseño, captura Step5): tarjeta siempre abierta con la rejilla de
  * documentos. Antes era el cuerpo del `WizardAccordion` «Documentos»; la rejilla no cambia.
+ *
+ * La fuente es el CHECKLIST (`GET /instances/{id}/checklist`, `ChecklistItemView[]`) — el listado de
+ * documentos REQUERIDOS por la tipología del trámite con su estado (`satisfied`) — no los
+ * `ProcedureAttachment[]` ya generados: esos, por definición, siempre están "Cargado" y no dejan ver
+ * lo que falta. Cada ítem se empareja con su adjunto por `docTipo` ↔ `tipo` para la huella y el botón
+ * «Ver PDF»; sin adjunto emparejado el documento sigue "Pendiente" y sin botón.
  */
 function DocumentosCargadosCard({
   instanceId,
   attachments,
+  checklist,
 }: {
   instanceId: string | null;
   attachments: ProcedureAttachment[];
+  checklist: ChecklistItemView[];
 }) {
   return (
     <VisorCard
@@ -217,15 +234,22 @@ function DocumentosCargadosCard({
         </span>
       }
     >
-      {attachments.length > 0 ? (
+      {checklist.length > 0 ? (
         // Rejilla (propuesta, «Documentos cargados»): sigue siendo una lista semántica, la rejilla es
         // solo el `className` — `<ul>`/`<li>` no cambian.
         <ul
           className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
           aria-label="Documentos del expediente (visor)"
         >
-          {attachments.map((a) => (
-            <DocRow key={a.id} instanceId={instanceId} attachment={a} />
+          {checklist.map((item) => (
+            <DocRow
+              key={item.key}
+              instanceId={instanceId}
+              item={item}
+              attachment={
+                item.docTipo ? attachments.find((a) => a.tipo === item.docTipo) : undefined
+              }
+            />
           ))}
         </ul>
       ) : (
@@ -333,8 +357,7 @@ function ExpedienteConsolidadoCard({
    * Genera (si hace falta) y ABRE el consolidado en pestaña nueva — punto 2 del rediseño: la
    * captura vigente (`MatriculaInicial`) dice literal «Ver expediente consolidado (PDF)», y es lo
    * que decía FLIT antes de que una generación anterior (`WizardTramite`) lo cambiara a descarga
-   * directa. La descarga real al equipo del gestor la sigue cubriendo el botón «Descargar» de cada
-   * documento suelto (`DocRow`), que no cambia.
+   * directa. Cada documento suelto del checklist abre igual, con «Ver PDF» (`DocRow`).
    * Regenerar con force=true evita mostrar todos los documentos duplicados si se había generado
    * anidando un consolidado_maestro u otro paquete previo.
    */
@@ -472,122 +495,83 @@ function ExpedienteConsolidadoCard({
 
 function DocRow({
   instanceId,
-  attachment: d,
+  item,
+  attachment,
 }: {
   instanceId: string | null;
-  attachment: ProcedureAttachment;
+  item: ChecklistItemView;
+  /** Adjunto emparejado por `docTipo` ↔ `tipo`; ausente cuando el documento aún no se cargó. */
+  attachment: ProcedureAttachment | undefined;
 }) {
-  const [busyVer, setBusyVer] = useState(false);
-  const [busyDescargar, setBusyDescargar] = useState(false);
-  const label = documentLabel(d.tipo) || d.filename || d.tipo || 'Documento';
-  const filename = d.filename?.trim() || '';
-  const nombreAccesible = filename || label;
+  const [busy, setBusy] = useState(false);
+  // Rótulo del CHECKLIST (`item.label`, ya resuelto por backend) — no `documentLabel(tipo)`: es el
+  // dato correcto para el requisito, y cubre también los que no tienen adjunto que traer un `tipo`.
+  const label = item.label;
+  const validado = item.satisfied;
   // Truncado a 24 caracteres con elipsis (propuesta): la rejilla es un vistazo, no el detalle
-  // forense. El hash completo sigue disponible en el `title` (tooltip nativo).
-  const shaShort = d.sha256 && d.sha256.length > 24 ? `${d.sha256.slice(0, 24)}…` : d.sha256;
+  // forense. El hash completo sigue disponible en el `title` (tooltip nativo). Solo hay SHA cuando
+  // hay adjunto emparejado.
+  const sha = attachment?.sha256;
+  const shaShort = sha && sha.length > 24 ? `${sha.slice(0, 24)}…` : sha;
 
   const handleVer = async () => {
-    if (!instanceId) return;
-    setBusyVer(true);
+    if (!instanceId || !attachment) return;
+    setBusy(true);
     try {
-      await openAttachmentInNewTab(instanceId, d);
+      await openAttachmentInNewTab(instanceId, attachment);
     } finally {
-      setBusyVer(false);
-    }
-  };
-
-  // Descarga real (propuesta, WizardTramite.tsx:710-712): a diferencia de "Ver" (que muestra el
-  // documento en pestaña nueva), esta guarda el archivo en el equipo del gestor con
-  // `downloadAttachment` — el mismo cliente que usa el consolidado.
-  const handleDescargar = async () => {
-    if (!instanceId) return;
-    setBusyDescargar(true);
-    try {
-      const descargado = await tramitesClient.downloadAttachment(
-        instanceId,
-        d.id,
-        undefined,
-        filename || undefined,
-      );
-      const objectUrl = URL.createObjectURL(
-        descargado.mimetype
-          ? new Blob([descargado.blob], { type: descargado.mimetype })
-          : descargado.blob,
-      );
-      const anchor = document.createElement('a');
-      anchor.href = objectUrl;
-      anchor.download = descargado.filename || nombreAccesible;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(objectUrl);
-    } finally {
-      setBusyDescargar(false);
+      setBusy(false);
     }
   };
 
   return (
     <li
-      // Ficha dentro del acordeón blanco de "Documentos" (`WizardAccordion`): un `bg-white` aquí
-      // repetía la tarjeta-dentro-de-tarjeta que el guardián de diseño ya había marcado en este
-      // módulo. Se hunde en el azul del fondo de app (`#EEF5FF` claro / `#0A1428` oscuro, igual
-      // que `background.app`) en vez de repetir el blanco del contenedor.
-      className="flex flex-col gap-3 rounded-2xl border bg-[#EEF5FF] p-4 dark:bg-[#0A1428]"
+      // Tarjeta blanca DENTRO de la tarjeta blanca de la sección (propuesta, Step5): se distingue
+      // por el borde + la sombra, no por un fondo hundido — el `#EEF5FF`/`#0A1428` que traía antes
+      // es el hundido en el fondo de app que el guardián de diseño ya había marcado y que la
+      // captura no tiene. `dark:bg-[#162744]` es la misma superficie oscura de tarjeta anidada que
+      // usa `WIZARD_CARD` en toda la app, no el fondo de app.
+      className="flex flex-col gap-3 rounded-xl border bg-white p-4 shadow-sm dark:bg-[#162744]"
       style={{ borderColor: BORDER }}
     >
       <div className="flex items-start justify-between gap-2">
-        <FileText className="h-5 w-5 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
-        {/* Todo documento de esta lista ya se generó/cargó con éxito —si no, no estaría en el
-            expediente—: el badge afirma ese hecho, no simula un estado variable que este dato no
-            tiene (a diferencia del OCR pendiente/erróneo de la carga, que es otra pantalla). */}
-        <StatusBadge label="Cargado" tone="success" />
-      </div>
-      <div className="min-w-0">
-        <p className="truncate text-xs font-semibold" style={{ color: '#162744' }} title={label}>
+        {/* Nombre en navy, puede ocupar dos líneas (propuesta): sin icono de fichero, la captura no
+            lo tiene. */}
+        <p className="min-w-0 flex-1 text-xs font-semibold leading-tight" style={{ color: '#162744' }} title={label}>
           {label}
         </p>
-        {filename ? <p className="truncate text-xs opacity-70">{filename}</p> : null}
-        {d.sha256 ? (
-          <p className="mt-1 truncate font-mono text-xs opacity-70" title={d.sha256}>
-            SHA-256 {shaShort}
-          </p>
-        ) : null}
+        <StatusBadge
+          label={validado ? 'Validado' : 'Pendiente'}
+          tone={validado ? 'success' : 'warning'}
+          className="shrink-0"
+        />
       </div>
-      {/* Pista de la barra en `#DFE5ED` (no `#EEF5FF`): la tarjeta ya usa ese azul como fondo, y la
-          pista se volvía invisible sobre su propio contenedor. */}
+      {sha ? (
+        <p className="truncate font-mono text-xs opacity-70" title={sha}>
+          SHA-256 {shaShort}
+        </p>
+      ) : null}
       <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: '#DFE5ED' }} aria-hidden="true">
-        <div className="h-full w-full rounded-full" style={{ background: '#8CC63F' }} />
+        <div
+          className="h-full w-full rounded-full"
+          style={{ background: validado ? '#8CC63F' : 'var(--badge-warning-fg)' }}
+        />
       </div>
-      {/* Dos acciones distintas, no una renombrada: "Ver" abre el documento en pestaña nueva para
-          consultarlo sin salir del trámite; "Descargar" lo guarda en el equipo del gestor. Ambos
-          botones nombran el documento en su `aria-label` — hay tests que buscan ese nombre exacto.
-          Estilo "blanco con borde" (propuesta, MatriculaInicial.tsx:1065): el relleno sólido en
-          `#557EFF` con texto blanco a 12px no llega a 4.5:1 (≈3.61:1); `--badge-info-fg` es el
-          mismo azul oscurecido que ya usan los badges de tono `info` para resolver justo este caso. */}
-      <div className="flex flex-wrap gap-2">
+      {/* Un solo botón (propuesta, Step5): «Ver PDF», no "Ver"/"Descargar". Sin adjunto emparejado
+          no se pinta — no hay nada que abrir. */}
+      {attachment ? (
         <button
           type="button"
-          disabled={!instanceId || busyVer}
-          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full border bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50 dark:bg-transparent"
+          disabled={!instanceId || busy}
+          className="inline-flex items-center justify-center gap-1.5 rounded-full border bg-white px-4 py-2 text-xs font-semibold disabled:opacity-50 dark:bg-transparent"
           style={{ borderColor: BLUE, color: INK_BLUE }}
-          aria-label={`Ver ${nombreAccesible}`}
+          aria-label={`Ver PDF de ${label}`}
           onClick={() => void handleVer()}
         >
           <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-          {busyVer ? 'Abriendo…' : 'Ver'}
+          {busy ? 'Abriendo…' : 'Ver PDF'}
         </button>
-        <button
-          type="button"
-          disabled={!instanceId || busyDescargar}
-          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full border bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50 dark:bg-transparent"
-          style={{ borderColor: BLUE, color: INK_BLUE }}
-          aria-label={`Descargar ${nombreAccesible}`}
-          onClick={() => void handleDescargar()}
-        >
-          <Download className="h-3.5 w-3.5" aria-hidden="true" />
-          {busyDescargar ? 'Descargando…' : 'Descargar'}
-        </button>
-      </div>
+      ) : null}
     </li>
   );
 }

@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   getPrenda: vi.fn(),
   getActors: vi.fn(),
   getAttachments: vi.fn(),
+  getChecklist: vi.fn(),
   listBiometricExpediente: vi.fn(),
   getBiometricState: vi.fn(),
   getBiometricAuditByValidation: vi.fn(),
@@ -185,6 +186,7 @@ beforeEach(() => {
     { rol: 'comprador', tipoDocumento: 'CC', numeroDocumento: '333444', nombreCompleto: 'Beto Comprador', email: 'beto@example.com', telefono: '3004445566', direccion: 'Carrera 10 # 20-30', ciudad: 'Bogotá' },
   ]);
   mocks.getAttachments.mockResolvedValue([]);
+  mocks.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true });
   mocks.listBiometricExpediente.mockResolvedValue({ validations: [], provider: 'mock', firmaBaulPartes: [] });
   mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'mock', firmaBaulPartes: [] });
   mocks.getBiometricAuditByValidation.mockResolvedValue({ events: [], referencedFromOtherProcedure: false });
@@ -505,18 +507,37 @@ describe('FirmaFurStep — inventario: expediente y documentos generados', () =>
     expect(await screen.findByRole('region', { name: 'Expediente digital' })).toBeInTheDocument();
   });
 
-  it('lista los documentos generados con su nombre y su huella', async () => {
+  it('lista los documentos del checklist con su rótulo, su estado y su huella', async () => {
     mocks.getAttachments.mockResolvedValue([FUR_DOC, IMPRONTA_DOC]);
+    // Rediseño: la rejilla sale del checklist, no de los adjuntos — se empareja por `docTipo`.
+    mocks.getChecklist.mockResolvedValue({
+      items: [
+        { key: 'fur', label: 'FUR', obligatorio: true, docTipo: 'fur', satisfied: true },
+        { key: 'impronta', label: 'Improntas de motor y chasis', obligatorio: true, docTipo: 'impronta', satisfied: true },
+        { key: 'factura', label: 'Factura de venta', obligatorio: true, docTipo: 'factura', satisfied: false },
+      ],
+      faltanObligatorios: 1,
+      completo: false,
+    });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
     const documentos = await screen.findByRole('list', { name: 'Documentos del expediente (visor)' });
-    expect(within(documentos).getByText(/fur\.pdf/)).toBeInTheDocument();
-    expect(within(documentos).getByText(/impronta\.pdf/)).toBeInTheDocument();
+    expect(within(documentos).getByText('FUR')).toBeInTheDocument();
+    expect(within(documentos).getByText('Improntas de motor y chasis')).toBeInTheDocument();
     // La huella del documento es lo que permite demostrar que no se alteró.
     expect(within(documentos).getByText(/SHA-256 abc123/)).toBeInTheDocument();
-    // Cada documento se puede abrir.
-    expect(within(documentos).getByRole('button', { name: 'Ver fur.pdf' })).toBeInTheDocument();
-    expect(within(documentos).getByRole('button', { name: 'Ver impronta.pdf' })).toBeInTheDocument();
+    // Cada documento con adjunto emparejado se puede abrir.
+    expect(within(documentos).getByRole('button', { name: 'Ver PDF de FUR' })).toBeInTheDocument();
+    expect(
+      within(documentos).getByRole('button', { name: 'Ver PDF de Improntas de motor y chasis' }),
+    ).toBeInTheDocument();
+    expect(within(documentos).getAllByText('Validado')).toHaveLength(2);
+    // Un ítem del checklist sin adjunto sale Pendiente y sin botón (no hay nada que abrir).
+    expect(within(documentos).getByText('Factura de venta')).toBeInTheDocument();
+    expect(within(documentos).getByText('Pendiente')).toBeInTheDocument();
+    expect(
+      within(documentos).queryByRole('button', { name: /Factura de venta/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('sin documentos todavía lo dice, y conserva el consolidado como acción', async () => {
@@ -700,72 +721,84 @@ describe('FirmaFurStep — inventario: acciones del cierre del trámite', () => 
   it('en trámite aprobado la documentación es definitiva y no se regenera', async () => {
     mocks.getInstance.mockResolvedValue({ ...DETALLE, status: 'aprobado' });
     mocks.getAttachments.mockResolvedValue([FUR_DOC]);
+    mocks.getChecklist.mockResolvedValue({
+      items: [{ key: 'fur', label: 'FUR', obligatorio: true, docTipo: 'fur', satisfied: true }],
+      faltanObligatorios: 0,
+      completo: true,
+    });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
     expect(
       await screen.findByText(/su documentación es definitiva\. Puedes consultarla y descargarla\./),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Re-generar expediente consolidado' })).toBeNull();
-    // Pero los documentos siguen listados y descargables.
-    const documentos = screen.getByRole('list', { name: 'Documentos del expediente (visor)' });
-    expect(within(documentos).getByRole('button', { name: 'Ver fur.pdf' })).toBeInTheDocument();
+    // Pero los documentos siguen listados y se pueden abrir.
+    const documentos = await screen.findByRole('list', { name: 'Documentos del expediente (visor)' });
+    expect(within(documentos).getByRole('button', { name: 'Ver PDF de FUR' })).toBeInTheDocument();
   });
 });
 
-// Auditoría del líder de diseño (No aprobado) — la cuarta parte del contenido que faltaba.
-// Rediseño (captura Step5): «Tracking de validación de identidad» pasó a «Estado de validación de
-// identidad» — un bloque por actor con su badge de estado (Pendiente/Verificada), su enlace de
-// captura cuando aplica, y la bitácora técnica plegada dentro (antes era su propia tarjeta abierta).
-describe('MatriculaResumen — inventario: estado de validación de identidad por actor', () => {
-  it('traspaso monta un bloque por actor, con su nombre y su estado', async () => {
+// Auditoría del líder de diseño (No aprobado) — la cuarta parte del contenido que faltaba, y hallazgo
+// posterior del usuario: la propuesta solo contempla un actor y no embebe nada aparte, así que la
+// tarjeta compartida «Estado de validación de identidad» duplicaba la validación de cada actor. Se
+// retiró; su bitácora técnica (desplegable «Ver trazabilidad de validación»), el enlace de captura y
+// el badge de estado ahora viven DENTRO de la sección de cada actor (Vendedor/Comprador) — nada de
+// eso desapareció, solo cambió de contenedor.
+describe('MatriculaResumen — inventario: trazabilidad de validación dentro de cada actor', () => {
+  it('ya no existe la tarjeta compartida «Estado de validación de identidad»', async () => {
     renderResumen();
-
-    const identidad = await screen.findByRole('region', {
-      name: 'Estado de validación de identidad',
-    });
-    expect(within(identidad).getByText('Ana Vendedora')).toBeInTheDocument();
-    expect(within(identidad).getByText('Beto Comprador')).toBeInTheDocument();
-    // Badge de estado (StatusBadge tone="success"), nunca la píldora sólida de la propuesta.
-    expect(within(identidad).getAllByText('Verificada')).toHaveLength(2);
-    // La bitácora técnica vive plegada dentro de cada bloque: no se carga hasta que se abre.
-    expect(mocks.getBiometricAuditByValidation).not.toHaveBeenCalled();
-  });
-
-  it('la bitácora de un actor se carga solo al abrir su desplegable de trazabilidad', async () => {
-    const user = userEvent.setup();
-    renderResumen();
-
-    const identidad = await screen.findByRole('region', {
-      name: 'Estado de validación de identidad',
-    });
-    const toggles = within(identidad).getAllByRole('button', {
-      name: 'Ver trazabilidad de validación',
-    });
-    expect(toggles).toHaveLength(2);
-    await user.click(toggles[0]!);
-    await waitFor(() => expect(mocks.getBiometricAuditByValidation).toHaveBeenCalled());
-  });
-
-  it('matrícula inicial monta solo el bloque del comprador', async () => {
-    renderResumen({ modalidad: 'matricula_inicial', vendedor: null, vendedorBio: null });
-
-    const identidad = await screen.findByRole('region', {
-      name: 'Estado de validación de identidad',
-    });
-    expect(within(identidad).getByText('Beto Comprador')).toBeInTheDocument();
-    expect(within(identidad).queryByText('Ana Vendedora')).toBeNull();
-    expect(within(identidad).getAllByText('Verificada')).toHaveLength(1);
-  });
-
-  it('sin ninguna validación biométrica no se monta la sección', async () => {
-    renderResumen({ compradorBio: null, vendedorBio: null });
     await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(
       screen.queryByRole('region', { name: 'Estado de validación de identidad' }),
     ).toBeNull();
   });
 
-  it('sin la validación aprobada el badge dice Pendiente, sin inventar un puntaje', async () => {
+  it('traspaso: cada actor conserva su propio desplegable de trazabilidad', async () => {
+    renderResumen();
+
+    const vendedor = await screen.findByRole('region', { name: 'Vendedor' });
+    const comprador = screen.getByRole('region', { name: 'Comprador' });
+    expect(
+      within(vendedor).getByRole('button', { name: 'Ver trazabilidad de validación' }),
+    ).toBeInTheDocument();
+    expect(
+      within(comprador).getByRole('button', { name: 'Ver trazabilidad de validación' }),
+    ).toBeInTheDocument();
+    // La bitácora técnica vive plegada dentro de cada bloque: no se carga hasta que se abre.
+    expect(mocks.getBiometricAuditByValidation).not.toHaveBeenCalled();
+  });
+
+  it('la bitácora de un actor se carga solo al abrir su propio desplegable de trazabilidad', async () => {
+    const user = userEvent.setup();
+    renderResumen();
+
+    const vendedor = await screen.findByRole('region', { name: 'Vendedor' });
+    await user.click(
+      within(vendedor).getByRole('button', { name: 'Ver trazabilidad de validación' }),
+    );
+    await waitFor(() => expect(mocks.getBiometricAuditByValidation).toHaveBeenCalled());
+  });
+
+  it('matrícula inicial: solo el comprador tiene desplegable de trazabilidad', async () => {
+    renderResumen({ modalidad: 'matricula_inicial', vendedor: null, vendedorBio: null });
+
+    expect(screen.queryByRole('region', { name: 'Vendedor' })).toBeNull();
+    const comprador = await screen.findByRole('region', { name: 'Comprador' });
+    expect(
+      within(comprador).getByRole('button', { name: 'Ver trazabilidad de validación' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole('button', { name: 'Ver trazabilidad de validación' }),
+    ).toHaveLength(1);
+  });
+
+  it('sin ninguna validación biométrica no hay nada que auditar', async () => {
+    renderResumen({ compradorBio: null, vendedorBio: null });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(screen.queryByRole('button', { name: 'Ver trazabilidad de validación' })).toBeNull();
+  });
+
+  it('con la biométrica embebida (pendiente) el actor sigue anunciando su estado con un badge', async () => {
     renderResumen({
       compradorBio: { ...BIO_APROBADA, status: 'en_proceso', score: null, captureUrl: null },
       vendedorBio: null,
@@ -773,11 +806,23 @@ describe('MatriculaResumen — inventario: estado de validación de identidad po
       vendedor: null,
     });
 
-    const identidad = await screen.findByRole('region', {
-      name: 'Estado de validación de identidad',
-    });
-    expect(within(identidad).getByText('Pendiente')).toBeInTheDocument();
-    expect(within(identidad).queryByText(/Puntaje/)).toBeNull();
+    const comprador = await screen.findByRole('region', { name: 'Comprador' });
+    // Badge de estado (StatusBadge tone="warning"), nunca la píldora sólida de la propuesta — solo se
+    // pinta aquí porque la biométrica embebida sustituye al banner "Validación de identidad" que ya
+    // lo diría; sin inventar un puntaje que la validación no trae.
+    expect(within(comprador).getByText('Pendiente')).toBeInTheDocument();
+    expect(within(comprador).queryByText(/Puntaje/)).toBeNull();
+  });
+
+  it('con la identidad aprobada el badge no se repite: ya lo dice el sello de "Identidad verificada"', async () => {
+    renderResumen();
+
+    const vendedor = screen.getByRole('region', { name: 'Vendedor' });
+    const comprador = screen.getByRole('region', { name: 'Comprador' });
+    // El banner "Identidad verificada — 95/100" ya anuncia el estado (otro test lo cubre); el badge
+    // corto "Verificada" de la trazabilidad se omite para no duplicarlo.
+    expect(within(vendedor).queryByText('Verificada')).toBeNull();
+    expect(within(comprador).queryByText('Verificada')).toBeNull();
   });
 
   it('con el enlace de captura pendiente lo muestra en monoespaciada, con botón de copiar', async () => {
@@ -793,12 +838,10 @@ describe('MatriculaResumen — inventario: estado de validación de identidad po
       vendedor: null,
     });
 
-    const identidad = await screen.findByRole('region', {
-      name: 'Estado de validación de identidad',
-    });
-    const enlace = within(identidad).getByLabelText('Enlace de captura de Beto Comprador');
+    const comprador = await screen.findByRole('region', { name: 'Comprador' });
+    const enlace = within(comprador).getByLabelText('Enlace de captura de Beto Comprador');
     expect(enlace).toHaveValue('https://kyverum.flit.io/captura/TRM-2026-000095');
-    expect(within(identidad).getByRole('button', { name: 'Copiar enlace' })).toBeInTheDocument();
+    expect(within(comprador).getByRole('button', { name: 'Copiar enlace' })).toBeInTheDocument();
   });
 });
 
@@ -862,25 +905,26 @@ describe('FirmaFurStep — inventario: organismo de tránsito también en traspa
     });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
-    // Punto 1 del rediseño — el organismo llega como `organismoSlot` y se pinta DENTRO del
-    // «Consolidado del trámite» (misma fila que «Estado de validación de identidad»), no después.
-    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
-    expect(within(resumen).getByText('Organismo de tránsito')).toBeInTheDocument();
+    // Al retirarse la tarjeta compartida «Estado de validación de identidad» (rediseño posterior:
+    // la identidad ya vive dentro de cada actor), el organismo recupera su propia fila del paso,
+    // fuera de «Consolidado del trámite» — lo sigue montando `FirmaFurStep`, no `MatriculaResumen`.
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(screen.getByText('Organismo de tránsito')).toBeInTheDocument();
     expect(
-      within(resumen).getByText('Secretaría Distrital de Movilidad de Bogotá'),
+      screen.getByText('Secretaría Distrital de Movilidad de Bogotá'),
     ).toBeInTheDocument();
     // El dígito de preferencia de placa sigue exclusivo de matrícula: en traspaso el vehículo ya
     // tiene placa.
-    expect(within(resumen).queryByRole('region', { name: 'Placa preasignada' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Placa preasignada' })).toBeNull();
   });
 
-  it('matrícula sigue mostrando organismo + preasignación de placa emparejados, dentro del resumen', async () => {
+  it('matrícula sigue mostrando organismo + preasignación de placa emparejados, en su propia fila', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
-    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
-    expect(within(resumen).getByText('Organismo de tránsito')).toBeInTheDocument();
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(screen.getByText('Organismo de tránsito')).toBeInTheDocument();
     expect(
-      await within(resumen).findByRole('region', { name: 'Placa preasignada' }),
+      await screen.findByRole('region', { name: 'Placa preasignada' }),
     ).toBeInTheDocument();
   });
 });
