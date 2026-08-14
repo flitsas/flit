@@ -63,11 +63,11 @@ describe("EditUserModal (#10622)", () => {
     );
   });
 
-  it("AC2: mapea el 409 USER_ALREADY_EXISTS sin perder lo escrito en el formulario", async () => {
+  it("AC2: mapea el 409 EMAIL_ALREADY_IN_USE (campo 'code') sin perder lo escrito en el formulario", async () => {
     const ue = userEvent.setup();
     const onUpdate = vi
       .fn()
-      .mockRejectedValue(new ApiError(409, "Conflict", { code: "USER_ALREADY_EXISTS" }));
+      .mockRejectedValue(new ApiError(409, "Conflict", { code: "EMAIL_ALREADY_IN_USE" }));
     const onSaved = vi.fn();
     render(<EditUserModal user={user} onClose={vi.fn()} onSaved={onSaved} onUpdate={onUpdate} />);
 
@@ -84,11 +84,13 @@ describe("EditUserModal (#10622)", () => {
     expect(onSaved).not.toHaveBeenCalled();
   });
 
-  it("AC2: mapea el 409 EMAIL_BELONGS_TO_DELETED_USER", async () => {
+  it("AC2: mapea el 409 EMAIL_ALREADY_IN_USE (campo 'error', ruta OT) con el mismo mensaje unificado", async () => {
+    // La ruta Security/AdminCompany serializa `code`; la de AdminOt serializa `error`
+    // (ErrorResponse vs. objeto anónimo, HU #11550) — el helper compartido lee ambos.
     const ue = userEvent.setup();
     const onUpdate = vi
       .fn()
-      .mockRejectedValue(new ApiError(409, "Conflict", { code: "EMAIL_BELONGS_TO_DELETED_USER" }));
+      .mockRejectedValue(new ApiError(409, "Conflict", { error: "EMAIL_ALREADY_IN_USE" }));
     render(<EditUserModal user={user} onClose={vi.fn()} onSaved={vi.fn()} onUpdate={onUpdate} />);
 
     await ue.click(screen.getByRole("button", { name: /guardar cambios/i }));
@@ -98,20 +100,26 @@ describe("EditUserModal (#10622)", () => {
     );
   });
 
-  it("AC2: mapea el 409 INVITATION_ALREADY_PENDING con el mismo mensaje unificado", async () => {
-    // No lo devuelve hoy el endpoint de edición (solo el de invitar), pero el código está en
-    // el catálogo unificado (HU #11550) y debe resolverse igual si algún día lo hiciera.
+  // HU #11580 — regresión: los códigos RETIRADOS (INVITATION_ALREADY_PENDING,
+  // USER_ALREADY_EXISTS, EMAIL_BELONGS_TO_DELETED_USER) ya NO se reconocen como
+  // conflicto de correo. Con status 409, este componente cae en la rama de
+  // conflicto de concurrencia (no en el mensaje unificado ni en un crash) — así
+  // queda documentado el comportamiento real y no se reintroduce la distinción
+  // por accidente.
+  it("AC2 regresión: un código RETIRADO (USER_ALREADY_EXISTS) ya no se reconoce como conflicto de correo", async () => {
     const ue = userEvent.setup();
     const onUpdate = vi
       .fn()
-      .mockRejectedValue(new ApiError(409, "Conflict", { code: "INVITATION_ALREADY_PENDING" }));
+      .mockRejectedValue(new ApiError(409, "Conflict", { code: "USER_ALREADY_EXISTS" }));
     render(<EditUserModal user={user} onClose={vi.fn()} onSaved={vi.fn()} onUpdate={onUpdate} />);
 
     await ue.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
+    const alert = await screen.findByRole("alert");
+    expect(alert).not.toHaveTextContent(
       /el correo utilizado ya se encuentra asociado a otra cuenta/i,
     );
+    expect(alert).toHaveTextContent(/modificado por otra persona/i);
   });
 
   it("AC3: aviso de conflicto de concurrencia (CONCURRENCY_CONFLICT), formulario se mantiene abierto", async () => {

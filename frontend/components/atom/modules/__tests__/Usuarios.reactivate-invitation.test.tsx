@@ -129,7 +129,7 @@ describe("Usuarios — invitación cancelada, estado vivo y reversible (#11552, 
   it("AC3: 409 por correo ya ocupado muestra el mensaje unificado y el estado no cambia", async () => {
     vi.mocked(getUsers).mockResolvedValue([cancelledInvitation]);
     vi.mocked(reactivateInvitation).mockRejectedValue(
-      new ApiError(409, "Error 409", { code: "USER_ALREADY_EXISTS", message: "irrelevante" }),
+      new ApiError(409, "Error 409", { code: "EMAIL_ALREADY_IN_USE", message: "irrelevante" }),
     );
     const user = userEvent.setup();
     render(<Usuarios />);
@@ -140,6 +140,29 @@ describe("Usuarios — invitación cancelada, estado vivo y reversible (#11552, 
 
     expect(
       await screen.findByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).toBeInTheDocument();
+    // El estado sigue "Cancelada" — no se refresca en error.
+    expect(screen.getByRole("status", { name: /^Estado: Cancelada$/i })).toBeInTheDocument();
+  });
+
+  // HU #11580 — regresión: un código RETIRADO ya no produce el mensaje unificado.
+  it("regresión: un código RETIRADO (USER_ALREADY_EXISTS) ya no se reconoce como conflicto de correo", async () => {
+    vi.mocked(getUsers).mockResolvedValue([cancelledInvitation]);
+    vi.mocked(reactivateInvitation).mockRejectedValue(
+      new ApiError(409, "Error 409", { code: "USER_ALREADY_EXISTS", message: "irrelevante" }),
+    );
+    const user = userEvent.setup();
+    render(<Usuarios />);
+
+    await screen.findByText("Sofía Nieto");
+    const button = screen.getByRole("button", { name: /reactivar invitación a sofía nieto/i });
+    await user.click(button);
+
+    expect(
+      screen.queryByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByText(/no se pudo reactivar la invitación por un conflicto/i),
     ).toBeInTheDocument();
     // El estado sigue "Cancelada" — no se refresca en error.
     expect(screen.getByRole("status", { name: /^Estado: Cancelada$/i })).toBeInTheDocument();

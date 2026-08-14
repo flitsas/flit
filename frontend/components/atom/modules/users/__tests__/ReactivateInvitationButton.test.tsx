@@ -1,7 +1,8 @@
 // HU #11552 / ADR-0048 — Botón "Reactivar invitación" (espejo de ResendInvitationButton).
-// Cubre: happy path, cooldown 429, los tres códigos de conflicto de correo (409), el 409
-// INVITATION_NOT_CANCELLED, accesibilidad (nombre accesible + estado deshabilitado anunciado +
-// mensaje con role="alert"/aria-live).
+// Cubre: happy path, cooldown 429, el conflicto de correo único EMAIL_ALREADY_IN_USE (409,
+// HU #11580), el 409 INVITATION_NOT_CANCELLED, accesibilidad (nombre accesible + estado
+// deshabilitado anunciado + mensaje con role="alert"/aria-live) y la regresión de que un
+// código RETIRADO ya no se reconoce como conflicto de correo.
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -40,10 +41,10 @@ describe("ReactivateInvitationButton", () => {
     ).toBeInTheDocument();
   });
 
-  it("409 INVITATION_ALREADY_PENDING usa el literal unificado de conflicto de correo", async () => {
+  it("409 EMAIL_ALREADY_IN_USE (campo 'code') usa el literal unificado de conflicto de correo", async () => {
     const reactivate = vi
       .fn()
-      .mockRejectedValue(new ApiError(409, "Conflict", { code: "INVITATION_ALREADY_PENDING" }));
+      .mockRejectedValue(new ApiError(409, "Conflict", { code: "EMAIL_ALREADY_IN_USE" }));
     const user = userEvent.setup();
     render(
       <ReactivateInvitationButton invitationId="inv-3" fullName="Caro Díaz" reactivate={reactivate} />,
@@ -56,10 +57,10 @@ describe("ReactivateInvitationButton", () => {
     expect(message).toHaveAttribute("aria-live", "assertive");
   });
 
-  it("409 EMAIL_BELONGS_TO_DELETED_USER (campo 'error', ruta OT) usa el mismo literal unificado", async () => {
+  it("409 EMAIL_ALREADY_IN_USE (campo 'error', ruta OT) usa el mismo literal unificado", async () => {
     const reactivate = vi
       .fn()
-      .mockRejectedValue(new ApiError(409, "Conflict", { error: "EMAIL_BELONGS_TO_DELETED_USER" }));
+      .mockRejectedValue(new ApiError(409, "Conflict", { error: "EMAIL_ALREADY_IN_USE" }));
     const user = userEvent.setup();
     render(
       <ReactivateInvitationButton invitationId="inv-4" fullName="Dani Soto" reactivate={reactivate} />,
@@ -70,6 +71,27 @@ describe("ReactivateInvitationButton", () => {
     expect(
       await screen.findByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
     ).toBeInTheDocument();
+  });
+
+  // HU #11580 — regresión: un código RETIRADO (antes uno de los tres conflictos de correo)
+  // ya no se reconoce como tal. El componente no rompe: cae en el mensaje genérico de
+  // conflicto 409, en vez del literal unificado de correo ya asociado.
+  it("409 con un código RETIRADO (USER_ALREADY_EXISTS) ya no se reconoce como conflicto de correo", async () => {
+    const reactivate = vi
+      .fn()
+      .mockRejectedValue(new ApiError(409, "Conflict", { code: "USER_ALREADY_EXISTS" }));
+    const user = userEvent.setup();
+    render(
+      <ReactivateInvitationButton invitationId="inv-3b" fullName="Caro Díaz" reactivate={reactivate} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Reactivar invitación a Caro Díaz" }));
+
+    const message = await screen.findByRole("alert");
+    expect(message).not.toHaveTextContent(
+      "El correo utilizado ya se encuentra asociado a otra cuenta",
+    );
+    expect(message).toHaveTextContent(/no se pudo reactivar la invitación por un conflicto/i);
   });
 
   it("409 INVITATION_NOT_CANCELLED muestra un mensaje propio, distinto del conflicto de correo", async () => {

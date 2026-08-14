@@ -13,9 +13,9 @@ import { ICON_BUTTON_HIT_AREA } from "@/components/atom/RowActions";
 // ResendInvitationButton: misma semántica de cooldown optimista + reemplazo por el
 // `retryAfterSeconds` real en 429, y mismo mensaje inline con `role="alert"`/`aria-live`. El
 // padre solo lo renderiza cuando `status === "cancelled"` (el `id` de la fila YA es el
-// `invitationId` en ese caso). AC3: si el correo ya se ocupó (409 INVITATION_ALREADY_PENDING |
-// USER_ALREADY_EXISTS | EMAIL_BELONGS_TO_DELETED_USER), muestra el literal unificado de
-// `emailConflict.ts` — el estado de la invitación NO cambia.
+// `invitationId` en ese caso). AC3: si el correo ya se ocupó (409 EMAIL_ALREADY_IN_USE,
+// HU #11580), muestra el literal unificado de `emailConflict.ts` — el estado de la
+// invitación NO cambia.
 const OPTIMISTIC_COOLDOWN_SECONDS = 120;
 
 export interface ReactivateInvitationOutcome {

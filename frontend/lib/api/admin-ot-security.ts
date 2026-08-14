@@ -128,8 +128,8 @@ export function unsuspendOtUser(userId: string, scope?: OtApiScope): Promise<voi
 }
 
 /** PATCH /api/v1/admin/ot/users/{userId} â€” edita nombre y/o correo del usuario (HU #10621).
- *  409 con cÃ³digo USER_ALREADY_EXISTS | EMAIL_BELONGS_TO_DELETED_USER | CONCURRENCY_CONFLICT
- *  (rowVersion desactualizado); 404 si el usuario ya no existe. */
+ *  409 con cÃ³digo EMAIL_ALREADY_IN_USE | CONCURRENCY_CONFLICT (rowVersion desactualizado);
+ *  404 si el usuario ya no existe. */
 export function updateOtUser(
   userId: string,
   body: UpdateOtUserRequest,

@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
+using Flit.Admin.Application.Auditing;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
@@ -97,9 +98,9 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         invitation.RoleId.Should().Be(_otAdminRoleId);
     }
 
-    // HU #11550 AC1 — invitar por la ruta de Security (SuperAdmin) con un correo que YA tiene
-    // una invitación pendiente en el tenant destino debe mostrar el mensaje unificado,
-    // conservando su propio código de error.
+    // HU #11550 AC1 / HU #11580 AC1-AC2 — invitar por la ruta de Security (SuperAdmin) con un
+    // correo que YA tiene una invitación pendiente en el tenant destino debe mostrar el mensaje
+    // Y el código unificados (indistinguibilidad — ya no conserva su propio código de error).
     [Fact]
     public async Task Invite_AsSuperAdmin_EmailWithPendingInvitation_Returns409WithUnifiedMessage()
     {
@@ -113,12 +114,12 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var body = await response.Content.ReadFromJsonAsync<SecurityErrorBody>(
             cancellationToken: TestContext.Current.CancellationToken);
-        body!.Code.Should().Be("INVITATION_ALREADY_PENDING");
+        body!.Code.Should().Be("EMAIL_ALREADY_IN_USE");
         body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
     }
 
-    // HU #11550 AC2 — invitar por la ruta de Security con el correo de una cuenta ACTIVA debe
-    // mostrar el mismo mensaje unificado, conservando su propio código de error.
+    // HU #11550 AC2 / HU #11580 AC1-AC2 — invitar por la ruta de Security con el correo de una
+    // cuenta ACTIVA debe mostrar el mismo mensaje Y el mismo código unificados.
     [Fact]
     public async Task Invite_AsSuperAdmin_EmailOfActiveAccount_Returns409WithUnifiedMessage()
     {
@@ -132,7 +133,7 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var body = await response.Content.ReadFromJsonAsync<SecurityErrorBody>(
             cancellationToken: TestContext.Current.CancellationToken);
-        body!.Code.Should().Be("USER_ALREADY_EXISTS");
+        body!.Code.Should().Be("EMAIL_ALREADY_IN_USE");
         body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
     }
 
@@ -396,7 +397,8 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
     }
 
     // Reactivar una invitación cancelada cuando ya existe OTRA pending con el mismo correo en el
-    // tenant → 409 INVITATION_ALREADY_PENDING (pre-validado antes de tocar la fila).
+    // tenant → 409 EMAIL_ALREADY_IN_USE (pre-validado antes de tocar la fila; HU #11580: código
+    // único, ya no INVITATION_ALREADY_PENDING).
     [Fact]
     public async Task ReactivateInvitation_AsSuperAdmin_CollidesWithAnotherPendingSameEmail_Returns409()
     {
@@ -425,7 +427,7 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var body = await response.Content.ReadFromJsonAsync<SecurityErrorBody>(
             cancellationToken: TestContext.Current.CancellationToken);
-        body!.Code.Should().Be("INVITATION_ALREADY_PENDING");
+        body!.Code.Should().Be("EMAIL_ALREADY_IN_USE");
     }
 
     // Cooldown antiabuso compartido con /resend: cancelada hace menos de 2 minutos desde el
@@ -553,6 +555,131 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         var invitation = await db.UserInvitations.AsNoTracking()
             .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
         invitation.TenantId.Should().Be(_companyTenantId);
+    }
+
+    // HU #11580 AC1/AC2 — indistinguibilidad: las tres causas de correo ya ocupado
+    // (invitación pendiente, cuenta activa, cuenta eliminada) deben producir EXACTAMENTE la
+    // misma respuesta (status + code + message), para que un atacante no pueda distinguir cuál
+    // de las tres es la causa real. Se comparan las tres respuestas ENTRE SÍ, no solo contra un
+    // valor fijo, para que el test falle si alguien reintroduce cualquier diferencia.
+    [Fact]
+    public async Task Invite_ThreeConflictCauses_ReturnIndistinguishableResponses()
+    {
+        // Causa 1 — invitación pendiente en el mismo tenant destino.
+        var (_, pendingEmail) = await SeedPendingInvitationAsync(_companyTenantId, lastSentAt: null);
+
+        // Causa 2 — cuenta activa (reutiliza el correo del SuperAdmin sembrado en SeedAsync).
+        var activeEmail = $"superadmin-{_superAdminUserId:N}@flit.local";
+
+        // Causa 3 — cuenta eliminada (soft-delete): se siembra un usuario ya con DeletedAt
+        // fijado, sin pasar por el endpoint de borrado (más simple y no depende de otro flujo).
+        var deletedUserId = Guid.NewGuid();
+        var deletedEmail = $"deleted-{deletedUserId:N}@flit.local";
+        await using (var db = CreateDbContext())
+        {
+            db.Users.Add(new User
+            {
+                Id = deletedUserId,
+                Email = deletedEmail,
+                DisplayName = "Cuenta eliminada de prueba",
+                Status = "active",
+                CreatedAt = DateTimeOffset.UtcNow,
+                DeletedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        try
+        {
+            var responsePending = await _client.PostAsJsonAsync(
+                "/api/v1/security/invitations",
+                new { email = pendingEmail, fullName = "Causa 1", targetTenantId = _companyTenantId },
+                TestContext.Current.CancellationToken);
+            var responseActive = await _client.PostAsJsonAsync(
+                "/api/v1/security/invitations",
+                new { email = activeEmail, fullName = "Causa 2", targetTenantId = _companyTenantId },
+                TestContext.Current.CancellationToken);
+            var responseDeleted = await _client.PostAsJsonAsync(
+                "/api/v1/security/invitations",
+                new { email = deletedEmail, fullName = "Causa 3", targetTenantId = _companyTenantId },
+                TestContext.Current.CancellationToken);
+
+            responsePending.StatusCode.Should().Be(HttpStatusCode.Conflict);
+            responseActive.StatusCode.Should().Be(HttpStatusCode.Conflict);
+            responseDeleted.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+            var bodyPending = await responsePending.Content.ReadFromJsonAsync<SecurityErrorBody>(
+                cancellationToken: TestContext.Current.CancellationToken);
+            var bodyActive = await responseActive.Content.ReadFromJsonAsync<SecurityErrorBody>(
+                cancellationToken: TestContext.Current.CancellationToken);
+            var bodyDeleted = await responseDeleted.Content.ReadFromJsonAsync<SecurityErrorBody>(
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            // Las tres respuestas deben ser IDÉNTICAS entre sí — ni un atacante que dispare las
+            // tres causas puede diferenciarlas por el cuerpo de la respuesta.
+            bodyActive.Should().BeEquivalentTo(bodyPending);
+            bodyDeleted.Should().BeEquivalentTo(bodyPending);
+
+            bodyPending!.Code.Should().Be("EMAIL_ALREADY_IN_USE");
+            bodyPending.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
+        }
+        finally
+        {
+            await using var db = CreateDbContext();
+            db.TenantConfigAuditLogs.RemoveRange(
+                db.TenantConfigAuditLogs.Where(a => a.ChangedBy == _superAdminUserId || a.TargetEntityId == deletedUserId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+            db.Users.RemoveRange(db.Users.Where(u => u.Id == deletedUserId));
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
+    // HU #11580 AC3 — la causa CONCRETA del conflicto (no el código único de la respuesta) debe
+    // quedar registrada en auditoría vía ConfigAuditFailureContext, para que el rastro conserve
+    // la trazabilidad que antes vivía (falsamente, según el hallazgo de la HU) en el código de
+    // la respuesta. Antes de este fix, AdminAuditFilter.ResolveErrorCode caía al fallback por
+    // status HTTP y registraba literalmente "conflict" para cualquier 409.
+    //
+    // Usa el caller AdminCompany (tenant real _companyTenantId) en vez de SuperAdmin: el tenant
+    // del token SuperAdmin de este archivo (_superAdminTenantId) es un GUID que NUNCA se
+    // persiste como fila `Tenants` (solo vive en el claim del JWT) — AdminAuditWriter intenta
+    // `SELECT set_config('app.current_tenant_id', ...)` y el INSERT posterior viola la FK
+    // `tenant_config_audit_logs.tenant_id → identity.tenants(id)`, y como el writer es
+    // best-effort (nunca propaga excepciones), la fila simplemente no se escribe — sin este
+    // dato el AC3 daría un falso negativo por un defecto de seed del propio test, no del código
+    // bajo prueba.
+    [Fact]
+    public async Task Invite_AsAdminCompany_EmailOfActiveAccount_AuditLogsConcreteCause_NotGenericConflict()
+    {
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", MintToken("AdminCompany", _companyTenantId, _superAdminUserId));
+
+        var activeEmail = $"superadmin-{_superAdminUserId:N}@flit.local";
+
+        var response = await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email = activeEmail, fullName = "Auditoría causa concreta", roleIds = new[] { _companyAdminRoleId } },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        await using var db = CreateDbContext();
+        var auditRow = await db.TenantConfigAuditLogs.AsNoTracking()
+            .Where(a => a.ChangedBy == _superAdminUserId
+                && a.Module == AuditVocabulary.Modules.Users
+                && a.Operation == AuditVocabulary.Operations.Invite
+                && a.Result == AuditVocabulary.Results.Failure)
+            .OrderByDescending(a => a.ChangedAt)
+            .FirstOrDefaultAsync(TestContext.Current.CancellationToken);
+
+        auditRow.Should().NotBeNull("el endpoint tiene AdminAuditFilter enganchado (invite) y debe dejar traza");
+        auditRow!.ErrorCode.Should().Be("user_already_exists");
+        auditRow.ErrorCode.Should().NotBe("conflict");
+
+        // Limpieza: esta fila de auditoría bloquearía el borrado de _superAdminUserId en
+        // Dispose() (FK tenant_config_audit_logs_changed_by_fkey) si no se retira aquí.
+        db.TenantConfigAuditLogs.Remove(auditRow);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
     private async Task<(Guid InvitationId, string Email)> SeedPendingInvitationAsync(

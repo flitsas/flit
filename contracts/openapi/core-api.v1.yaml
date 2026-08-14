@@ -250,9 +250,10 @@ paths:
         SIEMPRE (el enlace anterior queda muerto) y reenvía el correo. NO es
         idempotente — reactivar una invitación que no está `cancelled` es 409
         `INVITATION_NOT_CANCELLED`. Orden de validación: alcance (404) → está
-        cancelada (409) → correo libre (409 `INVITATION_ALREADY_PENDING` /
-        `USER_ALREADY_EXISTS` / `EMAIL_BELONGS_TO_DELETED_USER`) → roles vigentes
-        (409 `ROLE_NOT_FOUND`) → cooldown anti-abuso compartido con `/resend` (429).
+        cancelada (409) → correo libre (409 `EMAIL_ALREADY_IN_USE` — HU #11580: código
+        único de cara al cliente, sin distinguir invitación pendiente / cuenta activa
+        / cuenta eliminada) → roles vigentes (409 `ROLE_NOT_FOUND`) → cooldown
+        anti-abuso compartido con `/resend` (429).
         Mismo alcance y misma policy que `DELETE` — SuperAdmin cualquier tenant,
         AdminCompany solo el propio (AdminCompanyPolicy NO incluye ot_admin: el
         equivalente OT vive en `/api/v1/admin/ot/invitations/{invitationId}/reactivate`).
@@ -282,9 +283,8 @@ paths:
         "409":
           description: >
             La invitación no está cancelada (`INVITATION_NOT_CANCELLED`), el correo
-            ya está en uso (`INVITATION_ALREADY_PENDING` / `USER_ALREADY_EXISTS` /
-            `EMAIL_BELONGS_TO_DELETED_USER`), o algún rol de la invitación ya no
-            está activo (`ROLE_NOT_FOUND`).
+            ya está en uso (409 `EMAIL_ALREADY_IN_USE` — código único, HU #11580),
+            o algún rol de la invitación ya no está activo (`ROLE_NOT_FOUND`).
           content:
             application/json:
               schema:
@@ -1429,10 +1429,11 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: >
-            El correo ya tiene una cuenta activa (`USER_ALREADY_EXISTS`), pertenece
-            a una cuenta eliminada (`EMAIL_BELONGS_TO_DELETED_USER`), o `rowVersion`
-            quedó desactualizado (`CONCURRENCY_CONFLICT` — otro admin ya modificó al
-            usuario). No se persiste nada.
+            El correo ya está en uso, ya sea porque tiene una cuenta activa o
+            porque pertenece a una cuenta eliminada (409 `EMAIL_ALREADY_IN_USE` —
+            código único, HU #11580), o `rowVersion` quedó desactualizado
+            (`CONCURRENCY_CONFLICT` — otro admin ya modificó al usuario). No se
+            persiste nada.
           content:
             application/json:
               schema:

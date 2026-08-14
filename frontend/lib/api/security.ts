@@ -160,8 +160,8 @@ export async function unblockUser(userId: string): Promise<void> {
 }
 
 /** PATCH /api/v1/security/users/{userId} — edita nombre y/o correo del usuario (HU #10621).
- *  409 con código USER_ALREADY_EXISTS | EMAIL_BELONGS_TO_DELETED_USER | CONCURRENCY_CONFLICT
- *  (rowVersion desactualizado); 404 si el usuario ya no existe. */
+ *  409 con código EMAIL_ALREADY_IN_USE | CONCURRENCY_CONFLICT (rowVersion desactualizado);
+ *  404 si el usuario ya no existe. */
 export async function updateUser(userId: string, request: UpdateUserRequest): Promise<void> {
   return apiFetch<void>(`/api/v1/security/users/${userId}`, {
     method: "PATCH",
@@ -245,10 +245,10 @@ export interface ReactivateInvitationResult {
  *  la fila YA es el `invitationId` cuando `status === "cancelled"`. Sin cuerpo de petición.
  *  Errores: 404 si la invitación no existe o no pertenece al alcance del caller; 409
  *  INVITATION_NOT_CANCELLED si ya no está cancelada (fue reactivada por otra persona —
- *  condición de carrera), o INVITATION_ALREADY_PENDING | USER_ALREADY_EXISTS |
- *  EMAIL_BELONGS_TO_DELETED_USER | ROLE_NOT_FOUND (mismo trío de conflictos de correo que
- *  crear invitación); 429 con `{ code, message, retryAfterSeconds }` si el cooldown anti-abuso
- *  compartido con `resend` sigue activo — este endpoint usa `code` (el de OT usa `error`). */
+ *  condición de carrera), o EMAIL_ALREADY_IN_USE | ROLE_NOT_FOUND (mismo conflicto de correo
+ *  que crear invitación); 429 con `{ code, message, retryAfterSeconds }` si el cooldown
+ *  anti-abuso compartido con `resend` sigue activo — este endpoint usa `code` (el de OT usa
+ *  `error`). */
 export async function reactivateInvitation(invitationId: string): Promise<ReactivateInvitationResult> {
   return apiFetch<ReactivateInvitationResult>(
     `/api/v1/security/invitations/${invitationId}/reactivate`,

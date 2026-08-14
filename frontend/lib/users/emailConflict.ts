@@ -1,7 +1,7 @@
 /**
- * Mensaje visible unificado para los tres conflictos de correo ya asociado a otra
- * cuenta (HU #11550): invitación pendiente, cuenta activa existente y cuenta
- * eliminada. Espejo EXACTO del literal que ya envía el backend en
+ * Mensaje visible unificado para el conflicto de correo ya asociado a otra
+ * cuenta (HU #11550, código único desde HU #11580). Espejo EXACTO del literal
+ * que ya envía el backend en
  * `services/core-api/src/Flit.Api/Endpoints/UserEmailConflictMessages.cs`
  * (`UserEmailConflictMessages.EmailAlreadyInUse`).
  *
@@ -12,21 +12,24 @@
  * consistente entre endpoints (`SecurityEndpoints` usa `code`, `AdminOtEndpoints`
  * usa `error`), así que de todos modos hace falta un punto único que normalice
  * ambos antes de decidir el mensaje.
+ *
+ * HU #11580: el backend antes exponía tres códigos distintos
+ * (`INVITATION_ALREADY_PENDING`, `USER_ALREADY_EXISTS`,
+ * `EMAIL_BELONGS_TO_DELETED_USER`), lo que permitía a quien llama a la API
+ * deducir por qué está ocupado el correo — las dos últimas comprobaciones son
+ * globales, no por tenant, así que la información cruzaba la frontera del
+ * tenant. El backend los colapsó en un único código `EMAIL_ALREADY_IN_USE`
+ * (409, mismo mensaje) para que la respuesta sea indistinguible.
  */
 export const EMAIL_ALREADY_ASSOCIATED_MESSAGE =
   "El correo utilizado ya se encuentra asociado a otra cuenta";
 
 /**
- * Códigos de error que representan el mismo conflicto: el correo ya está asociado
- * a otra cuenta (invitación pendiente, cuenta activa o cuenta eliminada). Deben
- * coincidir uno a uno con los `catch` que usan `UserEmailConflictMessages` en el
- * backend.
+ * Código de error que representa el conflicto: el correo ya está asociado a
+ * otra cuenta. Debe coincidir con el `catch` que usa
+ * `UserEmailConflictMessages` en el backend.
  */
-const EMAIL_CONFLICT_CODES = new Set<string>([
-  "INVITATION_ALREADY_PENDING",
-  "USER_ALREADY_EXISTS",
-  "EMAIL_BELONGS_TO_DELETED_USER",
-]);
+const EMAIL_CONFLICT_CODES = new Set<string>(["EMAIL_ALREADY_IN_USE"]);
 
 /**
  * Extrae el código de error del cuerpo JSON de una respuesta de error del backend.
@@ -34,7 +37,7 @@ const EMAIL_CONFLICT_CODES = new Set<string>([
  * `error` (`AdminOtEndpoints`, objeto anónimo `{ error, message }`) — mismo
  * significado, nombre de campo distinto según el endpoint que respondió.
  *
- * Uso de ejemplo: `emailConflictErrorCode({ code: "USER_ALREADY_EXISTS" })` → `"USER_ALREADY_EXISTS"`.
+ * Uso de ejemplo: `emailConflictErrorCode({ error: "EMAIL_ALREADY_IN_USE" })` → `"EMAIL_ALREADY_IN_USE"`.
  */
 export function emailConflictErrorCode(body: unknown): string | undefined {
   const parsed = body as { code?: string; error?: string } | null | undefined;
@@ -42,10 +45,13 @@ export function emailConflictErrorCode(body: unknown): string | undefined {
 }
 
 /**
- * `true` si el código corresponde a uno de los tres conflictos de correo ya
- * asociado a otra cuenta.
+ * `true` si el código corresponde al conflicto de correo ya asociado a otra
+ * cuenta. Desde la HU #11580 es UN solo código: los tres anteriores fueron
+ * retirados a propósito y ya no se reconocen — si alguno vuelve a aparecer aquí,
+ * se reabre la fuga que esa HU cerró.
  *
- * Uso de ejemplo: `isEmailConflictCode("EMAIL_BELONGS_TO_DELETED_USER")` → `true`.
+ * Uso de ejemplo: `isEmailConflictCode("EMAIL_ALREADY_IN_USE")` → `true`;
+ * `isEmailConflictCode("USER_ALREADY_EXISTS")` → `false` (código retirado).
  */
 export function isEmailConflictCode(code: string | undefined): boolean {
   return code !== undefined && EMAIL_CONFLICT_CODES.has(code);

@@ -1707,23 +1707,30 @@ public static class AdminOtEndpoints
         }
         catch (InvitationAlreadyPendingException)
         {
+            // HU #11580 — código único de cara al cliente (indistinguibilidad); la causa
+            // concreta queda en auditoría vía ConfigAuditFailureContext, no en la respuesta.
+            // NOTA: esta ruta (/users/invite) no tiene AdminAuditFilter ni ConfigAuditFailureFilter
+            // enganchado — SetErrorCode aquí no tiene efecto hasta que se instrumente el filtro.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "invitation_already_pending");
             return Results.Json(
-                new { error = "INVITATION_ALREADY_PENDING", message = UserEmailConflictMessages.EmailAlreadyInUse },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
         catch (UserAlreadyExistsException)
         {
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "user_already_exists");
             return Results.Json(
-                new { error = "USER_ALREADY_EXISTS", message = UserEmailConflictMessages.EmailAlreadyInUse },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
         catch (UserEmailBelongsToDeletedAccountException)
         {
             // HU #10623 AC4 — el correo pertenece a una cuenta soft-deleted.
-            // HU #11550 — mensaje visible unificado con los otros dos conflictos de correo;
-            // el código de error se mantiene distinto para no perder trazabilidad.
+            // HU #11580 — código único de cara al cliente; la causa concreta queda en
+            // auditoría vía ConfigAuditFailureContext.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
             return Results.Json(
-                new { error = "EMAIL_BELONGS_TO_DELETED_USER", message = UserEmailConflictMessages.EmailAlreadyInUse },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
     }
@@ -1907,15 +1914,21 @@ public static class AdminOtEndpoints
         }
         catch (UserAlreadyExistsException)
         {
+            // NOTA: esta ruta (PATCH /users/{userId}) no tiene AdminAuditFilter ni
+            // ConfigAuditFailureFilter enganchado — SetErrorCode aquí no tiene efecto hasta
+            // que se instrumente el filtro.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "user_already_exists");
             return Results.Json(
-                new { error = "USER_ALREADY_EXISTS", message = UserEmailConflictMessages.EmailAlreadyInUse },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
         catch (UserEmailBelongsToDeletedAccountException)
         {
-            // HU #11550 — mensaje visible unificado; el código de error se mantiene.
+            // HU #11580 — código único de cara al cliente; la causa concreta queda en
+            // auditoría vía ConfigAuditFailureContext.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
             return Results.Json(
-                new { error = "EMAIL_BELONGS_TO_DELETED_USER", message = UserEmailConflictMessages.EmailAlreadyInUse },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
         catch (UserProfileConcurrencyException ex)
@@ -2224,20 +2237,26 @@ public static class AdminOtEndpoints
         }
         catch (InvitationAlreadyPendingException)
         {
+            // NOTA: esta ruta (/invitations/{invitationId}/reactivate) no tiene AdminAuditFilter
+            // ni ConfigAuditFailureFilter enganchado — SetErrorCode aquí no tiene efecto hasta
+            // que se instrumente el filtro.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "invitation_already_pending");
             return Results.Json(
-                new { error = "INVITATION_ALREADY_PENDING", message = UserEmailConflictMessages.EmailAlreadyInUse },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
         catch (UserAlreadyExistsException)
         {
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "user_already_exists");
             return Results.Json(
-                new { error = "USER_ALREADY_EXISTS", message = UserEmailConflictMessages.EmailAlreadyInUse },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
         catch (UserEmailBelongsToDeletedAccountException)
         {
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
             return Results.Json(
-                new { error = "EMAIL_BELONGS_TO_DELETED_USER", message = UserEmailConflictMessages.EmailAlreadyInUse },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
         catch (RoleNotFoundException)

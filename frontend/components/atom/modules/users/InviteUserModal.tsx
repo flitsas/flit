@@ -438,10 +438,11 @@ export function InviteUserModal({
 }
 
 function resolveErrorMessage(code: string | undefined, status: number | undefined): string {
-  // Los tres conflictos de correo (invitación pendiente / cuenta activa / cuenta
-  // eliminada) comparten el mismo mensaje visible unificado (HU #11550) — se
-  // resuelven primero y por código, NO por status, para no capturar otro 409
-  // futuro (p. ej. concurrencia) bajo este mismo texto.
+  // El conflicto de correo ya asociado a otra cuenta (código único
+  // EMAIL_ALREADY_IN_USE desde HU #11580, antes tres códigos distintos) usa el
+  // mismo mensaje visible unificado (HU #11550) — se resuelve primero y por
+  // código, NO por status, para no capturar otro 409 futuro (p. ej.
+  // concurrencia) bajo este mismo texto.
   if (isEmailConflictCode(code)) return EMAIL_ALREADY_ASSOCIATED_MESSAGE;
 
   switch (code) {
@@ -458,9 +459,9 @@ function resolveErrorMessage(code: string | undefined, status: number | undefine
     default:
       break;
   }
-  // Fallback para cualquier otro 409 que no sea uno de los tres conflictos de
-  // correo (hoy el backend no emite otro, pero no se asume "correo ya asociado"
-  // para no repetir el mismo defecto en sentido inverso).
+  // Fallback para cualquier otro 409 que no sea el conflicto de correo (hoy el
+  // backend no emite otro, pero no se asume "correo ya asociado" para no
+  // repetir el mismo defecto en sentido inverso).
   if (status === 409) return "No se pudo completar la invitación por un conflicto. Inténtalo de nuevo.";
   if (status === 404) return "Alguno de los roles seleccionados no existe.";
   if (status === 400) return "Revisa el destino y los roles seleccionados.";

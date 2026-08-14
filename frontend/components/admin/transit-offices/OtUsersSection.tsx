@@ -259,8 +259,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     } catch (err) {
       if (err instanceof ApiError && isEmailConflictCode(emailConflictErrorCode(err.body))) {
         // Mensaje unificado (HU #11550) — mismo texto que la ruta Security/AdminCompany
-        // (InviteUserModal) para los tres conflictos: invitación pendiente, cuenta activa
-        // y cuenta eliminada.
+        // (InviteUserModal) para el único código EMAIL_ALREADY_IN_USE (HU #11580).
         show(EMAIL_ALREADY_ASSOCIATED_MESSAGE, "error");
       } else if (err instanceof ApiError && err.status === 409) {
         // Otro conflicto (no de correo) — no reutilizar el mensaje unificado de arriba.

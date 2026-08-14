@@ -151,8 +151,8 @@ export function EditUserModal({
       // No se pierde lo escrito: displayName/email no se resetean, solo se muestra el error.
       if (error instanceof ApiError) {
         const code = emailConflictErrorCode(error.body);
-        // Mensaje unificado (HU #11550) — mismo texto para USER_ALREADY_EXISTS y
-        // EMAIL_BELONGS_TO_DELETED_USER que en InviteUserModal / OtUsersSection.
+        // Mensaje unificado (HU #11550) — mismo texto para el único código
+        // EMAIL_ALREADY_IN_USE (HU #11580) que en InviteUserModal / OtUsersSection.
         if (isEmailConflictCode(code)) {
           setFormError(EMAIL_ALREADY_ASSOCIATED_MESSAGE);
         } else if (code === "CONCURRENCY_CONFLICT" || error.status === 409) {

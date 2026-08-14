@@ -117,7 +117,7 @@ describe("OtUsersSection — invitación cancelada, estado vivo y reversible (#1
   it("AC3: 409 por correo ya ocupado muestra el mensaje unificado y el estado no cambia", async () => {
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [cancelledInvitation] });
     vi.mocked(reactivateOtInvitation).mockRejectedValue(
-      new ApiError(409, "Error 409", { error: "EMAIL_BELONGS_TO_DELETED_USER", message: "irrelevante" }),
+      new ApiError(409, "Error 409", { error: "EMAIL_ALREADY_IN_USE", message: "irrelevante" }),
     );
     const user = userEvent.setup();
     renderSection();
@@ -128,6 +128,28 @@ describe("OtUsersSection — invitación cancelada, estado vivo y reversible (#1
 
     expect(
       await screen.findByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: /^Estado: Cancelada$/i })).toBeInTheDocument();
+  });
+
+  // HU #11580 — regresión: un código RETIRADO ya no se reconoce como conflicto de correo.
+  it("regresión: un código RETIRADO (EMAIL_BELONGS_TO_DELETED_USER) ya no usa el mensaje unificado", async () => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [cancelledInvitation] });
+    vi.mocked(reactivateOtInvitation).mockRejectedValue(
+      new ApiError(409, "Error 409", { error: "EMAIL_BELONGS_TO_DELETED_USER", message: "irrelevante" }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByText("Rita Peña");
+    const button = screen.getByRole("button", { name: /reactivar invitación a rita peña/i });
+    await user.click(button);
+
+    expect(
+      screen.queryByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByText(/no se pudo reactivar la invitación por un conflicto/i),
     ).toBeInTheDocument();
     expect(screen.getByRole("status", { name: /^Estado: Cancelada$/i })).toBeInTheDocument();
   });

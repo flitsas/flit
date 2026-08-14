@@ -480,7 +480,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         response.Headers.RetryAfter.Should().NotBeNull();
     }
     // HU #10621 AC2 — el correo ya pertenece a otra cuenta ACTIVA (el propio ot_admin) → 409
-    // USER_ALREADY_EXISTS.
+    // EMAIL_ALREADY_IN_USE (HU #11580: código único, ya no USER_ALREADY_EXISTS).
     [Fact]
     public async Task UpdateUser_WhenEmailBelongsToAnotherActiveUser_Returns409UserAlreadyExists()
     {
@@ -510,8 +510,9 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var body = await response.Content.ReadFromJsonAsync<ErrorBody>(
             cancellationToken: TestContext.Current.CancellationToken);
-        body!.Error.Should().Be("USER_ALREADY_EXISTS");
-        // HU #11550 — mensaje visible unificado con los otros dos conflictos de correo.
+        body!.Error.Should().Be("EMAIL_ALREADY_IN_USE");
+        // HU #11550 — mensaje visible unificado / HU #11580 — código único, con los otros dos
+        // conflictos de correo.
         body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
     }
 
@@ -1278,14 +1279,15 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         inviteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var body = await inviteResponse.Content.ReadFromJsonAsync<ErrorBody>(
             cancellationToken: TestContext.Current.CancellationToken);
-        body!.Error.Should().Be("EMAIL_BELONGS_TO_DELETED_USER");
-        // HU #11550 AC3/AC4 — mensaje visible unificado con los otros dos conflictos de correo.
+        body!.Error.Should().Be("EMAIL_ALREADY_IN_USE");
+        // HU #11550 AC3/AC4 — mensaje visible unificado / HU #11580 — código único, con los
+        // otros dos conflictos de correo.
         body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
     }
 
-    // HU #11550 AC1/AC4 — invitar por la ruta del OT con un correo que YA tiene una invitación
-    // pendiente en el tenant debe mostrar el mismo mensaje unificado que los otros dos
-    // conflictos de correo, conservando su propio código de error.
+    // HU #11550 AC1/AC4 / HU #11580 AC1-AC2 — invitar por la ruta del OT con un correo que YA
+    // tiene una invitación pendiente en el tenant debe mostrar el mismo mensaje Y el mismo
+    // código unificados que los otros dos conflictos de correo (indistinguibilidad).
     [Fact]
     public async Task InviteUser_AsOtAdmin_EmailWithPendingInvitation_Returns409WithUnifiedMessage()
     {
@@ -1302,12 +1304,12 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         inviteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var body = await inviteResponse.Content.ReadFromJsonAsync<ErrorBody>(
             cancellationToken: TestContext.Current.CancellationToken);
-        body!.Error.Should().Be("INVITATION_ALREADY_PENDING");
+        body!.Error.Should().Be("EMAIL_ALREADY_IN_USE");
         body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
     }
 
-    // HU #11550 AC2/AC4 — invitar por la ruta del OT con el correo de una cuenta ACTIVA debe
-    // mostrar el mismo mensaje unificado, conservando su propio código de error.
+    // HU #11550 AC2/AC4 / HU #11580 AC1-AC2 — invitar por la ruta del OT con el correo de una
+    // cuenta ACTIVA debe mostrar el mismo mensaje Y el mismo código unificados.
     [Fact]
     public async Task InviteUser_AsOtAdmin_EmailOfActiveAccount_Returns409WithUnifiedMessage()
     {
@@ -1331,7 +1333,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         inviteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var body = await inviteResponse.Content.ReadFromJsonAsync<ErrorBody>(
             cancellationToken: TestContext.Current.CancellationToken);
-        body!.Error.Should().Be("USER_ALREADY_EXISTS");
+        body!.Error.Should().Be("EMAIL_ALREADY_IN_USE");
         body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
     }
 
