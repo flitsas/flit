@@ -896,7 +896,12 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     expect(await within(dialog).findByText('Fallo de red')).toBeInTheDocument();
 
     mocks.getInstance.mockResolvedValueOnce({ id: 'rad-7', statusHistory: [] });
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Reintentar' }));
+    // El panel de trazabilidad tiene tres bloques que fallan por separado (cronología, archivos e
+    // identidad), así que el reintento se pide por su nombre accesible concreto y no por el
+    // genérico «Reintentar», que ahora sería ambiguo.
+    await userEvent.click(
+      within(dialog).getByRole('button', { name: 'Reintentar la trazabilidad' }),
+    );
 
     await vi.waitFor(() => {
       expect(within(dialog).queryByText('Fallo de red')).toBeNull();

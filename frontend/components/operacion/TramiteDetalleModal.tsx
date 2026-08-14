@@ -1,13 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Clock, Download } from 'lucide-react';
+import { Clock, Coins, Download, FileText, FolderCheck, Users } from 'lucide-react';
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import ExpedienteTimeline from './ExpedienteTimeline';
 import { plateFlowHint } from './TramitesTable';
 import { AttachmentPreview, useAttachmentPreview } from './TramiteDocumentosModal';
+// Vocabulario compartido por TODAS las secciones del detalle. El modal usa las mismas piezas que
+// ellas: tenía un esqueleto y un error propios, escritos antes de que existieran las primitivas,
+// y dos versiones del mismo estado es exactamente la duplicación que la norma prohíbe.
+import { SeccionCargando, SeccionError } from './detalle/primitivos';
+import { TramiteDetalleDocumentos } from './detalle/TramiteDetalleDocumentos';
+import { TramiteDetalleActores } from './detalle/TramiteDetalleActores';
+import { TramiteDetalleVehiculo } from './detalle/TramiteDetalleVehiculo';
+import { TramiteDetalleComercial } from './detalle/TramiteDetalleComercial';
+import { TramiteDetalleIdentidad } from './detalle/TramiteDetalleIdentidad';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { formatFecha } from '@/lib/format/date';
@@ -40,6 +49,20 @@ const MODALIDAD_TITLE: Record<WizardModalidad, string> = {
   traspaso: 'Detalle de traspaso',
 };
 
+type SeccionId = 'trazabilidad' | 'documentos' | 'actores' | 'vehiculo' | 'comercial';
+
+/**
+ * Secciones del detalle. Los iconos son los mismos que la propuesta asigna a cada bloque en su
+ * stepper; lo que cambia es que aquí son PESTAÑAS de contenido y no pasos con progreso.
+ */
+const SECCIONES: { id: SeccionId; label: string; Icon: typeof Clock }[] = [
+  { id: 'trazabilidad', label: 'Trazabilidad', Icon: Clock },
+  { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
+  { id: 'actores', label: 'Actores y firmas', Icon: Users },
+  { id: 'vehiculo', label: 'Vehículo', Icon: FileText },
+  { id: 'comercial', label: 'Comercial y prenda', Icon: Coins },
+];
+
 function estadoChip(estado: InstanceSummary['estado']) {
   const style = estadoChipStyle(estado);
   return { label: estadoLabel(estado), ...style };
@@ -59,41 +82,6 @@ export interface TramiteDetalleModalProps {
   item: InstanceSummary | null;
 }
 
-/** Skeleton de 3 barras — mismo patrón que el resto del módulo (`TramiteDocumentosModal`). */
-function Skeleton({ count, label }: { count: number; label: string }) {
-  return (
-    <div className="space-y-2" role="status" aria-busy="true" aria-label={label}>
-      {Array.from({ length: count }).map((_, i) => (
-        // Mismo gris de esqueleto que usa el listado: el borde de marca al 50%. `#F4F7FC` no sale
-        // ni de la propuesta ni de globals.css.
-        <div
-          key={i}
-          className="h-10 animate-pulse rounded-xl dark:bg-white/5"
-          style={{ background: 'rgba(223,229,237,0.5)' }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function ErrorRetry({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="flex flex-col items-start gap-2 py-1" role="alert">
-      <p className="text-xs" style={{ color: '#C2410C' }}>
-        {message}
-      </p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="rounded-full border px-4 py-1.5 text-xs font-semibold transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-        style={{ borderColor: BLUE, color: BLUE }}
-      >
-        Reintentar
-      </button>
-    </div>
-  );
-}
-
 export function TramiteDetalleModal({
   open,
   onClose,
@@ -110,6 +98,17 @@ export function TramiteDetalleModal({
   const [attLoading, setAttLoading] = useState(false);
   const [attError, setAttError] = useState<string | null>(null);
   const [attReloadKey, setAttReloadKey] = useState(0);
+
+  // Sección activa del navegador. Se reinicia al cambiar de trámite: abrir otro expediente y
+  // encontrarse en la pestaña donde quedó el anterior desorienta más de lo que ahorra. El reinicio
+  // se hace AJUSTANDO EL ESTADO DURANTE EL RENDER (patrón de React para "resetear al cambiar una
+  // prop"), no desde un efecto: con el efecto se pintaría un fotograma con la pestaña vieja.
+  const [seccion, setSeccion] = useState<SeccionId>('trazabilidad');
+  const [seccionDe, setSeccionDe] = useState<string | null>(instanceId);
+  if (instanceId !== seccionDe) {
+    setSeccionDe(instanceId);
+    setSeccion('trazabilidad');
+  }
 
   const preview = useAttachmentPreview(instanceId, tenantId);
 
@@ -244,19 +243,91 @@ export function TramiteDetalleModal({
                 </div>
               </div>
 
-              {/* Derecha — Trazabilidad: ExpedienteTimeline (statusHistory de getInstance) + archivos
-                  finales generados por el sistema (getAttachments, filtrado a source === 'system'). */}
-              <div className="flex flex-col gap-4 lg:col-span-2">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" style={{ color: BLUE }} aria-hidden="true" />
-                  <h3 className="text-sm font-bold" style={{ color: BLUE }}>
-                    Trazabilidad
-                  </h3>
+              {/* Derecha — navegador de secciones + la sección activa.
+                  Es un `tablist`, NO el stepper del asistente: los pasos del wizard son cinco en
+                  matrícula y seis en traspaso, y en un trámite ya radicado dejaron de significar
+                  progreso. La propuesta reusa su stepper y marca los pasos completados con un
+                  porcentaje inventado (`row.prog`); aquí eso mentiría.
+                  Trazabilidad va primera y es la de por defecto: a un trámite radicado se entra a
+                  ver en qué va y qué quedó adjunto, no a releer las especificaciones del vehículo.
+                  Cada sección pide sus propios datos AL MONTARSE, así que abrir el modal no dispara
+                  las siete llamadas de golpe: solo las de la sección que se está mirando. */}
+              <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
+                <div
+                  role="tablist"
+                  aria-label="Secciones del detalle"
+                  className="flex flex-wrap items-center gap-1 border-b"
+                  style={{ borderColor: BORDER }}
+                >
+                  {SECCIONES.map(({ id, label, Icon }) => {
+                    const activa = id === seccion;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        role="tab"
+                        id={`detalle-tab-${id}`}
+                        aria-selected={activa}
+                        aria-controls={`detalle-panel-${id}`}
+                        onClick={() => setSeccion(id)}
+                        className="relative inline-flex items-center gap-1.5 rounded-t-lg px-3 py-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
+                        style={activa ? { color: BLUE } : { color: NAVY, opacity: 0.7 }}
+                      >
+                        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                        {label}
+                        {/* El activo se marca con color Y con subrayado: no depende solo del color. */}
+                        {activa ? (
+                          <span
+                            className="absolute inset-x-2 -bottom-px h-0.5 rounded-full"
+                            style={{ background: BLUE }}
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {loading ? <Skeleton count={3} label="Cargando trazabilidad" /> : null}
+                <div
+                  role="tabpanel"
+                  id={`detalle-panel-${seccion}`}
+                  aria-labelledby={`detalle-tab-${seccion}`}
+                  className="flex min-w-0 flex-col gap-4"
+                >
+                {seccion !== 'trazabilidad' && instanceId ? (
+                  <>
+                    {seccion === 'documentos' ? (
+                      <TramiteDetalleDocumentos
+                        instanceId={instanceId}
+                        tenantId={tenantId}
+                        item={item}
+                      />
+                    ) : null}
+                    {seccion === 'actores' ? (
+                      <TramiteDetalleActores instanceId={instanceId} tenantId={tenantId} item={item} />
+                    ) : null}
+                    {seccion === 'vehiculo' ? (
+                      <TramiteDetalleVehiculo instanceId={instanceId} tenantId={tenantId} item={item} />
+                    ) : null}
+                    {seccion === 'comercial' ? (
+                      <TramiteDetalleComercial
+                        instanceId={instanceId}
+                        tenantId={tenantId}
+                        item={item}
+                      />
+                    ) : null}
+                  </>
+                ) : null}
+
+                {seccion === 'trazabilidad' ? (
+                  <>
+                {loading ? <SeccionCargando etiqueta="Cargando trazabilidad" filas={3} /> : null}
                 {!loading && error ? (
-                  <ErrorRetry message={error} onRetry={() => setDetailReloadKey((k) => k + 1)} />
+                  <SeccionError
+                    mensaje={error}
+                    contexto="la trazabilidad"
+                    onReintentar={() => setDetailReloadKey((k) => k + 1)}
+                  />
                 ) : null}
                 {!loading && !error ? (
                   <ExpedienteTimeline statusHistory={detail?.statusHistory ?? []} />
@@ -269,9 +340,15 @@ export function TramiteDetalleModal({
                   <h4 className="mb-3 text-sm font-bold" style={{ color: NAVY }}>
                     Archivos finales
                   </h4>
-                  {attLoading ? <Skeleton count={2} label="Cargando archivos finales" /> : null}
+                  {attLoading ? (
+                    <SeccionCargando etiqueta="Cargando archivos finales" filas={2} />
+                  ) : null}
                   {!attLoading && attError ? (
-                    <ErrorRetry message={attError} onRetry={() => setAttReloadKey((k) => k + 1)} />
+                    <SeccionError
+                      mensaje={attError}
+                      contexto="los archivos finales"
+                      onReintentar={() => setAttReloadKey((k) => k + 1)}
+                    />
                   ) : null}
                   {!attLoading && !attError && systemAttachments.length === 0 ? (
                     <p className="text-xs opacity-70">
@@ -313,6 +390,20 @@ export function TramiteDetalleModal({
                       {preview.error}
                     </p>
                   ) : null}
+                </div>
+
+                {/* Tercer bloque de la trazabilidad: el estado de la validación de identidad, por
+                    parte. Vive aquí y no en su propia pestaña porque responde a la misma pregunta
+                    que la cronología y los archivos: en qué va el expediente. */}
+                {instanceId ? (
+                  <TramiteDetalleIdentidad
+                    instanceId={instanceId}
+                    tenantId={tenantId}
+                    item={item}
+                  />
+                ) : null}
+                  </>
+                ) : null}
                 </div>
               </div>
             </div>
