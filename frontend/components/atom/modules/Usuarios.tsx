@@ -3,11 +3,12 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History } from "lucide-react";
-import { getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, TenantUser, TenantRole } from "@/lib/api/security";
+import { getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, reactivateInvitation, TenantUser, TenantRole } from "@/lib/api/security";
 import { EditUserModal } from "./users/EditUserModal";
 import { DeleteUserDialog } from "./users/DeleteUserDialog";
 import { RestoreUserDialog } from "./users/RestoreUserDialog";
 import { ResendInvitationButton } from "./users/ResendInvitationButton";
+import { ReactivateInvitationButton } from "./users/ReactivateInvitationButton";
 import { CancelInvitationDialog } from "./users/CancelInvitationDialog";
 import { InviteUserModal } from "./users/InviteUserModal";
 import { UsersTable, toUserRow } from "./users/UsersTable";
@@ -23,6 +24,7 @@ import {
   type SuspendMode,
 } from "./users/SuspendOrDeactivateModal";
 import { resolveProfile, targetEntityTypeForProfile } from "@/lib/users/profiles";
+import { isInvitationRow } from "@/lib/users/invitationRow";
 import { superadminClient } from "@/lib/api/superadmin-client";
 
 // HU #10623 (AC3/AC4): "Eliminados" solo se ofrece a SuperAdmin — AdminCompany/OtAdmin ven
@@ -150,7 +152,7 @@ export function Usuarios() {
   // Roles para EditUserModal: AdminCompany usa getRoles(); SuperAdmin carga catálogo
   // COMPANY/OT según perfil del usuario objetivo (nunca FLIT/SuperAdmin).
   useEffect(() => {
-    if (!editTarget || editTarget.status === "pending") {
+    if (!editTarget || isInvitationRow(editTarget)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditRoles([]);
       setEditRolesLoading(false);
@@ -207,7 +209,7 @@ export function Usuarios() {
 
     const actions: RowAction[] = [];
 
-    if (u.status !== "pending" && isSuperAdmin) {
+    if (!isInvitationRow(u) && isSuperAdmin) {
       actions.push({
         icon: History,
         label: `Ver historial de ${u.fullName}`,
@@ -217,8 +219,9 @@ export function Usuarios() {
     }
 
     // Editar información (nombre/correo/rol): SuperAdmin, AdminCompany y ot_admin.
-    // AC4 (HU #10622): sin botón para usuarios pendientes — no hay cuenta real que editar.
-    if (u.status !== "pending") {
+    // AC4 (HU #10622): sin botón para usuarios pendientes ni cancelados (HU #11552 / ADR-0048)
+    // — el `id` de esas filas es un invitationId, no hay cuenta real que editar.
+    if (!isInvitationRow(u)) {
       actions.push({
         icon: Pencil,
         label: `Editar usuario ${u.fullName}`,
@@ -228,7 +231,7 @@ export function Usuarios() {
     }
 
     // Restablecer contraseña: SuperAdmin o AdminCompany (HU-B auth-parity; el API acota al tenant).
-    if (u.status !== "pending" && canResetPassword) {
+    if (!isInvitationRow(u) && canResetPassword) {
       actions.push({
         icon: KeyRound,
         label: `Restablecer contraseña de ${u.fullName}`,
@@ -238,7 +241,7 @@ export function Usuarios() {
 
     // Bloquear/desactivar/reactivar: SuperAdmin (cualquier tenant) o AdminCompany (solo su
     // empresa — el API rechaza fuera de ámbito).
-    if (u.status !== "pending" && canManageUserLifecycle) {
+    if (!isInvitationRow(u) && canManageUserLifecycle) {
       if (u.isSuspended) {
         actions.push({
           icon: ShieldOff,
@@ -263,7 +266,7 @@ export function Usuarios() {
 
     // AC2 (HU #10623): eliminar lo puede hacer SuperAdmin o AdminCompany en su tenant, y nunca
     // sobre la propia fila. Restaurar sigue siendo exclusivo de SuperAdmin.
-    if (u.status !== "pending" && canManageUserLifecycle && u.id !== currentUserId) {
+    if (!isInvitationRow(u) && canManageUserLifecycle && u.id !== currentUserId) {
       actions.push({
         icon: Trash2,
         label: `Eliminar usuario ${u.fullName}`,
@@ -272,7 +275,8 @@ export function Usuarios() {
       });
     }
 
-    // AC2 (HU #10628): "Cancelar invitación" SOLO en filas pendientes.
+    // AC2 (HU #10628): "Cancelar invitación" SOLO en filas pendientes (una cancelada ya no
+    // tiene nada que cancelar — su acción es "Reactivar", ver extraActionsFor de UsersTable).
     if (u.status === "pending") {
       actions.push({
         icon: MailX,
@@ -362,17 +366,33 @@ export function Usuarios() {
               : "No hay usuarios en este tenant. Invita al primero."
           }
           actionsFor={(row) => actionsForUser(row.id)}
-          extraActionsFor={(row) =>
+          extraActionsFor={(row) => {
             // AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el
             // invitationId. Vive fuera de RowActions porque lleva cooldown y mensaje inline.
-            row.status === "pending" ? (
-              <ResendInvitationButton
-                invitationId={row.id}
-                fullName={row.fullName}
-                resend={resendInvitation}
-              />
-            ) : null
-          }
+            if (row.status === "pending") {
+              return (
+                <ResendInvitationButton
+                  invitationId={row.id}
+                  fullName={row.fullName}
+                  resend={resendInvitation}
+                />
+              );
+            }
+            // HU #11552 / ADR-0048: SOLO en filas "Cancelada" — el id de la fila ya es el
+            // invitationId. Tras reactivar, la fila vuelve a verse como "Pendiente" recargando
+            // el listado, sin recargar la página.
+            if (row.status === "cancelled") {
+              return (
+                <ReactivateInvitationButton
+                  invitationId={row.id}
+                  fullName={row.fullName}
+                  reactivate={reactivateInvitation}
+                  onReactivated={() => loadUsers()}
+                />
+              );
+            }
+            return null;
+          }}
         />
       )}
 

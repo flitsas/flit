@@ -7,6 +7,7 @@ using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CancelInvitation;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.Auth.ReactivateInvitation;
 using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Application.Modules;
 using Flit.Modules.Security.Application.UserManagement.DeleteUser;
@@ -346,6 +347,94 @@ public static class SecurityEndpoints
         }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
           .AddEndpointFilter(new AdminAuditFilter(
               AuditVocabulary.Modules.Users, AuditVocabulary.Operations.Delete, "invitation",
+              "INVITATION", "invitationId"));
+
+        // HU #11552 / ADR-0048 — reactivar una invitación cancelada: es UNA sola acción que
+        // vuelve el Status a "pending", regenera el token (el enlace anterior queda muerto) y
+        // reenvía el correo. NO es idempotente: reactivar una invitación que ya está "pending"
+        // es 409 INVITATION_NOT_CANCELLED. Mismo alcance y misma policy que DELETE (AdminCompany
+        // NO incluye ot_admin — el equivalente ot_admin vive en AdminOtEndpoints).
+        group.MapPost("/invitations/{invitationId:guid}/reactivate", async (
+            Guid invitationId,
+            ClaimsPrincipal caller,
+            ReactivateInvitationHandler handler,
+            HttpContext httpContext,
+            CancellationToken cancellationToken) =>
+        {
+            var tenantClaim = caller.FindFirstValue("tenant_id");
+            if (!Guid.TryParse(tenantClaim, out var callerTenantId))
+                return Results.Unauthorized();
+
+            var subClaim = caller.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? caller.FindFirstValue("sub");
+            if (!Guid.TryParse(subClaim, out var reactivatedBy))
+                return Results.Unauthorized();
+
+            var isSuperAdmin = caller.Claims.Any(c =>
+                c.Type == AdminAuthorization.RoleClaimType
+                && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
+
+            // SuperAdmin no restringe por tenant (alcance global); AdminCompany solo su propio tenant.
+            Guid? scopeTenantId = isSuperAdmin ? null : callerTenantId;
+
+            try
+            {
+                var result = await handler.HandleAsync(
+                    new ReactivateInvitationCommand(invitationId, scopeTenantId, reactivatedBy),
+                    cancellationToken);
+
+                return Results.Ok(new InvitationCreatedResponse(result.InvitationId, result.Email, result.EmailSent));
+            }
+            catch (InvitationNotFoundException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVITATION_NOT_FOUND", "La invitación no existe o no pertenece a tu alcance."),
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+            catch (InvitationNotCancelledException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVITATION_NOT_CANCELLED", "La invitación no está cancelada, así que no se puede reactivar."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (InvitationAlreadyPendingException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVITATION_ALREADY_PENDING", UserEmailConflictMessages.EmailAlreadyInUse),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (UserAlreadyExistsException)
+            {
+                return Results.Json(
+                    new ErrorResponse("USER_ALREADY_EXISTS", UserEmailConflictMessages.EmailAlreadyInUse),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (UserEmailBelongsToDeletedAccountException)
+            {
+                return Results.Json(
+                    new ErrorResponse("EMAIL_BELONGS_TO_DELETED_USER", UserEmailConflictMessages.EmailAlreadyInUse),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (AuthRoleNotFoundException)
+            {
+                return Results.Json(
+                    new ErrorResponse("ROLE_NOT_FOUND", "Alguno de los roles de la invitación ya no existe o está inactivo."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (ResendCooldownActiveException ex)
+            {
+                var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling(ex.RetryAfter.TotalSeconds));
+                httpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+                return Results.Json(
+                    new ResendCooldownResponse(
+                        "RESEND_COOLDOWN_ACTIVE",
+                        $"Debes esperar antes de reactivar esta invitación de nuevo. Intenta en {retryAfterSeconds} segundos.",
+                        retryAfterSeconds),
+                    statusCode: StatusCodes.Status429TooManyRequests);
+            }
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+          .AddEndpointFilter(new AdminAuditFilter(
+              AuditVocabulary.Modules.Users, AuditVocabulary.Operations.ReactivateInvite, "invitation",
               "INVITATION", "invitationId"));
 
         // GET /security/modules — módulos y acciones accesibles al caller según sus permisos JWT.
@@ -801,18 +890,20 @@ public static class SecurityEndpoints
                 var allPending = await (
                     from i in db.UserInvitations.AsNoTracking()
                     join t in db.Tenants.AsNoTracking() on i.TenantId equals t.Id
-                    where i.TenantId != callerTenantId && i.Status == "pending"
+                    where i.TenantId != callerTenantId && InvitationListingStatuses.Visible.Contains(i.Status)
                     orderby i.CreatedAt descending
                     select new TenantUserDto(
                         i.Id.ToString(),
                         i.FullName,
                         i.Email,
-                        // El rol de una invitación pendiente ya está decidido: mostrarlo evita
-                        // que la columna Perfil / Rol quede en "—" hasta que el usuario active.
+                        // El rol de una invitación pendiente/cancelada ya está decidido: mostrarlo
+                        // evita que la columna Perfil / Rol quede en "—" hasta que el usuario active.
                         db.Roles.Where(r => r.Id == i.RoleId).Select(r => r.Name).FirstOrDefault(),
                         db.Roles.Where(r => r.Id == i.RoleId).Select(r => r.Code).FirstOrDefault(),
                         i.RoleId,
-                        "pending",
+                        // HU #11552 / ADR-0048: estado real (no el literal "pending" hardcodeado)
+                        // — una invitación cancelada debe verse como "cancelled" en el listado.
+                        i.Status,
                         i.CreatedAt,
                         false,
                         t.Id.ToString(),
@@ -859,7 +950,7 @@ public static class SecurityEndpoints
                 var flitPending = await (
                     from i in db.UserInvitations.AsNoTracking()
                     join t in db.Tenants.AsNoTracking() on i.TenantId equals t.Id
-                    where i.TenantId == callerTenantId && i.Status == "pending"
+                    where i.TenantId == callerTenantId && InvitationListingStatuses.Visible.Contains(i.Status)
                     orderby i.CreatedAt descending
                     select new TenantUserDto(
                         i.Id.ToString(),
@@ -868,7 +959,8 @@ public static class SecurityEndpoints
                         db.Roles.Where(r => r.Id == i.RoleId).Select(r => r.Name).FirstOrDefault(),
                         db.Roles.Where(r => r.Id == i.RoleId).Select(r => r.Code).FirstOrDefault(),
                         i.RoleId,
-                        "pending",
+                        // HU #11552 / ADR-0048: estado real, no el literal "pending" hardcodeado.
+                        i.Status,
                         i.CreatedAt,
                         false,
                         t.Id.ToString(),
@@ -945,7 +1037,7 @@ public static class SecurityEndpoints
 
             var pending = await db.UserInvitations
                 .AsNoTracking()
-                .Where(x => x.TenantId == tenantId && x.Status == "pending")
+                .Where(x => x.TenantId == tenantId && InvitationListingStatuses.Visible.Contains(x.Status))
                 .OrderByDescending(x => x.CreatedAt)
                 .Select(x => new TenantUserDto(
                     x.Id.ToString(),
@@ -954,7 +1046,8 @@ public static class SecurityEndpoints
                     db.Roles.Where(r => r.Id == x.RoleId).Select(r => r.Name).FirstOrDefault(),
                     db.Roles.Where(r => r.Id == x.RoleId).Select(r => r.Code).FirstOrDefault(),
                     x.RoleId,
-                    "pending",
+                    // HU #11552 / ADR-0048: estado real, no el literal "pending" hardcodeado.
+                    x.Status,
                     x.CreatedAt,
                     false,
                     null,

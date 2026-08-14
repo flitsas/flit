@@ -574,7 +574,8 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
             var cancelled = await db.UserInvitations.AsNoTracking()
                 .SingleAsync(i => i.Id == invitationId, TestContext.Current.CancellationToken);
             cancelled.Status.Should().Be("cancelled");
-            cancelled.DeletedAt.Should().NotBeNull();
+            // ADR-0048: "cancelled" es un estado vivo y reversible, NO un soft-delete.
+            cancelled.DeletedAt.Should().BeNull();
         }
 
         // El email queda disponible para una nueva invitación (la cancelada no cuenta como pending).
@@ -626,6 +627,135 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
             $"/api/v1/admin/ot/invitations/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    // HU #11552 / ADR-0048 — GET /admin/ot/users muestra la invitación cancelada con su estado
+    // real (no desaparece del listado del tenant OT).
+    [Fact]
+    public async Task GetUsers_AsOtAdmin_ShowsCancelledInvitationWithRealStatus()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var email = $"ot-list-cancelled-{Guid.NewGuid():N}@flit.local";
+        await _client.PostAsJsonAsync(
+            "/api/v1/admin/ot/users/invite",
+            new { email, fullName = "Cancelada en el listado" },
+            TestContext.Current.CancellationToken);
+
+        Guid invitationId;
+        await using (var db = CreateDbContext())
+        {
+            invitationId = await db.UserInvitations.AsNoTracking()
+                .Where(i => i.Email == email).Select(i => i.Id)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        (await _client.DeleteAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}", TestContext.Current.CancellationToken))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var listResponse = await _client.GetFromJsonAsync<OtUsersListResponse>(
+            "/api/v1/admin/ot/users", TestContext.Current.CancellationToken);
+
+        var row = listResponse!.Data.Single(u => u.Email == email);
+        row.Status.Should().Be("cancelled");
+    }
+
+    // AC1 (HU #11552 / ADR-0048) — ot_admin reactiva una invitación cancelada de su propio
+    // tenant: vuelve a "pending" con un token nuevo (el token viejo ya no resuelve nada).
+    [Fact]
+    public async Task ReactivateInvitation_AsOtAdmin_CancelledInvitation_ReturnsPendingWithNewToken()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var email = $"ot-reactivate-{Guid.NewGuid():N}@flit.local";
+        await _client.PostAsJsonAsync(
+            "/api/v1/admin/ot/users/invite",
+            new { email, fullName = "Reactivar OT" },
+            TestContext.Current.CancellationToken);
+
+        Guid invitationId;
+        string oldTokenHash;
+        await using (var db = CreateDbContext())
+        {
+            var invitation = await db.UserInvitations.AsNoTracking()
+                .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+            invitationId = invitation.Id;
+            oldTokenHash = invitation.TokenHash;
+        }
+
+        (await _client.DeleteAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}", TestContext.Current.CancellationToken))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var reactivateResponse = await _client.PostAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}/reactivate", null, TestContext.Current.CancellationToken);
+        reactivateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var dbAfter = CreateDbContext();
+        var reactivated = await dbAfter.UserInvitations.AsNoTracking()
+            .SingleAsync(i => i.Id == invitationId, TestContext.Current.CancellationToken);
+        reactivated.Status.Should().Be("pending");
+        reactivated.TokenHash.Should().NotBe(oldTokenHash);
+        reactivated.DeletedAt.Should().BeNull();
+    }
+
+    // AC2 — no es idempotente: reactivar una invitación que sigue "pending" → 409.
+    [Fact]
+    public async Task ReactivateInvitation_AsOtAdmin_InvitationStillPending_Returns409()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var email = $"ot-reactivate-pending-{Guid.NewGuid():N}@flit.local";
+        await _client.PostAsJsonAsync(
+            "/api/v1/admin/ot/users/invite",
+            new { email, fullName = "Sigue pendiente" },
+            TestContext.Current.CancellationToken);
+
+        await using var db = CreateDbContext();
+        var invitationId = await db.UserInvitations.AsNoTracking()
+            .Where(i => i.Email == email).Select(i => i.Id)
+            .SingleAsync(TestContext.Current.CancellationToken);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/admin/ot/invitations/{invitationId}/reactivate", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var body = await response.Content.ReadFromJsonAsync<ErrorBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Error.Should().Be("INVITATION_NOT_CANCELLED");
+    }
+
+    // ot_admin no puede reactivar una invitación cancelada fuera de su tenant → 404.
+    [Fact]
+    public async Task ReactivateInvitation_AsOtAdmin_TargetingInvitationOutsideTenant_Returns404()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/admin/ot/invitations/{Guid.NewGuid()}/reactivate", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    // AdminCompanyPolicy (ruta de SecurityEndpoints) NO incluye ot_admin: la ruta de
+    // AdminOtEndpoints es la única forma de que un ot_admin reactive — un ot_admin sin acceso
+    // a /api/v1/security/invitations/{id}/reactivate recibe 403 ahí (AdminCompanyPolicy exige
+    // AdminCompany o SuperAdmin, no ot_admin).
+    [Fact]
+    public async Task ReactivateInvitation_AsOtAdmin_OnSecurityRoute_Returns403()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{Guid.NewGuid()}/reactivate", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     // HU #10619 AC1 — sin endsAt: desactivación indefinida (sin fecha de fin), hasta reactivación manual.
@@ -1428,4 +1558,10 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
 
     // SecurityUsersEndpoints (SuperAdmin) usa "code" en vez de "error" para el campo de código.
     private sealed record SuperAdminErrorBody(string Code, string? Message);
+
+    // GET /admin/ot/users envuelve el arreglo en "data" — proyección mínima para leer Status
+    // real de invitaciones (HU #11552).
+    private sealed record OtUsersListResponse(List<OtUserRow> Data);
+
+    private sealed record OtUserRow(string Id, string FullName, string Email, string Status);
 }

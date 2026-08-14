@@ -247,7 +247,8 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
             var cancelled = await db.UserInvitations.AsNoTracking()
                 .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
             cancelled.Status.Should().Be("cancelled");
-            cancelled.DeletedAt.Should().NotBeNull();
+            // ADR-0048: "cancelled" es un estado vivo y reversible, NO un soft-delete.
+            cancelled.DeletedAt.Should().BeNull();
         }
 
         // El email queda disponible para una nueva invitación (la cancelada no cuenta como pending).
@@ -288,6 +289,198 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
     {
         var response = await _client.DeleteAsync(
             $"/api/v1/security/invitations/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    // HU #11552 / ADR-0048 — el listado GET /users muestra la invitación cancelada con su
+    // estado real (no desaparece, no queda en "pending" hardcodeado).
+    [Fact]
+    public async Task GetUsers_AsSuperAdmin_ShowsCancelledInvitationWithRealStatus()
+    {
+        var (invitationId, email) = await SeedPendingInvitationAsync(_otTenantId, lastSentAt: null);
+
+        var cancelResponse = await _client.DeleteAsync(
+            $"/api/v1/security/invitations/{invitationId}", TestContext.Current.CancellationToken);
+        cancelResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var listResponse = await _client.GetFromJsonAsync<List<TenantUserListDto>>(
+            "/api/v1/security/users", TestContext.Current.CancellationToken);
+
+        var row = listResponse!.Single(u => u.Email == email);
+        row.Status.Should().Be("cancelled");
+    }
+
+    // ADR-0048, ciclo completo — cancelar→reactivar: vuelve a "pending" con un token nuevo (el
+    // token viejo ya no resuelve ninguna invitación pendiente) y reenvía el correo.
+    [Fact]
+    public async Task ReactivateInvitation_AsSuperAdmin_CancelledInvitation_ReturnsPendingWithNewToken()
+    {
+        var (invitationId, email) = await SeedPendingInvitationAsync(_otTenantId, lastSentAt: null);
+
+        string oldTokenHash;
+        await using (var db = CreateDbContext())
+        {
+            oldTokenHash = await db.UserInvitations.AsNoTracking()
+                .Where(i => i.Id == invitationId).Select(i => i.TokenHash)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        (await _client.DeleteAsync(
+            $"/api/v1/security/invitations/{invitationId}", TestContext.Current.CancellationToken))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var reactivateResponse = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/reactivate", null, TestContext.Current.CancellationToken);
+        reactivateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await reactivateResponse.Content.ReadFromJsonAsync<InvitationCreatedBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.InvitationId.Should().Be(invitationId);
+        body.Email.Should().Be(email);
+
+        await using var dbAfter = CreateDbContext();
+        var invitation = await dbAfter.UserInvitations.AsNoTracking()
+            .SingleAsync(i => i.Id == invitationId, TestContext.Current.CancellationToken);
+        invitation.Status.Should().Be("pending");
+        // Token viejo muerto: el token regenerado nunca reutiliza el hash anterior.
+        invitation.TokenHash.Should().NotBe(oldTokenHash);
+        // "cancelled" no fue nunca un soft-delete (ADR-0048) — la reactivación tampoco toca DeletedAt.
+        invitation.DeletedAt.Should().BeNull();
+    }
+
+    // No es idempotente a propósito: reactivar una invitación que ya está "pending" (nunca se
+    // canceló) → 409 INVITATION_NOT_CANCELLED, distinto del 409 INVITATION_NOT_PENDING de cancelar/reenviar.
+    [Fact]
+    public async Task ReactivateInvitation_AsSuperAdmin_InvitationStillPending_Returns409()
+    {
+        var (invitationId, _) = await SeedPendingInvitationAsync(_otTenantId, lastSentAt: null);
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/reactivate", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var body = await response.Content.ReadFromJsonAsync<SecurityErrorBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Code.Should().Be("INVITATION_NOT_CANCELLED");
+    }
+
+    // Ciclo completo cancelar→reactivar→(activada) — una segunda reactivación sobre la misma
+    // invitación, ya "accepted", sigue rechazándose con el mismo código que "pending".
+    [Fact]
+    public async Task ReactivateInvitation_FullCycle_CancelReactivateThenAccepted_SecondReactivateReturns409()
+    {
+        var (invitationId, _) = await SeedPendingInvitationAsync(_otTenantId, lastSentAt: null, status: "cancelled");
+
+        var firstReactivate = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/reactivate", null, TestContext.Current.CancellationToken);
+        firstReactivate.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Simula la activación (consumo del token por ActivateAccountHandler, cubierto por sus
+        // propios tests unitarios) marcando la invitación como aceptada directamente en BD.
+        await using (var db = CreateDbContext())
+        {
+            var invitation = await db.UserInvitations.SingleAsync(
+                i => i.Id == invitationId, TestContext.Current.CancellationToken);
+            invitation.Status = "accepted";
+            invitation.AcceptedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var secondReactivate = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/reactivate", null, TestContext.Current.CancellationToken);
+        secondReactivate.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var body = await secondReactivate.Content.ReadFromJsonAsync<SecurityErrorBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Code.Should().Be("INVITATION_NOT_CANCELLED");
+    }
+
+    // Reactivar una invitación cancelada cuando ya existe OTRA pending con el mismo correo en el
+    // tenant → 409 INVITATION_ALREADY_PENDING (pre-validado antes de tocar la fila).
+    [Fact]
+    public async Task ReactivateInvitation_AsSuperAdmin_CollidesWithAnotherPendingSameEmail_Returns409()
+    {
+        var (cancelledId, email) = await SeedPendingInvitationAsync(_otTenantId, lastSentAt: null, status: "cancelled");
+
+        await using (var db = CreateDbContext())
+        {
+            db.UserInvitations.Add(new UserInvitation
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _otTenantId,
+                Email = email,
+                FullName = "Invitado Colisión",
+                TokenHash = $"hash-{Guid.NewGuid():N}",
+                Status = "pending",
+                InvitedBy = _superAdminUserId,
+                CreatedAt = DateTimeOffset.UtcNow,
+                RowVersion = 0,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{cancelledId}/reactivate", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var body = await response.Content.ReadFromJsonAsync<SecurityErrorBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Code.Should().Be("INVITATION_ALREADY_PENDING");
+    }
+
+    // Cooldown antiabuso compartido con /resend: cancelada hace menos de 2 minutos desde el
+    // último envío → 429 + Retry-After (evita el bypass cancel→reactivate en bucle).
+    [Fact]
+    public async Task ReactivateInvitation_AsSuperAdmin_WithinCooldown_Returns429WithRetryAfterHeader()
+    {
+        var (invitationId, _) = await SeedPendingInvitationAsync(
+            _otTenantId, lastSentAt: DateTimeOffset.UtcNow.AddSeconds(-30), status: "cancelled");
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/reactivate", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        response.Headers.RetryAfter.Should().NotBeNull();
+    }
+
+    // AdminCompany reactiva una invitación cancelada de su propio tenant.
+    [Fact]
+    public async Task ReactivateInvitation_AsAdminCompany_OwnTenantInvitation_Returns200()
+    {
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", MintToken("AdminCompany", _companyTenantId, Guid.NewGuid()));
+
+        var (invitationId, _) = await SeedPendingInvitationAsync(
+            _companyTenantId, lastSentAt: null, status: "cancelled");
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/reactivate", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // AdminCompany no puede reactivar una invitación cancelada de OTRO tenant → 404 (mismo
+    // alcance/mismo error que cancelar).
+    [Fact]
+    public async Task ReactivateInvitation_AsAdminCompany_InvitationOfAnotherTenant_Returns404()
+    {
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", MintToken("AdminCompany", _companyTenantId, Guid.NewGuid()));
+
+        var (invitationId, _) = await SeedPendingInvitationAsync(_otTenantId, lastSentAt: null, status: "cancelled");
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/reactivate", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    // Reactivar una invitación inexistente → 404.
+    [Fact]
+    public async Task ReactivateInvitation_NotFound_Returns404()
+    {
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{Guid.NewGuid()}/reactivate", null, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -489,4 +682,11 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
     // SecurityEndpoints (SuperAdmin/AdminCompany) usa "code" en vez de "error" — mismo
     // convenio documentado en AdminOtUsersEndpointsTests.SuperAdminErrorBody.
     private sealed record SecurityErrorBody(string Code, string? Message);
+
+    // Respuesta de POST /invitations y POST /invitations/{id}/reactivate — mismo shape
+    // (InvitationCreatedResponse) que crear/reenviar.
+    private sealed record InvitationCreatedBody(Guid InvitationId, string Email, bool EmailSent);
+
+    // Proyección mínima de GET /security/users usada solo para leer el Status real (HU #11552).
+    private sealed record TenantUserListDto(string Id, string FullName, string Email, string Status);
 }

@@ -26,14 +26,17 @@ export interface UserRow {
   profile?: string | null;
   tenantType?: string | null;
   tenantName?: string | null;
-  status: "active" | "inactive" | "pending";
+  /** HU #11552 / ADR-0048: "cancelled" es un cuarto valor — invitación cancelada, visible y
+   *  reactivable. Ver `isInvitationRow` en lib/users/invitationRow.ts antes de asumir que
+   *  `status !== "pending"` implica "esta fila es un usuario real". */
+  status: "active" | "inactive" | "pending" | "cancelled";
   isSuspended: boolean;
   createdAt: string | null;
   /** Clave de React: un usuario con N roles produce N filas con el mismo id. */
   rowKey: string;
 }
 
-export type UserStatusFilter = "" | "active" | "pending" | "inactive" | "blocked";
+export type UserStatusFilter = "" | "active" | "pending" | "inactive" | "blocked" | "cancelled";
 
 /**
  * Adapta cualquiera de las formas que devuelven las APIs (`TenantUser`, `OtUserItem`) a
@@ -48,7 +51,7 @@ export function toUserRow(
     role: string | null;
     roleCode: string | null;
     roleId?: string | null;
-    status: "active" | "inactive" | "pending";
+    status: "active" | "inactive" | "pending" | "cancelled";
     isSuspended: boolean;
     createdAt: string | null;
     profile?: string | null;
@@ -77,6 +80,9 @@ const STATUS_BADGE: Record<UserRow["status"], { label: string; tone: StatusTone 
   active: { label: "Activo", tone: "success" },
   inactive: { label: "Inactivo", tone: "danger" },
   pending: { label: "Pendiente", tone: "warning" },
+  // HU #11552 / ADR-0048: invitación cancelada, visible y reactivable — tono neutral, no
+  // "danger" (no es un error ni una baja definitiva, es un estado terminal-reversible).
+  cancelled: { label: "Cancelada", tone: "neutral" },
 };
 
 const SUSPENDED_BADGE: { label: string; tone: StatusTone } = { label: "Bloqueado", tone: "danger" };
@@ -84,6 +90,7 @@ const SUSPENDED_BADGE: { label: string; tone: StatusTone } = { label: "Bloqueado
 const STATUS_OPTIONS: { value: Exclude<UserStatusFilter, "">; label: string }[] = [
   { value: "active", label: "Activo" },
   { value: "pending", label: "Pendiente" },
+  { value: "cancelled", label: "Cancelada" },
   { value: "inactive", label: "Inactivo" },
   { value: "blocked", label: "Bloqueado" },
 ];

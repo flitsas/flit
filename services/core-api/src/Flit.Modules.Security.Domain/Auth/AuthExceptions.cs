@@ -164,13 +164,28 @@ public sealed class InvitationNotPendingException : Exception
 
 /// <summary>
 /// Reenvío rechazado por el cooldown anti-abuso: la invitación ya se reenvió hace menos del
-/// tiempo mínimo configurado (HU #10625 AC2, <c>InvitationOptions.ResendCooldown</c>).
+/// tiempo mínimo configurado (HU #10625 AC2, <c>InvitationOptions.ResendCooldown</c>). También
+/// aplica a la reactivación (HU #11552) para que <c>cancel → reactivate</c> en bucle no sea un
+/// bypass del antiabuso de <c>/resend</c>.
 /// </summary>
 public sealed class ResendCooldownActiveException(TimeSpan retryAfter)
     : Exception("You must wait before resending this invitation again.")
 {
     /// <summary>Tiempo restante hasta que se pueda reenviar de nuevo.</summary>
     public TimeSpan RetryAfter { get; } = retryAfter;
+}
+
+/// <summary>
+/// La invitación no está en estado "cancelled" — no se puede reactivar una que sigue pendiente
+/// o que ya fue aceptada (HU #11552 / ADR-0048 AC). No es idempotente a propósito: reactivar dos
+/// veces la misma invitación es un error de negocio explícito, no un no-op silencioso.
+/// </summary>
+public sealed class InvitationNotCancelledException : Exception
+{
+    public InvitationNotCancelledException()
+        : base("The invitation is not cancelled, so it cannot be reactivated.")
+    {
+    }
 }
 
 /// <summary>
