@@ -32,7 +32,9 @@ public sealed class BiometricPersonGroupFiltersRepositoryTests
         string nombre = "Persona de prueba",
         DateTimeOffset? createdAt = null,
         DateTimeOffset? expiresAt = null,
-        DateTimeOffset? validatedAt = null) => new()
+        DateTimeOffset? validatedAt = null,
+        int attempts = 0,
+        int maxAttempts = 5) => new()
     {
         Id = Guid.NewGuid(),
         TenantId = TenantId,
@@ -45,6 +47,8 @@ public sealed class BiometricPersonGroupFiltersRepositoryTests
         ExpiresAt = expiresAt ?? Now.AddDays(1),
         ValidatedAt = validatedAt,
         Provider = BiometricProviders.Mock,
+        Attempts = attempts,
+        MaxAttempts = maxAttempts,
     };
 
     private static async Task<IProcedureInstanceRepository> RepoAsync(
@@ -212,5 +216,24 @@ public sealed class BiometricPersonGroupFiltersRepositoryTests
         documentos.Should().HaveCount(2);
         counts.Values.Sum().Should().Be(documentos.Count);
         counts.GetValueOrDefault(BiometricEstados.Expirado).Should().Be(2);
+    }
+
+    /// <summary>HU #11505 (AC3) — la fila agrupada expone los intentos de la validación MÁS RECIENTE.</summary>
+    [Fact]
+    public async Task Intentos_expone_los_de_la_validacion_mas_reciente_no_una_suma_del_grupo()
+    {
+        var repo = await RepoAsync(
+            nameof(Intentos_expone_los_de_la_validacion_mas_reciente_no_una_suma_del_grupo),
+            // Más antigua: 2 de 5 intentos consumidos.
+            Validacion("401", BiometricEstados.Rechazado, createdAt: Now.AddDays(-5), attempts: 2, maxAttempts: 5),
+            // Más reciente: 4 de 5. La fila debe mostrar ESTOS, no 2, no 6 (suma).
+            Validacion("401", BiometricEstados.EnProceso, createdAt: Now.AddDays(-1), attempts: 4, maxAttempts: 5));
+
+        var (rows, _) = await repo.ListBiometricValidationsGroupedByPersonAsync(
+            TenantId, 0, 50, null, Now, TestContext.Current.CancellationToken);
+
+        var fila = rows.Should().ContainSingle().Which;
+        fila.Attempts.Should().Be(4);
+        fila.MaxAttempts.Should().Be(5);
     }
 }

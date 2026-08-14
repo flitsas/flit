@@ -284,6 +284,118 @@ public sealed class AdminIdentityValidationServiceTests
         linker.Links.Should().ContainSingle();
     }
 
+    // ── ReconcileAsync + rechazado_intento (HU #11504) ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task Reconcile_WhenProviderReportsRejectedAttempt_WithAvailableAttempts_DoesNotTerminalize()
+    {
+        var provider = new FakeProvider
+        {
+            Status = new AdminIdentityStatusResult(
+                Approved: false, Rejected: false, "rechazado_intento", null, "{}",
+                RejectedAttempt: true, AttemptKey: "attempt-1"),
+        };
+        var repo = new FakeRepository();
+        var linker = new FakeLinker();
+        var service = new AdminIdentityValidationService(provider, repo, linker, new FixedTimeProvider(Now));
+
+        var sent = await service.SendAsync(Descriptor(), Ct);
+        var changed = await service.ReconcileAsync(Tenant, sent.Validation.Id, Now, Ct);
+
+        changed.Should().BeTrue();
+        var stored = repo.Store[sent.Validation.Id];
+        stored.Status.Should().NotBe(AdminIdentityEstados.Rechazado);
+        stored.Attempts.Should().Be(1);
+
+        // AC1: sigue elegible para reconciliaciones posteriores (no terminal). Un segundo poll con la
+        // MISMA clave de intento no vuelve a contar (dedup): sin cambios adicionales.
+        var reconciledAgain = await service.ReconcileAsync(Tenant, sent.Validation.Id, Now, Ct);
+        reconciledAgain.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Reconcile_WhenProviderReportsRejectedAttempt_ReachingMax_TerminalizesRejected()
+    {
+        var provider = new FakeProvider();
+        var repo = new FakeRepository();
+        var linker = new FakeLinker();
+        var service = new AdminIdentityValidationService(provider, repo, linker, new FixedTimeProvider(Now));
+
+        var sent = await service.SendAsync(Descriptor(), Ct);
+
+        provider.Status = new AdminIdentityStatusResult(
+            Approved: false, Rejected: false, "rechazado_intento", null, "{}",
+            RejectedAttempt: true, AttemptKey: "attempt-1");
+        await service.ReconcileAsync(Tenant, sent.Validation.Id, Now, Ct);
+
+        provider.Status = new AdminIdentityStatusResult(
+            Approved: false, Rejected: false, "rechazado_intento", null, "{}",
+            RejectedAttempt: true, AttemptKey: "attempt-2");
+        await service.ReconcileAsync(Tenant, sent.Validation.Id, Now, Ct);
+
+        provider.Status = new AdminIdentityStatusResult(
+            Approved: false, Rejected: false, "rechazado_intento", null, "{}",
+            RejectedAttempt: true, AttemptKey: "attempt-3");
+        var changed = await service.ReconcileAsync(Tenant, sent.Validation.Id, Now, Ct);
+
+        changed.Should().BeTrue();
+        var stored = repo.Store[sent.Validation.Id];
+        stored.Status.Should().Be(AdminIdentityEstados.Rechazado);
+        stored.Attempts.Should().Be(3);
+
+        // AC2: terminal → excluida de reconciliaciones futuras (ReconcileAsync corta antes de llamar al proveedor).
+        var reconciledAgain = await service.ReconcileAsync(Tenant, sent.Validation.Id, Now, Ct);
+        reconciledAgain.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Reconcile_WhenApprovedAfterNonExhaustedRejectedAttempts_KeepsAttemptsHistory()
+    {
+        var provider = new FakeProvider();
+        var repo = new FakeRepository();
+        var linker = new FakeLinker();
+        var service = new AdminIdentityValidationService(provider, repo, linker, new FixedTimeProvider(Now));
+
+        var sent = await service.SendAsync(Descriptor(), Ct);
+
+        provider.Status = new AdminIdentityStatusResult(
+            Approved: false, Rejected: false, "rechazado_intento", null, "{}",
+            RejectedAttempt: true, AttemptKey: "attempt-1");
+        await service.ReconcileAsync(Tenant, sent.Validation.Id, Now, Ct);
+
+        provider.Status = new AdminIdentityStatusResult(Approved: true, Rejected: false, "aprobado", "cert-final", "{}");
+        var changed = await service.ReconcileAsync(Tenant, sent.Validation.Id, Now, Ct);
+
+        changed.Should().BeTrue();
+        var stored = repo.Store[sent.Validation.Id];
+        stored.Status.Should().Be(AdminIdentityEstados.Aprobado);
+        stored.Attempts.Should().Be(1); // AC3: conserva el histórico consumido
+        stored.CertificateHash.Should().Be("cert-final");
+    }
+
+    [Fact]
+    public async Task Reconcile_WhenSameAttemptKeyReportedTwice_IncrementsOnlyOnce()
+    {
+        var provider = new FakeProvider
+        {
+            Status = new AdminIdentityStatusResult(
+                Approved: false, Rejected: false, "rechazado_intento", null, "{}",
+                RejectedAttempt: true, AttemptKey: "same-attempt-key"),
+        };
+        var repo = new FakeRepository();
+        var linker = new FakeLinker();
+        var service = new AdminIdentityValidationService(provider, repo, linker, new FixedTimeProvider(Now));
+
+        var sent = await service.SendAsync(Descriptor(), Ct);
+
+        var first = await service.ReconcileAsync(Tenant, sent.Validation.Id, Now, Ct);
+        var second = await service.ReconcileAsync(Tenant, sent.Validation.Id, Now.AddMinutes(2), Ct);
+
+        first.Should().BeTrue();
+        second.Should().BeFalse(); // dedup: el mismo intento reportado dos veces (dos polls) no duplica el conteo
+        repo.Store[sent.Validation.Id].Attempts.Should().Be(1);
+    }
+
     // ── Fakes ─────────────────────────────────────────────────────────────────
 
     private sealed class FakeProvider : IAdminIdentityValidationProvider

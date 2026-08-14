@@ -150,25 +150,35 @@ internal sealed class KyverumVerifyClient(
             if (payload is null || string.IsNullOrWhiteSpace(payload.Status))
                 throw new KyverumVerifyException("Respuesta de estado inválida de Kyverum.", transient: false);
 
-            // Kyverum permite REINTENTOS dentro de una misma validación (p.ej. 3 intentos). El resultado
-            // TERMINAL vive en `result` (aprobado + closedAt); mientras `result` sea null la validación sigue
-            // ABIERTA aunque el ÚLTIMO intento (top-level `subjects`) haya sido rechazado. Por eso el estado
-            // efectivo se deriva del `result` (o expirado); si no cerró → en_proceso (no se terminaliza por un
-            // intento fallido). El score/validadoAt del veredicto vienen de `result.subjects`.
+            // Kyverum permite REINTENTOS dentro de una misma validación (p.ej. 3 intentos) y reporta `result`
+            // (aprobado/rechazado) tras CADA intento, no solo al agotar los reintentos — el status top-level
+            // "rechazado" NO es de fiar como señal de cierre: Kyverum lo emite igual en un intento intermedio.
+            // La ÚNICA señal fiable de cierre real es `result.closedAt` (no-null solo cuando la validación
+            // CERRÓ en el proveedor). Por eso:
+            //   - aprobado=true            → "aprobado" (terminal, siempre).
+            //   - rechazo CON closedAt     → "rechazado" (terminal: Kyverum cerró la validación).
+            //   - rechazo SIN closedAt     → "rechazado_intento" (no terminal: el reconciliador decide con
+            //                                el conteo de intentos autoritativo del webhook).
+            // "rechazo" cubre tanto `result.aprobado=false` como el status top-level `rechazado` — ambas son
+            // la MISMA señal de Kyverum leída de dos formas; antes se interpretaban distinto y el status
+            // top-level se trataba (mal) como terminal incondicional (Bug #11503).
+            // Riesgo residual ACEPTADO: si Kyverum cerrara sin `closedAt`, la validación seguiría "abierta"
+            // hasta que el conteo de intentos del webhook la agote (`rechazado_intento`/`default` ya
+            // terminalizan con Attempts >= MaxAttempts) o expire — degradación seguido de "tarda", no de
+            // "congela mal" (que era el bug original).
             var subject = SelectStatusSubject(payload.Subjects, parte);
             var resultSubject = SelectStatusSubject(payload.Result?.Subjects, parte);
 
-            // OJO: Kyverum reporta `result` (aprobado/closedAt) tras CADA intento, no solo al agotar los 3.
-            // Por eso un `result.aprobado=false` NO es terminal por sí solo → se mapea a `rechazado_intento` y
-            // el reconciliador decide con el conteo de intentos del webhook.
-            // Excepción: el status top-level `rechazado` indica validación CERRADA en Kyverum (agotó
-            // reintentos) → mapear a `rechazado` TERMINAL (no `rechazado_intento`), para no depender solo
-            // del conteo local cuando el GET llega después del cierre.
+            var closedAt = payload.Result?.ClosedAt;
+            var hasClosedSignal = !string.IsNullOrWhiteSpace(closedAt);
+            var isRechazo = payload.Result?.Aprobado == false
+                || string.Equals(payload.Status, "rechazado", StringComparison.OrdinalIgnoreCase);
+
             string effectiveStatus;
-            if (string.Equals(payload.Status, "rechazado", StringComparison.OrdinalIgnoreCase))
-                effectiveStatus = "rechazado";
-            else if (payload.Result?.Aprobado is { } aprobado)
-                effectiveStatus = aprobado ? "aprobado" : "rechazado_intento";
+            if (payload.Result?.Aprobado == true)
+                effectiveStatus = "aprobado";
+            else if (isRechazo)
+                effectiveStatus = hasClosedSignal ? "rechazado" : "rechazado_intento";
             else
                 effectiveStatus = payload.Status!; // en_proceso/enviado/aprobado/expirado (compat)
 
@@ -179,12 +189,14 @@ internal sealed class KyverumVerifyClient(
             // del último intento. Kyverum puede no exponerlo en el GET → null (el webhook es la fuente primaria).
             var firmaSerie = resultSubject?.FirmaSerie ?? subject?.FirmaSerie;
 
-            // Trazabilidad SIN OCR/PII: estados/score/fecha (NUNCA datosExtraidos).
+            // Trazabilidad SIN OCR/PII: estados/score/fecha (NUNCA datosExtraidos). `closed_at` es la marca de
+            // tiempo que discrimina rechazo de intento vs. cierre real (nunca PII).
             var sanitized = JsonSerializer.Serialize(new
             {
                 status = effectiveStatus,
                 provider_status = payload.Status,
                 result_aprobado = payload.Result?.Aprobado,
+                closed_at = closedAt,
                 subject_status = subject?.Status,
                 // Motivo del ÚLTIMO intento (para mostrar "reintentando: <motivo>" mientras sigue abierta).
                 subject_motivo = subject?.Motivo,
@@ -283,9 +295,11 @@ internal sealed class KyverumVerifyClient(
         [property: JsonPropertyName("captureUrl")] string? CaptureUrl);
 
     // ── Contrato del GET /v1/validations/{id} (reconciliación) ────────────────
-    // `result` es no-null SOLO cuando la validación CERRÓ (aprobado/rechazado final, tras agotar reintentos
-    // o aprobar). Mientras es null, la validación sigue abierta (Kyverum permite reintentar). Los `subjects`
-    // top-level reflejan el ÚLTIMO intento (puede ser rechazado aunque la validación no haya cerrado).
+    // OJO (Bug #11503): `result` NO es exclusivo del cierre — Kyverum lo reporta (aprobado=false) tras CADA
+    // intento fallido, aunque la validación siga abierta con reintentos disponibles. La ÚNICA señal fiable de
+    // cierre real es `result.closedAt` (no-null solo cuando la validación CERRÓ: aprobó o agotó reintentos).
+    // Los `subjects` top-level reflejan el ÚLTIMO intento (puede ser rechazado aunque la validación no haya
+    // cerrado).
     private sealed record KyverumStatusResponse(
         [property: JsonPropertyName("status")] string? Status,
         [property: JsonPropertyName("result")] KyverumStatusResult? Result,
@@ -293,6 +307,7 @@ internal sealed class KyverumVerifyClient(
 
     private sealed record KyverumStatusResult(
         [property: JsonPropertyName("aprobado")] bool? Aprobado,
+        // Discriminante de cierre real (ver nota arriba): presente ⇒ la validación CERRÓ en Kyverum.
         [property: JsonPropertyName("closedAt")] string? ClosedAt,
         [property: JsonPropertyName("subjects")] IReadOnlyList<KyverumStatusSubject>? Subjects);
 

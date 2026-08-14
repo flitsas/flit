@@ -1256,6 +1256,15 @@ export interface TenantBiometricValidation {
    * (excluye el trámite primario `instanceId` si existe).
    */
   linkedProcedures?: LinkedProcedureRef[];
+  /**
+   * HU #11505 — intentos consumidos por la validación (mismo criterio de lectura que
+   * `BiometricValidation.intentos`, ver PersonIdentityDetailDrawer). Opcional: el backend de esta vista
+   * transversal aún no lo envía (HU #11504 en curso en paralelo); si falta, la grilla omite el contador
+   * sin romper la fila.
+   */
+  intentos?: number;
+  /** HU #11505 — tope de intentos de la validación. Opcional por el mismo motivo que `intentos`. */
+  maxIntentos?: number;
 }
 
 /** KPIs agregados del submódulo de Validaciones (espejo de BiometricValidationStatsDto). */
@@ -1345,6 +1354,15 @@ export interface TenantBiometricPerson {
   validUntil: string | null;
   daysRemaining: number | null;
   linkExpiresAt: string | null;
+  /**
+   * HU #11505 — intentos consumidos por la validación MÁS RECIENTE de la persona (mismo criterio de
+   * lectura que `BiometricValidation.intentos`, ya usado en PersonIdentityDetailDrawer). Opcional a
+   * propósito: el backend aún no los envía en esta vista agrupada (queda para la capa backend de esta
+   * misma HU); si faltan, la grilla omite el contador sin romper la fila (AC4).
+   */
+  intentos?: number;
+  /** HU #11505 — tope de intentos de la validación más reciente. Opcional por el mismo motivo. */
+  maxIntentos?: number;
 }
 
 /** Respuesta de GET /biometric-validations/by-person. `total` = personas; `stats` = validaciones. */

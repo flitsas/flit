@@ -69,13 +69,19 @@ internal sealed class KyverumAdminIdentityValidationProvider(
             }
 
             // El cliente ya normaliza el veredicto: `aprobado` (result cerrado aprobado), `rechazado`
-            // (terminal) o en_proceso/enviado/rechazado_intento (sigue abierta). La serie/hash del
+            // (terminal: Kyverum CERRÓ la validación, result.closedAt presente — Bug #11503) o
+            // `rechazado_intento` (un INTENTO falló SIN señal de cierre; aún quedan reintentos, HU #11504)
+            // — en_proceso/enviado se mapean como "sigue en proceso" (ambos false). La serie/hash del
             // certificado (firmaSerie) es el CertificateHash de la identidad aprobada (HU #10488).
+            // `AttemptAt` (validadoAt del intento) viaja como clave de dedup para que el reconciliador
+            // admin cuente el intento una sola vez por reintento real (ver AdminIdentityStatusResult).
             var approved = string.Equals(status.Status, "aprobado", StringComparison.OrdinalIgnoreCase);
             var rejected = string.Equals(status.Status, "rechazado", StringComparison.OrdinalIgnoreCase);
+            var rejectedAttempt = string.Equals(status.Status, "rechazado_intento", StringComparison.OrdinalIgnoreCase);
 
             return new AdminIdentityStatusResult(
-                approved, rejected, status.Status, status.FirmaSerie, status.RawPayloadSanitized);
+                approved, rejected, status.Status, status.FirmaSerie, status.RawPayloadSanitized,
+                RejectedAttempt: rejectedAttempt, AttemptKey: status.AttemptAt);
         }
         catch (KyverumVerifyException ex)
         {
