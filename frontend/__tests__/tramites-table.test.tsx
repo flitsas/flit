@@ -196,7 +196,7 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
     ]);
     render(<TramitesTable />);
 
-    const row = (await screen.findByText('PEND01')).closest('[role="button"]') as HTMLElement;
+    const row = (await screen.findByText('PEND01')).closest('tr') as HTMLElement;
     expect(within(row).getByText('Pendiente validación')).toBeInTheDocument();
     // Accesible: el chip expone su estado por aria-label.
     expect(within(row).getByLabelText('Estado: Pendiente validación')).toBeInTheDocument();
@@ -220,7 +220,7 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
     ]);
     render(<TramitesTable />);
 
-    const row = (await screen.findByText('FIRM01')).closest('[role="button"]') as HTMLElement;
+    const row = (await screen.findByText('FIRM01')).closest('tr') as HTMLElement;
     expect(within(row).getByText('Pendiente firma')).toBeInTheDocument();
   });
 
@@ -239,7 +239,7 @@ describe('TramitesTable — validación de identidad async (HU #10350, AC3)', ()
     ]);
     render(<TramitesTable />);
 
-    const row = (await screen.findByText('RDY001')).closest('[role="button"]') as HTMLElement;
+    const row = (await screen.findByText('RDY001')).closest('tr') as HTMLElement;
     expect(within(row).getByText('Listo para radicar')).toBeInTheDocument();
     // La acción vive dentro del menú de la fila desde HU #11037.
     await abrirAcciones();
@@ -353,7 +353,7 @@ describe('TramitesTable — subsanación / motivo de rechazo', () => {
     ]);
     render(<TramitesTable />);
 
-    const row = (await screen.findByText('SUB001')).closest('[role="button"]') as HTMLElement;
+    const row = (await screen.findByText('SUB001')).closest('tr') as HTMLElement;
     expect(within(row).queryByText('En subsanación')).not.toBeInTheDocument();
     expect(within(row).queryByText('Subsanado ×2')).not.toBeInTheDocument();
 
@@ -420,10 +420,13 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
 
     await screen.findByText('AAA111');
     // Gestor entra en el default de la pantalla principal: ya no hay que activarla a mano.
-    expect(within(screen.getByRole('row')).getByText('Gestor')).toBeInTheDocument();
-    expect(within(screen.getByRole('row')).queryByText('Compañía')).not.toBeInTheDocument();
-    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
-    expect(within(rows).getByText('Empresa A')).toBeInTheDocument();
+    // `getByRole('row')` ya no es único: la cabecera y cada fila de datos son `<tr>` (role="row"
+    // implícito), así que se acota a la cabecera con `getAllByRole('row')[0]`.
+    const table = screen.getByRole('table', { name: 'Trámites en curso' });
+    const header = within(table).getAllByRole('row')[0];
+    expect(within(header).getByText('Gestor')).toBeInTheDocument();
+    expect(within(header).queryByText('Compañía')).not.toBeInTheDocument();
+    expect(within(table).getByText('Empresa A')).toBeInTheDocument();
     // Filtro Compañía presente (select con label) con la opción de la empresa.
     expect(screen.getByLabelText('Compañía')).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Empresa A' })).toBeInTheDocument();
@@ -469,7 +472,10 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    const header = screen.getByRole('row');
+    // `getByRole('row')` ya no es único (cabecera + una fila por `<tr>`): se acota a la cabecera.
+    const header = within(screen.getByRole('table', { name: 'Trámites en curso' })).getAllByRole(
+      'row',
+    )[0];
     for (const col of [
       'Radicado',
       'VIN',
@@ -503,7 +509,9 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: /^Vehículo$/i }));
     await userEvent.click(screen.getByRole('checkbox', { name: /^Paso$/i }));
 
-    const header = screen.getByRole('row');
+    const header = within(screen.getByRole('table', { name: 'Trámites en curso' })).getAllByRole(
+      'row',
+    )[0];
     expect(within(header).getByText('Vehículo')).toBeInTheDocument();
     expect(within(header).getByText('Paso')).toBeInTheDocument();
   });
@@ -516,7 +524,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     render(<TramitesTable />);
     await screen.findByText('P0001');
 
-    const rows = () => screen.getByRole('list', { name: 'Trámites en curso' });
+    const rows = () => screen.getByRole('table', { name: 'Trámites en curso' });
     // Por defecto el vehículo va apilado bajo la placa: aparece UNA vez.
     expect(within(rows()).getAllByText('RENAULT STEPWAY')).toHaveLength(1);
 
@@ -548,7 +556,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
     await userEvent.click(screen.getByRole('checkbox', { name: /Fecha de actualización/i }));
 
-    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
+    const rows = screen.getByRole('table', { name: 'Trámites en curso' });
     expect(within(rows).getByText('Empresa Gestora SAS')).toBeInTheDocument();
     expect(within(rows).getByText('Ana Gestora')).toBeInTheDocument();
     expect(within(rows).getByText('Integración')).toBeInTheDocument();
@@ -570,7 +578,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
+    const rows = screen.getByRole('table', { name: 'Trámites en curso' });
     expect(within(rows).getByText('Vendedor:')).toBeInTheDocument();
     expect(within(rows).getByText('Comprador:')).toBeInTheDocument();
     expect(within(rows).getByText('Firmado')).toBeInTheDocument();
@@ -592,7 +600,8 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     render(<TramitesTable />);
     await screen.findByText('P0001');
 
-    const header = () => screen.getByRole('row');
+    const header = () =>
+      within(screen.getByRole('table', { name: 'Trámites en curso' })).getAllByRole('row')[0];
     // Pestaña "Todos": presente.
     expect(within(header()).getByText('Propietario / vendedor')).toBeInTheDocument();
 
@@ -621,7 +630,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    const rows = screen.getByRole('list', { name: 'Trámites en curso' });
+    const rows = screen.getByRole('table', { name: 'Trámites en curso' });
     expect(within(rows).queryByText('Vendedor:')).toBeNull();
     expect(within(rows).getByText('Comprador:')).toBeInTheDocument();
     // Parte existente pero sin acreditación registrada: se dice, no se deja un guion mudo.

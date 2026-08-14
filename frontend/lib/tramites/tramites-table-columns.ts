@@ -168,3 +168,35 @@ export function buildTramitesGridLayout(
       ACTIONS_COL_MIN_PX,
   };
 }
+
+/**
+ * Construye los anchos en PORCENTAJE de cada columna (Selección si aplica + visibles en orden
+ * canónico + Acciones), en el mismo orden en que la tabla las pinta. `<colgroup>` no admite
+ * unidades `fr` (las que usa `buildTramitesGridLayout`), así que esta función reparte
+ * proporcionalmente los mismos pesos `fr` de TRAMITES_COLUMNS convertidos a porcentaje.
+ *
+ * La pista de Selección es de ancho FIJO (`SELECT_COL_WIDTH`): se devuelve tal cual, SIN
+ * repartir del 100% — el 100% se reparte entre el resto (columnas visibles + Acciones). Misma
+ * degradación defensiva que `buildTramitesGridLayout`: si `visibleKeys` no casa con ninguna
+ * columna conocida, cae a TODAS las columnas.
+ */
+export function buildTramitesColWidths(
+  visibleKeys: readonly string[],
+  options: BuildTramitesGridLayoutOptions = {},
+): string[] {
+  const includeSelectColumn = options.includeSelectColumn === true;
+  const matched = TRAMITES_COLUMNS.filter((c) => visibleKeys.includes(c.key));
+  const columns = matched.length > 0 ? matched : TRAMITES_COLUMNS;
+
+  const frOf = (width: string): number => parseFloat(width);
+  const dataFr = columns.map((c) => frOf(c.width));
+  const actionsFr = frOf(ACTIONS_COL_WIDTH);
+  const totalFr = dataFr.reduce((sum, fr) => sum + fr, 0) + actionsFr;
+  const toPercent = (fr: number): string => `${((fr / totalFr) * 100).toFixed(4)}%`;
+
+  return [
+    ...(includeSelectColumn ? [SELECT_COL_WIDTH] : []),
+    ...dataFr.map(toPercent),
+    toPercent(actionsFr),
+  ];
+}

@@ -3,6 +3,7 @@ import {
   DEFAULT_TRAMITES_VISIBLE_COLUMNS,
   TRAMITES_COLUMNS,
   buildTramitesGridLayout,
+  buildTramitesColWidths,
 } from '../tramites-table-columns';
 
 /**
@@ -110,5 +111,53 @@ describe('buildTramitesGridLayout', () => {
     const full = buildTramitesGridLayout(TRAMITES_COLUMNS.map((c) => c.key));
     const partial = buildTramitesGridLayout(DEFAULT_TRAMITES_VISIBLE_COLUMNS);
     expect(partial.minWidthPx).toBeLessThan(full.minWidthPx);
+  });
+});
+
+/**
+ * `buildTramitesColWidths` es la contraparte de `buildTramitesGridLayout` para `<colgroup>`
+ * (que no admite `fr`): reparte los mismos pesos de TRAMITES_COLUMNS como porcentaje, en el
+ * mismo orden canónico, salvo la pista de Selección que es de ancho fijo.
+ */
+describe('buildTramitesColWidths', () => {
+  /** Suma solo las pistas en porcentaje (la de Selección, si aparece, va en rem y no cuenta). */
+  function sumPercent(widths: string[]): number {
+    return widths
+      .filter((w) => w.endsWith('%'))
+      .reduce((sum, w) => sum + parseFloat(w), 0);
+  }
+
+  it('la suma de los porcentajes da 100% dentro de tolerancia', () => {
+    const widths = buildTramitesColWidths(DEFAULT_TRAMITES_VISIBLE_COLUMNS);
+    expect(sumPercent(widths)).toBeCloseTo(100, 1);
+  });
+
+  it('respeta el orden canónico de TRAMITES_COLUMNS sin importar el orden de entrada', () => {
+    const canonical = buildTramitesColWidths(['radicado', 'placa', 'estado']);
+    const shuffled = buildTramitesColWidths(['estado', 'radicado', 'placa']);
+    expect(shuffled).toEqual(canonical);
+  });
+
+  it('la pista de Selección solo aparece cuando se pide, es fija (no en %) y no altera el 100% del resto', () => {
+    const without = buildTramitesColWidths(['radicado', 'placa']);
+    const withSelect = buildTramitesColWidths(['radicado', 'placa'], {
+      includeSelectColumn: true,
+    });
+    // radicado + placa + Acciones.
+    expect(without).toHaveLength(3);
+    // Selección + radicado + placa + Acciones.
+    expect(withSelect).toHaveLength(4);
+    expect(withSelect[0]).toBe('2.25rem');
+    expect(withSelect[0].endsWith('%')).toBe(false);
+    // El resto (sin la pista fija) sigue sumando 100%.
+    expect(sumPercent(withSelect)).toBeCloseTo(100, 1);
+    // Y son proporcionalmente iguales a la versión sin Selección (mismos pesos fr, mismo total).
+    expect(withSelect.slice(1)).toEqual(without);
+  });
+
+  it('cae a TODAS las columnas si `visibleKeys` no casa con ninguna conocida (mismo fallback que buildTramitesGridLayout)', () => {
+    const widths = buildTramitesColWidths([]);
+    expect(widths).toHaveLength(TRAMITES_COLUMNS.length + 1);
+    expect(sumPercent(widths)).toBeCloseTo(100, 1);
   });
 });

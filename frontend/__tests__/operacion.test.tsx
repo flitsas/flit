@@ -46,6 +46,22 @@ vi.mock('next/navigation', () => ({
 
 import { OperacionView } from '@/components/operacion/OperacionView';
 
+/**
+ * Filas de datos de "Trámites en curso": la tabla ahora es un `<table>` semántico, así que
+ * `getByRole('row')` deja de ser único (cabecera + una fila por `<tr>`). Se acota al `<tbody>`
+ * (segundo `rowgroup` del `<table>`, después del `<thead>`) y se cuentan sus `<tr>`.
+ */
+function tramitesBodyRows(): HTMLElement[] {
+  const table = screen.getByRole('table', { name: /Trámites en curso/ });
+  const tbody = within(table).getAllByRole('rowgroup')[1];
+  return within(tbody).getAllByRole('row');
+}
+
+async function findTramitesBodyRows(): Promise<HTMLElement[]> {
+  await screen.findByRole('table', { name: /Trámites en curso/ });
+  return tramitesBodyRows();
+}
+
 const TRASPASO_WIZARD: WizardState = {
   modalidad: 'traspaso',
   tipologiaCodigo: 'traspaso',
@@ -162,8 +178,7 @@ describe('M6 — tabla de trámites en curso', () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_DRAFT, INSTANCE_SUBMITTED]);
     render(<OperacionView onNewTramite={vi.fn()} />);
 
-    const list = await screen.findByRole('list', { name: /Trámites en curso/ });
-    const rows = within(list).getAllByRole('listitem');
+    const rows = await findTramitesBodyRows();
     expect(rows).toHaveLength(2);
 
     // Fila borrador: placa, comprador, vehículo (si columna visible), paso, chip ámbar (N 03).
@@ -225,7 +240,7 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     render(<OperacionView onNewTramite={vi.fn()} />);
 
     // Espera a que cargue el listado (sale del estado "Cargando…").
-    await screen.findByRole('list', { name: /Trámites en curso/ });
+    await screen.findByRole('table', { name: /Trámites en curso/ });
 
     // La modalidad se filtra con tabs (rol `tab`), no con chips toggle.
     expect(screen.getByRole('tab', { name: 'Matrícula inicial' })).toBeInTheDocument();
@@ -244,15 +259,13 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     const user = userEvent.setup();
     render(<OperacionView onNewTramite={vi.fn()} />);
 
-    const list = await screen.findByRole('list', { name: /Trámites en curso/ });
-    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    const initialRows = await findTramitesBodyRows();
+    expect(initialRows).toHaveLength(2);
 
     // La búsqueda vive en la tarjeta de filtros, siempre visible.
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ABC123');
 
-    const rows = within(
-      screen.getByRole('list', { name: /Trámites en curso/ }),
-    ).getAllByRole('listitem');
+    const rows = tramitesBodyRows();
     expect(rows).toHaveLength(1);
     expect(within(rows[0]).getByText('ABC123')).toBeInTheDocument();
   });
@@ -262,12 +275,10 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     const user = userEvent.setup();
     render(<OperacionView onNewTramite={vi.fn()} />);
 
-    await screen.findByRole('list', { name: /Trámites en curso/ });
+    await findTramitesBodyRows();
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'VIN-NEW-002');
 
-    const rows = within(
-      screen.getByRole('list', { name: /Trámites en curso/ }),
-    ).getAllByRole('listitem');
+    const rows = tramitesBodyRows();
     expect(rows).toHaveLength(1);
     expect(within(rows[0]).getByText('Entregado')).toBeInTheDocument();
   });
@@ -304,11 +315,11 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     const user = userEvent.setup();
     render(<OperacionView onNewTramite={vi.fn()} />);
 
-    await screen.findByRole('list', { name: /Trámites en curso/ });
+    await findTramitesBodyRows();
     await user.type(screen.getByRole('searchbox', { name: /Buscar trámites/ }), 'ZZZ-SIN-MATCH');
 
-    // Ya no hay lista de resultados; aparece el vacío "Sin resultados".
-    expect(screen.queryByRole('list', { name: /Trámites en curso/ })).not.toBeInTheDocument();
+    // Ya no hay tabla de resultados; aparece el vacío "Sin resultados".
+    expect(screen.queryByRole('table', { name: /Trámites en curso/ })).not.toBeInTheDocument();
     expect(screen.getAllByText('Sin resultados').length).toBeGreaterThan(0);
 
     const clearButtons = screen.getAllByRole('button', { name: 'Limpiar filtros' });
@@ -316,9 +327,7 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     await user.click(clearButtons[0]);
 
     // Tras limpiar, vuelven las dos filas.
-    const rows = within(
-      await screen.findByRole('list', { name: /Trámites en curso/ }),
-    ).getAllByRole('listitem');
+    const rows = await findTramitesBodyRows();
     expect(rows).toHaveLength(2);
   });
 });

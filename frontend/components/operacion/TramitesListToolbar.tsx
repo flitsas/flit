@@ -21,8 +21,6 @@ interface Props {
   loading?: boolean;
   /** ¿Hay algún filtro activo (búsqueda/modalidad/estado/compañía)? Lo calcula el contenedor. */
   hasActiveFilters: boolean;
-  totalCount: number;
-  filteredCount: number;
   /** HU #10536 — filtro "solo prioritarios". */
   soloPrioritarios: boolean;
   onPrioritariosChange: (v: boolean) => void;
@@ -40,15 +38,18 @@ export function TramitesListToolbar({
   onRefresh,
   loading = false,
   hasActiveFilters,
-  totalCount,
-  filteredCount,
   soloPrioritarios,
   onPrioritariosChange,
 }: Props) {
-  const counterLabel =
-    filteredCount === 0
-      ? 'Sin resultados'
-      : `${filteredCount} trámite${filteredCount === 1 ? '' : 's'}`;
+  // El RECUENTO ya no se anuncia aquí: lo dice la píldora visible que hay sobre la tabla, que es
+  // una región `status` por sí misma. Aquí queda solo el estado del filtrado, que no tiene
+  // equivalente visible en esta fila.
+  const estadoFiltrado = [
+    hasActiveFilters ? 'filtros activos' : null,
+    soloPrioritarios ? 'solo prioritarios' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <div className="flex min-w-0 flex-col">
@@ -122,14 +123,12 @@ export function TramitesListToolbar({
         </div>
       </div>
 
-      {/* El diseño no dibuja un contador bajo los tabs (y la paginación ya informa "Mostrando X
-          de Y"), así que el recuento queda SOLO como región viva para lector de pantalla: al
-          cambiar un filtro se sigue anunciando el resultado sin añadir ruido visual. */}
+      {/* Región viva SOLO para el estado del filtrado: que haya filtros aplicados o el modo "solo
+          prioritarios" no se lee en ningún sitio de esta fila. El recuento se quitó de aquí al
+          hacerse visible sobre la tabla — dos regiones `status` diciendo lo mismo se anunciaban
+          por duplicado en cada cambio de filtro. */}
       <p className="sr-only" role="status" aria-live="polite">
-        {counterLabel}
-        {hasActiveFilters && filteredCount !== totalCount ? ` de ${totalCount}` : ''}
-        {hasActiveFilters ? ' · filtros activos' : ''}
-        {soloPrioritarios ? ' · solo prioritarios' : ''}
+        {estadoFiltrado}
       </p>
     </div>
   );

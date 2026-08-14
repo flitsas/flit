@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatFecha } from '@/lib/format/date';
 import { useRouter } from 'next/navigation';
 import {
@@ -35,6 +35,7 @@ import {
   TRAMITES_COLUMNS_ADDED_SINCE_LEGACY,
   DEFAULT_TRAMITES_VISIBLE_COLUMNS,
   buildTramitesGridLayout,
+  buildTramitesColWidths,
   tramitesColumnToSortBy,
   type TramitesColumnDef,
   type TramitesGridLayout,
@@ -846,8 +847,6 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           onRefresh={() => void load()}
           loading={loading}
           hasActiveFilters={hasActiveFilters}
-          totalCount={items.length}
-          filteredCount={filtered.length}
           soloPrioritarios={soloPrioritarios}
           onPrioritariosChange={handlePrioritariosChange}
         />
@@ -1086,7 +1085,11 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   );
 }
 
-/** Cabecera ordenable (grid CSS) — mismo patrón que OT ClientProceduresTable. */
+/**
+ * Cabecera ordenable — mismo patrón que OT ClientProceduresTable. Se renderiza DENTRO del `<th>`
+ * (que ya aporta el contexto de bloque): sin envolver en un `<div>` de más, para no duplicar
+ * semántica sobre la propia celda de cabecera.
+ */
 function SortableHeaderCell({
   column,
   sortBy,
@@ -1099,24 +1102,22 @@ function SortableHeaderCell({
   onSortChange: (sortBy: string, sortDir: 'asc' | 'desc') => void;
 }) {
   if (!column.sortable) {
-    return <div>{column.label}</div>;
+    return <>{column.label}</>;
   }
   const apiKey = tramitesColumnToSortBy(column.key);
   const active = sortBy === apiKey;
   const nextDir: 'asc' | 'desc' = active && sortDir === 'asc' ? 'desc' : 'asc';
   const Icon = !active ? ArrowUpDown : sortDir === 'asc' ? ArrowUp : ArrowDown;
   return (
-    <div>
-      <button
-        type="button"
-        className="inline-flex items-center gap-1 uppercase hover:opacity-80"
-        aria-label={`Ordenar por ${column.label}${active ? ` (${sortDir === 'asc' ? 'ascendente' : 'descendente'})` : ''}`}
-        onClick={() => onSortChange(apiKey, nextDir)}
-      >
-        {column.label}
-        <Icon className="h-3 w-3 opacity-60" aria-hidden="true" />
-      </button>
-    </div>
+    <button
+      type="button"
+      className="inline-flex items-center gap-1 uppercase hover:opacity-80"
+      aria-label={`Ordenar por ${column.label}${active ? ` (${sortDir === 'asc' ? 'ascendente' : 'descendente'})` : ''}`}
+      onClick={() => onSortChange(apiKey, nextDir)}
+    >
+      {column.label}
+      <Icon className="h-3 w-3 opacity-60" aria-hidden="true" />
+    </button>
   );
 }
 
@@ -1260,61 +1261,107 @@ function TableBody({
   // garantiza la alineación por construcción, sin importar cuántas columnas se oculten.
   const visibleDefs = TRAMITES_COLUMNS.filter((c) => visibleColumns.includes(c.key));
   const visibleKeysOrdered = visibleDefs.map((c) => c.key);
+  // `<colgroup>` no admite `fr` (lo que usa `gridLayout`): los anchos en % se calculan aparte,
+  // con el MISMO `visibleColumns` — así quedan alineados con `visibleDefs` por construcción.
+  const colWidths = buildTramitesColWidths(visibleColumns, {
+    includeSelectColumn: gridLayout.includeSelectColumn,
+  });
+  const tramiteWord = filtered.length === 1 ? 'trámite' : 'trámites';
 
   return (
     // Scroll normal de página: la tabla crece con su contenido y solo scrollea en horizontal
     // cuando las columnas visibles no caben a lo ancho.
     <div className="flex flex-col">
+      {/* Píldora de conteo (paridad con Reportes.tsx): visible y con role=status para que se
+          anuncie sola sin duplicar el recuento del párrafo sr-only del toolbar de arriba. */}
+      <p
+        role="status"
+        aria-live="polite"
+        className="mb-2 w-fit rounded-full bg-[#EEF5FF] px-3 py-1.5 text-xs font-medium text-[#3B4FD6]"
+      >
+        {filtered.length} {tramiteWord}
+      </p>
       <div className="overflow-x-auto">
-        <div style={{ minWidth: `${gridLayout.minWidthPx}px` }}>
-        {/* Header */}
-        <div
-          className="grid items-center rounded-xl px-2 py-2.5 text-xs font-semibold uppercase tracking-wider"
+        <table
+          aria-label="Trámites en curso"
           style={{
-            background: '#dfe5ed',
-            color: '#162744',
-            gridTemplateColumns: gridLayout.gridTemplateColumns,
+            minWidth: `${gridLayout.minWidthPx}px`,
+            borderCollapse: 'separate',
+            borderSpacing: '0 8px',
+            tableLayout: 'fixed',
           }}
-          role="row"
         >
-          {/* Columna de selección solo cuando hay borradores ICT (si no, hueco vacío al inicio). */}
-          {gridLayout.includeSelectColumn ? <div aria-hidden="true" /> : null}
-          {visibleDefs.map((col) => (
-            <SortableHeaderCell
-              key={col.key}
-              column={col}
-              sortBy={sortBy}
-              sortDir={sortDir}
-              onSortChange={onSortChange}
-            />
-          ))}
-          <div className="text-right">Acciones</div>
-        </div>
-
-        {/* Rows */}
-        <ul className="space-y-2 mt-2" aria-label="Trámites en curso">
-          {paginated.map((item) => (
-            <TramiteRow
-              key={item.id}
-              item={item}
-              visibleColumns={visibleKeysOrdered}
-              gridTemplateColumns={gridLayout.gridTemplateColumns}
-              includeSelectColumn={gridLayout.includeSelectColumn}
-              popoverOpen={openPopoverId === item.id}
-              onTogglePopover={onTogglePopover}
-              onClosePopover={onClosePopover}
-              onTogglePriority={onTogglePriority}
-              onTogglePause={onTogglePause}
-              selected={selectedIds.has(item.id)}
-              onToggleSelect={onToggleSelect}
-              onProcesar={onProcesar}
-              onOpen={onOpen}
-              onVerDocumentos={onVerDocumentos}
-              onVerConsolidado={onVerConsolidado}
-            />
-          ))}
-        </ul>
-        </div>
+          <colgroup>
+            {/* Columna de selección solo cuando hay borradores ICT (si no, hueco vacío al inicio). */}
+            {gridLayout.includeSelectColumn ? <col style={{ width: colWidths[0] }} /> : null}
+            {visibleDefs.map((col, index) => (
+              <col
+                key={col.key}
+                style={{
+                  width: colWidths[gridLayout.includeSelectColumn ? index + 1 : index],
+                }}
+              />
+            ))}
+            <col style={{ width: colWidths[colWidths.length - 1] }} />
+          </colgroup>
+          <thead>
+            <tr>
+              {gridLayout.includeSelectColumn ? (
+                <th
+                  scope="col"
+                  aria-hidden="true"
+                  className="rounded-l-xl px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wider"
+                  style={{ background: '#DFE5ED', color: '#162744' }}
+                />
+              ) : null}
+              {visibleDefs.map((col, index) => (
+                <th
+                  key={col.key}
+                  scope="col"
+                  className={`px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wider ${
+                    !gridLayout.includeSelectColumn && index === 0 ? 'rounded-l-xl' : ''
+                  }`}
+                  style={{ background: '#DFE5ED', color: '#162744' }}
+                >
+                  <SortableHeaderCell
+                    column={col}
+                    sortBy={sortBy}
+                    sortDir={sortDir}
+                    onSortChange={onSortChange}
+                  />
+                </th>
+              ))}
+              <th
+                scope="col"
+                className="rounded-r-xl px-2 py-2.5 text-right text-xs font-semibold uppercase tracking-wider"
+                style={{ background: '#DFE5ED', color: '#162744' }}
+              >
+                Acciones
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {paginated.map((item) => (
+              <TramiteRow
+                key={item.id}
+                item={item}
+                visibleColumns={visibleKeysOrdered}
+                includeSelectColumn={gridLayout.includeSelectColumn}
+                popoverOpen={openPopoverId === item.id}
+                onTogglePopover={onTogglePopover}
+                onClosePopover={onClosePopover}
+                onTogglePriority={onTogglePriority}
+                onTogglePause={onTogglePause}
+                selected={selectedIds.has(item.id)}
+                onToggleSelect={onToggleSelect}
+                onProcesar={onProcesar}
+                onOpen={onOpen}
+                onVerDocumentos={onVerDocumentos}
+                onVerConsolidado={onVerConsolidado}
+              />
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {/* Fuera del contenedor con scroll horizontal: la paginación no se desplaza con la tabla. */}
@@ -1471,7 +1518,6 @@ function FirmaParteLinea({
 function TramiteRow({
   item,
   visibleColumns,
-  gridTemplateColumns,
   includeSelectColumn,
   popoverOpen,
   onTogglePopover,
@@ -1488,8 +1534,6 @@ function TramiteRow({
   item: InstanceSummary;
   /** Claves visibles (selector de columnas) — misma lista/orden que usa la cabecera. */
   visibleColumns: readonly string[];
-  /** `gridTemplateColumns` ya resuelto por TableBody a partir de `visibleColumns`. */
-  gridTemplateColumns: string;
   /** Debe coincidir con `gridLayout.includeSelectColumn` (pista del checkbox ICT). */
   includeSelectColumn: boolean;
   popoverOpen: boolean;
@@ -1648,9 +1692,21 @@ function TramiteRow({
               aria-hidden="true"
             />
           </button>
-          <span className="min-w-0 truncate block font-mono font-semibold text-[#162744] dark:text-white">
+          {/* Acceso por teclado/lector de pantalla a la fila: el `<tr>` ya no es focuseable (una
+              tabla semántica no puede tener `role="button"` en la fila), así que el radicado
+              lleva el mismo `handleOpen`/aria-label de antes en un botón real. El aspecto en
+              reposo no cambia: mismo font-mono font-semibold, subrayado solo al interactuar. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpen();
+            }}
+            aria-label={`Abrir trámite ${item.referenceNumber}`}
+            className="min-w-0 truncate font-mono font-semibold text-[#162744] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:text-white"
+          >
             {item.referenceNumber}
-          </span>
+          </button>
         </span>
         {!shows('fechaCreacion') ? (
           <span className="block truncate text-xs text-[#162744]/60 dark:text-white/50">
@@ -1901,62 +1957,63 @@ function TramiteRow({
     );
   }
 
+  // `<tr>` conserva el onClick (comodidad de ratón) pero PIERDE role/tabIndex/onKeyDown/aria-label:
+  // un <tr role="button"> rompería la semántica de tabla. El acceso por teclado/lector de pantalla
+  // vive en el botón del radicado (ver cellsByKey.radicado), con el mismo aria-label de antes.
   return (
-    <li>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={handleOpen}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleOpen();
-          }
-        }}
-        className="w-full grid cursor-pointer items-center bg-white dark:bg-[#162744] rounded-xl border px-4 py-3 text-xs transition hover:border-[#557EFF]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-        style={{ gridTemplateColumns }}
-        aria-label={`Abrir trámite ${item.referenceNumber}`}
-      >
-        {/* ICT — checkbox de selección solo si la grilla reservó la pista (hay borradores ICT). */}
-        {includeSelectColumn ? (
-          <span className="flex items-center justify-start" onClick={(e) => e.stopPropagation()}>
-            {isIctDraft ? (
-              <input
-                type="checkbox"
-                checked={selected}
-                onChange={() => onToggleSelect(item.id)}
-                aria-label={`Seleccionar el trámite ${item.referenceNumber} para pausar/reanudar en lote`}
-                title="Seleccionar para pausar/reanudar en lote"
-                className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#557EFF]"
-              />
-            ) : null}
-          </span>
-        ) : null}
-        {/* Selector de columnas: solo se renderizan las visibles, en el orden canónico de
-            TRAMITES_COLUMNS — la misma lista/orden que usa la cabecera (TableBody). */}
-        {visibleColumns.map((key) => (
-          <Fragment key={key}>{cellsByKey[key]}</Fragment>
-        ))}
-        {/* La fila entera navega al wizard, así que las acciones detienen la propagación en un
-            envoltorio: el menú no recibe el evento y no hay que filtrarlo acción por acción.
-            Se conserva el `ActionsMenu` que introdujo el subflujo de placa (HU #11037): las acciones
-            de documentos y consolidado entran como ítems suyos, en vez de montar un segundo grupo de
-            botones en la misma celda. */}
-        <span
-          className="flex justify-end"
+    <tr onClick={handleOpen} className="group cursor-pointer bg-white text-xs transition dark:bg-[#162744]">
+      {/* ICT — checkbox de selección solo si la tabla reservó la pista (hay borradores ICT). Como
+          <tr> no admite border-radius, el borde/radio de "tarjeta" vive en cada <td>. */}
+      {includeSelectColumn ? (
+        <td
+          className="rounded-l-xl border-y border-l border-[#DFE5ED] px-4 py-3 align-middle group-hover:border-[#557EFF]/40 dark:border-white/10"
           onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
         >
-          <ActionsMenu
-            ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
-            items={actionItems}
-            className="bg-white dark:bg-[#162744]"
-            attention={puedeProcesar}
-            attentionHint="Pendiente por procesar: el OT ya asignó la placa"
-          />
-        </span>
-      </div>
-      {/* ICT — confirmación FLIT (Modal con blur/overlay/CTA degradado) al continuar un trámite pausado. */}
+          {isIctDraft ? (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleSelect(item.id)}
+              aria-label={`Seleccionar el trámite ${item.referenceNumber} para pausar/reanudar en lote`}
+              title="Seleccionar para pausar/reanudar en lote"
+              className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[#557EFF]"
+            />
+          ) : null}
+        </td>
+      ) : null}
+      {/* Selector de columnas: solo se renderizan las visibles, en el orden canónico de
+          TRAMITES_COLUMNS — la misma lista/orden que usa la cabecera (TableBody). */}
+      {visibleColumns.map((key, index) => (
+        <td
+          key={key}
+          className={`border-y border-[#DFE5ED] px-4 py-3 align-middle text-xs group-hover:border-[#557EFF]/40 dark:border-white/10 ${
+            !includeSelectColumn && index === 0 ? 'border-l rounded-l-xl' : ''
+          }`}
+        >
+          {cellsByKey[key]}
+        </td>
+      ))}
+      {/* La fila entera navega al wizard, así que las acciones detienen la propagación en un
+          envoltorio: el menú no recibe el evento y no hay que filtrarlo acción por acción.
+          Se conserva el `ActionsMenu` que introdujo el subflujo de placa (HU #11037): las acciones
+          de documentos y consolidado entran como ítems suyos, en vez de montar un segundo grupo de
+          botones en la misma celda. */}
+      <td
+        className="rounded-r-xl border-y border-r border-[#DFE5ED] px-4 py-3 text-right align-middle group-hover:border-[#557EFF]/40 dark:border-white/10"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <ActionsMenu
+          ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
+          items={actionItems}
+          className="bg-white dark:bg-[#162744]"
+          attention={puedeProcesar}
+          attentionHint="Pendiente por procesar: el OT ya asignó la placa"
+        />
+      </td>
+      {/* ICT — confirmación FLIT (Modal con blur/overlay/CTA degradado) al continuar un trámite
+          pausado. `Modal` se porta vía `createPortal` a `document.body`: no llega a insertarse
+          como hijo real del `<tr>` en el DOM, así que no rompe la validez de la tabla. */}
       <Modal
         open={confirmPauseOpen}
         onClose={() => setConfirmPauseOpen(false)}
@@ -1991,6 +2048,6 @@ function TramiteRow({
           </button>
         </div>
       </Modal>
-    </li>
+    </tr>
   );
 }
