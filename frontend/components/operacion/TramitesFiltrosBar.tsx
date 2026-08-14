@@ -1,14 +1,13 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { CalendarDays, Search, X } from 'lucide-react';
+import { ChevronDown, Search, X } from 'lucide-react';
 
 /**
- * Barra de filtros del listado de trámites (Track A). Reemplaza al panel colapsable anterior:
- * es una tarjeta blanca SIEMPRE VISIBLE, composición tomada de `Reportes.tsx` (repo hermano,
- * `origin/main`), con los VALORES (colores, radios, tipografía, spacing) tomados de
- * `frontend/app/globals.css` / tokens FLIT — no del prototipo, que usa valores fuera de norma
- * (texto <12px, opacidades <0.7, `slate-*`/`#8A94A6`, superficie dark `#0B0F14`).
+ * Fila de acciones compactas del listado de trámites (Track A). Reemplaza a la tarjeta blanca de
+ * filtros SIEMPRE visible (~185px de alto, casi muda en reposo): ahora vive DENTRO de la fila de
+ * tabs de `TramitesListToolbar` (prop `actions`), como búsqueda + dos popovers (Periodo, + Filtro)
+ * + el `ColumnSelector`. La tabla queda como foco de la pantalla.
  *
  * Puramente presentacional: todo el estado (draft/aplicado) vive en `TramitesTable`, que decide
  * cuándo convertir "Periodo" en `createdFrom/createdTo` o `updatedFrom/updatedTo` (ver
@@ -30,7 +29,7 @@ export const PERIODOS = [
 ] as const;
 export type Periodo = (typeof PERIODOS)[number];
 
-/** Los 5 filtros específicos que YA existen hoy en el `<form>` legado: ninguno desaparece. */
+/** Los 5 filtros específicos que YA existen hoy: ninguno desaparece, solo se mudan al popover. */
 export type FiltroEspecificoKey = 'placa' | 'vendedor' | 'comprador' | 'gestor' | 'firmado';
 
 const FILTROS_ESPECIFICOS_GRUPOS: {
@@ -53,18 +52,31 @@ const FILTROS_ESPECIFICOS_GRUPOS: {
     ],
   },
 ];
-/** Orden canónico (mismo de los grupos) para pintar la grilla de campos activos siempre igual,
- *  sin importar el orden en que el usuario los fue añadiendo. */
+/** Orden canónico (mismo de los grupos) para pintar chips y campos siempre igual, sin importar el
+ *  orden en que el usuario los fue añadiendo. */
 const FILTROS_ESPECIFICOS_ORDEN: FiltroEspecificoKey[] = FILTROS_ESPECIFICOS_GRUPOS.flatMap((g) =>
   g.items.map((i) => i.key),
 );
 
+export function filtroEspecificoLabel(key: FiltroEspecificoKey): string {
+  return FILTROS_ESPECIFICOS_GRUPOS.flatMap((g) => g.items).find((i) => i.key === key)?.label ?? key;
+}
+
 const INPUT_CLS =
-  'rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-[#162744] outline-none transition focus:border-[#557EFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-white/5 dark:text-white';
+  'h-9 rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs text-[#162744] outline-none transition focus:border-[#557EFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 dark:border-white/15 dark:bg-white/5 dark:text-white';
 const POPOVER_SURFACE_CLS =
   'rounded-2xl border border-[#DFE5ED] bg-white shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#162744]';
-const OUTLINE_BUTTON_CLS =
-  'rounded-xl border border-[#557EFF] px-4 py-2.5 text-xs font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40';
+
+/** Botón disparador compacto compartido por los popovers "Periodo" y "+ Filtro": mismo tratamiento
+ *  activo (borde/texto `#557EFF`/`#3B4FD6`) y neutro (`#DFE5ED`/`#162744`). */
+function popoverTriggerCls(activo: boolean): string {
+  return [
+    'inline-flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl border px-3 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2',
+    activo
+      ? 'border-[#557EFF] text-[#3B4FD6] hover:bg-[#557EFF]/10'
+      : 'border-[#DFE5ED] text-[#162744]/70 hover:bg-[#557EFF]/5 dark:border-white/15 dark:text-white/70',
+  ].join(' ');
+}
 
 /**
  * Calcula el rango de fechas (local, `yyyy-mm-dd`) que corresponde a un periodo predefinido.
@@ -127,8 +139,7 @@ function Field({
   );
 }
 
-/** Cierre por clic fuera Y por Escape, con el foco devuelto al disparador — el `useOutside` de la
- *  propuesta no hacía ninguna de las dos cosas. */
+/** Cierre por clic fuera Y por Escape, con el foco devuelto al disparador. */
 function usePopoverDismiss(
   open: boolean,
   onClose: () => void,
@@ -159,22 +170,51 @@ function usePopoverDismiss(
   return panelRef;
 }
 
-function RangoPropioPopover({
-  desde,
-  hasta,
-  onDesdeChange,
-  onHastaChange,
-}: {
-  desde: string;
-  hasta: string;
-  onDesdeChange: (v: string) => void;
-  onHastaChange: (v: string) => void;
-}) {
+const RANGO_SOBRE_OPTIONS: { value: RangoSobre; label: string }[] = [
+  { value: 'created', label: 'Fecha de creación' },
+  { value: 'updated', label: 'Última actualización' },
+];
+
+interface PeriodoPopoverProps {
+  rangoSobre: RangoSobre;
+  onRangoSobreChange: (v: RangoSobre) => void;
+  periodo: string;
+  onPeriodoChange: (v: string) => void;
+  rangoPropioDesde: string;
+  rangoPropioHasta: string;
+  onRangoPropioDesdeChange: (v: string) => void;
+  onRangoPropioHastaChange: (v: string) => void;
+  onAplicar: () => void;
+}
+
+function PeriodoPopover({
+  rangoSobre,
+  onRangoSobreChange,
+  periodo,
+  onPeriodoChange,
+  rangoPropioDesde,
+  rangoPropioHasta,
+  onRangoPropioDesdeChange,
+  onRangoPropioHastaChange,
+  onAplicar,
+}: PeriodoPopoverProps) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const close = () => setOpen(false);
   const panelRef = usePopoverDismiss(open, close, triggerRef);
   const panelId = useId();
+  const activo = periodo !== 'Sin periodo';
+
+  const handleLimpiar = () => {
+    onPeriodoChange('Sin periodo');
+    onRangoPropioDesdeChange('');
+    onRangoPropioHastaChange('');
+    close();
+  };
+  const handleAplicar = () => {
+    onAplicar();
+    close();
+  };
 
   return (
     <div className="relative">
@@ -182,59 +222,158 @@ function RangoPropioPopover({
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Elegir rango de fechas propio"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-xl border border-[#557EFF] text-[#557EFF] transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+        className={popoverTriggerCls(activo)}
       >
-        <CalendarDays className="h-4 w-4" aria-hidden="true" />
+        {activo ? periodo : 'Periodo'}
+        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
       {open ? (
         <div
           ref={panelRef}
           id={panelId}
           role="dialog"
-          aria-label="Rango de fechas propio"
-          className={`absolute left-0 top-full z-30 mt-2 w-64 p-3 ${POPOVER_SURFACE_CLS}`}
+          aria-label="Elegir periodo"
+          className={`absolute right-0 top-full z-30 mt-2 w-64 p-3 ${POPOVER_SURFACE_CLS}`}
         >
-          <Field label="Fecha inicial">
-            <input
-              type="date"
-              value={desde}
-              onChange={(e) => onDesdeChange(e.target.value)}
-              aria-label="Fecha inicial del rango propio"
+          <Field label="Rango sobre">
+            <select
+              value={rangoSobre}
+              onChange={(e) => onRangoSobreChange(e.target.value as RangoSobre)}
               className={INPUT_CLS}
-            />
+            >
+              {RANGO_SOBRE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </Field>
+
           <div className="h-2" aria-hidden="true" />
-          <Field label="Fecha final">
-            <input
-              type="date"
-              value={hasta}
-              onChange={(e) => onHastaChange(e.target.value)}
-              aria-label="Fecha final del rango propio"
+
+          <Field label="Periodo">
+            <select
+              value={periodo}
+              onChange={(e) => onPeriodoChange(e.target.value)}
               className={INPUT_CLS}
-            />
+            >
+              {PERIODOS.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
           </Field>
+
+          {periodo === 'Rango propio' ? (
+            <>
+              <div className="h-2" aria-hidden="true" />
+              <Field label="Fecha inicial">
+                <input
+                  type="date"
+                  value={rangoPropioDesde}
+                  onChange={(e) => onRangoPropioDesdeChange(e.target.value)}
+                  aria-label="Fecha inicial del rango propio"
+                  className={INPUT_CLS}
+                />
+              </Field>
+              <div className="h-2" aria-hidden="true" />
+              <Field label="Fecha final">
+                <input
+                  type="date"
+                  value={rangoPropioHasta}
+                  onChange={(e) => onRangoPropioHastaChange(e.target.value)}
+                  aria-label="Fecha final del rango propio"
+                  className={INPUT_CLS}
+                />
+              </Field>
+            </>
+          ) : null}
+
+          <div className="mt-3 flex items-center justify-end gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+            <button
+              type="button"
+              onClick={handleLimpiar}
+              className="rounded-xl px-3 py-2 text-xs font-semibold text-[#59677D] transition hover:bg-[#DFE5ED]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+            >
+              Limpiar
+            </button>
+            <button
+              type="button"
+              onClick={handleAplicar}
+              className="rounded-xl bg-[#557EFF] px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+            >
+              Aplicar
+            </button>
+          </div>
         </div>
       ) : null}
     </div>
   );
 }
 
+interface FiltroEspecificoPopoverProps {
+  activos: ReadonlySet<FiltroEspecificoKey>;
+  onToggle: (key: FiltroEspecificoKey) => void;
+  placa: string;
+  onPlacaChange: (v: string) => void;
+  vendedor: string;
+  onVendedorChange: (v: string) => void;
+  comprador: string;
+  onCompradorChange: (v: string) => void;
+  gestor: string;
+  onGestorChange: (v: string) => void;
+  firmado: '' | 'true' | 'false';
+  onFirmadoChange: (v: '' | 'true' | 'false') => void;
+  onAplicar: () => void;
+  onEmpezarDeCero: () => void;
+  empezarDeCeroDisabled: boolean;
+  /** #1 — filtro de compañía, SOLO SuperAdmin (ve trámites de todas las empresas). */
+  isAdmin: boolean;
+  companias: readonly string[];
+  compania: string;
+  onCompaniaChange: (v: string) => void;
+}
+
 function FiltroEspecificoPopover({
   activos,
   onToggle,
-}: {
-  activos: ReadonlySet<FiltroEspecificoKey>;
-  onToggle: (key: FiltroEspecificoKey) => void;
-}) {
+  placa,
+  onPlacaChange,
+  vendedor,
+  onVendedorChange,
+  comprador,
+  onCompradorChange,
+  gestor,
+  onGestorChange,
+  firmado,
+  onFirmadoChange,
+  onAplicar,
+  onEmpezarDeCero,
+  empezarDeCeroDisabled,
+  isAdmin,
+  companias,
+  compania,
+  onCompaniaChange,
+}: FiltroEspecificoPopoverProps) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const close = () => setOpen(false);
   const panelRef = usePopoverDismiss(open, close, triggerRef);
   const panelId = useId();
+  const count = activos.size;
+
+  const handleAplicar = () => {
+    onAplicar();
+    close();
+  };
+  const handleEmpezarDeCero = () => {
+    onEmpezarDeCero();
+    close();
+  };
 
   return (
     <div className="relative">
@@ -245,18 +384,43 @@ function FiltroEspecificoPopover({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        className={OUTLINE_BUTTON_CLS}
+        className={popoverTriggerCls(count > 0)}
       >
-        + Agregar filtro específico
+        {count > 0 ? `+ Filtro (${count})` : '+ Filtro'}
+        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
       {open ? (
         <div
           ref={panelRef}
           id={panelId}
           role="dialog"
-          aria-label="Agregar filtro específico"
-          className={`absolute left-0 top-full z-30 mt-2 w-72 max-h-[330px] overflow-y-auto p-2 ${POPOVER_SURFACE_CLS}`}
+          aria-label="Agregar filtro"
+          className={`absolute right-0 top-full z-30 mt-2 max-h-[420px] w-80 overflow-y-auto p-2 ${POPOVER_SURFACE_CLS}`}
         >
+          {isAdmin && companias.length > 0 ? (
+            <div className="border-b border-[#DFE5ED] pb-2 dark:border-white/10">
+              <p className="select-none px-2 py-1 text-xs font-bold uppercase tracking-wide text-[#162744] dark:text-white">
+                ALCANCE
+              </p>
+              <div className="px-2 py-1">
+                <Field label="Compañía">
+                  <select
+                    value={compania}
+                    onChange={(e) => onCompaniaChange(e.target.value)}
+                    className={INPUT_CLS}
+                  >
+                    <option value="">Todas</option>
+                    {companias.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+            </div>
+          ) : null}
+
           {FILTROS_ESPECIFICOS_GRUPOS.map((grupo, gi) => (
             <div
               key={grupo.grupo}
@@ -266,21 +430,97 @@ function FiltroEspecificoPopover({
                 {grupo.grupo}
               </p>
               {grupo.items.map((item) => (
-                <label
-                  key={item.key}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-[#162744] hover:bg-[#EEF5FF] dark:text-white dark:hover:bg-white/5"
-                >
-                  <input
-                    type="checkbox"
-                    checked={activos.has(item.key)}
-                    onChange={() => onToggle(item.key)}
-                    className="h-3.5 w-3.5 accent-[#557EFF]"
-                  />
-                  {item.label}
-                </label>
+                <div key={item.key}>
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-[#162744] hover:bg-[#EEF5FF] dark:text-white dark:hover:bg-white/5">
+                    <input
+                      type="checkbox"
+                      checked={activos.has(item.key)}
+                      onChange={() => onToggle(item.key)}
+                      className="h-3.5 w-3.5 accent-[#557EFF]"
+                    />
+                    {item.label}
+                  </label>
+                  {/* El campo real se despliega DEBAJO del checkbox, dentro del popover: en
+                      pantalla solo queda su chip, nunca el input suelto. */}
+                  {activos.has(item.key) ? (
+                    <div className="px-2 pb-2 pl-8">
+                      {item.key === 'placa' ? (
+                        <input
+                          type="search"
+                          aria-label="Filtrar por placa"
+                          value={placa}
+                          onChange={(e) => onPlacaChange(e.target.value)}
+                          placeholder="ABC123"
+                          className={`${INPUT_CLS} w-full`}
+                        />
+                      ) : null}
+                      {item.key === 'vendedor' ? (
+                        <input
+                          type="search"
+                          aria-label="Filtrar por propietario o vendedor"
+                          value={vendedor}
+                          onChange={(e) => onVendedorChange(e.target.value)}
+                          placeholder="Nombre"
+                          className={`${INPUT_CLS} w-full`}
+                        />
+                      ) : null}
+                      {item.key === 'comprador' ? (
+                        <input
+                          type="search"
+                          aria-label="Filtrar por comprador"
+                          value={comprador}
+                          onChange={(e) => onCompradorChange(e.target.value)}
+                          placeholder="Nombre"
+                          className={`${INPUT_CLS} w-full`}
+                        />
+                      ) : null}
+                      {item.key === 'gestor' ? (
+                        <input
+                          type="search"
+                          aria-label="Filtrar por gestor"
+                          value={gestor}
+                          onChange={(e) => onGestorChange(e.target.value)}
+                          placeholder="Nombre"
+                          className={`${INPUT_CLS} w-full`}
+                        />
+                      ) : null}
+                      {item.key === 'firmado' ? (
+                        <select
+                          aria-label="Filtrar por firma de compraventa"
+                          value={firmado}
+                          onChange={(e) => onFirmadoChange(e.target.value as '' | 'true' | 'false')}
+                          title="Firma electrónica de la compraventa (completa o pendiente)"
+                          className={`${INPUT_CLS} w-full`}
+                        >
+                          <option value="">Todos</option>
+                          <option value="true">Firmado</option>
+                          <option value="false">Pendiente</option>
+                        </select>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
               ))}
             </div>
           ))}
+
+          <div className="mt-2 flex items-center justify-end gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+            <button
+              type="button"
+              onClick={handleEmpezarDeCero}
+              disabled={empezarDeCeroDisabled}
+              className="rounded-xl border border-[#FF4E00] px-3 py-2 text-xs font-semibold text-[#C2410C] transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Empezar de cero
+            </button>
+            <button
+              type="button"
+              onClick={handleAplicar}
+              className="rounded-xl bg-[#557EFF] px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+            >
+              Aplicar
+            </button>
+          </div>
         </div>
       ) : null}
     </div>
@@ -318,7 +558,7 @@ export interface TramitesFiltrosBarProps {
   onEmpezarDeCero: () => void;
   empezarDeCeroDisabled?: boolean;
 
-  /** `ColumnSelector` ya montado por el contenedor — se muda aquí desde la fila de tabs. */
+  /** `ColumnSelector` ya montado por el contenedor — último control de la fila. */
   columnSelector: ReactNode;
 
   /** #1 — filtro de compañía, SOLO SuperAdmin (ve trámites de todas las empresas). */
@@ -328,11 +568,12 @@ export interface TramitesFiltrosBarProps {
   onCompaniaChange: (v: string) => void;
 }
 
-const RANGO_SOBRE_OPTIONS: { value: RangoSobre; label: string }[] = [
-  { value: 'created', label: 'Fecha de creación' },
-  { value: 'updated', label: 'Última actualización' },
-];
-
+/**
+ * Fila de acciones compactas: búsqueda (siempre visible) + popover "Periodo" + popover "+ Filtro"
+ * + `ColumnSelector`, en ese orden. Pensada para pintarse dentro de la prop `actions` de
+ * `TramitesListToolbar` — devuelve un fragmento (sin envoltorio) para que el `gap` del flex
+ * contenedor separe sus hijos como si fueran hermanos directos.
+ */
 export function TramitesFiltrosBar({
   rangoSobre,
   onRangoSobreChange,
@@ -365,206 +606,151 @@ export function TramitesFiltrosBar({
   compania,
   onCompaniaChange,
 }: TramitesFiltrosBarProps) {
-  const activosOrdenados = FILTROS_ESPECIFICOS_ORDEN.filter((k) => filtrosEspecificos.has(k));
-  const filtroLabel = (key: FiltroEspecificoKey): string =>
-    FILTROS_ESPECIFICOS_GRUPOS.flatMap((g) => g.items).find((i) => i.key === key)?.label ?? key;
-
   return (
-    <div className="rounded-2xl border border-[#DFE5ED] bg-white p-5 dark:border-white/10 dark:bg-[#162744]">
-      {/* Fila principal. */}
-      <div className="flex flex-wrap items-end gap-3">
-        {/* #1 — Compañía del SuperAdmin: no está en el orden numerado de la fila principal del
-            prototipo (que asume un único tenant); entra primero por ser un alcance más amplio que
-            el resto de filtros (decide QUÉ compañía se está mirando antes de refinar por fecha o
-            campos específicos). */}
-        {isAdmin && companias.length > 0 ? (
-          <Field label="Compañía" className="min-w-[170px]">
-            <select
-              value={compania}
-              onChange={(e) => onCompaniaChange(e.target.value)}
-              className={INPUT_CLS}
-            >
-              <option value="">Todas</option>
-              {companias.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : null}
-
-        <Field label="Rango sobre" className="min-w-[190px]">
-          <select
-            value={rangoSobre}
-            onChange={(e) => onRangoSobreChange(e.target.value as RangoSobre)}
-            className={INPUT_CLS}
-          >
-            {RANGO_SOBRE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="Periodo" className="min-w-[170px]">
-          <select
-            value={periodo}
-            onChange={(e) => onPeriodoChange(e.target.value)}
-            className={INPUT_CLS}
-          >
-            {PERIODOS.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        {periodo === 'Rango propio' ? (
-          <RangoPropioPopover
-            desde={rangoPropioDesde}
-            hasta={rangoPropioHasta}
-            onDesdeChange={onRangoPropioDesdeChange}
-            onHastaChange={onRangoPropioHastaChange}
-          />
-        ) : null}
-
-        <FiltroEspecificoPopover activos={filtrosEspecificos} onToggle={onToggleFiltroEspecifico} />
-
-        <Field label="Búsqueda rápida" className="min-w-[240px] flex-1">
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#59677D]"
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              aria-label="Buscar trámites"
-              value={search}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Placa, VIN, referencia, comprador u organismo…"
-              className={`${INPUT_CLS} w-full pl-9`}
-            />
-          </div>
-        </Field>
-
-        <button
-          type="button"
-          onClick={onAplicar}
-          className="rounded-xl bg-[#557EFF] px-4 py-2.5 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-        >
-          Aplicar filtros
-        </button>
-
-        <button
-          type="button"
-          onClick={onEmpezarDeCero}
-          disabled={empezarDeCeroDisabled}
-          className="rounded-xl border border-[#FF4E00] px-4 py-2.5 text-xs font-semibold text-[#C2410C] transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Empezar de cero
-        </button>
+    <>
+      {/* Búsqueda: nunca se esconde, es el control más usado. Crece con el foco (w-56 → w-72). */}
+      <div className="group relative w-56 shrink-0 transition-[width] duration-150 focus-within:w-72">
+        <Search
+          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#59677D]"
+          aria-hidden="true"
+        />
+        <input
+          type="search"
+          aria-label="Buscar trámites"
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Buscar…"
+          className={`${INPUT_CLS} w-full pl-8`}
+        />
       </div>
 
-      {/* Zona de filtros específicos activos: un campo real por cada uno que el usuario añadió. */}
-      {activosOrdenados.length > 0 ? (
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-          {activosOrdenados.includes('placa') ? (
-            <Field label="Placa">
-              <input
-                type="search"
-                aria-label="Filtrar por placa"
-                value={placa}
-                onChange={(e) => onPlacaChange(e.target.value)}
-                placeholder="ABC123"
-                className={INPUT_CLS}
-              />
-            </Field>
-          ) : null}
-          {activosOrdenados.includes('vendedor') ? (
-            <Field label="Propietario / vendedor">
-              <input
-                type="search"
-                aria-label="Filtrar por propietario o vendedor"
-                value={vendedor}
-                onChange={(e) => onVendedorChange(e.target.value)}
-                placeholder="Nombre"
-                className={INPUT_CLS}
-              />
-            </Field>
-          ) : null}
-          {activosOrdenados.includes('comprador') ? (
-            <Field label="Comprador">
-              <input
-                type="search"
-                aria-label="Filtrar por comprador"
-                value={comprador}
-                onChange={(e) => onCompradorChange(e.target.value)}
-                placeholder="Nombre"
-                className={INPUT_CLS}
-              />
-            </Field>
-          ) : null}
-          {activosOrdenados.includes('gestor') ? (
-            <Field label="Gestor">
-              <input
-                type="search"
-                aria-label="Filtrar por gestor"
-                value={gestor}
-                onChange={(e) => onGestorChange(e.target.value)}
-                placeholder="Nombre"
-                className={INPUT_CLS}
-              />
-            </Field>
-          ) : null}
-          {activosOrdenados.includes('firmado') ? (
-            <Field label="Firmado">
-              <select
-                aria-label="Filtrar por firma de compraventa"
-                value={firmado}
-                onChange={(e) => onFirmadoChange(e.target.value as '' | 'true' | 'false')}
-                title="Firma electrónica de la compraventa (completa o pendiente)"
-                className={INPUT_CLS}
-              >
-                <option value="">Todos</option>
-                <option value="true">Firmado</option>
-                <option value="false">Pendiente</option>
-              </select>
-            </Field>
-          ) : null}
-        </div>
-      ) : null}
+      <PeriodoPopover
+        rangoSobre={rangoSobre}
+        onRangoSobreChange={onRangoSobreChange}
+        periodo={periodo}
+        onPeriodoChange={onPeriodoChange}
+        rangoPropioDesde={rangoPropioDesde}
+        rangoPropioHasta={rangoPropioHasta}
+        onRangoPropioDesdeChange={onRangoPropioDesdeChange}
+        onRangoPropioHastaChange={onRangoPropioHastaChange}
+        onAplicar={onAplicar}
+      />
 
-      {/* Fila inferior: columnas + chips de periodo/filtros activos. */}
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
-        {columnSelector}
-        {periodo !== 'Sin periodo' ? (
-          <span className="rounded-full bg-[#EEF5FF] px-2.5 py-1 text-xs font-semibold text-[#3B4FD6]">
-            {periodo}
-          </span>
-        ) : null}
-        {activosOrdenados.map((key) => (
+      <FiltroEspecificoPopover
+        activos={filtrosEspecificos}
+        onToggle={onToggleFiltroEspecifico}
+        placa={placa}
+        onPlacaChange={onPlacaChange}
+        vendedor={vendedor}
+        onVendedorChange={onVendedorChange}
+        comprador={comprador}
+        onCompradorChange={onCompradorChange}
+        gestor={gestor}
+        onGestorChange={onGestorChange}
+        firmado={firmado}
+        onFirmadoChange={onFirmadoChange}
+        onAplicar={onAplicar}
+        onEmpezarDeCero={onEmpezarDeCero}
+        empezarDeCeroDisabled={empezarDeCeroDisabled}
+        isAdmin={isAdmin}
+        companias={companias}
+        compania={compania}
+        onCompaniaChange={onCompaniaChange}
+      />
+
+      {columnSelector}
+    </>
+  );
+}
+
+export interface TramitesFiltrosChipsProps {
+  periodo: string;
+  filtrosEspecificos: ReadonlySet<FiltroEspecificoKey>;
+  onToggleFiltroEspecifico: (key: FiltroEspecificoKey) => void;
+  onQuitarPeriodo: () => void;
+  /** Valores YA APLICADOS (no el borrador): el chip solo muestra `Etiqueta: valor` una vez que el
+   *  usuario pulsó "Aplicar" — mientras tanto queda solo la etiqueta, sin adelantar un valor que
+   *  todavía no rige la consulta. */
+  appliedPlaca: string;
+  appliedVendedor: string;
+  appliedComprador: string;
+  appliedGestor: string;
+  appliedFirmado: '' | 'true' | 'false';
+}
+
+/**
+ * Tira de chips debajo de la fila de tabs: SOLO se renderiza si hay algo activo (periodo o algún
+ * filtro específico). Sin tarjeta ni borde — es lo único que delata que hay filtros aplicados,
+ * ahora que sus campos viven escondidos dentro de los popovers.
+ */
+export function TramitesFiltrosChips({
+  periodo,
+  filtrosEspecificos,
+  onToggleFiltroEspecifico,
+  onQuitarPeriodo,
+  appliedPlaca,
+  appliedVendedor,
+  appliedComprador,
+  appliedGestor,
+  appliedFirmado,
+}: TramitesFiltrosChipsProps) {
+  const activosOrdenados = FILTROS_ESPECIFICOS_ORDEN.filter((k) => filtrosEspecificos.has(k));
+  const periodoActivo = periodo !== 'Sin periodo';
+
+  const valorDe = (key: FiltroEspecificoKey): string => {
+    switch (key) {
+      case 'placa':
+        return appliedPlaca;
+      case 'vendedor':
+        return appliedVendedor;
+      case 'comprador':
+        return appliedComprador;
+      case 'gestor':
+        return appliedGestor;
+      case 'firmado':
+        return appliedFirmado === 'true' ? 'Firmado' : appliedFirmado === 'false' ? 'Pendiente' : '';
+      default:
+        return '';
+    }
+  };
+
+  if (!periodoActivo && activosOrdenados.length === 0) return null;
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      {periodoActivo ? (
+        <span className="flex items-center gap-1.5 rounded-full bg-[#EEF5FF] px-2.5 py-1 text-xs font-semibold text-[#3B4FD6]">
+          {periodo}
+          <button
+            type="button"
+            onClick={onQuitarPeriodo}
+            aria-label="Quitar filtro de periodo"
+            className="rounded-full transition hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+          >
+            <X className="h-3 w-3" aria-hidden="true" />
+          </button>
+        </span>
+      ) : null}
+      {activosOrdenados.map((key) => {
+        const label = filtroEspecificoLabel(key);
+        const valor = valorDe(key).trim();
+        return (
           <span
             key={key}
             className="flex items-center gap-1.5 rounded-full border border-[#557EFF] px-2.5 py-1 text-xs font-semibold text-[#3B4FD6]"
           >
-            {filtroLabel(key)}
+            {valor ? `${label}: ${valor}` : label}
             <button
               type="button"
               onClick={() => onToggleFiltroEspecifico(key)}
-              aria-label={`Quitar filtro ${filtroLabel(key)}`}
+              aria-label={`Quitar filtro ${label}`}
               className="rounded-full transition hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
             >
               <X className="h-3 w-3" aria-hidden="true" />
             </button>
           </span>
-        ))}
-        {activosOrdenados.length === 0 ? (
-          <span className="text-xs text-[#59677D]">Sin filtros adicionales aplicados.</span>
-        ) : null}
-      </div>
+        );
+      })}
     </div>
   );
 }

@@ -109,14 +109,17 @@ beforeEach(() => {
 });
 
 describe('TramitesTable — paginación', () => {
-  it('no muestra controles de paginación cuando todo cabe en una página', async () => {
+  it('no muestra botones de página cuando todo cabe en una página, pero sí el conteo', async () => {
     mocks.listInstances.mockResolvedValue(makeInstances(10));
     render(<TramitesTable />);
 
     await screen.findByText('P0001');
-    expect(
-      screen.queryByRole('navigation', { name: 'Paginación de trámites' }),
-    ).not.toBeInTheDocument();
+    const nav = screen.getByRole('navigation', { name: 'Paginación de trámites' });
+    // La píldora de conteo suelta desapareció: la cuenta ahora vive SOLO aquí, incluso con una
+    // única página.
+    expect(within(nav).getByText('Mostrando 10 de 10')).toBeInTheDocument();
+    expect(within(nav).queryByRole('button', { name: 'Página anterior' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('button', { name: 'Página 1' })).not.toBeInTheDocument();
   });
 
   it('pagina a 10 filas por página y navega entre páginas', async () => {
@@ -427,7 +430,9 @@ describe('TramitesTable — SuperAdmin multi-tenant', () => {
     expect(within(header).getByText('Gestor')).toBeInTheDocument();
     expect(within(header).queryByText('Compañía')).not.toBeInTheDocument();
     expect(within(table).getByText('Empresa A')).toBeInTheDocument();
-    // Filtro Compañía presente (select con label) con la opción de la empresa.
+    // Filtro Compañía: select SIEMPRE presente (no checkbox) dentro del grupo ALCANCE del
+    // popover "+ Filtro", primero para el SuperAdmin.
+    await userEvent.click(screen.getByRole('button', { name: /^\+ Filtro/ }));
     expect(screen.getByLabelText('Compañía')).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Empresa A' })).toBeInTheDocument();
 
@@ -884,11 +889,22 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
 
 describe('TramitesTable — filtros y ordenamiento server-side', () => {
   // Los filtros específicos (placa/actores/gestor/firmado) ya no están siempre en pantalla: hay
-  // que añadirlos primero desde "+ Agregar filtro específico" (popover con checkboxes). Se abre
-  // UNA vez y se marcan todos los pedidos: reabrir el disparador con el popover ya abierto lo
-  // cerraría (toggle).
+  // que añadirlos primero desde el popover "+ Filtro" (disparador con checkboxes agrupados). El
+  // rótulo del disparador cambia a "+ Filtro (n)" al marcar filtros, así que se abre por regex.
+  async function abrirPopoverFiltro() {
+    if (screen.queryByRole('dialog', { name: 'Agregar filtro' })) return;
+    await userEvent.click(screen.getByRole('button', { name: /^\+ Filtro/ }));
+  }
+  async function abrirPopoverPeriodo() {
+    if (screen.queryByRole('dialog', { name: 'Elegir periodo' })) return;
+    // Rótulo "Periodo" en reposo ("Sin periodo"); una vez elegido un periodo, el botón muestra su
+    // nombre (p. ej. "Mes actual"). En estos tests siempre se abre en reposo, antes de elegir.
+    await userEvent.click(screen.getByRole('button', { name: 'Periodo' }));
+  }
+  /** Abre "+ Filtro" y marca cada casilla pedida; el popover se deja abierto (sus campos reales
+   *  se despliegan justo debajo de cada checkbox marcado, dentro del propio popover). */
   async function agregarFiltrosEspecificos(...nombres: string[]) {
-    await userEvent.click(screen.getByRole('button', { name: '+ Agregar filtro específico' }));
+    await abrirPopoverFiltro();
     for (const nombre of nombres) {
       await userEvent.click(screen.getByRole('checkbox', { name: nombre }));
     }
@@ -908,13 +924,16 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     await userEvent.type(screen.getByLabelText('Filtrar por gestor'), 'Ana');
     await userEvent.selectOptions(screen.getByLabelText('Filtrar por firma de compraventa'), 'true');
 
-    // Rango propio sobre "Fecha de creación" (opción por defecto de "Rango sobre").
+    // Rango propio sobre "Fecha de creación" (opción por defecto de "Rango sobre") — vive en el
+    // popover "Periodo", un disparador distinto: abrirlo cierra "+ Filtro" (clic fuera), pero el
+    // borrador de los campos ya escritos sigue vivo (todo el estado vive en TramitesTable, no en
+    // el popover).
+    await abrirPopoverPeriodo();
     await userEvent.selectOptions(screen.getByLabelText('Periodo'), 'Rango propio');
-    await userEvent.click(screen.getByRole('button', { name: 'Elegir rango de fechas propio' }));
     await userEvent.type(screen.getByLabelText('Fecha inicial del rango propio'), '2026-01-01');
     await userEvent.type(screen.getByLabelText('Fecha final del rango propio'), '2026-01-31');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
 
     await vi.waitFor(() => {
       expect(mocks.listInstances).toHaveBeenLastCalledWith(
@@ -938,12 +957,12 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     render(<TramitesTable />);
     await screen.findByText('P0001');
 
+    await abrirPopoverPeriodo();
     await userEvent.selectOptions(screen.getByLabelText('Rango sobre'), 'Última actualización');
     await userEvent.selectOptions(screen.getByLabelText('Periodo'), 'Rango propio');
-    await userEvent.click(screen.getByRole('button', { name: 'Elegir rango de fechas propio' }));
     await userEvent.type(screen.getByLabelText('Fecha inicial del rango propio'), '2026-02-01');
     await userEvent.type(screen.getByLabelText('Fecha final del rango propio'), '2026-02-28');
-    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
 
     await vi.waitFor(() => {
       expect(mocks.listInstances).toHaveBeenLastCalledWith(
@@ -960,13 +979,14 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     render(<TramitesTable />);
     await screen.findByText('P0001');
 
+    await abrirPopoverFiltro();
     expect(screen.queryByLabelText('Filtrar por placa')).toBeNull();
     expect(screen.getByRole('button', { name: 'Empezar de cero' })).toBeDisabled();
 
-    await agregarFiltrosEspecificos('Placa');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Placa' }));
     expect(screen.getByLabelText('Filtrar por placa')).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Filtrar por placa'), 'XYZ');
-    await userEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Aplicar' }));
 
     await vi.waitFor(() => {
       expect(mocks.listInstances).toHaveBeenLastCalledWith(
@@ -974,6 +994,9 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
       );
     });
 
+    // "Aplicar" cerró el popover: se reabre (ahora con rótulo "+ Filtro (1)") para llegar a
+    // "Empezar de cero".
+    await abrirPopoverFiltro();
     await userEvent.click(screen.getByRole('button', { name: 'Empezar de cero' }));
     await vi.waitFor(() => {
       expect(mocks.listInstances).toHaveBeenLastCalledWith(undefined);

@@ -24,6 +24,7 @@ import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
 import {
   TramitesFiltrosBar,
+  TramitesFiltrosChips,
   rangoDePeriodo,
   type FiltroEspecificoKey,
   type RangoSobre,
@@ -783,6 +784,20 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     setPage(1);
   };
 
+  // Quita el chip de periodo: limpia borrador (periodo + rango propio) Y lo ya aplicado al
+  // backend (createdFrom/To o updatedFrom/To, según a qué apuntaba) — mismo criterio que
+  // `handleToggleFiltroEspecifico` para los filtros específicos.
+  const handleQuitarPeriodo = () => {
+    setPeriodo('Sin periodo');
+    setRangoPropioDesde('');
+    setRangoPropioHasta('');
+    setAppliedCreatedFrom('');
+    setAppliedCreatedTo('');
+    setAppliedUpdatedFrom('');
+    setAppliedUpdatedTo('');
+    setPage(1);
+  };
+
   return (
     // Sin tarjeta blanca envolvente: en el diseño la pantalla es una pila de bloques sobre el
     // fondo azul claro (título en tarjeta, KPIs en tarjeta, tabs desnudos, filas como tarjetas).
@@ -839,8 +854,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           </button>
         </div>
 
-        {/* Tabs de modalidad + estrella de prioritarios + actualizar: sale la compañía/Filtros/
-            Limpiar/Columnas, que ahora viven en la tarjeta siempre visible de abajo. */}
+        {/* Tabs de modalidad + fila de acciones compactas (búsqueda, Periodo, + Filtro, Columnas)
+            + estrella de prioritarios + actualizar. Reemplaza a la tarjeta blanca de filtros
+            SIEMPRE visible (~185px de alto, casi muda en reposo): la tabla queda como foco. */}
         <TramitesListToolbar
           modalidad={modalidad}
           onModalidadChange={handleModalidadChange}
@@ -849,50 +865,62 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           hasActiveFilters={hasActiveFilters}
           soloPrioritarios={soloPrioritarios}
           onPrioritariosChange={handlePrioritariosChange}
-        />
-
-        {/* Tarjeta de filtros SIEMPRE visible (composición de Reportes.tsx, valores FLIT): rango
-            de fechas por periodo, filtros específicos añadidos a demanda, búsqueda rápida,
-            aplicar/empezar de cero y, en la fila inferior, columnas + chips activos. */}
-        <TramitesFiltrosBar
-          rangoSobre={rangoSobre}
-          onRangoSobreChange={setRangoSobre}
-          periodo={periodo}
-          onPeriodoChange={setPeriodo}
-          rangoPropioDesde={rangoPropioDesde}
-          rangoPropioHasta={rangoPropioHasta}
-          onRangoPropioDesdeChange={setRangoPropioDesde}
-          onRangoPropioHastaChange={setRangoPropioHasta}
-          filtrosEspecificos={filtrosEspecificos}
-          onToggleFiltroEspecifico={handleToggleFiltroEspecifico}
-          placa={placaFilter}
-          onPlacaChange={setPlacaFilter}
-          vendedor={vendedorFilter}
-          onVendedorChange={setVendedorFilter}
-          comprador={compradorFilter}
-          onCompradorChange={setCompradorFilter}
-          gestor={gestorFilter}
-          onGestorChange={setGestorFilter}
-          firmado={firmadoFilter}
-          onFirmadoChange={setFirmadoFilter}
-          search={search}
-          onSearchChange={handleSearchChange}
-          onAplicar={applyServerFilters}
-          onEmpezarDeCero={clearFilters}
-          empezarDeCeroDisabled={!hasActiveFilters && !hasDraftFilters}
-          columnSelector={
-            <ColumnSelector
-              columns={TRAMITES_COLUMNS}
-              visible={visibleColumns}
-              onChange={setVisibleColumns}
-              label="Columnas"
-              disabled={savingColumns}
+          actions={
+            <TramitesFiltrosBar
+              rangoSobre={rangoSobre}
+              onRangoSobreChange={setRangoSobre}
+              periodo={periodo}
+              onPeriodoChange={setPeriodo}
+              rangoPropioDesde={rangoPropioDesde}
+              rangoPropioHasta={rangoPropioHasta}
+              onRangoPropioDesdeChange={setRangoPropioDesde}
+              onRangoPropioHastaChange={setRangoPropioHasta}
+              filtrosEspecificos={filtrosEspecificos}
+              onToggleFiltroEspecifico={handleToggleFiltroEspecifico}
+              placa={placaFilter}
+              onPlacaChange={setPlacaFilter}
+              vendedor={vendedorFilter}
+              onVendedorChange={setVendedorFilter}
+              comprador={compradorFilter}
+              onCompradorChange={setCompradorFilter}
+              gestor={gestorFilter}
+              onGestorChange={setGestorFilter}
+              firmado={firmadoFilter}
+              onFirmadoChange={setFirmadoFilter}
+              search={search}
+              onSearchChange={handleSearchChange}
+              onAplicar={applyServerFilters}
+              onEmpezarDeCero={clearFilters}
+              empezarDeCeroDisabled={!hasActiveFilters && !hasDraftFilters}
+              columnSelector={
+                <ColumnSelector
+                  columns={TRAMITES_COLUMNS}
+                  visible={visibleColumns}
+                  onChange={setVisibleColumns}
+                  label="Columnas"
+                  disabled={savingColumns}
+                />
+              }
+              isAdmin={isAdmin}
+              companias={companias}
+              compania={compania}
+              onCompaniaChange={handleCompaniaChange}
             />
           }
-          isAdmin={isAdmin}
-          companias={companias}
-          compania={compania}
-          onCompaniaChange={handleCompaniaChange}
+        />
+
+        {/* Tira de chips: SOLO existe si hay periodo o algún filtro específico activo — sin
+            tarjeta ni borde, `mt-2`. */}
+        <TramitesFiltrosChips
+          periodo={periodo}
+          filtrosEspecificos={filtrosEspecificos}
+          onToggleFiltroEspecifico={handleToggleFiltroEspecifico}
+          onQuitarPeriodo={handleQuitarPeriodo}
+          appliedPlaca={appliedPlaca}
+          appliedVendedor={appliedVendedor}
+          appliedComprador={appliedComprador}
+          appliedGestor={appliedGestor}
+          appliedFirmado={appliedFirmado}
         />
 
         {/* ICT (paridad v1 pause-unpause-massive) — barra de acción cuando hay trámites ICT seleccionados. */}
@@ -1266,21 +1294,12 @@ function TableBody({
   const colWidths = buildTramitesColWidths(visibleColumns, {
     includeSelectColumn: gridLayout.includeSelectColumn,
   });
-  const tramiteWord = filtered.length === 1 ? 'trámite' : 'trámites';
 
   return (
     // Scroll normal de página: la tabla crece con su contenido y solo scrollea en horizontal
-    // cuando las columnas visibles no caben a lo ancho.
+    // cuando las columnas visibles no caben a lo ancho. La píldora de conteo que iba aquí se
+    // fundió con "Mostrando X de Y" de `Pagination` — un solo lugar para el recuento.
     <div className="flex flex-col">
-      {/* Píldora de conteo (paridad con Reportes.tsx): visible y con role=status para que se
-          anuncie sola sin duplicar el recuento del párrafo sr-only del toolbar de arriba. */}
-      <p
-        role="status"
-        aria-live="polite"
-        className="mb-2 w-fit rounded-full bg-[#EEF5FF] px-3 py-1.5 text-xs font-medium text-[#3B4FD6]"
-      >
-        {filtered.length} {tramiteWord}
-      </p>
       <div className="overflow-x-auto">
         <table
           aria-label="Trámites en curso"
@@ -1380,8 +1399,11 @@ function TableBody({
 }
 
 /**
- * Control de paginación client-side. Se oculta cuando todo cabe en una sola
- * página (totalPages <= 1). Estilo FLIT: borde #DFE5ED, acento #557EFF.
+ * Control de paginación client-side. La línea de conteo ("Mostrando X de Y") ahora es la ÚNICA
+ * pieza que dice cuántos trámites hay — la píldora suelta que iba sobre la tabla desapareció, así
+ * que este párrafo se pinta SIEMPRE, incluso con `totalPages <= 1`; solo los botones de página se
+ * ocultan en ese caso (no tiene sentido paginar una sola página). Estilo FLIT: borde #DFE5ED,
+ * acento #557EFF.
  */
 function Pagination({
   page,
@@ -1396,7 +1418,7 @@ function Pagination({
   shown: number;
   onPageChange: (page: number) => void;
 }) {
-  if (totalPages <= 1) return null;
+  const hayVariasPaginas = totalPages > 1;
 
   // Ventana de páginas del diseño: ‹ 1 2 … N ›, con la activa rellena en azul. Se calcula en vez
   // de dibujarse fija para que "…" solo aparezca cuando de verdad hay páginas ocultas.
@@ -1415,55 +1437,57 @@ function Pagination({
       <p className="text-xs opacity-70" role="status" aria-live="polite">
         Mostrando {shown} de {total}
       </p>
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          onClick={() => onPageChange(page - 1)}
-          disabled={page <= 1}
-          className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-40"
-          style={{ color: '#557EFF', background: 'rgba(85,126,255,0.08)' }}
-          aria-label="Página anterior"
-        >
-          ‹
-        </button>
-        {paginas.map((p, i) =>
-          p === 'gap' ? (
-            <span
-              key={`gap-${i}`}
-              className="px-1 text-xs opacity-50"
-              aria-hidden="true"
-            >
-              …
-            </span>
-          ) : (
-            <button
-              key={p}
-              type="button"
-              onClick={() => onPageChange(p)}
-              aria-label={`Página ${p}`}
-              aria-current={p === page ? 'page' : undefined}
-              className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold tabular-nums transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-              style={
-                p === page
-                  ? { background: '#557EFF', color: '#fff' }
-                  : { color: '#557EFF', background: 'rgba(85,126,255,0.08)' }
-              }
-            >
-              {p}
-            </button>
-          ),
-        )}
-        <button
-          type="button"
-          onClick={() => onPageChange(page + 1)}
-          disabled={page >= totalPages}
-          className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-40"
-          style={{ color: '#557EFF', background: 'rgba(85,126,255,0.08)' }}
-          aria-label="Página siguiente"
-        >
-          ›
-        </button>
-      </div>
+      {hayVariasPaginas ? (
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onPageChange(page - 1)}
+            disabled={page <= 1}
+            className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-40"
+            style={{ color: '#557EFF', background: 'rgba(85,126,255,0.08)' }}
+            aria-label="Página anterior"
+          >
+            ‹
+          </button>
+          {paginas.map((p, i) =>
+            p === 'gap' ? (
+              <span
+                key={`gap-${i}`}
+                className="px-1 text-xs opacity-50"
+                aria-hidden="true"
+              >
+                …
+              </span>
+            ) : (
+              <button
+                key={p}
+                type="button"
+                onClick={() => onPageChange(p)}
+                aria-label={`Página ${p}`}
+                aria-current={p === page ? 'page' : undefined}
+                className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold tabular-nums transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                style={
+                  p === page
+                    ? { background: '#557EFF', color: '#fff' }
+                    : { color: '#557EFF', background: 'rgba(85,126,255,0.08)' }
+                }
+              >
+                {p}
+              </button>
+            ),
+          )}
+          <button
+            type="button"
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= totalPages}
+            className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-40"
+            style={{ color: '#557EFF', background: 'rgba(85,126,255,0.08)' }}
+            aria-label="Página siguiente"
+          >
+            ›
+          </button>
+        </div>
+      ) : null}
     </nav>
   );
 }

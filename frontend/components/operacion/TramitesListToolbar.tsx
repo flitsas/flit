@@ -1,14 +1,14 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { RefreshCw, Star } from 'lucide-react';
 import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
 
 /**
- * Barra de tipo de trámite del listado (Track A). Tabs con subrayado por modalidad +
- * acciones de vista (prioritarios / actualizar), en el estilo de la pantalla principal
- * de trámites. El filtro por estado vive en la tira de KPIs (EstadoFunnel); compañía,
- * periodo, filtros específicos, búsqueda y columnas viven en `TramitesFiltrosBar`, la
- * tarjeta siempre visible que va justo debajo de esta fila. Es presentacional.
+ * Barra de tipo de trámite del listado (Track A). Tabs con subrayado por modalidad + slot de
+ * acciones de filtros (búsqueda, Periodo, + Filtro, Columnas) + acciones de vista (prioritarios /
+ * actualizar), en el estilo de la pantalla principal de trámites. El filtro por estado vive en la
+ * tira de KPIs (EstadoFunnel). Es presentacional.
  *
  * Nota: el diseño dibuja además una pestaña "Otros trámites". No se incluye porque hoy
  * `WizardModalidad` solo tiene matrícula inicial y traspaso: una pestaña que no filtra
@@ -24,6 +24,9 @@ interface Props {
   /** HU #10536 — filtro "solo prioritarios". */
   soloPrioritarios: boolean;
   onPrioritariosChange: (v: boolean) => void;
+  /** Slot de acciones compactas (búsqueda, Periodo, + Filtro, Columnas), a la derecha de los tabs
+   *  y antes de la estrella de prioritarios / actualizar — separado de ellas por un divisor. */
+  actions?: ReactNode;
 }
 
 const MODALIDAD_TABS: { value: '' | WizardModalidad; label: string }[] = [
@@ -40,9 +43,10 @@ export function TramitesListToolbar({
   hasActiveFilters,
   soloPrioritarios,
   onPrioritariosChange,
+  actions,
 }: Props) {
-  // El RECUENTO ya no se anuncia aquí: lo dice la píldora visible que hay sobre la tabla, que es
-  // una región `status` por sí misma. Aquí queda solo el estado del filtrado, que no tiene
+  // El RECUENTO ya no se anuncia aquí: lo dice "Mostrando X de Y" de `Pagination`, que es una
+  // región `status` por sí misma. Aquí queda solo el estado del filtrado, que no tiene
   // equivalente visible en esta fila.
   const estadoFiltrado = [
     hasActiveFilters ? 'filtros activos' : null,
@@ -86,7 +90,16 @@ export function TramitesListToolbar({
             );
           })}
         </div>
-        <div className="flex flex-wrap items-center gap-1 pb-1">
+        <div className="flex flex-wrap items-center gap-2 pb-1">
+          {actions ? (
+            <>
+              {actions}
+              <span
+                className="h-5 w-px shrink-0 bg-[#DFE5ED] dark:bg-white/15"
+                aria-hidden="true"
+              />
+            </>
+          ) : null}
           {/* HU #10536 — filtro "solo prioritarios". */}
           <button
             type="button"
