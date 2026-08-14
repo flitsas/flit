@@ -485,6 +485,76 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // Bug #11581 AC1 — un caller autenticado pero SIN rol AdminCompany/SuperAdmin (p.ej.
+    // "Radicador", rol real sembrado por DevelopmentAuthSeeder) no puede crear invitaciones:
+    // antes del fix el grupo solo exigía .RequireAuthorization() sin policy, así que
+    // cualquier usuario autenticado del tenant podía invitar (escalada de privilegios).
+    [Fact]
+    public async Task Invite_AsRadicador_Returns403AndDoesNotCreateInvitation()
+    {
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", MintToken("Radicador", _companyTenantId, Guid.NewGuid()));
+
+        var email = $"radicador-invite-{Guid.NewGuid():N}@flit.local";
+
+        var response = await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email, fullName = "Invitado por Radicador", targetTenantId = _companyTenantId },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        await using var db = CreateDbContext();
+        var created = await db.UserInvitations.AsNoTracking()
+            .AnyAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+        created.Should().BeFalse("un caller sin rol AdminCompany/SuperAdmin no debe poder crear invitaciones");
+    }
+
+    // Bug #11581 AC2 — mismo defecto en /resend: un caller "Radicador" no puede reenviar una
+    // invitación pendiente, aunque sea de su propio tenant.
+    [Fact]
+    public async Task Resend_AsRadicador_Returns403()
+    {
+        var (invitationId, _) = await SeedPendingInvitationAsync(_companyTenantId, lastSentAt: null);
+
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", MintToken("Radicador", _companyTenantId, Guid.NewGuid()));
+
+        var response = await _client.PostAsync(
+            $"/api/v1/security/invitations/{invitationId}/resend", null, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // Bug #11581 AC3 (no regresión) — con AdminCompany, crear invitación sigue funcionando
+    // igual que antes del fix (Resend_AsAdminCompany_OwnTenantInvitation_Returns200 ya cubre
+    // la no-regresión de /resend; aquí se cubre /invitations, que no tenía cobertura explícita
+    // con AdminCompany, solo con SuperAdmin).
+    [Fact]
+    public async Task Invite_AsAdminCompany_OwnTenant_Returns201()
+    {
+        // invited_by es FK a users.id (user_invitations_invited_by_fkey): a diferencia de
+        // /resend (que no inserta una fila nueva), /invitations SÍ necesita un usuario real
+        // — se reutiliza _superAdminUserId (ya sembrado) solo para satisfacer la FK; el claim
+        // "role" del token sigue siendo AdminCompany, que es lo que decide la autorización.
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", MintToken("AdminCompany", _companyTenantId, _superAdminUserId));
+
+        var email = $"admincompany-invite-{Guid.NewGuid():N}@flit.local";
+
+        var response = await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email, fullName = "Invitado por AdminCompany", roleIds = new[] { _companyAdminRoleId } },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        await using var db = CreateDbContext();
+        var invitation = await db.UserInvitations.AsNoTracking()
+            .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
+        invitation.TenantId.Should().Be(_companyTenantId);
+    }
+
     private async Task<(Guid InvitationId, string Email)> SeedPendingInvitationAsync(
         Guid tenantId, DateTimeOffset? lastSentAt, string status = "pending")
     {

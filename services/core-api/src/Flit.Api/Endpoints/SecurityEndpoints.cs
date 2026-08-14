@@ -233,7 +233,8 @@ public static class SecurityEndpoints
                     new ErrorResponse("EMAIL_BELONGS_TO_DELETED_USER", UserEmailConflictMessages.EmailAlreadyInUse),
                     statusCode: StatusCodes.Status409Conflict);
             }
-        }).AddEndpointFilter(new AdminAuditFilter(
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+          .AddEndpointFilter(new AdminAuditFilter(
             AuditVocabulary.Modules.Users, AuditVocabulary.Operations.Invite, "invitation", "INVITATION"));
 
         // HU #10625 — reenviar invitación pendiente: SIEMPRE regenera el token de activación
@@ -294,7 +295,8 @@ public static class SecurityEndpoints
                         retryAfterSeconds),
                     statusCode: StatusCodes.Status429TooManyRequests);
             }
-        }).AddEndpointFilter(new AdminAuditFilter(
+        }).RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+          .AddEndpointFilter(new AdminAuditFilter(
             AuditVocabulary.Modules.Users, AuditVocabulary.Operations.ResendInvite, "invitation",
             "INVITATION", "invitationId"));
 
