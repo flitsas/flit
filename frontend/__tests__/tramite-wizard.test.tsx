@@ -303,6 +303,20 @@ function renderWizard() {
   );
 }
 
+/**
+ * Las confirmaciones del expediente consolidado nacen desmarcadas y bloquean radicar (decisión de
+ * producto: son afirmaciones del gestor, no adorno). Cualquier flujo que radique tiene que marcarlas
+ * primero, igual que lo haría una persona.
+ */
+async function confirmarExpediente(user: ReturnType<typeof userEvent.setup>) {
+  const grupo = await screen.findByRole('group', {
+    name: 'Confirmaciones del expediente consolidado',
+  });
+  for (const casilla of within(grupo).getAllByRole('checkbox')) {
+    if (!(casilla as HTMLInputElement).checked) await user.click(casilla);
+  }
+}
+
 function renderWizardStrict() {
   return render(
     <StrictMode>
@@ -675,7 +689,11 @@ describe('TramiteWizard — Finalizar y blockers', () => {
 
     // Reanuda en el paso de decisión (todo completo → frontera = último paso).
     const radicar = await screen.findByRole('button', { name: /Finalizar y enviar trámite/ });
-    expect(radicar).toBeEnabled();
+    // El expediente informa sus confirmaciones en un efecto, así que el gateo entra un tick
+    // después de que aparezca el botón.
+    await waitFor(() => expect(radicar).toBeDisabled());
+    await confirmarExpediente(user);
+    await waitFor(() => expect(radicar).toBeEnabled());
     await user.click(radicar);
     await screen.findByText('Confirmar radicación');
     await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
@@ -724,6 +742,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     const user = userEvent.setup();
     render(<TramiteWizard existingInstanceId="inst-1" onExit={onExit} />);
 
+    await confirmarExpediente(user);
     await user.click(await screen.findByRole('button', { name: /Finalizar y enviar trámite/ }));
     await screen.findByText('Confirmar radicación');
     await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));

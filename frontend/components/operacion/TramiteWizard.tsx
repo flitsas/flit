@@ -495,6 +495,11 @@ export function TramiteWizard(props: Props) {
   const [paqueteDocsStatus, setPaqueteDocsStatus] = useState<
     'idle' | 'loading' | 'ready' | 'error'
   >('idle');
+  // Confirmaciones del expediente consolidado (propuesta, Step5): nacen desmarcadas y se suman a
+  // «Requisitos pendientes antes del envío». Gatean radicar —el acto que hay que confirmar—, no la
+  // vista del PDF. En la maqueta van premarcadas y no gatean nada; una casilla de consentimiento
+  // premarcada no constituye autorización, así que aquí nacen vacías.
+  const [confirmacionesExpediente, setConfirmacionesExpediente] = useState<string[]>([]);
   // HU #10646 — partes (NIT/jurídicas) cuya identidad quedó cubierta por la firma electrónica del baúl.
   // El backend no expone un flag "cubierto por baúl" por parte en el estado biométrico, así que la señal
   // se captura del outcome `firma_baul` que devuelve ensureIdentity al guardar la parte, y desde aquí se
@@ -1345,13 +1350,14 @@ export function TramiteWizard(props: Props) {
                 onTipoServicioGateChange={setTipoServicioGateOk}
                 paqueteDocsStatus={paqueteDocsStatus}
                 onPaqueteStatusChange={setPaqueteDocsStatus}
+                onConfirmacionesExpedienteChange={setConfirmacionesExpediente}
                 onMarkDirty={() => setHasUnsavedChanges(true)}
               />
             </div>
           )}
 
           {/* Bloqueos de envío traducidos (en el paso de decisión). */}
-          {isDecisionStep && blockers.length > 0 && (
+          {isDecisionStep && (blockers.length > 0 || confirmacionesExpediente.length > 0) && (
             <InlineAlert
               tone="error"
               title="Requisitos pendientes antes del envío"
@@ -1360,6 +1366,11 @@ export function TramiteWizard(props: Props) {
               <ul className="space-y-0.5" aria-label="Bloqueos de envío">
                 {blockers.map((b) => (
                   <li key={b}>• {blockerCopy(b)}</li>
+                ))}
+                {/* Las del servidor llegan como código y se traducen; estas ya son texto legible
+                    porque las redacta el propio expediente. */}
+                {confirmacionesExpediente.map((c) => (
+                  <li key={c}>• {c}</li>
                 ))}
               </ul>
             </InlineAlert>
@@ -1380,7 +1391,11 @@ export function TramiteWizard(props: Props) {
                 <button
                   type="button"
                   onClick={() => setConfirmRadicar(true)}
-                  disabled={submitting || (!fullReadOnly && !canRadicar && draftFinalized)}
+                  disabled={
+                    submitting ||
+                    (!fullReadOnly && !canRadicar && draftFinalized) ||
+                    confirmacionesExpediente.length > 0
+                  }
                   className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
                   style={{ background: WIZARD_CTA_GRADIENT_DONE }}
                   title={
@@ -3243,6 +3258,7 @@ function StepBody({
   onTipoServicioGateChange,
   paqueteDocsStatus = 'idle',
   onPaqueteStatusChange,
+  onConfirmacionesExpedienteChange,
   onMarkDirty,
 }: {
   step: WizardStep;
@@ -3294,6 +3310,8 @@ function StepBody({
   /** Feature #11066 — estado de pre-generación del paquete al entrar al paso FUR. */
   paqueteDocsStatus?: 'idle' | 'loading' | 'ready' | 'error';
   onPaqueteStatusChange?: (status: 'idle' | 'loading' | 'ready' | 'error') => void;
+  /** Confirmaciones del expediente consolidado que siguen sin marcar (texto legible). */
+  onConfirmacionesExpedienteChange?: (pendientes: string[]) => void;
   /** Feature #11066 — marca dirty en el shell (p.ej. checklist de docs editado). */
   onMarkDirty?: () => void;
 }) {
@@ -3524,6 +3542,7 @@ function StepBody({
             onRefresh={onRefresh}
             rnmcEnabled={rnmcEnabled}
             onPaqueteStatusChange={onPaqueteStatusChange}
+            onConfirmacionesExpedienteChange={onConfirmacionesExpedienteChange}
             vaultCoveredPartes={vaultCoveredPartes}
             biometricForceEditable={identityOperable}
           />

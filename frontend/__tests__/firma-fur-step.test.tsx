@@ -69,6 +69,14 @@ import { FirmaFurStep } from '@/components/operacion/FirmaFurStep';
 
 const INSTANCE = 'inst-1';
 
+/** Las tres casillas base de «Expediente consolidado» (punto 6, rediseño Step5). Los tests de este
+ * archivo no declaran transformaciones, así que no hay cuarta casilla. */
+const CONFIRMACIONES_BASE = (organismo = 'Secretaría Distrital de Movilidad de Bogotá') => [
+  'Confirmo que los datos del vehículo coinciden con la factura de venta.',
+  'Confirmo que el comprador autorizó el tratamiento de sus datos personales.',
+  `Confirmo la radicación ante ${organismo}.`,
+];
+
 const FIRMA_ENVIADA: Signature = {
   id: 'sig-1',
   parte: 'comprador',
@@ -241,14 +249,14 @@ beforeEach(() => {
 describe('FirmaFurStep — firma solo en traspaso', () => {
   it('matrícula NO muestra la sección de firma', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(screen.queryByRole('region', { name: 'Firma de la compraventa' })).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: /Firma compraventa/i })).not.toBeInTheDocument();
   });
 
   it('traspaso tampoco muestra firma de compraventa en el resumen', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(screen.queryByRole('group', { name: 'Firma compraventa Comprador' })).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Firma compraventa Vendedor' })).not.toBeInTheDocument();
   });
@@ -258,7 +266,7 @@ describe('FirmaFurStep — solicitar y simular firma', () => {
   // La UI de firma de compraventa se retiró del resumen (ambos actores).
   it('no muestra tarjeta de firma de compraventa en el resumen', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(screen.queryByRole('group', { name: /Firma compraventa/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Solicitar firma' })).toBeNull();
     expect(mocks.solicitarFirma).not.toHaveBeenCalled();
@@ -267,7 +275,7 @@ describe('FirmaFurStep — solicitar y simular firma', () => {
   it('no ofrece simular firma de compraventa desde el resumen', async () => {
     mocks.listFirmas.mockResolvedValue([FIRMA_ENVIADA]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(screen.queryByRole('button', { name: 'Simular firma (DEV)' })).toBeNull();
     expect(mocks.simularFirma).not.toHaveBeenCalled();
   });
@@ -276,7 +284,7 @@ describe('FirmaFurStep — solicitar y simular firma', () => {
 describe('FirmaFurStep — participantes portal ocultos (Feature #11211)', () => {
   it('no renderiza Participantes del portal en el camino feliz', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(
       screen.queryByRole('region', { name: 'Participantes del portal' }),
     ).not.toBeInTheDocument();
@@ -290,7 +298,7 @@ describe('FirmaFurStep — impronta (Feature #11066)', () => {
   it('sin impronta: no muestra sección dedicada ni botón Generar Improntas', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(screen.queryByRole('region', { name: 'Impronta de motor y chasis' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Generar Improntas/i })).not.toBeInTheDocument();
   });
@@ -313,13 +321,57 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     expect(screen.queryByRole('button', { name: /Generar FUR/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Re-generar FUR/i })).not.toBeInTheDocument();
     expect(
-      await screen.findByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }),
+      await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' }),
     ).toBeInTheDocument();
 
     await waitFor(() => {
       expect(mocks.generarFur).toHaveBeenCalledWith(INSTANCE);
       expect(mocks.generarImpronta).toHaveBeenCalledWith(INSTANCE);
     });
+  });
+
+  // Punto 6 del rediseño (captura Step5) — las casillas nacen desmarcadas, pero NO gatean el botón:
+  // ver el PDF no es un acto que haya que confirmar. Lo que sí deben condicionar es radicar, y ese
+  // gateo vive en el wizard (`Requisitos pendientes antes del envío`), fuera de este paso.
+  it('las casillas de confirmación nacen desmarcadas y NO bloquean «Ver expediente consolidado»', async () => {
+    mocks.getAttachments.mockResolvedValue([]);
+    const user = userEvent.setup();
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+
+    const boton = await screen.findByRole('button', {
+      name: 'Ver expediente consolidado (PDF)',
+    });
+    expect(boton).toBeEnabled();
+
+    for (const texto of CONFIRMACIONES_BASE()) {
+      expect(screen.getByLabelText(texto)).not.toBeChecked();
+    }
+
+    await user.click(boton);
+    await waitFor(() => expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE, undefined, true));
+  });
+
+  // Contrato de `onConfirmacionesExpedienteChange`: reporta las confirmaciones SIN marcar, para que
+  // el wizard (dueño de `TramiteWizard.tsx`) las sume a sus requisitos pendientes.
+  it('reporta las confirmaciones pendientes y las retira al marcarlas', async () => {
+    mocks.getAttachments.mockResolvedValue([]);
+    const user = userEvent.setup();
+    const reportes: string[][] = [];
+    render(
+      <FirmaFurStep
+        instanceId={INSTANCE}
+        modalidad="traspaso"
+        onConfirmacionesExpedienteChange={(pendientes) => reportes.push(pendientes)}
+      />,
+    );
+
+    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
+    await waitFor(() => expect(reportes.at(-1)).toEqual(CONFIRMACIONES_BASE()));
+
+    for (const texto of CONFIRMACIONES_BASE()) {
+      await user.click(screen.getByLabelText(texto));
+    }
+    await waitFor(() => expect(reportes.at(-1)).toEqual([]));
   });
 
   it('lista el FUR en Documentos del expediente y no vuelve a generarFur', async () => {
@@ -335,7 +387,7 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
   it('muestra Fecha del trámite al inicio del resumen como hoy y no editable', async () => {
     mocks.getAttachments.mockResolvedValue([]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    const resumen = await screen.findByRole('region', { name: 'Resumen del trámite' });
+    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
     const fecha = within(resumen).getByLabelText('Fecha del trámite', {
       selector: 'input',
     }) as HTMLInputElement;
@@ -366,9 +418,9 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     mocks.getAttachments.mockResolvedValue([]);
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' });
+    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
 
-    await user.click(screen.getByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }));
+    await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
 
     await waitFor(() => expect(mocks.patchFieldValues).toHaveBeenCalled());
     await waitFor(() =>
@@ -386,9 +438,9 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     );
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' });
+    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
 
-    await user.click(screen.getByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }));
+    await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
 
     expect(
       await screen.findByText(/su documentación es definitiva y no se regenera/i),
@@ -409,9 +461,9 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     });
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' });
+    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
 
-    await user.click(screen.getByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }));
+    await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
 
     const aviso = await screen.findByRole('alert');
     expect(aviso).toHaveTextContent(/Expediente consolidado generado/i);
@@ -547,7 +599,7 @@ describe('FirmaFurStep — descarga de documentos', () => {
 describe('FirmaFurStep — sin envío duplicado en el paso', () => {
   it('NO renderiza la sección de envío a tránsito (el submit vive en Finalizar)', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(screen.queryByRole('region', { name: 'Envío a tránsito' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Enviar a tránsito' })).not.toBeInTheDocument();
     expect(mocks.submitInstance).not.toHaveBeenCalled();
@@ -557,15 +609,15 @@ describe('FirmaFurStep — sin envío duplicado en el paso', () => {
 describe('FirmaFurStep — resumen / expediente', () => {
   it('muestra el resumen del trámite con el estado de la instancia', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    const resumen = await screen.findByRole('region', { name: 'Resumen del trámite' });
+    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
     // N 03 — label desde la fuente única lib/tramites/estados.ts.
     expect(within(resumen).getByText('Borrador')).toBeInTheDocument();
   });
 
-  it('en traspaso y matrícula el resumen se rotula "Resumen del trámite"', async () => {
+  it('en traspaso y matrícula el resumen se rotula "Consolidado del trámite"', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
     expect(
-      await screen.findByRole('region', { name: 'Resumen del trámite' }),
+      await screen.findByRole('region', { name: 'Consolidado del trámite' }),
     ).toBeInTheDocument();
   });
 
@@ -578,7 +630,7 @@ describe('FirmaFurStep — resumen / expediente', () => {
       ],
     });
     const { unmount } = render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    const resumenTraspaso = await screen.findByRole('region', { name: 'Resumen del trámite' });
+    const resumenTraspaso = await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(within(resumenTraspaso).getByText(/Ana Vendedora/)).toBeInTheDocument();
     unmount();
 
@@ -589,7 +641,7 @@ describe('FirmaFurStep — resumen / expediente', () => {
       ],
     });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    const resumenMat = await screen.findByRole('region', { name: 'Resumen del trámite' });
+    const resumenMat = await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(within(resumenMat).queryByText(/Ana Vendedora/)).toBeNull();
     expect(within(resumenMat).getByText(/Beto Comprador/)).toBeInTheDocument();
   });
@@ -616,8 +668,12 @@ describe('FirmaFurStep — resumen / expediente', () => {
       createdAt: '2026-06-19T00:00:00Z',
     });
 
+    const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    const resumen = await screen.findByRole('region', { name: 'Resumen del trámite' });
+    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    // Transformaciones/Prenda son desplegables CERRADOS por defecto (rediseño): hay que abrirlos.
+    await user.click(within(resumen).getByRole('button', { name: 'Transformaciones' }));
+    await user.click(within(resumen).getByRole('button', { name: 'Prenda / gravamen' }));
     const transformaciones = within(resumen).getByLabelText('Transformaciones declaradas');
     expect(within(transformaciones).getByText('Color')).toBeInTheDocument();
     expect(within(transformaciones).getByText('NEGRO')).toBeInTheDocument();
@@ -633,18 +689,20 @@ describe('FirmaFurStep — resumen / expediente', () => {
 
   it('sin transformaciones ni prenda el resumen no muestra esos bloques', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    const resumen = await screen.findByRole('region', { name: 'Resumen del trámite' });
+    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(within(resumen).queryByLabelText('Transformaciones declaradas')).toBeNull();
     expect(within(resumen).queryByLabelText('Prenda o gravamen')).toBeNull();
   });
 
   it('el expediente digital muestra documentos; el resumen tiene vehículo', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    const resumen = await screen.findByRole('region', { name: 'Resumen del trámite' });
+    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
     const visor = await screen.findByRole('region', { name: 'Expediente digital' });
     // Vehículo ya no es un acordeón (rediseño: tarjeta siempre abierta).
     expect(within(resumen).getByRole('region', { name: 'Vehículo' })).toBeInTheDocument();
-    expect(within(visor).getByRole('button', { name: 'Documentos' })).toBeInTheDocument();
+    // «Documentos cargados» tampoco es un acordeón (rediseño): tarjeta siempre abierta, sin botón.
+    expect(within(visor).getByRole('region', { name: 'Documentos cargados' })).toBeInTheDocument();
+    expect(within(visor).queryByRole('button', { name: 'Documentos' })).toBeNull();
     expect(within(visor).getByText('No se han cargado documentos.')).toBeInTheDocument();
     expect(within(visor).queryByRole('button', { name: 'Vehículo' })).toBeNull();
     expect(within(visor).queryByRole('button', { name: 'Validación de identidad' })).toBeNull();
@@ -660,7 +718,7 @@ describe('FirmaFurStep — resumen / expediente', () => {
       ],
     });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    const resumen = await screen.findByRole('region', { name: 'Resumen del trámite' });
+    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
     const visor = await screen.findByRole('region', { name: 'Expediente digital' });
 
     // Vendedor/Comprador ya no son acordeones (rediseño: tarjetas siempre abiertas en dos columnas).
@@ -693,7 +751,7 @@ describe('FirmaFurStep — OT fijado desde RUNT en traspaso (B11, HU #10659)', (
     mocks.getInstance.mockResolvedValue(TRASPASO_OT_BOUND);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
-    expect(await screen.findByLabelText('Resumen del trámite')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Consolidado del trámite')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Organismo de tránsito' })).not.toBeInTheDocument();
     expect(screen.queryByText(/no puede modificarse en un traspaso/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Cambiar|Seleccionar/ })).not.toBeInTheDocument();
@@ -710,7 +768,7 @@ describe('FirmaFurStep — OT fijado desde RUNT en traspaso (B11, HU #10659)', (
     });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
-    expect(await screen.findByLabelText('Resumen del trámite')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Consolidado del trámite')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Organismo de tránsito' })).not.toBeInTheDocument();
     expect(screen.queryByText(/no está habilitado para tu empresa/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Cambiar|Seleccionar/ })).not.toBeInTheDocument();
@@ -718,7 +776,7 @@ describe('FirmaFurStep — OT fijado desde RUNT en traspaso (B11, HU #10659)', (
 
   it('matrícula: el resumen tampoco muestra la sección de organismo', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    expect(await screen.findByLabelText('Resumen del trámite')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Consolidado del trámite')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Organismo de tránsito' })).not.toBeInTheDocument();
     expect(screen.queryByText(/no puede modificarse en un traspaso/)).not.toBeInTheDocument();
   });
@@ -742,7 +800,7 @@ describe('FirmaFurStep — la secretaría elegida en el paso 1 (HU #11199, AC4)'
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
     // Esperar a que el paso cargue (resumen / expediente).
-    expect(await screen.findByLabelText('Resumen del trámite')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Consolidado del trámite')).toBeInTheDocument();
     expect(screen.queryByText(/Lo elegiste al comenzar el trámite/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Cambiar|Seleccionar/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: 'Seleccionar organismo de tránsito' })).not.toBeInTheDocument();
@@ -783,7 +841,7 @@ describe('FirmaFurStep — firma no bloqueante en traspaso (B12, HU #10661)', ()
   it('traspaso: no solicita firma de compraventa desde el resumen', async () => {
     mocks.listFirmas.mockResolvedValue([FIRMA_ENVIADA]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(screen.queryByRole('button', { name: 'Solicitar firma' })).toBeNull();
     expect(screen.queryByLabelText('Enlace de firma Comprador')).toBeNull();
   });

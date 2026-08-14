@@ -102,6 +102,13 @@ interface Props {
   prioritario?: boolean;
   /** Ausente cuando el trámite todavía no existe (sin `instanceId`, nada que marcar). */
   onPrioritarioChange?: (value: boolean) => void;
+  /**
+   * «Organismo de tránsito y preasignación de placa», ya montado por `FirmaFurStep` (es quien tiene
+   * los datos: `OrganismoInfoCard` + `PlacaPreasignadaSection`). Este componente no mueve esos datos
+   * de sitio — solo los coloca como segunda celda de la fila `grid lg:grid-cols-2` donde vive «Estado
+   * de validación de identidad» (captura Step5: las dos tarjetas comparten fila).
+   */
+  organismoSlot?: ReactNode;
 }
 
 const BORDER = '#DFE5ED';
@@ -414,7 +421,8 @@ function ActorBlock({
 }) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* Datos del actor: `grid-cols-2 sm:grid-cols-3` (captura Step5, traducido a los tokens FLIT). */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Field label="Nombre" value={actor.nombre} />
         <Field
           label={actor.tipoDoc === 'NIT' ? 'NIT' : 'Cédula'}
@@ -507,20 +515,23 @@ function CapturaLinkCopy({ link, label }: { link: string; label: string }) {
 }
 
 /**
- * Tabla de tracking de identidad de UN actor (propuesta, `WizardTramite` `TrackingTable`): el nombre
- * encima y el puntaje al lado — en `StatusBadge tone="success"`, tintado, nunca la píldora sólida
- * `#8CC63F`/texto blanco de la propuesta (2.05:1, prohibida). Cuando la validación sigue pendiente y
- * el proveedor mandó `captureUrl`, el enlace de captura vive en el mismo recuadro.
+ * Bloque de identidad de UN actor dentro de «Estado de validación de identidad» (propuesta, Step5:
+ * `Badge text={validado ? "Verificada" : "Pendiente"}`) — escalado a dos actores (comprador y, en
+ * traspaso, vendedor) como bloques hermanos dentro de la MISMA tarjeta, no como filas propias de la
+ * rejilla. Cuando la validación sigue pendiente y el proveedor mandó `captureUrl`, el enlace de
+ * captura vive en el mismo bloque, en monoespaciada, con su botón «Copiar enlace».
+ *
+ * La bitácora técnica por evento (antes su propia tarjeta «Tracking de validación de identidad», con
+ * la tabla siempre abierta) se conserva pero se pliega: un desplegable cerrado por defecto, no una
+ * fila propia — así la segunda fila de la rejilla del paso queda como en la captura.
  */
-function IdentityTrackingCard({ nombre, bio }: { nombre: string; bio: BiometricValidation }) {
+function IdentityStatusBlock({ nombre, bio }: { nombre: string; bio: BiometricValidation }) {
   const pendiente = bio.status !== 'aprobado';
   return (
     <div className="min-w-0 rounded-xl border p-3" style={{ borderColor: BORDER }}>
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="truncate text-xs font-bold">{nombre}</p>
-        {bio.score != null ? (
-          <StatusBadge label={`Puntaje ${bio.score}/100`} tone="success" />
-        ) : null}
+        <StatusBadge label={pendiente ? 'Pendiente' : 'Verificada'} tone={pendiente ? 'warning' : 'success'} />
       </div>
       {pendiente && bio.captureUrl ? (
         <div className="mb-3">
@@ -530,7 +541,9 @@ function IdentityTrackingCard({ nombre, bio }: { nombre: string; bio: BiometricV
           <CapturaLinkCopy link={bio.captureUrl} label={`Enlace de captura de ${nombre}`} />
         </div>
       ) : null}
-      <IdentityValidationTrackingPanel validationId={bio.id} embebido />
+      <WizardAccordion title="Ver trazabilidad de validación" level="h4" defaultOpen={false}>
+        <IdentityValidationTrackingPanel validationId={bio.id} embebido />
+      </WizardAccordion>
     </div>
   );
 }
@@ -558,6 +571,7 @@ export default function MatriculaResumen({
   observacionesFur = null,
   prioritario,
   onPrioritarioChange,
+  organismoSlot,
 }: Props) {
   const tone = estadoChipStyle(status).color;
   const soatEstado = (soat?.estado ?? '').toLowerCase();
@@ -577,7 +591,10 @@ export default function MatriculaResumen({
       : soatEstado === 'vencido'
         ? 'var(--badge-danger-fg)'
         : undefined;
-  const resumenTitulo = 'Resumen del trámite';
+  // HU rediseño (captura Step5) — el rótulo pasa a «Consolidado del trámite». El nombre del PASO en
+  // la navegación del asistente (Stepper) sigue siendo «Resumen»: es un dato distinto (wizard-copy.ts
+  // / TramitesTable.tsx), fuera del alcance de este componente.
+  const resumenTitulo = 'Consolidado del trámite';
   const partesTxt = [vendedor?.nombre, comprador?.nombre].filter(Boolean).join(' · ');
   const hasExtras = transformaciones.length > 0 || !!prenda;
   const showFecha = typeof fechaTramite === 'string' && fechaTramite.length > 0;
@@ -738,46 +755,49 @@ export default function MatriculaResumen({
         </div>
       ) : null}
 
-      <ResumenCard title="Vehículo">
-        {placa ? (
-          <div className="mb-3 flex flex-wrap items-center gap-3">
-            <span className="font-mono text-2xl font-bold tracking-widest" style={{ color: tone }}>
-              {placa}
-            </span>
-            <span
-              className="text-xs opacity-70"
-              style={soatColor ? { color: soatColor, opacity: 1 } : undefined}
-            >
-              {soatLine}
-            </span>
-          </div>
-        ) : null}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {vehiculo ? <Field label="Modelo / clase" value={vehiculo} /> : null}
-          {vin ? <Field label="VIN" value={vin} /> : null}
-        </div>
-        {specs.length > 0 ? (
-          <div className="mt-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
-              Especificaciones técnicas
-            </p>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {specs.map((s) => (
-                <Field key={s.label} label={s.label} value={s.value} />
-              ))}
-            </div>
-          </div>
-        ) : null}
-        {!placa && !vehiculo && !vin && specs.length === 0 ? (
-          <p className="text-xs opacity-70">Sin datos de vehículo.</p>
-        ) : null}
-      </ResumenCard>
-
-      {/* Vendedor/Comprador en `grid lg:grid-cols-2` (propuesta, Step5): las dos partes se repasan
-          juntas antes de radicar. Con una sola parte (matrícula inicial) Comprador ocupa las dos
-          columnas — media tarjeta y un hueco en blanco al lado no era el patrón, era un accidente
-          de la grilla. */}
+      {/* Vehículo + Vendedor + Comprador en la MISMA `grid lg:grid-cols-2` (captura Step5), en ese
+          orden. Antes Vehículo iba a ancho completo y Vendedor/Comprador vivían en una segunda
+          rejilla aparte — no era la composición de la captura: en matrícula (sin vendedor) Vehículo
+          ocupa la primera celda y Comprador la segunda, sin `col-span`; en traspaso Vendedor
+          acompaña a Vehículo en la primera fila y Comprador cae debajo, en el flujo natural de la
+          rejilla — «misma rejilla, mismo orden, mismos sitios» en las dos modalidades. */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <ResumenCard title="Vehículo">
+          {placa ? (
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <span className="font-mono text-2xl font-bold tracking-widest" style={{ color: tone }}>
+                {placa}
+              </span>
+              <span
+                className="text-xs opacity-70"
+                style={soatColor ? { color: soatColor, opacity: 1 } : undefined}
+              >
+                {soatLine}
+              </span>
+            </div>
+          ) : null}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {vehiculo ? <Field label="Modelo / clase" value={vehiculo} /> : null}
+            {vin ? <Field label="VIN" value={vin} /> : null}
+          </div>
+          {specs.length > 0 ? (
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
+                Especificaciones técnicas
+              </p>
+              {/* Especificaciones del vehículo: `grid-cols-2 sm:grid-cols-4` (captura Step5). */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {specs.map((s) => (
+                  <Field key={s.label} label={s.label} value={s.value} />
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {!placa && !vehiculo && !vin && specs.length === 0 ? (
+            <p className="text-xs opacity-70">Sin datos de vehículo.</p>
+          ) : null}
+        </ResumenCard>
+
         {vendedor ? (
           <ResumenCard title="Vendedor">
             <div className="space-y-4">
@@ -797,7 +817,7 @@ export default function MatriculaResumen({
         ) : null}
 
         {comprador || (!vendedor && partesTxt) ? (
-          <ResumenCard title="Comprador" className={vendedor ? '' : 'lg:col-span-2'}>
+          <ResumenCard title="Comprador">
             {comprador ? (
               <div className="space-y-4">
                 <ActorBlock
@@ -822,28 +842,41 @@ export default function MatriculaResumen({
         ) : null}
       </div>
 
-      {/* Tracking de validación de identidad por actor (propuesta, `WizardTramite` Step5: una tabla
-          en matrícula, dos en traspaso — mismo sitio, mismo estilo en las dos modalidades). */}
-      {(modalidad === 'traspaso' && vendedorBio) || compradorBio ? (
-        <ResumenCard title="Tracking de validación de identidad">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {modalidad === 'traspaso' && vendedorBio ? (
-              <IdentityTrackingCard nombre={vendedor?.nombre || vendedorBio.name} bio={vendedorBio} />
-            ) : null}
-            {compradorBio ? (
-              <IdentityTrackingCard nombre={comprador?.nombre || compradorBio.name} bio={compradorBio} />
-            ) : null}
-          </div>
-        </ResumenCard>
+      {/* Estado de validación de identidad | Organismo de tránsito y preasignación de placa (captura
+          Step5): MISMA fila `grid lg:grid-cols-2`. El organismo/placa los sigue montando
+          `FirmaFurStep` (es quien tiene esos datos) y llegan ya armados en `organismoSlot`; este
+          componente solo decide DÓNDE se pintan, no de dónde salen los datos.
+          Identidad: un bloque por actor dentro de la MISMA tarjeta (antes «Tracking de validación de
+          identidad», con una tabla siempre abierta por actor), apilados en vez de en su propia
+          rejilla interna — la tarjeta ahora ocupa media fila, no el ancho completo. */}
+      {((modalidad === 'traspaso' && vendedorBio) || compradorBio || organismoSlot) ? (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {(modalidad === 'traspaso' && vendedorBio) || compradorBio ? (
+            <ResumenCard title="Estado de validación de identidad">
+              <div className="space-y-4">
+                {modalidad === 'traspaso' && vendedorBio ? (
+                  <IdentityStatusBlock nombre={vendedor?.nombre || vendedorBio.name} bio={vendedorBio} />
+                ) : null}
+                {compradorBio ? (
+                  <IdentityStatusBlock nombre={comprador?.nombre || compradorBio.name} bio={compradorBio} />
+                ) : null}
+              </div>
+            </ResumenCard>
+          ) : null}
+          {organismoSlot}
+        </div>
       ) : null}
 
+      {/* Contenido nuestro sin equivalente en la captura: mandatario, transformaciones y prenda.
+          Plegados por defecto (antes Transformaciones/Prenda abrían solos) y DETRÁS de la fila de
+          identidad/organismo, para no colarse entre sus dos celdas — el expediente consolidado
+          (documentos + confirmaciones) vive en `ExpedienteVisor`, un componente distinto que el paso
+          monta a continuación de este. */}
       {instanceId ? (
         <MandatarioSection
           instanceId={instanceId}
           onChanged={onBiometricRefresh}
           asDisclosure
-          // Plegado en el resumen: el sistema resuelve el mandatario solo, así que abierto por
-          // defecto ocupaba sitio pidiendo una decisión que no hace falta tomar.
           defaultOpen={false}
         />
       ) : null}
@@ -851,7 +884,7 @@ export default function MatriculaResumen({
       {hasExtras ? (
         <>
           {transformaciones.length > 0 ? (
-            <ResumenDisclosure title="Transformaciones">
+            <ResumenDisclosure title="Transformaciones" defaultOpen={false}>
               <div
                 className="grid grid-cols-1 gap-3 sm:grid-cols-2"
                 aria-label="Transformaciones declaradas"
@@ -882,7 +915,7 @@ export default function MatriculaResumen({
             </ResumenDisclosure>
           ) : null}
           {prenda ? (
-            <ResumenDisclosure title="Prenda / gravamen">
+            <ResumenDisclosure title="Prenda / gravamen" defaultOpen={false}>
               <div
                 className="grid grid-cols-1 gap-3 sm:grid-cols-2"
                 aria-label="Prenda o gravamen"

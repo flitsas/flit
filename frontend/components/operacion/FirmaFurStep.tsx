@@ -63,6 +63,17 @@ interface Props {
   vaultCoveredPartes?: BiometricParte[];
   /** Borrador finalizado: biométrica editable aunque el wizard esté read-only. */
   biometricForceEditable?: boolean;
+  /**
+   * Rediseño Step5 (punto 6) — «Confirmaciones pendientes» de `ExpedienteVisor` (las casillas del
+   * expediente consolidado, nacidas desmarcadas: datos del vehículo, autorización de datos,
+   * radicación, trámites simultáneos). Se dispara con la lista de textos SIN confirmar cada vez que
+   * cambia — `[]` cuando no falta ninguna o cuando el expediente todavía no aplica (trámite en
+   * estado final o sin `instanceId`). Las casillas NO gatean nada por sí mismas — solo abren el PDF
+   * del consolidado en pestaña, que no exige confirmación—; es el wizard (`TramiteWizard`) quien
+   * debe sumar esta lista a «Requisitos pendientes antes del envío» y usarla para deshabilitar
+   * «Finalizar y enviar trámite», el mismo mecanismo que ya usa para sus otros bloqueos.
+   */
+  onConfirmacionesExpedienteChange?: (pendientes: string[]) => void;
 }
 
 // FEATURE 05 — colores por estado del check RNMC (mismo semáforo del pre-vuelo: ok verde, warn ámbar).
@@ -231,6 +242,7 @@ export function FirmaFurStep({
   onPaqueteStatusChange,
   vaultCoveredPartes = [],
   biometricForceEditable = false,
+  onConfirmacionesExpedienteChange,
 }: Props) {
   // Solo lectura (Track C): sin acciones (organismo, firma, participantes, FUR);
   // se conserva la visualización (resumen, expediente, timeline, descargas).
@@ -557,6 +569,38 @@ export function FirmaFurStep({
     })();
   }, [instanceId, readOnly, organismoSelected, estadoDetalle, loadExpediente]);
 
+  // Transformaciones de vehículo declaradas (`VehicleTransformationsCard`, paso de Requisitos): la
+  // reutiliza «Expediente consolidado» como su cuarta casilla de confirmación dinámica — «trámites
+  // simultáneos» (captura Step5, `subs`) — porque este módulo no tiene su propio concepto de
+  // sub-trámite. Se computa una sola vez para no repetir la lectura de `fieldValues`.
+  const transformacionesDeclaradas = summarizeDeclaredTransformations(detail?.fieldValues ?? []);
+
+  // «Organismo de tránsito y preasignación de placa» (captura Step5) — este módulo sigue siendo
+  // quien tiene los datos (OT resuelto, catálogo de placas), pero ya no se pinta en su propia fila:
+  // viaja como `organismoSlot` para que `MatriculaResumen` lo coloque junto a «Estado de validación
+  // de identidad», en la MISMA `grid lg:grid-cols-2` de la captura. HU #10799 — la preasignación de
+  // placa (Flujo A) sigue exclusiva de matrícula inicial; el organismo se muestra en las dos.
+  const organismoSlot =
+    organismoSelected && instanceId ? (
+      <div className="space-y-3">
+        <OrganismoInfoCard name={organismo.name} />
+        {modalidad === 'matricula_inicial' && organismo.id && (
+          <PlacaPreasignadaSection
+            instanceId={instanceId}
+            organismoId={organismo.id}
+            plateValue={fv('plate')}
+            plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
+            preferredDigitValue={fv('plate_preferred_last_digit')}
+            readOnly={readOnly}
+            onRefresh={() => {
+              void loadDetail();
+              onRefresh?.();
+            }}
+          />
+        )}
+      </div>
+    ) : undefined;
+
   return (
     <div className="space-y-8">
       <MatriculaResumen
@@ -589,7 +633,7 @@ export function FirmaFurStep({
         identidadAprobada={identidadAprobada}
         firmaBaulPartes={firmaBaulPartes}
         soat={{ estado: fv('soat_estado'), vencimiento: fv('soat_vencimiento') }}
-        transformaciones={summarizeDeclaredTransformations(detail?.fieldValues ?? [])}
+        transformaciones={transformacionesDeclaradas}
         prenda={
           prenda
             ? (() => {
@@ -632,44 +676,18 @@ export function FirmaFurStep({
         observacionesFur={fv('fur_observations') || null}
         prioritario={prioritario}
         onPrioritarioChange={instanceId ? handlePrioritarioChange : undefined}
+        organismoSlot={organismoSlot}
       />
-
-      {/* HU #10799 — selección de placa preasignada como SECCIÓN explícita (Flujo A), solo en matrícula
-          inicial y una vez elegido el OT. No aplica si el VIN ya tiene placa del RUNT (AC2).
-          Emparejada con el organismo en `grid lg:grid-cols-2` (propuesta, Step5: «Organismo de
-          tránsito y preasignación de placa»).
-          El organismo YA NO se limita a matrícula: en traspaso el gestor radicaba sin ver ante quién
-          (el OT lo resuelve el RUNT vía auto-bind, HU #10659, pero antes solo se le informaba en
-          matrícula). La preasignación de placa sí se queda exclusiva de matrícula — en traspaso el
-          vehículo ya tiene placa. */}
-      {organismoSelected && instanceId && (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <div className={modalidad === 'matricula_inicial' && organismo.id ? '' : 'lg:col-span-2'}>
-            <OrganismoInfoCard name={organismo.name} />
-          </div>
-          {modalidad === 'matricula_inicial' && organismo.id && (
-            <PlacaPreasignadaSection
-              instanceId={instanceId}
-              organismoId={organismo.id}
-              plateValue={fv('plate')}
-              plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
-              preferredDigitValue={fv('plate_preferred_last_digit')}
-              readOnly={readOnly}
-              onRefresh={() => {
-                void loadDetail();
-                onRefresh?.();
-              }}
-            />
-          )}
-        </div>
-      )}
 
       <ExpedienteVisor
         instanceId={instanceId}
         attachments={attachments}
         modalidad={modalidad}
         status={detail?.status ?? 'borrador'}
+        organismoNombre={organismo.name}
+        tramitesSimultaneos={transformacionesDeclaradas}
         onBeforeGenerateConsolidado={guardarFechaTramite}
+        onConfirmacionesPendientesChange={onConfirmacionesExpedienteChange}
         onAttachmentsChange={() => {
           void loadExpediente();
           onRefresh?.();

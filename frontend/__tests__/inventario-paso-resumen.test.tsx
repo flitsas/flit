@@ -236,7 +236,7 @@ describe('MatriculaResumen — inventario: cabecera y vehículo', () => {
   it('conserva el estado del trámite y la fecha con la que se radica', async () => {
     renderResumen();
 
-    const resumen = screen.getByRole('region', { name: 'Resumen del trámite' });
+    const resumen = screen.getByRole('region', { name: 'Consolidado del trámite' });
     expect(within(resumen).getByText('Borrador')).toBeInTheDocument();
 
     const fecha = within(resumen).getByLabelText('Fecha del trámite') as HTMLInputElement;
@@ -435,8 +435,11 @@ describe('MatriculaResumen — inventario: mandatario, transformaciones y prenda
   });
 
   it('las transformaciones declaradas conservan qué cambió y a qué valor', async () => {
+    const user = userEvent.setup();
     renderResumen({ transformaciones: ['Color: NEGRO', 'Combustible: DIESEL'] });
 
+    // Desplegable cerrado por defecto (rediseño): al final del resumen, hay que abrirlo.
+    await user.click(screen.getByRole('button', { name: 'Transformaciones' }));
     const transformaciones = screen.getByLabelText('Transformaciones declaradas');
     expect(within(transformaciones).getByText('Color')).toBeInTheDocument();
     expect(within(transformaciones).getByText('NEGRO')).toBeInTheDocument();
@@ -445,6 +448,7 @@ describe('MatriculaResumen — inventario: mandatario, transformaciones y prenda
   });
 
   it('la prenda conserva decisión, acreedor y su documento de soporte', async () => {
+    const user = userEvent.setup();
     renderResumen({
       prenda: {
         decisionLabel: 'Registrar prenda',
@@ -455,6 +459,8 @@ describe('MatriculaResumen — inventario: mandatario, transformaciones y prenda
       },
     });
 
+    // Desplegable cerrado por defecto (rediseño): al final del resumen, hay que abrirlo.
+    await user.click(screen.getByRole('button', { name: 'Prenda / gravamen' }));
     const prenda = screen.getByLabelText('Prenda o gravamen');
     expect(within(prenda).getByText('Decisión')).toBeInTheDocument();
     expect(within(prenda).getByText('Registrar prenda')).toBeInTheDocument();
@@ -467,6 +473,7 @@ describe('MatriculaResumen — inventario: mandatario, transformaciones y prenda
   });
 
   it('la prenda sin soporte cargado lo dice en vez de callarlo', async () => {
+    const user = userEvent.setup();
     renderResumen({
       prenda: {
         decisionLabel: 'Registrar prenda',
@@ -477,6 +484,7 @@ describe('MatriculaResumen — inventario: mandatario, transformaciones y prenda
       },
     });
 
+    await user.click(screen.getByRole('button', { name: 'Prenda / gravamen' }));
     const prenda = screen.getByLabelText('Prenda o gravamen');
     expect(within(prenda).getByText('Sin documento cargado')).toBeInTheDocument();
   });
@@ -493,7 +501,7 @@ describe('FirmaFurStep — inventario: expediente y documentos generados', () =>
   it('el paso monta el resumen y el expediente digital', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
-    expect(await screen.findByRole('region', { name: 'Resumen del trámite' })).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Consolidado del trámite' })).toBeInTheDocument();
     expect(await screen.findByRole('region', { name: 'Expediente digital' })).toBeInTheDocument();
   });
 
@@ -518,7 +526,7 @@ describe('FirmaFurStep — inventario: expediente y documentos generados', () =>
     expect(within(expediente).getByText('No se han cargado documentos.')).toBeInTheDocument();
     expect(within(expediente).getByText('Expediente consolidado')).toBeInTheDocument();
     expect(
-      await within(expediente).findByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }),
+      await within(expediente).findByRole('button', { name: 'Ver expediente consolidado (PDF)' }),
     ).toBeInTheDocument();
   });
 
@@ -598,7 +606,7 @@ describe('FirmaFurStep — inventario: placa preasignada (solo matrícula inicia
   it('traspaso no tiene placa preasignada: el vehículo ya la tiene', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
-    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(screen.queryByRole('region', { name: 'Placa preasignada' })).toBeNull();
   });
 });
@@ -662,7 +670,7 @@ describe('FirmaFurStep — inventario: acciones del cierre del trámite', () => 
   it('no duplica ni las observaciones del FUR ni el envío a tránsito', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
-    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(screen.queryByLabelText(/Observaciones del trámite/)).toBeNull();
     expect(screen.queryByRole('region', { name: 'Envío a tránsito' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Enviar a tránsito' })).toBeNull();
@@ -685,7 +693,7 @@ describe('FirmaFurStep — inventario: acciones del cierre del trámite', () => 
   it('sin ese sub-estado no ofrece el cierre del gestor', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
-    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(screen.queryByRole('button', { name: 'Marcar como Terminado' })).toBeNull();
   });
 
@@ -705,40 +713,59 @@ describe('FirmaFurStep — inventario: acciones del cierre del trámite', () => 
 });
 
 // Auditoría del líder de diseño (No aprobado) — la cuarta parte del contenido que faltaba.
-describe('MatriculaResumen — inventario: tracking de validación de identidad por actor', () => {
-  it('traspaso monta una tabla de tracking por actor, con su nombre y puntaje', async () => {
+// Rediseño (captura Step5): «Tracking de validación de identidad» pasó a «Estado de validación de
+// identidad» — un bloque por actor con su badge de estado (Pendiente/Verificada), su enlace de
+// captura cuando aplica, y la bitácora técnica plegada dentro (antes era su propia tarjeta abierta).
+describe('MatriculaResumen — inventario: estado de validación de identidad por actor', () => {
+  it('traspaso monta un bloque por actor, con su nombre y su estado', async () => {
     renderResumen();
 
-    const tracking = await screen.findByRole('region', {
-      name: 'Tracking de validación de identidad',
+    const identidad = await screen.findByRole('region', {
+      name: 'Estado de validación de identidad',
     });
-    expect(within(tracking).getByText('Ana Vendedora')).toBeInTheDocument();
-    expect(within(tracking).getByText('Beto Comprador')).toBeInTheDocument();
-    // Puntaje tintado (StatusBadge tone="success"), nunca la píldora sólida de la propuesta.
-    expect(within(tracking).getAllByText('Puntaje 95/100')).toHaveLength(2);
+    expect(within(identidad).getByText('Ana Vendedora')).toBeInTheDocument();
+    expect(within(identidad).getByText('Beto Comprador')).toBeInTheDocument();
+    // Badge de estado (StatusBadge tone="success"), nunca la píldora sólida de la propuesta.
+    expect(within(identidad).getAllByText('Verificada')).toHaveLength(2);
+    // La bitácora técnica vive plegada dentro de cada bloque: no se carga hasta que se abre.
+    expect(mocks.getBiometricAuditByValidation).not.toHaveBeenCalled();
+  });
+
+  it('la bitácora de un actor se carga solo al abrir su desplegable de trazabilidad', async () => {
+    const user = userEvent.setup();
+    renderResumen();
+
+    const identidad = await screen.findByRole('region', {
+      name: 'Estado de validación de identidad',
+    });
+    const toggles = within(identidad).getAllByRole('button', {
+      name: 'Ver trazabilidad de validación',
+    });
+    expect(toggles).toHaveLength(2);
+    await user.click(toggles[0]!);
     await waitFor(() => expect(mocks.getBiometricAuditByValidation).toHaveBeenCalled());
   });
 
-  it('matrícula inicial monta solo la tabla del comprador', async () => {
+  it('matrícula inicial monta solo el bloque del comprador', async () => {
     renderResumen({ modalidad: 'matricula_inicial', vendedor: null, vendedorBio: null });
 
-    const tracking = await screen.findByRole('region', {
-      name: 'Tracking de validación de identidad',
+    const identidad = await screen.findByRole('region', {
+      name: 'Estado de validación de identidad',
     });
-    expect(within(tracking).getByText('Beto Comprador')).toBeInTheDocument();
-    expect(within(tracking).queryByText('Ana Vendedora')).toBeNull();
-    expect(within(tracking).getAllByText('Puntaje 95/100')).toHaveLength(1);
+    expect(within(identidad).getByText('Beto Comprador')).toBeInTheDocument();
+    expect(within(identidad).queryByText('Ana Vendedora')).toBeNull();
+    expect(within(identidad).getAllByText('Verificada')).toHaveLength(1);
   });
 
   it('sin ninguna validación biométrica no se monta la sección', async () => {
     renderResumen({ compradorBio: null, vendedorBio: null });
-    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    await screen.findByRole('region', { name: 'Consolidado del trámite' });
     expect(
-      screen.queryByRole('region', { name: 'Tracking de validación de identidad' }),
+      screen.queryByRole('region', { name: 'Estado de validación de identidad' }),
     ).toBeNull();
   });
 
-  it('sin puntaje todavía (validación pendiente) no inventa un número', async () => {
+  it('sin la validación aprobada el badge dice Pendiente, sin inventar un puntaje', async () => {
     renderResumen({
       compradorBio: { ...BIO_APROBADA, status: 'en_proceso', score: null, captureUrl: null },
       vendedorBio: null,
@@ -746,10 +773,11 @@ describe('MatriculaResumen — inventario: tracking de validación de identidad 
       vendedor: null,
     });
 
-    const tracking = await screen.findByRole('region', {
-      name: 'Tracking de validación de identidad',
+    const identidad = await screen.findByRole('region', {
+      name: 'Estado de validación de identidad',
     });
-    expect(within(tracking).queryByText(/Puntaje/)).toBeNull();
+    expect(within(identidad).getByText('Pendiente')).toBeInTheDocument();
+    expect(within(identidad).queryByText(/Puntaje/)).toBeNull();
   });
 
   it('con el enlace de captura pendiente lo muestra en monoespaciada, con botón de copiar', async () => {
@@ -765,12 +793,12 @@ describe('MatriculaResumen — inventario: tracking de validación de identidad 
       vendedor: null,
     });
 
-    const tracking = await screen.findByRole('region', {
-      name: 'Tracking de validación de identidad',
+    const identidad = await screen.findByRole('region', {
+      name: 'Estado de validación de identidad',
     });
-    const enlace = within(tracking).getByLabelText('Enlace de captura de Beto Comprador');
+    const enlace = within(identidad).getByLabelText('Enlace de captura de Beto Comprador');
     expect(enlace).toHaveValue('https://kyverum.flit.io/captura/TRM-2026-000095');
-    expect(within(tracking).getByRole('button', { name: 'Copiar enlace' })).toBeInTheDocument();
+    expect(within(identidad).getByRole('button', { name: 'Copiar enlace' })).toBeInTheDocument();
   });
 });
 
@@ -834,23 +862,25 @@ describe('FirmaFurStep — inventario: organismo de tránsito también en traspa
     });
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
-    await screen.findByRole('region', { name: 'Resumen del trámite' });
-    expect(screen.getByText('Organismo de tránsito')).toBeInTheDocument();
+    // Punto 1 del rediseño — el organismo llega como `organismoSlot` y se pinta DENTRO del
+    // «Consolidado del trámite» (misma fila que «Estado de validación de identidad»), no después.
+    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(within(resumen).getByText('Organismo de tránsito')).toBeInTheDocument();
     expect(
-      screen.getByText('Secretaría Distrital de Movilidad de Bogotá'),
+      within(resumen).getByText('Secretaría Distrital de Movilidad de Bogotá'),
     ).toBeInTheDocument();
     // El dígito de preferencia de placa sigue exclusivo de matrícula: en traspaso el vehículo ya
     // tiene placa.
-    expect(screen.queryByRole('region', { name: 'Placa preasignada' })).toBeNull();
+    expect(within(resumen).queryByRole('region', { name: 'Placa preasignada' })).toBeNull();
   });
 
-  it('matrícula sigue mostrando organismo + preasignación de placa emparejados', async () => {
+  it('matrícula sigue mostrando organismo + preasignación de placa emparejados, dentro del resumen', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
-    await screen.findByRole('region', { name: 'Resumen del trámite' });
-    expect(screen.getByText('Organismo de tránsito')).toBeInTheDocument();
+    const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
+    expect(within(resumen).getByText('Organismo de tránsito')).toBeInTheDocument();
     expect(
-      await screen.findByRole('region', { name: 'Placa preasignada' }),
+      await within(resumen).findByRole('region', { name: 'Placa preasignada' }),
     ).toBeInTheDocument();
   });
 });
