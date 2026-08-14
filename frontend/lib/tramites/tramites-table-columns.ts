@@ -44,7 +44,12 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   // UNA sola columna de firmas para las dos partes, como en el diseño: dentro lleva una línea por
   // parte (vendedor y comprador) porque la acreditación es POR PARTE, no del trámite. En matrícula
   // inicial solo hay comprador, así que la celda muestra una sola línea.
-  { key: 'firmado', label: 'Firmas', width: '1.2fr', minPx: 150, group: GRUPO_BASE },
+  //
+  // El ancho mínimo lo fija el peor caso REAL de la celda, no una estimación redonda: el rótulo
+  // más largo ("Comprador", ~61px) + separación + el valor más largo ("Sin registrar", ~82px) +
+  // los 32px de padding del `<td>` ≈ 183px. Con los 150px que tenía antes, el valor se cortaba a
+  // "Sin …" en cuanto la tabla trabajaba a su ancho mínimo.
+  { key: 'firmado', label: 'Firmas', width: '1.5fr', minPx: 190, group: GRUPO_BASE },
   { key: 'tramite', label: 'Trámite / Estado', width: '1.3fr', minPx: 160, group: GRUPO_BASE },
   // Sin truncar: el nombre del organismo es la mitad del valor de la columna ("SECRETARIA
   // DISTRITAL DE MOVILIDAD DE BOGOTA" cortado a "SECRETARIA DISTRITAL DE…" no distingue nada).

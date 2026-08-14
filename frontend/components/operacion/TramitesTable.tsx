@@ -1535,16 +1535,24 @@ function FirmaParteLinea({
   // los dos rótulos no miden lo mismo, y la columna no se podía barrer en vertical.
   return (
     <>
-      <span className="shrink-0 text-xs text-[#162744]/70 dark:text-white/70">{rotulo}</span>
+      {/* Ni el rótulo ni el valor se truncan: los dos salen de un conjunto cerrado y corto
+          (Vendedor/Comprador · Firmado/Sin firma/Rechazado/Sin registrar), y el ancho mínimo de la
+          columna está calculado para el peor caso. Un `truncate` aquí solo servía para esconder
+          que la columna iba estrecha, que es justo lo que pasaba. */}
+      <span className="whitespace-nowrap text-xs text-[#162744]/70 dark:text-white/70">
+        {rotulo}
+      </span>
       {estado ? (
         <span
-          className="truncate text-xs font-semibold"
+          className="whitespace-nowrap text-xs font-semibold"
           style={{ color: FIRMA_TEXTO[estado].color }}
         >
           {FIRMA_TEXTO[estado].label}
         </span>
       ) : (
-        <span className="truncate text-xs text-[#162744]/70 dark:text-white/70">Sin registrar</span>
+        <span className="whitespace-nowrap text-xs text-[#162744]/70 dark:text-white/70">
+          Sin registrar
+        </span>
       )}
     </>
   );
@@ -1784,7 +1792,7 @@ function TramiteRow({
     // matrícula inicial no tiene vendedor, así que se muestra solo el comprador en lugar de gastar
     // una línea en un "No aplica" repetido en todas las filas.
     firmado: (
-      <span className="grid min-w-0 grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1">
+      <span className="grid min-w-0 grid-cols-[auto_auto] justify-start items-center gap-x-2 gap-y-1">
         {item.modalidad === 'traspaso' ? (
           <FirmaParteLinea rotulo="Vendedor" estado={item.firmaVendedorEstado} />
         ) : null}
