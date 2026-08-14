@@ -704,12 +704,9 @@ describe('FirmaFurStep — resumen / expediente', () => {
       createdAt: '2026-06-19T00:00:00Z',
     });
 
-    const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
     const resumen = await screen.findByRole('region', { name: 'Consolidado del trámite' });
-    // Transformaciones/Prenda son desplegables CERRADOS por defecto (rediseño): hay que abrirlos.
-    await user.click(within(resumen).getByRole('button', { name: 'Transformaciones' }));
-    await user.click(within(resumen).getByRole('button', { name: 'Prenda / gravamen' }));
+    // Transformaciones y Prenda son tarjetas abiertas de la fila de tres columnas, no desplegables.
     const transformaciones = within(resumen).getByLabelText('Transformaciones declaradas');
     expect(within(transformaciones).getByText('Color')).toBeInTheDocument();
     expect(within(transformaciones).getByText('NEGRO')).toBeInTheDocument();
@@ -788,7 +785,10 @@ describe('FirmaFurStep — OT fijado desde RUNT en traspaso (B11, HU #10659)', (
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
     expect(await screen.findByLabelText('Consolidado del trámite')).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Organismo de tránsito' })).not.toBeInTheDocument();
+    // El organismo SÍ se muestra ahora, como ficha informativa y en las dos modalidades (el gestor
+    // radicaba sin ver ante quién). Lo que estos tests guardan sigue en pie: nada editable, ni
+    // catálogo, ni modal — el OT se eligió en el paso 1 o lo fijó el RUNT (HU #10659/#11199).
+    expect(screen.getByRole('region', { name: 'Organismo de tránsito' })).toBeInTheDocument();
     expect(screen.queryByText(/no puede modificarse en un traspaso/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Cambiar|Seleccionar/ })).not.toBeInTheDocument();
     expect(mocks.listTransitOffices).not.toHaveBeenCalled();
@@ -805,7 +805,10 @@ describe('FirmaFurStep — OT fijado desde RUNT en traspaso (B11, HU #10659)', (
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
     expect(await screen.findByLabelText('Consolidado del trámite')).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Organismo de tránsito' })).not.toBeInTheDocument();
+    // El organismo SÍ se muestra ahora, como ficha informativa y en las dos modalidades (el gestor
+    // radicaba sin ver ante quién). Lo que estos tests guardan sigue en pie: nada editable, ni
+    // catálogo, ni modal — el OT se eligió en el paso 1 o lo fijó el RUNT (HU #10659/#11199).
+    expect(screen.getByRole('region', { name: 'Organismo de tránsito' })).toBeInTheDocument();
     expect(screen.queryByText(/no está habilitado para tu empresa/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Cambiar|Seleccionar/ })).not.toBeInTheDocument();
   });
@@ -813,7 +816,10 @@ describe('FirmaFurStep — OT fijado desde RUNT en traspaso (B11, HU #10659)', (
   it('matrícula: el resumen tampoco muestra la sección de organismo', async () => {
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
     expect(await screen.findByLabelText('Consolidado del trámite')).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Organismo de tránsito' })).not.toBeInTheDocument();
+    // El organismo SÍ se muestra ahora, como ficha informativa y en las dos modalidades (el gestor
+    // radicaba sin ver ante quién). Lo que estos tests guardan sigue en pie: nada editable, ni
+    // catálogo, ni modal — el OT se eligió en el paso 1 o lo fijó el RUNT (HU #10659/#11199).
+    expect(screen.getByRole('region', { name: 'Organismo de tránsito' })).toBeInTheDocument();
     expect(screen.queryByText(/no puede modificarse en un traspaso/)).not.toBeInTheDocument();
   });
 });

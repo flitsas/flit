@@ -101,38 +101,21 @@ interface Props {
   prioritario?: boolean;
   /** Ausente cuando el trámite todavía no existe (sin `instanceId`, nada que marcar). */
   onPrioritarioChange?: (value: boolean) => void;
+  /**
+   * Tarjetas sueltas de la última fila que monta `FirmaFurStep` —organismo de tránsito y placa
+   * preasignada—, porque los datos son suyos. Van como celdas hermanas de transformaciones y prenda
+   * en la misma rejilla de tres columnas, no envueltas: envolverlas las volvería una sola celda.
+   */
+  extrasSlot?: ReactNode;
 }
 
 const BORDER = '#DFE5ED';
 const BLUE = '#557EFF';
 
-/**
- * Secciones del resumen. Delegan en el acordeón compartido del wizard: antes traían su propio
- * chrome (radio `xl`, título en versalitas con `tracking-[0.2em]`, barrita azul y chevron gris),
- * que no era el de ningún otro panel del asistente.
- */
-function ResumenDisclosure({
-  title,
-  defaultOpen = true,
-  children,
-}: {
-  title: string;
-  defaultOpen?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <WizardAccordion
-      title={title}
-      defaultOpen={defaultOpen}
-      icon={<span className="h-4 w-1 shrink-0 rounded-full" style={{ background: BLUE }} aria-hidden="true" />}
-      // El resumen (h3, arriba) es la tarjeta que cuelga del paso; estas secciones viven DENTRO de
-      // ella, así que su título arranca un nivel por debajo (h4) y no repite el h3 del resumen.
-      level="h4"
-    >
-      {children}
-    </WizardAccordion>
-  );
-}
+// `ResumenDisclosure` desapareció: transformaciones y prenda eran las últimas que lo usaban y ahora
+// son `ResumenCard`, como el resto de la fila. Un acordeón con chevrón entre tarjetas planas se leía
+// como una pieza de otro sitio. El único desplegable que queda en el resumen es la trazabilidad de
+// validación, dentro de cada actor.
 
 /**
  * Rótulo/valor de las grillas del resumen. Delega en `WizardPair` (el átomo del kit para grillas de
@@ -151,7 +134,7 @@ function Field({ label, value }: { label: string; value?: string | null }) {
  * pide. Lo que sigue siendo genuinamente secundario y largo (mandatario, transformaciones, prenda)
  * se queda en `ResumenDisclosure`.
  */
-function ResumenCard({
+export function ResumenCard({
   title,
   children,
   className = '',
@@ -588,6 +571,7 @@ export default function MatriculaResumen({
   observacionesFur = null,
   prioritario,
   onPrioritarioChange,
+  extrasSlot,
 }: Props) {
   const tone = estadoChipStyle(status).color;
   const soatEstado = (soat?.estado ?? '').toLowerCase();
@@ -868,10 +852,14 @@ export default function MatriculaResumen({
       {/* Mandatario retirado del resumen (decisión del usuario). El backend lo resuelve solo cuando
           no se elige a mano, que es lo que decía el propio subtítulo de la sección. */}
 
-      {hasExtras ? (
-        <>
+      {/* Última fila del resumen, en tres columnas: transformaciones, prenda y —vía `extrasSlot`—
+          el organismo de tránsito y la placa preasignada, que los monta `FirmaFurStep` porque es
+          quien tiene esos datos. Antes iban apiladas a ancho completo y la prenda además usaba un
+          acordeón, así que se leía como una pieza distinta de las tarjetas de al lado. */}
+      {hasExtras || extrasSlot ? (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
           {transformaciones.length > 0 ? (
-            <ResumenDisclosure title="Transformaciones" defaultOpen={false}>
+            <ResumenCard title="Transformaciones">
               <div
                 className="grid grid-cols-1 gap-3 sm:grid-cols-2"
                 aria-label="Transformaciones declaradas"
@@ -899,12 +887,12 @@ export default function MatriculaResumen({
                   );
                 })}
               </div>
-            </ResumenDisclosure>
+            </ResumenCard>
           ) : null}
           {prenda ? (
-            <ResumenDisclosure title="Prenda / gravamen" defaultOpen={false}>
+            <ResumenCard title="Prenda / gravamen">
               <div
-                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                className="grid grid-cols-1 gap-3"
                 aria-label="Prenda o gravamen"
               >
                 <Field label="Decisión" value={prenda.decisionLabel} />
@@ -926,9 +914,10 @@ export default function MatriculaResumen({
                   )
                 ) : null}
               </div>
-            </ResumenDisclosure>
+            </ResumenCard>
           ) : null}
-        </>
+          {extrasSlot}
+        </div>
       ) : null}
     </section>
   );

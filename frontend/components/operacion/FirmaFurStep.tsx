@@ -14,7 +14,7 @@ import {
   listAvailablePlatesForCompany,
   type PlateDetail,
 } from '@/lib/api/admin-plate-ranges';
-import MatriculaResumen from './MatriculaResumen';
+import MatriculaResumen, { ResumenCard } from './MatriculaResumen';
 import ExpedienteVisor from './ExpedienteVisor';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
@@ -148,10 +148,11 @@ function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: b
  * que ya no vuelva a aparecer. Esta es solo la nota de contexto junto a la preasignación de placa,
  * como en la propuesta («Organismo de tránsito y preasignación de placa», Step5).
  */
+// `ResumenCard` en vez de una tarjeta propia: era la única del resumen sin la franja azul junto al
+// título, así que se leía como una pieza ajena entre prenda y placa preasignada.
 function OrganismoInfoCard({ name }: { name: string }) {
   return (
-    <div className={WIZARD_CARD}>
-      <WizardCardHeader title="Organismo de tránsito" level="h4" className="mb-2" />
+    <ResumenCard title="Organismo de tránsito">
       <p className="text-sm font-semibold" style={{ color: '#162744' }}>
         {name || 'Sin seleccionar'}
       </p>
@@ -159,7 +160,7 @@ function OrganismoInfoCard({ name }: { name: string }) {
           catálogo (HU #11199): el convenio activo y la radicación electrónica son una garantía del
           sistema en este punto, no un dato que haya que consultar aparte. */}
       <p className="mt-1 text-xs opacity-70">Convenio activo · Radicación electrónica habilitada</p>
-    </div>
+    </ResumenCard>
   );
 }
 
@@ -587,9 +588,11 @@ export function FirmaFurStep({
   // cada actor), el organismo vuelve a su propia fila del paso, debajo del resumen — visible en las
   // DOS modalidades (HU #10659/#11199: en traspaso el OT lo fija el RUNT). HU #10799 — la
   // preasignación de placa (Flujo A) sigue exclusiva de matrícula inicial.
+  // Sin envolver en un `div`: van como celdas hermanas de la rejilla de tres columnas que pinta
+  // `MatriculaResumen`; envolverlas las volvería una sola celda apilada.
   const organismoRow =
     organismoSelected && instanceId ? (
-      <div className="space-y-3">
+      <>
         <OrganismoInfoCard name={organismo.name} />
         {modalidad === 'matricula_inicial' && organismo.id && (
           <PlacaPreasignadaSection
@@ -605,7 +608,7 @@ export function FirmaFurStep({
             }}
           />
         )}
-      </div>
+      </>
     ) : null;
 
   return (
@@ -683,9 +686,8 @@ export function FirmaFurStep({
         observacionesFur={fv('fur_observations') || null}
         prioritario={prioritario}
         onPrioritarioChange={instanceId ? handlePrioritarioChange : undefined}
+        extrasSlot={organismoRow}
       />
-
-      {organismoRow}
 
       <ExpedienteVisor
         instanceId={instanceId}

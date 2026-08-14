@@ -427,11 +427,9 @@ describe('MatriculaResumen — inventario: mandatario, transformaciones y prenda
   });
 
   it('las transformaciones declaradas conservan qué cambió y a qué valor', async () => {
-    const user = userEvent.setup();
     renderResumen({ transformaciones: ['Color: NEGRO', 'Combustible: DIESEL'] });
 
-    // Desplegable cerrado por defecto (rediseño): al final del resumen, hay que abrirlo.
-    await user.click(screen.getByRole('button', { name: 'Transformaciones' }));
+    // Tarjeta abierta de la fila de tres columnas: ya no es un desplegable que haya que abrir.
     const transformaciones = screen.getByLabelText('Transformaciones declaradas');
     expect(within(transformaciones).getByText('Color')).toBeInTheDocument();
     expect(within(transformaciones).getByText('NEGRO')).toBeInTheDocument();
@@ -440,7 +438,6 @@ describe('MatriculaResumen — inventario: mandatario, transformaciones y prenda
   });
 
   it('la prenda conserva decisión, acreedor y su documento de soporte', async () => {
-    const user = userEvent.setup();
     renderResumen({
       prenda: {
         decisionLabel: 'Registrar prenda',
@@ -451,8 +448,7 @@ describe('MatriculaResumen — inventario: mandatario, transformaciones y prenda
       },
     });
 
-    // Desplegable cerrado por defecto (rediseño): al final del resumen, hay que abrirlo.
-    await user.click(screen.getByRole('button', { name: 'Prenda / gravamen' }));
+    // Tarjeta abierta de la fila de tres columnas: ya no es un desplegable que haya que abrir.
     const prenda = screen.getByLabelText('Prenda o gravamen');
     expect(within(prenda).getByText('Decisión')).toBeInTheDocument();
     expect(within(prenda).getByText('Registrar prenda')).toBeInTheDocument();
@@ -465,7 +461,6 @@ describe('MatriculaResumen — inventario: mandatario, transformaciones y prenda
   });
 
   it('la prenda sin soporte cargado lo dice en vez de callarlo', async () => {
-    const user = userEvent.setup();
     renderResumen({
       prenda: {
         decisionLabel: 'Registrar prenda',
@@ -476,7 +471,6 @@ describe('MatriculaResumen — inventario: mandatario, transformaciones y prenda
       },
     });
 
-    await user.click(screen.getByRole('button', { name: 'Prenda / gravamen' }));
     const prenda = screen.getByLabelText('Prenda o gravamen');
     expect(within(prenda).getByText('Sin documento cargado')).toBeInTheDocument();
   });
