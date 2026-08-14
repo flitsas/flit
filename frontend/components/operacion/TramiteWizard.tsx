@@ -84,6 +84,7 @@ import {
   WIZARD_BTN,
   WIZARD_CARD,
   WIZARD_CTA_GRADIENT,
+  WIZARD_CTA_GRADIENT_DONE,
   WIZARD_INPUT,
   WIZARD_LABEL,
 } from './wizard-field-styles';
@@ -486,6 +487,10 @@ export function TramiteWizard(props: Props) {
   // Confirmación de "Cancelar trámite" (propuesta): salir pierde lo no guardado, y el botón vive
   // junto al de avance, donde un clic de más es fácil.
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // Confirmación de "Finalizar y enviar trámite" (propuesta, MatriculaInicial.tsx:1111-1121): la
+  // acción terminal ya no radica al primer clic — abre "Confirmar radicación" y el radicado real
+  // ocurre solo tras "Sí, radicar trámite".
+  const [confirmRadicar, setConfirmRadicar] = useState(false);
   // Feature #11066 — estado informativo del paquete (FUR/certs/impronta). No bloquea Preparar.
   const [paqueteDocsStatus, setPaqueteDocsStatus] = useState<
     'idle' | 'loading' | 'ready' | 'error'
@@ -577,6 +582,9 @@ export function TramiteWizard(props: Props) {
   // por el que se consultó el vehículo en cada modalidad.
   const fvOf = (key: string) =>
     state.detail?.fieldValues?.find((f) => f.fieldKey === key)?.valueText?.trim() || null;
+  // Organismo real del trámite, para el texto del modal "Confirmar radicación" (propuesta:
+  // MatriculaInicial.tsx:1114) — nunca un literal de maqueta.
+  const organismoNombre = fvOf('transit_office_name');
   const identificador =
     modalidad === 'traspaso'
       ? (fvOf('plate') ?? fvOf('vin'))
@@ -1356,6 +1364,37 @@ export function TramiteWizard(props: Props) {
               </ul>
             </InlineAlert>
           )}
+
+          {/* Acción terminal del asistente (propuesta: MatriculaInicial.tsx:1100-1109) — vive en el
+              CUERPO del paso de decisión, no en el pie. Es la ÚNICA pieza que se mueve: "Anterior",
+              EstadoAcciones y "Cancelar trámite" son función existente del pie y se quedan ahí; el
+              pie de FLIT tampoco desaparece en este paso como en la propuesta, porque sigue
+              haciendo falta para navegar hacia atrás y para cancelar.
+              Cubre las tres variantes que antes vivían en el pie con el rótulo "Radicar trámite"
+              (entrega desde preparado, radicar desde borrador con identidad, y el disabled a la
+              espera de identidad): las tres son la misma acción de cierre. */}
+          {isDecisionStep &&
+            !inSubsanacion &&
+            ((fullReadOnly && canEntregar) || (!fullReadOnly && (canRadicar || draftFinalized))) && (
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setConfirmRadicar(true)}
+                  disabled={submitting || (!fullReadOnly && !canRadicar && draftFinalized)}
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                  style={{ background: WIZARD_CTA_GRADIENT_DONE }}
+                  title={
+                    fullReadOnly
+                      ? 'Entrega el trámite al organismo de tránsito'
+                      : canRadicar
+                        ? 'Prepara y radica el trámite en un solo paso (queda en entregado)'
+                        : 'Disponible cuando el cliente valide su identidad'
+                  }
+                >
+                  {submitting ? 'Radicando…' : 'Finalizar y enviar trámite'}
+                </button>
+              </div>
+            )}
         </div>
 
           <div className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-t px-2 pb-3 pt-4 sm:px-5">
@@ -1384,24 +1423,16 @@ export function TramiteWizard(props: Props) {
                 como una sola pieza, con "Cancelar trámite" y el avance sin aire entre medias. */}
             <div className="flex flex-wrap items-center justify-end gap-3">
             {/* Acción derecha del footer:
-                · Preparado o borrador con identidad OK: "Radicar trámite" (encadena preparado→entregado).
+                · Preparado o borrador con identidad OK / en borrador finalizado: la acción terminal
+                  ("Finalizar y enviar trámite") ya NO vive aquí — se movió al cuerpo del paso de
+                  decisión (justo debajo del InlineAlert de requisitos pendientes), igual que en la
+                  propuesta. Aquí no queda nada para esos casos.
                 · Solo visualización (otros estados no editables): sin acciones, solo se recorre.
-                · Paso de decisión en borrador sin identidad: "Finalizar" (finalize-draft).
-                · En borrador ya finalizado: "Radicar trámite" deshabilitado hasta identidad.
+                · Paso de decisión en borrador sin identidad: "Finalizar" (finalize-draft) — esta SÍ
+                  se queda en el pie: no es la acción de cierre, solo sella el borrador a la espera
+                  de la validación de identidad.
                 · Pasos de datos: "Guardar y continuar". */}
-            {fullReadOnly ? (
-              isDecisionStep && canEntregar ? (
-                <button
-                  onClick={() => void handleRadicarTramite()}
-                  disabled={submitting}
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
-                  style={{ background: WIZARD_CTA_GRADIENT }}
-                  title="Entrega el trámite al organismo de tránsito"
-                >
-                  {submitting ? 'Radicando…' : 'Radicar trámite'}
-                </button>
-              ) : null
-            ) : isDecisionStep ? (
+            {fullReadOnly ? null : isDecisionStep ? (
               // HU #10874 — en subsanación NO Preparar/Finalizar: re-radicar vive en SubsanacionPanel.
               // En el último paso de subsanación: "Guardar y continuar" habilita Re-radicar.
               inSubsanacion ? (
@@ -1437,27 +1468,7 @@ export function TramiteWizard(props: Props) {
                 >
                   {continuing ? 'Guardando…' : 'Guardar y continuar'}
                 </button>
-              ) : canRadicar ? (
-                <button
-                  onClick={() => void handleRadicarTramite()}
-                  disabled={submitting}
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
-                  style={{ background: WIZARD_CTA_GRADIENT }}
-                  title="Prepara y radica el trámite en un solo paso (queda en entregado)"
-                >
-                  {submitting ? 'Radicando…' : 'Radicar trámite'}
-                </button>
-              ) : draftFinalized ? (
-                <button
-                  onClick={() => void handleRadicarTramite()}
-                  disabled
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
-                  style={{ background: WIZARD_CTA_GRADIENT }}
-                  title="Disponible cuando el cliente valide su identidad"
-                >
-                  Radicar trámite
-                </button>
-              ) : (
+              ) : canRadicar || draftFinalized ? null : (
                 <button
                   onClick={() => void handleFinalizeDraft()}
                   disabled={!canSubmit || submitting}
@@ -1533,6 +1544,39 @@ export function TramiteWizard(props: Props) {
               style={{ background: '#FF4E00' }}
             >
               Sí, cancelar
+            </button>
+          </div>
+        </WizardModal>
+      )}
+
+      {/* Confirmación de la acción terminal (propuesta: MatriculaInicial.tsx:1111-1121). Pulsar
+          "Finalizar y enviar trámite" ya NO radica al primer clic: abre este modal, con la
+          modalidad y el organismo reales del trámite (nunca literales de maqueta), y solo
+          "Sí, radicar trámite" dispara handleRadicarTramite. */}
+      {confirmRadicar && (
+        <WizardModal title="Confirmar radicación" onClose={() => setConfirmRadicar(false)}>
+          <p className="text-xs leading-relaxed opacity-80">
+            ¿Estás seguro de finalizar y radicar este trámite de {modalidadLabel} ante la{' '}
+            {organismoNombre ?? 'entidad de tránsito seleccionada'}?
+          </p>
+          <div className="mt-6 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmRadicar(false)}
+              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            >
+              Revisar datos
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmRadicar(false);
+                void handleRadicarTramite();
+              }}
+              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+              style={{ background: WIZARD_CTA_GRADIENT_DONE }}
+            >
+              Sí, radicar trámite
             </button>
           </div>
         </WizardModal>
@@ -3004,7 +3048,7 @@ function ConsultaStep({
               <span
                 aria-hidden="true"
                 className="relative inline-block h-5 w-9 rounded-full transition-colors"
-                style={{ background: prioritarioVigente ? '#557EFF' : '#CBD5E1' }}
+                style={{ background: prioritarioVigente ? '#557EFF' : '#DFE5ED' }}
               >
                 <span
                   className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${

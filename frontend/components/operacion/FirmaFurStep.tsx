@@ -16,6 +16,7 @@ import {
 } from '@/lib/api/admin-plate-ranges';
 import MatriculaResumen from './MatriculaResumen';
 import ExpedienteVisor from './ExpedienteVisor';
+import ExpedienteTimeline from './ExpedienteTimeline';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { PRENDA_DECISION_LABELS } from './PrendaForm';
@@ -167,8 +168,20 @@ function absoluteLink(path: string): string {
   return `${window.location.origin}${path}`;
 }
 
-/** Botón reutilizable de copiar un enlace al portapapeles. */
-function CopyLink({ link, label }: { link: string; label: string }) {
+/**
+ * Botón reutilizable de copiar un enlace al portapapeles. `mono` lo usa el enlace de captura
+ * biométrica del resumen (tracking por actor): un enlace se lee como dato técnico, no como texto.
+ */
+export function CopyLink({
+  link,
+  label,
+  mono = false,
+}: {
+  link: string;
+  label: string;
+  /** Tipografía monoespaciada del campo — el enlace de captura biométrica, no el de participantes. */
+  mono?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   const handleCopy = async () => {
     try {
@@ -186,7 +199,7 @@ function CopyLink({ link, label }: { link: string; label: string }) {
         readOnly
         value={link}
         aria-label={label}
-        className={INPUT_BASE}
+        className={mono ? `${INPUT_BASE} font-mono` : INPUT_BASE}
       />
       <button
         type="button"
@@ -242,6 +255,10 @@ export function FirmaFurStep({
   const [prenda, setPrenda] = useState<PrendaData | null>(null);
   // HU #10988 — fecha del trámite en el resumen (estampa FUR y documentos).
   const [fechaTramite, setFechaTramite] = useState(todayIsoDate);
+  // HU #10536 — trámite prioritario, visible y accionable desde la cabecera del resumen (antes solo
+  // se podía marcar en el paso 1 o desde el listado). Vive en una columna del expediente, no en
+  // `fieldValues`: se hidrata de `getInstance` y se cambia con su propio endpoint idempotente.
+  const [prioritario, setPrioritario] = useState(false);
   // FEATURE 05 — resultado RNMC por actor (medidas correctivas). Se consulta al entrar a este paso
   // (cuando ya se capturó la fecha de expedición de cada actor), no en el pre-vuelo.
   const [rnmcChecks, setRnmcChecks] = useState<PreflightCheck[]>([]);
@@ -270,6 +287,7 @@ export function FirmaFurStep({
       });
       setActorsContact(actors);
       setPrenda(p);
+      setPrioritario(d.prioritario ?? false);
       // Siempre la fecha del día (no editable en el resumen).
       const fecha = todayIsoDate();
       setFechaTramite(fecha);
@@ -296,6 +314,21 @@ export function FirmaFurStep({
       // Best-effort fuera de borrador.
     }
   }, [instanceId, fechaTramite]);
+
+  // HU #10536 — optimista con reversión: es una preferencia de orden en la bandeja del OT, no un
+  // requisito, y no merece bloquear el resumen. Mismo patrón que `handlePrioritario` del paso 1
+  // (TramiteWizard → ConsultaStep).
+  const handlePrioritarioChange = useCallback(
+    (value: boolean) => {
+      if (!instanceId) return;
+      setPrioritario(value);
+      void tramitesClient
+        .setPriority(instanceId, value)
+        .then(() => onRefresh?.())
+        .catch(() => setPrioritario(!value));
+    },
+    [instanceId, onRefresh],
+  );
 
   const loadExpediente = useCallback(async () => {
     if (!instanceId) return;
@@ -546,6 +579,9 @@ export function FirmaFurStep({
           motor: fv('vehicle_engine_number'),
           chasis: fv('vehicle_chassis'),
           serie: fv('vehicle_series'),
+          // Casilla 19 del FUR — solo aplica con servicio Público o Especial (las dos modalidades).
+          empresaVinculadoraRazonSocial: fv('empresa_vinculadora_razon_social'),
+          empresaVinculadoraNit: fv('empresa_vinculadora_nit'),
         }}
         vendedor={toResumenActor(vendedor, vendedorContact)}
         comprador={toResumenActor(comprador, compradorContact)}
@@ -593,27 +629,38 @@ export function FirmaFurStep({
         }}
         vaultCoveredPartes={vaultCoveredPartes}
         biometricForceEditable={biometricForceEditable}
+        observacionesFur={fv('fur_observations') || null}
+        prioritario={prioritario}
+        onPrioritarioChange={instanceId ? handlePrioritarioChange : undefined}
       />
 
       {/* HU #10799 — selección de placa preasignada como SECCIÓN explícita (Flujo A), solo en matrícula
           inicial y una vez elegido el OT. No aplica si el VIN ya tiene placa del RUNT (AC2).
           Emparejada con el organismo en `grid lg:grid-cols-2` (propuesta, Step5: «Organismo de
-          tránsito y preasignación de placa»). */}
-      {modalidad === 'matricula_inicial' && organismoSelected && organismo.id && instanceId && (
+          tránsito y preasignación de placa»).
+          El organismo YA NO se limita a matrícula: en traspaso el gestor radicaba sin ver ante quién
+          (el OT lo resuelve el RUNT vía auto-bind, HU #10659, pero antes solo se le informaba en
+          matrícula). La preasignación de placa sí se queda exclusiva de matrícula — en traspaso el
+          vehículo ya tiene placa. */}
+      {organismoSelected && instanceId && (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <OrganismoInfoCard name={organismo.name} />
-          <PlacaPreasignadaSection
-            instanceId={instanceId}
-            organismoId={organismo.id}
-            plateValue={fv('plate')}
-            plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
-            preferredDigitValue={fv('plate_preferred_last_digit')}
-            readOnly={readOnly}
-            onRefresh={() => {
-              void loadDetail();
-              onRefresh?.();
-            }}
-          />
+          <div className={modalidad === 'matricula_inicial' && organismo.id ? '' : 'lg:col-span-2'}>
+            <OrganismoInfoCard name={organismo.name} />
+          </div>
+          {modalidad === 'matricula_inicial' && organismo.id && (
+            <PlacaPreasignadaSection
+              instanceId={instanceId}
+              organismoId={organismo.id}
+              plateValue={fv('plate')}
+              plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
+              preferredDigitValue={fv('plate_preferred_last_digit')}
+              readOnly={readOnly}
+              onRefresh={() => {
+                void loadDetail();
+                onRefresh?.();
+              }}
+            />
+          )}
         </div>
       )}
 
@@ -628,6 +675,10 @@ export function FirmaFurStep({
           onRefresh?.();
         }}
       />
+
+      {/* HU #11007 (rediseño) — trazabilidad cronológica del trámite: el dato ya estaba cargado
+          (`statusHistory` de `getInstance`) y se descartaba sin pintarse. */}
+      <ExpedienteTimeline statusHistory={detail?.statusHistory ?? []} />
 
       {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
 

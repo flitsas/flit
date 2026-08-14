@@ -53,6 +53,7 @@ const mocks = vi.hoisted(() => ({
   submitInstance: vi.fn(),
   iniciarBiometric: vi.fn(),
   simulateBiometric: vi.fn(),
+  setPriority: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -202,6 +203,7 @@ beforeEach(() => {
   mocks.listParticipantes.mockResolvedValue([]);
   mocks.completePlateFlow.mockResolvedValue({ warningMessage: null });
   mocks.submitInstance.mockResolvedValue({ id: INSTANCE, status: 'entregado' });
+  mocks.setPriority.mockResolvedValue({ id: INSTANCE, prioritario: true });
   plateMocks.getPlatePreassignStatus.mockResolvedValue({ enabled: true });
   plateMocks.listAvailablePlatesForCompany.mockResolvedValue([]);
 });
@@ -516,7 +518,7 @@ describe('FirmaFurStep — inventario: expediente y documentos generados', () =>
     expect(within(expediente).getByText('No se han cargado documentos.')).toBeInTheDocument();
     expect(within(expediente).getByText('Expediente consolidado')).toBeInTheDocument();
     expect(
-      await within(expediente).findByRole('button', { name: 'Ver expediente consolidado (PDF)' }),
+      await within(expediente).findByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }),
     ).toBeInTheDocument();
   });
 
@@ -699,5 +701,191 @@ describe('FirmaFurStep — inventario: acciones del cierre del trámite', () => 
     // Pero los documentos siguen listados y descargables.
     const documentos = screen.getByRole('list', { name: 'Documentos del expediente (visor)' });
     expect(within(documentos).getByRole('button', { name: 'Ver fur.pdf' })).toBeInTheDocument();
+  });
+});
+
+// Auditoría del líder de diseño (No aprobado) — la cuarta parte del contenido que faltaba.
+describe('MatriculaResumen — inventario: tracking de validación de identidad por actor', () => {
+  it('traspaso monta una tabla de tracking por actor, con su nombre y puntaje', async () => {
+    renderResumen();
+
+    const tracking = await screen.findByRole('region', {
+      name: 'Tracking de validación de identidad',
+    });
+    expect(within(tracking).getByText('Ana Vendedora')).toBeInTheDocument();
+    expect(within(tracking).getByText('Beto Comprador')).toBeInTheDocument();
+    // Puntaje tintado (StatusBadge tone="success"), nunca la píldora sólida de la propuesta.
+    expect(within(tracking).getAllByText('Puntaje 95/100')).toHaveLength(2);
+    await waitFor(() => expect(mocks.getBiometricAuditByValidation).toHaveBeenCalled());
+  });
+
+  it('matrícula inicial monta solo la tabla del comprador', async () => {
+    renderResumen({ modalidad: 'matricula_inicial', vendedor: null, vendedorBio: null });
+
+    const tracking = await screen.findByRole('region', {
+      name: 'Tracking de validación de identidad',
+    });
+    expect(within(tracking).getByText('Beto Comprador')).toBeInTheDocument();
+    expect(within(tracking).queryByText('Ana Vendedora')).toBeNull();
+    expect(within(tracking).getAllByText('Puntaje 95/100')).toHaveLength(1);
+  });
+
+  it('sin ninguna validación biométrica no se monta la sección', async () => {
+    renderResumen({ compradorBio: null, vendedorBio: null });
+    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    expect(
+      screen.queryByRole('region', { name: 'Tracking de validación de identidad' }),
+    ).toBeNull();
+  });
+
+  it('sin puntaje todavía (validación pendiente) no inventa un número', async () => {
+    renderResumen({
+      compradorBio: { ...BIO_APROBADA, status: 'en_proceso', score: null, captureUrl: null },
+      vendedorBio: null,
+      modalidad: 'matricula_inicial',
+      vendedor: null,
+    });
+
+    const tracking = await screen.findByRole('region', {
+      name: 'Tracking de validación de identidad',
+    });
+    expect(within(tracking).queryByText(/Puntaje/)).toBeNull();
+  });
+
+  it('con el enlace de captura pendiente lo muestra en monoespaciada, con botón de copiar', async () => {
+    renderResumen({
+      compradorBio: {
+        ...BIO_APROBADA,
+        status: 'en_proceso',
+        score: null,
+        captureUrl: 'https://kyverum.flit.io/captura/TRM-2026-000095',
+      },
+      vendedorBio: null,
+      modalidad: 'matricula_inicial',
+      vendedor: null,
+    });
+
+    const tracking = await screen.findByRole('region', {
+      name: 'Tracking de validación de identidad',
+    });
+    const enlace = within(tracking).getByLabelText('Enlace de captura de Beto Comprador');
+    expect(enlace).toHaveValue('https://kyverum.flit.io/captura/TRM-2026-000095');
+    expect(within(tracking).getByRole('button', { name: 'Copiar enlace' })).toBeInTheDocument();
+  });
+});
+
+describe('MatriculaResumen — inventario: trámites solicitados (espejo del FUR)', () => {
+  it('abre el consolidado con el texto final que se estampará en el FUR', async () => {
+    renderResumen({ observacionesFur: 'Traspaso Estándar. Radicación electrónica.' });
+
+    expect(screen.getByText('Trámites solicitados')).toBeInTheDocument();
+    expect(
+      screen.getByText('Traspaso Estándar. Radicación electrónica.'),
+    ).toBeInTheDocument();
+  });
+
+  it('sin observaciones del FUR todavía no se pinta el bloque', async () => {
+    renderResumen({ observacionesFur: null });
+    expect(screen.queryByText('Trámites solicitados')).toBeNull();
+  });
+
+  it('es de solo lectura: no monta un segundo campo editable de observaciones', async () => {
+    renderResumen({ observacionesFur: 'Matrícula Inicial.' });
+    // El contrato del paso: la captura de observaciones vive en Requisitos, no aquí.
+    expect(screen.queryByLabelText(/Observaciones del trámite/)).toBeNull();
+    expect(screen.queryByRole('textbox', { name: /Observaciones/ })).toBeNull();
+  });
+});
+
+describe('MatriculaResumen — inventario: trámite prioritario en la cabecera', () => {
+  it('conserva el interruptor y avisa al cambiarlo', async () => {
+    const onPrioritarioChange = vi.fn();
+    renderResumen({ prioritario: false, onPrioritarioChange });
+
+    const interruptor = screen.getByRole('button', { name: 'Trámite Prioritario' });
+    expect(interruptor).toHaveAttribute('aria-pressed', 'false');
+
+    await userEvent.setup().click(interruptor);
+    expect(onPrioritarioChange).toHaveBeenCalledWith(true);
+  });
+
+  it('refleja el estado activado', async () => {
+    renderResumen({ prioritario: true, onPrioritarioChange: vi.fn() });
+    expect(
+      screen.getByRole('button', { name: 'Trámite Prioritario' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('sin handler (trámite aún sin crear) no se ofrece el interruptor', async () => {
+    renderResumen();
+    expect(screen.queryByRole('button', { name: 'Trámite Prioritario' })).toBeNull();
+  });
+});
+
+describe('FirmaFurStep — inventario: organismo de tránsito también en traspaso', () => {
+  it('traspaso con OT resuelto por el RUNT también lo muestra (antes solo matrícula)', async () => {
+    mocks.getInstance.mockResolvedValue({
+      ...DETALLE,
+      fieldValues: [
+        { formFieldId: null, fieldKey: 'transit_office_id', valueText: 'ot-9', valueJson: null, source: 'consultation' },
+        { formFieldId: null, fieldKey: 'transit_office_code', valueText: '11001', valueJson: null, source: 'consultation' },
+        { formFieldId: null, fieldKey: 'transit_office_name', valueText: 'Secretaría Distrital de Movilidad de Bogotá', valueJson: null, source: 'consultation' },
+      ],
+    });
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+
+    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    expect(screen.getByText('Organismo de tránsito')).toBeInTheDocument();
+    expect(
+      screen.getByText('Secretaría Distrital de Movilidad de Bogotá'),
+    ).toBeInTheDocument();
+    // El dígito de preferencia de placa sigue exclusivo de matrícula: en traspaso el vehículo ya
+    // tiene placa.
+    expect(screen.queryByRole('region', { name: 'Placa preasignada' })).toBeNull();
+  });
+
+  it('matrícula sigue mostrando organismo + preasignación de placa emparejados', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await screen.findByRole('region', { name: 'Resumen del trámite' });
+    expect(screen.getByText('Organismo de tránsito')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('region', { name: 'Placa preasignada' }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('FirmaFurStep — inventario: trazabilidad cronológica del trámite', () => {
+  it('monta la línea de tiempo con el estado, su origen y el motivo, en una sola frase', async () => {
+    mocks.getInstance.mockResolvedValue({
+      ...DETALLE,
+      statusHistory: [
+        { fromStatus: null, toStatus: 'borrador', changedAt: '2026-08-01T08:00:00Z', reason: null },
+        {
+          fromStatus: 'entregado',
+          toStatus: 'rechazado',
+          changedAt: '2026-08-05T10:00:00Z',
+          reason: 'Cargar documentos',
+        },
+      ],
+    });
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+
+    const timeline = await screen.findByRole('region', {
+      name: 'Línea de tiempo del expediente',
+    });
+    expect(within(timeline).getByText('Borrador')).toBeInTheDocument();
+    expect(
+      within(timeline).getByText('Rechazado desde Entregado (Cargar documentos)'),
+    ).toBeInTheDocument();
+  });
+
+  it('sin historial todavía lo dice en vez de dejar la sección muda', async () => {
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    const timeline = await screen.findByRole('region', {
+      name: 'Línea de tiempo del expediente',
+    });
+    expect(within(timeline).getByText('Sin eventos registrados todavía.')).toBeInTheDocument();
   });
 });

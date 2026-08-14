@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, Download, FileSignature, FileText } from 'lucide-react';
+import { Check, Clock, Copy, Download, FileSignature, FileText, Star } from 'lucide-react';
 import type {
   BiometricParte,
   BiometricValidation,
@@ -10,11 +10,12 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { StatusBadge } from '@/components/atom/StatusBadge';
+import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import { formatDateOnly } from '@/lib/format/date-only';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { WizardAccordion } from './WizardAccordion';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
-import { WIZARD_CARD } from './wizard-field-styles';
+import { WIZARD_CARD, WIZARD_INPUT } from './wizard-field-styles';
 import { BiometricStep } from './BiometricStep';
 import { MandatarioSection } from './MandatarioSection';
 import { openAttachmentInNewTab } from './ExpedienteVisor';
@@ -51,6 +52,9 @@ export type ResumenEspecificaciones = {
   motor?: string;
   chasis?: string;
   serie?: string;
+  /** Casilla 19 del FUR — solo con servicio Público o Especial (matrícula y traspaso). */
+  empresaVinculadoraRazonSocial?: string;
+  empresaVinculadoraNit?: string;
 };
 
 export type ResumenActor = {
@@ -89,6 +93,15 @@ interface Props {
   vaultCoveredPartes?: BiometricParte[];
   /** Borrador finalizado: fuerza biométrica editable aunque el wizard esté read-only. */
   biometricForceEditable?: boolean;
+  /**
+   * Texto final que se estampará en el FUR (`fur_observations`, ya compuesto por Requisitos). Solo
+   * lectura aquí: la captura vive en el paso de Requisitos, no en el resumen.
+   */
+  observacionesFur?: string | null;
+  /** HU #10536 — trámite prioritario, accionable desde la cabecera del resumen. */
+  prioritario?: boolean;
+  /** Ausente cuando el trámite todavía no existe (sin `instanceId`, nada que marcar). */
+  onPrioritarioChange?: (value: boolean) => void;
 }
 
 const BORDER = '#DFE5ED';
@@ -256,14 +269,16 @@ function IdentidadStatusBanner({
       >
         <span
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-          style={{ background: '#5B8A1F', color: 'white' }}
+          // Verde de tinta del sistema (mismo token que el texto): no `#5B8A1F`, que no es paleta FLIT.
+          style={{ background: 'var(--flit-success-ink)', color: 'white' }}
           aria-hidden
         >
           <Check className="h-5 w-5" />
         </span>
         <div className="space-y-0.5">
           <p className="text-xs font-bold" style={{ color: 'var(--flit-success-ink)' }}>
-            Identidad verificada — {bio.score ?? 95}/100
+            {/* Nunca un puntaje inventado: si el proveedor no lo trae, no se muestra número. */}
+            {bio.score != null ? `Identidad verificada — ${bio.score}/100` : 'Identidad verificada'}
           </p>
           {bio.name ? <p className="text-xs opacity-70">{bio.name}</p> : null}
         </div>
@@ -271,7 +286,36 @@ function IdentidadStatusBanner({
     );
   }
 
-  return null;
+  // Pendiente (sin iniciar, en proceso, rechazada o expirada): antes este estado se quedaba mudo
+  // (`return null`) — en la pantalla que dice "revisa todo antes de radicar" un dato ausente no
+  // puede leerse como "no hay nada pendiente".
+  return (
+    <div
+      className="flex items-center gap-3 rounded-xl p-3"
+      style={{ background: '#EEF5FF', border: '1px solid #DFE5ED' }}
+      role="status"
+      aria-live="polite"
+      data-testid="identidad-pendiente"
+    >
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+        style={{ background: '#59677D', color: 'white' }}
+        aria-hidden
+      >
+        <Clock className="h-5 w-5" />
+      </span>
+      <div className="space-y-0.5">
+        <p className="text-xs font-bold" style={{ color: '#59677D' }}>
+          Validación de identidad pendiente
+        </p>
+        {bio?.status === 'rechazado' || bio?.status === 'expirado' ? (
+          <p className="text-xs opacity-70">
+            La última validación no se aprobó; puede reintentarse.
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 function CertificadoIdButton({
@@ -422,6 +466,75 @@ function identidadPendiente(
   return bio?.status !== 'aprobado';
 }
 
+/**
+ * Enlace de captura, copiable, en monoespaciada — mismo patrón que `CopyLink` (participantes,
+ * `FirmaFurStep`), embebido aquí en el bloque de identidad de cada actor pendiente para no crear una
+ * dependencia circular entre los dos módulos del paso.
+ */
+function CapturaLinkCopy({ link, label }: { link: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Sin portapapeles: el enlace ya está visible para copiar a mano.
+    }
+  };
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="text"
+        readOnly
+        value={link}
+        aria-label={label}
+        className={`${WIZARD_INPUT} font-mono`}
+        style={{ borderColor: BORDER }}
+      />
+      <button
+        type="button"
+        onClick={() => void handleCopy()}
+        className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white"
+        style={{ background: BLUE }}
+        aria-label="Copiar enlace"
+      >
+        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        {copied ? 'Copiado' : 'Copiar'}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Tabla de tracking de identidad de UN actor (propuesta, `WizardTramite` `TrackingTable`): el nombre
+ * encima y el puntaje al lado — en `StatusBadge tone="success"`, tintado, nunca la píldora sólida
+ * `#8CC63F`/texto blanco de la propuesta (2.05:1, prohibida). Cuando la validación sigue pendiente y
+ * el proveedor mandó `captureUrl`, el enlace de captura vive en el mismo recuadro.
+ */
+function IdentityTrackingCard({ nombre, bio }: { nombre: string; bio: BiometricValidation }) {
+  const pendiente = bio.status !== 'aprobado';
+  return (
+    <div className="min-w-0 rounded-xl border p-3" style={{ borderColor: BORDER }}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="truncate text-xs font-bold">{nombre}</p>
+        {bio.score != null ? (
+          <StatusBadge label={`Puntaje ${bio.score}/100`} tone="success" />
+        ) : null}
+      </div>
+      {pendiente && bio.captureUrl ? (
+        <div className="mb-3">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
+            Enlace de captura
+          </p>
+          <CapturaLinkCopy link={bio.captureUrl} label={`Enlace de captura de ${nombre}`} />
+        </div>
+      ) : null}
+      <IdentityValidationTrackingPanel validationId={bio.id} embebido />
+    </div>
+  );
+}
+
 export default function MatriculaResumen({
   modalidad,
   status,
@@ -442,6 +555,9 @@ export default function MatriculaResumen({
   onBiometricRefresh,
   vaultCoveredPartes = [],
   biometricForceEditable = false,
+  observacionesFur = null,
+  prioritario,
+  onPrioritarioChange,
 }: Props) {
   const tone = estadoChipStyle(status).color;
   const soatEstado = (soat?.estado ?? '').toLowerCase();
@@ -497,6 +613,7 @@ export default function MatriculaResumen({
         hideIntro
         onlyPartes={[parte]}
         vaultCoveredPartes={vaultCoveredPartes}
+        embedded
       />
     );
     return biometricForceEditable ? (
@@ -506,9 +623,21 @@ export default function MatriculaResumen({
     );
   };
 
+  // Casilla 19 del FUR: empresa vinculadora + NIT, solo con servicio Público o Especial. El código
+  // del catálogo llega en mayúsculas (`PUBLICO`/`ESPECIAL`); se normaliza por si acaso.
+  const servicioNormalizado = (especificaciones.servicio ?? '').trim().toUpperCase();
+  const requiereEmpresaVinculadora =
+    servicioNormalizado === 'PUBLICO' || servicioNormalizado === 'ESPECIAL';
+
   const specs = [
     { label: 'Clase', value: especificaciones.clase },
     { label: 'Servicio', value: especificaciones.servicio },
+    ...(requiereEmpresaVinculadora
+      ? [
+          { label: 'Empresa vinculadora', value: especificaciones.empresaVinculadoraRazonSocial },
+          { label: 'NIT empresa vinculadora', value: especificaciones.empresaVinculadoraNit },
+        ]
+      : []),
     {
       label: 'Cilindraje',
       value: especificaciones.cilindraje
@@ -534,9 +663,35 @@ export default function MatriculaResumen({
         <div className="min-w-0 flex-1">
           <WizardCardHeader
             title={resumenTitulo}
+            subtitle="Revisa toda la información antes de enviar el expediente al Organismo de Tránsito."
             className=""
             action={
               <div className="flex flex-wrap items-center justify-end gap-3">
+                {/* HU #10536 — el líder de diseño lo pidió explícitamente en la cabecera: esta es la
+                    pantalla que dice "revisa todo antes de enviar" y hasta ahora no había forma de
+                    saber si el trámite es prioritario en el punto donde se radica. Paleta de aviso
+                    (`--badge-warning-*`), no los hex de la propuesta (`#FDE68A`/`#FFFBEB`/`#B45309`,
+                    fuera de la paleta FLIT). */}
+                {onPrioritarioChange ? (
+                  <button
+                    type="button"
+                    onClick={() => onPrioritarioChange(!prioritario)}
+                    aria-pressed={!!prioritario}
+                    className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition"
+                    style={
+                      prioritario
+                        ? {
+                            borderColor: 'var(--badge-warning-border)',
+                            background: 'var(--badge-warning-bg)',
+                            color: 'var(--badge-warning-fg)',
+                          }
+                        : { borderColor: BORDER, color: '#59677D' }
+                    }
+                  >
+                    <Star className="h-3.5 w-3.5" fill={prioritario ? 'currentColor' : 'none'} aria-hidden="true" />
+                    Trámite Prioritario
+                  </button>
+                ) : null}
                 {showFecha ? (
                   <div className="text-right">
                     <label
@@ -568,6 +723,20 @@ export default function MatriculaResumen({
           />
         </div>
       </div>
+
+      {/* Abre el consolidado a ancho completo, como en la propuesta: qué trámite se está radicando.
+          Mismo dato (`fur_observations`) que se estampará en el FUR — de ahí el azul. Solo lectura: la
+          captura de observaciones se queda en Requisitos. */}
+      {observacionesFur ? (
+        <div className={WIZARD_CARD}>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
+            Trámites solicitados
+          </p>
+          <p className="text-xs font-medium leading-snug" style={{ color: BLUE }}>
+            {observacionesFur}
+          </p>
+        </div>
+      ) : null}
 
       <ResumenCard title="Vehículo">
         {placa ? (
@@ -652,6 +821,21 @@ export default function MatriculaResumen({
           </ResumenCard>
         ) : null}
       </div>
+
+      {/* Tracking de validación de identidad por actor (propuesta, `WizardTramite` Step5: una tabla
+          en matrícula, dos en traspaso — mismo sitio, mismo estilo en las dos modalidades). */}
+      {(modalidad === 'traspaso' && vendedorBio) || compradorBio ? (
+        <ResumenCard title="Tracking de validación de identidad">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {modalidad === 'traspaso' && vendedorBio ? (
+              <IdentityTrackingCard nombre={vendedor?.nombre || vendedorBio.name} bio={vendedorBio} />
+            ) : null}
+            {compradorBio ? (
+              <IdentityTrackingCard nombre={comprador?.nombre || compradorBio.name} bio={compradorBio} />
+            ) : null}
+          </div>
+        </ResumenCard>
+      ) : null}
 
       {instanceId ? (
         <MandatarioSection

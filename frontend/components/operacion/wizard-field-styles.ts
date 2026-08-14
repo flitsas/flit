@@ -65,3 +65,12 @@ export const WIZARD_BTN =
  * B7 (guardián de diseño) lo corrige al degradado de marca.
  */
 export const WIZARD_CTA_GRADIENT = 'linear-gradient(135deg, #557EFF 0%, #00DBD5 100%)';
+
+/**
+ * Degradado del CTA de cierre: token FLIT `gradient.success` (cian→verde), descrito en el token
+ * file como «CTA de cierre/finalizar» y exigido por `prototype_rules.md` para el último paso.
+ * Reservado a las acciones terminales del asistente —Radicar y Finalizar—: son las únicas que
+ * cierran el trámite. «Continuar» y «Guardar y continuar» siguen con el degradado primario,
+ * porque avanzar no es cerrar.
+ */
+export const WIZARD_CTA_GRADIENT_DONE = 'linear-gradient(135deg, #00DBD5 0%, #8CC63F 100%)';

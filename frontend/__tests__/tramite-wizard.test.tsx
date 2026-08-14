@@ -534,9 +534,9 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     expect(screen.getByText(/Hay bloqueos críticos en el pre-vuelo/)).toBeInTheDocument();
   });
 
-  it('N 03 dos pasos — con identidad aprobada el botón es "Radicar trámite" (borrador→preparado) y sale al listado (Feature #11211)', async () => {
+  it('N 03 dos pasos — con identidad aprobada el botón es "Finalizar y enviar trámite" (borrador→preparado) y sale al listado (Feature #11211)', async () => {
     // Todos los pasos completos (incl. la biométrica → sin pendiente_biometria) ⇒ identidad
-    // aprobada ⇒ el botón terminal es "Radicar trámite" (no "Radicar trámite" ni "Finalizar").
+    // aprobada ⇒ el botón terminal es "Finalizar y enviar trámite" (no "Finalizar").
     const BORRADOR_COMPLETO: WizardState = {
       ...TRASPASO_WIZARD,
       canSubmit: true,
@@ -574,12 +574,17 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     await user.click(screen.getByRole('button', { name: /^Paso 6: Resumen/ }));
 
     const radicar = await waitFor(() => {
-      const btn = screen.getByRole('button', { name: /^Radicar trámite$/ });
+      const btn = screen.getByRole('button', { name: /^Finalizar y enviar trámite$/ });
       expect(btn).toBeEnabled();
       return btn;
     });
     expect(screen.queryByRole('button', { name: /^Finalizar$/ })).not.toBeInTheDocument();
     await user.click(radicar);
+
+    // La acción terminal ya no radica al primer clic: abre "Confirmar radicación" y solo
+    // "Sí, radicar trámite" dispara la transición real.
+    await screen.findByText('Confirmar radicación');
+    await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
 
     await waitFor(() =>
       expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'preparado'),
@@ -635,9 +640,11 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
     await user.click(screen.getByRole('button', { name: /^Paso 6: Resumen/ }));
 
-    const radicar = await screen.findByRole('button', { name: /^Radicar trámite$/ });
+    const radicar = await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ });
     expect(radicar).toBeEnabled();
     await user.click(radicar);
+    await screen.findByText('Confirmar radicación');
+    await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
 
     await waitFor(() =>
       expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'preparado'),
@@ -649,7 +656,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     expect(onExit).not.toHaveBeenCalled();
   });
 
-  it('N 03 dos pasos — en `preparado` el botón "Radicar trámite" transiciona a entregado, avisa y sale', async () => {
+  it('N 03 dos pasos — en `preparado` el botón "Finalizar y enviar trámite" transiciona a entregado, avisa y sale', async () => {
     // Instancia existente ya preparada: wizard en solo lectura con la acción de radicar.
     const PREPARADO: WizardState = {
       ...TRASPASO_WIZARD,
@@ -667,9 +674,11 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     render(<TramiteWizard existingInstanceId="inst-1" onExit={onExit} />);
 
     // Reanuda en el paso de decisión (todo completo → frontera = último paso).
-    const radicar = await screen.findByRole('button', { name: /Radicar trámite/ });
+    const radicar = await screen.findByRole('button', { name: /Finalizar y enviar trámite/ });
     expect(radicar).toBeEnabled();
     await user.click(radicar);
+    await screen.findByText('Confirmar radicación');
+    await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
 
     await waitFor(() => {
       expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, true);
@@ -715,7 +724,9 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     const user = userEvent.setup();
     render(<TramiteWizard existingInstanceId="inst-1" onExit={onExit} />);
 
-    await user.click(await screen.findByRole('button', { name: /Radicar trámite/ }));
+    await user.click(await screen.findByRole('button', { name: /Finalizar y enviar trámite/ }));
+    await screen.findByText('Confirmar radicación');
+    await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
 
     expect(
       await screen.findByText(/No se puede radicar: Expediente incompleto/i),
@@ -739,13 +750,15 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     renderWizard();
     await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
     await user.click(screen.getByRole('button', { name: /^Paso 6: Resumen/ }));
-    await user.click(screen.getByRole('button', { name: /^Radicar trámite$/ }));
+    await user.click(screen.getByRole('button', { name: /^Finalizar y enviar trámite$/ }));
+    await screen.findByText('Confirmar radicación');
+    await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
 
     expect(
       await screen.findByText(/validación de identidad no está aprobada/i),
     ).toBeInTheDocument();
     // Sigue en borrador: el botón "Preparar" continúa disponible para reintentar.
-    expect(screen.getByRole('button', { name: /^Radicar trámite$/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /^Finalizar y enviar trámite$/ })).toBeEnabled();
   });
 });
 
@@ -798,7 +811,7 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
     expect(await screen.findByText(/se generarán automáticamente/i)).toBeInTheDocument();
     const finalizar = await screen.findByRole('button', { name: /^Finalizar$/ });
     expect(finalizar).toBeEnabled();
-    expect(screen.queryByRole('button', { name: /Radicar trámite/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Finalizar y enviar trámite/ })).not.toBeInTheDocument();
 
     await user.click(finalizar);
 
@@ -808,7 +821,7 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
-  it('AC2 — borrador finalizado: datos en solo lectura, Identidad operable, Radicar trámite deshabilitado', async () => {
+  it('AC2 — borrador finalizado: datos en solo lectura, Identidad operable, Finalizar y enviar trámite deshabilitado', async () => {
     mocks.getWizardState.mockResolvedValue(MATRICULA_DATA_DONE_IDENTITY_PENDING);
     // draftFinalizedAt presente ⇒ modo borrador finalizado (readOnly parcial).
     mocks.getInstance.mockResolvedValue({
@@ -834,9 +847,9 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
     await user.click(screen.getByRole('button', { name: /^Paso 1: Consulta Vehículo/ }));
     expect(await screen.findByLabelText('Número VIN')).toBeDisabled();
 
-    // En el paso FUR (decisión), "Radicar trámite" deshabilitado hasta validar; sin "Finalizar" (ya finalizado).
+    // En el paso FUR (decisión), "Finalizar y enviar trámite" deshabilitado hasta validar; sin "Finalizar" (ya finalizado).
     await user.click(screen.getByRole('button', { name: /^Paso 5: Resumen/ }));
-    expect(await screen.findByRole('button', { name: /^Radicar trámite$/ })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ })).toBeDisabled();
     expect(screen.queryByRole('button', { name: /^Finalizar$/ })).not.toBeInTheDocument();
   });
 });

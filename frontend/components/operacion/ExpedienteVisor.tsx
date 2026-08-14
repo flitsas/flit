@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { Download, FileText } from 'lucide-react';
+import { Download, Eye, FileText } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
   openLoadingDocumentTab,
@@ -33,6 +33,10 @@ interface Props {
 
 const BLUE = '#557EFF';
 const BORDER = '#DFE5ED';
+// `#557EFF` como TEXTO/relleno sólido con blanco no llega a 4.5:1 (≈3.61:1, ver auditoría de
+// diseño). `--badge-info-fg` es el mismo azul oscurecido para texto que ya usan los badges de
+// tono `info` (≈6.46:1 sobre blanco, theme-aware) — token `--badge-*`, autorizado por norma.
+const INK_BLUE = 'var(--badge-info-fg)';
 
 /** Solo el consolidado del wizard (`tipo === 'consolidado'`). Nunca el maestro ni fuzzy match. */
 export function findConsolidadoAttachment(
@@ -44,10 +48,12 @@ export function findConsolidadoAttachment(
 function ExpedienteDisclosure({
   title,
   defaultOpen = true,
+  badge,
   children,
 }: {
   title: string;
   defaultOpen?: boolean;
+  badge?: ReactNode;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -58,6 +64,7 @@ function ExpedienteDisclosure({
       open={open}
       onOpenChange={setOpen}
       icon={<span className="h-4 w-1 shrink-0 rounded-full" style={{ background: BLUE }} aria-hidden="true" />}
+      badge={badge}
     >
       {children}
     </WizardAccordion>
@@ -236,9 +243,12 @@ function DocumentosSection({
   };
 
   /**
-   * Siempre regenera con force=true y abre el PDF nuevo.
-   * Abrir un consolidado cacheado podía mostrar todos los documentos duplicados si se había
-   * generado anidando un consolidado_maestro u otro paquete previo.
+   * Siempre regenera con force=true y descarga el PDF nuevo al equipo del gestor (propuesta,
+   * WizardTramite.tsx:715-717: «Descargar todo», no «Ver»). Antes abría una pestaña; ahora usa
+   * `downloadAttachment` (mismo cliente que cada documento suelto) para que el rótulo describa
+   * lo que la acción realmente hace.
+   * Regenerar con force=true evita mostrar todos los documentos duplicados si se había generado
+   * anidando un consolidado_maestro u otro paquete previo.
    */
   const handleDescargarTodo = async () => {
     if (!instanceId) return;
@@ -250,12 +260,24 @@ function DocumentosSection({
       applyAvisos(generado);
       const doc = consolidadoIdFromResult(generado);
       if (doc) {
-        await openAttachmentInNewTab(instanceId, {
-          id: doc.id,
-          tipo: 'consolidado',
-          filename: doc.filename,
-          mimetype: 'application/pdf',
-        });
+        const descargado = await tramitesClient.downloadAttachment(
+          instanceId,
+          doc.id,
+          undefined,
+          doc.filename,
+        );
+        const objectUrl = URL.createObjectURL(
+          descargado.mimetype
+            ? new Blob([descargado.blob], { type: descargado.mimetype })
+            : descargado.blob,
+        );
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = descargado.filename || doc.filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(objectUrl);
       }
       onAttachmentsChange?.();
     } catch (err) {
@@ -271,12 +293,25 @@ function DocumentosSection({
     }
   };
 
+  // `gradient.primary` del token file: 135deg, #557EFF → #00DBD5. El botón usaba 90deg (deriva de
+  // la propuesta, que fija el ángulo en WizardTramite.tsx:715).
   const gradientBtnClass =
     'inline-flex items-center justify-center rounded-full px-6 py-2.5 text-xs font-semibold text-white transition hover:opacity-95 disabled:opacity-50';
-  const gradientBtnStyle = { background: 'linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)' };
+  const gradientBtnStyle = { background: 'linear-gradient(135deg,#557EFF 0%,#00DBD5 100%)' };
 
   return (
-    <ExpedienteDisclosure title="Documentos">
+    <ExpedienteDisclosure
+      title="Documentos"
+      badge={
+        // Distintivo del bloque (propuesta, WizardTramite.tsx:701). `aria-hidden`: cada documento ya
+        // anuncia su propio "SHA-256 <hash>" como texto accesible; sin ocultarlo, el nombre accesible
+        // del disclosure pasaría de "Documentos" a "Documentos SHA-256" para cada lector de pantalla
+        // que lo recorra, un dato redundante con lo que ya lee en cada tarjeta.
+        <span className="text-xs font-semibold" style={{ color: BLUE }} aria-hidden="true">
+          SHA-256
+        </span>
+      }
+    >
       {attachments.length > 0 ? (
         // Rejilla (propuesta, «Documentos cargados»): sigue siendo una lista semántica, la rejilla es
         // solo el `className` — `<ul>`/`<li>` no cambian.
@@ -289,7 +324,8 @@ function DocumentosSection({
           ))}
         </ul>
       ) : (
-        <p className="text-xs opacity-60">No se han cargado documentos.</p>
+        // Piso de opacidad de la norma: 0.7 (estaba en 0.6).
+        <p className="text-xs opacity-70">No se han cargado documentos.</p>
       )}
 
       <div className="mt-4 space-y-3 border-t pt-4" style={{ borderColor: BORDER }}>
@@ -338,11 +374,11 @@ function DocumentosSection({
               style={gradientBtnStyle}
               disabled={busy}
               onClick={() => void handleDescargarTodo()}
-              aria-label="Ver expediente consolidado (PDF)"
+              aria-label="Descargar todo · Expediente consolidado (PDF)"
             >
               {downloading
                 ? 'Generando expediente…'
-                : 'Ver expediente consolidado (PDF)'}
+                : 'Descargar todo · Expediente consolidado (PDF)'}
             </button>
           ) : null}
         </div>
@@ -358,16 +394,62 @@ function DocRow({
   instanceId: string | null;
   attachment: ProcedureAttachment;
 }) {
-  const [busy, setBusy] = useState(false);
+  const [busyVer, setBusyVer] = useState(false);
+  const [busyDescargar, setBusyDescargar] = useState(false);
   const label = documentLabel(d.tipo) || d.filename || d.tipo || 'Documento';
   const filename = d.filename?.trim() || '';
+  const nombreAccesible = filename || label;
   // Truncado a 24 caracteres con elipsis (propuesta): la rejilla es un vistazo, no el detalle
   // forense. El hash completo sigue disponible en el `title` (tooltip nativo).
   const shaShort = d.sha256 && d.sha256.length > 24 ? `${d.sha256.slice(0, 24)}…` : d.sha256;
 
+  const handleVer = async () => {
+    if (!instanceId) return;
+    setBusyVer(true);
+    try {
+      await openAttachmentInNewTab(instanceId, d);
+    } finally {
+      setBusyVer(false);
+    }
+  };
+
+  // Descarga real (propuesta, WizardTramite.tsx:710-712): a diferencia de "Ver" (que muestra el
+  // documento en pestaña nueva), esta guarda el archivo en el equipo del gestor con
+  // `downloadAttachment` — el mismo cliente que usa el consolidado.
+  const handleDescargar = async () => {
+    if (!instanceId) return;
+    setBusyDescargar(true);
+    try {
+      const descargado = await tramitesClient.downloadAttachment(
+        instanceId,
+        d.id,
+        undefined,
+        filename || undefined,
+      );
+      const objectUrl = URL.createObjectURL(
+        descargado.mimetype
+          ? new Blob([descargado.blob], { type: descargado.mimetype })
+          : descargado.blob,
+      );
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = descargado.filename || nombreAccesible;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } finally {
+      setBusyDescargar(false);
+    }
+  };
+
   return (
     <li
-      className="flex flex-col gap-3 rounded-2xl border bg-white p-4 dark:bg-[#162744]"
+      // Ficha dentro del acordeón blanco de "Documentos" (`WizardAccordion`): un `bg-white` aquí
+      // repetía la tarjeta-dentro-de-tarjeta que el guardián de diseño ya había marcado en este
+      // módulo. Se hunde en el azul del fondo de app (`#EEF5FF` claro / `#0A1428` oscuro, igual
+      // que `background.app`) en vez de repetir el blanco del contenedor.
+      className="flex flex-col gap-3 rounded-2xl border bg-[#EEF5FF] p-4 dark:bg-[#0A1428]"
       style={{ borderColor: BORDER }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -388,28 +470,41 @@ function DocRow({
           </p>
         ) : null}
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: '#EEF5FF' }} aria-hidden="true">
+      {/* Pista de la barra en `#DFE5ED` (no `#EEF5FF`): la tarjeta ya usa ese azul como fondo, y la
+          pista se volvía invisible sobre su propio contenedor. */}
+      <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: '#DFE5ED' }} aria-hidden="true">
         <div className="h-full w-full rounded-full" style={{ background: '#8CC63F' }} />
       </div>
-      <button
-        type="button"
-        disabled={!instanceId || busy}
-        className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-        style={{ background: BLUE }}
-        aria-label={`Ver ${filename || label}`}
-        onClick={async () => {
-          if (!instanceId) return;
-          setBusy(true);
-          try {
-            await openAttachmentInNewTab(instanceId, d);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        <Download className="h-3.5 w-3.5" aria-hidden="true" />
-        {busy ? 'Abriendo…' : 'Ver'}
-      </button>
+      {/* Dos acciones distintas, no una renombrada: "Ver" abre el documento en pestaña nueva para
+          consultarlo sin salir del trámite; "Descargar" lo guarda en el equipo del gestor. Ambos
+          botones nombran el documento en su `aria-label` — hay tests que buscan ese nombre exacto.
+          Estilo "blanco con borde" (propuesta, MatriculaInicial.tsx:1065): el relleno sólido en
+          `#557EFF` con texto blanco a 12px no llega a 4.5:1 (≈3.61:1); `--badge-info-fg` es el
+          mismo azul oscurecido que ya usan los badges de tono `info` para resolver justo este caso. */}
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={!instanceId || busyVer}
+          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full border bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50 dark:bg-transparent"
+          style={{ borderColor: BLUE, color: INK_BLUE }}
+          aria-label={`Ver ${nombreAccesible}`}
+          onClick={() => void handleVer()}
+        >
+          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          {busyVer ? 'Abriendo…' : 'Ver'}
+        </button>
+        <button
+          type="button"
+          disabled={!instanceId || busyDescargar}
+          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full border bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50 dark:bg-transparent"
+          style={{ borderColor: BLUE, color: INK_BLUE }}
+          aria-label={`Descargar ${nombreAccesible}`}
+          onClick={() => void handleDescargar()}
+        >
+          <Download className="h-3.5 w-3.5" aria-hidden="true" />
+          {busyDescargar ? 'Descargando…' : 'Descargar'}
+        </button>
+      </div>
     </li>
   );
 }

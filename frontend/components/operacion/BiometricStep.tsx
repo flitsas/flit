@@ -60,6 +60,13 @@ interface Props {
    * ir un paso por detrás del outcome que el wizard acaba de recibir.</p>
    */
   vaultCoveredPartes?: BiometricParte[];
+  /**
+   * Se embebe dentro de otra tarjeta ya con chrome propio (`MatriculaResumen` → `ResumenCard`):
+   * las tarjetas internas (firma + biométrica) dejan su borde/fondo/radio propios — que antes
+   * dibujaban una tarjeta dentro de otra— y pasan a un tratamiento más liviano, sin chrome duplicado.
+   * En su propio paso (`onlyPartes` ausente / `heading` presente) esta prop no se usa.
+   */
+  embedded?: boolean;
 }
 
 /**
@@ -226,6 +233,7 @@ export function BiometricStep({
   heading,
   headingSubtitle,
   vaultCoveredPartes = [],
+  embedded = false,
 }: Props) {
   const partes = onlyPartes?.length
     ? partesFor(modalidad).filter((p) => onlyPartes.includes(p))
@@ -390,6 +398,7 @@ export function BiometricStep({
               firmaBaulServidor.includes(parte) || vaultCoveredPartes.includes(parte)
             }
             onChanged={() => void handleRefresh()}
+            embedded={embedded}
           />
         );
       })}
@@ -483,6 +492,7 @@ function ParteBlock({
   historial,
   vaultCovered,
   onChanged,
+  embedded = false,
 }: {
   parte: BiometricParte;
   instanceId: string | null;
@@ -492,14 +502,19 @@ function ParteBlock({
   historial: BiometricValidation[];
   vaultCovered: boolean;
   onChanged: () => void;
+  embedded?: boolean;
 }) {
   return (
     <div>
-      <h3 className="mb-2 text-xs font-bold uppercase tracking-wide opacity-70">
-        {PARTE_LABEL[parte]}
-      </h3>
+      {/* Embebido en el resumen: el rol ya lo dice la tarjeta de `ActorBlock` que lo envuelve
+          (Vendedor/Comprador); repetirlo aquí era un tercer rótulo para el mismo actor. */}
+      {!embedded && (
+        <h3 className="mb-2 text-xs font-bold uppercase tracking-wide opacity-70">
+          {PARTE_LABEL[parte]}
+        </h3>
+      )}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <SignatureCard parte={parte} actor={actor} vaultCovered={vaultCovered} />
+        <SignatureCard parte={parte} actor={actor} vaultCovered={vaultCovered} embedded={embedded} />
         <ParteCard
           parte={parte}
           instanceId={instanceId}
@@ -509,6 +524,7 @@ function ParteBlock({
           historial={historial}
           vaultCovered={vaultCovered}
           onChanged={onChanged}
+          embedded={embedded}
         />
       </div>
     </div>
@@ -553,10 +569,12 @@ function SignatureCard({
   parte,
   actor,
   vaultCovered,
+  embedded = false,
 }: {
   parte: BiometricParte;
   actor: ProcedureActor | null;
   vaultCovered: boolean;
+  embedded?: boolean;
 }) {
   const mecanismoFirma = actor?.representanteLegal?.mecanismoFirma;
   const badge = signatureBadge(vaultCovered, mecanismoFirma);
@@ -567,7 +585,9 @@ function SignatureCard({
     : `${PARTE_LABEL[parte]} todavía no tiene un mecanismo de firma electrónica registrado.`;
 
   return (
-    <div className={WIZARD_CARD}>
+    // Embebido en `MatriculaResumen`: sin el radio/borde/fondo propios de `WIZARD_CARD` — ya está
+    // dentro de la tarjeta del actor, y repetirlos dibujaba una tarjeta dentro de otra.
+    <div className={embedded ? 'rounded-xl border p-3' : WIZARD_CARD}>
       <WizardCardHeader
         title="Firma electrónica"
         action={<StatusBadge label={badge.label} tone={badge.tone} />}
@@ -589,6 +609,7 @@ function ParteCard({
   historial,
   vaultCovered,
   onChanged,
+  embedded = false,
 }: {
   parte: BiometricParte;
   instanceId: string | null;
@@ -601,11 +622,16 @@ function ParteCard({
   historial: BiometricValidation[];
   vaultCovered: boolean;
   onChanged: () => void;
+  embedded?: boolean;
 }) {
   const estado = validation?.status;
   const badge = parteBadge(validation, vaultCovered);
   return (
-    <div role="group" aria-label={`Biométrica ${PARTE_LABEL[parte]}`} className={WIZARD_CARD}>
+    <div
+      role="group"
+      aria-label={`Biométrica ${PARTE_LABEL[parte]}`}
+      className={embedded ? 'rounded-xl border p-3' : WIZARD_CARD}
+    >
       {/* El chip de estado de la cabecera (paridad con la referencia del diseño) es seguro junto al
           placeholder de carga de AC8: el esqueleto se busca por su NOMBRE accesible ("Cargando
           validaciones de identidad"), no por el rol `status` a secas, así que puede convivir con los

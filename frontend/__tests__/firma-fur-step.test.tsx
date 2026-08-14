@@ -313,7 +313,7 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     expect(screen.queryByRole('button', { name: /Generar FUR/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Re-generar FUR/i })).not.toBeInTheDocument();
     expect(
-      await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' }),
+      await screen.findByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }),
     ).toBeInTheDocument();
 
     await waitFor(() => {
@@ -366,9 +366,9 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     mocks.getAttachments.mockResolvedValue([]);
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
+    await screen.findByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' });
 
-    await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
+    await user.click(screen.getByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }));
 
     await waitFor(() => expect(mocks.patchFieldValues).toHaveBeenCalled());
     await waitFor(() =>
@@ -386,9 +386,9 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     );
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
+    await screen.findByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' });
 
-    await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
+    await user.click(screen.getByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }));
 
     expect(
       await screen.findByText(/su documentación es definitiva y no se regenera/i),
@@ -409,9 +409,9 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     });
     const user = userEvent.setup();
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
-    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
+    await screen.findByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' });
 
-    await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
+    await user.click(screen.getByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }));
 
     const aviso = await screen.findByRole('alert');
     expect(aviso).toHaveTextContent(/Expediente consolidado generado/i);
