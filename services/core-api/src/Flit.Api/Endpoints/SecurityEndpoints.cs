@@ -214,20 +214,22 @@ public static class SecurityEndpoints
             catch (InvitationAlreadyPendingException)
             {
                 return Results.Json(
-                    new ErrorResponse("INVITATION_ALREADY_PENDING", "Ya existe una invitación pendiente para este correo."),
+                    new ErrorResponse("INVITATION_ALREADY_PENDING", UserEmailConflictMessages.EmailAlreadyInUse),
                     statusCode: StatusCodes.Status409Conflict);
             }
             catch (UserAlreadyExistsException)
             {
                 return Results.Json(
-                    new ErrorResponse("USER_ALREADY_EXISTS", "Este correo ya tiene una cuenta activa en el sistema."),
+                    new ErrorResponse("USER_ALREADY_EXISTS", UserEmailConflictMessages.EmailAlreadyInUse),
                     statusCode: StatusCodes.Status409Conflict);
             }
-            catch (UserEmailBelongsToDeletedAccountException ex)
+            catch (UserEmailBelongsToDeletedAccountException)
             {
                 // HU #10623 AC4 — el correo pertenece a una cuenta soft-deleted.
+                // HU #11550 — mensaje visible unificado con los otros dos conflictos de correo;
+                // el código de error se mantiene distinto para no perder trazabilidad.
                 return Results.Json(
-                    new ErrorResponse("EMAIL_BELONGS_TO_DELETED_USER", ex.Message),
+                    new ErrorResponse("EMAIL_BELONGS_TO_DELETED_USER", UserEmailConflictMessages.EmailAlreadyInUse),
                     statusCode: StatusCodes.Status409Conflict);
             }
         }).AddEndpointFilter(new AdminAuditFilter(
@@ -580,13 +582,14 @@ public static class SecurityEndpoints
             catch (UserAlreadyExistsException)
             {
                 return Results.Json(
-                    new ErrorResponse("USER_ALREADY_EXISTS", "Este correo ya tiene una cuenta activa en el sistema."),
+                    new ErrorResponse("USER_ALREADY_EXISTS", UserEmailConflictMessages.EmailAlreadyInUse),
                     statusCode: StatusCodes.Status409Conflict);
             }
-            catch (UserEmailBelongsToDeletedAccountException ex)
+            catch (UserEmailBelongsToDeletedAccountException)
             {
+                // HU #11550 — mensaje visible unificado; el código de error se mantiene.
                 return Results.Json(
-                    new ErrorResponse("EMAIL_BELONGS_TO_DELETED_USER", ex.Message),
+                    new ErrorResponse("EMAIL_BELONGS_TO_DELETED_USER", UserEmailConflictMessages.EmailAlreadyInUse),
                     statusCode: StatusCodes.Status409Conflict);
             }
             catch (UserProfileConcurrencyException ex)

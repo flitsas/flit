@@ -16,6 +16,11 @@ import {
   targetEntityTypeForProfile,
   type UserProfileKind,
 } from "@/lib/users/profiles";
+import {
+  EMAIL_ALREADY_ASSOCIATED_MESSAGE,
+  emailConflictErrorCode,
+  isEmailConflictCode,
+} from "@/lib/users/emailConflict";
 
 const SUPER_ADMIN_ROLE_CODE = "superadmin";
 
@@ -190,7 +195,7 @@ export function InviteUserModal({
       onSuccess();
     } catch (err) {
       const apiErr = err as ApiError;
-      const code = (apiErr.body as { code?: string } | undefined)?.code;
+      const code = emailConflictErrorCode(apiErr.body);
       setError(resolveErrorMessage(code, apiErr.status));
       setStatus("idle");
     }
@@ -433,6 +438,12 @@ export function InviteUserModal({
 }
 
 function resolveErrorMessage(code: string | undefined, status: number | undefined): string {
+  // Los tres conflictos de correo (invitación pendiente / cuenta activa / cuenta
+  // eliminada) comparten el mismo mensaje visible unificado (HU #11550) — se
+  // resuelven primero y por código, NO por status, para no capturar otro 409
+  // futuro (p. ej. concurrencia) bajo este mismo texto.
+  if (isEmailConflictCode(code)) return EMAIL_ALREADY_ASSOCIATED_MESSAGE;
+
   switch (code) {
     case "NO_ROLES_SELECTED":
       return "Selecciona al menos un rol para el usuario invitado.";
@@ -447,7 +458,10 @@ function resolveErrorMessage(code: string | undefined, status: number | undefine
     default:
       break;
   }
-  if (status === 409) return "Ya existe una invitación pendiente para este correo.";
+  // Fallback para cualquier otro 409 que no sea uno de los tres conflictos de
+  // correo (hoy el backend no emite otro, pero no se asume "correo ya asociado"
+  // para no repetir el mismo defecto en sentido inverso).
+  if (status === 409) return "No se pudo completar la invitación por un conflicto. Inténtalo de nuevo.";
   if (status === 404) return "Alguno de los roles seleccionados no existe.";
   if (status === 400) return "Revisa el destino y los roles seleccionados.";
   return "No se pudo enviar la invitación. Inténtalo de nuevo.";

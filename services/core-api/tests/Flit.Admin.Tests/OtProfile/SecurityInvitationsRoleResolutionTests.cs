@@ -97,6 +97,45 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         invitation.RoleId.Should().Be(_otAdminRoleId);
     }
 
+    // HU #11550 AC1 — invitar por la ruta de Security (SuperAdmin) con un correo que YA tiene
+    // una invitación pendiente en el tenant destino debe mostrar el mensaje unificado,
+    // conservando su propio código de error.
+    [Fact]
+    public async Task Invite_AsSuperAdmin_EmailWithPendingInvitation_Returns409WithUnifiedMessage()
+    {
+        var (_, pendingEmail) = await SeedPendingInvitationAsync(_companyTenantId, lastSentAt: null);
+
+        var response = await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email = pendingEmail, fullName = "Invitación duplicada", targetTenantId = _companyTenantId },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var body = await response.Content.ReadFromJsonAsync<SecurityErrorBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Code.Should().Be("INVITATION_ALREADY_PENDING");
+        body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
+    }
+
+    // HU #11550 AC2 — invitar por la ruta de Security con el correo de una cuenta ACTIVA debe
+    // mostrar el mismo mensaje unificado, conservando su propio código de error.
+    [Fact]
+    public async Task Invite_AsSuperAdmin_EmailOfActiveAccount_Returns409WithUnifiedMessage()
+    {
+        var activeEmail = $"superadmin-{_superAdminUserId:N}@flit.local";
+
+        var response = await _client.PostAsJsonAsync(
+            "/api/v1/security/invitations",
+            new { email = activeEmail, fullName = "Ya tiene cuenta activa", targetTenantId = _companyTenantId },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var body = await response.Content.ReadFromJsonAsync<SecurityErrorBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Code.Should().Be("USER_ALREADY_EXISTS");
+        body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
+    }
+
     // HU #10625 AC1 — SuperAdmin puede reenviar CUALQUIER invitación del sistema (sin
     // restricción de tenant), a diferencia de AdminCompany que solo puede su propio tenant.
     [Fact]
@@ -446,4 +485,8 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         db.TransitOffices.RemoveRange(db.TransitOffices.Where(o => o.Id == _transitOfficeId));
         db.SaveChanges();
     }
+
+    // SecurityEndpoints (SuperAdmin/AdminCompany) usa "code" en vez de "error" — mismo
+    // convenio documentado en AdminOtUsersEndpointsTests.SuperAdminErrorBody.
+    private sealed record SecurityErrorBody(string Code, string? Message);
 }

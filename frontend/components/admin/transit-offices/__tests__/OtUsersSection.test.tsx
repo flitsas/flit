@@ -209,4 +209,52 @@ describe("OtUsersSection — refactor adminOT", () => {
       expect(unsuspendOtUser).toHaveBeenCalledWith("u-2", { transitOfficeId: "ot-1" }),
     );
   });
+
+  // HU #11550 AC4 — la ruta OT (AdminOtEndpoints) responde con `{ error, message }`
+  // (no `code`, a diferencia de SecurityEndpoints); igual debe mostrar el mismo mensaje
+  // unificado que la ruta Security/AdminCompany para los tres conflictos de correo.
+  it.each([
+    ["INVITATION_ALREADY_PENDING", "AC1"],
+    ["USER_ALREADY_EXISTS", "AC2"],
+    ["EMAIL_BELONGS_TO_DELETED_USER", "AC3"],
+  ])("AC4 — %s (%s): invitar desde el hub OT muestra el mensaje unificado", async (code) => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    vi.mocked(inviteOtUser).mockRejectedValue(
+      new ApiError(409, "Conflict", { error: code, message: "…" }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Laura García");
+
+    await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
+    await user.type(screen.getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
+    await user.type(screen.getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
+    await user.click(screen.getByRole("button", { name: /Enviar invitación/i }));
+
+    expect(
+      await screen.findByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).toBeInTheDocument();
+  });
+
+  it("un 409 que no es conflicto de correo al invitar desde el hub OT NO usa el mensaje unificado", async () => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    vi.mocked(inviteOtUser).mockRejectedValue(
+      new ApiError(409, "Conflict", { error: "SOME_OTHER_CONFLICT" }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Laura García");
+
+    await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
+    await user.type(screen.getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
+    await user.type(screen.getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
+    await user.click(screen.getByRole("button", { name: /Enviar invitación/i }));
+
+    expect(
+      await screen.findByText(/no se pudo completar la invitación por un conflicto/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).not.toBeInTheDocument();
+  });
 });

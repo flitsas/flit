@@ -19,6 +19,11 @@ import {
 // genérico SOLO SuperAdmin, sin scope OT: se reutiliza el mismo cliente que Usuarios.tsx.
 import { restoreUser } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
+import {
+  EMAIL_ALREADY_ASSOCIATED_MESSAGE,
+  emailConflictErrorCode,
+  isEmailConflictCode,
+} from "@/lib/users/emailConflict";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EditUserModal } from "@/components/atom/modules/users/EditUserModal";
 import { DeleteUserDialog } from "@/components/atom/modules/users/DeleteUserDialog";
@@ -248,8 +253,14 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
       setInviteOpen(false);
       void load();
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        show("Ya existe una invitación pendiente para ese correo o ya tiene cuenta.", "error");
+      if (err instanceof ApiError && isEmailConflictCode(emailConflictErrorCode(err.body))) {
+        // Mensaje unificado (HU #11550) — mismo texto que la ruta Security/AdminCompany
+        // (InviteUserModal) para los tres conflictos: invitación pendiente, cuenta activa
+        // y cuenta eliminada.
+        show(EMAIL_ALREADY_ASSOCIATED_MESSAGE, "error");
+      } else if (err instanceof ApiError && err.status === 409) {
+        // Otro conflicto (no de correo) — no reutilizar el mensaje unificado de arriba.
+        show("No se pudo completar la invitación por un conflicto. Inténtalo de nuevo.", "error");
       } else {
         show("No se pudo enviar la invitación.", "error");
       }

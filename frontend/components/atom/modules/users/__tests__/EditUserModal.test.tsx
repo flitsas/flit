@@ -76,7 +76,9 @@ describe("EditUserModal (#10622)", () => {
     await ue.type(nameInput, "Laura G.");
     await ue.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/ese correo ya está en uso/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /el correo utilizado ya se encuentra asociado a otra cuenta/i,
+    );
     // No se pierde lo escrito.
     expect(screen.getByLabelText(/nombre completo/i)).toHaveValue("Laura G.");
     expect(onSaved).not.toHaveBeenCalled();
@@ -92,7 +94,23 @@ describe("EditUserModal (#10622)", () => {
     await ue.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      /pertenece a una cuenta eliminada/i,
+      /el correo utilizado ya se encuentra asociado a otra cuenta/i,
+    );
+  });
+
+  it("AC2: mapea el 409 INVITATION_ALREADY_PENDING con el mismo mensaje unificado", async () => {
+    // No lo devuelve hoy el endpoint de edición (solo el de invitar), pero el código está en
+    // el catálogo unificado (HU #11550) y debe resolverse igual si algún día lo hiciera.
+    const ue = userEvent.setup();
+    const onUpdate = vi
+      .fn()
+      .mockRejectedValue(new ApiError(409, "Conflict", { code: "INVITATION_ALREADY_PENDING" }));
+    render(<EditUserModal user={user} onClose={vi.fn()} onSaved={vi.fn()} onUpdate={onUpdate} />);
+
+    await ue.click(screen.getByRole("button", { name: /guardar cambios/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /el correo utilizado ya se encuentra asociado a otra cuenta/i,
     );
   });
 

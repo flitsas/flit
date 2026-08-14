@@ -511,6 +511,8 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         var body = await response.Content.ReadFromJsonAsync<ErrorBody>(
             cancellationToken: TestContext.Current.CancellationToken);
         body!.Error.Should().Be("USER_ALREADY_EXISTS");
+        // HU #11550 — mensaje visible unificado con los otros dos conflictos de correo.
+        body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
     }
 
     // HU #10625 AC3 — invitación ya no pendiente (aceptada) → 409
@@ -1147,6 +1149,60 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         var body = await inviteResponse.Content.ReadFromJsonAsync<ErrorBody>(
             cancellationToken: TestContext.Current.CancellationToken);
         body!.Error.Should().Be("EMAIL_BELONGS_TO_DELETED_USER");
+        // HU #11550 AC3/AC4 — mensaje visible unificado con los otros dos conflictos de correo.
+        body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
+    }
+
+    // HU #11550 AC1/AC4 — invitar por la ruta del OT con un correo que YA tiene una invitación
+    // pendiente en el tenant debe mostrar el mismo mensaje unificado que los otros dos
+    // conflictos de correo, conservando su propio código de error.
+    [Fact]
+    public async Task InviteUser_AsOtAdmin_EmailWithPendingInvitation_Returns409WithUnifiedMessage()
+    {
+        var (_, pendingEmail) = await SeedPendingInvitationAsync(lastSentAt: null);
+
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var inviteResponse = await _client.PostAsJsonAsync(
+            "/api/v1/admin/ot/users/invite",
+            new { email = pendingEmail, fullName = "Invitación duplicada" },
+            TestContext.Current.CancellationToken);
+
+        inviteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var body = await inviteResponse.Content.ReadFromJsonAsync<ErrorBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Error.Should().Be("INVITATION_ALREADY_PENDING");
+        body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
+    }
+
+    // HU #11550 AC2/AC4 — invitar por la ruta del OT con el correo de una cuenta ACTIVA debe
+    // mostrar el mismo mensaje unificado, conservando su propio código de error.
+    [Fact]
+    public async Task InviteUser_AsOtAdmin_EmailOfActiveAccount_Returns409WithUnifiedMessage()
+    {
+        var token = MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        string collaboratorEmail;
+        await using (var db = CreateDbContext())
+        {
+            collaboratorEmail = await db.Users.AsNoTracking()
+                .Where(u => u.Id == _collaboratorUserId)
+                .Select(u => u.Email)
+                .SingleAsync(TestContext.Current.CancellationToken);
+        }
+
+        var inviteResponse = await _client.PostAsJsonAsync(
+            "/api/v1/admin/ot/users/invite",
+            new { email = collaboratorEmail, fullName = "Ya tiene cuenta activa" },
+            TestContext.Current.CancellationToken);
+
+        inviteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var body = await inviteResponse.Content.ReadFromJsonAsync<ErrorBody>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        body!.Error.Should().Be("USER_ALREADY_EXISTS");
+        body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
     }
 
     private async Task<(Guid InvitationId, string Email)> SeedPendingInvitationAsync(

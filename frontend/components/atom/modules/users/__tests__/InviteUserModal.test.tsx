@@ -178,6 +178,54 @@ describe("InviteUserModal — SuperAdmin", () => {
 
     expect(await screen.findByText(/no aplica al destino elegido/i)).toBeInTheDocument();
   });
+
+  // HU #11550 AC1/AC2/AC3 — los tres conflictos de correo comparten el mismo mensaje
+  // visible unificado que ya manda el backend, en vez del literal propio "Ya existe una
+  // invitación pendiente…" que antes se mostraba para CUALQUIER 409.
+  it.each([
+    ["INVITATION_ALREADY_PENDING", "AC1"],
+    ["USER_ALREADY_EXISTS", "AC2"],
+    ["EMAIL_BELONGS_TO_DELETED_USER", "AC3"],
+  ])("%s (%s) muestra el mensaje unificado de correo ya asociado", async (code) => {
+    vi.mocked(createInvitation).mockRejectedValue(
+      Object.assign(new Error("conflict"), { status: 409, body: { code } }),
+    );
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(await screen.findByRole("radio", { name: /Gestor/i }));
+    await user.click(await screen.findByLabelText(/compañía destino/i));
+    await user.click(await screen.findByRole("option", { name: /Compañía Demo/ }));
+    await fillIdentity(user);
+    await user.click(await screen.findByRole("radio", { name: "Radicador" }));
+    await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
+
+    expect(
+      await screen.findByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).toBeInTheDocument();
+  });
+
+  it("un 409 que no es conflicto de correo NO usa el mensaje unificado", async () => {
+    vi.mocked(createInvitation).mockRejectedValue(
+      Object.assign(new Error("conflict"), { status: 409, body: { code: "SOME_OTHER_CONFLICT" } }),
+    );
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(await screen.findByRole("radio", { name: /Gestor/i }));
+    await user.click(await screen.findByLabelText(/compañía destino/i));
+    await user.click(await screen.findByRole("option", { name: /Compañía Demo/ }));
+    await fillIdentity(user);
+    await user.click(await screen.findByRole("radio", { name: "Radicador" }));
+    await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
+
+    expect(
+      await screen.findByText(/no se pudo completar la invitación por un conflicto/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("InviteUserModal — AdminCompany", () => {

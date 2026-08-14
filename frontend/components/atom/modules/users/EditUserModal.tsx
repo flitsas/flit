@@ -5,6 +5,11 @@ import { Loader2, UserCog } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ApiError } from "@/lib/api/types";
 import { sanitizeName, validateReadableName } from "@/lib/validation/fieldRules";
+import {
+  EMAIL_ALREADY_ASSOCIATED_MESSAGE,
+  emailConflictErrorCode,
+  isEmailConflictCode,
+} from "@/lib/users/emailConflict";
 import type { TenantRole } from "@/lib/api/security";
 import {
   selectableRolesForProfile,
@@ -145,13 +150,11 @@ export function EditUserModal({
     } catch (error) {
       // No se pierde lo escrito: displayName/email no se resetean, solo se muestra el error.
       if (error instanceof ApiError) {
-        const code = (error.body as { code?: string } | undefined)?.code;
-        if (code === "USER_ALREADY_EXISTS") {
-          setFormError("Ese correo ya está en uso por otra cuenta.");
-        } else if (code === "EMAIL_BELONGS_TO_DELETED_USER") {
-          setFormError(
-            "Ese correo pertenece a una cuenta eliminada. Contacta a un SuperAdmin para restaurarla.",
-          );
+        const code = emailConflictErrorCode(error.body);
+        // Mensaje unificado (HU #11550) — mismo texto para USER_ALREADY_EXISTS y
+        // EMAIL_BELONGS_TO_DELETED_USER que en InviteUserModal / OtUsersSection.
+        if (isEmailConflictCode(code)) {
+          setFormError(EMAIL_ALREADY_ASSOCIATED_MESSAGE);
         } else if (code === "CONCURRENCY_CONFLICT" || error.status === 409) {
           setFormError(
             "Este usuario fue modificado por otra persona. Cierra el diálogo y vuelve a abrirlo.",
