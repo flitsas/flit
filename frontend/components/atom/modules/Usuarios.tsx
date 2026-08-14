@@ -326,7 +326,11 @@ export function Usuarios() {
         title="Usuarios"
         subtitle="Gestiona el acceso de tu equipo a la plataforma."
         action={
-          tab === "usuarios" ? (
+          // El backend exige AdminCompanyPolicy para invitar (Bug #11581). El acceso a este
+          // modulo es por permiso RBAC, no por rol, asi que un rol personalizado con el modulo
+          // concedido veria el boton y recibiria un 403 opaco: se gatea con el mismo criterio
+          // que el resto de acciones de ciclo de vida.
+          tab === "usuarios" && canManageUserLifecycle ? (
             <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
               Invitar usuario
             </button>
