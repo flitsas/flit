@@ -14,7 +14,9 @@ export interface TenantUser {
   role: string | null;
   roleCode: string | null;
   roleId: string | null;
-  status: "active" | "inactive" | "pending";
+  /** HU #11552 / ADR-0048: "cancelled" es un cuarto valor — invitación cancelada, visible y
+   *  reactivable. El `id` de la fila sigue siendo el `invitationId` en "pending" y "cancelled". */
+  status: "active" | "inactive" | "pending" | "cancelled";
   createdAt: string | null;
   isSuspended: boolean;
   tenantId?: string | null;
@@ -158,8 +160,8 @@ export async function unblockUser(userId: string): Promise<void> {
 }
 
 /** PATCH /api/v1/security/users/{userId} — edita nombre y/o correo del usuario (HU #10621).
- *  409 con código USER_ALREADY_EXISTS | EMAIL_BELONGS_TO_DELETED_USER | CONCURRENCY_CONFLICT
- *  (rowVersion desactualizado); 404 si el usuario ya no existe. */
+ *  409 con código EMAIL_ALREADY_IN_USE | CONCURRENCY_CONFLICT (rowVersion desactualizado);
+ *  404 si el usuario ya no existe. */
 export async function updateUser(userId: string, request: UpdateUserRequest): Promise<void> {
   return apiFetch<void>(`/api/v1/security/users/${userId}`, {
     method: "PATCH",
@@ -226,4 +228,30 @@ export async function cancelInvitation(invitationId: string): Promise<void> {
   return apiFetch<void>(`/api/v1/security/invitations/${invitationId}`, {
     method: "DELETE",
   });
+}
+
+/** Resultado de reactivar una invitación cancelada (HU #11552) — mismo shape que
+ *  ResendInvitationResult/InvitationCreatedResult. */
+export interface ReactivateInvitationResult {
+  invitationId: string;
+  email: string;
+  emailSent: boolean;
+}
+
+/** POST /api/v1/security/invitations/{invitationId}/reactivate — reactiva una invitación
+ *  cancelada (HU #11552 / ADR-0048): es UNA sola acción que vuelve el estado a "pending",
+ *  SIEMPRE regenera el token (el enlace anterior queda muerto) y reenvía el correo. Mismo
+ *  alcance que crear invitaciones (AdminCompany su tenant, SuperAdmin cualquiera). El `id` de
+ *  la fila YA es el `invitationId` cuando `status === "cancelled"`. Sin cuerpo de petición.
+ *  Errores: 404 si la invitación no existe o no pertenece al alcance del caller; 409
+ *  INVITATION_NOT_CANCELLED si ya no está cancelada (fue reactivada por otra persona —
+ *  condición de carrera), o EMAIL_ALREADY_IN_USE | ROLE_NOT_FOUND (mismo conflicto de correo
+ *  que crear invitación); 429 con `{ code, message, retryAfterSeconds }` si el cooldown
+ *  anti-abuso compartido con `resend` sigue activo — este endpoint usa `code` (el de OT usa
+ *  `error`). */
+export async function reactivateInvitation(invitationId: string): Promise<ReactivateInvitationResult> {
+  return apiFetch<ReactivateInvitationResult>(
+    `/api/v1/security/invitations/${invitationId}/reactivate`,
+    { method: "POST" },
+  );
 }

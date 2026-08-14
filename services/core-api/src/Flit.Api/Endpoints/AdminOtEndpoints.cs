@@ -38,6 +38,7 @@ using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Application.Auth.CancelInvitation;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
+using Flit.Modules.Security.Application.Auth.ReactivateInvitation;
 using Flit.Modules.Security.Application.Auth.ResendInvitation;
 using Flit.Modules.Security.Application.UserManagement.DeleteUser;
 using Flit.Modules.Security.Application.UserManagement.SuspendUser;
@@ -416,6 +417,24 @@ public static class AdminOtEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
+
+        // HU #11552 / ADR-0048 — reactiva una invitación cancelada del tenant OT resuelto (propio
+        // para ot_admin, o el indicado por ?transitOfficeId= para SuperAdmin). Necesaria además de
+        // la de SecurityEndpoints porque AdminCompanyPolicy no incluye ot_admin: con solo esa, el
+        // OT podría cancelar pero no reactivar. Reactivar es UNA sola acción: pending + token
+        // nuevo + reenvío del correo, no idempotente (segunda llamada → 409).
+        group.MapPost("/invitations/{invitationId:guid}/reactivate", ReactivateInvitationAsync)
+            .WithName("AdminOtReactivateInvitation")
+            .WithSummary("Reactiva una invitación cancelada del tenant OT")
+            .WithDescription("Vuelve la invitación a 'pending' con un token SIEMPRE nuevo (el enlace anterior deja "
+                + "de ser válido) y reenvía el correo. 409 si no está cancelada, si el correo ya está en uso o si "
+                + "algún rol de la invitación ya no está activo; 429 si no ha pasado el cooldown anti-abuso.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict)
+            .Produces(StatusCodes.Status429TooManyRequests);
 
         return app;
     }
@@ -1688,21 +1707,30 @@ public static class AdminOtEndpoints
         }
         catch (InvitationAlreadyPendingException)
         {
+            // HU #11580 — código único de cara al cliente (indistinguibilidad); la causa
+            // concreta queda en auditoría vía ConfigAuditFailureContext, no en la respuesta.
+            // NOTA: esta ruta (/users/invite) no tiene AdminAuditFilter ni ConfigAuditFailureFilter
+            // enganchado — SetErrorCode aquí no tiene efecto hasta que se instrumente el filtro.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "invitation_already_pending");
             return Results.Json(
-                new { error = "INVITATION_ALREADY_PENDING", message = "Ya existe una invitación pendiente para este correo." },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
         catch (UserAlreadyExistsException)
         {
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "user_already_exists");
             return Results.Json(
-                new { error = "USER_ALREADY_EXISTS", message = "Este correo ya tiene una cuenta activa en el sistema." },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
-        catch (UserEmailBelongsToDeletedAccountException ex)
+        catch (UserEmailBelongsToDeletedAccountException)
         {
             // HU #10623 AC4 — el correo pertenece a una cuenta soft-deleted.
+            // HU #11580 — código único de cara al cliente; la causa concreta queda en
+            // auditoría vía ConfigAuditFailureContext.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
             return Results.Json(
-                new { error = "EMAIL_BELONGS_TO_DELETED_USER", message = ex.Message },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
     }
@@ -1822,10 +1850,10 @@ public static class AdminOtEndpoints
 
         var pending = await db.UserInvitations
             .AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.Status == "pending")
+            .Where(x => x.TenantId == tenantId && InvitationListingStatuses.Visible.Contains(x.Status))
             .OrderByDescending(x => x.CreatedAt)
-            // El rol de la invitación pendiente ya está decidido: se muestra para que la columna
-            // Perfil / Rol no quede en "—" hasta que el usuario active su cuenta.
+            // El rol de la invitación pendiente/cancelada ya está decidido: se muestra para que
+            // la columna Perfil / Rol no quede en "—" hasta que el usuario active su cuenta.
             .Select(x => new OtUserDto(
                 x.Id.ToString(),
                 x.FullName,
@@ -1833,7 +1861,8 @@ public static class AdminOtEndpoints
                 db.Roles.Where(r => r.Id == x.RoleId).Select(r => r.Name).FirstOrDefault(),
                 db.Roles.Where(r => r.Id == x.RoleId).Select(r => r.Code).FirstOrDefault(),
                 x.RoleId,
-                "pending",
+                // HU #11552 / ADR-0048: estado real, no el literal "pending" hardcodeado.
+                x.Status,
                 x.CreatedAt,
                 false,
                 0L))
@@ -1885,14 +1914,21 @@ public static class AdminOtEndpoints
         }
         catch (UserAlreadyExistsException)
         {
+            // NOTA: esta ruta (PATCH /users/{userId}) no tiene AdminAuditFilter ni
+            // ConfigAuditFailureFilter enganchado — SetErrorCode aquí no tiene efecto hasta
+            // que se instrumente el filtro.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "user_already_exists");
             return Results.Json(
-                new { error = "USER_ALREADY_EXISTS", message = "Este correo ya tiene una cuenta activa en el sistema." },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
-        catch (UserEmailBelongsToDeletedAccountException ex)
+        catch (UserEmailBelongsToDeletedAccountException)
         {
+            // HU #11580 — código único de cara al cliente; la causa concreta queda en
+            // auditoría vía ConfigAuditFailureContext.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
             return Results.Json(
-                new { error = "EMAIL_BELONGS_TO_DELETED_USER", message = ex.Message },
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
                 statusCode: StatusCodes.Status409Conflict);
         }
         catch (UserProfileConcurrencyException ex)
@@ -2155,6 +2191,92 @@ public static class AdminOtEndpoints
             return Results.Json(
                 new { error = "INVITATION_NOT_PENDING", message = "La invitación ya no está pendiente (fue aceptada o cancelada previamente)." },
                 statusCode: StatusCodes.Status409Conflict);
+        }
+    }
+
+    private static async Task<IResult> ReactivateInvitationAsync(
+        Guid invitationId,
+        HttpContext httpContext,
+        FlitDbContext db,
+        ReactivateInvitationHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var reactivatedBy = ResolveUserId(httpContext.User);
+        if (reactivatedBy is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        try
+        {
+            var result = await handler.HandleAsync(
+                new ReactivateInvitationCommand(invitationId, tenantId, reactivatedBy.Value),
+                cancellationToken).ConfigureAwait(false);
+
+            return Results.Ok(new { invitationId = result.InvitationId, email = result.Email, emailSent = result.EmailSent });
+        }
+        catch (InvitationNotFoundException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_NOT_FOUND", message = "La invitación no existe o no pertenece al tenant OT resuelto." },
+                statusCode: StatusCodes.Status404NotFound);
+        }
+        catch (InvitationNotCancelledException)
+        {
+            return Results.Json(
+                new { error = "INVITATION_NOT_CANCELLED", message = "La invitación no está cancelada, así que no se puede reactivar." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (InvitationAlreadyPendingException)
+        {
+            // NOTA: esta ruta (/invitations/{invitationId}/reactivate) no tiene AdminAuditFilter
+            // ni ConfigAuditFailureFilter enganchado — SetErrorCode aquí no tiene efecto hasta
+            // que se instrumente el filtro.
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "invitation_already_pending");
+            return Results.Json(
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (UserAlreadyExistsException)
+        {
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "user_already_exists");
+            return Results.Json(
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (UserEmailBelongsToDeletedAccountException)
+        {
+            ConfigAuditFailureContext.SetErrorCode(httpContext, "email_belongs_to_deleted_user");
+            return Results.Json(
+                new { error = UserEmailConflictMessages.EmailAlreadyInUseCode, message = UserEmailConflictMessages.EmailAlreadyInUse },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (RoleNotFoundException)
+        {
+            return Results.Json(
+                new { error = "ROLE_NOT_FOUND", message = "Alguno de los roles de la invitación ya no existe o está inactivo." },
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (ResendCooldownActiveException ex)
+        {
+            var retryAfterSeconds = Math.Max(1, (int)Math.Ceiling(ex.RetryAfter.TotalSeconds));
+            httpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+            return Results.Json(
+                new
+                {
+                    error = "RESEND_COOLDOWN_ACTIVE",
+                    message = $"Debes esperar antes de reactivar esta invitación de nuevo. Intenta en {retryAfterSeconds} segundos.",
+                    retryAfterSeconds,
+                },
+                statusCode: StatusCodes.Status429TooManyRequests);
         }
     }
 

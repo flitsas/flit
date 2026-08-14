@@ -95,6 +95,13 @@ public static class AuthEndpoints
                     new ErrorResponse("WEAK_PASSWORD", "La contraseña no cumple los requisitos mínimos."),
                     statusCode: StatusCodes.Status400BadRequest);
             }
+            catch (PasswordReusedException)
+            {
+                // HU #11553 AC2 — el token de recuperación sigue vigente; el usuario puede reintentar.
+                return Results.Json(
+                    new ErrorResponse("PASSWORD_REUSED", "La contraseña nueva debe ser distinta de la actual."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
         });
 
         // HU #10170 AC1 — reset administrativo: el admin restablece la contraseña de un usuario de su ámbito.
@@ -130,6 +137,12 @@ public static class AuthEndpoints
                 return Results.Json(
                     new ErrorResponse("USER_NOT_FOUND", "Usuario no encontrado."),
                     statusCode: StatusCodes.Status404NotFound);
+            }
+            catch (PasswordReusedException)
+            {
+                return Results.Json(
+                    new ErrorResponse("PASSWORD_REUSED", "La contraseña nueva debe ser distinta de la actual."),
+                    statusCode: StatusCodes.Status409Conflict);
             }
         }).RequireAuthorization();
 
@@ -167,6 +180,12 @@ public static class AuthEndpoints
             catch (InvalidCredentialsException)
             {
                 return Results.Unauthorized();
+            }
+            catch (PasswordReusedException)
+            {
+                return Results.Json(
+                    new ErrorResponse("PASSWORD_REUSED", "La contraseña nueva debe ser distinta de la actual."),
+                    statusCode: StatusCodes.Status409Conflict);
             }
         }).RequireAuthorization();
 

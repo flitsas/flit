@@ -178,6 +178,107 @@ describe("InviteUserModal — SuperAdmin", () => {
 
     expect(await screen.findByText(/no aplica al destino elegido/i)).toBeInTheDocument();
   });
+
+  // HU #11550 + HU #11580 — el conflicto de correo ya asociado a otra cuenta usa un
+  // único código EMAIL_ALREADY_IN_USE (antes tres códigos distintos que permitían
+  // deducir POR QUÉ estaba ocupado el correo) y muestra el mismo mensaje visible
+  // unificado que ya manda el backend, en vez del literal propio "Ya existe una
+  // invitación pendiente…" que antes se mostraba para CUALQUIER 409.
+  it("EMAIL_ALREADY_IN_USE (campo 'code') muestra el mensaje unificado de correo ya asociado", async () => {
+    vi.mocked(createInvitation).mockRejectedValue(
+      Object.assign(new Error("conflict"), {
+        status: 409,
+        body: { code: "EMAIL_ALREADY_IN_USE" },
+      }),
+    );
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(await screen.findByRole("radio", { name: /Gestor/i }));
+    await user.click(await screen.findByLabelText(/compañía destino/i));
+    await user.click(await screen.findByRole("option", { name: /Compañía Demo/ }));
+    await fillIdentity(user);
+    await user.click(await screen.findByRole("radio", { name: "Radicador" }));
+    await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
+
+    expect(
+      await screen.findByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).toBeInTheDocument();
+  });
+
+  it("EMAIL_ALREADY_IN_USE (campo 'error', ruta OT) también muestra el mensaje unificado", async () => {
+    vi.mocked(createInvitation).mockRejectedValue(
+      Object.assign(new Error("conflict"), {
+        status: 409,
+        body: { error: "EMAIL_ALREADY_IN_USE" },
+      }),
+    );
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(await screen.findByRole("radio", { name: /Gestor/i }));
+    await user.click(await screen.findByLabelText(/compañía destino/i));
+    await user.click(await screen.findByRole("option", { name: /Compañía Demo/ }));
+    await fillIdentity(user);
+    await user.click(await screen.findByRole("radio", { name: "Radicador" }));
+    await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
+
+    expect(
+      await screen.findByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).toBeInTheDocument();
+  });
+
+  it("un 409 que no es conflicto de correo NO usa el mensaje unificado", async () => {
+    vi.mocked(createInvitation).mockRejectedValue(
+      Object.assign(new Error("conflict"), { status: 409, body: { code: "SOME_OTHER_CONFLICT" } }),
+    );
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(await screen.findByRole("radio", { name: /Gestor/i }));
+    await user.click(await screen.findByLabelText(/compañía destino/i));
+    await user.click(await screen.findByRole("option", { name: /Compañía Demo/ }));
+    await fillIdentity(user);
+    await user.click(await screen.findByRole("radio", { name: "Radicador" }));
+    await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
+
+    expect(
+      await screen.findByText(/no se pudo completar la invitación por un conflicto/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).not.toBeInTheDocument();
+  });
+
+  // HU #11580 — regresión: un código RETIRADO ya no debe reconocerse como conflicto
+  // de correo, aunque venga con status 409. Esto impide que alguien reintroduzca la
+  // distinción entre invitación pendiente / cuenta activa / cuenta eliminada sin
+  // darse cuenta. Cae en el fallback genérico de 409 (igual que "un 409 que no es
+  // conflicto de correo").
+  it("un código RETIRADO (USER_ALREADY_EXISTS) ya no se reconoce como conflicto de correo", async () => {
+    vi.mocked(createInvitation).mockRejectedValue(
+      Object.assign(new Error("conflict"), {
+        status: 409,
+        body: { code: "USER_ALREADY_EXISTS" },
+      }),
+    );
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(await screen.findByRole("radio", { name: /Gestor/i }));
+    await user.click(await screen.findByLabelText(/compañía destino/i));
+    await user.click(await screen.findByRole("option", { name: /Compañía Demo/ }));
+    await fillIdentity(user);
+    await user.click(await screen.findByRole("radio", { name: "Radicador" }));
+    await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
+
+    expect(
+      await screen.findByText(/no se pudo completar la invitación por un conflicto/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("InviteUserModal — AdminCompany", () => {

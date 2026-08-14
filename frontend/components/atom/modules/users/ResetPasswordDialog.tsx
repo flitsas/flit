@@ -5,6 +5,7 @@ import { KeyRound, Loader2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ApiError } from "@/lib/api/types";
 import { adminResetPassword } from "@/lib/api/auth";
+import { isPasswordReusedError } from "@/lib/auth/passwordReusedError";
 
 export interface ResetPasswordDialogTarget {
   fullName: string;
@@ -18,6 +19,16 @@ export interface ResetPasswordDialogProps {
 }
 
 const GENERIC_ERROR = "No se pudo restablecer la contraseña. Inténtalo de nuevo.";
+
+// Aquí la contraseña la genera el sistema, no el admin: si colisiona con la
+// vigente el backend la regenera solo (hasta 5 intentos) y completa el reset sin
+// error. Que este 409 llegue igual significa que el generador está roto — una
+// condición sobre la que el admin no puede actuar. Se le da un texto honesto de
+// error del sistema (en vez de caer en el genérico, que sonaría a "reintenta y
+// probablemente funcione") para no sugerir una reutilización que no ocurrió y
+// para no insinuar que el admin hizo algo mal.
+const SYSTEM_PASSWORD_GENERATION_ERROR =
+  "No se pudo generar una contraseña temporal válida. Este es un error del sistema, no de tu solicitud — contacta a soporte si persiste.";
 
 /**
  * Confirmación de reset administrativo (HU-B auth-parity / HU #10170/#10174).
@@ -46,6 +57,8 @@ export function ResetPasswordDialog({ user, onClose, onDone }: ResetPasswordDial
           setError("Acceso restringido: no tiene ámbito sobre este usuario.");
         } else if (err.status === 404) {
           setError("El usuario no existe o no está activo.");
+        } else if (isPasswordReusedError(err.status, err.body)) {
+          setError(SYSTEM_PASSWORD_GENERATION_ERROR);
         } else {
           setError(err.message || GENERIC_ERROR);
         }
