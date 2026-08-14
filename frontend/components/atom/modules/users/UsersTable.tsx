@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Search } from "lucide-react";
 import { RowActions, type RowAction } from "@/components/atom/RowActions";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
-import { ProfileRoleCell } from "./ProfileRoleCell";
+import { ProfileCell, RoleCell } from "./ProfileRoleCell";
 import {
   USER_PROFILE_ORDER,
   profileShortLabel,
@@ -137,10 +137,13 @@ export function UsersTable({
   const [roleFilter, setRoleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<UserStatusFilter>("");
 
+  // Perfil y Rol viven en columnas separadas (HU #11551): antes se apilaban en una sola celda
+  // y el chip de Perfil (siempre "Gestor" para cualquier usuario de compañía) eclipsaba el rol
+  // real, dando la impresión de que todos los usuarios tenían el mismo rol.
   const gridTemplate = showTenantColumn
-    ? "2.4fr 1.4fr 1.8fr 1.1fr 1.2fr 108px"
-    : "2.6fr 1.8fr 1.2fr 1.4fr 108px";
-  const minWidth = showTenantColumn ? "min-w-[880px]" : "min-w-[760px]";
+    ? "2.2fr 1.3fr 0.8fr 1.4fr 1.0fr 1.2fr 108px"
+    : "2.4fr 0.8fr 1.5fr 1.1fr 1.3fr 108px";
+  const minWidth = showTenantColumn ? "min-w-[980px]" : "min-w-[860px]";
 
   const roleOptions = useMemo(() => {
     const names = new Set<string>();
@@ -264,7 +267,8 @@ export function UsersTable({
         >
           <div>Usuario</div>
           {showTenantColumn && <div>Empresa</div>}
-          <div>Perfil / Rol</div>
+          <div>Perfil</div>
+          <div>Rol</div>
           <div>Estado</div>
           <div>Fecha</div>
           <div className="text-right">Acciones</div>
@@ -331,12 +335,12 @@ export function UsersTable({
                       {row.tenantName ?? "—"}
                     </div>
                   )}
-                  <ProfileRoleCell
+                  <ProfileCell
                     roleCode={row.roleCode}
-                    roleName={row.role}
                     profile={row.profile}
                     tenantType={row.tenantType}
                   />
+                  <RoleCell roleCode={row.roleCode} roleName={row.role} />
                   <div>
                     <StatusBadge label={badge.label} tone={badge.tone} />
                   </div>

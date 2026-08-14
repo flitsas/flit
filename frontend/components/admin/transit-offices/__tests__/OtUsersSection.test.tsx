@@ -116,6 +116,24 @@ describe("OtUsersSection — refactor adminOT", () => {
     expect(within(bloqueada).getByText("Bloqueado")).toBeInTheDocument();
   });
 
+  // AC4 (HU #11551) — el hub OT es una de las tres pantallas que comparten UsersTable: Perfil
+  // y Rol deben quedar en columnas separadas y las acciones (Editar) siguen disponibles.
+  it("AC4 — muestra Perfil y Rol en columnas separadas y conserva las acciones", async () => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    renderSection();
+
+    const fila = (await screen.findByText("Laura García")).closest("div.grid") as HTMLElement;
+    const encabezado = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
+    expect(within(encabezado).getByText("Perfil")).toBeInTheDocument();
+    expect(within(encabezado).getByText("Rol")).toBeInTheDocument();
+    // Esta sección vive dentro de un organismo: el perfil de fila es siempre OT.
+    expect(within(fila).getByText("OT")).toBeInTheDocument();
+    expect(within(fila).getByText("Admin OT")).toBeInTheDocument();
+    expect(
+      within(fila).getByRole("button", { name: /editar usuario laura garcía/i }),
+    ).toBeInTheDocument();
+  });
+
   it("invita a un usuario nuevo sin marcar rol: el backend asigna ot_admin", async () => {
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
     vi.mocked(inviteOtUser).mockResolvedValue({

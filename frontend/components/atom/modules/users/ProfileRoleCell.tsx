@@ -39,17 +39,27 @@ export interface ProfileRoleCellProps {
   tenantType?: string | null;
 }
 
-/** Celda compuesta Perfil + Rol de las tablas de usuarios. */
-export function ProfileRoleCell({ roleCode, roleName, profile, tenantType }: ProfileRoleCellProps) {
+/**
+ * Celda "Perfil" de las tablas de usuarios. Perfil (FLIT / Gestor / OT) es un eje distinto del
+ * rol: cualquier usuario de una compañía es perfil Gestor, sea Administrador de Compañía o
+ * Radicador — separar la columna evita que el chip domine visualmente sobre el rol real
+ * (HU #11551).
+ */
+export function ProfileCell({ roleCode, profile, tenantType }: Omit<ProfileRoleCellProps, "roleName">) {
   const kind = resolveProfile({ profile, roleCode, tenantType });
-  const roleLabel = roleName?.trim() || roleCode?.trim() || "Sin rol";
-
   return (
-    <div className="flex min-w-0 flex-col gap-1">
+    <div className="flex min-w-0 items-center">
       <ProfileBadge profile={kind} />
-      <span className="truncate text-[11px] opacity-80" title={roleLabel}>
-        {roleLabel}
-      </span>
     </div>
+  );
+}
+
+/** Celda "Rol" de las tablas de usuarios: texto legible, en su propia columna. */
+export function RoleCell({ roleCode, roleName }: Pick<ProfileRoleCellProps, "roleCode" | "roleName">) {
+  const roleLabel = roleName?.trim() || roleCode?.trim() || "Sin rol";
+  return (
+    <span className="block truncate text-xs font-medium" title={roleLabel}>
+      {roleLabel}
+    </span>
   );
 }
