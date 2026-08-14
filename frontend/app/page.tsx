@@ -100,7 +100,6 @@ function HomeContent() {
 
     lastDeniedRef.current = null;
     replaceIssuedRef.current = null;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setModule((prev) => (prev === plan.module ? prev : plan.module));
   }, [rawModule, navigableKey, navigableIds, modulesLoading, router, showToast]);
 
