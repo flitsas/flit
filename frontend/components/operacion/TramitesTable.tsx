@@ -53,6 +53,7 @@ import {
   TramiteDocumentosModal,
   useAttachmentPreview,
 } from './TramiteDocumentosModal';
+import { TramiteDetalleModal } from './TramiteDetalleModal';
 import type {
   FirmaParteEstado,
   InstanceStatus,
@@ -65,8 +66,11 @@ import type {
 /** Tope del camino filtrado del backend (mismo MaxItems del API). */
 const SERVER_LIST_TAKE = 200;
 
-/** Texto corto y discreto del sub-estado de placa (debajo del chip de estado). */
-function plateFlowHint(status: string | null | undefined): string | null {
+/**
+ * Texto corto y discreto del sub-estado de placa (debajo del chip de estado). Exportada porque
+ * `TramiteDetalleModal` reutiliza el mismo texto en su banner contextual — no se duplica.
+ */
+export function plateFlowHint(status: string | null | undefined): string | null {
   if (status === 'asignado') return 'Placa asignada por el OT';
   if (status === 'preasignado') return 'Esperando placa del OT';
   if (status === 'terminado') return 'Listo para el OT';
@@ -331,6 +335,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   // necesita el tenant de la fila.
   const [docsTramite, setDocsTramite] = useState<InstanceSummary | null>(null);
   const [consolidadoTramite, setConsolidadoTramite] = useState<InstanceSummary | null>(null);
+  // Frente C, etapa 1 — modal de detalle para trámites YA RADICADOS (estado ≠ 'borrador'). El
+  // borrador sigue navegando al asistente; ver `TramiteRow.handleOpen`.
+  const [detalleTramite, setDetalleTramite] = useState<InstanceSummary | null>(null);
 
   // Paginación client-side (1-based).
   const [page, setPage] = useState(1);
@@ -996,6 +1003,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
           }
           onVerDocumentos={setDocsTramite}
           onVerConsolidado={setConsolidadoTramite}
+          onOpenDetalle={setDetalleTramite}
         />
       </div>
 
@@ -1017,6 +1025,15 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
             setConsolidadoTramite(null);
           },
         }}
+      />
+
+      {/* Frente C, etapa 1 — modal de detalle para trámites ya radicados (estado ≠ 'borrador'). */}
+      <TramiteDetalleModal
+        open={detalleTramite !== null}
+        onClose={() => setDetalleTramite(null)}
+        instanceId={detalleTramite?.id ?? null}
+        tenantId={isAdmin ? detalleTramite?.tenantId : undefined}
+        item={detalleTramite}
       />
 
       {processTarget && (
@@ -1183,6 +1200,7 @@ function TableBody({
   onOpen,
   onVerDocumentos,
   onVerConsolidado,
+  onOpenDetalle,
 }: {
   loading: boolean;
   error: string | null;
@@ -1214,6 +1232,8 @@ function TableBody({
   onOpen: (id: string, tenantId: string) => void;
   onVerDocumentos: (item: InstanceSummary) => void;
   onVerConsolidado: (item: InstanceSummary) => void;
+  /** Frente C, etapa 1 — abre el modal de detalle (trámites YA RADICADOS, estado ≠ 'borrador'). */
+  onOpenDetalle: (item: InstanceSummary) => void;
 }) {
   if (loading) {
     return (
@@ -1385,6 +1405,7 @@ function TableBody({
                 onOpen={onOpen}
                 onVerDocumentos={onVerDocumentos}
                 onVerConsolidado={onVerConsolidado}
+                onOpenDetalle={onOpenDetalle}
               />
             ))}
           </tbody>
@@ -1574,6 +1595,7 @@ function TramiteRow({
   onOpen,
   onVerDocumentos,
   onVerConsolidado,
+  onOpenDetalle,
 }: {
   item: InstanceSummary;
   /** Claves visibles (selector de columnas) — misma lista/orden que usa la cabecera. */
@@ -1591,6 +1613,8 @@ function TramiteRow({
   onOpen: (id: string, tenantId: string) => void;
   onVerDocumentos: (item: InstanceSummary) => void;
   onVerConsolidado: (item: InstanceSummary) => void;
+  /** Frente C, etapa 1 — abre el modal de detalle (trámites YA RADICADOS, estado ≠ 'borrador'). */
+  onOpenDetalle: (item: InstanceSummary) => void;
 }) {
   // HU #11055 — la acción del consolidado solo existe si el expediente ya está generado (el resumen
   // trae el id del adjunto): el botón NUNCA dispara una generación.
@@ -1669,7 +1693,14 @@ function TramiteRow({
   // ICT — abrir/continuar un trámite PAUSADO pide confirmación primero (modal FLIT, no confirm nativo):
   // recordar reanudarlo para poder radicarlo.
   const [confirmPauseOpen, setConfirmPauseOpen] = useState(false);
+  // Frente C, etapa 1 (Tramites.tsx:222 de la propuesta) — borrador → asistente; radicado → modal
+  // de detalle, sin navegar. `isPaused` solo aplica a borradores ICT, así que el chequeo de pausa
+  // queda intacto dentro de esa rama.
   const handleOpen = () => {
+    if (item.estado !== 'borrador') {
+      onOpenDetalle(item);
+      return;
+    }
     if (item.isPaused) {
       setConfirmPauseOpen(true);
       return;

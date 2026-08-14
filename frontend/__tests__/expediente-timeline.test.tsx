@@ -26,8 +26,11 @@ describe("ExpedienteTimeline — trazabilidad cronológica", () => {
 
   it("muestra el estado origen y el motivo cuando existen", () => {
     render(<ExpedienteTimeline statusHistory={desordenado} />);
+    // El hito se pinta como UNA sola frase —«Preparado desde Borrador (Gates OK)»—, así que el
+    // motivo se busca como parte de ella y no como nodo suelto: es lo mismo que se comprobaba
+    // antes de que el componente adoptara el formato literal de la propuesta.
     expect(screen.getByText(/desde Borrador/i)).toBeInTheDocument();
-    expect(screen.getByText("Gates OK")).toBeInTheDocument();
+    expect(screen.getByText(/\(Gates OK\)/)).toBeInTheDocument();
   });
 
   it("estado vacío", () => {

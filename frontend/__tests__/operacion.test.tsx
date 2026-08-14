@@ -297,7 +297,11 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     expect(routerPush).toHaveBeenCalledWith('/tramites/inst-1');
   });
 
-  it('la acción Ver de una fila submitted navega al wizard de esa instancia', async () => {
+  // Frente C, etapa 1 — un trámite YA RADICADO (estado ≠ 'borrador') ya no navega al asistente:
+  // abre el modal de detalle en su lugar (Tramites.tsx:222 de la propuesta). Antes esta prueba
+  // comprobaba que "Ver" navegaba; ahora comprueba lo contrario (abre el modal, sin navegar), que
+  // es el comportamiento nuevo — no se debilita, se actualiza al contrato vigente.
+  it('la acción Ver de una fila submitted abre el modal de detalle sin navegar', async () => {
     mocks.listInstances.mockResolvedValue([INSTANCE_SUBMITTED]);
     const user = userEvent.setup();
     render(<OperacionView onNewTramite={vi.fn()} />);
@@ -305,9 +309,13 @@ describe('Track A — toolbar de filtros y acciones del listado', () => {
     await user.click(
       await screen.findByRole('button', { name: /Acciones del trámite MA-002/ }),
     );
-    // "Ver" abre el wizard; "Ver documentos" es otra acción, de ahí el ancla al final.
+    // "Ver" abre el modal de detalle; "Ver documentos" es otra acción, de ahí el ancla al final.
     await user.click(screen.getByRole('menuitem', { name: /^Ver$/ }));
-    expect(routerPush).toHaveBeenCalledWith('/tramites/inst-2');
+
+    expect(
+      await screen.findByRole('dialog', { name: /Detalle de matrícula inicial/ }),
+    ).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
   it('el estado vacío con filtros activos muestra "Limpiar filtros" y al limpiar reaparecen las filas', async () => {

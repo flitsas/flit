@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   getAttachments: vi.fn(),
   fetchAttachmentPreviewUrl: vi.fn(),
   downloadAttachment: vi.fn(),
+  // Frente C, etapa 1 — modal de detalle de un trámite ya radicado.
+  getInstance: vi.fn(),
   // ICT (PR #204) — pausa individual y masiva + cierre del subflujo de placa.
   pauseInstance: vi.fn(),
   pauseInstancesMassive: vi.fn(),
@@ -728,6 +730,178 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
     );
     expect(mocks.getAttachments).not.toHaveBeenCalled();
     expect(routerPush).not.toHaveBeenCalled();
+  });
+});
+
+// Frente C, etapa 1 — armazón del modal de detalle (Tramites.tsx:222 de la propuesta): borrador
+// sigue navegando al asistente; radicado (estado ≠ 'borrador') abre el modal de detalle, sin
+// navegar. Cubre el cableado (fila / botón del radicado / acción "Ver") y el contenido del modal
+// (trazabilidad + archivos finales) con los 4 estados de carga.
+describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radicado', () => {
+  const [base] = makeInstances(1);
+
+  it('un trámite radicado abre el modal de detalle al hacer clic en la fila, sin navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-1', referenceNumber: 'TR-RAD1', placa: 'RAD001', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({ id: 'rad-1', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByText('RAD001'));
+
+    expect(await screen.findByRole('dialog', { name: /Detalle de traspaso/ })).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('el botón del radicado de un trámite radicado abre el modal sin navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-2', referenceNumber: 'TR-RAD2', placa: 'RAD002', estado: 'aprobado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({ id: 'rad-2', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Abrir trámite TR-RAD2' }));
+
+    expect(await screen.findByRole('dialog', { name: /Detalle de traspaso/ })).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('la acción "Ver" del menú de un trámite radicado abre el modal sin navegar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-3', referenceNumber: 'TR-RAD3', placa: 'RAD003', estado: 'preparado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({ id: 'rad-3', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<TramitesTable />);
+
+    await screen.findByText('RAD003');
+    await abrirAcciones('TR-RAD3');
+    await userEvent.click(screen.getByRole('menuitem', { name: /^Ver$/ }));
+
+    expect(await screen.findByRole('dialog', { name: /Detalle de traspaso/ })).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('un trámite en borrador sigue navegando al asistente en vez de abrir el modal', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'brw-1', referenceNumber: 'TR-BRW1', placa: 'BRW001', estado: 'borrador' },
+    ]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByText('BRW001'));
+
+    expect(routerPush).toHaveBeenCalledWith('/tramites/brw-1');
+    expect(screen.queryByRole('dialog', { name: /Detalle de/ })).toBeNull();
+    expect(mocks.getInstance).not.toHaveBeenCalled();
+  });
+
+  it('la trazabilidad pinta los hitos del statusHistory devuelto por getInstance', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-4', referenceNumber: 'TR-RAD4', placa: 'RAD004', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({
+      id: 'rad-4',
+      statusHistory: [
+        { fromStatus: null, toStatus: 'borrador', changedAt: '2026-07-01T09:00:00Z', reason: null },
+        { fromStatus: 'borrador', toStatus: 'preparado', changedAt: '2026-07-02T09:00:00Z', reason: null },
+      ],
+    });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByText('RAD004'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(within(dialog).getByText('Borrador')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Preparado desde Borrador/)).toBeInTheDocument();
+  });
+
+  it('los archivos finales del sistema muestran su SHA-256 completo (y excluyen los de otro origen)', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-5', referenceNumber: 'TR-RAD5', placa: 'RAD005', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({ id: 'rad-5', statusHistory: [] });
+    mocks.getAttachments.mockResolvedValue([
+      {
+        id: 'att-sys',
+        tipo: 'fur',
+        filename: 'fur-generado.pdf',
+        mimetype: 'application/pdf',
+        sizeBytes: 2048,
+        sha256: 'a91f2c7d4e88b013aabbccddeeff00112233445566778899aabbccddeeff00',
+        source: 'system',
+        uploadedAt: '2026-07-05T00:00:00Z',
+      },
+      {
+        id: 'att-user',
+        tipo: 'cedula',
+        filename: 'cedula.pdf',
+        mimetype: 'application/pdf',
+        sizeBytes: 1024,
+        sha256: 'zzzz',
+        source: 'user',
+        uploadedAt: '2026-07-04T00:00:00Z',
+      },
+    ]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByText('RAD005'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(await within(dialog).findByText('fur-generado.pdf')).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        /SHA-256 · a91f2c7d4e88b013aabbccddeeff00112233445566778899aabbccddeeff00/,
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText('cedula.pdf')).toBeNull();
+    expect(
+      within(dialog).getByRole('button', { name: 'Descargar fur-generado.pdf' }),
+    ).toBeInTheDocument();
+  });
+
+  it('estado de carga: muestra el skeleton de trazabilidad mientras getInstance está pendiente', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-6', referenceNumber: 'TR-RAD6', placa: 'RAD006', estado: 'entregado' },
+    ]);
+    let resolveGetInstance: (value: unknown) => void = () => {};
+    mocks.getInstance.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGetInstance = resolve;
+      }),
+    );
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByText('RAD006'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(within(dialog).getByRole('status', { name: 'Cargando trazabilidad' })).toBeInTheDocument();
+
+    resolveGetInstance({ id: 'rad-6', statusHistory: [] });
+    await vi.waitFor(() => {
+      expect(within(dialog).queryByRole('status', { name: 'Cargando trazabilidad' })).toBeNull();
+    });
+  });
+
+  it('estado de error: muestra el mensaje con botón Reintentar y vuelve a llamar a getInstance', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-7', referenceNumber: 'TR-RAD7', placa: 'RAD007', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockRejectedValueOnce(new Error('Fallo de red'));
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<TramitesTable />);
+
+    await userEvent.click(await screen.findByText('RAD007'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(await within(dialog).findByText('Fallo de red')).toBeInTheDocument();
+
+    mocks.getInstance.mockResolvedValueOnce({ id: 'rad-7', statusHistory: [] });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Reintentar' }));
+
+    await vi.waitFor(() => {
+      expect(within(dialog).queryByText('Fallo de red')).toBeNull();
+    });
+    expect(mocks.getInstance).toHaveBeenCalledTimes(2);
   });
 });
 
