@@ -172,3 +172,17 @@ public sealed class ResendCooldownActiveException(TimeSpan retryAfter)
     /// <summary>Tiempo restante hasta que se pueda reenviar de nuevo.</summary>
     public TimeSpan RetryAfter { get; } = retryAfter;
 }
+
+/// <summary>
+/// La contraseña nueva es exactamente igual a la vigente de la cuenta (HU #11553). Se evalúa
+/// después de la política de complejidad, para no filtrar información sobre la contraseña
+/// vigente ante una entrada que ni siquiera es válida. Solo se compara contra la contraseña
+/// actual (sin histórico) — decisión de alcance del PO.
+/// </summary>
+public sealed class PasswordReusedException : Exception
+{
+    public PasswordReusedException()
+        : base("The new password must be different from the current password.")
+    {
+    }
+}

@@ -176,6 +176,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
+        '409':
+          description: >
+            La contraseña nueva es igual a la vigente (código `PASSWORD_REUSED`, HU #11553).
+            El token de recuperación NO se invalida — se puede reintentar con otra contraseña.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
   /api/v1/security/invitations/{invitationId}/resend:
     parameters:
       - name: invitationId
