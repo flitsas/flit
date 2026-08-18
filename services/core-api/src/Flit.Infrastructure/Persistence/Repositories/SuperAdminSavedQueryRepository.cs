@@ -37,6 +37,19 @@ internal sealed class SuperAdminSavedQueryRepository : ISuperAdminSavedQueryRepo
         ];
     }
 
+    public async Task<SavedQueryDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        if (CompanyFactoryQueries.IsFactory(id))
+            return CompanyFactoryQueries.Queries.FirstOrDefault(q => q.Id == id);
+
+        var entity = await _context.SuperAdminSavedQueries
+            .AsNoTracking()
+            .FirstOrDefaultAsync(q => q.Id == id, cancellationToken)
+            .ConfigureAwait(false);
+
+        return entity is null ? null : ToSavedDto(entity);
+    }
+
     public async Task<SavedQueryDto> SaveAsync(
         Guid userId,
         Guid? id,

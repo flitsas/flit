@@ -209,21 +209,37 @@ public sealed class ReportScheduleValidationTests
 
         var (_, error) = SchedulingValidation.ValidateReportSchedule(input);
 
-        error.Should().Be("El alcance de la consulta debe ser 'empresa'.");
+        error.Should().Be("El alcance de la consulta debe ser 'empresa' o 'superadmin'.");
     }
 
     [Fact]
-    public void Tipo_consulta_con_scope_superadmin_devuelve_error_aun_no_disponible()
+    public void Tipo_consulta_con_scope_desconocido_devuelve_error()
     {
         var input = Valid(reportType: "consulta", format: "excel") with
         {
             SavedQueryId = Guid.NewGuid(),
-            SavedQueryScope = "superadmin",
+            SavedQueryScope = "otro",
         };
 
         var (_, error) = SchedulingValidation.ValidateReportSchedule(input);
 
-        error.Should().Be("El alcance de la consulta debe ser 'empresa'.");
+        error.Should().Be("El alcance de la consulta debe ser 'empresa' o 'superadmin'.");
+    }
+
+    [Fact]
+    public void Tipo_consulta_con_scope_superadmin_valido_normaliza_sin_error()
+    {
+        var id = Guid.NewGuid();
+        var input = Valid(reportType: "consulta", format: "excel") with
+        {
+            SavedQueryId = id,
+            SavedQueryScope = "superadmin",
+        };
+
+        var (result, error) = SchedulingValidation.ValidateReportSchedule(input);
+
+        error.Should().BeNull();
+        result!.SavedQueryScope.Should().Be("superadmin");
     }
 
     [Fact]

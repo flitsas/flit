@@ -22,11 +22,7 @@ public static partial class SchedulingValidation
 
     private static readonly string[] ReportTypes =
         ["resumen", "operacion", "ot", "uso", "productividad", "consulta"];
-    // "superadmin" queda fuera por ahora a propósito: el CHECK de BD (§75 del DDL) ya lo modela
-    // (tenant_id nulo), pero los endpoints CRUD de esta clase siguen exigiendo un tenant concreto
-    // (§4.7) — falta el endpoint dedicado de SuperAdmin (sin tenant) para poder crear uno de estos
-    // sin violar esa exigencia. Próxima pasada.
-    private static readonly string[] SavedQueryScopes = ["empresa"];
+    private static readonly string[] SavedQueryScopes = ["empresa", "superadmin"];
     private static readonly string[] Frequencies = ["daily", "weekly", "monthly"];
     private static readonly string[] Formats = ["excel", "pdf"];
     private static readonly string[] Metrics =
@@ -62,7 +58,7 @@ public static partial class SchedulingValidation
             if (input.SavedQueryId is null)
                 return (null, "Un informe de tipo 'consulta' requiere indicar savedQueryId.");
             if (input.SavedQueryScope is null || !SavedQueryScopes.Contains(input.SavedQueryScope))
-                return (null, "El alcance de la consulta debe ser 'empresa'.");
+                return (null, "El alcance de la consulta debe ser 'empresa' o 'superadmin'.");
             if (input.Format is not null && input.Format != "excel")
                 return (null, "Un informe de tipo 'consulta' solo se entrega en formato Excel.");
         }

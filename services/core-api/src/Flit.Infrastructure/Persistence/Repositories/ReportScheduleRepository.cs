@@ -12,7 +12,7 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// </summary>
 internal sealed class ReportScheduleRepository(FlitDbContext db) : IReportScheduleRepository
 {
-    public async Task<IReadOnlyList<ReportScheduleDto>> ListAsync(Guid tenantId, CancellationToken ct)
+    public async Task<IReadOnlyList<ReportScheduleDto>> ListAsync(Guid? tenantId, CancellationToken ct)
     {
         var rows = await Active(tenantId)
             .OrderBy(s => s.Name).ThenBy(s => s.Id)
@@ -22,7 +22,7 @@ internal sealed class ReportScheduleRepository(FlitDbContext db) : IReportSchedu
     }
 
     public async Task<ReportScheduleDto> CreateAsync(
-        Guid tenantId, Guid? createdBy, ValidatedReportSchedule data, CancellationToken ct)
+        Guid? tenantId, Guid? createdBy, ValidatedReportSchedule data, CancellationToken ct)
     {
         var entity = new ReportSchedule
         {
@@ -39,7 +39,7 @@ internal sealed class ReportScheduleRepository(FlitDbContext db) : IReportSchedu
     }
 
     public async Task<ReportScheduleDto?> UpdateAsync(
-        Guid tenantId, Guid id, ValidatedReportSchedule data, CancellationToken ct)
+        Guid? tenantId, Guid id, ValidatedReportSchedule data, CancellationToken ct)
     {
         var entity = await Active(tenantId).FirstOrDefaultAsync(s => s.Id == id, ct);
         if (entity is null)
@@ -51,7 +51,7 @@ internal sealed class ReportScheduleRepository(FlitDbContext db) : IReportSchedu
         return ToDto(entity);
     }
 
-    public async Task<bool> SoftDeleteAsync(Guid tenantId, Guid id, CancellationToken ct)
+    public async Task<bool> SoftDeleteAsync(Guid? tenantId, Guid id, CancellationToken ct)
     {
         var entity = await Active(tenantId).FirstOrDefaultAsync(s => s.Id == id, ct);
         if (entity is null)
@@ -63,7 +63,7 @@ internal sealed class ReportScheduleRepository(FlitDbContext db) : IReportSchedu
         return true;
     }
 
-    private IQueryable<ReportSchedule> Active(Guid tenantId) =>
+    private IQueryable<ReportSchedule> Active(Guid? tenantId) =>
         db.Set<ReportSchedule>().Where(s => s.TenantId == tenantId && s.DeletedAt == null);
 
     private static void Apply(ReportSchedule entity, ValidatedReportSchedule data)

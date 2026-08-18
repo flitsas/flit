@@ -9,7 +9,7 @@ namespace Flit.Analytics.Application.Scheduling;
 /// <summary>GET /analytics/report-schedules — lista los informes programados del tenant.</summary>
 public sealed class ListReportSchedulesHandler(IReportScheduleRepository repo)
 {
-    public Task<IReadOnlyList<ReportScheduleDto>> HandleAsync(Guid tenantId, CancellationToken ct = default) =>
+    public Task<IReadOnlyList<ReportScheduleDto>> HandleAsync(Guid? tenantId, CancellationToken ct = default) =>
         repo.ListAsync(tenantId, ct);
 }
 
@@ -17,7 +17,7 @@ public sealed class ListReportSchedulesHandler(IReportScheduleRepository repo)
 public sealed class CreateReportScheduleHandler(IReportScheduleRepository repo)
 {
     public async Task<(ReportScheduleDto? Result, string? Error)> HandleAsync(
-        Guid tenantId, Guid? createdBy, ReportScheduleInput input, CancellationToken ct = default)
+        Guid? tenantId, Guid? createdBy, ReportScheduleInput input, CancellationToken ct = default)
     {
         var (data, error) = SchedulingValidation.ValidateReportSchedule(input);
         if (error is not null)
@@ -32,7 +32,7 @@ public sealed class CreateReportScheduleHandler(IReportScheduleRepository repo)
 public sealed class UpdateReportScheduleHandler(IReportScheduleRepository repo)
 {
     public async Task<(ReportScheduleDto? Result, string? Error)> HandleAsync(
-        Guid tenantId, Guid id, ReportScheduleInput input, CancellationToken ct = default)
+        Guid? tenantId, Guid id, ReportScheduleInput input, CancellationToken ct = default)
     {
         var (data, error) = SchedulingValidation.ValidateReportSchedule(input);
         if (error is not null)
@@ -46,6 +46,6 @@ public sealed class UpdateReportScheduleHandler(IReportScheduleRepository repo)
 /// <summary>DELETE /analytics/report-schedules/{id} — borrado lógico; otro tenant → false (404).</summary>
 public sealed class DeleteReportScheduleHandler(IReportScheduleRepository repo)
 {
-    public Task<bool> HandleAsync(Guid tenantId, Guid id, CancellationToken ct = default) =>
+    public Task<bool> HandleAsync(Guid? tenantId, Guid id, CancellationToken ct = default) =>
         repo.SoftDeleteAsync(tenantId, id, ct);
 }

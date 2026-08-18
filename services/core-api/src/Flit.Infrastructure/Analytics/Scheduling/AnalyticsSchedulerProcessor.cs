@@ -277,7 +277,9 @@ internal sealed class AnalyticsSchedulerProcessor(
         try
         {
             var builder = services.GetRequiredService<CompanyQueryReportDocumentBuilder>();
-            var result = await builder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
+            var result = schedule.SavedQueryScope == "superadmin"
+                ? await builder.BuildForSuperAdminAsync(schedule.SavedQueryId!.Value, ct)
+                : await builder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
             if (result is null)
             {
                 var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name);

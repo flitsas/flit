@@ -356,6 +356,44 @@ public sealed class AnalyticsSchedulerProcessorTests
     }
 
     [Fact]
+    public async Task Informe_tipo_consulta_alcance_superadmin_ejecuta_sobre_todas_las_companias()
+    {
+        var dbName = NewDbName();
+        var savedQueryId = Guid.NewGuid();
+        // TenantId null: único caso legítimo (§75 del DDL), alcance "superadmin".
+        await SeedScheduleAsync(
+            dbName, reportType: "consulta", format: "excel", savedQueryId: savedQueryId,
+            savedQueryScope: "superadmin", superAdminScope: true);
+        var emailSender = Substitute.For<IEmailSender>();
+        var sent = new List<EmailMessage>();
+        emailSender.SendAsync(Arg.Do<EmailMessage>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
+
+        var savedQuery = new SavedQueryDto(
+            savedQueryId, "Aprobados de todas las compañías", null, DeFabrica: false,
+            new QueryDefinition(new QueryDateFilter("creacion", QueryRangePreset.Ultimos7), [], ["referencia", "compania"]),
+            DateTimeOffset.UtcNow.AddDays(-1), null);
+        var superAdminSavedQueries = Substitute.For<ISuperAdminSavedQueryRepository>();
+        superAdminSavedQueries.GetByIdAsync(savedQueryId, Arg.Any<CancellationToken>()).Returns(savedQuery);
+        var companyQueries = Substitute.For<ICompanyQueryRepository>();
+        companyQueries.ExecuteForSuperAdminAsync(Arg.Any<QueryRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new CompanyQueryResultDto(
+                2, 1, 200, DateOnly.FromDateTime(NowUtc.Date), DateOnly.FromDateTime(NowUtc.Date), 0,
+                [Row(savedQueryId), Row(Guid.NewGuid())], []));
+
+        var processor = NewProcessor(dbName, emailSender, Substitute.For<IAlertMetricsReadRepository>(),
+            companyQueryRepository: companyQueries, superAdminSavedQueryRepository: superAdminSavedQueries);
+
+        await processor.ProcessSchedulesAsync(NowUtc, Ct);
+
+        sent.Should().ContainSingle();
+        sent[0].HtmlBody.Should().Contain("Aprobados de todas las").And.Contain("Resultados:</strong> 2");
+        sent[0].Attachments.Should().ContainSingle();
+        await companyQueries.Received(1).ExecuteForSuperAdminAsync(Arg.Any<QueryRequest>(), Arg.Any<CancellationToken>());
+        await companyQueries.DidNotReceive().ExecuteAsync(Arg.Any<Guid>(), Arg.Any<QueryRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Informe_tipo_consulta_con_savedQuery_borrada_avisa_sin_adjunto()
     {
         var dbName = NewDbName();
@@ -423,14 +461,16 @@ public sealed class AnalyticsSchedulerProcessorTests
 
     private static async Task<Guid> SeedScheduleAsync(
         string dbName, string reportType = "resumen", string format = "pdf",
-        Guid? savedQueryId = null, string? savedQueryScope = null)
+        Guid? savedQueryId = null, string? savedQueryScope = null,
+        // Alcance superadmin (§75 del DDL): único caso con TenantId nulo a propósito.
+        bool superAdminScope = false)
     {
         var id = Guid.NewGuid();
         await using var db = NewContext(dbName);
         db.Set<ReportSchedule>().Add(new ReportSchedule
         {
             Id = id,
-            TenantId = TenantId,
+            TenantId = superAdminScope ? null : TenantId,
             Name = "Informe diario",
             ReportType = reportType,
             Frequency = "daily",
@@ -454,7 +494,8 @@ public sealed class AnalyticsSchedulerProcessorTests
         IProcedureExcelExporter? procedureExcelExporter = null,
         IUsageMetricsReadRepository? usageMetricsReadRepository = null,
         IAnalyticsMetricsReadRepository? analyticsMetricsReadRepository = null,
-        ICompanyQueryRepository? companyQueryRepository = null)
+        ICompanyQueryRepository? companyQueryRepository = null,
+        ISuperAdminSavedQueryRepository? superAdminSavedQueryRepository = null)
     {
         var analytics = Substitute.For<IAnalyticsReadRepository>();
         analytics.GetOverviewAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
@@ -497,6 +538,11 @@ public sealed class AnalyticsSchedulerProcessorTests
         if (companyQueryRepository is not null)
         {
             services.AddSingleton(companyQueryRepository);
+            // CompanyQueryReportDocumentBuilder también resuelve ISuperAdminSavedQueryRepository en su
+            // constructor (alcance "superadmin") — sin registrar AL MENOS un doble, la resolución del
+            // builder fallaría y el fallback "SavedQuery no disponible" (best-effort) enmascararía el
+            // test real que se quiere cubrir en los que solo ejercitan "empresa".
+            services.AddSingleton(superAdminSavedQueryRepository ?? Substitute.For<ISuperAdminSavedQueryRepository>());
             services.AddScoped<CompanyQueryReportDocumentBuilder>();
         }
 
