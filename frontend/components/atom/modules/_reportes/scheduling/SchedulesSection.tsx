@@ -154,7 +154,10 @@ export function SchedulesSection({
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-500 dark:text-slate-400">
           {superAdminMode
-            ? "Informes de consultas guardadas de SuperAdmin, sobre todas las compañías."
+            // Se repite aquí (no solo en emptyMessage de abajo) porque esa guía desaparece en
+            // cuanto hay al menos un informe listado — sin esto, con la lista llena no quedaba
+            // ninguna pista de cómo programar uno más.
+            ? "Informes de consultas guardadas de SuperAdmin, sobre todas las compañías. Prográmalos desde una consulta guardada en «Consultas personalizadas»."
             : "Recibe por correo un resumen de indicadores del periodo, en la hora de Bogotá que elijas."}
         </p>
         {/* En alcance SuperAdmin no hay "informe en blanco": todo informe aquí es de tipo
