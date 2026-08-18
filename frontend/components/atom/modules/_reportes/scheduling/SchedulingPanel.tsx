@@ -22,6 +22,9 @@ export interface SchedulingPanelProps {
   presetConsulta?: SchedulePresetConsulta | null;
   /** Se llama una vez el preset ya abrió el formulario, para no reabrirlo en cada render. */
   onConsumePreset?: () => void;
+  /** Alcance Organismo de Tránsito (Reportes 2.0, HU-D, tercera ola): gestiona los informes y
+   * alertas propios de ESE organismo — ver {@link SchedulesSection}/{@link AlertsSection}. */
+  otTransitOfficeId?: string;
 }
 
 type Tab = "schedules" | "alerts";
@@ -33,7 +36,7 @@ type Tab = "schedules" | "alerts";
  * botón; este componente es el entregable standalone (no toca Reportes.tsx).
  */
 export function SchedulingPanel({
-  open, onClose, tenantId, needsCompany = false, presetConsulta, onConsumePreset,
+  open, onClose, tenantId, needsCompany = false, presetConsulta, onConsumePreset, otTransitOfficeId,
 }: SchedulingPanelProps) {
   const [tab, setTab] = useState<Tab>("schedules");
 
@@ -72,7 +75,9 @@ export function SchedulingPanel({
               Programación y alertas
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Informes periódicos por correo y alertas por umbral sobre las métricas del tenant.
+              {otTransitOfficeId
+                ? "Informes periódicos por correo y alertas por umbral sobre el panel de tu organismo."
+                : "Informes periódicos por correo y alertas por umbral sobre las métricas de tu compañía."}
             </p>
           </div>
           <button
@@ -113,9 +118,14 @@ export function SchedulingPanel({
               needsCompany={needsCompany}
               presetConsulta={presetConsulta ?? null}
               onConsumePreset={onConsumePreset}
+              otTransitOfficeId={otTransitOfficeId}
             />
           ) : (
-            <AlertsSection tenantId={tenantId} needsCompany={needsCompany} />
+            <AlertsSection
+              tenantId={tenantId}
+              needsCompany={needsCompany}
+              otTransitOfficeId={otTransitOfficeId}
+            />
           )}
         </div>
       </div>

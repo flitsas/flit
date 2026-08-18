@@ -34,6 +34,9 @@ interface ScheduleFormProps {
   initial?: ReportSchedule;
   /** Solo al crear desde una consulta guardada. Ver {@link SchedulePresetConsulta}. */
   presetConsulta?: SchedulePresetConsulta;
+  /** Restringe el selector "Tipo de informe" (p. ej. el panel del organismo solo ofrece
+   * "ot_operativo"). Por defecto, todos los tipos salvo "consulta" (que nunca se elige aquí). */
+  allowedReportTypes?: ReportType[];
   onSubmit: (input: ReportScheduleInput) => Promise<void>;
   onCancel: () => void;
 }
@@ -49,10 +52,12 @@ const labelClass = "block text-xs font-semibold text-[#162744] dark:text-slate-2
  * nombre, tipo, periodicidad con día condicional, hora (Bogotá), formato, destinatarios
  * y activo. Validación client-side espejo del backend; mensajes en español.
  */
-export function ScheduleForm({ initial, presetConsulta, onSubmit, onCancel }: ScheduleFormProps) {
+export function ScheduleForm({
+  initial, presetConsulta, allowedReportTypes, onSubmit, onCancel,
+}: ScheduleFormProps) {
   const [name, setName] = useState(initial?.name ?? (presetConsulta ? presetConsulta.queryName : ""));
   const [reportType, setReportType] = useState<ReportType>(
-    initial?.reportType ?? (presetConsulta ? "consulta" : "resumen"),
+    initial?.reportType ?? (presetConsulta ? "consulta" : allowedReportTypes?.[0] ?? "resumen"),
   );
   const [frequency, setFrequency] = useState<ScheduleFrequency>(initial?.frequency ?? "daily");
   const [dayOfWeek, setDayOfWeek] = useState<number>(initial?.dayOfWeek ?? 1);
@@ -155,6 +160,7 @@ export function ScheduleForm({ initial, presetConsulta, onSubmit, onCancel }: Sc
               >
                 {Object.entries(REPORT_TYPE_LABELS)
                   .filter(([value]) => value !== "consulta")
+                  .filter(([value]) => !allowedReportTypes || allowedReportTypes.includes(value as ReportType))
                   .map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                   ))}

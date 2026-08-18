@@ -21,8 +21,9 @@ public static partial class SchedulingValidation
     public const int MaxCooldownMinutes = 10_080;
 
     private static readonly string[] ReportTypes =
-        ["resumen", "operacion", "ot", "uso", "productividad", "consulta"];
-    private static readonly string[] SavedQueryScopes = ["empresa", "superadmin"];
+        ["resumen", "operacion", "ot", "uso", "productividad", "consulta",
+            "ot_analisis", "ot_informe", "ot_revisores"];
+    private static readonly string[] SavedQueryScopes = ["empresa", "superadmin", "ot"];
     private static readonly string[] Frequencies = ["daily", "weekly", "monthly"];
     private static readonly string[] Formats = ["excel", "pdf"];
     private static readonly string[] Metrics =
@@ -30,6 +31,8 @@ public static partial class SchedulingValidation
         "rejection_rate_pct", "stuck_count", "external_api_errors", "pending_identity_validations",
         // Métricas ICT (HU5 / E1) evaluadas cross-schema sobre ict.*
         "ict_stuck_in_validation", "ict_novelty_rate_pct", "ict_webhook_delivery_failures", "ict_jobs_out_of_sla",
+        // Métricas de alcance OT (Reportes 2.0, HU-D — informes/alertas del organismo de tránsito)
+        "ot_rejection_rate_pct", "ot_stuck_count",
     ];
     private static readonly string[] Operators = ["gt", "gte", "lt", "lte"];
 
@@ -48,7 +51,8 @@ public static partial class SchedulingValidation
             return (null, $"El nombre no puede superar los {MaxNameLength} caracteres.");
 
         if (input.ReportType is null || !ReportTypes.Contains(input.ReportType))
-            return (null, "El tipo de informe debe ser uno de: resumen, operacion, ot, uso, productividad, consulta.");
+            return (null, "El tipo de informe debe ser uno de: resumen, operacion, ot, uso, productividad, " +
+                "consulta, ot_analisis, ot_informe, ot_revisores.");
 
         // Reportes 2.0 (HU-D, segunda ola) — un informe de tipo "consulta" apunta a una SavedQuery
         // en vez de a uno de los 5 tipos agregados; espejo del CHECK
@@ -58,7 +62,7 @@ public static partial class SchedulingValidation
             if (input.SavedQueryId is null)
                 return (null, "Un informe de tipo 'consulta' requiere indicar savedQueryId.");
             if (input.SavedQueryScope is null || !SavedQueryScopes.Contains(input.SavedQueryScope))
-                return (null, "El alcance de la consulta debe ser 'empresa' o 'superadmin'.");
+                return (null, "El alcance de la consulta debe ser 'empresa', 'ot' o 'superadmin'.");
             if (input.Format is not null && input.Format != "excel")
                 return (null, "Un informe de tipo 'consulta' solo se entrega en formato Excel.");
         }
@@ -121,7 +125,7 @@ public static partial class SchedulingValidation
         if (input.Metric is null || !Metrics.Contains(input.Metric))
             return (null, "La métrica debe ser una de: rejection_rate_pct, stuck_count, external_api_errors, " +
                 "pending_identity_validations, ict_stuck_in_validation, ict_novelty_rate_pct, " +
-                "ict_webhook_delivery_failures, ict_jobs_out_of_sla.");
+                "ict_webhook_delivery_failures, ict_jobs_out_of_sla, ot_rejection_rate_pct, ot_stuck_count.");
 
         if (input.Operator is null || !Operators.Contains(input.Operator))
             return (null, "El operador debe ser uno de: gt, gte, lt, lte.");

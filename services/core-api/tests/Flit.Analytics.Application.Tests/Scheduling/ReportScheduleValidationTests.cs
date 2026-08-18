@@ -209,7 +209,7 @@ public sealed class ReportScheduleValidationTests
 
         var (_, error) = SchedulingValidation.ValidateReportSchedule(input);
 
-        error.Should().Be("El alcance de la consulta debe ser 'empresa' o 'superadmin'.");
+        error.Should().Be("El alcance de la consulta debe ser 'empresa', 'ot' o 'superadmin'.");
     }
 
     [Fact]
@@ -223,7 +223,7 @@ public sealed class ReportScheduleValidationTests
 
         var (_, error) = SchedulingValidation.ValidateReportSchedule(input);
 
-        error.Should().Be("El alcance de la consulta debe ser 'empresa' o 'superadmin'.");
+        error.Should().Be("El alcance de la consulta debe ser 'empresa', 'ot' o 'superadmin'.");
     }
 
     [Fact]
@@ -264,5 +264,44 @@ public sealed class ReportScheduleValidationTests
         var (_, error) = SchedulingValidation.ValidateReportSchedule(input);
 
         error.Should().Be("savedQueryId y el alcance de la consulta solo aplican a informes de tipo 'consulta'.");
+    }
+
+    // ------------------------------------------------------------------
+    // Reportes 2.0 (HU-D, tercera ola) — 3 tipos propios del organismo (alcance OT)
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("ot_analisis")]
+    [InlineData("ot_informe")]
+    [InlineData("ot_revisores")]
+    public void Tipos_de_alcance_ot_estan_en_el_vocabulario_y_no_exigen_saved_query(string reportType)
+    {
+        var (result, error) = SchedulingValidation.ValidateReportSchedule(Valid(reportType: reportType));
+
+        error.Should().BeNull();
+        result!.ReportType.Should().Be(reportType);
+        result.SavedQueryId.Should().BeNull();
+        result.SavedQueryScope.Should().BeNull();
+    }
+
+    // ------------------------------------------------------------------
+    // Reportes 2.0 (HU-D, tercera ola) — consulta guardada del organismo (savedQueryScope="ot")
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Tipo_consulta_con_scope_ot_valido_normaliza_sin_error()
+    {
+        var id = Guid.NewGuid();
+        var input = Valid(reportType: "consulta", format: "excel") with
+        {
+            SavedQueryId = id,
+            SavedQueryScope = "ot",
+        };
+
+        var (result, error) = SchedulingValidation.ValidateReportSchedule(input);
+
+        error.Should().BeNull();
+        result!.SavedQueryId.Should().Be(id);
+        result.SavedQueryScope.Should().Be("ot");
     }
 }

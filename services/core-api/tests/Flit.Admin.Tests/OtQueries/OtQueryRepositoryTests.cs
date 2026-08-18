@@ -626,6 +626,99 @@ public sealed class OtQueryRepositoryTests
         vistos.Should().HaveCount(6);
     }
 
+    // ── GetSavedByIdAsync (Reportes 2.0, HU-D, tercera ola) ──────────────────────────────────
+    //
+    // La usa el scheduler de informes programados para re-ejecutar una consulta guardada del
+    // organismo sin sesión de usuario. A diferencia del resto del repositorio, NO filtra por
+    // userId: por diseño, el informe programado lo puede haber creado un colaborador distinto
+    // al que lo va a recibir.
+
+    [Fact]
+    public async Task GetSavedByIdAsync_ConsultaPropiaDelOrganismo_LaDevuelve()
+    {
+        var db = NewDbName();
+        var savedId = Guid.NewGuid();
+        var otroUsuario = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedScope(seed);
+            seed.OtSavedQueries.Add(new OtSavedQueryEntity
+            {
+                Id = savedId,
+                TransitOfficeId = TransitOffice,
+                UserId = otroUsuario,
+                Nombre = "Solo traspasos",
+                Definicion = "{}",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtQueryRepository(ctx);
+
+        var result = await repo.GetSavedByIdAsync(
+            OtTenant, savedId, cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Should().NotBeNull();
+        result!.Nombre.Should().Be("Solo traspasos");
+        result.DeFabrica.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetSavedByIdAsync_ConsultaDeFabrica_LaDevuelveSinTocarLaBaseDeDatos()
+    {
+        var db = NewDbName();
+        var fabricaId = OtFactoryQueries.Queries[0].Id;
+
+        await using (var seed = NewContext(db))
+        {
+            SeedScope(seed);
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtQueryRepository(ctx);
+
+        var result = await repo.GetSavedByIdAsync(
+            OtTenant, fabricaId, cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Should().NotBeNull();
+        result!.DeFabrica.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetSavedByIdAsync_ConsultaDeOtroOrganismo_DevuelveNull()
+    {
+        var db = NewDbName();
+        var savedId = Guid.NewGuid();
+        var transitOfficeAjeno = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedScope(seed);
+            seed.OtSavedQueries.Add(new OtSavedQueryEntity
+            {
+                Id = savedId,
+                TransitOfficeId = transitOfficeAjeno,
+                UserId = Carla,
+                Nombre = "De otro organismo",
+                Definicion = "{}",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtQueryRepository(ctx);
+
+        var result = await repo.GetSavedByIdAsync(
+            OtTenant, savedId, cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Should().BeNull();
+    }
+
     // ── Infraestructura de prueba ─────────────────────────────────────────────────────────────
 
     private static QueryCondition Cond(string fieldId, params string[] values) =>

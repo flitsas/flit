@@ -555,6 +555,29 @@ internal sealed class OtQueryRepository : IOtQueryRepository
             },
             cancellationToken);
 
+    public Task<SavedQueryDto?> GetSavedByIdAsync(
+        Guid otTenantId,
+        Guid id,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        _scope.ExecuteAsync<SavedQueryDto>(
+            otTenantId,
+            transitOfficeIdOverride,
+            async (transitOfficeId, _) =>
+            {
+                if (OtFactoryQueries.IsFactory(id))
+                    return OtFactoryQueries.Queries.FirstOrDefault(q => q.Id == id)!;
+
+                var entity = await _context.OtSavedQueries
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(
+                        q => q.Id == id && q.TransitOfficeId == transitOfficeId, cancellationToken)
+                    .ConfigureAwait(false);
+
+                return entity is null ? null! : ToSavedDto(entity);
+            },
+            cancellationToken);
+
     public Task<SavedQueryDto?> SaveAsync(
         Guid otTenantId,
         Guid userId,

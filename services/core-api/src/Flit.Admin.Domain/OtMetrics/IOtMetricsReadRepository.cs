@@ -90,4 +90,27 @@ public interface IOtMetricsReadRepository
         Guid otTenantId,
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Foto instantánea para evaluar alertas por umbral del organismo (Reportes 2.0, HU-D — alcance
+    /// OT): atascados actuales + tasa de rechazo en <paramref name="windowMinutes"/>. Devuelve null
+    /// si el tenant no resuelve organismo (mismo criterio que el resto de la interfaz).
+    /// </summary>
+    Task<OtAlertSnapshotDto?> GetAlertSnapshotAsync(
+        Guid otTenantId,
+        int windowMinutes,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resuelve el tenant DUEÑO de un organismo a partir de su id de catálogo — la dirección
+    /// inversa del perfil OT respecto al resto de esta interfaz (que siempre parte de un tenant).
+    /// La usa SuperAdmin al programar informes/alertas de OT con
+    /// <c>?transitOfficeId=</c>: esas filas se guardan con <c>tenant_id</c> (no hay columna de
+    /// organismo en <c>report_schedules</c>/<c>alert_rules</c>, ver ADR de la HU), así que hace
+    /// falta este paso antes de poder reutilizar el mismo CRUD que ya usa la empresa.
+    /// </summary>
+    Task<Guid?> ResolveTenantIdForTransitOfficeAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default);
 }

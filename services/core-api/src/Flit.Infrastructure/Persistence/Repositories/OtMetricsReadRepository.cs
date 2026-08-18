@@ -1487,6 +1487,57 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                 .ToDictionaryAsync(t => t.Id, t => t.LegalName, cancellationToken)
                 .ConfigureAwait(false);
 
+    // ── Alertas por umbral (Reportes 2.0, HU-D — alcance OT) ──────────────────────────────────
+
+    public Task<OtAlertSnapshotDto?> GetAlertSnapshotAsync(
+        Guid otTenantId,
+        int windowMinutes,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteScopedAsync<OtAlertSnapshotDto>(
+            otTenantId,
+            transitOfficeIdOverride,
+            async (transitOfficeId, tenantIds) =>
+            {
+                // Sin filtro de modalidad/empresa cliente a propósito: una alerta vigila TODO el
+                // organismo, no un recorte — mismo criterio que las métricas de alerta de empresa
+                // (AlertMetricsReadRepository), que tampoco aceptan filtros adicionales.
+                var wildcard = new OtMetricsFilter(default, default);
+
+                var pendientes = await LoadPendingAsync(
+                    transitOfficeId, tenantIds, wildcard, cancellationToken).ConfigureAwait(false);
+                var stuckCount = pendientes.Count(IsMasDe7Dias);
+
+                var since = DateTimeOffset.UtcNow.AddMinutes(-windowMinutes);
+                var decisiones = await QueryTransitions(
+                        transitOfficeId, tenantIds, wildcard, since, DateTimeOffset.UtcNow)
+                    .Where(h => h.ToStatus == TramiteEstado.Aprobado || h.ToStatus == TramiteEstado.Rechazado)
+                    .Select(h => h.ToStatus)
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var rechazados = decisiones.Count(s => s == TramiteEstado.Rechazado);
+                // 0 sin decididos: mismo default que rejection_rate_pct de empresa — una ventana
+                // sin actividad no es una tasa de rechazo del 0 %, es "no hay nada que medir".
+                var rejectionRatePct = decisiones.Count == 0
+                    ? 0m
+                    : Math.Round(rechazados * 100m / decisiones.Count, 2);
+
+                return new OtAlertSnapshotDto(stuckCount, rejectionRatePct);
+            },
+            cancellationToken);
+
+    public Task<Guid?> ResolveTenantIdForTransitOfficeAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default) =>
+        _scope.ReadCrossTenantAsync(
+            () => _context.TransitOfficeProfiles
+                .AsNoTracking()
+                .Where(p => p.TransitOfficeId == transitOfficeId)
+                .Select(p => (Guid?)p.TenantId)
+                .FirstOrDefaultAsync(cancellationToken),
+            cancellationToken);
+
     // ── Scope OT (grant + organismo) ──────────────────────────────────────────────────────────
 
     // La resolución del organismo y sus empresas vive en OtTenantScope: es la única regla que

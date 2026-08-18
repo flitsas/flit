@@ -10,6 +10,15 @@ public sealed record OtMetricsFilter(
     string? Modalidad = null,
     Guid? ClientTenantId = null);
 
+/// <summary>
+/// Foto instantánea para las alertas por umbral del organismo (Reportes 2.0, HU-D — alcance OT):
+/// las dos únicas señales que hoy tienen sentido desde el eje invertido del organismo. Mismas
+/// definiciones que sus contrapartes de empresa (<c>stuck_count</c>/<c>rejection_rate_pct</c> en
+/// <c>AlertMetricsReadRepository</c>), pero calculadas cruzando las empresas con grant vigente en
+/// vez de filtrando por un único tenant.
+/// </summary>
+public sealed record OtAlertSnapshotDto(int StuckCount, decimal RejectionRatePct);
+
 // ── A.1 Panel operativo ───────────────────────────────────────────────────────────────────────
 
 /// <summary>Movimiento del día (día calendario America/Bogotá).</summary>
