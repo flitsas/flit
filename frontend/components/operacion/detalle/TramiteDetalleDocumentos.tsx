@@ -36,7 +36,6 @@ import {
  * se omite — ver respuesta del encargo.
  */
 
-const BORDER = '#DFE5ED';
 const AZUL = '#557EFF';
 
 function formatBytes(bytes: number): string {
@@ -66,8 +65,8 @@ function DownloadButton({
       onClick={onClick}
       aria-label={`Descargar ${filename}`}
       title="Descargar"
-      className="shrink-0 rounded-lg border p-1.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-      style={{ borderColor: BORDER, color: AZUL }}
+      className="shrink-0 rounded-lg border p-1.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 border-[#DFE5ED] dark:border-white/10"
+      style={{ color: AZUL }}
     >
       <Download className="h-3.5 w-3.5" aria-hidden="true" />
     </button>
@@ -86,8 +85,7 @@ function RequisitoRow({
 }) {
   return (
     <li
-      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2"
-      style={{ borderColor: BORDER }}
+      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
     >
       <span className="min-w-0">
         <span className="block truncate text-xs font-medium text-[#162744] dark:text-white">
@@ -120,8 +118,7 @@ function AdjuntoRow({
 }) {
   return (
     <li
-      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2"
-      style={{ borderColor: BORDER }}
+      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
     >
       <span className="min-w-0">
         <span className="block truncate text-xs font-medium text-[#162744] dark:text-white">

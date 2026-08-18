@@ -190,7 +190,7 @@ export function TramiteDetalleComercial({ instanceId, tenantId }: SeccionDetalle
                 su maqueta no tenía prenda, pero en un gravamen real saber a favor de quién está
                 es la mitad del dato: una prenda sin acreedor no dice nada operativo. */}
             {prenda.data.acreedorNombre || prenda.data.acreedorDocumento ? (
-              <div className="mt-2 border-t pt-2" style={{ borderColor: '#DFE5ED' }}>
+              <div className="mt-2 border-t pt-2 border-[#DFE5ED] dark:border-white/10">
                 <ListaCampos>
                   {prenda.data.acreedorNombre ? (
                     <CampoValor campo="Acreedor" valor={prenda.data.acreedorNombre} />

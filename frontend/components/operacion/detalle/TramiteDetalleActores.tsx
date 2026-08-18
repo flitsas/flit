@@ -45,7 +45,6 @@ import {
  * propuesta no define.
  */
 
-const BORDE = '#DFE5ED';
 
 const FIRMA_META: Record<FirmaParteEstado, { label: string; tone: StatusTone }> = {
   firmado: { label: 'Firmado', tone: 'success' },
@@ -90,7 +89,7 @@ function ActorCard({
         {actor.direccion ? <CampoValor campo="Dirección" valor={actor.direccion} /> : null}
         {actor.ciudad ? <CampoValor campo="Ciudad" valor={actor.ciudad} /> : null}
       </ListaCampos>
-      <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3" style={{ borderColor: BORDE }}>
+      <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3 border-[#DFE5ED] dark:border-white/10">
         <span className="text-xs text-[#162744]/70 dark:text-white/70">Estado de la firma</span>
         <FirmaEstadoBadge estado={firmaEstado} />
       </div>

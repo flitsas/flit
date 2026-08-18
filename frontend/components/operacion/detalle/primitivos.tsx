@@ -29,7 +29,6 @@ export interface SeccionDetalleProps {
  * y aquí el piso es 12px (`text-xs`) y 0.7.
  */
 
-const BORDE = '#DFE5ED';
 const NAVY = '#162744';
 const AZUL = '#557EFF';
 
@@ -48,8 +47,7 @@ export function TarjetaDetalle({
 }) {
   return (
     <section
-      className={`rounded-[18px] border bg-white p-4 dark:bg-[#162744] ${className}`}
-      style={{ borderColor: BORDE }}
+      className={`rounded-[18px] border bg-white p-4 dark:bg-[#162744] ${className} border-[#DFE5ED] dark:border-white/10`}
       aria-label={titulo}
     >
       <div className="mb-3 flex items-start justify-between gap-3">

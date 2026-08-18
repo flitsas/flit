@@ -199,7 +199,7 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
               const message = check.message?.trim() ?? '';
               const inline = message.length > 0 && message.length <= MENSAJE_CORTO_MAX;
               return (
-                <li key={check.key} className="rounded-xl border px-3 py-2" style={{ borderColor: '#DFE5ED' }}>
+                <li key={check.key} className="rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10">
                   <div className="flex items-center justify-between gap-2">
                     <span className="min-w-0 text-xs font-medium text-[#162744] dark:text-white">
                       {check.label}

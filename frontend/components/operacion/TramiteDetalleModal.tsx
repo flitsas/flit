@@ -53,7 +53,6 @@ import type {
  * archivos finales generados por el sistema.
  */
 
-const BORDER = '#DFE5ED';
 const BLUE = '#557EFF';
 const NAVY = '#162744';
 
@@ -270,8 +269,7 @@ export function TramiteDetalleModal({
             <div
               role="tablist"
               aria-label="Pasos del trámite"
-              className="flex items-start overflow-x-auto rounded-[18px] border bg-white p-4 dark:bg-[#162744]"
-              style={{ borderColor: BORDER }}
+              className="flex items-start overflow-x-auto rounded-[18px] border bg-white p-4 dark:bg-[#162744] border-[#DFE5ED] dark:border-white/10"
             >
               {pasos.map((paso, i) => {
                 const activa = paso.id === seccion;
@@ -325,8 +323,7 @@ export function TramiteDetalleModal({
                   `getInstance`, así que está lista desde el primer render (sin foto: no hay dato de
                   imagen en el contrato y no se inventa). */}
               <div
-                className="h-fit rounded-[18px] border bg-white p-4 dark:bg-[#162744]"
-                style={{ borderColor: BORDER }}
+                className="h-fit rounded-[18px] border bg-white p-4 dark:bg-[#162744] border-[#DFE5ED] dark:border-white/10"
               >
                 <p
                   className="text-center font-mono text-lg font-bold uppercase tracking-wider"
@@ -340,7 +337,7 @@ export function TramiteDetalleModal({
                 <p className="mt-2 text-center font-mono text-xs opacity-70">
                   VIN: {item.vin ?? '—'}
                 </p>
-                <div className="mt-3 border-t pt-3 text-xs opacity-70" style={{ borderColor: BORDER }}>
+                <div className="mt-3 border-t pt-3 text-xs opacity-70 border-[#DFE5ED] dark:border-white/10">
                   <p>Creado: {formatFecha(item.createdAt)}</p>
                   <p>Actualizado: {item.updatedAt ? formatFecha(item.updatedAt) : '—'}</p>
                 </div>
@@ -423,8 +420,7 @@ export function TramiteDetalleModal({
                 ) : null}
 
                 <div
-                  className="rounded-2xl border bg-white p-4 dark:bg-[#162744]"
-                  style={{ borderColor: BORDER }}
+                  className="rounded-2xl border bg-white p-4 dark:bg-[#162744] border-[#DFE5ED] dark:border-white/10"
                 >
                   <h4 className="mb-3 text-sm font-bold" style={{ color: NAVY }}>
                     Archivos finales
@@ -449,8 +445,7 @@ export function TramiteDetalleModal({
                       {systemAttachments.map((a) => (
                         <li
                           key={a.id}
-                          className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2"
-                          style={{ borderColor: BORDER }}
+                          className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
                         >
                           <span className="min-w-0">
                             <span className="block truncate text-xs font-medium">{a.filename}</span>
@@ -463,8 +458,8 @@ export function TramiteDetalleModal({
                             onClick={() => void preview.download(a)}
                             aria-label={`Descargar ${a.filename}`}
                             title="Descargar"
-                            className="shrink-0 rounded-lg border p-1.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-                            style={{ borderColor: BORDER, color: BLUE }}
+                            className="shrink-0 rounded-lg border p-1.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] border-[#DFE5ED] dark:border-white/10"
+                            style={{ color: BLUE }}
                           >
                             <Download className="h-3.5 w-3.5" aria-hidden="true" />
                           </button>
