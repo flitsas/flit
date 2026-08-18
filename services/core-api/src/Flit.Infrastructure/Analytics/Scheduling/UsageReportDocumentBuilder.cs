@@ -36,7 +36,7 @@ internal sealed class UsageReportDocumentBuilder(IUsageMetricsReadRepository rep
     {
         var sheets = new List<TabularWorkbookWriter.Sheet>
         {
-            new(
+            TabularWorkbookWriter.Sheet.OfText(
                 "Pasos del wizard",
                 ["Paso", "Vistas", "Completados", "Abandono (%)", "Duración prom. (s)", "Duración mediana (s)"],
                 wizardSteps.Select(s => (IReadOnlyList<string>)
@@ -48,17 +48,17 @@ internal sealed class UsageReportDocumentBuilder(IUsageMetricsReadRepository rep
                     Seconds(s.AvgDurationMs),
                     Seconds(s.MedianDurationMs),
                 ]).ToList()),
-            new(
+            TabularWorkbookWriter.Sheet.OfText(
                 "Uso por módulo",
                 ["Módulo", "Eventos", "Usuarios únicos"],
                 moduleUsage.Select(m => (IReadOnlyList<string>)
                     [m.Module, m.Events.ToString(Es), m.UniqueUsers.ToString(Es)]).ToList()),
-            new(
+            TabularWorkbookWriter.Sheet.OfText(
                 "Horas pico",
                 ["Día (0=domingo)", "Hora", "Eventos"],
                 peakHours.Select(p => (IReadOnlyList<string>)
                     [p.DayOfWeek.ToString(Es), p.Hour.ToString(Es), p.Events.ToString(Es)]).ToList()),
-            new(
+            TabularWorkbookWriter.Sheet.OfText(
                 "Duración total del wizard",
                 ["Duración promedio (s)", "Duración mediana (s)"],
                 (List<IReadOnlyList<string>>)

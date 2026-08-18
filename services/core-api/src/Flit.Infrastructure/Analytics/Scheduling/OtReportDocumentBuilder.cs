@@ -29,7 +29,7 @@ internal sealed class OtReportDocumentBuilder(IAnalyticsMetricsReadRepository re
         var s = m.Summary;
         var sheets = new List<TabularWorkbookWriter.Sheet>
         {
-            new(
+            TabularWorkbookWriter.Sheet.OfText(
                 "Resumen",
                 ["Entregados", "Aprobados", "Rechazados", "Tasa de rechazo (%)", "Horas prom. aprobación",
                     "P50 horas", "P90 horas", "Reincidencia (%)", "Atascados"],
@@ -39,7 +39,7 @@ internal sealed class OtReportDocumentBuilder(IAnalyticsMetricsReadRepository re
                         s.RejectionRatePct.ToString("0.##", Es), Hours(s.AvgApprovalHours), Hours(s.P50ApprovalHours),
                         Hours(s.P90ApprovalHours), s.ReincidencePct.ToString("0.##", Es), s.StuckCount.ToString(Es),
                     ]]),
-            new(
+            TabularWorkbookWriter.Sheet.OfText(
                 "Rechazo por organismo",
                 ["Organismo", "Entregados", "Aprobados", "Rechazados", "Tasa de rechazo (%)"],
                 m.RejectionByOffice.Select(r => (IReadOnlyList<string>)
@@ -47,35 +47,35 @@ internal sealed class OtReportDocumentBuilder(IAnalyticsMetricsReadRepository re
                     r.TransitOfficeName, r.Entregados.ToString(Es), r.Aprobados.ToString(Es),
                     r.Rechazados.ToString(Es), r.RejectionRatePct.ToString("0.##", Es),
                 ]).ToList()),
-            new(
+            TabularWorkbookWriter.Sheet.OfText(
                 "Causales tipificadas",
                 ["Código", "Descripción", "Rechazos", "% de rechazos que la incluyen"],
                 m.RejectionByReasonCatalog.Select(r => (IReadOnlyList<string>)
                     [r.Code, r.Description, r.Rechazos.ToString(Es), r.Pct.ToString("0.##", Es)]).ToList()),
-            new(
+            TabularWorkbookWriter.Sheet.OfText(
                 "Causales en texto libre",
                 ["Motivo", "Cantidad", "%"],
                 m.RejectionByReason.Select(r => (IReadOnlyList<string>)
                     [r.Reason, r.Count.ToString(Es), r.Pct.ToString("0.##", Es)]).ToList()),
-            new(
+            TabularWorkbookWriter.Sheet.OfText(
                 "Rechazo por tipo de trámite",
                 ["Tipo de trámite", "Entregados", "Rechazados", "Tasa de rechazo (%)"],
                 m.RejectionByType.Select(r => (IReadOnlyList<string>)
                     [r.ProcedureTypeName, r.Entregados.ToString(Es), r.Rechazados.ToString(Es),
                         r.RejectionRatePct.ToString("0.##", Es)]).ToList()),
-            new(
+            TabularWorkbookWriter.Sheet.OfText(
                 "Tiempos de aprobación por organismo",
                 ["Organismo", "Decididos", "Horas prom.", "P50 horas", "P90 horas"],
                 m.ApprovalTimesByOffice.Select(a => (IReadOnlyList<string>)
                     [a.TransitOfficeName, a.Decididos.ToString(Es), Hours(a.AvgHours), Hours(a.P50Hours),
                         Hours(a.P90Hours)]).ToList()),
-            new(
+            TabularWorkbookWriter.Sheet.OfText(
                 "Ranking de agilidad",
                 ["Puesto", "Organismo", "P50 horas", "Tasa de rechazo (%)", "Volumen"],
                 m.OfficeRanking.Select(r => (IReadOnlyList<string>)
                     [r.Rank.ToString(Es), r.TransitOfficeName, r.P50Hours.ToString("0.#", Es),
                         r.RejectionRatePct.ToString("0.##", Es), r.Volumen.ToString(Es)]).ToList()),
-            new(
+            TabularWorkbookWriter.Sheet.OfText(
                 "Reincidencia y ciclo interno",
                 ["Rechazadas", "Reintentadas", "Ciclos prom.", "Ciclos máx.", "Ciclo interno prom. (h)",
                     "Ciclo interno P50 (h)", "Ciclo interno P90 (h)"],
@@ -85,7 +85,7 @@ internal sealed class OtReportDocumentBuilder(IAnalyticsMetricsReadRepository re
                         m.Reincidence.AvgCiclos.ToString("0.##", Es), m.Reincidence.MaxCiclos.ToString(Es),
                         Hours(m.InternalCycle.AvgHours), Hours(m.InternalCycle.P50Hours), Hours(m.InternalCycle.P90Hours),
                     ]]),
-            new(
+            TabularWorkbookWriter.Sheet.OfText(
                 $"Atascados (top {m.Stuck.Items.Count} de {m.Stuck.TotalCount})",
                 ["Referencia", "Estado", "Días en el estado", "Organismo", "Tipo de trámite", "Radicado por"],
                 m.Stuck.Items.Select(i => (IReadOnlyList<string>)

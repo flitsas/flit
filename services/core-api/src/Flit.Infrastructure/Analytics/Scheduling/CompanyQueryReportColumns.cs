@@ -1,4 +1,3 @@
-using System.Globalization;
 using Flit.Analytics.Application.CompanyQueries;
 using Flit.Infrastructure.Documents.Reports;
 
@@ -8,14 +7,16 @@ namespace Flit.Infrastructure.Analytics.Scheduling;
 /// Reportes 2.0 (HU-D, segunda ola) — mismo catálogo de columnas que
 /// <c>frontend/components/atom/modules/_reportes/consultas/company-columns.ts</c>, portado a C#
 /// porque el informe de una consulta guardada lo arma el SCHEDULER (sin navegador que ejecute el
-/// escritor de xlsx del cliente). Solo el texto formateado (equivalente al <c>value</c> de cada
-/// columna del frontend, no el <c>raw</c> tipado): el archivo del correo es de solo lectura, no
-/// hace falta que Excel trate una fecha como fecha.
+/// escritor de xlsx del cliente). Anchos de columna y celdas TIPADAS (número/fecha, no solo texto)
+/// también replican ese archivo — un número como "12" y una fecha como "15/07/2026" en el Excel del
+/// correo tienen que poder sumarse/ordenarse en Excel igual que en el export manual, no llegar como
+/// texto plano. Solo las columnas que en el frontend no definen <c>raw</c> (modalidad, estado,
+/// prioritario, etc. — valores ya traducidos a etiqueta) se quedan en texto aquí también, porque
+/// ahí el propio frontend hace lo mismo: sin <c>raw</c>, el Excel manual recibe el mismo texto que
+/// la pantalla.
 /// </summary>
 internal static class CompanyQueryReportColumns
 {
-    private static readonly CultureInfo Es = CultureInfo.InvariantCulture;
-
     /// <summary>Espejo de <c>defaultCompanyQueryColumns()</c>: lo que se ve si una consulta guardada
     /// quedó sin columnas elegidas (no debería pasar — el picker siempre escribe algo — pero una
     /// consulta vieja o corrupta no debe producir un Excel sin columnas).</summary>
@@ -52,42 +53,44 @@ internal static class CompanyQueryReportColumns
         ["bilateral"] = "Bilateral",
     };
 
-    private sealed record ColumnDef(string Header, Func<CompanyQueryRowDto, string> Value);
+    private sealed record ColumnDef(string Header, int Width, Func<CompanyQueryRowDto, TabularWorkbookWriter.Cell> Cell);
 
+    // Anchos calcados de COMPANY_QUERY_COLUMNS (company-columns.ts) — la misma columna debe verse
+    // igual de ancha en el export manual y en el adjunto del correo.
     private static readonly Dictionary<string, ColumnDef> Definitions = new(StringComparer.Ordinal)
     {
-        ["compania"] = new("Compañía", r => r.CompaniaNombre),
-        ["referencia"] = new("Radicado", r => r.ReferenceNumber),
-        ["placa"] = new("Placa", r => r.Placa ?? "—"),
-        ["vin"] = new("VIN", r => r.Vin ?? "—"),
-        ["organismo"] = new("Organismo", r => r.TransitOfficeName ?? "—"),
-        ["tipo"] = new("Tipo de trámite", r => r.ProcedureTypeName),
-        ["modalidad"] = new("Modalidad", r => Label(ModalidadLabel, r.Modalidad)),
-        ["estado"] = new("Estado", r => Label(EstadoLabel, r.Status)),
-        ["prioritario"] = new("Prioritario", r => SiNo(r.Prioritario)),
-        ["radicado_por"] = new("Radicado por", r => r.RadicadoPor),
-        ["comprador"] = new("Comprador", r => r.Comprador ?? "—"),
-        ["vendedor"] = new("Vendedor", r => r.Vendedor ?? "—"),
-        ["prenda"] = new("Prenda", r => SiNo(r.TienePrenda)),
-        ["acreedor_prenda"] = new("Acreedor", r => r.AcreedorPrenda ?? "—"),
-        ["licencia_transito"] = new("LT cargada", r => SiNo(r.TieneLicenciaTransito)),
-        ["transformaciones"] = new("Transformaciones", r => r.Transformaciones.Count == 0
-            ? "—"
-            : string.Join(", ", r.Transformaciones.Select(t => Label(TransformacionLabel, t)))),
-        ["subsanaciones"] = new("Subsanaciones", r => r.SubsanacionCount.ToString(Es)),
-        ["leasing"] = new("Leasing", r => SiNo(r.EsLeasing)),
-        ["metodo_pago"] = new("Método de pago", r => r.MetodoPago ?? "—"),
-        ["tipo_traspaso"] = new("Tipo de traspaso", r => string.IsNullOrEmpty(r.TipoTraspaso)
-            ? "—"
-            : Label(TraspasoLabel, r.TipoTraspaso)),
-        ["creado_en"] = new("Creado", r => FormatDate(r.CreadoEn)),
-        ["enviado_en"] = new("Enviado al organismo", r => FormatDateTime(r.EnviadoEn)),
-        ["cerrado_en"] = new("Cerrado", r => FormatDateTime(r.CerradoEn)),
-        ["aprobado_en"] = new("Aprobado", r => FormatDateTime(r.AprobadoEn)),
-        ["actualizado_en"] = new("Última actualización", r => FormatDateTime(r.ActualizadoEn)),
-        ["dias_hasta_envio"] = new("Días hasta el envío", r => FormatDays(r.DiasHastaEnvio)),
-        ["dias_en_organismo"] = new("Días en el organismo", r => FormatDays(r.DiasEnOrganismo)),
-        ["devoluciones"] = new("Devoluciones", r => r.Devoluciones.ToString(Es)),
+        ["compania"] = new("Compañía", 24, r => Text(r.CompaniaNombre)),
+        ["referencia"] = new("Radicado", 18, r => Text(r.ReferenceNumber)),
+        ["placa"] = new("Placa", 10, r => TextOrEmpty(r.Placa)),
+        ["vin"] = new("VIN", 20, r => TextOrEmpty(r.Vin)),
+        ["organismo"] = new("Organismo", 28, r => TextOrEmpty(r.TransitOfficeName)),
+        ["tipo"] = new("Tipo de trámite", 24, r => Text(r.ProcedureTypeName)),
+        ["modalidad"] = new("Modalidad", 16, r => Text(Label(ModalidadLabel, r.Modalidad))),
+        ["estado"] = new("Estado", 14, r => Text(Label(EstadoLabel, r.Status))),
+        ["prioritario"] = new("Prioritario", 11, r => Text(SiNo(r.Prioritario))),
+        ["radicado_por"] = new("Radicado por", 22, r => Text(r.RadicadoPor)),
+        ["comprador"] = new("Comprador", 26, r => TextOrEmpty(r.Comprador)),
+        ["vendedor"] = new("Vendedor", 26, r => TextOrEmpty(r.Vendedor)),
+        ["prenda"] = new("Prenda", 9, r => Text(SiNo(r.TienePrenda))),
+        ["acreedor_prenda"] = new("Acreedor", 24, r => TextOrEmpty(r.AcreedorPrenda)),
+        ["licencia_transito"] = new("LT cargada", 12, r => Text(SiNo(r.TieneLicenciaTransito))),
+        ["transformaciones"] = new("Transformaciones", 24, r => TextOrEmpty(r.Transformaciones.Count == 0
+            ? null
+            : string.Join(", ", r.Transformaciones.Select(t => Label(TransformacionLabel, t))))),
+        ["subsanaciones"] = new("Subsanaciones", 13, r => TabularWorkbookWriter.Cell.Of(r.SubsanacionCount)),
+        ["leasing"] = new("Leasing", 9, r => Text(SiNo(r.EsLeasing))),
+        ["metodo_pago"] = new("Método de pago", 18, r => TextOrEmpty(r.MetodoPago)),
+        ["tipo_traspaso"] = new("Tipo de traspaso", 22, r => TextOrEmpty(string.IsNullOrEmpty(r.TipoTraspaso)
+            ? null
+            : Label(TraspasoLabel, r.TipoTraspaso))),
+        ["creado_en"] = new("Creado", 12, r => DateCell(r.CreadoEn)),
+        ["enviado_en"] = new("Enviado al organismo", 18, r => DateTimeCellOrEmpty(r.EnviadoEn)),
+        ["cerrado_en"] = new("Cerrado", 18, r => DateTimeCellOrEmpty(r.CerradoEn)),
+        ["aprobado_en"] = new("Aprobado", 18, r => DateTimeCellOrEmpty(r.AprobadoEn)),
+        ["actualizado_en"] = new("Última actualización", 18, r => DateTimeCellOrEmpty(r.ActualizadoEn)),
+        ["dias_hasta_envio"] = new("Días hasta el envío", 16, r => NumberOrEmpty(r.DiasHastaEnvio)),
+        ["dias_en_organismo"] = new("Días en el organismo", 17, r => NumberOrEmpty(r.DiasEnOrganismo)),
+        ["devoluciones"] = new("Devoluciones", 12, r => TabularWorkbookWriter.Cell.Of(r.Devoluciones)),
     };
 
     /// <summary>
@@ -103,12 +106,14 @@ internal static class CompanyQueryReportColumns
         if (columns.Count == 0)
             columns = DefaultColumns.Select(id => Definitions[id]).ToList();
 
-        var headers = columns.Select(c => c.Header).ToList();
+        var sheetColumns = columns
+            .Select(c => new TabularWorkbookWriter.Column(c.Header, c.Width))
+            .ToList();
         var dataRows = rows
-            .Select(r => (IReadOnlyList<string>)columns.Select(c => c.Value(r)).ToList())
+            .Select(r => (IReadOnlyList<TabularWorkbookWriter.Cell>)columns.Select(c => c.Cell(r)).ToList())
             .ToList();
 
-        return new TabularWorkbookWriter.Sheet(sheetName, headers, dataRows);
+        return new TabularWorkbookWriter.Sheet(sheetName, sheetColumns, dataRows);
     }
 
     private static string Label(Dictionary<string, string> map, string value) =>
@@ -116,14 +121,25 @@ internal static class CompanyQueryReportColumns
 
     private static string SiNo(bool value) => value ? "Sí" : "No";
 
-    private static string FormatDate(DateTimeOffset value) =>
-        TimeZoneInfo.ConvertTime(value, ScheduleDueEvaluator.BogotaTimeZone).ToString("dd/MM/yyyy", Es);
+    private static TabularWorkbookWriter.Cell Text(string value) => TabularWorkbookWriter.Cell.Of(value);
 
-    private static string FormatDateTime(DateTimeOffset? value) => value is null
-        ? "—"
-        : TimeZoneInfo.ConvertTime(value.Value, ScheduleDueEvaluator.BogotaTimeZone).ToString("dd/MM/yyyy HH:mm", Es);
+    private static TabularWorkbookWriter.Cell TextOrEmpty(string? value) => TabularWorkbookWriter.Cell.Of(value);
 
-    private static string FormatDays(double? value) => value is null
-        ? "—"
-        : $"{value.Value.ToString("0.#", Es)} {(Math.Abs(value.Value - 1) < 0.001 ? "día" : "días")}";
+    private static TabularWorkbookWriter.Cell NumberOrEmpty(double? value) =>
+        value is null ? TabularWorkbookWriter.Cell.Empty : TabularWorkbookWriter.Cell.Of(value.Value);
+
+    private static TabularWorkbookWriter.Cell DateCell(DateTimeOffset value)
+    {
+        var local = TimeZoneInfo.ConvertTime(value, ScheduleDueEvaluator.BogotaTimeZone);
+        return TabularWorkbookWriter.Cell.Of(DateOnly.FromDateTime(local.Date));
+    }
+
+    private static TabularWorkbookWriter.Cell DateTimeCellOrEmpty(DateTimeOffset? value)
+    {
+        if (value is null)
+            return TabularWorkbookWriter.Cell.Empty;
+
+        var local = TimeZoneInfo.ConvertTime(value.Value, ScheduleDueEvaluator.BogotaTimeZone);
+        return TabularWorkbookWriter.Cell.OfDateTime(DateOnly.FromDateTime(local.Date), local.Hour, local.Minute);
+    }
 }
