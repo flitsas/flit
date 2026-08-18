@@ -14,17 +14,20 @@ public sealed partial class ConsoleEmailSender(ILogger<ConsoleEmailSender> logge
 {
     public Task<EmailSendResult> SendAsync(EmailMessage message, CancellationToken cancellationToken)
     {
-        LogDevEmail(logger, message.ToEmail, message.ToName, message.Subject, message.HtmlBody);
+        LogDevEmail(
+            logger, message.ToEmail, message.ToName, message.Subject, message.HtmlBody, message.Attachments.Count);
         return Task.FromResult(EmailSendResult.Sent);
     }
 
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "[DEV EMAIL] Para: {ToEmail} <{ToName}> | Asunto: {Subject}\n{HtmlBody}")]
+        Message = "[DEV EMAIL] Para: {ToEmail} <{ToName}> | Asunto: {Subject}\n{HtmlBody}\n"
+            + "Adjuntos: {AttachmentCount}")]
     private static partial void LogDevEmail(
         ILogger logger,
         string toEmail,
         string toName,
         string subject,
-        string htmlBody);
+        string htmlBody,
+        int attachmentCount);
 }
