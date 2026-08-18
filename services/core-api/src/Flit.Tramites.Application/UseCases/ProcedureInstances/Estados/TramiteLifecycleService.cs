@@ -647,16 +647,16 @@ public sealed class TramiteLifecycleService(
         ProcedureInstancePrenda? prenda,
         bool documentoExigido,
         string mensajeDecisionRequerida) => prendaGateCode switch
-    {
-        TramiteEstadoErrores.PrendaDecisionRequerida =>
-            (TramiteEstadoErrores.PrendaDecisionRequerida, mensajeDecisionRequerida),
-        TramiteEstadoErrores.PrendaDocumentoRequerido when documentoExigido =>
-            (TramiteEstadoErrores.PrendaDocumentoRequerido,
-                "La decisión de prenda seleccionada requiere adjuntar su documento de soporte."),
-        TramiteEstadoErrores.PrendaAcreedorRequerido =>
-            (TramiteEstadoErrores.PrendaAcreedorRequerido, DescribirAcreedorFaltante(prenda)),
-        _ => (null, null),
-    };
+        {
+            TramiteEstadoErrores.PrendaDecisionRequerida =>
+                (TramiteEstadoErrores.PrendaDecisionRequerida, mensajeDecisionRequerida),
+            TramiteEstadoErrores.PrendaDocumentoRequerido when documentoExigido =>
+                (TramiteEstadoErrores.PrendaDocumentoRequerido,
+                    "La decisión de prenda seleccionada requiere adjuntar su documento de soporte."),
+            TramiteEstadoErrores.PrendaAcreedorRequerido =>
+                (TramiteEstadoErrores.PrendaAcreedorRequerido, DescribirAcreedorFaltante(prenda)),
+            _ => (null, null),
+        };
 
     /// <summary>
     /// HU #11591 — arma el mensaje de <see cref="TramiteEstadoErrores.PrendaAcreedorRequerido"/>
