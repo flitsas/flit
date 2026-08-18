@@ -95,9 +95,9 @@ describe('ActorsForm — layout split (un comprador)', () => {
     expect(
       screen.getByRole('button', { name: 'Consultar RUNT' }),
     ).toBeInTheDocument();
-    // Sección de contacto: ciudad y dirección (nuevos).
-    expect(screen.getByLabelText('Ciudad')).toBeInTheDocument();
-    expect(screen.getByLabelText('Dirección')).toBeInTheDocument();
+    // Sección de contacto: ciudad y dirección (nuevos, obligatorias desde HU #11595).
+    expect(screen.getByLabelText(/^Ciudad/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Dirección/)).toBeInTheDocument();
     // No es el layout de fieldsets ni renderiza vendedor.
     expect(screen.queryByRole('group', { name: 'Vendedor' })).toBeNull();
   });
@@ -106,7 +106,7 @@ describe('ActorsForm — layout split (un comprador)', () => {
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
-    const ciudad = await screen.findByLabelText('Ciudad');
+    const ciudad = await screen.findByLabelText(/^Ciudad/);
     await user.type(ciudad, 'med');
     // Sugerencia filtrada del catálogo.
     const opcion = await screen.findByRole('button', { name: 'Medellin' });
@@ -181,13 +181,23 @@ describe('ActorsForm — validación cliente', () => {
     const numeros = screen.getAllByLabelText(/Número de documento/);
     const nombres = screen.getAllByLabelText(/Nombre completo/);
     const emails = screen.getAllByLabelText(/Correo electrónico/);
+    // HU #11595 — ciudad, dirección y teléfono son obligatorios para ambos actores.
+    const telefonos = screen.getAllByLabelText(/Teléfono/);
+    const ciudades = screen.getAllByLabelText(/Ciudad/);
+    const direcciones = screen.getAllByLabelText(/Dirección/);
 
     await user.type(numeros[0], '111');
     await user.type(nombres[0], 'Ana Vendedora');
     await user.type(emails[0], 'compartido@example.com');
+    await user.type(telefonos[0], '3001112222');
+    await user.type(ciudades[0], 'Bogota');
+    await user.type(direcciones[0], 'Calle 1 # 2-3');
     await user.type(numeros[1], '222');
     await user.type(nombres[1], 'Beto Comprador');
     await user.type(emails[1], 'compartido@example.com');
+    await user.type(telefonos[1], '3003334444');
+    await user.type(ciudades[1], 'Medellin');
+    await user.type(direcciones[1], 'Calle 4 # 5-6');
 
     const consultButtons = screen.getAllByRole('button', { name: 'Consultar RUNT' });
     mocks.runtPersonLookup
@@ -234,7 +244,8 @@ describe('ActorsForm — validación cliente', () => {
 });
 
 describe('ActorsForm — submit', () => {
-  it('llama saveActors con los actores válidos (teléfono opcional omitido)', async () => {
+  // HU #11595 — ciudad, dirección y teléfono pasaron de opcionales a obligatorios.
+  it('llama saveActors con los actores válidos (ciudad, dirección y teléfono obligatorios)', async () => {
     const user = userEvent.setup();
     const onSaved = vi.fn();
     render(
@@ -254,6 +265,9 @@ describe('ActorsForm — submit', () => {
       screen.getByLabelText(/Correo electrónico/),
       'juan@example.com',
     );
+    await user.type(screen.getByLabelText(/Teléfono/), '3001234567');
+    await user.type(screen.getByLabelText(/Ciudad/), 'Bogota');
+    await user.type(screen.getByLabelText(/Dirección/), 'Calle 1 # 2-3');
     await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
 
     await waitFor(() => expect(mocks.saveActors).toHaveBeenCalledTimes(1));
@@ -266,7 +280,9 @@ describe('ActorsForm — submit', () => {
         numeroDocumento: '12345',
         nombreCompleto: 'Juan Perez',
         email: 'juan@example.com',
-        telefono: undefined,
+        telefono: '3001234567',
+        ciudad: 'Bogota',
+        direccion: 'Calle 1 # 2-3',
         // HU #10543: por defecto persona natural.
         personType: 'natural',
       },
@@ -354,6 +370,14 @@ describe('ActorsForm — tipo de persona (HU #10543)', () => {
       document.getElementById('0-rl-email') as HTMLInputElement,
       'rl@example.com',
     );
+    // HU #11595 — ciudad, dirección y teléfono del actor (comprador) son obligatorios. El teléfono
+    // se distingue por id: el representante legal también tiene un input "Teléfono".
+    await user.type(
+      document.getElementById('comprador-telefono') as HTMLInputElement,
+      '3001234567',
+    );
+    await user.type(screen.getByLabelText(/^Ciudad/), 'Bogota');
+    await user.type(screen.getByLabelText(/^Dirección/), 'Calle 1 # 2-3');
 
     await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
 
@@ -393,6 +417,10 @@ describe('ActorsForm — save() vía ref (embebido en wizard)', () => {
         numeroDocumento: '123',
         nombreCompleto: 'Juan Perez',
         email: 'juan@example.com',
+        // HU #11595 — ciudad, dirección y teléfono ya obligatorios: sin ellos save() fallaría.
+        telefono: '3001234567',
+        ciudad: 'Bogota',
+        direccion: 'Calle 1 # 2-3',
       },
     ]);
     const ref = createRef<ActorsFormHandle>();
@@ -802,8 +830,12 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
     );
     // Auto-consulta RUNT al montar (autoConsultRunt).
     await screen.findByText(/Persona encontrada en RUNT/i);
-    // Completa los requeridos del vendedor para que el guardado sea válido.
+    // Completa los requeridos del vendedor para que el guardado sea válido (HU #11595: ciudad,
+    // dirección y teléfono también son obligatorios).
     await user.type(screen.getByLabelText(/Correo electrónico/), 'ana@example.com');
+    await user.type(screen.getByLabelText(/Teléfono/), '3001234567');
+    await user.type(screen.getByLabelText(/Ciudad/), 'Bogota');
+    await user.type(screen.getByLabelText(/Dirección/), 'Calle 1 # 2-3');
 
     let ok: boolean | undefined;
     await act(async () => {
@@ -850,6 +882,10 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
     );
     await screen.findByText(/Persona encontrada en RUNT/i);
     await user.type(screen.getByLabelText(/Correo electrónico/), 'ana@example.com');
+    // HU #11595 — ciudad, dirección y teléfono también son obligatorios.
+    await user.type(screen.getByLabelText(/Teléfono/), '3001234567');
+    await user.type(screen.getByLabelText(/Ciudad/), 'Bogota');
+    await user.type(screen.getByLabelText(/Dirección/), 'Calle 1 # 2-3');
 
     let ok: boolean | undefined;
     await act(async () => {
@@ -890,13 +926,16 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
 });
 
 describe('validateActors — unidad', () => {
+  // HU #11595 — ciudad, dirección y teléfono ahora son obligatorios: el "base" válido debe traerlos.
   const base: ProcedureActor = {
     rol: 'comprador',
     tipoDocumento: 'CC',
     numeroDocumento: '1',
     nombreCompleto: 'X',
     email: 'x@y.com',
-    telefono: undefined,
+    telefono: '3001234567',
+    ciudad: 'Bogota',
+    direccion: 'Calle 1 # 2-3',
   };
 
   it('acepta un comprador válido en matrícula', () => {

@@ -179,7 +179,9 @@ export interface ActorsValidation {
 /**
  * Valida requeridos + formato de email + (traspaso) vendedor≠comprador por DOCUMENTO.
  * El correo compartido entre las partes no bloquea desde la HU #11019.
- * Pura: sin estado, testeable de forma aislada. Ciudad/dirección son opcionales.
+ * HU #11595 — ciudad, dirección y teléfono son obligatorios (antes opcionales): el organismo
+ * devuelve el trámite cuando faltan, así que bloquean "Continuar" igual que nombre/documento/email.
+ * Pura: sin estado, testeable de forma aislada.
  */
 export function validateActors(
   actors: ProcedureActor[],
@@ -199,6 +201,11 @@ export function validateActors(
     }
     if (!a.email.trim()) e.email = 'Correo requerido';
     else if (!EMAIL_RE.test(a.email.trim())) e.email = 'Correo no válido';
+    // HU #11595 — ciudad, dirección y teléfono pasan a obligatorios: el organismo devuelve el
+    // trámite cuando faltan (ver ParteCompletaRule en el backend, HU #11593).
+    if (!a.ciudad?.trim()) e.ciudad = 'Ciudad requerida';
+    if (!a.direccion?.trim()) e.direccion = 'Dirección requerida';
+    if (!a.telefono?.trim()) e.telefono = 'Teléfono requerido';
     // HU #10688 (Fase 1): en persona jurídica el correo del representante legal es obligatorio
     // (es quien valida la identidad de la PJ). Nombre/documento del RL siguen opcionales.
     if (isJuridical(a)) {
@@ -735,16 +742,25 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);
   if (state.actors && loadedKey !== hydratedKey) {
     setHydratedKey(loadedKey);
-    setActors(
-      roles.map((rol) => {
-        const found = state.actors?.find((a) => a.rol === rol);
-        // HU #11014 — al rehidratar desde el backend también se deriva el tipo de persona: un actor
-        // persistido con NIT y personType 'natural' (creado antes de esta corrección) se corrige solo.
-        return withOwnerSeed(
-          found ? withDerivedPersonType({ ...emptyActor(rol), ...found }) : emptyActor(rol),
-        );
-      }),
-    );
+    const nextActors = roles.map((rol) => {
+      const found = state.actors?.find((a) => a.rol === rol);
+      // HU #11014 — al rehidratar desde el backend también se deriva el tipo de persona: un actor
+      // persistido con NIT y personType 'natural' (creado antes de esta corrección) se corrige solo.
+      return withOwnerSeed(
+        found ? withDerivedPersonType({ ...emptyActor(rol), ...found }) : emptyActor(rol),
+      );
+    });
+    setActors(nextActors);
+    // HU #11595 (AC4) — un trámite en curso que YA tenía un actor persistido (documento propio,
+    // no un paso vacío recién abierto) pero quedó sin ciudad/dirección/teléfono debe mostrar esos
+    // campos marcados como faltantes al abrir el paso, sin esperar a que el gestor pulse
+    // "Continuar" (que es lo único que antes activaba `showErrors`).
+    const hasIncompleteExistingActor = state.actors.some((persisted) => {
+      if (!persisted.numeroDocumento?.trim()) return false;
+      const merged = nextActors.find((a) => a.rol === persisted.rol);
+      return !!merged && !validateActors([merged], modalidad).valid;
+    });
+    if (hasIncompleteExistingActor) setShowErrors(true);
   }
 
   // El seed puede llegar después de la rehidratación (fetch async). Cuando
@@ -2079,10 +2095,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 </p>
               )}
             </div>
-            {/* Teléfono (opcional) */}
+            {/* Teléfono */}
             <div>
-              <label htmlFor="comprador-telefono" className={`${WIZARD_LABEL} mb-1.5`}>
-                Teléfono <span className="font-normal">(opcional)</span>
+              <label htmlFor="comprador-telefono" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
+                Teléfono
+                <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
               </label>
               <input
                 id="comprador-telefono"
@@ -2090,25 +2107,37 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 inputMode="numeric"
                 pattern="[0-9]*"
                 autoComplete="tel"
+                required
+                aria-required="true"
                 value={actor.telefono ?? ''}
                 onChange={(e) => {
                   markContactTouched(0, 'telefono');
                   updateActor(0, { telefono: e.target.value });
                 }}
                 placeholder="3001234567"
+                aria-invalid={!!errors.telefono}
+                aria-describedby={errors.telefono ? 'comprador-telefono-err' : undefined}
                 className={INPUT_BASE}
               />
+              {errors.telefono && (
+                <p id="comprador-telefono-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                  {errors.telefono}
+                </p>
+              )}
             </div>
             {/* Fecha de expedición del documento (RNMC, solo persona natural) */}
             {issueDateField(0)}
             {/* Ciudad (autocomplete) */}
             <div className={`relative ${showCiudades ? 'z-40' : ''}`}>
-              <label htmlFor="comprador-ciudad" className={`${WIZARD_LABEL} mb-1.5`}>
+              <label htmlFor="comprador-ciudad" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                 Ciudad
+                <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
               </label>
               <input
                 id="comprador-ciudad"
                 type="text"
+                required
+                aria-required="true"
                 value={actor.ciudad ?? ''}
                 onChange={(e) => {
                   markContactTouched(0, 'ciudad');
@@ -2121,8 +2150,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 onBlur={() => setTimeout(() => setCiudadOpen((p) => ({ ...p, 0: false })), 150)}
                 autoComplete="off"
                 placeholder="Escribe para buscar…"
+                aria-invalid={!!errors.ciudad}
+                aria-describedby={errors.ciudad ? 'comprador-ciudad-err' : undefined}
                 className={INPUT_BASE}
               />
+              {errors.ciudad && (
+                <p id="comprador-ciudad-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                  {errors.ciudad}
+                </p>
+              )}
               {showCiudades && (
                 <ul
                   className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-white shadow-lg dark:bg-[#162744]"
@@ -2150,19 +2186,29 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             </div>
             {/* Dirección (full width) */}
             <div className="lg:col-span-3">
-              <label htmlFor="comprador-direccion" className={`${WIZARD_LABEL} mb-1.5`}>
+              <label htmlFor="comprador-direccion" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                 Dirección
+                <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
               </label>
               <input
                 id="comprador-direccion"
                 type="text"
+                required
+                aria-required="true"
                 value={actor.direccion ?? ''}
                 onChange={(e) => {
                   markContactTouched(0, 'direccion');
                   updateActor(0, { direccion: e.target.value });
                 }}
+                aria-invalid={!!errors.direccion}
+                aria-describedby={errors.direccion ? 'comprador-direccion-err' : undefined}
                 className={INPUT_BASE}
               />
+              {errors.direccion && (
+                <p id="comprador-direccion-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                  {errors.direccion}
+                </p>
+              )}
             </div>
           </div>
         </section>
@@ -2375,10 +2421,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   )}
                 </div>
 
-                {/* Teléfono (opcional) */}
+                {/* Teléfono */}
                 <div>
-                  <label htmlFor={`${prefix}-telefono`} className={`${WIZARD_LABEL} mb-1.5`}>
-                    Teléfono <span className="font-normal">(opcional)</span>
+                  <label htmlFor={`${prefix}-telefono`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
+                    Teléfono
+                    <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
                   </label>
                   <input
                     id={`${prefix}-telefono`}
@@ -2386,23 +2433,35 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     inputMode="numeric"
                     pattern="[0-9]*"
                     autoComplete="tel"
+                    required
+                    aria-required="true"
                     value={actor.telefono ?? ''}
                     onChange={(e) => {
                       markContactTouched(index, 'telefono');
                       updateActor(index, { telefono: e.target.value });
                     }}
+                    aria-invalid={!!errors.telefono}
+                    aria-describedby={errors.telefono ? `${prefix}-telefono-err` : undefined}
                     className={INPUT_BASE}
                   />
+                  {errors.telefono && (
+                    <p id={`${prefix}-telefono-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                      {errors.telefono}
+                    </p>
+                  )}
                 </div>
 
                 {/* Ciudad (autocomplete) — HU #10956, precargable desde el contacto ya conocido. */}
                 <div className={`relative ${showCiudadSuggestions ? 'z-40' : ''}`}>
-                  <label htmlFor={`${prefix}-ciudad`} className={`${WIZARD_LABEL} mb-1.5`}>
+                  <label htmlFor={`${prefix}-ciudad`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                     Ciudad
+                    <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
                   </label>
                   <input
                     id={`${prefix}-ciudad`}
                     type="text"
+                    required
+                    aria-required="true"
                     value={actor.ciudad ?? ''}
                     onChange={(e) => {
                       markContactTouched(index, 'ciudad');
@@ -2417,8 +2476,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     onBlur={() => setTimeout(() => setCiudadOpen((p) => ({ ...p, [index]: false })), 150)}
                     autoComplete="off"
                     placeholder="Escribe para buscar…"
+                    aria-invalid={!!errors.ciudad}
+                    aria-describedby={errors.ciudad ? `${prefix}-ciudad-err` : undefined}
                     className={INPUT_BASE}
                   />
+                  {errors.ciudad && (
+                    <p id={`${prefix}-ciudad-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                      {errors.ciudad}
+                    </p>
+                  )}
                   {showCiudadSuggestions && (
                     <ul
                       className="absolute left-0 right-0 top-full z-[100] mt-1 max-h-48 overflow-auto rounded-xl border bg-white shadow-lg dark:bg-[#162744]"
@@ -2445,21 +2511,32 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   )}
                 </div>
 
-                {/* Dirección (opcional) — HU #10956, precargable desde el contacto ya conocido. */}
+                {/* Dirección — HU #10956 (precargable desde el contacto ya conocido), obligatoria
+                    desde la HU #11595. */}
                 <div>
-                  <label htmlFor={`${prefix}-direccion`} className={`${WIZARD_LABEL} mb-1.5`}>
+                  <label htmlFor={`${prefix}-direccion`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                     Dirección
+                    <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
                   </label>
                   <input
                     id={`${prefix}-direccion`}
                     type="text"
+                    required
+                    aria-required="true"
                     value={actor.direccion ?? ''}
                     onChange={(e) => {
                       markContactTouched(index, 'direccion');
                       updateActor(index, { direccion: e.target.value });
                     }}
+                    aria-invalid={!!errors.direccion}
+                    aria-describedby={errors.direccion ? `${prefix}-direccion-err` : undefined}
                     className={INPUT_BASE}
                   />
+                  {errors.direccion && (
+                    <p id={`${prefix}-direccion-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                      {errors.direccion}
+                    </p>
+                  )}
                 </div>
 
                 {/* Aviso de precarga de contacto (HU #10956) — no bloqueante, no reemplaza al badge de

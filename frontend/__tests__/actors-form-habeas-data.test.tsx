@@ -93,6 +93,10 @@ describe('ActorsForm — AC1 (HU #10956) el check de Habeas Data ya no se ofrece
         nombreCompleto: 'Juan Perez',
         email: 'juan@example.com',
         autorizaReutilizacionDatos: true,
+        // HU #11595 — ciudad, dirección y teléfono ahora son obligatorios.
+        telefono: '3001234567',
+        ciudad: 'Bogota',
+        direccion: 'Calle 1 # 2-3',
       },
     ]);
     const user = userEvent.setup();
@@ -156,8 +160,8 @@ describe('ActorsForm — AC2/AC3/AC4 (HU #10956) precarga de datos de contacto',
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Ciudad')).toHaveValue('Bogotá');
-      expect(screen.getByLabelText('Dirección')).toHaveValue('Cra 1 # 2-3');
+      expect(screen.getByLabelText(/^Ciudad/)).toHaveValue('Bogotá');
+      expect(screen.getByLabelText(/^Dirección/)).toHaveValue('Cra 1 # 2-3');
       expect(screen.getByLabelText(/Teléfono/)).toHaveValue('3001112233');
       expect(screen.getByLabelText(/Correo electrónico/)).toHaveValue('juan.contacto@empresa.com');
     });
@@ -197,11 +201,11 @@ describe('ActorsForm — AC2/AC3/AC4 (HU #10956) precarga de datos de contacto',
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     expect(await screen.findByText('Persona encontrada en RUNT')).toBeInTheDocument();
 
-    await waitFor(() => expect(screen.getByLabelText('Ciudad')).toHaveValue('Medellín'));
+    await waitFor(() => expect(screen.getByLabelText(/^Ciudad/)).toHaveValue('Medellín'));
 
     // La ciudad (no tocada) SÍ se precarga; el correo (editado a mano) se conserva intacto.
     expect(screen.getByLabelText(/Correo electrónico/)).toHaveValue('operador@example.com');
-    expect(screen.getByLabelText('Dirección')).toHaveValue('Calle falsa 123');
+    expect(screen.getByLabelText(/^Dirección/)).toHaveValue('Calle falsa 123');
   });
 
   it('AC4: persona sin antecedentes deja los 4 campos vacíos y editables, sin error', async () => {
@@ -229,14 +233,14 @@ describe('ActorsForm — AC2/AC3/AC4 (HU #10956) precarga de datos de contacto',
 
     await waitFor(() => expect(mocks.actorContactLookup).toHaveBeenCalledTimes(1));
 
-    expect(screen.getByLabelText('Ciudad')).toHaveValue('');
-    expect(screen.getByLabelText('Dirección')).toHaveValue('');
+    expect(screen.getByLabelText(/^Ciudad/)).toHaveValue('');
+    expect(screen.getByLabelText(/^Dirección/)).toHaveValue('');
     expect(screen.getByLabelText(/Teléfono/)).toHaveValue('');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
     // Siguen editables: el operador puede completarlos a mano sin bloqueo.
-    await user.type(screen.getByLabelText('Ciudad'), 'Cali');
-    expect(screen.getByLabelText('Ciudad')).toHaveValue('Cali');
+    await user.type(screen.getByLabelText(/^Ciudad/), 'Cali');
+    expect(screen.getByLabelText(/^Ciudad/)).toHaveValue('Cali');
   });
 });
 
@@ -280,7 +284,7 @@ describe('ActorsForm — AC5 (HU #10956) estados de UI del lookup de contacto', 
       telefono: null,
     });
 
-    await waitFor(() => expect(screen.getByLabelText('Ciudad')).toHaveValue('Barranquilla'));
+    await waitFor(() => expect(screen.getByLabelText(/^Ciudad/)).toHaveValue('Barranquilla'));
     expect(screen.queryByText(/Buscando datos de contacto conocidos/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(/Contacto precargado desde un trámite anterior/i),
@@ -315,7 +319,7 @@ describe('ActorsForm — AC5 (HU #10956) estados de UI del lookup de contacto', 
     ).toBeInTheDocument();
 
     // Nunca bloquea: el operador completa el contacto a mano sin problema.
-    const ciudadInput = screen.getByLabelText('Ciudad');
+    const ciudadInput = screen.getByLabelText(/^Ciudad/);
     expect(ciudadInput).not.toBeDisabled();
     await user.type(ciudadInput, 'Manizales');
     expect(ciudadInput).toHaveValue('Manizales');

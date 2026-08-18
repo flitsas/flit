@@ -199,8 +199,8 @@ describe('ActorsForm — inventario: matrícula inicial (un comprador, layout pa
     expect(screen.getByLabelText(/^Nombre completo/)).toBeInTheDocument();
     expect(screen.getByLabelText(/^Correo electrónico/)).toBeInTheDocument();
     expect(screen.getByLabelText(/^Teléfono/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Ciudad')).toBeInTheDocument();
-    expect(screen.getByLabelText('Dirección')).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Ciudad/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Dirección/)).toBeInTheDocument();
 
     // 4 · Espejo de solo lectura del documento dentro del bloque de contacto: el gestor ve a quién
     // le está escribiendo los datos sin volver a la sección de arriba.
@@ -210,7 +210,7 @@ describe('ActorsForm — inventario: matrícula inicial (un comprador, layout pa
   it('la ciudad conserva el autocompletado del catálogo', async () => {
     const user = await renderMatricula();
 
-    const ciudad = screen.getByLabelText('Ciudad');
+    const ciudad = screen.getByLabelText(/^Ciudad/);
     await user.type(ciudad, 'med');
 
     const sugerencias = await screen.findByRole('list', { name: 'Sugerencias de ciudad' });
@@ -329,8 +329,8 @@ describe('ActorsForm — inventario: traspaso (vendedor y comprador)', () => {
       expect(within(tarjeta).getByLabelText(/^Nombre completo/)).toBeInTheDocument();
       expect(within(tarjeta).getByLabelText(/^Correo electrónico/)).toBeInTheDocument();
       expect(within(tarjeta).getByLabelText(/^Teléfono/)).toBeInTheDocument();
-      expect(within(tarjeta).getByLabelText('Ciudad')).toBeInTheDocument();
-      expect(within(tarjeta).getByLabelText('Dirección')).toBeInTheDocument();
+      expect(within(tarjeta).getByLabelText(/^Ciudad/)).toBeInTheDocument();
+      expect(within(tarjeta).getByLabelText(/^Dirección/)).toBeInTheDocument();
     },
   );
 

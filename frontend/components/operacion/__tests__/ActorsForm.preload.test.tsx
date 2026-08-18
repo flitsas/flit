@@ -199,6 +199,14 @@ describe('ActorsForm — precarga por NIT desde el directorio del tenant (HU #10
     // demás campos "Correo electrónico" (el del representante legal ya viene precargado) — y guarda.
     const actorEmail = document.getElementById('comprador-email') as HTMLInputElement;
     await user.type(actorEmail, 'contacto@valle.co');
+    // HU #11595 — ciudad, dirección y teléfono del actor también son obligatorios. El teléfono se
+    // distingue por id: el representante legal (precargado) también trae un input "Teléfono".
+    await user.type(
+      document.getElementById('comprador-telefono') as HTMLInputElement,
+      '3001234567',
+    );
+    await user.type(screen.getByLabelText(/^Ciudad/), 'Bogota');
+    await user.type(screen.getByLabelText(/^Dirección/), 'Calle 1 # 2-3');
     await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
 
     await waitFor(() => expect(mocks.saveActors).toHaveBeenCalled());
