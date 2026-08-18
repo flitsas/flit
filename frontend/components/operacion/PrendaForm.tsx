@@ -9,6 +9,7 @@ import { InlineAlert } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { PrendaDocumentUpload } from './PrendaDocumentUpload';
 import { prendaDocTipoFor } from './prenda-document-tipos';
+import { blockerCopy } from './wizard-copy';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import type { FieldValue, PrendaDecision, WizardModalidad } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
@@ -113,6 +114,11 @@ interface Props {
 }
 
 const INPUT_BASE = WIZARD_INPUT;
+/** Label de campo obligatorio (HU #11594): mismo patrón que CommercialForm/ActorsForm. */
+const REQUIRED_LABEL = 'text-xs font-semibold mb-1.5 flex items-center gap-1.5';
+
+/** Errores de validación por campo del acreedor (HU #11594). */
+type AcreedorFieldErrors = { nombre?: string; documento?: string };
 
 function byKey(fields: FieldValue[], key: string): string {
   return fields.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
@@ -240,6 +246,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<AcreedorFieldErrors>({});
   const [runtSummary, setRuntSummary] = useState<RuntPrendaSummary | null>(null);
   const [runtOpen, setRuntOpen] = useState(false);
   const [docSatisfied, setDocSatisfied] = useState(false);
@@ -318,6 +325,10 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
 
   const selectDecision = (d: PrendaDecision) => {
     setDecision(d);
+    setError(null);
+    // La decisión nueva no exige acreedor (HU #11594): descarta los errores de campo de la
+    // anterior, igual que el reset de `docSatisfied` de abajo.
+    if (!CAPTURA_ACREEDOR.has(d)) setFieldErrors({});
     // La decisión nueva no pide certificado: descarta el adjunto satisfecho de la anterior
     // (se resetea aquí y no en un efecto: las otras dos rutas que fijan `decision` viven en la
     // carga inicial, donde `docSatisfied` todavía es el `false` de arranque).
@@ -340,7 +351,27 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
 
   const submit = async (): Promise<boolean> => {
     if (!instanceId) return false;
-    if (decision === '') return true;
+    // HU #11592 (matrícula) / #10598 (traspaso) — sin decisión no se avanza: el gate ya lo exige
+    // en backend (PrendaGate), esto solo evita el viaje redondo y el 409.
+    if (decision === '') {
+      setError('Selecciona una decisión de prenda antes de continuar.');
+      return false;
+    }
+    // HU #11591/#11594 — solicitar/registrar CONSTITUYEN gravamen: el acreedor (nombre + NIT) es
+    // obligatorio antes de guardar, no solo al radicar.
+    if (capturaAcreedor) {
+      const nombreVacio = !acreedorNombre.trim();
+      const documentoVacio = !acreedorDocumento.trim();
+      if (nombreVacio || documentoVacio) {
+        setFieldErrors({
+          nombre: nombreVacio ? 'Ingresa el nombre del acreedor.' : undefined,
+          documento: documentoVacio ? 'Ingresa el documento del acreedor.' : undefined,
+        });
+        setError('Completa los datos del acreedor (nombre y documento) para continuar.');
+        return false;
+      }
+    }
+    setFieldErrors({});
     setSaving(true);
     setSaved(false);
     setError(null);
@@ -354,7 +385,11 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
       onSaved?.();
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al guardar la decisión de prenda');
+      const message = err instanceof Error ? err.message : 'Error al guardar la decisión de prenda';
+      // Defensa en profundidad: si el backend rechaza por acreedor faltante (condición de carrera,
+      // datos legacy) el mensaje crudo trae el código, no el texto humano — se traduce igual que el
+      // resto de códigos de prenda (wizard-copy.ts).
+      setError(message.includes('prenda_acreedor_requerido') ? blockerCopy('prenda_acreedor_requerido') : message);
       return false;
     } finally {
       setSaving(false);
@@ -532,32 +567,60 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
           {capturaAcreedor && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="prenda-acreedor-nombre" className="text-xs font-semibold mb-1.5 block">
+                <label htmlFor="prenda-acreedor-nombre" className={REQUIRED_LABEL}>
                   Acreedor (beneficiario)
+                  {/* Decorativo: el `required` del input ya lo anuncia el lector de pantalla; el
+                      asterisco visual no debe alterar el nombre accesible de la etiqueta. */}
+                  <span style={{ color: '#FF4E00' }} aria-hidden="true">*</span>
                 </label>
                 <input
                   id="prenda-acreedor-nombre"
                   type="text"
+                  required
                   value={acreedorNombre}
-                  onChange={(e) => setAcreedorNombre(e.target.value)}
+                  onChange={(e) => {
+                    setAcreedorNombre(e.target.value);
+                    if (fieldErrors.nombre) setFieldErrors((f) => ({ ...f, nombre: undefined }));
+                  }}
                   placeholder="Ej. Banco XYZ"
                   className={INPUT_BASE}
+                  aria-invalid={!!fieldErrors.nombre}
+                  aria-describedby={fieldErrors.nombre ? 'prenda-acreedor-nombre-err' : undefined}
                 />
+                {fieldErrors.nombre && (
+                  <p id="prenda-acreedor-nombre-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                    {fieldErrors.nombre}
+                  </p>
+                )}
               </div>
               <div>
-                <label htmlFor="prenda-acreedor-doc" className="text-xs font-semibold mb-1.5 block">
+                <label htmlFor="prenda-acreedor-doc" className={REQUIRED_LABEL}>
                   NIT / documento del acreedor
+                  {/* Decorativo: el `required` del input ya lo anuncia el lector de pantalla; el
+                      asterisco visual no debe alterar el nombre accesible de la etiqueta. */}
+                  <span style={{ color: '#FF4E00' }} aria-hidden="true">*</span>
                 </label>
                 <input
                   id="prenda-acreedor-doc"
                   type="text"
+                  required
                   inputMode="numeric"
                   pattern="[0-9]*"
                   autoComplete="off"
                   value={acreedorDocumento}
-                  onChange={(e) => setAcreedorDocumento(digitsOnly(e.target.value))}
+                  onChange={(e) => {
+                    setAcreedorDocumento(digitsOnly(e.target.value));
+                    if (fieldErrors.documento) setFieldErrors((f) => ({ ...f, documento: undefined }));
+                  }}
                   className={INPUT_BASE}
+                  aria-invalid={!!fieldErrors.documento}
+                  aria-describedby={fieldErrors.documento ? 'prenda-acreedor-doc-err' : undefined}
                 />
+                {fieldErrors.documento && (
+                  <p id="prenda-acreedor-doc-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
+                    {fieldErrors.documento}
+                  </p>
+                )}
               </div>
             </div>
           )}
