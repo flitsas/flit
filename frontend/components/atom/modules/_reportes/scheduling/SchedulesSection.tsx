@@ -160,7 +160,7 @@ export function SchedulesSection({
             // informe» no está: sin esto, alguien sin el contexto de por qué desapareció no
             // sabría que elegir una compañía en el filtro superior lo hace reaparecer.
             ? "Aquí solo se listan informes de consultas guardadas: para crear uno, ve a «Consultas personalizadas» y haz clic en el ícono de calendario junto a la consulta que quieras programar. Para un informe de resumen, operación, uso u organismo de tránsito de una compañía específica, elígela primero en el filtro «COMPAÑÍA» arriba — ahí reaparece el botón «Nuevo informe»."
-            : "Recibe por correo un resumen de indicadores del periodo, en la hora de Bogotá que elijas."}
+            : "Recibe por correo un resumen de indicadores del periodo, en la hora que elijas."}
         </p>
         {/* En alcance SuperAdmin no hay "informe en blanco": todo informe aquí es de tipo
             "consulta" y se crea desde "Programar este informe" en una consulta guardada. */}
