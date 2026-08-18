@@ -616,8 +616,26 @@ public sealed class TramiteLifecycleService(
             TramiteEstadoErrores.PrendaDocumentoRequerido when documentoExigido =>
                 (TramiteEstadoErrores.PrendaDocumentoRequerido,
                     "La decisión de prenda seleccionada requiere adjuntar su documento de soporte."),
+            TramiteEstadoErrores.PrendaAcreedorRequerido =>
+                (TramiteEstadoErrores.PrendaAcreedorRequerido, DescribirAcreedorFaltante(prenda)),
             _ => (null, null),
         };
+    }
+
+    /// <summary>
+    /// HU #11591 — arma el mensaje de <see cref="TramiteEstadoErrores.PrendaAcreedorRequerido"/>
+    /// enumerando dinámicamente qué campo(s) del acreedor faltan (nombre, documento o ambos).
+    /// </summary>
+    private static string DescribirAcreedorFaltante(ProcedureInstancePrenda? prenda)
+    {
+        var faltantes = new List<string>();
+        if (string.IsNullOrWhiteSpace(prenda?.AcreedorNombre))
+            faltantes.Add("nombre del acreedor");
+        if (string.IsNullOrWhiteSpace(prenda?.AcreedorDocumento))
+            faltantes.Add("documento del acreedor");
+
+        return "La decisión de prenda constituye un gravamen: falta diligenciar "
+            + string.Join(" y ", faltantes) + ".";
     }
 
     /// <summary>

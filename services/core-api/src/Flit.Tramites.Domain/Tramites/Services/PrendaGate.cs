@@ -35,6 +35,12 @@ public static class PrendaGate
                 return TramiteEstadoErrores.PrendaDocumentoRequerido;
         }
 
+        if (PrendaDecision.ImplicaGravamen(prendaVigente.Decision)
+            && (string.IsNullOrWhiteSpace(prendaVigente.AcreedorNombre) || string.IsNullOrWhiteSpace(prendaVigente.AcreedorDocumento)))
+        {
+            return TramiteEstadoErrores.PrendaAcreedorRequerido;
+        }
+
         return null;
     }
 

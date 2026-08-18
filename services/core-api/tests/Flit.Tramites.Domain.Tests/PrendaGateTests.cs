@@ -14,6 +14,16 @@ public sealed class PrendaGateTests
     private static ProcedureInstancePrenda Prenda(string decision) =>
         new() { Decision = decision, Estado = PrendaEstado.Vigente };
 
+    private static ProcedureInstancePrenda PrendaConAcreedor(
+        string decision, string? acreedorNombre, string? acreedorDocumento) =>
+        new()
+        {
+            Decision = decision,
+            Estado = PrendaEstado.Vigente,
+            AcreedorNombre = acreedorNombre,
+            AcreedorDocumento = acreedorDocumento,
+        };
+
     [Fact]
     public void No_aplica_en_matricula()
     {
@@ -45,7 +55,12 @@ public sealed class PrendaGateTests
     [Fact]
     public void Decision_que_requiere_documento_con_adjunto_pasa()
     {
-        PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, Prenda("registrar"), docTipos: ["prenda_registro"])
+        // HU #11591: "registrar" también implica gravamen ⇒ exige acreedor diligenciado.
+        PrendaGate.Evaluate(
+                esTraspaso: true,
+                hasGravamenWarn: true,
+                PrendaConAcreedor(PrendaDecision.Registrar, "Banco X", "900123456"),
+                docTipos: ["prenda_registro"])
             .Should().BeNull();
     }
 
@@ -61,6 +76,55 @@ public sealed class PrendaGateTests
     {
         PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, Prenda("sin_prenda"), docTipos: [])
             .Should().BeNull();
+    }
+
+    // ── HU #11591 — acreedor obligatorio en decisiones que constituyen gravamen ────────────────────
+
+    [Fact]
+    public void Solicitar_con_acreedor_completo_pasa()
+    {
+        PrendaGate.Evaluate(
+                esTraspaso: true,
+                hasGravamenWarn: true,
+                PrendaConAcreedor(PrendaDecision.Solicitar, "Banco X", "900123456"),
+                docTipos: ["prenda_solicitud"])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void Registrar_sin_nombre_de_acreedor_bloquea()
+    {
+        PrendaGate.Evaluate(
+                esTraspaso: true,
+                hasGravamenWarn: true,
+                PrendaConAcreedor(PrendaDecision.Registrar, acreedorNombre: null, acreedorDocumento: "900123456"),
+                docTipos: ["prenda_registro"])
+            .Should().Be(TramiteEstadoErrores.PrendaAcreedorRequerido);
+    }
+
+    [Fact]
+    public void Registrar_sin_documento_de_acreedor_bloquea()
+    {
+        PrendaGate.Evaluate(
+                esTraspaso: true,
+                hasGravamenWarn: true,
+                PrendaConAcreedor(PrendaDecision.Registrar, acreedorNombre: "Banco X", acreedorDocumento: null),
+                docTipos: ["prenda_registro"])
+            .Should().Be(TramiteEstadoErrores.PrendaAcreedorRequerido);
+    }
+
+    [Theory]
+    [InlineData(PrendaDecision.Levantar)]
+    [InlineData(PrendaDecision.Omitir)]
+    [InlineData(PrendaDecision.SinPrenda)]
+    public void Decision_que_no_implica_gravamen_no_exige_acreedor(string decision)
+    {
+        PrendaGate.Evaluate(
+                esTraspaso: true,
+                hasGravamenWarn: true,
+                PrendaConAcreedor(decision, acreedorNombre: null, acreedorDocumento: null),
+                docTipos: decision == PrendaDecision.Levantar ? ["prenda_levantamiento"] : [])
+            .Should().NotBe(TramiteEstadoErrores.PrendaAcreedorRequerido);
     }
 
     // ── CF-06 (HU #10881) — override del OT, independiente del semáforo de gravámenes ───────────
