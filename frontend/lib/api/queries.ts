@@ -165,4 +165,9 @@ export interface QuerySource<TRow> {
   fetchSaved: (signal?: AbortSignal) => Promise<SavedQuery[]>;
   save: (input: SaveQueryInput) => Promise<SavedQuery>;
   remove: (id: string) => Promise<void>;
+  /**
+   * Reportes 2.0 (HU-D, segunda ola) — "Programar este informe": solo Consultas de empresa y
+   * SuperAdmin lo ofrecen (Consultas del organismo no lo pasa, así que el botón no aparece ahí).
+   */
+  onSchedule?: (query: SavedQuery) => void;
 }

@@ -7,7 +7,9 @@ const base = "/api/v1/analytics";
 
 // ── Tipos §4.7 ───────────────────────────────────────────────────────────────
 
-export type ReportType = "resumen" | "operacion" | "ot" | "uso" | "productividad";
+export type ReportType = "resumen" | "operacion" | "ot" | "uso" | "productividad" | "consulta";
+/** Solo aplica cuando reportType="consulta" (Reportes 2.0, HU-D, segunda ola). */
+export type SavedQueryScope = "empresa" | "superadmin";
 export type ScheduleFrequency = "daily" | "weekly" | "monthly";
 export type ScheduleFormat = "excel" | "pdf";
 export type AlertMetric =
@@ -37,6 +39,10 @@ export interface ReportSchedule {
   recipients: string[];
   isActive: boolean;
   lastSentAt: string | null;
+  /** Solo reportType="consulta". */
+  savedQueryId?: string | null;
+  /** Solo reportType="consulta". */
+  savedQueryScope?: SavedQueryScope | null;
 }
 
 export interface AlertRule {
@@ -83,6 +89,10 @@ export interface ReportScheduleInput {
   format: ScheduleFormat;
   recipients: string[];
   isActive: boolean;
+  /** Solo reportType="consulta". */
+  savedQueryId?: string | null;
+  /** Solo reportType="consulta". */
+  savedQueryScope?: SavedQueryScope | null;
 }
 
 /** Payload de creación/edición de una regla de alerta (POST/PUT). */
@@ -145,6 +155,35 @@ export function deleteReportSchedule(id: string, tenantId?: string): Promise<voi
     method: "DELETE",
     query: { tenantId },
   });
+}
+
+// ── Informes de SuperAdmin (alcance "superadmin", todas las compañías) ──────
+// Mismo modelo, endpoint separado y SIN tenant — ver SuperAdminReportSchedulesEndpoints
+// en el backend. Solo crea/edita reportType="consulta" con savedQueryScope="superadmin".
+
+export function fetchSuperAdminReportSchedules(signal?: AbortSignal): Promise<{ items: ReportSchedule[] }> {
+  return apiFetch<{ items: ReportSchedule[] }>(`${base}/report-schedules/superadmin`, { signal });
+}
+
+export function createSuperAdminReportSchedule(input: ReportScheduleInput): Promise<ReportSchedule> {
+  return apiFetch<ReportSchedule>(`${base}/report-schedules/superadmin`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+export function updateSuperAdminReportSchedule(
+  id: string,
+  input: ReportScheduleInput,
+): Promise<ReportSchedule> {
+  return apiFetch<ReportSchedule>(`${base}/report-schedules/superadmin/${id}`, {
+    method: "PUT",
+    body: input,
+  });
+}
+
+export function deleteSuperAdminReportSchedule(id: string): Promise<void> {
+  return apiFetch<void>(`${base}/report-schedules/superadmin/${id}`, { method: "DELETE" });
 }
 
 // ── Reglas de alerta ─────────────────────────────────────────────────────────

@@ -171,7 +171,13 @@ internal sealed partial class TenantChannelEmailRouter(
             message.Subject,
             message.HtmlBody,
             new RentingEmailAddress(options.SendEmailSenderEmail, options.SendEmailSenderUsername),
-            new RentingEmailAddress(message.ToEmail, message.ToName));
+            new RentingEmailAddress(message.ToEmail, message.ToName))
+            with
+        {
+            Attachments = message.Attachments
+                .Select(a => new RentingEmailAttachment(a.FileName, a.ContentType, a.Content))
+                .ToList(),
+        };
 
         // HU #11372 — solo el camino del banco de pruebas (SendAsync(NotificationChannel, ...))
         // suministra recipientExemption; el camino de producción (SendAsync(EmailMessage, ...)) lo

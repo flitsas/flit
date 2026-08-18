@@ -17,6 +17,7 @@ import { ProcedureDetailPanel } from "./_reportes/ProcedureDetailPanel";
 import { isValidRange } from "./_reportes/range";
 import { ReportesTabBar } from "./_reportes/ReportesTabBar";
 import { SchedulingPanel } from "./_reportes/scheduling/SchedulingPanel";
+import type { SchedulePresetConsulta } from "./_reportes/scheduling/ScheduleForm";
 import { OperacionTab } from "./_reportes/tabs/OperacionTab";
 import { OrganismoTab } from "./_reportes/tabs/OrganismoTab";
 import { ProductividadTab } from "./_reportes/tabs/ProductividadTab";
@@ -149,6 +150,9 @@ export function Reportes() {
   // Programación y alertas (HU-D): visible con su permiso; SuperAdmin bypass.
   const canManageScheduling = isSuper || permissions.includes(SCHEDULING_SLUG);
   const [schedulingOpen, setSchedulingOpen] = useState(false);
+  // "Programar este informe" (HU-D, segunda ola) — abre el panel directo en el formulario de
+  // creación, con la consulta guardada ya fijada. Null = el panel se abre en modo normal.
+  const [schedulePreset, setSchedulePreset] = useState<SchedulePresetConsulta | null>(null);
 
   // Drill-down compartido: cualquier gráfica abre el panel lateral de detalle.
   const [segment, setSegment] = useState<SelectedSegment | null>(null);
@@ -252,6 +256,14 @@ export function Reportes() {
               tenantId={filters.tenantId || undefined}
               needsCompany={needsCompany}
               isSuper={isSuper}
+              onScheduleQuery={
+                canManageScheduling
+                  ? (query, scope) => {
+                      setSchedulePreset({ savedQueryId: query.id, savedQueryScope: scope, queryName: query.nombre });
+                      setSchedulingOpen(true);
+                    }
+                  : undefined
+              }
             />
           )}
         </div>
@@ -260,8 +272,14 @@ export function Reportes() {
       {canManageScheduling && (
         <SchedulingPanel
           open={schedulingOpen}
-          onClose={() => setSchedulingOpen(false)}
+          onClose={() => {
+            setSchedulingOpen(false);
+            setSchedulePreset(null);
+          }}
           tenantId={filters.tenantId || undefined}
+          needsCompany={needsCompany}
+          presetConsulta={schedulePreset}
+          onConsumePreset={() => setSchedulePreset(null)}
         />
       )}
 

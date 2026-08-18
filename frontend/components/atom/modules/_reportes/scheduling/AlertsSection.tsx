@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { BellPlus, History, Pencil, Trash2 } from "lucide-react";
 import { CreateButton } from "@/components/atom/CreateButton";
+import { CompanyNotice } from "../CompanyNotice";
 import { cn } from "@/lib/utils";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
@@ -19,6 +20,9 @@ import { AlertEventsHistory } from "./AlertEventsHistory";
 
 interface AlertsSectionProps {
   tenantId?: string;
+  /** SuperAdmin sin compañía elegida en el filtro superior: en vez de llamar a la API (que exige
+   * tenant concreto y respondería 400), se muestra un aviso — mismo patrón que SchedulesSection. */
+  needsCompany?: boolean;
 }
 
 type SubView = "rules" | "history";
@@ -27,7 +31,7 @@ type SubView = "rules" | "history";
  * Sección "Alertas" (Reportes 2.0, HU-D): tabla de reglas + formulario crear/editar +
  * eliminación con confirmación y sub-vista "Historial de disparos" (alert-events paginado).
  */
-export function AlertsSection({ tenantId }: AlertsSectionProps) {
+export function AlertsSection({ tenantId, needsCompany = false }: AlertsSectionProps) {
   const [items, setItems] = useState<AlertRule[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [subView, setSubView] = useState<SubView>("rules");
@@ -37,6 +41,7 @@ export function AlertsSection({ tenantId }: AlertsSectionProps) {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (needsCompany) return;
     setStatus("loading");
     try {
       const data = await fetchAlertRules(tenantId);
@@ -45,7 +50,7 @@ export function AlertsSection({ tenantId }: AlertsSectionProps) {
     } catch {
       setStatus("error");
     }
-  }, [tenantId]);
+  }, [tenantId, needsCompany]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await
@@ -107,13 +112,15 @@ export function AlertsSection({ tenantId }: AlertsSectionProps) {
             <History className="h-3.5 w-3.5" aria-hidden="true" /> Historial de disparos
           </button>
         </div>
-        {subView === "rules" && !formOpen && (
+        {subView === "rules" && !formOpen && !needsCompany && (
           <CreateButton size="sm" label="Nueva alerta" icon={BellPlus} onClick={() => setCreating(true)} />
         )}
       </div>
 
       {subView === "history" ? (
         <AlertEventsHistory rules={items} tenantId={tenantId} />
+      ) : needsCompany ? (
+        <CompanyNotice message="Como SuperAdmin debes elegir una compañía en el filtro superior para ver o crear sus alertas." />
       ) : (
         <>
           {creating && <AlertRuleForm onSubmit={handleCreate} onCancel={() => setCreating(false)} />}

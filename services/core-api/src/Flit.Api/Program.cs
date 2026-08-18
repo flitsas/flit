@@ -286,6 +286,7 @@ app.MapLegalRepresentativeConsumptionEndpoints();
 app.MapAnalyticsEndpoints();
 app.MapDetailedReportEndpoints(); // Feature #10813
 app.MapReportSchedulesEndpoints(); // Reportes2 HU-D
+app.MapSuperAdminReportSchedulesEndpoints(); // Reportes2 HU-D 2da ola — informes de consulta SuperAdmin
 app.MapAlertRulesEndpoints(); // Reportes2 HU-D
 app.MapAnalyticsMetricsEndpoints(); // Reportes2 HU-B
 app.MapCompanyQueriesEndpoints(); // Consultas propias de la empresa

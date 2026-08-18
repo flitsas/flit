@@ -9,7 +9,7 @@
 
 import { useMemo } from "react";
 import { QueryConsole } from "@/components/consultas/QueryConsole";
-import type { QuerySource } from "@/lib/api/queries";
+import type { QuerySource, SavedQuery } from "@/lib/api/queries";
 import {
   COMPANY_DATE_FIELDS,
   deleteCompanySavedQuery,
@@ -43,9 +43,19 @@ export interface ConsultasTabProps {
    * muestran las demás, corre sobre TODAS las compañías a la vez (motor de operaciones).
    */
   isSuper?: boolean;
+  /**
+   * Reportes 2.0 (HU-D, segunda ola) — "Programar este informe" en una consulta guardada. Sin
+   * esto el botón no aparece (mismo criterio que Consultas del organismo, que no lo pasa).
+   */
+  onScheduleQuery?: (query: SavedQuery, scope: "empresa" | "superadmin") => void;
 }
 
-export function ConsultasTab({ tenantId, needsCompany = false, isSuper = false }: ConsultasTabProps) {
+export function ConsultasTab({
+  tenantId,
+  needsCompany = false,
+  isSuper = false,
+  onScheduleQuery,
+}: ConsultasTabProps) {
   // SuperAdmin sin compañía elegida en el selector global: el motor de operaciones, sobre todas las
   // compañías. Elegir una compañía ahí sigue funcionando igual que para una empresa normal.
   const superAdmin = isSuper && !tenantId;
@@ -68,8 +78,9 @@ export function ConsultasTab({ tenantId, needsCompany = false, isSuper = false }
       fetchSaved: (signal) => fetchCompanySavedQueries(tenantId, signal),
       save: (input) => saveCompanyQuery(input, tenantId),
       remove: (id) => deleteCompanySavedQuery(id, tenantId),
+      onSchedule: onScheduleQuery ? (query) => onScheduleQuery(query, "empresa") : undefined,
     }),
-    [tenantId],
+    [tenantId, onScheduleQuery],
   );
 
   const superAdminSource = useMemo<QuerySource<CompanyQueryRow>>(
@@ -87,8 +98,9 @@ export function ConsultasTab({ tenantId, needsCompany = false, isSuper = false }
       fetchSaved: fetchSuperAdminSavedQueries,
       save: saveSuperAdminQuery,
       remove: deleteSuperAdminSavedQuery,
+      onSchedule: onScheduleQuery ? (query) => onScheduleQuery(query, "superadmin") : undefined,
     }),
-    [],
+    [onScheduleQuery],
   );
 
   // Sin compañía elegida no se consulta: el backend responde 400 y un error rojo se lee como una

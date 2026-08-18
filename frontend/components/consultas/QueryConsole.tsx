@@ -774,6 +774,7 @@ export function QueryConsole<TRow>({
             onOpen={openSaved}
             onPedirBorrado={setPorBorrar}
             onConfirmarBorrado={(q) => void handleDelete(q)}
+            onSchedule={source.onSchedule}
             testIdPrefix={prefix}
           />
           <button

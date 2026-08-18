@@ -14,6 +14,12 @@ public interface ISuperAdminSavedQueryRepository
     /// <summary>Todas las guardadas por cualquier SuperAdmin, más las de fábrica al final.</summary>
     Task<IReadOnlyList<SavedQueryDto>> ListAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Una guardada por id (incluye las de fábrica). La usa el scheduler de informes programados
+    /// (Reportes 2.0, HU-D) tipo "consulta" con alcance superadmin. Null si no existe.
+    /// </summary>
+    Task<SavedQueryDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+
     /// <summary><paramref name="id"/> nulo crea; con id, actualiza la que exista (de cualquier autor).</summary>
     Task<SavedQueryDto> SaveAsync(
         Guid userId,
