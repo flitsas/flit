@@ -816,8 +816,12 @@ export default function MatriculaResumen({
           </ResumenCard>
         ) : null}
 
+        {/* Con vendedor son TRES tarjetas en una rejilla de dos columnas (Vehiculo, Vendedor,
+            Comprador): Comprador cae solo en la segunda fila y deja media fila vacia a su derecha,
+            y encima es la mas alta porque lleva embebida la validacion biometrica. En ese caso
+            ocupa la fila entera. En matricula son dos tarjetas, encajan, y no cambia nada. */}
         {comprador || (!vendedor && partesTxt) ? (
-          <ResumenCard title="Comprador">
+          <ResumenCard title="Comprador" className={vendedor ? 'lg:col-span-2' : ''}>
             {comprador ? (
               <div className="space-y-4">
                 <ActorBlock
