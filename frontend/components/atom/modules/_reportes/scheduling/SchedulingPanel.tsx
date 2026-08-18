@@ -12,6 +12,8 @@ export interface SchedulingPanelProps {
   onClose: () => void;
   /** Solo SuperAdmin: compañía objetivo (los endpoints HU-D exigen tenant concreto). */
   tenantId?: string;
+  /** SuperAdmin sin compañía elegida en el filtro superior — ver {@link SchedulesSection}. */
+  needsCompany?: boolean;
   /**
    * "Programar este informe" (HU-D, segunda ola): abre directo en "Informes programados" con el
    * formulario de creación ya prellenado. El alcance de la consulta (empresa/superadmin) decide
@@ -31,7 +33,7 @@ type Tab = "schedules" | "alerts";
  * botón; este componente es el entregable standalone (no toca Reportes.tsx).
  */
 export function SchedulingPanel({
-  open, onClose, tenantId, presetConsulta, onConsumePreset,
+  open, onClose, tenantId, needsCompany = false, presetConsulta, onConsumePreset,
 }: SchedulingPanelProps) {
   const [tab, setTab] = useState<Tab>("schedules");
 
@@ -108,12 +110,12 @@ export function SchedulingPanel({
           {tab === "schedules" ? (
             <SchedulesSection
               tenantId={tenantId}
-              superAdminMode={presetConsulta?.savedQueryScope === "superadmin"}
+              needsCompany={needsCompany}
               presetConsulta={presetConsulta ?? null}
               onConsumePreset={onConsumePreset}
             />
           ) : (
-            <AlertsSection tenantId={tenantId} />
+            <AlertsSection tenantId={tenantId} needsCompany={needsCompany} />
           )}
         </div>
       </div>

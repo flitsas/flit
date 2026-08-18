@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarPlus, Pencil, Trash2 } from "lucide-react";
 import { CreateButton } from "@/components/atom/CreateButton";
+import { CompanyNotice } from "../CompanyNotice";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   createReportSchedule,
@@ -27,9 +28,9 @@ import { ScheduleForm, type SchedulePresetConsulta } from "./ScheduleForm";
 
 interface SchedulesSectionProps {
   tenantId?: string;
-  /** Alcance SuperAdmin (Reportes 2.0, HU-D, segunda ola): usa /report-schedules/superadmin
-   * (sin tenant) en vez del CRUD de empresa. `tenantId` se ignora en este modo. */
-  superAdminMode?: boolean;
+  /** SuperAdmin sin compañía elegida en el filtro superior (y sin un preset de alcance
+   * "superadmin" que la haga innecesaria): en vez de llamar a la API, se muestra un aviso. */
+  needsCompany?: boolean;
   /** "Programar este informe": abre el formulario de creación ya prellenado con esto. */
   presetConsulta?: SchedulePresetConsulta | null;
   /** Se llama una vez el preset ya abrió el formulario. */
@@ -50,7 +51,7 @@ function describeWhen(s: ReportSchedule): string {
  * eliminación con confirmación. Estados loading/vacío/error con UiStateBoundary.
  */
 export function SchedulesSection({
-  tenantId, superAdminMode = false, presetConsulta = null, onConsumePreset,
+  tenantId, needsCompany = false, presetConsulta = null, onConsumePreset,
 }: SchedulesSectionProps) {
   const [items, setItems] = useState<ReportSchedule[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -61,6 +62,15 @@ export function SchedulesSection({
   // Copia LOCAL del preset activo: la prop se limpia (onConsumePreset) apenas se lee, pero el
   // formulario sigue abierto y necesita seguir sabiendo con qué consulta se prellenó.
   const [activePreset, setActivePreset] = useState<SchedulePresetConsulta | null>(null);
+  // Alcance SuperAdmin (Reportes 2.0, HU-D, segunda ola): se fija cuando llega un preset con
+  // savedQueryScope="superadmin" y, a diferencia de leerlo directo de `presetConsulta` en cada
+  // render, NO se limpia junto con el preset — el padre lo limpia (onConsumePreset) en el mismo
+  // tick en que se consume, así que sin este estado persistido el POST del submit caía en el
+  // endpoint de empresa con tenantId en vez de /report-schedules/superadmin. Combinado con la
+  // propia prop (línea de abajo) para que el primer render — antes de que el efecto corra — ya
+  // tenga el alcance correcto y no dispare un primer fetch al endpoint equivocado.
+  const [scopeLocked, setScopeLocked] = useState(false);
+  const superAdminMode = scopeLocked || presetConsulta?.savedQueryScope === "superadmin";
 
   // "Programar este informe": el preset abre el formulario de creación solo (nunca reemplaza una
   // edición en curso) y se consume enseguida — sin esto, reabrir el panel en la misma sesión
@@ -71,10 +81,16 @@ export function SchedulesSection({
     setEditing(null);
     setCreating(true);
     setActivePreset(presetConsulta);
+    setScopeLocked(presetConsulta.savedQueryScope === "superadmin");
     onConsumePreset?.();
   }, [presetConsulta, onConsumePreset]);
 
+  // SuperAdmin sin compañía elegida: el alcance "superadmin" (consultas cross-compañía) no la
+  // necesita, así que solo bloquea el fetch cuando de verdad no hay tenant que consultar.
+  const blockedByCompany = needsCompany && !superAdminMode;
+
   const load = useCallback(async () => {
+    if (blockedByCompany) return;
     setStatus("loading");
     try {
       const data = superAdminMode
@@ -85,7 +101,7 @@ export function SchedulesSection({
     } catch {
       setStatus("error");
     }
-  }, [tenantId, superAdminMode]);
+  }, [tenantId, superAdminMode, blockedByCompany]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await
@@ -142,7 +158,7 @@ export function SchedulesSection({
         </p>
         {/* En alcance SuperAdmin no hay "informe en blanco": todo informe aquí es de tipo
             "consulta" y se crea desde "Programar este informe" en una consulta guardada. */}
-        {!formOpen && !superAdminMode && (
+        {!formOpen && !superAdminMode && !blockedByCompany && (
           <CreateButton size="sm" label="Nuevo informe" icon={CalendarPlus} onClick={() => setCreating(true)} />
         )}
       </div>
@@ -161,7 +177,11 @@ export function SchedulesSection({
         <ScheduleForm initial={editing} onSubmit={handleUpdate} onCancel={() => setEditing(null)} />
       )}
 
-      {!formOpen && (
+      {!formOpen && blockedByCompany && (
+        <CompanyNotice message="Como SuperAdmin debes elegir una compañía en el filtro superior para ver o crear sus informes programados." />
+      )}
+
+      {!formOpen && !blockedByCompany && (
         <UiStateBoundary
           status={status}
           emptyMessage={

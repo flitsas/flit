@@ -277,6 +277,7 @@ export function Reportes() {
             setSchedulePreset(null);
           }}
           tenantId={filters.tenantId || undefined}
+          needsCompany={needsCompany}
           presetConsulta={schedulePreset}
           onConsumePreset={() => setSchedulePreset(null)}
         />
