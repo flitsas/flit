@@ -78,4 +78,29 @@ public sealed class ResetPasswordHandlerTests
         await _tokenRepository.DidNotReceiveWithAnyArgs().FindActiveByTokenHashAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
+
+    // HU #11553 AC2 — la nueva contraseña coincide con la vigente → PasswordReusedException, y el
+    // token NO se consume (ni MarkUsed ni InvalidateActiveForUser) para permitir reintentar.
+    [Fact]
+    public async Task HandleAsync_NewPasswordSameAsCurrent_ThrowsPasswordReusedAndKeepsTokenValid()
+    {
+        var userId = Guid.NewGuid();
+        var tokenId = Guid.NewGuid();
+        _tokenGenerator.HashToken("raw-token").Returns("hash-token");
+        _tokenRepository.FindActiveByTokenHashAsync(
+                "hash-token", "password_reset", Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(new PasswordResetTokenRecord(tokenId, userId));
+        _userAccountRepository.GetPasswordHashAsync(userId, Arg.Any<CancellationToken>()).Returns("current-hash");
+        _passwordHasher.Verify("NewPass123!", "current-hash").Returns(true);
+
+        var act = () => _handler.HandleAsync(new ResetPasswordCommand("raw-token", "NewPass123!"), CancellationToken.None);
+
+        await act.Should().ThrowAsync<PasswordReusedException>();
+        await _userAccountRepository.DidNotReceiveWithAnyArgs().UpdatePasswordHashAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _tokenRepository.DidNotReceiveWithAnyArgs().MarkUsedAsync(
+            Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+        await _tokenRepository.DidNotReceiveWithAnyArgs().InvalidateActiveForUserAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
 }

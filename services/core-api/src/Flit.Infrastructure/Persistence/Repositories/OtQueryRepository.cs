@@ -323,6 +323,9 @@ internal sealed class OtQueryRepository : IOtQueryRepository
                 RadicadoEn: radicacion?.ChangedAt,
                 UltimaRadicacionEn: ultimaRadicacion?.ChangedAt,
                 DecididoEn: decision?.ChangedAt,
+                // La misma decisión ya calculada arriba, pero solo cuenta si fue aprobación: un
+                // rechazado también decide, pero nunca tiene esta fecha.
+                AprobadoEn: decision?.ToStatus == TramiteEstado.Aprobado ? decision.ChangedAt : null,
                 DecididoPor: decision?.ChangedBy,
                 UltimoRechazoEventId: posteriores
                     .LastOrDefault(e => e.ToStatus == TramiteEstado.Rechazado)?.Id,
@@ -384,6 +387,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
     private static DateTimeOffset? DateOf(QueryRow row, string campo) => campo switch
     {
         OtQueryDateField.Decision => row.DecididoEn,
+        OtQueryDateField.Aprobacion => row.AprobadoEn,
         OtQueryDateField.Actualizacion => row.Instance.UpdatedAt ?? row.Instance.CreatedAt,
         _ => row.RadicadoEn,
     };
@@ -452,6 +456,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
             RadicadoEn: row.RadicadoEn,
             UltimaRadicacionEn: row.UltimaRadicacionEn,
             DecididoEn: row.DecididoEn,
+            AprobadoEn: row.AprobadoEn,
             ActualizadoEn: row.Instance.UpdatedAt,
             DecididoPor: row.DecididoPor is Guid id ? revisores.GetValueOrDefault(id) : null,
             HorasHastaDecision: row.HorasHastaDecision,
@@ -798,6 +803,7 @@ internal sealed class OtQueryRepository : IOtQueryRepository
         DateTimeOffset? RadicadoEn,
         DateTimeOffset? UltimaRadicacionEn,
         DateTimeOffset? DecididoEn,
+        DateTimeOffset? AprobadoEn,
         Guid? DecididoPor,
         Guid? UltimoRechazoEventId,
         double? HorasHastaDecision,

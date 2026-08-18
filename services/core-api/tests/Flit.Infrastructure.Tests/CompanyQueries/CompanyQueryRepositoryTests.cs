@@ -212,6 +212,45 @@ public sealed class CompanyQueryRepositoryTests
         porEnvio.Filas.Should().ContainSingle().Which.ReferenceNumber.Should().Be("REF-ENVIADO");
     }
 
+    [Fact] // «Fecha de aprobación» tiene que excluir lo rechazado: los dos cierran, pero solo uno
+           // aprueba, y confundirlos mezclaría rechazados en un reporte de aprobados.
+    public async Task FechaDeAprobacion_ExcluyeLoRechazadoAunqueTambienHayaCerrado()
+    {
+        var db = NewDbName();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedCatalogos(seed);
+
+            var aprobado = Tramite(seed, "REF-APROBADO", placa: "ABC123", creadoEn: Hace(5),
+                status: TramiteEstado.Aprobado);
+            Historia(seed, aprobado, TramiteEstado.Entregado, Hace(4));
+            Historia(seed, aprobado, TramiteEstado.Aprobado, Hace(2));
+
+            var rechazado = Tramite(seed, "REF-RECHAZADO", placa: "XYZ789", creadoEn: Hace(5),
+                status: TramiteEstado.Rechazado);
+            Historia(seed, rechazado, TramiteEstado.Entregado, Hace(4));
+            Historia(seed, rechazado, TramiteEstado.Rechazado, Hace(2));
+
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var porCreacion = await RunAsync(db, Definir());
+        porCreacion.Total.Should().Be(2);
+
+        var porAprobacion = await RunAsync(db, Definir(campoFecha: CompanyQueryDateField.Aprobacion));
+        porAprobacion.Total.Should().Be(1);
+
+        var fila = porAprobacion.Filas.Should().ContainSingle().Subject;
+        fila.ReferenceNumber.Should().Be("REF-APROBADO");
+        fila.AprobadoEn.Should().NotBeNull();
+
+        // El rechazado también cerró (tiene un evento de decisión), pero nunca aprobó: el DTO no le
+        // asigna esta fecha aunque se le pida por otro rango.
+        var todos = await RunAsync(db, Definir());
+        todos.Filas.Single(f => f.ReferenceNumber == "REF-RECHAZADO").AprobadoEn.Should().BeNull();
+    }
+
     // ── Catálogo ──────────────────────────────────────────────────────────────────────────────
 
     [Fact] // Esta prueba sostiene la promesa del catálogo: un campo declarado sin traducción en el
@@ -260,6 +299,7 @@ public sealed class CompanyQueryRepositoryTests
             [CompanyQueryFieldCatalog.Leasing] = "true",
             [CompanyQueryFieldCatalog.MetodoPago] = "Efectivo",
             [CompanyQueryFieldCatalog.TipoTraspaso] = CompanyQueryFieldCatalog.TraspasoUnilateral,
+            [CompanyQueryFieldCatalog.Compania] = Empresa.ToString(),
         };
 
         esperado.Keys.Should().BeEquivalentTo(
@@ -519,6 +559,18 @@ public sealed class CompanyQueryRepositoryTests
 
         return id;
     }
+
+    private static void Historia(
+        FlitDbContext ctx, Guid instanceId, string toStatus, DateTimeOffset at, Guid? tenantId = null) =>
+        ctx.ProcedureInstanceStatusHistories.Add(new ProcedureInstanceStatusHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId ?? Empresa,
+            ProcedureInstanceId = instanceId,
+            FromStatus = null,
+            ToStatus = toStatus,
+            ChangedAt = at,
+        });
 
     private static void Actor(
         FlitDbContext ctx, Guid instanceId, string actorType, string nombre, string documento) =>

@@ -11,6 +11,9 @@ namespace Flit.Infrastructure.Tests.Notifications.Tramites;
 /// en variantes FLIT y Renting, carácter a carácter, ANTES de que el disparador productivo
 /// (Features #11459/#11460) toque la composición.
 /// <para>
+/// HU #11488 — misma protección para <c>tramites.asignacion-placa</c> (FLIT y Renting).
+/// </para>
+/// <para>
 /// Sin handler de envío aún, la captura se hace en el composer vía
 /// <see cref="TramiteEmailPreviewSample"/> (mismos datos sintéticos del banco). Cuando exista
 /// el worker, estos golden siguen protegiendo el cuerpo que ese worker enviará.
@@ -56,6 +59,22 @@ public sealed class TramiteEmailGoldenTests
         var (subject, html) = TramiteEmailPreviewSample.BuildRentingRechazado(AssetsBaseUrl);
         EmailGolden.Assert(ToMessage(TramiteCambioEstadoEmailComposer.TemplateIdRechazado, subject, html),
             "tramites-rechazado-renting");
+    }
+
+    [Fact]
+    public void Asignacion_placa_flit_conserva_asunto_y_cuerpo()
+    {
+        var (subject, html) = AsignacionPlacaEmailPreviewSample.BuildFlit(AssetsBaseUrl);
+        EmailGolden.Assert(ToMessage(AsignacionPlacaEmailComposer.TemplateId, subject, html),
+            "tramites-asignacion-placa-flit");
+    }
+
+    [Fact]
+    public void Asignacion_placa_renting_conserva_asunto_y_cuerpo()
+    {
+        var (subject, html) = AsignacionPlacaEmailPreviewSample.BuildRenting(AssetsBaseUrl);
+        EmailGolden.Assert(ToMessage(AsignacionPlacaEmailComposer.TemplateId, subject, html),
+            "tramites-asignacion-placa-renting");
     }
 
     private static EmailMessage ToMessage(string templateKey, string subject, string html) =>

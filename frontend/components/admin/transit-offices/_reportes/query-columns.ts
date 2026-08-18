@@ -203,6 +203,15 @@ export const QUERY_COLUMNS: QueryColumn[] = [
     sort: "decidido",
   },
   {
+    id: "aprobado_en",
+    label: "Aprobado",
+    group: "Fechas",
+    xlsxHeader: "Fecha de aprobación",
+    value: (r) => formatDate(r.aprobadoEn),
+    raw: (r) => bogotaDay(r.aprobadoEn),
+    width: 14,
+  },
+  {
     id: "actualizado_en",
     label: "Última actualización",
     group: "Fechas",

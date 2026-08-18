@@ -13,19 +13,27 @@ import {
   deleteOtUser,
   resendOtInvitation,
   cancelOtInvitation,
+  reactivateOtInvitation,
   type OtUserItem,
 } from "@/lib/api/admin-ot-security";
 // HU #10624 — restaurar (POST /api/v1/superadmin/users/{userId}/restore) es un endpoint
 // genérico SOLO SuperAdmin, sin scope OT: se reutiliza el mismo cliente que Usuarios.tsx.
 import { restoreUser } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
+import {
+  EMAIL_ALREADY_ASSOCIATED_MESSAGE,
+  emailConflictErrorCode,
+  isEmailConflictCode,
+} from "@/lib/users/emailConflict";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EditUserModal } from "@/components/atom/modules/users/EditUserModal";
 import { DeleteUserDialog } from "@/components/atom/modules/users/DeleteUserDialog";
 import { RestoreUserDialog } from "@/components/atom/modules/users/RestoreUserDialog";
 import { ResendInvitationButton } from "@/components/atom/modules/users/ResendInvitationButton";
+import { ReactivateInvitationButton } from "@/components/atom/modules/users/ReactivateInvitationButton";
 import { CancelInvitationDialog } from "@/components/atom/modules/users/CancelInvitationDialog";
 import { UsersTable, toUserRow } from "@/components/atom/modules/users/UsersTable";
+import { isInvitationRow } from "@/lib/users/invitationRow";
 import { UserAuditHistoryDrawer } from "@/components/atom/modules/users/UserAuditHistoryDrawer";
 // HU19 — misma area clickeable minima que la columna de acciones unificada (RowActions).
 import { ICON_BUTTON_HIT_AREA, type RowAction } from "@/components/atom/RowActions";
@@ -125,7 +133,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   }, [showDeleted, isSuperAdmin, loadDeleted]);
 
   useEffect(() => {
-    if (!editTarget || editTarget.status === "pending") {
+    if (!editTarget || isInvitationRow(editTarget)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditRoles([]);
       return;
@@ -172,7 +180,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
 
     const actions: RowAction[] = [];
 
-    if (u.status !== "pending" && isSuperAdmin) {
+    if (!isInvitationRow(u) && isSuperAdmin) {
       actions.push({
         icon: History,
         label: `Ver historial de ${u.fullName}`,
@@ -181,8 +189,9 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
       });
     }
 
-    // AC4 (HU #10622): sin "Editar" para pendientes — no hay cuenta real que editar.
-    if (u.status !== "pending") {
+    // AC4 (HU #10622): sin "Editar" para pendientes ni canceladas (HU #11552 / ADR-0048) — no
+    // hay cuenta real que editar.
+    if (!isInvitationRow(u)) {
       actions.push({
         icon: Pencil,
         label: `Editar usuario ${u.fullName}`,
@@ -192,7 +201,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     }
 
     // Bloquear/desactivar/reactivar es EXCLUSIVO de SuperAdmin.
-    if (u.status !== "pending" && isSuperAdmin) {
+    if (!isInvitationRow(u) && isSuperAdmin) {
       if (u.isSuspended) {
         actions.push({
           icon: ShieldOff,
@@ -216,7 +225,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     }
 
     // AC2 (HU #10623): eliminar es exclusivo de SuperAdmin y nunca sobre la propia fila.
-    if (u.status !== "pending" && isSuperAdmin && u.id !== currentUserId) {
+    if (!isInvitationRow(u) && isSuperAdmin && u.id !== currentUserId) {
       actions.push({
         icon: Trash2,
         label: `Eliminar usuario ${u.fullName}`,
@@ -248,8 +257,13 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
       setInviteOpen(false);
       void load();
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        show("Ya existe una invitación pendiente para ese correo o ya tiene cuenta.", "error");
+      if (err instanceof ApiError && isEmailConflictCode(emailConflictErrorCode(err.body))) {
+        // Mensaje unificado (HU #11550) — mismo texto que la ruta Security/AdminCompany
+        // (InviteUserModal) para el único código EMAIL_ALREADY_IN_USE (HU #11580).
+        show(EMAIL_ALREADY_ASSOCIATED_MESSAGE, "error");
+      } else if (err instanceof ApiError && err.status === 409) {
+        // Otro conflicto (no de correo) — no reutilizar el mensaje unificado de arriba.
+        show("No se pudo completar la invitación por un conflicto. Inténtalo de nuevo.", "error");
       } else {
         show("No se pudo enviar la invitación.", "error");
       }
@@ -309,6 +323,13 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   // viven en el propio diálogo; aquí solo se persiste.
   function handleCancelInvitation(invitationId: string) {
     return cancelOtInvitation(invitationId, { transitOfficeId });
+  }
+
+  // HU #11552 / ADR-0048 — Inyectado a ReactivateInvitationButton: liga el scope OT a
+  // reactivateOtInvitation. El propio botón mapea 409/429 y aplica el cooldown visual; aquí
+  // solo se persiste.
+  function handleReactivateInvitation(invitationId: string) {
+    return reactivateOtInvitation(invitationId, { transitOfficeId });
   }
 
   return (
@@ -418,24 +439,48 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           onRetry={() => void load()}
           emptyMessage="No hay usuarios en este organismo de tránsito todavía."
           actionsFor={(row) => actionsForUser(row.id)}
-          extraActionsFor={(row) =>
+          extraActionsFor={(row) => {
             // AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el invitationId.
-            row.status === "pending" ? (
-              <ResendInvitationButton
-                invitationId={row.id}
-                fullName={row.fullName}
-                resend={handleResendInvitation}
-                onResent={(outcome) =>
-                  show(
-                    outcome.emailSent
-                      ? `Invitación reenviada a ${outcome.email}.`
-                      : "Invitación reenviada, pero el correo no pudo entregarse.",
-                    "success",
-                  )
-                }
-              />
-            ) : null
-          }
+            if (row.status === "pending") {
+              return (
+                <ResendInvitationButton
+                  invitationId={row.id}
+                  fullName={row.fullName}
+                  resend={handleResendInvitation}
+                  onResent={(outcome) =>
+                    show(
+                      outcome.emailSent
+                        ? `Invitación reenviada a ${outcome.email}.`
+                        : "Invitación reenviada, pero el correo no pudo entregarse.",
+                      "success",
+                    )
+                  }
+                />
+              );
+            }
+            // HU #11552 / ADR-0048: SOLO en filas "Cancelada" — el id de la fila ya es el
+            // invitationId. Tras reactivar, la fila vuelve a verse como "Pendiente" recargando
+            // el listado, sin recargar la página.
+            if (row.status === "cancelled") {
+              return (
+                <ReactivateInvitationButton
+                  invitationId={row.id}
+                  fullName={row.fullName}
+                  reactivate={handleReactivateInvitation}
+                  onReactivated={(outcome) => {
+                    show(
+                      outcome.emailSent
+                        ? `Invitación reactivada y reenviada a ${outcome.email}.`
+                        : "Invitación reactivada, pero el correo no pudo entregarse.",
+                      "success",
+                    );
+                    void load();
+                  }}
+                />
+              );
+            }
+            return null;
+          }}
         />
       )}
 

@@ -26,6 +26,11 @@ public sealed record TenantBiometricPersonDto(
     int? Score,
     string? CaptureUrl,
     bool Expired,
+    // HU #11505 (AC3) — intentos consumidos y máximo de la validación MÁS RECIENTE del grupo, mismo
+    // nombre que el DTO de detalle (BiometricValidationDto) para que la serialización camelCase
+    // produzca intentos/maxIntentos y la grilla los pueda leer con el mismo contrato.
+    int Intentos,
+    int MaxIntentos,
     DateTimeOffset CreatedAt,
     DateTimeOffset? ValidatedAt,
     DateTimeOffset? ValidUntil,
@@ -280,6 +285,8 @@ public sealed class ListTenantBiometricPersonsHandler(
             r.Score,
             r.CaptureUrl,
             r.Status != BiometricEstados.Aprobado && now > r.ExpiresAt,
+            r.Attempts,
+            r.MaxAttempts,
             r.CreatedAt,
             r.ValidatedAt,
             r.ValidUntil,

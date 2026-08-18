@@ -161,6 +161,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Lo mismo, del otro lado del trámite: las que guarda un usuario de la empresa gestora.
     public DbSet<CompanySavedQueryEntity> CompanySavedQueries => Set<CompanySavedQueryEntity>();
 
+    // Las que guarda SuperAdmin en modo «todas las compañías»: sin tenant, compartidas entre todo
+    // el equipo de SuperAdmin.
+    public DbSet<SuperAdminSavedQueryEntity> SuperAdminSavedQueries => Set<SuperAdminSavedQueryEntity>();
+
     // HU #10545 — requisitos configurables por OT (RNMC, ruta de placa, validación de identidad).
     public DbSet<OtRequirementsEntity> OtRequirements => Set<OtRequirementsEntity>();
 
@@ -233,6 +237,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // Trámites — cola de despachos de correo al cambio de estado (HU #11461, ADR-0045)
     public DbSet<ProcedureStateChangeEmailDispatch> ProcedureStateChangeEmailDispatches =>
         Set<ProcedureStateChangeEmailDispatch>();
+
+    // Trámites — cola de despachos de correo al asignar placa (HU #11484, ADR-0046)
+    public DbSet<PlateAssignmentEmailDispatch> PlateAssignmentEmailDispatches =>
+        Set<PlateAssignmentEmailDispatch>();
 
     // Trámites — bitácora ÚNICA del ciclo de validación de identidad (envío/webhook/descifrado/errores)
     public DbSet<IdentityValidationAuditEvent> IdentityValidationAudits => Set<IdentityValidationAuditEvent>();

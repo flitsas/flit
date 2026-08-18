@@ -38,7 +38,7 @@ export function CoverageNotice({
   cobertura: QueryCoverageItem[];
   /** El catálogo, para nombrar los campos como se llaman en pantalla. */
   fields?: QueryField[];
-  /** Dónde no está lo que no salió: «este organismo», «su empresa». */
+  /** Dónde no está lo que no salió: «este organismo», «tu empresa». */
   ambito: string;
   testIdPrefix: string;
 }) {
@@ -59,7 +59,7 @@ export function CoverageNotice({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-semibold text-[#8A6100] dark:text-[#F2C14E]">
-          {plural(faltantes.length, "valor que pidió no salió", "valores que pidió no salieron")} en
+          {plural(faltantes.length, "valor que pediste no salió", "valores que pediste no salieron")} en
           el resultado
         </p>
         <button

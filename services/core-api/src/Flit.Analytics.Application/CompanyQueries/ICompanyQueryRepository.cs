@@ -19,12 +19,26 @@ public interface ICompanyQueryRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Igual que <see cref="ExecuteAsync(Guid, QueryRequest, CancellationToken)"/> pero sobre una
+    /// lista de compañías a la vez. Exclusivo del motor de SuperAdmin
+    /// (<c>SuperAdminQueriesEndpoints</c>): puede lanzar <see cref="SuperAdminQueryTooBroadException"/>
+    /// si el universo real que habría que cargar para resolverla supera el tope de cordura.
+    /// </summary>
+    Task<CompanyQueryResultDto> ExecuteForSuperAdminAsync(
+        QueryRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Catálogo de campos con las opciones que dependen de los datos de la empresa —organismos,
     /// tipos de trámite, quién radica, métodos de pago— ya rellenadas con lo que esa empresa
     /// realmente tiene.
     /// </summary>
     Task<IReadOnlyList<QueryFieldDto>> GetFieldsAsync(
         Guid tenantId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>El mismo catálogo, con «Compañía» resuelta a las compañías activas. Solo SuperAdmin.</summary>
+    Task<IReadOnlyList<QueryFieldDto>> GetFieldsForSuperAdminAsync(
         CancellationToken cancellationToken = default);
 
     /// <summary>Las del usuario más las de fábrica, éstas siempre al final.</summary>

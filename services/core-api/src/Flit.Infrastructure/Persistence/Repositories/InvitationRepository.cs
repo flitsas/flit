@@ -1,6 +1,7 @@
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -144,9 +145,77 @@ public sealed class InvitationRepository(FlitDbContext db) : IInvitationReposito
         entity.Status = "cancelled";
         entity.UpdatedAt = now;
         entity.UpdatedBy = cancelledBy;
-        entity.DeletedAt = now;
-        entity.DeletedBy = cancelledBy;
 
+        // ADR-0048: "cancelled" es un estado vivo y reversible, NO un soft-delete — ya no se
+        // marca DeletedAt/DeletedBy (antes lo hacía). El trigger tr_user_invitations_audit sigue
+        // registrando este UPDATE.
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<InvitationForReactivate?> FindForReactivateAsync(
+        Guid invitationId, Guid? scopeTenantId, CancellationToken cancellationToken)
+    {
+        var query = db.UserInvitations.AsNoTracking().Where(x => x.Id == invitationId);
+
+        if (scopeTenantId is { } tenantId)
+            query = query.Where(x => x.TenantId == tenantId);
+
+        var entity = await query
+            .Select(x => new { x.Id, x.TenantId, x.Email, x.FullName, x.Status, x.LastSentAt, x.RoleId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (entity is null)
+            return null;
+
+        var roleIds = await db.InvitationRoles
+            .AsNoTracking()
+            .Where(r => r.InvitationId == entity.Id)
+            .Select(r => r.RoleId)
+            .ToListAsync(cancellationToken);
+
+        // Datos anteriores a la tabla puente invitation_roles (HU #10506): sin filas ahí, el
+        // único rol vive en la columna singular RoleId.
+        if (roleIds.Count == 0 && entity.RoleId is { } singleRoleId)
+            roleIds.Add(singleRoleId);
+
+        return new InvitationForReactivate(
+            entity.Id, entity.TenantId, entity.Email, entity.FullName, entity.Status, entity.LastSentAt, roleIds);
+    }
+
+    public async Task ReactivateAsync(
+        Guid invitationId,
+        string tokenHash,
+        DateTimeOffset reactivatedAt,
+        Guid reactivatedBy,
+        CancellationToken cancellationToken)
+    {
+        var entity = await db.UserInvitations.FirstAsync(x => x.Id == invitationId, cancellationToken);
+
+        entity.Status = "pending";
+        entity.TokenHash = tokenHash;
+        entity.LastSentAt = reactivatedAt;
+        entity.UpdatedAt = reactivatedAt;
+        entity.UpdatedBy = reactivatedBy;
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsPendingUniqueViolation(ex))
+        {
+            // Red de la condición de carrera: el handler ya pre-valida con ExistsPendingAsync,
+            // pero entre esa lectura y este UPDATE otra invitación pudo volverse "pending" para
+            // el mismo (tenant, email) — uq_user_invitations_tenant_email_pending revienta con
+            // 23505 y se traduce a la misma excepción de dominio que el chequeo previo.
+            db.Entry(entity).State = EntityState.Unchanged;
+            throw new InvitationAlreadyPendingException();
+        }
+    }
+
+    private const string PendingUniqueIndex = "uq_user_invitations_tenant_email_pending";
+
+    private static bool IsPendingUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException pg
+        && pg.SqlState == PostgresErrorCodes.UniqueViolation
+        && pg.ConstraintName == PendingUniqueIndex;
 }

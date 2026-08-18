@@ -76,6 +76,8 @@ function row(overrides: Partial<CompanyQueryRow> = {}): CompanyQueryRow {
     vin: "VIN0001",
     transitOfficeId: "o1",
     transitOfficeName: "Secretaría de Movilidad",
+    companiaId: "empresa-1",
+    companiaNombre: "Mi Empresa",
     procedureTypeId: "t1",
     procedureTypeName: "Traspaso de vehículo",
     modalidad: "traspaso",
@@ -96,6 +98,7 @@ function row(overrides: Partial<CompanyQueryRow> = {}): CompanyQueryRow {
     creadoEn: "2026-08-01T14:00:00Z",
     enviadoEn: "2026-08-02T14:00:00Z",
     cerradoEn: null,
+    aprobadoEn: null,
     actualizadoEn: "2026-08-03T14:00:00Z",
     diasHastaEnvio: 1,
     diasEnOrganismo: 3,
@@ -200,7 +203,7 @@ describe("Consultas de la empresa", () => {
 });
 
 describe("Cobertura, del lado de la empresa", () => {
-  it("dice que lo que no salió no está en SU empresa, no en el organismo", async () => {
+  it("dice que lo que no salió no está en TU empresa, no en el organismo", async () => {
     mocks.runCompanyQuery.mockResolvedValue(
       result({
         total: 0,
@@ -211,7 +214,7 @@ describe("Cobertura, del lado de la empresa", () => {
             valor: "ZZZ999",
             resultado: "no_existe",
             motivoCampo: null,
-            motivo: "No hay ningún trámite con este valor en su empresa.",
+            motivo: "No hay ningún trámite con este valor en tu empresa.",
           },
         ],
       }),
@@ -223,7 +226,7 @@ describe("Cobertura, del lado de la empresa", () => {
 
     // Mandar a un gestor a reclamar al organismo por una placa que sencillamente no es suya es el
     // error que este aviso existe para no cometer.
-    expect(aviso).toHaveTextContent("su empresa");
+    expect(aviso).toHaveTextContent("tu empresa");
     expect(aviso).not.toHaveTextContent("organismo");
   });
 

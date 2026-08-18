@@ -52,9 +52,13 @@ public sealed class KyverumVerifyException(string message, bool transient) : Exc
 /// reconciliación. <paramref name="Status"/> ya viene NORMALIZADO por el cliente al veredicto FLIT:
 /// <list type="bullet">
 ///   <item><c>aprobado</c> — el <c>result</c> de Kyverum cerró aprobado.</item>
-///   <item><c>rechazado_intento</c> — un INTENTO falló (Kyverum reporta result/rechazado tras CADA intento,
-///   aunque queden reintentos). NO es terminal por sí solo: el reconciliador CUENTA los intentos (dedup por
-///   <paramref name="AttemptAt"/>) y solo terminaliza en <c>rechazado</c> al llegar al máximo.</item>
+///   <item><c>rechazado_intento</c> — un INTENTO falló SIN señal de cierre (<c>result.closedAt</c> ausente;
+///   Kyverum reporta result/rechazado tras CADA intento, aunque queden reintentos). NO es terminal por sí
+///   solo: el reconciliador CUENTA los intentos (dedup por <paramref name="AttemptAt"/>) y solo terminaliza
+///   en <c>rechazado</c> al llegar al máximo.</item>
+///   <item><c>rechazado</c> — Kyverum CERRÓ la validación rechazada (<c>result.closedAt</c> presente, agotó
+///   sus reintentos). Terminal de inmediato: es autoritativo aunque el conteo local aún tenga margen
+///   (Bug #11503).</item>
 ///   <item><c>en_proceso</c>/<c>enviado</c>/<c>expirado</c> — tal cual.</item>
 /// </list>
 /// <paramref name="AttemptAt"/> = <c>validadoAt</c> del último intento (clave de dedup/conteo);

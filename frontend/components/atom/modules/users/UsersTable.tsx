@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Search } from "lucide-react";
 import { RowActions, type RowAction } from "@/components/atom/RowActions";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
-import { ProfileRoleCell } from "./ProfileRoleCell";
+import { ProfileCell, RoleCell } from "./ProfileRoleCell";
 import {
   USER_PROFILE_ORDER,
   profileShortLabel,
@@ -26,14 +26,17 @@ export interface UserRow {
   profile?: string | null;
   tenantType?: string | null;
   tenantName?: string | null;
-  status: "active" | "inactive" | "pending";
+  /** HU #11552 / ADR-0048: "cancelled" es un cuarto valor — invitación cancelada, visible y
+   *  reactivable. Ver `isInvitationRow` en lib/users/invitationRow.ts antes de asumir que
+   *  `status !== "pending"` implica "esta fila es un usuario real". */
+  status: "active" | "inactive" | "pending" | "cancelled";
   isSuspended: boolean;
   createdAt: string | null;
   /** Clave de React: un usuario con N roles produce N filas con el mismo id. */
   rowKey: string;
 }
 
-export type UserStatusFilter = "" | "active" | "pending" | "inactive" | "blocked";
+export type UserStatusFilter = "" | "active" | "pending" | "inactive" | "blocked" | "cancelled";
 
 /**
  * Adapta cualquiera de las formas que devuelven las APIs (`TenantUser`, `OtUserItem`) a
@@ -48,7 +51,7 @@ export function toUserRow(
     role: string | null;
     roleCode: string | null;
     roleId?: string | null;
-    status: "active" | "inactive" | "pending";
+    status: "active" | "inactive" | "pending" | "cancelled";
     isSuspended: boolean;
     createdAt: string | null;
     profile?: string | null;
@@ -77,6 +80,9 @@ const STATUS_BADGE: Record<UserRow["status"], { label: string; tone: StatusTone 
   active: { label: "Activo", tone: "success" },
   inactive: { label: "Inactivo", tone: "danger" },
   pending: { label: "Pendiente", tone: "warning" },
+  // HU #11552 / ADR-0048: invitación cancelada, visible y reactivable — tono neutral, no
+  // "danger" (no es un error ni una baja definitiva, es un estado terminal-reversible).
+  cancelled: { label: "Cancelada", tone: "neutral" },
 };
 
 const SUSPENDED_BADGE: { label: string; tone: StatusTone } = { label: "Bloqueado", tone: "danger" };
@@ -84,6 +90,7 @@ const SUSPENDED_BADGE: { label: string; tone: StatusTone } = { label: "Bloqueado
 const STATUS_OPTIONS: { value: Exclude<UserStatusFilter, "">; label: string }[] = [
   { value: "active", label: "Activo" },
   { value: "pending", label: "Pendiente" },
+  { value: "cancelled", label: "Cancelada" },
   { value: "inactive", label: "Inactivo" },
   { value: "blocked", label: "Bloqueado" },
 ];
@@ -137,10 +144,13 @@ export function UsersTable({
   const [roleFilter, setRoleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<UserStatusFilter>("");
 
+  // Perfil y Rol viven en columnas separadas (HU #11551): antes se apilaban en una sola celda
+  // y el chip de Perfil (siempre "Gestor" para cualquier usuario de compañía) eclipsaba el rol
+  // real, dando la impresión de que todos los usuarios tenían el mismo rol.
   const gridTemplate = showTenantColumn
-    ? "2.4fr 1.4fr 1.8fr 1.1fr 1.2fr 108px"
-    : "2.6fr 1.8fr 1.2fr 1.4fr 108px";
-  const minWidth = showTenantColumn ? "min-w-[880px]" : "min-w-[760px]";
+    ? "2.2fr 1.3fr 0.8fr 1.4fr 1.0fr 1.2fr 108px"
+    : "2.4fr 0.8fr 1.5fr 1.1fr 1.3fr 108px";
+  const minWidth = showTenantColumn ? "min-w-[980px]" : "min-w-[860px]";
 
   const roleOptions = useMemo(() => {
     const names = new Set<string>();
@@ -264,7 +274,8 @@ export function UsersTable({
         >
           <div>Usuario</div>
           {showTenantColumn && <div>Empresa</div>}
-          <div>Perfil / Rol</div>
+          <div>Perfil</div>
+          <div>Rol</div>
           <div>Estado</div>
           <div>Fecha</div>
           <div className="text-right">Acciones</div>
@@ -331,12 +342,12 @@ export function UsersTable({
                       {row.tenantName ?? "—"}
                     </div>
                   )}
-                  <ProfileRoleCell
+                  <ProfileCell
                     roleCode={row.roleCode}
-                    roleName={row.role}
                     profile={row.profile}
                     tenantType={row.tenantType}
                   />
+                  <RoleCell roleCode={row.roleCode} roleName={row.role} />
                   <div>
                     <StatusBadge label={badge.label} tone={badge.tone} />
                   </div>

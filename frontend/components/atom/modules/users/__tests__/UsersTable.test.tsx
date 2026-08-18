@@ -38,12 +38,52 @@ function renderTable(overrides: Partial<React.ComponentProps<typeof UsersTable>>
   );
 }
 
-describe("UsersTable — columna Perfil / Rol", () => {
-  it("muestra el perfil y el rol de cada usuario", () => {
+describe("UsersTable — columnas Perfil y Rol separadas (HU #11551)", () => {
+  it("expone encabezados 'Perfil' y 'Rol' como columnas distintas", () => {
+    renderTable();
+    // La cabecera de la tabla vive en el mismo grid que "Usuario"/"Estado"/"Fecha"; el label
+    // "Perfil" también existe en la barra de filtros, así que se acota al encabezado.
+    const encabezado = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
+    expect(within(encabezado).getByText("Perfil")).toBeInTheDocument();
+    expect(within(encabezado).getByText("Rol")).toBeInTheDocument();
+    // Ya no existe la columna compuesta "Perfil / Rol".
+    expect(screen.queryByText("Perfil / Rol")).not.toBeInTheDocument();
+  });
+
+  // AC1 — Administrador de Compañía en tenant compañía: Perfil = Gestor, Rol = Administrador
+  // de Compañía, en celdas distintas y legibles (sin truncar por opacidad baja).
+  it("AC1 — perfil Gestor y rol Administrador de Compañía en celdas separadas", () => {
     renderTable();
     const fila = screen.getByText("Ana Torres").closest("div.grid") as HTMLElement;
     expect(within(fila).getByText("Gestor")).toBeInTheDocument();
-    expect(within(fila).getByText("Administrador de Compañía")).toBeInTheDocument();
+    const rol = within(fila).getByText("Administrador de Compañía");
+    expect(rol).toBeInTheDocument();
+    // La celda de rol ya no lleva la opacidad reducida que la hacía ilegible.
+    expect(rol.className).not.toContain("opacity-80");
+  });
+
+  // AC2 — usuario sin rol asignado: columna Rol muestra "Sin rol".
+  it("AC2 — usuario sin rol asignado muestra 'Sin rol' en la columna Rol", () => {
+    render(
+      <UsersTable
+        rows={[row({ id: "u6", fullName: "Fer Ríos", profile: "GESTOR", role: null, roleCode: null })]}
+        actionsFor={() => []}
+      />,
+    );
+    const fila = screen.getByText("Fer Ríos").closest("div.grid") as HTMLElement;
+    expect(within(fila).getByText("Sin rol")).toBeInTheDocument();
+  });
+
+  // AC3 — un usuario FLIT y otro OT: cada uno con su perfil correcto y su rol respectivo.
+  it("AC3 — perfiles FLIT y OT muestran cada uno su perfil y su rol", () => {
+    renderTable();
+    const filaFlit = screen.getByText("Caro Díaz").closest("div.grid") as HTMLElement;
+    expect(within(filaFlit).getByText("FLIT")).toBeInTheDocument();
+    expect(within(filaFlit).getByText("Super Administrador")).toBeInTheDocument();
+
+    const filaOt = screen.getByText("Beto Ruiz").closest("div.grid") as HTMLElement;
+    expect(within(filaOt).getByText("OT")).toBeInTheDocument();
+    expect(within(filaOt).getByText("Administrador OT")).toBeInTheDocument();
   });
 
   it("usa el perfil del backend aunque el rol sea personalizado", () => {

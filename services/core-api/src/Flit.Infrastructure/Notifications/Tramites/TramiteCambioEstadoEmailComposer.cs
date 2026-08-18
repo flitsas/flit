@@ -14,7 +14,9 @@ public sealed record TramiteCambioEstadoEmailModel(
     string CiudadOt,
     string NombreOt,
     string EstadoActual,
-    bool EsTraspaso);
+    bool EsTraspaso,
+    IReadOnlyList<string>? CausalesRechazo = null,
+    string? ObservacionRechazo = null);
 
 /// <summary>
 /// Composer compartido de <c>tramites.aprobado</c> y <c>tramites.rechazado</c>:
@@ -97,7 +99,6 @@ public static class TramiteCambioEstadoEmailComposer
     private static string BuildFlitHtml(
         TramiteCambioEstadoEmailModel model, string estado, string assetsBaseUrl)
     {
-        var vendedor = Enc(model.VendedorNombre);
         var comprador = Enc(model.CompradorNombre);
         var placa = Enc(model.Placa);
         var ciudad = Enc(model.CiudadOt);
@@ -110,14 +111,12 @@ public static class TramiteCambioEstadoEmailComposer
         var estadoEnc = Enc(estado);
 
         var saludo = model.EsTraspaso
-            ? $"Estimados Señor/a <strong style=\"color:{PrimaryBlue}\">{vendedor}</strong> y Señor/a <strong style=\"color:{PrimaryBlue}\">{comprador}</strong>."
+            ? $"Estimados Señor/a <strong style=\"color:{PrimaryBlue}\">{Enc(model.VendedorNombre)}</strong> y Señor/a <strong style=\"color:{PrimaryBlue}\">{comprador}</strong>."
             : $"Estimado/a Señor/a <strong style=\"color:{PrimaryBlue}\">{comprador}</strong>.";
 
         var introParte = model.EsTraspaso
             ? $"el traspaso de propiedad del vehículo con placa <strong>{placa}</strong>"
             : $"el trámite del vehículo con placa <strong>{placa}</strong>";
-
-        var vendedorLine = model.EsTraspaso ? vendedor : "—";
 
         var sb = new StringBuilder();
         sb.Append("<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\"/></head>");
@@ -132,18 +131,32 @@ public static class TramiteCambioEstadoEmailComposer
         sb.Append(CultureInfo.InvariantCulture, $"<p style=\"margin:0 0 12px;\">{saludo}</p>");
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 16px;\">Nos ponemos en contacto para informarle que {introParte} ha sido <strong style=\"color:{estadoColor};\">{estadoEnc}</strong>.</p>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Vendedor:</strong> {vendedorLine}</p>");
+        if (model.EsTraspaso)
+        {
+            sb.Append(CultureInfo.InvariantCulture,
+                $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Vendedor:</strong> {Enc(model.VendedorNombre)}</p>");
+        }
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Comprador:</strong> {comprador}</p>");
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Placa del Vehículo:</strong> {placa}</p>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Ciudad:</strong> {ciudad}</p>");
+        if (!string.IsNullOrWhiteSpace(model.CiudadOt))
+        {
+            sb.Append(CultureInfo.InvariantCulture,
+                $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Ciudad:</strong> {ciudad}</p>");
+        }
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Secretaría de Tránsito:</strong> {ot}</p>");
+        var rejectionLines = BuildRejectionLines(model, estado);
+        var estadoMargin = rejectionLines.Count > 0 ? "6px" : "16px";
         sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 16px;\"><strong style=\"color:{PrimaryBlue};\">Estado Actual:</strong> <span style=\"color:{estadoColor};font-weight:700;\">{estadoIcon} {estadoEnc}</span></p>");
+            $"<p style=\"margin:0 0 {estadoMargin};\"><strong style=\"color:{PrimaryBlue};\">Estado Actual:</strong> <span style=\"color:{estadoColor};font-weight:700;\">{estadoIcon} {estadoEnc}</span></p>");
+        AppendRejectionLines(
+            sb,
+            rejectionLines,
+            lastMargin: "16px",
+            (label, value, margin) =>
+                $"<p style=\"margin:0 0 {margin};\"><strong style=\"color:{PrimaryBlue};\">{label}:</strong> {value}</p>");
         sb.Append("<p style=\"margin:0 0 20px;\">En FLIT, nos aseguramos de que los trámites de tránsito sean más ágiles, eficientes y sin contratiempos.</p>");
         sb.Append("<p style=\"margin:0 0 8px;\">Cordialmente,</p>");
         sb.Append(CultureInfo.InvariantCulture,
@@ -165,7 +178,6 @@ public static class TramiteCambioEstadoEmailComposer
     private static string BuildRentingHtml(
         TramiteCambioEstadoEmailModel model, string estado, string assetsBaseUrl)
     {
-        var vendedor = Enc(model.VendedorNombre);
         var comprador = Enc(model.CompradorNombre);
         var placa = Enc(model.Placa);
         var ciudad = Enc(model.CiudadOt);
@@ -182,7 +194,6 @@ public static class TramiteCambioEstadoEmailComposer
         var procesoParte = model.EsTraspaso
             ? "del traspaso de propiedad del vehículo"
             : "del trámite del vehículo";
-        var vendedorLine = model.EsTraspaso ? vendedor : "—";
 
         var lead = approved
             ? $"¡Buenas Noticias! Queremos mantenerte informado/a sobre el estado actualizado {procesoParte} con placa <strong>{placa}</strong>"
@@ -194,36 +205,51 @@ public static class TramiteCambioEstadoEmailComposer
 
         var sb = new StringBuilder();
         sb.Append("<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\"/>");
-        sb.Append("<meta name=\"color-scheme\" content=\"light dark\"/>");
-        sb.Append("<meta name=\"supported-color-schemes\" content=\"light dark\"/>");
+        sb.Append("<meta name=\"color-scheme\" content=\"light\"/>");
+        sb.Append("<meta name=\"supported-color-schemes\" content=\"light\"/>");
         sb.Append("<style type=\"text/css\">");
-        sb.Append(":root{color-scheme:light dark;}");
-        sb.Append(".renting-header-bg{background-color:#000000 !important;}");
+        sb.Append(":root{color-scheme:light;}");
+        sb.Append(".renting-header-bg{background-color:#ffffff !important;}");
         sb.Append(".renting-footer-bg{background-color:#ffffff !important;}");
-        sb.Append("@media (prefers-color-scheme:dark){.renting-header-bg{background-color:#000000 !important;}.renting-footer-bg{background-color:#ffffff !important;}}");
+        sb.Append(".renting-body-bg{background-color:#ffffff !important;}");
+        sb.Append("@media (prefers-color-scheme:dark){.renting-header-bg,.renting-footer-bg,.renting-body-bg{background-color:#ffffff !important;}}");
         sb.Append("</style></head>");
         sb.Append(CultureInfo.InvariantCulture,
             $"<body style=\"margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:{RentingInk};\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:640px;margin:0 auto;background:#ffffff;\">");
         sb.Append(CultureInfo.InvariantCulture,
-            $"<tr><td class=\"renting-header-bg\" bgcolor=\"#000000\" style=\"padding:0;background-color:#000000 !important;\"><img src=\"{headerUrl}\" alt=\"Compra Tu Usado — Renting Colombia\" width=\"640\" style=\"display:block;width:100%;max-width:640px;height:auto;border:0;background-color:#000000;\"/></td></tr>");
-        sb.Append("<tr><td style=\"padding:28px 32px 8px;font-size:15px;line-height:1.55;background-color:#ffffff;\">");
+            $"<tr><td class=\"renting-header-bg\" bgcolor=\"#ffffff\" style=\"padding:0;background-color:#ffffff !important;\"><img src=\"{headerUrl}\" alt=\"Compra Tu Usado — Renting Colombia\" width=\"640\" style=\"display:block;width:100%;max-width:640px;height:auto;border:0;background-color:#ffffff;\"/></td></tr>");
+        sb.Append("<tr><td class=\"renting-body-bg\" style=\"padding:28px 32px 8px;font-size:15px;line-height:1.55;background-color:#ffffff;\">");
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 16px;\"><strong>{comprador}</strong>, ¡Es un gusto saludarte!</p>");
         sb.Append(CultureInfo.InvariantCulture, $"<p style=\"margin:0 0 20px;\">{lead}</p>");
         sb.Append("<p style=\"margin:0 0 10px;\"><strong>Detalles clave:</strong></p>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 6px;\"><strong>Vendedor:</strong> {vendedorLine}</p>");
+        if (model.EsTraspaso)
+        {
+            sb.Append(CultureInfo.InvariantCulture,
+                $"<p style=\"margin:0 0 6px;\"><strong>Vendedor:</strong> {Enc(model.VendedorNombre)}</p>");
+        }
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 6px;\"><strong>Comprador:</strong> {comprador}</p>");
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 6px;\"><strong>Placa del Vehículo:</strong> {placa}</p>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 6px;\"><strong>Ciudad:</strong> {ciudad}</p>");
+        if (!string.IsNullOrWhiteSpace(model.CiudadOt))
+        {
+            sb.Append(CultureInfo.InvariantCulture,
+                $"<p style=\"margin:0 0 6px;\"><strong>Ciudad:</strong> {ciudad}</p>");
+        }
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 6px;\"><strong>Secretaría de Tránsito:</strong> {ot}</p>");
+        var rejectionLines = BuildRejectionLines(model, estado);
+        var estadoMargin = rejectionLines.Count > 0 ? "6px" : "18px";
         sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 18px;\"><strong>Estado Actual:</strong> <span style=\"color:{estadoColor};font-weight:700;\">{estadoEnc}</span></p>");
+            $"<p style=\"margin:0 0 {estadoMargin};\"><strong>Estado Actual:</strong> <span style=\"color:{estadoColor};font-weight:700;\">{estadoEnc}</span></p>");
+        AppendRejectionLines(
+            sb,
+            rejectionLines,
+            lastMargin: "18px",
+            (label, value, margin) =>
+                $"<p style=\"margin:0 0 {margin};\"><strong>{label}:</strong> {value}</p>");
         sb.Append(CultureInfo.InvariantCulture, $"<p style=\"margin:0 0 18px;\">{cierre}</p>");
         sb.Append("<p style=\"margin:0 0 8px;\">Si tienes alguna inquietud, comunícate con nosotros:</p>");
         sb.Append(CultureInfo.InvariantCulture,
@@ -247,7 +273,56 @@ public static class TramiteCambioEstadoEmailComposer
         return $"{baseUrl}/{fileName}";
     }
 
-    private static string Enc(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);
+    private static List<(string Label, string ValueHtml)> BuildRejectionLines(
+        TramiteCambioEstadoEmailModel model, string estado)
+    {
+        if (!string.Equals(estado, "RECHAZADO", StringComparison.Ordinal))
+            return [];
+
+        var lines = new List<(string Label, string ValueHtml)>();
+        var causales = (model.CausalesRechazo ?? [])
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c.Trim())
+            .ToList();
+        if (causales.Count > 0)
+            lines.Add(("Motivo de rechazo", Enc(string.Join("; ", causales))));
+
+        var observacion = model.ObservacionRechazo?.Trim();
+        if (!string.IsNullOrEmpty(observacion))
+            lines.Add(("Observación", EncMultiline(observacion)));
+
+        return lines;
+    }
+
+    private static void AppendRejectionLines(
+        StringBuilder sb,
+        List<(string Label, string ValueHtml)> lines,
+        string lastMargin,
+        Func<string, string, string, string> formatLine)
+    {
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var margin = i == lines.Count - 1 ? lastMargin : "6px";
+            var (label, value) = lines[i];
+            sb.Append(formatLine(label, value, margin));
+        }
+    }
+
+    private static string Enc(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal)
+            .Replace(">", "&gt;", StringComparison.Ordinal);
+    }
+
+    private static string EncMultiline(string value) =>
+        Enc(value)
+            .Replace("\r\n", "<br/>", StringComparison.Ordinal)
+            .Replace("\n", "<br/>", StringComparison.Ordinal)
+            .Replace("\r", "<br/>", StringComparison.Ordinal);
 
     private static string EncAttr(string? value) =>
         WebUtility.HtmlEncode(value ?? string.Empty).Replace("\"", "&quot;", StringComparison.Ordinal);

@@ -28,7 +28,9 @@ public static class TramiteEmailPreviewSample
         CiudadOt: "FUNZA",
         NombreOt: "STRIA TTOyTTE PAL FUNZA",
         EstadoActual: "RECHAZADO",
-        EsTraspaso: true);
+        EsTraspaso: true,
+        CausalesRechazo: ["Documentos ilegibles", "Improntas no coinciden"],
+        ObservacionRechazo: "Adjuntar SOAT vigente y fotos nítidas de las improntas.");
 
     public static (string Subject, string Html) BuildFlitAprobado(string? assetsBaseUrl = null) =>
         TramiteCambioEstadoEmailComposer.ComposeFlit(

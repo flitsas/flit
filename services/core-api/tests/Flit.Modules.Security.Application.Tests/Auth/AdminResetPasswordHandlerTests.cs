@@ -155,4 +155,51 @@ public sealed class AdminResetPasswordHandlerTests
         await _handler.Invoking(h => h.HandleAsync(command, CancellationToken.None))
             .Should().ThrowAsync<TargetUserNotFoundException>();
     }
+
+    // HU #11553 AC3 — la PRIMERA temporal generada coincide con la vigente del usuario objetivo:
+    // el admin no elige la contraseña, así que la colisión se resuelve regenerando en silencio
+    // (sin excepción, sin auditar fallo) y el reset se completa con la segunda temporal.
+    [Fact]
+    public async Task HandleAsync_FirstGeneratedTemporaryPasswordCollides_RegeneratesAndCompletesReset()
+    {
+        var target = ArrangeTarget(Guid.NewGuid());
+        _repo.GetPasswordHashAsync(target.UserId, Arg.Any<CancellationToken>()).Returns("current-hash");
+        _tempGen.Generate().Returns("Temp23xy!Kp9Qr", "OtraTemp99!Zz");
+        _hasher.Verify("Temp23xy!Kp9Qr", "current-hash").Returns(true);
+        _hasher.Verify("OtraTemp99!Zz", "current-hash").Returns(false);
+        _hasher.Hash("OtraTemp99!Zz").Returns("hashed-second-temp");
+        var command = new AdminResetPasswordCommand(Guid.NewGuid(), "SuperAdmin", [], "user@flit.local");
+
+        await _handler.HandleAsync(command, CancellationToken.None);
+
+        await _repo.Received(1).UpdatePasswordHashAsync(
+            target.UserId, "hashed-second-temp", Arg.Any<DateTimeOffset>(), true, Arg.Any<CancellationToken>());
+        await _email.Received(1).SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        // Camino feliz (colisionó una vez y se regeneró) NO se audita como fallo.
+        await _auditWriter.DidNotReceive().WriteAsync(
+            Arg.Is<AdminAuditEntry>(e => e.ErrorCode == "password_reused"), Arg.Any<CancellationToken>());
+    }
+
+    // HU #11553 AC3 (tope agotado) — el generador SIEMPRE colisiona con la vigente dentro del
+    // tope de reintentos → fallo real del generador, no accionable por el admin: ahí sí
+    // PasswordReusedException, sin persistir ni enviar correo, y SÍ se audita.
+    [Fact]
+    public async Task HandleAsync_TemporaryPasswordAlwaysCollides_ThrowsPasswordReusedAfterExhaustingRetries()
+    {
+        var target = ArrangeTarget(Guid.NewGuid());
+        _repo.GetPasswordHashAsync(target.UserId, Arg.Any<CancellationToken>()).Returns("current-hash");
+        _tempGen.Generate().Returns("SiempreIgual1!");
+        _hasher.Verify("SiempreIgual1!", "current-hash").Returns(true);
+        var command = new AdminResetPasswordCommand(Guid.NewGuid(), "SuperAdmin", [], "user@flit.local");
+
+        await _handler.Invoking(h => h.HandleAsync(command, CancellationToken.None))
+            .Should().ThrowAsync<PasswordReusedException>();
+
+        _tempGen.Received(5).Generate();
+        await _repo.DidNotReceiveWithAnyArgs().UpdatePasswordHashAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+        await _email.DidNotReceiveWithAnyArgs().SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>());
+        await _auditWriter.Received(1).WriteAsync(
+            Arg.Is<AdminAuditEntry>(e => e.ErrorCode == "password_reused"), Arg.Any<CancellationToken>());
+    }
 }

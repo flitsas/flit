@@ -289,6 +289,7 @@ app.MapReportSchedulesEndpoints(); // Reportes2 HU-D
 app.MapAlertRulesEndpoints(); // Reportes2 HU-D
 app.MapAnalyticsMetricsEndpoints(); // Reportes2 HU-B
 app.MapCompanyQueriesEndpoints(); // Consultas propias de la empresa
+app.MapSuperAdminQueriesEndpoints(); // Consultas de SuperAdmin sobre todas las compañías
 app.MapUsageEventsEndpoints(); // Reportes2 HU-A
 
 app.Run();

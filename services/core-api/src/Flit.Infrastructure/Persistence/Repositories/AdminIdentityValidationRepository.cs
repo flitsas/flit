@@ -61,6 +61,9 @@ internal sealed class AdminIdentityValidationRepository : IAdminIdentityValidati
                 entity.CertificateHash = validation.CertificateHash;
                 entity.ValidatedAt = validation.ValidatedAt;
                 entity.ValidUntil = validation.ValidUntil;
+                entity.Attempts = validation.Attempts;
+                entity.MaxAttempts = validation.MaxAttempts;
+                entity.LastAttemptAt = validation.LastAttemptAt;
                 entity.UpdatedAt = validation.UpdatedAt ?? DateTimeOffset.UtcNow;
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -165,6 +168,9 @@ internal sealed class AdminIdentityValidationRepository : IAdminIdentityValidati
         ValidUntil = v.ValidUntil,
         CreatedAt = v.CreatedAt,
         UpdatedAt = v.UpdatedAt,
+        Attempts = v.Attempts,
+        MaxAttempts = v.MaxAttempts,
+        LastAttemptAt = v.LastAttemptAt,
     };
 
     private static AdminIdentityValidation ToAggregate(AdminIdentityValidationEntity e) =>
@@ -172,5 +178,5 @@ internal sealed class AdminIdentityValidationRepository : IAdminIdentityValidati
             e.Id, e.TenantId, e.SubjectType, e.SubjectRef, e.DocumentType, e.DocumentNumber, e.Name,
             e.Email, e.Status, e.Provider, e.CaptureUrl, e.KyverumVerificationId, e.WebhookSecretEncrypted,
             e.ProviderStatus, e.ProviderPayload, e.CertificateHash, e.ValidatedAt, e.ValidUntil,
-            e.CreatedAt, e.UpdatedAt);
+            e.CreatedAt, e.UpdatedAt, e.Attempts, e.MaxAttempts, e.LastAttemptAt);
 }

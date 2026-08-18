@@ -12,9 +12,9 @@ namespace Flit.Ict.Api.Endpoints;
 /// </summary>
 public static class IctClientAdminEndpoints
 {
-    public sealed record CreateClientRequest(string Username, Guid TenantId, string[]? Scopes);
+    public sealed record CreateClientRequest(string Username, Guid TenantId, string[]? Scopes, bool? TestMode);
 
-    public sealed record UpdateClientRequest(bool? IsActive, bool? MustRotate, string[]? Scopes);
+    public sealed record UpdateClientRequest(bool? IsActive, bool? MustRotate, string[]? Scopes, bool? TestMode);
 
     public static IEndpointRouteBuilder MapIctClientAdminEndpoints(this IEndpointRouteBuilder app)
     {
@@ -58,7 +58,7 @@ public static class IctClientAdminEndpoints
 
             var tenantId = access.IsSuperAdmin ? body.TenantId : (access.TenantId ?? body.TenantId);
             var (result, error) = await handler.HandleAsync(
-                new CreateClientCommand(body.Username, tenantId, body.Scopes), ct);
+                new CreateClientCommand(body.Username, tenantId, body.Scopes, body.TestMode ?? false), ct);
             return error is null ? Results.Ok(result) : MapError(error);
         });
 
@@ -77,7 +77,7 @@ public static class IctClientAdminEndpoints
 
             var restrict = access.IsSuperAdmin ? (Guid?)null : access.TenantId;
             var (result, error) = await handler.HandleAsync(
-                new UpdateClientCommand(id, body.IsActive, body.MustRotate, body.Scopes), restrict, ct);
+                new UpdateClientCommand(id, body.IsActive, body.MustRotate, body.Scopes, body.TestMode), restrict, ct);
             return error is null ? Results.Ok(result) : MapError(error);
         });
 

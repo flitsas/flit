@@ -87,4 +87,37 @@ describe("ResetPasswordForm (HU #10173)", () => {
     fireEvent.click(screen.getByRole("button", { name: /restablecer/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/inválido o expiró/i);
   });
+
+  // HU #11553 AC2 — misma contraseña vía token: mensaje explicativo Y el formulario
+  // sigue operativo (el token sigue siendo válido, no hay que pedir un enlace nuevo).
+  it("muestra mensaje explicativo si la nueva contraseña es igual a la actual (409 PASSWORD_REUSED) y permite reintentar", async () => {
+    resetMock.mockRejectedValueOnce({ status: 409, body: { code: "PASSWORD_REUSED", message: "..." } });
+    resetMock.mockResolvedValueOnce(undefined);
+    render(<ResetPasswordForm token="tok123" />);
+
+    fill("SamePass123", "SamePass123");
+    fireEvent.click(screen.getByRole("button", { name: /restablecer/i }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/diferente a la actual/i);
+
+    // El formulario sigue presente (no redirige, no invalida el estado): se puede reintentar.
+    expect(screen.getByLabelText(/nueva contraseña/i)).toBeInTheDocument();
+    expect(clearTokenMock).not.toHaveBeenCalled();
+
+    fill("OtherPass456", "OtherPass456");
+    fireEvent.click(screen.getByRole("button", { name: /restablecer/i }));
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    expect(resetMock).toHaveBeenCalledTimes(2);
+    expect(resetMock).toHaveBeenLastCalledWith("tok123", "OtherPass456");
+  });
+
+  it("un 409 con otro código no muestra el mensaje de reutilización", async () => {
+    resetMock.mockRejectedValue({ status: 409, body: { code: "OTHER_CONFLICT" } });
+    render(<ResetPasswordForm token="tok123" />);
+    fill("NewPass123", "NewPass123");
+    fireEvent.click(screen.getByRole("button", { name: /restablecer/i }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).not.toHaveTextContent(/diferente a la actual/i);
+    expect(alert).toHaveTextContent(/no se pudo restablecer/i);
+  });
 });

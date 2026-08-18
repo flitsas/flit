@@ -15,6 +15,7 @@ import { UsersTable, toUserRow } from "@/components/atom/modules/users/UsersTabl
 import { UserAuditHistoryDrawer } from "@/components/atom/modules/users/UserAuditHistoryDrawer";
 import type { RowAction } from "@/components/atom/RowActions";
 import { isSuperAdminRole, resolveProfile } from "@/lib/users/profiles";
+import { isInvitationRow } from "@/lib/users/invitationRow";
 import { superadminClient } from "@/lib/api/superadmin-client";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -57,7 +58,7 @@ export function CompanyUsersPanel({ tenantId }: CompanyUsersPanelProps) {
   }, [load]);
 
   useEffect(() => {
-    if (!editTarget || editTarget.status === "pending") {
+    if (!editTarget || isInvitationRow(editTarget)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditRoles([]);
       return;
@@ -101,7 +102,10 @@ export function CompanyUsersPanel({ tenantId }: CompanyUsersPanelProps) {
 
   function actionsFor(userId: string): RowAction[] {
     const u = users.find((x) => x.id === userId);
-    if (!u || u.status === "pending") return [];
+    // HU #11552 / ADR-0048: `status === "pending"` dejaba de excluir "cancelled" — con solo ese
+    // guarda, una invitación cancelada ofrecía "Ver historial" y "Editar" sobre un id que es un
+    // invitationId, no un userId.
+    if (!u || isInvitationRow(u)) return [];
     return [
       {
         icon: History,

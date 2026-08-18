@@ -190,8 +190,18 @@ internal sealed class ProcedureStateChangeEmailDispatchProcessor(
             var fieldValues = instance.FieldValues
                 .ToDictionary(fv => fv.FieldKey, fv => fv.ValueText, StringComparer.OrdinalIgnoreCase);
             var estado = EstadoFromTemplateKey(row.TemplateKey);
+
+            IReadOnlyList<string>? causales = null;
+            string? observacion = null;
+            if (string.Equals(row.TemplateKey, TramiteCambioEstadoEmailComposer.TemplateIdRechazado, StringComparison.Ordinal))
+            {
+                (causales, observacion) = await TramiteRechazoEmailDataLoader
+                    .LoadAsync(db, row.TenantId, row.ProcedureInstanceId, ct)
+                    .ConfigureAwait(false);
+            }
+
             var model = TramiteCambioEstadoEmailProjector.Project(
-                instance, instance.Actors.ToList(), fieldValues, estado);
+                instance, instance.Actors.ToList(), fieldValues, estado, causales, observacion);
 
             var channel = await channelResolver.ResolveAsync(row.TenantId, ct).ConfigureAwait(false);
             var assetsBaseUrl = assets.BaseUrl;

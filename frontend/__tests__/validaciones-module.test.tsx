@@ -184,6 +184,9 @@ function toPerson(v: TenantBiometricValidation, validationCount = 1): TenantBiom
     validUntil: v.validUntil,
     daysRemaining: v.daysRemaining,
     linkExpiresAt: v.linkExpiresAt,
+    // HU #11505 — opcionales; solo se propagan si el fixture de validación los trae.
+    intentos: v.intentos,
+    maxIntentos: v.maxIntentos,
   };
 }
 
@@ -387,6 +390,109 @@ describe('Validaciones — datos y accesibilidad', () => {
     expect(
       screen.getByRole('button', { name: /actualizar validaciones de identidad/i }),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * HU #11505 — Bug #11503: el gestor necesita distinguir de un vistazo un rechazo legítimo (intentos
+ * agotados) de uno prematuro (congelado al primer intento fallido, con intentos aún disponibles), sin
+ * abrir el detalle. El contador se lee con el mismo criterio que PersonIdentityDetailDrawer
+ * (`${v.intentos} / ${v.maxIntentos}`).
+ */
+describe('Validaciones — HU #11505 intentos consumidos en la grilla', () => {
+  it('AC1: muestra el contador "intentos / maxIntentos" cuando el backend los envía', async () => {
+    mocks.listTenantBiometricPersons.mockResolvedValue(
+      personsResponse([{ ...ROW_APROBADA, intentos: 1, maxIntentos: 3 }]),
+    );
+
+    renderValidaciones();
+
+    const row = await screen.findByLabelText(/^validación de ana compradora/i);
+    expect(within(row).getByText('1 / 3 intentos')).toBeInTheDocument();
+    expect(row.getAttribute('aria-label')).toMatch(/intentos 1 de 3/i);
+  });
+
+  it('AC2: rechazo con intentos AGOTADOS se distingue por texto de uno con intentos disponibles', async () => {
+    mocks.listTenantBiometricPersons.mockResolvedValue(
+      personsResponse([{ ...ROW_RECHAZADA, intentos: 3, maxIntentos: 3 }]),
+    );
+
+    renderValidaciones();
+
+    const row = await screen.findByLabelText(/^validación de luis vendedor/i);
+    // El texto (no solo el color) dice que el rechazo es legítimo: intentos agotados.
+    expect(within(row).getByText('Rechazado (intentos agotados)')).toBeInTheDocument();
+    expect(within(row).getByText('3 / 3 intentos')).toBeInTheDocument();
+    expect(row.getAttribute('aria-label')).toMatch(/estado rechazado \(intentos agotados\)/i);
+    expect(row.getAttribute('aria-label')).not.toMatch(/rechazo con intentos disponibles/i);
+  });
+
+  it('AC2: rechazo con intentos DISPONIBLES se rotula como prematuro (Bug #11503), distinto por texto', async () => {
+    mocks.listTenantBiometricPersons.mockResolvedValue(
+      personsResponse([{ ...ROW_RECHAZADA, intentos: 1, maxIntentos: 3 }]),
+    );
+
+    renderValidaciones();
+
+    const row = await screen.findByLabelText(/^validación de luis vendedor/i);
+    expect(within(row).getByText('Rechazado (intentos disponibles)')).toBeInTheDocument();
+    expect(within(row).queryByText('Rechazado (intentos agotados)')).not.toBeInTheDocument();
+    expect(within(row).getByText('1 / 3 intentos')).toBeInTheDocument();
+    expect(row.getAttribute('aria-label')).toMatch(/rechazo con intentos disponibles/i);
+  });
+
+  it('AC4: sin `intentos`/`maxIntentos` la celda omite el contador y conserva estado y motivo, sin NaN/undefined', async () => {
+    // ROW_RECHAZADA no trae intentos/maxIntentos (backend aún no los envía) — comportamiento actual intacto.
+    mocks.listTenantBiometricPersons.mockResolvedValue(personsResponse([ROW_RECHAZADA]));
+
+    renderValidaciones();
+
+    const row = await screen.findByLabelText(/^validación de luis vendedor/i);
+    expect(within(row).getByText('Rechazado')).toBeInTheDocument();
+    expect(within(row).queryByText('Rechazado (intentos agotados)')).not.toBeInTheDocument();
+    expect(within(row).queryByText('Rechazado (intentos disponibles)')).not.toBeInTheDocument();
+    expect(within(row).queryByText(/intentos$/)).not.toBeInTheDocument();
+    expect(row.textContent).not.toMatch(/NaN/);
+    expect(row.textContent).not.toMatch(/undefined/);
+    expect(row.textContent).not.toMatch(/0 \/ 0/);
+  });
+
+  it('AC4: `intentos` sin `maxIntentos` (dato parcial) tampoco pinta el contador', async () => {
+    mocks.listTenantBiometricPersons.mockResolvedValue(
+      personsResponse([{ ...ROW_APROBADA, intentos: 2 }]),
+    );
+
+    renderValidaciones();
+
+    const row = await screen.findByLabelText(/^validación de ana compradora/i);
+    expect(within(row).queryByText(/intentos$/)).not.toBeInTheDocument();
+    expect(row.textContent).not.toMatch(/NaN/);
+    expect(row.textContent).not.toMatch(/undefined/);
+  });
+
+  it('AC5: no toca "Ver proceso" — sigue abriendo el detalle de la persona con intentos presentes', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricPersons.mockResolvedValue(
+      personsResponse([{ ...ROW_APROBADA, intentos: 1, maxIntentos: 3 }]),
+    );
+    mocks.listPersonBiometricValidations.mockResolvedValue({
+      documentType: ROW_APROBADA.documentType,
+      documentNumber: ROW_APROBADA.documentNumber,
+      name: ROW_APROBADA.name,
+      validations: [],
+      page: 1,
+      pageSize: 50,
+      total: 0,
+      allTerminal: true,
+    });
+
+    renderValidaciones();
+    await screen.findByText('TRM-2026-000001');
+
+    await user.click(screen.getByRole('button', { name: /acciones de validación de ana compradora/i }));
+    await user.click(screen.getByRole('menuitem', { name: /ver proceso/i }));
+
+    expect(await screen.findByRole('dialog', { name: /proceso de validación/i })).toBeInTheDocument();
   });
 });
 

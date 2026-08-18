@@ -31,6 +31,7 @@ export const COMPANY_DATE_FIELDS: { value: string; label: string }[] = [
   { value: "creacion", label: "Fecha de creación" },
   { value: "envio", label: "Fecha de envío al organismo" },
   { value: "cierre", label: "Fecha de cierre" },
+  { value: "aprobacion", label: "Fecha de aprobación" },
   { value: "actualizacion", label: "Última actualización" },
 ];
 
@@ -41,6 +42,12 @@ export interface CompanyQueryRow {
   vin: string | null;
   transitOfficeId: string | null;
   transitOfficeName: string | null;
+  /**
+   * La compañía dueña del trámite. Se llena siempre, pero solo importa cuando la consulta corre
+   * sobre varias compañías a la vez — ver `lib/api/superadmin-queries.ts`.
+   */
+  companiaId: string;
+  companiaNombre: string;
   procedureTypeId: string;
   procedureTypeName: string;
   modalidad: string;
@@ -61,6 +68,7 @@ export interface CompanyQueryRow {
   creadoEn: string;
   enviadoEn: string | null;
   cerradoEn: string | null;
+  aprobadoEn: string | null;
   actualizadoEn: string | null;
   diasHastaEnvio: number | null;
   diasEnOrganismo: number | null;

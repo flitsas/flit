@@ -30,6 +30,7 @@ public static class AuditVocabulary
         public const string Unsuspend = "unsuspend";
         public const string Invite = "invite";
         public const string ResendInvite = "resend_invite";
+        public const string ReactivateInvite = "reactivate_invite";
         public const string DeleteUser = "delete_user";
         public const string Login = "login";
         public const string LoginFailed = "login_failed";

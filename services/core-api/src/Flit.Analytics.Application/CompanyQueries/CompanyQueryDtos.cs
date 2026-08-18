@@ -18,8 +18,14 @@ public static class CompanyQueryDateField
     /// <summary>Cuándo se entregó al organismo. Deja fuera lo que sigue en borrador.</summary>
     public const string Envio = "envio";
 
-    /// <summary>Cuándo quedó cerrado. Deja fuera lo que sigue abierto.</summary>
+    /// <summary>Cuándo quedó cerrado. Deja fuera lo que sigue abierto — incluye tanto aprobados como rechazados.</summary>
     public const string Cierre = "cierre";
+
+    /// <summary>
+    /// Cuándo pasó a Aprobado, específicamente. Distinto de <see cref="Cierre"/>: un trámite
+    /// rechazado también cierra, pero nunca tiene esta fecha.
+    /// </summary>
+    public const string Aprobacion = "aprobacion";
 
     /// <summary>Último movimiento de cualquier tipo.</summary>
     public const string Actualizacion = "actualizacion";
@@ -29,6 +35,7 @@ public static class CompanyQueryDateField
         new(Creacion, "Fecha de creación"),
         new(Envio, "Fecha de envío al organismo"),
         new(Cierre, "Fecha de cierre"),
+        new(Aprobacion, "Fecha de aprobación"),
         new(Actualizacion, "Última actualización"),
     ];
 }
@@ -45,9 +52,10 @@ public static class CompanyQuerySort
     public const string Estado = "estado";
     public const string Organismo = "organismo";
     public const string Tipo = "tipo";
+    public const string Compania = "compania";
 
     public static IReadOnlyList<string> All { get; } =
-        [Creado, Enviado, Cerrado, Actualizado, Placa, Referencia, Estado, Organismo, Tipo];
+        [Creado, Enviado, Cerrado, Actualizado, Placa, Referencia, Estado, Organismo, Tipo, Compania];
 }
 
 /// <summary>
@@ -65,6 +73,12 @@ public sealed record CompanyQueryRowDto(
     string? Vin,
     Guid? TransitOfficeId,
     string? TransitOfficeName,
+    /// <summary>
+    /// La compañía dueña del trámite. Se llena siempre, pero solo importa cuando la consulta corre
+    /// sobre varias compañías a la vez (SuperAdmin): en el resto de casos es la del propio tenant.
+    /// </summary>
+    Guid CompaniaId,
+    string CompaniaNombre,
     Guid ProcedureTypeId,
     string ProcedureTypeName,
     string Modalidad,
@@ -85,6 +99,7 @@ public sealed record CompanyQueryRowDto(
     DateTimeOffset CreadoEn,
     DateTimeOffset? EnviadoEn,
     DateTimeOffset? CerradoEn,
+    DateTimeOffset? AprobadoEn,
     DateTimeOffset? ActualizadoEn,
     double? DiasHastaEnvio,
     double? DiasEnOrganismo,

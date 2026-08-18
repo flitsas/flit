@@ -2,9 +2,10 @@
 // Permisos") ya no crea siempre un AdminCompany: el rol se resuelve según el tipo de tenant
 // destino, elegido entre compañías y organismos de tránsito en un mismo selector.
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Usuarios } from "../Usuarios";
+import { getUsers } from "@/lib/api/security";
 
 vi.mock("@/hooks/usePermissions", () => ({
   usePermissions: () => ({
@@ -116,5 +117,40 @@ describe("Usuarios — invitar usuario (SuperAdmin, selector de perfil)", () => 
     expect(screen.queryByLabelText(/compañía destino/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/organismo de tránsito destino/i)).not.toBeInTheDocument();
     expect(await screen.findByText(/se creará con el rol de sistema/i)).toBeInTheDocument();
+  });
+});
+
+// AC4 (HU #11551) — el módulo Usuarios es una de las tres pantallas que comparten UsersTable:
+// las columnas Perfil y Rol deben quedar separadas y las acciones no se pierden.
+describe("Usuarios — tabla con columnas Perfil y Rol separadas (AC4)", () => {
+  it("muestra Perfil y Rol en columnas distintas y conserva las acciones", async () => {
+    vi.mocked(getUsers).mockResolvedValueOnce([
+      {
+        id: "u-modulo-1",
+        fullName: "Gina Paredes",
+        email: "gina@flit.local",
+        role: "Administrador de Compañía",
+        roleCode: "AdminCompany",
+        roleId: "role-admin-company",
+        status: "active",
+        createdAt: "2026-08-01T10:00:00Z",
+        isSuspended: false,
+        tenantType: "COMPANY",
+        profile: "GESTOR",
+        rowVersion: 1,
+      },
+    ]);
+
+    render(<Usuarios />);
+
+    const fila = (await screen.findByText("Gina Paredes")).closest("div.grid") as HTMLElement;
+    const encabezado = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
+    expect(within(encabezado).getByText("Perfil")).toBeInTheDocument();
+    expect(within(encabezado).getByText("Rol")).toBeInTheDocument();
+    expect(within(fila).getByText("Gestor")).toBeInTheDocument();
+    expect(within(fila).getByText("Administrador de Compañía")).toBeInTheDocument();
+    expect(
+      within(fila).getByRole("button", { name: /editar usuario gina paredes/i }),
+    ).toBeInTheDocument();
   });
 });

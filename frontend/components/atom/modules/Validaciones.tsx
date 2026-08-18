@@ -1468,6 +1468,9 @@ function PersonasTable({
     linkExpiresAt: p.linkExpiresAt,
     // El DTO agrupado declara email como string; vacío = el backend aún no lo tiene → "—" en la celda.
     email: p.email || null,
+    // HU #11505 — opcionales: el backend de esta vista aún no los envía (AC4, ver tipo en procedure-runtime.ts).
+    intentos: p.intentos,
+    maxIntentos: p.maxIntentos,
   }));
 
   const counts = new Map(rows.map((r) => [r.latestValidationId, r.validationCount]));
@@ -1580,6 +1583,32 @@ function ValidacionRow({
   // por este mismo criterio: si la fila y el contador usaran estados distintos, no cuadrarían.
   const estado: BiometricEstado = r.expired && r.status !== 'aprobado' ? 'expirado' : r.status;
   const meta = ESTADO_META[estado] ?? ESTADO_META.enviado;
+  // HU #11505 (AC1/AC2/AC4) — intentos consumidos, con el mismo criterio de lectura que el drawer
+  // (PersonIdentityDetailDrawer: `${v.intentos} / ${v.maxIntentos}`). Ambos campos son opcionales: si
+  // falta cualquiera de los dos, se omite el contador entero (nunca se pinta NaN/undefined/"0 / 0").
+  const intentosInfo =
+    typeof r.intentos === 'number' &&
+    Number.isFinite(r.intentos) &&
+    typeof r.maxIntentos === 'number' &&
+    Number.isFinite(r.maxIntentos)
+      ? { intentos: r.intentos, maxIntentos: r.maxIntentos }
+      : null;
+  // Un rechazo con intentos AGOTADOS (intentos >= maxIntentos) es legítimo; uno con intentos DISPONIBLES
+  // es el rechazo prematuro del Bug #11503 (congelaba en `rechazado` al primer intento fallido). La
+  // distinción tiene que leerse por TEXTO (WCAG 2.1 AA), no solo por color: cambia label + tone.
+  const intentosAgotados = intentosInfo != null && intentosInfo.intentos >= intentosInfo.maxIntentos;
+  const esRechazoPrematuro = estado === 'rechazado' && intentosInfo != null && !intentosAgotados;
+  let badgeLabel: string = meta.label;
+  let badgeTone: StatusTone = meta.tone;
+  if (estado === 'rechazado' && intentosInfo != null) {
+    if (intentosAgotados) {
+      badgeLabel = 'Rechazado (intentos agotados)';
+      badgeTone = 'danger';
+    } else {
+      badgeLabel = 'Rechazado (intentos disponibles)';
+      badgeTone = 'warning';
+    }
+  }
   const modalidad = r.modalidad
     ? (MODALIDAD_LABEL[r.modalidad] ?? r.modalidad)
     : 'Prevalidación';
@@ -1591,7 +1620,9 @@ function ValidacionRow({
   const enlaceUtilizable = tieneEnlaceUtilizable(r, now);
   const ariaLabel =
     `Validación de ${r.name}${parte}, trámite ${refLabel} (${modalidad}), ` +
-    `proveedor ${provider}, correo ${emailLabel}, estado ${meta.label}` +
+    `proveedor ${provider}, correo ${emailLabel}, estado ${badgeLabel}` +
+    (intentosInfo ? `, intentos ${intentosInfo.intentos} de ${intentosInfo.maxIntentos}` : '') +
+    (esRechazoPrematuro ? ', rechazo con intentos disponibles' : '') +
     (r.score != null ? `, score ${r.score}` : '') +
     (r.status === 'rechazado' && r.rejectionReason ? `, motivo: ${r.rejectionReason}` : '') +
     `, registrada ${formatFecha(r.createdAt)}` +
@@ -1640,7 +1671,14 @@ function ValidacionRow({
         {emailLabel}
       </div>
       <div className="min-w-0">
-        <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} />
+        <StatusBadge label={badgeLabel} tone={badgeTone} ariaLabel={`Estado: ${badgeLabel}`} />
+        {/* HU #11505 (AC1) — contador de intentos, mismo criterio que el drawer. AC4: si falta
+            `intentos` o `maxIntentos`, no se pinta nada (nunca NaN/undefined/"0 / 0"). */}
+        {intentosInfo && (
+          <span className="mt-0.5 block text-[10px] opacity-70">
+            {intentosInfo.intentos} / {intentosInfo.maxIntentos} intentos
+          </span>
+        )}
         {r.status === 'rechazado' && r.rejectionReason && (
           <span className="mt-0.5 block text-[10px] opacity-70 truncate" title={r.rejectionReason}>
             {r.rejectionReason}

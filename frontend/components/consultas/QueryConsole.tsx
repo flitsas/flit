@@ -18,6 +18,7 @@
 // todas las páginas— es el mismo código, porque son la misma promesa.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Modal } from "@/components/atom/Modal";
 import {
   QUERY_MAX_PAGE_SIZE,
   RANGE_PRESETS,
@@ -63,8 +64,13 @@ import {
 
 const PAGE_SIZE = 25;
 
-/** Tope de filas del export. Se AVISA cuando recorta: un archivo truncado en silencio se firma. */
-const MAX_EXPORT_ROWS = 5000;
+/**
+ * Filas por archivo de export. No es un tope del TOTAL exportable —eso lo impone el motor de
+ * consultas (`MaxUniverso`)— sino el tamaño de cada archivo: pasado esto, se reparte en
+ * `..._parte_1_de_N`, `..._parte_2_de_N`, etc., en vez de forzar al usuario a acotar su búsqueda
+ * para poder descargar el resto.
+ */
+const EXPORT_BATCH_SIZE = 5000;
 
 /**
  * La huella de la PREGUNTA: fechas y condiciones, no columnas ni orden.
@@ -153,7 +159,12 @@ export function QueryConsole<TRow>({
   // estilar, y en algunos navegadores un usuario que marca «no volver a mostrar» los deja mudos
   // para siempre — el botón dejaría de funcionar sin decir nada.
   const [nombrando, setNombrando] = useState<string | null>(null);
+  // La consulta activa ya tiene nombre: guardar puede sobrescribirla o dejarla intacta y crear una
+  // aparte. Sin distinguir los dos casos, la única señal de cuál iba a pasar era escribir el mismo
+  // nombre de siempre o uno distinto — nada en pantalla lo explicaba.
+  const [guardarComoNueva, setGuardarComoNueva] = useState(false);
   const [porBorrar, setPorBorrar] = useState<SavedQuery | null>(null);
+  const [confirmandoLimpiar, setConfirmandoLimpiar] = useState(false);
 
   // La preferencia de columnas se rehidrata DESPUÉS del montaje: leer localStorage durante el
   // render haría que el servidor y el cliente pintaran tablas distintas.
@@ -315,18 +326,17 @@ export function QueryConsole<TRow>({
     [allColumns],
   );
 
+  // Nombre de la consulta activa, si es una guardada de verdad: de fábrica no cuenta —guardar sobre
+  // una la duplica, porque no vive en la base y tiene que seguir ahí tal cual.
   const sugerido = saved.find((q) => q.id === activeId && !q.deFabrica)?.nombre ?? "";
 
   const handleSave = useCallback(
-    async (nombre: string) => {
+    async (nombre: string, idParaSobrescribir?: string) => {
       if (!nombre.trim()) return;
 
       try {
         const guardada = await source.save({
-          // Guardar sobre una de fábrica la duplica: no vive en la base y tiene que seguir ahí.
-          // Y guardar con OTRO nombre también duplica: renombrar en el sitio es un caso distinto
-          // del de sacar una variante, y confundirlos hace perder la consulta original.
-          id: nombre.trim() === sugerido ? (activeId ?? undefined) : undefined,
+          id: idParaSobrescribir,
           nombre: nombre.trim(),
           definition: { ...definition, columnas: visibleColumns },
         });
@@ -340,8 +350,14 @@ export function QueryConsole<TRow>({
         setError(e instanceof Error ? e.message : "No se pudo guardar la consulta.");
       }
     },
-    [activeId, definition, source, sugerido, visibleColumns],
+    [definition, source, visibleColumns],
   );
+
+  // Sobrescribir no pide nombre: ya lo tiene, y pedirlo de nuevo solo sería una oportunidad de
+  // escribirlo distinto por accidente y duplicar en vez de actualizar.
+  const handleOverwrite = useCallback(() => {
+    if (activeId) void handleSave(sugerido, activeId);
+  }, [activeId, handleSave, sugerido]);
 
   const handleDelete = useCallback(
     async (query: SavedQuery) => {
@@ -376,6 +392,12 @@ export function QueryConsole<TRow>({
    *
    * Es la pregunta que hace todo el mundo la primera vez, y la respuesta contraria —exportar los 25
    * de pantalla— sería una trampa: el archivo parecería completo y nadie lo comprobaría.
+   *
+   * <p>Se reparte en varios archivos de {@link EXPORT_BATCH_SIZE} filas en vez de truncar: el motor
+   * de consultas ya impide que `result.total` sea inmanejable (`MaxUniverso`), así que el único
+   * límite que queda por resolver aquí es el tamaño cómodo de UN archivo de Excel, no cuánto puede
+   * ver el usuario. Cada archivo se dispara apenas se arma, en la misma interacción del clic, para
+   * no depender de que el usuario vuelva a pedir «el resto».</p>
    */
   const handleExport = useCallback(
     async (formato: "xlsx" | "csv") => {
@@ -384,56 +406,77 @@ export function QueryConsole<TRow>({
       setExporting(true);
       setNotice(null);
       try {
-        const filas: TRow[] = [];
+        const totalArchivos = Math.max(1, Math.ceil(result.total / EXPORT_BATCH_SIZE));
+        const notas = coverageLines(result.cobertura, fields);
+        const nombre = saved.find((q) => q.id === activeId)?.nombre ?? null;
+
+        let lote: TRow[] = [];
+        let numeroArchivo = 1;
+        let exportadas = 0;
         let pagina = 1;
-        while (filas.length < Math.min(result.total, MAX_EXPORT_ROWS)) {
+
+        const volcarLote = () => {
+          if (lote.length === 0) return;
+          const fileName = queryFileName(
+            source.exportPrefix,
+            nombre,
+            result.desde,
+            result.hasta,
+            formato,
+            { numero: numeroArchivo, total: totalArchivos },
+          );
+
+          if (formato === "xlsx") {
+            download(
+              buildWorkbook(sheetName, allColumns, lote, visibleColumns, notas),
+              fileName,
+              XLSX_MIME,
+            );
+          } else {
+            const csv = buildCsv(allColumns, lote, visibleColumns);
+            const conNotas =
+              notas.length > 0
+                ? `${csv}\r\n\r\n${notas.map((n) => `"${n.replace(/"/g, '""')}"`).join("\r\n")}`
+                : csv;
+            download(conNotas, fileName, "text/csv;charset=utf-8;");
+          }
+
+          exportadas += lote.length;
+          numeroArchivo += 1;
+          lote = [];
+        };
+
+        while (exportadas + lote.length < result.total) {
           const data = await source.run(definition, {
             page: pagina,
             pageSize: QUERY_MAX_PAGE_SIZE,
           });
           if (data.filas.length === 0) break;
-          filas.push(...data.filas);
+          lote.push(...data.filas);
           pagina += 1;
-        }
 
-        const recortado = filas.length > MAX_EXPORT_ROWS ? filas.slice(0, MAX_EXPORT_ROWS) : filas;
-        const notas = coverageLines(result.cobertura, fields);
-        if (recortado.length < result.total) {
-          notas.push(
-            `Atención: se exportaron ${recortado.length} de ${result.total} ${pluralNoun} (tope de ${MAX_EXPORT_ROWS}). Acote la consulta para obtener el resto.`,
-          );
+          if (lote.length >= EXPORT_BATCH_SIZE) {
+            volcarLote();
+          }
         }
-
-        const nombre = saved.find((q) => q.id === activeId)?.nombre ?? null;
-        const fileName = queryFileName(
-          source.exportPrefix,
-          nombre,
-          result.desde,
-          result.hasta,
-          formato,
-        );
-
-        if (formato === "xlsx") {
-          download(
-            buildWorkbook(sheetName, allColumns, recortado, visibleColumns, notas),
-            fileName,
-            XLSX_MIME,
-          );
-        } else {
-          const csv = buildCsv(allColumns, recortado, visibleColumns);
-          const conNotas =
-            notas.length > 0
-              ? `${csv}\r\n\r\n${notas.map((n) => `"${n.replace(/"/g, '""')}"`).join("\r\n")}`
-              : csv;
-          download(conNotas, fileName, "text/csv;charset=utf-8;");
-        }
+        volcarLote();
 
         setNotice(
-          `Se exportaron ${plural(recortado.length, singular, pluralNoun)} con ${plural(
-            visibleColumns.length,
-            "columna visible",
-            "columnas visibles",
-          )}.`,
+          totalArchivos > 1
+            ? `Se exportaron ${plural(exportadas, singular, pluralNoun)} en ${plural(
+                totalArchivos,
+                "archivo",
+                "archivos",
+              )} de hasta ${formatInt(EXPORT_BATCH_SIZE)} filas cada uno, con ${plural(
+                visibleColumns.length,
+                "columna visible",
+                "columnas visibles",
+              )}.`
+            : `Se exportaron ${plural(exportadas, singular, pluralNoun)} con ${plural(
+                visibleColumns.length,
+                "columna visible",
+                "columnas visibles",
+              )}.`,
         );
       } catch (e: unknown) {
         setError(e instanceof Error ? `No se pudo exportar: ${e.message}` : "No se pudo exportar.");
@@ -461,40 +504,25 @@ export function QueryConsole<TRow>({
   const modificada = activeSnapshot !== null && activeSnapshot !== preguntaKey;
   const totalPaginas = result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1;
 
+  // Si «empezar de cero» tirara esto sin avisar, armar una consulta larga y darle sin querer
+  // perdería el trabajo entero. Solo hace falta confirmar cuando hay algo que de verdad se pierde:
+  // una consulta en blanco no tiene nada que tirar, y una guardada tal cual sigue estando guardada.
+  const definicionVacia =
+    definition.condiciones.length === 0 && definition.fechas.preset === "ultimos_30";
+  const hayTrabajoSinGuardar = !definicionVacia && (activeId === null || modificada);
+
+  function limpiar() {
+    setDefinition(emptyDefinition());
+    setActiveId(null);
+    setActiveSnapshot(null);
+    setConfirmandoLimpiar(false);
+  }
+
   return (
     <div className="flex flex-col gap-6 lg:flex-row" data-testid={rootTestId ?? `${prefix}-tab`}>
-      {/* Algo más ancha de lo que pediría una lista de nombres: las tarjetas llevan nombre y
-          resumen, y a 14rem el resumen se corta justo donde empieza a ser útil. */}
-      <aside className="lg:w-64 lg:shrink-0">
-        <Section title="Consultas" testId={`${prefix}-lista`}>
-          <SavedQueryList
-            queries={saved}
-            activeId={activeId}
-            modificada={modificada}
-            porBorrar={porBorrar}
-            onOpen={openSaved}
-            onPedirBorrado={setPorBorrar}
-            onConfirmarBorrado={(q) => void handleDelete(q)}
-            testIdPrefix={prefix}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              setDefinition(emptyDefinition());
-              setActiveId(null);
-              setActiveSnapshot(null);
-            }}
-            className="mt-1 w-full rounded-xl border border-dashed border-[#DFE5ED] px-2 py-2 text-[11px] font-semibold text-[#6B7280] transition hover:border-[#557EFF] hover:text-[#557EFF] dark:border-white/20 dark:text-white/60"
-            data-testid={`${prefix}-nueva`}
-          >
-            Empezar de cero
-          </button>
-        </Section>
-      </aside>
-
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         <Section
-          title="Qué quiere ver"
+          title="Qué quieres ver"
           testId={`${prefix}-filtros-seccion`}
           hint="Los filtros se combinan con «y». Dentro de un mismo campo, varios valores se combinan con «o» — por eso una lista de placas funciona pegándola tal cual."
         >
@@ -606,7 +634,13 @@ export function QueryConsole<TRow>({
               >
                 Copiar enlace
               </button>
-              <PrimaryButton onClick={() => setNombrando(sugerido)} disabled={exporting}>
+              <PrimaryButton
+                onClick={() => {
+                  setGuardarComoNueva(false);
+                  setNombrando("");
+                }}
+                disabled={exporting}
+              >
                 Guardar consulta
               </PrimaryButton>
               <button
@@ -631,45 +665,6 @@ export function QueryConsole<TRow>({
               )}
             </div>
           </div>
-
-          {nombrando !== null && (
-            <form
-              className="flex flex-wrap items-center gap-2 rounded-xl bg-[#F5F7FA] p-2 dark:bg-white/5"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void handleSave(nombrando);
-              }}
-              data-testid={`${prefix}-nombrar`}
-            >
-              <label className="text-xs font-semibold" htmlFor={`${prefix}-nombre`}>
-                Nombre
-              </label>
-              <input
-                id={`${prefix}-nombre`}
-                autoFocus
-                value={nombrando}
-                onChange={(e) => setNombrando(e.target.value)}
-                placeholder="Traspasos con prenda de agosto"
-                className={`${FIELD_CLS} min-w-[16rem] flex-1`}
-                data-testid={`${prefix}-nombre-input`}
-              />
-              <button
-                type="submit"
-                disabled={!nombrando.trim()}
-                className="rounded-lg bg-[#557EFF] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
-                data-testid={`${prefix}-guardar-confirmar`}
-              >
-                Guardar
-              </button>
-              <button
-                type="button"
-                onClick={() => setNombrando(null)}
-                className="text-[11px] font-semibold text-[#6B7280] dark:text-white/50"
-              >
-                Cancelar
-              </button>
-            </form>
-          )}
 
           <div className="flex flex-wrap gap-1.5">
             {presets.map((preset) => (
@@ -700,7 +695,7 @@ export function QueryConsole<TRow>({
             <Empty>
               {busy
                 ? "Consultando…"
-                : `Ningún ${singular} cumple estos filtros. Quite alguna ficha o amplíe el periodo.`}
+                : `Ningún ${singular} cumple estos filtros. Quita alguna ficha o amplía el periodo.`}
             </Empty>
           ) : (
             <>
@@ -766,6 +761,147 @@ export function QueryConsole<TRow>({
           )}
         </Section>
       </div>
+
+      {/* Algo más ancha de lo que pediría una lista de nombres: las tarjetas llevan nombre y
+          resumen, y a 14rem el resumen se corta justo donde empieza a ser útil. */}
+      <aside className="lg:w-64 lg:shrink-0">
+        <Section title="Consultas" testId={`${prefix}-lista`}>
+          <SavedQueryList
+            queries={saved}
+            activeId={activeId}
+            modificada={modificada}
+            porBorrar={porBorrar}
+            onOpen={openSaved}
+            onPedirBorrado={setPorBorrar}
+            onConfirmarBorrado={(q) => void handleDelete(q)}
+            testIdPrefix={prefix}
+          />
+          <button
+            type="button"
+            onClick={() => (hayTrabajoSinGuardar ? setConfirmandoLimpiar(true) : limpiar())}
+            className="mt-1 w-full rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.06] px-2 py-2 text-[11px] font-semibold text-[#557EFF] transition hover:border-[#557EFF] hover:bg-[#557EFF]/10 dark:border-[#557EFF]/30 dark:bg-[#557EFF]/10 dark:text-[#9DB5FF]"
+            data-testid={`${prefix}-nueva`}
+          >
+            Empezar de cero
+          </button>
+        </Section>
+      </aside>
+
+      <Modal
+        open={confirmandoLimpiar}
+        onClose={() => setConfirmandoLimpiar(false)}
+        title="¿Empezar de cero?"
+        description="Se perderán los filtros que no has guardado."
+        size="sm"
+      >
+        <div className="flex justify-end gap-2" data-testid={`${prefix}-limpiar-confirmar`}>
+          <button
+            type="button"
+            onClick={() => setConfirmandoLimpiar(false)}
+            className="rounded-lg border border-[#DFE5ED] bg-white px-3 py-2 text-xs font-semibold text-[#6B7280] hover:text-[#0B1F33] dark:border-white/15 dark:bg-transparent dark:text-white/60 dark:hover:text-white"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={limpiar}
+            className="rounded-lg bg-[#C0392B] px-3 py-2 text-xs font-semibold text-white hover:bg-[#A63325]"
+            data-testid={`${prefix}-limpiar-confirmar-si`}
+          >
+            Empezar de cero
+          </button>
+        </div>
+      </Modal>
+
+      <Modal open={nombrando !== null} onClose={() => setNombrando(null)} title="Guardar consulta" size="sm">
+        {sugerido && !guardarComoNueva ? (
+          // Hay una consulta guardada detrás de esto: lo primero que se pregunta no es «cómo se
+          // llama», es «actualizo la de siempre o dejo esta aparte». Sin esta pantalla, la única
+          // forma de saber cuál iba a pasar era fijarse en si el nombre que se escribía coincidía
+          // con el de siempre — nada lo explicaba.
+          <div className="flex flex-col gap-4" data-testid={`${prefix}-guardar-elegir`}>
+            <p className="text-xs leading-relaxed text-[#6B7280] dark:text-white/60">
+              Esta consulta viene de{" "}
+              <span className="font-semibold text-[#0B1F33] dark:text-white/85">«{sugerido}»</span>.
+              Puedes actualizarla con los cambios de ahora, o guardarlos aparte sin tocar la
+              original.
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setGuardarComoNueva(true);
+                  setNombrando("");
+                }}
+                className="rounded-lg border border-[#DFE5ED] bg-white px-3 py-2 text-xs font-semibold text-[#6B7280] hover:text-[#0B1F33] dark:border-white/15 dark:bg-transparent dark:text-white/60 dark:hover:text-white"
+                data-testid={`${prefix}-guardar-como-nueva`}
+              >
+                Guardar como nueva
+              </button>
+              <button
+                type="button"
+                onClick={handleOverwrite}
+                className="rounded-lg bg-[#557EFF] px-3 py-2 text-xs font-semibold text-white"
+                data-testid={`${prefix}-guardar-sobrescribir`}
+              >
+                Sobrescribir «{sugerido}»
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form
+            className="flex flex-col gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (nombrando) void handleSave(nombrando, undefined);
+            }}
+            data-testid={`${prefix}-nombrar`}
+          >
+            <label className="flex flex-col gap-1 text-xs font-semibold" htmlFor={`${prefix}-nombre`}>
+              Nombre
+              <input
+                id={`${prefix}-nombre`}
+                autoFocus
+                value={nombrando ?? ""}
+                onChange={(e) => setNombrando(e.target.value)}
+                placeholder="Traspasos con prenda de agosto"
+                className={FIELD_CLS}
+                data-testid={`${prefix}-nombre-input`}
+              />
+            </label>
+            <div className="flex items-center justify-between gap-2">
+              {sugerido ? (
+                <button
+                  type="button"
+                  onClick={() => setGuardarComoNueva(false)}
+                  className="text-[11px] font-semibold text-[#6B7280] hover:text-[#0B1F33] dark:text-white/50 dark:hover:text-white"
+                >
+                  ← Volver
+                </button>
+              ) : (
+                <span />
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNombrando(null)}
+                  className="rounded-lg border border-[#DFE5ED] bg-white px-3 py-2 text-xs font-semibold text-[#6B7280] hover:text-[#0B1F33] dark:border-white/15 dark:bg-transparent dark:text-white/60 dark:hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!nombrando?.trim()}
+                  className="rounded-lg bg-[#557EFF] px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+                  data-testid={`${prefix}-guardar-confirmar`}
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }

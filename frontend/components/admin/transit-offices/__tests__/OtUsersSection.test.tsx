@@ -116,6 +116,24 @@ describe("OtUsersSection — refactor adminOT", () => {
     expect(within(bloqueada).getByText("Bloqueado")).toBeInTheDocument();
   });
 
+  // AC4 (HU #11551) — el hub OT es una de las tres pantallas que comparten UsersTable: Perfil
+  // y Rol deben quedar en columnas separadas y las acciones (Editar) siguen disponibles.
+  it("AC4 — muestra Perfil y Rol en columnas separadas y conserva las acciones", async () => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    renderSection();
+
+    const fila = (await screen.findByText("Laura García")).closest("div.grid") as HTMLElement;
+    const encabezado = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
+    expect(within(encabezado).getByText("Perfil")).toBeInTheDocument();
+    expect(within(encabezado).getByText("Rol")).toBeInTheDocument();
+    // Esta sección vive dentro de un organismo: el perfil de fila es siempre OT.
+    expect(within(fila).getByText("OT")).toBeInTheDocument();
+    expect(within(fila).getByText("Admin OT")).toBeInTheDocument();
+    expect(
+      within(fila).getByRole("button", { name: /editar usuario laura garcía/i }),
+    ).toBeInTheDocument();
+  });
+
   it("invita a un usuario nuevo sin marcar rol: el backend asigna ot_admin", async () => {
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
     vi.mocked(inviteOtUser).mockResolvedValue({
@@ -208,5 +226,74 @@ describe("OtUsersSection — refactor adminOT", () => {
     await waitFor(() =>
       expect(unsuspendOtUser).toHaveBeenCalledWith("u-2", { transitOfficeId: "ot-1" }),
     );
+  });
+
+  // HU #11550 AC4 — la ruta OT (AdminOtEndpoints) responde con `{ error, message }`
+  // (no `code`, a diferencia de SecurityEndpoints); igual debe mostrar el mismo mensaje
+  // unificado que la ruta Security/AdminCompany para el conflicto de correo. HU #11580:
+  // el backend colapsó los tres códigos anteriores en un único EMAIL_ALREADY_IN_USE.
+  it("AC4 — EMAIL_ALREADY_IN_USE: invitar desde el hub OT muestra el mensaje unificado", async () => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    vi.mocked(inviteOtUser).mockRejectedValue(
+      new ApiError(409, "Conflict", { error: "EMAIL_ALREADY_IN_USE", message: "…" }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Laura García");
+
+    await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
+    await user.type(screen.getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
+    await user.type(screen.getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
+    await user.click(screen.getByRole("button", { name: /Enviar invitación/i }));
+
+    expect(
+      await screen.findByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).toBeInTheDocument();
+  });
+
+  it("un 409 que no es conflicto de correo al invitar desde el hub OT NO usa el mensaje unificado", async () => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    vi.mocked(inviteOtUser).mockRejectedValue(
+      new ApiError(409, "Conflict", { error: "SOME_OTHER_CONFLICT" }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Laura García");
+
+    await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
+    await user.type(screen.getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
+    await user.type(screen.getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
+    await user.click(screen.getByRole("button", { name: /Enviar invitación/i }));
+
+    expect(
+      await screen.findByText(/no se pudo completar la invitación por un conflicto/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).not.toBeInTheDocument();
+  });
+
+  // HU #11580 — regresión: un código RETIRADO ya no se reconoce como conflicto de correo
+  // en la ruta OT (campo `error`), tampoco.
+  it("regresión: un código RETIRADO (USER_ALREADY_EXISTS) al invitar desde el hub OT NO usa el mensaje unificado", async () => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    vi.mocked(inviteOtUser).mockRejectedValue(
+      new ApiError(409, "Conflict", { error: "USER_ALREADY_EXISTS", message: "…" }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Laura García");
+
+    await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
+    await user.type(screen.getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
+    await user.type(screen.getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
+    await user.click(screen.getByRole("button", { name: /Enviar invitación/i }));
+
+    expect(
+      await screen.findByText(/no se pudo completar la invitación por un conflicto/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+    ).not.toBeInTheDocument();
   });
 });

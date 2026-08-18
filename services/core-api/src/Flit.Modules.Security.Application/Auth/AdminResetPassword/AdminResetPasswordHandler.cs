@@ -36,6 +36,15 @@ public sealed partial class AdminResetPasswordHandler(
 
     public const string GlobalResetPermission = "security.users.reset_password.all";
 
+    /// <summary>
+    /// HU #11553 AC3 — tope de reintentos de generación cuando la temporal colisiona con la
+    /// vigente. El admin no elige la contraseña (la produce <see cref="ITemporaryPasswordGenerator"/>),
+    /// así que una colisión no es un error accionable por él: se regenera en silencio. 5 intentos
+    /// da margen amplio (la probabilidad de colisión real es despreciable) a costo insignificante
+    /// (un hash + verify más por intento); solo si se agota es un fallo real del generador.
+    /// </summary>
+    private const int MaxTemporaryPasswordAttempts = 5;
+
     public async Task HandleAsync(AdminResetPasswordCommand command, CancellationToken cancellationToken)
     {
         var email = command.TargetEmail?.Trim() ?? string.Empty;
@@ -65,7 +74,31 @@ public sealed partial class AdminResetPasswordHandler(
             throw;
         }
 
-        var temporaryPassword = temporaryPasswordGenerator.Generate();
+        // HU #11553 AC3 — la temporal generada no puede coincidir con la vigente (comparación solo
+        // contra el hash actual, sin histórico). Como el admin NO elige la contraseña, una
+        // colisión no es un error del admin: se regenera en silencio, sin auditar, hasta el tope.
+        var currentHash = await userAccountRepository.GetPasswordHashAsync(target.UserId, cancellationToken);
+
+        string temporaryPassword;
+        var attempts = 0;
+        bool reusesCurrent;
+        do
+        {
+            temporaryPassword = temporaryPasswordGenerator.Generate();
+            attempts++;
+            reusesCurrent = currentHash is not null && passwordHasher.Verify(temporaryPassword, currentHash);
+        }
+        while (reusesCurrent && attempts < MaxTemporaryPasswordAttempts);
+
+        if (reusesCurrent)
+        {
+            // Tope agotado: esto NO debería ocurrir jamás — ahí sí es un fallo real del
+            // generador (no un caso accionable por el admin) y merece rastro de auditoría.
+            await AuditAsync(command, target.UserId, AuditVocabulary.Results.Failure, "password_reused", cancellationToken)
+                .ConfigureAwait(false);
+            throw new PasswordReusedException();
+        }
+
         var hash = passwordHasher.Hash(temporaryPassword);
 
         await userAccountRepository.UpdatePasswordHashAsync(

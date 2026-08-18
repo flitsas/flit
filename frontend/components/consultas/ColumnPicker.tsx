@@ -86,7 +86,7 @@ export function ColumnPicker<TRow>({
         >
           {groups.map((group) => (
             <fieldset key={group} className="mb-2 last:mb-0">
-              <legend className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#6B7280] dark:text-white/50">
+              <legend className="mb-1 w-full rounded-md bg-[#F5F7FA] px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-[#162744] dark:bg-white/[0.06] dark:text-white/75">
                 {group}
               </legend>
               {columns.filter((c) => c.group === group).map((column) => (

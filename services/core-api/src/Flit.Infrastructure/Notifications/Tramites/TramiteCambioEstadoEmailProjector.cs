@@ -1,4 +1,3 @@
-using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 
@@ -14,7 +13,9 @@ public static class TramiteCambioEstadoEmailProjector
         ProcedureInstance instance,
         IReadOnlyList<ProcedureInstanceActor> actors,
         IReadOnlyDictionary<string, string?> fieldValues,
-        string estadoActual)
+        string estadoActual,
+        IReadOnlyList<string>? causalesRechazo = null,
+        string? observacionRechazo = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(actors);
@@ -28,7 +29,7 @@ public static class TramiteCambioEstadoEmailProjector
         var comprador = FindActor(actors, "comprador");
         var vendedor = FindActor(actors, "vendedor");
 
-        var ciudad = TransitOfficeCity.Legible(Get(fieldValues, "transit_office_city")) ?? string.Empty;
+        var ciudad = TramiteEmailCityResolver.Resolve(fieldValues, comprador);
         var ot = Get(fieldValues, "transit_office_name") ?? string.Empty;
 
         return new TramiteCambioEstadoEmailModel(
@@ -38,7 +39,9 @@ public static class TramiteCambioEstadoEmailProjector
             CiudadOt: ciudad,
             NombreOt: ot.Trim(),
             EstadoActual: estadoActual,
-            EsTraspaso: esTraspaso);
+            EsTraspaso: esTraspaso,
+            CausalesRechazo: causalesRechazo,
+            ObservacionRechazo: observacionRechazo);
     }
 
     private static ProcedureInstanceActor? FindActor(

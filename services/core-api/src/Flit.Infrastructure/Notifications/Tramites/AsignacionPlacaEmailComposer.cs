@@ -14,9 +14,9 @@ namespace Flit.Infrastructure.Notifications.Tramites;
 public sealed record AsignacionPlacaEmailModel(
     string ClienteNombre,
     string Placa,
-    string Ciudad,
-    string SecretariaTransito,
-    string EstadoActual);
+    string EstadoActual,
+    string Ciudad = "",
+    string SecretariaTransito = "");
 
 /// <summary>
 /// Composer de <c>tramites.asignacion-placa</c>: variante FLIT genérica y Renting Colombia.
@@ -133,22 +133,24 @@ public static class AsignacionPlacaEmailComposer
         var sb = new StringBuilder(3584);
         sb.Append("<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\"/>");
         sb.Append("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>");
-        sb.Append("<meta name=\"color-scheme\" content=\"light dark\"/>");
-        sb.Append("<meta name=\"supported-color-schemes\" content=\"light dark\"/>");
+        sb.Append("<meta name=\"color-scheme\" content=\"light\"/>");
+        sb.Append("<meta name=\"supported-color-schemes\" content=\"light\"/>");
         sb.Append("<title>Asignación de placa</title>");
         sb.Append("<style type=\"text/css\">");
+        sb.Append(":root{color-scheme:light;}");
         sb.Append(".placa-bg{background-color:#ffffff !important;}");
-        sb.Append(".renting-header-bg{background-color:#000000 !important;}");
+        sb.Append(".renting-header-bg{background-color:#ffffff !important;}");
         sb.Append(".renting-footer-bg{background-color:#ffffff !important;}");
-        sb.Append("@media (prefers-color-scheme:dark){.placa-bg{background-color:#ffffff !important;}.renting-header-bg{background-color:#000000 !important;}.renting-footer-bg{background-color:#ffffff !important;}}");
+        sb.Append(".renting-body-bg{background-color:#ffffff !important;}");
+        sb.Append("@media (prefers-color-scheme:dark){.placa-bg,.renting-header-bg,.renting-footer-bg,.renting-body-bg{background-color:#ffffff !important;}}");
         sb.Append("</style></head>");
         sb.Append("<body style=\"margin:0;padding:0;background:#ffffff;\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" class=\"placa-bg\" bgcolor=\"#ffffff\" style=\"max-width:640px;margin:0 auto;background-color:#ffffff !important;\">");
-        sb.Append("<tr><td class=\"renting-header-bg\" bgcolor=\"#000000\" style=\"padding:0;background-color:#000000 !important;\">");
+        sb.Append("<tr><td class=\"renting-header-bg\" bgcolor=\"#ffffff\" style=\"padding:0;background-color:#ffffff !important;\">");
         sb.Append("<img src=\"").Append(headerUrl)
-            .Append("\" alt=\"Renting Colombia\" width=\"640\" style=\"display:block;width:100%;max-width:640px;height:auto;border:0;background-color:#000000;\"/>");
+            .Append("\" alt=\"Renting Colombia\" width=\"640\" style=\"display:block;width:100%;max-width:640px;height:auto;border:0;background-color:#ffffff;\"/>");
         sb.Append("</td></tr>");
-        sb.Append("<tr><td style=\"padding:28px 32px 8px;font-family:Arial,Helvetica,sans-serif;color:")
+        sb.Append("<tr><td class=\"renting-body-bg\" style=\"padding:28px 32px 8px;font-family:Arial,Helvetica,sans-serif;color:")
             .Append(Ink).Append(";font-size:14px;line-height:1.5;background-color:#ffffff;\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">");
         sb.Append(body);
@@ -184,29 +186,41 @@ public static class AsignacionPlacaEmailComposer
     {
         var cliente = Enc(model.ClienteNombre);
         var placa = Enc(model.Placa);
-        var ciudad = Enc(model.Ciudad);
-        var secretaria = Enc(model.SecretariaTransito);
         var estadoEnc = Enc(estado);
 
         var sb = new StringBuilder(1024);
         sb.Append("<tr><td style=\"padding:0 0 16px;\">Estimados Señor/a <strong>")
             .Append(cliente).Append("</strong>.</td></tr>");
-        sb.Append("<tr><td style=\"padding:0 0 20px;\">Queremos mantenerlos informados sobre el estado actualizado de su matricula inicial vehículo cuya posible placa es: <strong>")
+        sb.Append("<tr><td style=\"padding:0 0 20px;\">Queremos mantenerlos informados sobre el estado actualizado de su matrícula inicial de vehículo. Le confirmamos que la placa asignada es: <strong>")
             .Append(placa).Append("</strong>.</td></tr>");
         sb.Append("<tr><td style=\"padding:0 0 8px;\"><strong>Detalles clave:</strong></td></tr>");
         sb.Append("<tr><td style=\"padding:0 0 4px;\"><strong>Cliente:</strong> ")
             .Append(cliente).Append("</td></tr>");
         sb.Append("<tr><td style=\"padding:0 0 4px;\"><strong>Placa del Vehículo:</strong> ")
             .Append(placa).Append("</td></tr>");
-        sb.Append("<tr><td style=\"padding:0 0 4px;\"><strong>Ciudad:</strong> ")
-            .Append(ciudad).Append("</td></tr>");
-        sb.Append("<tr><td style=\"padding:0 0 16px;\"><strong>Secretaría de Tránsito:</strong> ")
-            .Append(secretaria).Append("</td></tr>");
+
+        if (HasText(model.Ciudad))
+        {
+            var ciudadPadding = HasText(model.SecretariaTransito) ? "0 0 4px" : "0 0 16px";
+            sb.Append("<tr><td style=\"padding:").Append(ciudadPadding).Append(";\"><strong>Ciudad:</strong> ")
+                .Append(Enc(model.Ciudad)).Append("</td></tr>");
+        }
+
+        if (HasText(model.SecretariaTransito))
+        {
+            sb.Append("<tr><td style=\"padding:0 0 16px;\"><strong>Secretaría de Tránsito:</strong> ")
+                .Append(Enc(model.SecretariaTransito)).Append("</td></tr>");
+        }
+
         sb.Append("<tr><td style=\"padding:0 0 20px;\">Estado Actual: <strong>")
             .Append(estadoEnc).Append("</strong></td></tr>");
+        sb.Append("<tr><td style=\"padding:0 0 20px;\">Le informamos que, como comprador, debe adquirir el SOAT (Seguro Obligatorio de Accidentes de Tránsito) para continuar con el trámite.</td></tr>");
         sb.Append("<tr><td style=\"padding:0 0 20px;\">Nuestro compromiso es asegurar un proceso sin contratiempos. Les proporcionaremos cualquier novedad y estamos disponibles para responder sus preguntas a través de nuestros canales de contacto.</td></tr>");
         return sb.ToString();
     }
+
+    private static bool HasText(string? value) =>
+        !string.IsNullOrWhiteSpace(value);
 
     private static string CombineAssetUrl(string assetsBaseUrl, string fileName)
     {

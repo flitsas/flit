@@ -70,6 +70,15 @@ const GRUPO_TIEMPOS = "Tiempos";
 
 export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
   {
+    id: "compania",
+    label: "Compañía",
+    group: GRUPO_IDENT,
+    // Solo importa cuando la consulta corre sobre varias compañías a la vez (SuperAdmin); por eso
+    // no va visible por defecto en la vista normal de una empresa — ver ConsultasSuperAdminTab.
+    value: (r) => r.companiaNombre,
+    width: 24,
+  },
+  {
     id: "referencia",
     label: "Radicado",
     group: GRUPO_IDENT,
@@ -249,6 +258,14 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     group: GRUPO_TIEMPOS,
     value: (r) => formatDateTime(r.cerradoEn),
     raw: (r) => bogotaClock(r.cerradoEn),
+    width: 18,
+  },
+  {
+    id: "aprobado_en",
+    label: "Aprobado",
+    group: GRUPO_TIEMPOS,
+    value: (r) => formatDateTime(r.aprobadoEn),
+    raw: (r) => bogotaClock(r.aprobadoEn),
     width: 18,
   },
   {
