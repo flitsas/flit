@@ -40,7 +40,10 @@ public sealed partial class SmtpEmailSender(EmailSettings settings, ILogger<Smtp
         mime.From.Add(new MailboxAddress(settings.DefaultSenderName, settings.DefaultSenderEmail));
         mime.To.Add(new MailboxAddress(message.ToName, message.ToEmail));
         mime.Subject = message.Subject;
-        mime.Body = new BodyBuilder { HtmlBody = message.HtmlBody }.ToMessageBody();
+        var bodyBuilder = new BodyBuilder { HtmlBody = message.HtmlBody };
+        foreach (var attachment in message.Attachments)
+            bodyBuilder.Attachments.Add(attachment.FileName, attachment.Content);
+        mime.Body = bodyBuilder.ToMessageBody();
 
         using var client = new SmtpClient();
         var socketOptions = settings.UseStartTls

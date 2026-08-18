@@ -100,6 +100,35 @@ public sealed class TenantChannelEmailRouterTests
             Arg.Any<RentingSendEmailRequest>(), Arg.Any<ControlledMailboxRecipient>(), Arg.Any<CancellationToken>());
     }
 
+    // ---------- Reportes 2.0 (HU-D): los adjuntos de EmailMessage llegan a Renting como AttachFiles ----------
+
+    [Fact]
+    public async Task TenantApiChannel_MessageWithAttachments_ForwardsThemAsRentingAttachments()
+    {
+        var settingsRepo = Substitute.For<ITenantSettingsRepository>();
+        settingsRepo.GetAsync(TenantId, Ct).Returns(Settings(NotificationChannel.TenantApi));
+        var flitTransport = Substitute.For<IEmailSender>();
+        var rentingSender = Substitute.For<IRentingEmailApiSender>();
+        rentingSender.SendAsync(Arg.Any<RentingSendEmailRequest>(), Ct).Returns(EmailSendResult.Sent);
+
+        var router = NewRouter(flitTransport, settingsRepo, rentingSender);
+        var message = AnalyticsEmail() with
+        {
+            Attachments = [new EmailAttachment("informe.xlsx", "application/vnd.ms-excel", [1, 2, 3])],
+        };
+
+        var result = await router.SendAsync(message, Ct);
+
+        result.Success.Should().BeTrue();
+        await rentingSender.Received(1).SendAsync(
+            Arg.Is<RentingSendEmailRequest>(r =>
+                r.Attachments.Count == 1
+                && r.Attachments[0].FileName == "informe.xlsx"
+                && r.Attachments[0].ContentType == "application/vnd.ms-excel"
+                && r.Attachments[0].Content.SequenceEqual(new byte[] { 1, 2, 3 })),
+            Ct);
+    }
+
     // ---------- HU #11372: solo el camino explícito (banco de pruebas) propaga la exención ----------
 
     [Fact]

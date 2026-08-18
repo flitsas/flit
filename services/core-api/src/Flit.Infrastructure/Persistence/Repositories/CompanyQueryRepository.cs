@@ -749,6 +749,22 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
         ];
     }
 
+    public async Task<SavedQueryDto?> GetSavedByIdAsync(
+        Guid tenantId,
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        if (CompanyFactoryQueries.IsFactory(id))
+            return CompanyFactoryQueries.Queries.FirstOrDefault(q => q.Id == id);
+
+        var entity = await _context.CompanySavedQueries
+            .AsNoTracking()
+            .FirstOrDefaultAsync(q => q.Id == id && q.TenantId == tenantId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return entity is null ? null : ToSavedDto(entity);
+    }
+
     public async Task<SavedQueryDto> SaveAsync(
         Guid tenantId,
         Guid userId,

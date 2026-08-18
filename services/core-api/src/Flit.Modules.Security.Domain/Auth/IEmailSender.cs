@@ -23,7 +23,20 @@ namespace Flit.Modules.Security.Domain.Auth;
 /// implementación de transporte lo usa para enviar.
 /// </param>
 public sealed record EmailMessage(
-    Guid? TenantId, string TemplateKey, string ToEmail, string ToName, string Subject, string HtmlBody);
+    Guid? TenantId, string TemplateKey, string ToEmail, string ToName, string Subject, string HtmlBody)
+{
+    /// <summary>
+    /// Reportes 2.0 (HU-D) — archivos adjuntos, vacío por defecto para que ningún llamador
+    /// existente cambie. Propiedad no posicional, igual criterio que <see cref="EmailSendResult.Channel"/>.
+    /// Solo <see cref="Flit.Infrastructure.Notifications.Renting.RentingSendEmailRequest"/> ya
+    /// modelaba adjuntos (campo <c>AttachFiles</c> del proveedor); esta propiedad es lo que le
+    /// faltaba al contrato genérico para poder llegar hasta ahí.
+    /// </summary>
+    public IReadOnlyList<EmailAttachment> Attachments { get; init; } = [];
+}
+
+/// <summary>Archivo adjunto de un <see cref="EmailMessage"/> (Reportes 2.0, HU-D).</summary>
+public sealed record EmailAttachment(string FileName, string ContentType, byte[] Content);
 
 /// <summary>
 /// HU #11358 AC2 — catálogo CERRADO de causas de un intento de envío. <see cref="Sent"/> es la

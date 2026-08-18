@@ -1,5 +1,6 @@
 using System.Data.Common;
 using Flit.Analytics.Application.Abstractions;
+using Flit.Analytics.Application.Queries;
 using Flit.Analytics.Application.Scheduling;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Analytics;
@@ -198,27 +199,45 @@ internal sealed class AnalyticsSchedulerProcessor(
         return row;
     }
 
-    /// <summary>Arma el resumen HTML de KPIs del periodo vencido y lo envía a cada destinatario.</summary>
+    /// <summary>
+    /// Arma el resumen HTML de KPIs del periodo vencido MÁS el archivo real (Excel/PDF, según
+    /// <see cref="ReportSchedule.Format"/>) y lo envía a cada destinatario. Antes, el archivo
+    /// prometido por <c>format</c> nunca llegaba (limitación histórica de <c>IEmailSender</c>,
+    /// cerrada en <see cref="Flit.Modules.Security.Domain.Auth.EmailMessage.Attachments"/>).
+    /// </summary>
     private async Task SendScheduledReportAsync(
         ReportSchedule schedule, DateTimeOffset nowUtc, CancellationToken ct)
     {
         // Scope PROPIO para lectura/envío: la lectura analítica abre su propia transacción (GUC RLS)
         // y no debe compartir el contexto que sostuvo el claim.
         await using var scope = scopeFactory.CreateAsyncScope();
-        var analytics = scope.ServiceProvider.GetRequiredService<IAnalyticsReadRepository>();
+
+        (string Subject, string Html, EmailAttachment? Attachment) message;
+        if (schedule.ReportType == "consulta")
+        {
+            // No hay overview/top radicadores que mostrar para una consulta arbitraria — plantilla
+            // y ejecución propias (ver SendConsultaReportAsync), sin el periodo vencido de los otros
+            // 5 tipos: el rango lo decide el filtro relativo de la propia SavedQuery.
+            message = await BuildConsultaMessageAsync(scope.ServiceProvider, schedule, ct);
+        }
+        else
+        {
+            var analytics = scope.ServiceProvider.GetRequiredService<IAnalyticsReadRepository>();
+            var nowLocal = TimeZoneInfo.ConvertTime(nowUtc, BogotaTimeZone);
+            var (from, to) = ScheduleDueEvaluator.GetElapsedPeriod(schedule.Frequency, nowLocal);
+            var periodLabel = ScheduleDueEvaluator.DescribePeriod(schedule.Frequency, from, to);
+
+            var overview = await analytics.GetOverviewAsync(schedule.TenantId, from, to, ct);
+            var topProducers = await analytics.GetTopProducersAsync(
+                schedule.TenantId, from, to, TopProducersLimit, ct);
+
+            var (subject, html) = SchedulerEmailComposer.BuildScheduledReport(
+                schedule.Name, schedule.ReportType, periodLabel, overview, topProducers);
+            var attachment = await BuildAttachmentAsync(scope.ServiceProvider, schedule, from, to, ct);
+            message = (subject, html, attachment);
+        }
+
         var emailSender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
-
-        var nowLocal = TimeZoneInfo.ConvertTime(nowUtc, BogotaTimeZone);
-        var (from, to) = ScheduleDueEvaluator.GetElapsedPeriod(schedule.Frequency, nowLocal);
-        var periodLabel = ScheduleDueEvaluator.DescribePeriod(schedule.Frequency, from, to);
-
-        var overview = await analytics.GetOverviewAsync(schedule.TenantId, from, to, ct);
-        var topProducers = await analytics.GetTopProducersAsync(
-            schedule.TenantId, from, to, TopProducersLimit, ct);
-
-        var (subject, html) = SchedulerEmailComposer.BuildScheduledReport(
-            schedule.Name, schedule.ReportType, periodLabel, overview, topProducers);
-
         foreach (var recipient in schedule.Recipients)
         {
             try
@@ -226,8 +245,13 @@ internal sealed class AnalyticsSchedulerProcessor(
                 // HU #11358 AC2/AC3 — el puerto ya no lanza por un fallo de transporte conocido;
                 // el resultado tipado reemplaza la interpretación "no lanzó == se envió".
                 // HU #11363 AC1 — id estable del catálogo (TemplateIds.ScheduledReport).
-                var result = await emailSender.SendAsync(
-                    new EmailMessage(schedule.TenantId, "analytics.scheduled-report", recipient, recipient, subject, html), ct);
+                var email = new EmailMessage(
+                    schedule.TenantId, "analytics.scheduled-report", recipient, recipient,
+                    message.Subject, message.Html);
+                if (message.Attachment is not null)
+                    email = email with { Attachments = [message.Attachment] };
+
+                var result = await emailSender.SendAsync(email, ct);
                 if (!result.Success)
                     SchedulerLog.ScheduleEmailFailed(logger, schedule.Id, recipient, result.Outcome);
             }
@@ -240,6 +264,107 @@ internal sealed class AnalyticsSchedulerProcessor(
         }
 
         SchedulerLog.ScheduleSent(logger, schedule.Id, schedule.Name, schedule.Recipients.Count);
+    }
+
+    /// <summary>
+    /// Resuelve la SavedQuery (empresa: siempre con tenant, §75 del DDL) y arma asunto+cuerpo+adjunto
+    /// del informe tipo "consulta". Un fallo de generación (BD/consulta inválida) degrada al mismo
+    /// aviso que una SavedQuery borrada — best-effort, igual criterio que el resto del scheduler.
+    /// </summary>
+    private async Task<(string Subject, string Html, EmailAttachment? Attachment)> BuildConsultaMessageAsync(
+        IServiceProvider services, ReportSchedule schedule, CancellationToken ct)
+    {
+        try
+        {
+            var builder = services.GetRequiredService<CompanyQueryReportDocumentBuilder>();
+            var result = schedule.SavedQueryScope == "superadmin"
+                ? await builder.BuildForSuperAdminAsync(schedule.SavedQueryId!.Value, ct)
+                : await builder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
+            if (result is null)
+            {
+                var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name);
+                return (missingSubject, missingHtml, null);
+            }
+
+            var (subject, html) = SchedulerEmailComposer.BuildConsultaReport(
+                schedule.Name, result.QueryName, result.Total, result.Truncated, CompanyQueryReportDocumentBuilder.RowCap);
+            var fileName = $"informe-consulta-{schedule.Id:N}.xlsx";
+            var attachment = new EmailAttachment(
+                fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Bytes);
+            return (subject, html, attachment);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SchedulerLog.AttachmentBuildError(logger, schedule.Id, schedule.ReportType, ex);
+            var (subject, html) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name);
+            return (subject, html, null);
+        }
+    }
+
+    /// <summary>
+    /// Genera el archivo real del <paramref name="schedule"/> según su tipo. "resumen"/"operacion"/
+    /// "productividad" reutilizan los MISMOS generadores que los botones de export del dashboard
+    /// (<see cref="IProcedureExcelExporter"/>/<see cref="ExportExecutivePdfHandler"/>, sin filtro de
+    /// categoría — un informe automático no tiene un segmento de gráfica seleccionado). "uso"/"ot"
+    /// usan los generadores dedicados de <see cref="UsageReportDocumentBuilder"/>/
+    /// <see cref="OtReportDocumentBuilder"/>, porque sus datos no son trámites (no hay Excel de
+    /// detalle que reutilizar). Un fallo generando el archivo NO cancela el envío — el correo sale
+    /// solo con el resumen HTML, y el fallo queda en el log (mismo criterio de "best effort" que ya
+    /// aplica al resto del scheduler).
+    /// </summary>
+    private async Task<EmailAttachment?> BuildAttachmentAsync(
+        IServiceProvider services, ReportSchedule schedule, DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        try
+        {
+            var extension = schedule.Format == "pdf" ? "pdf" : "xlsx";
+            var contentType = schedule.Format == "pdf"
+                ? "application/pdf"
+                : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            var fileName = $"informe-{schedule.ReportType}-{from:yyyy-MM-dd}-a-{to:yyyy-MM-dd}.{extension}";
+
+            // Los 4 tipos de abajo siguen exigiendo tenant (CHECK report_schedules_consulta_shape_check,
+            // §75 del DDL) — solo "consulta" con alcance superadmin tiene TenantId nulo.
+            byte[]? bytes = schedule.ReportType switch
+            {
+                "uso" => await services.GetRequiredService<UsageReportDocumentBuilder>()
+                    .BuildAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
+                "ot" => await services.GetRequiredService<OtReportDocumentBuilder>()
+                    .BuildAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
+                "resumen" or "operacion" or "productividad" =>
+                    await BuildProcedureBasedAttachmentAsync(services, schedule, from, to, ct),
+                _ => null, // "consulta" (Reportes 2.0, HU-D — filas propias, ver rama dedicada) u otro tipo futuro.
+            };
+
+            return bytes is null ? null : new EmailAttachment(fileName, contentType, bytes);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SchedulerLog.AttachmentBuildError(logger, schedule.Id, schedule.ReportType, ex);
+            return null;
+        }
+    }
+
+    private static async Task<byte[]?> BuildProcedureBasedAttachmentAsync(
+        IServiceProvider services, ReportSchedule schedule, DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        if (schedule.Format == "pdf")
+        {
+            var handler = services.GetRequiredService<ExportExecutivePdfHandler>();
+            var (pdf, error) = await handler.HandleAsync(
+                new ExportExecutivePdfQuery(schedule.TenantId!.Value, from, to), ct);
+            return error is null ? pdf : null;
+        }
+
+        var (filter, filterError) = ExportProceduresExcelHandler.Validate(
+            new ExportProceduresExcelQuery(schedule.TenantId!.Value, from, to, Category: null, Status: null));
+        if (filterError is not null || filter is null)
+            return null;
+
+        var exporter = services.GetRequiredService<IProcedureExcelExporter>();
+        using var stream = new MemoryStream();
+        await exporter.ExportAsync(stream, filter, ct);
+        return stream.ToArray();
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -465,6 +590,11 @@ internal static partial class SchedulerLog
     [LoggerMessage(Level = LogLevel.Error,
         Message = "Scheduler Reportes2: error procesando el informe programado {ScheduleId}.")]
     public static partial void ScheduleError(ILogger logger, Guid scheduleId, Exception ex);
+
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "Scheduler Reportes2: no se pudo generar el adjunto del informe {ScheduleId} (tipo {ReportType}); "
+            + "el correo sale solo con el resumen HTML.")]
+    public static partial void AttachmentBuildError(ILogger logger, Guid scheduleId, string reportType, Exception ex);
 
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Scheduler Reportes2: informe {ScheduleId} ('{Name}') enviado a {RecipientCount} destinatario(s).")]

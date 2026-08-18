@@ -1,16 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BellRing, CalendarClock, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SchedulesSection } from "./SchedulesSection";
 import { AlertsSection } from "./AlertsSection";
+import type { SchedulePresetConsulta } from "./ScheduleForm";
 
 export interface SchedulingPanelProps {
   open: boolean;
   onClose: () => void;
   /** Solo SuperAdmin: compañía objetivo (los endpoints HU-D exigen tenant concreto). */
   tenantId?: string;
+  /** SuperAdmin sin compañía elegida en el filtro superior — ver {@link SchedulesSection}. */
+  needsCompany?: boolean;
+  /**
+   * "Programar este informe" (HU-D, segunda ola): abre directo en "Informes programados" con el
+   * formulario de creación ya prellenado. El alcance de la consulta (empresa/superadmin) decide
+   * si la sección usa el CRUD de empresa o el de SuperAdmin — ver {@link SchedulesSection}.
+   */
+  presetConsulta?: SchedulePresetConsulta | null;
+  /** Se llama una vez el preset ya abrió el formulario, para no reabrirlo en cada render. */
+  onConsumePreset?: () => void;
 }
 
 type Tab = "schedules" | "alerts";
@@ -21,8 +32,15 @@ type Tab = "schedules" | "alerts";
  * alert-rules + historial de disparos). La integración lo monta desde Reportes con un
  * botón; este componente es el entregable standalone (no toca Reportes.tsx).
  */
-export function SchedulingPanel({ open, onClose, tenantId }: SchedulingPanelProps) {
+export function SchedulingPanel({
+  open, onClose, tenantId, needsCompany = false, presetConsulta, onConsumePreset,
+}: SchedulingPanelProps) {
   const [tab, setTab] = useState<Tab>("schedules");
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reacciona a un preset que llega de fuera, no a estado propio
+    if (presetConsulta) setTab("schedules");
+  }, [presetConsulta]);
 
   if (!open) return null;
 
@@ -90,9 +108,14 @@ export function SchedulingPanel({ open, onClose, tenantId }: SchedulingPanelProp
 
         <div className="p-5">
           {tab === "schedules" ? (
-            <SchedulesSection tenantId={tenantId} />
+            <SchedulesSection
+              tenantId={tenantId}
+              needsCompany={needsCompany}
+              presetConsulta={presetConsulta ?? null}
+              onConsumePreset={onConsumePreset}
+            />
           ) : (
-            <AlertsSection tenantId={tenantId} />
+            <AlertsSection tenantId={tenantId} needsCompany={needsCompany} />
           )}
         </div>
       </div>

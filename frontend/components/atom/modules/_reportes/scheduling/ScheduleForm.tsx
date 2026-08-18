@@ -6,6 +6,7 @@ import type {
   ReportSchedule,
   ReportScheduleInput,
   ReportType,
+  SavedQueryScope,
   ScheduleFormat,
   ScheduleFrequency,
 } from "@/lib/api/analytics-scheduling";
@@ -20,9 +21,19 @@ import {
 import { RecipientsInput } from "./RecipientsInput";
 import { digitsOnly } from "@/lib/format/currency";
 
+/** Consulta guardada sobre la que se programa un informe nuevo (acción "Programar este informe"
+ * desde el tab Consultas personalizadas) — fija tipo, alcance y formato, no editables. */
+export interface SchedulePresetConsulta {
+  savedQueryId: string;
+  savedQueryScope: SavedQueryScope;
+  queryName: string;
+}
+
 interface ScheduleFormProps {
   /** Schedule a editar; undefined = crear. */
   initial?: ReportSchedule;
+  /** Solo al crear desde una consulta guardada. Ver {@link SchedulePresetConsulta}. */
+  presetConsulta?: SchedulePresetConsulta;
   onSubmit: (input: ReportScheduleInput) => Promise<void>;
   onCancel: () => void;
 }
@@ -38,18 +49,29 @@ const labelClass = "block text-xs font-semibold text-[#162744] dark:text-slate-2
  * nombre, tipo, periodicidad con día condicional, hora (Bogotá), formato, destinatarios
  * y activo. Validación client-side espejo del backend; mensajes en español.
  */
-export function ScheduleForm({ initial, onSubmit, onCancel }: ScheduleFormProps) {
-  const [name, setName] = useState(initial?.name ?? "");
-  const [reportType, setReportType] = useState<ReportType>(initial?.reportType ?? "resumen");
+export function ScheduleForm({ initial, presetConsulta, onSubmit, onCancel }: ScheduleFormProps) {
+  const [name, setName] = useState(initial?.name ?? (presetConsulta ? presetConsulta.queryName : ""));
+  const [reportType, setReportType] = useState<ReportType>(
+    initial?.reportType ?? (presetConsulta ? "consulta" : "resumen"),
+  );
   const [frequency, setFrequency] = useState<ScheduleFrequency>(initial?.frequency ?? "daily");
   const [dayOfWeek, setDayOfWeek] = useState<number>(initial?.dayOfWeek ?? 1);
   const [dayOfMonth, setDayOfMonth] = useState<number>(initial?.dayOfMonth ?? 1);
   const [sendHour, setSendHour] = useState<number>(initial?.sendHour ?? 7);
-  const [format, setFormat] = useState<ScheduleFormat>(initial?.format ?? "pdf");
+  const [format, setFormat] = useState<ScheduleFormat>(
+    initial?.format ?? (presetConsulta ? "excel" : "pdf"),
+  );
   const [recipients, setRecipients] = useState<string[]>(initial?.recipients ?? []);
   const [isActive, setIsActive] = useState<boolean>(initial?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Fijo desde que se abre el formulario, no se re-elige: cambiar de tipo a mitad de edición
+  // dejaría savedQueryId apuntando a una consulta que ya no corresponde con "Tipo de informe".
+  const isConsulta = reportType === "consulta";
+  const savedQueryId = presetConsulta?.savedQueryId ?? initial?.savedQueryId ?? null;
+  const savedQueryScope = presetConsulta?.savedQueryScope ?? initial?.savedQueryScope ?? null;
+  const consultaQueryName = presetConsulta?.queryName ?? initial?.name;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,9 +93,10 @@ export function ScheduleForm({ initial, onSubmit, onCancel }: ScheduleFormProps)
       dayOfWeek: frequency === "weekly" ? dayOfWeek : null,
       dayOfMonth: frequency === "monthly" ? dayOfMonth : null,
       sendHour,
-      format,
+      format: isConsulta ? "excel" : format,
       recipients,
       isActive,
+      ...(isConsulta ? { savedQueryId, savedQueryScope } : {}),
     };
 
     setSaving(true);
@@ -111,17 +134,33 @@ export function ScheduleForm({ initial, onSubmit, onCancel }: ScheduleFormProps)
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label htmlFor="schedule-type" className={labelClass}>Tipo de informe</label>
-          <select
-            id="schedule-type"
-            value={reportType}
-            onChange={(e) => setReportType(e.target.value as ReportType)}
-            className={inputClass}
-          >
-            {Object.entries(REPORT_TYPE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
+          {isConsulta ? (
+            <>
+              <span className={labelClass}>Tipo de informe</span>
+              <p
+                data-testid="schedule-consulta-locked"
+                className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-[#162744] dark:text-slate-100"
+              >
+                Consulta personalizada — {consultaQueryName}
+              </p>
+            </>
+          ) : (
+            <>
+              <label htmlFor="schedule-type" className={labelClass}>Tipo de informe</label>
+              <select
+                id="schedule-type"
+                value={reportType}
+                onChange={(e) => setReportType(e.target.value as ReportType)}
+                className={inputClass}
+              >
+                {Object.entries(REPORT_TYPE_LABELS)
+                  .filter(([value]) => value !== "consulta")
+                  .map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+              </select>
+            </>
+          )}
         </div>
         <div>
           <label htmlFor="schedule-frequency" className={labelClass}>Periodicidad</label>
@@ -188,18 +227,26 @@ export function ScheduleForm({ initial, onSubmit, onCancel }: ScheduleFormProps)
 
         <div>
           <label htmlFor="schedule-format" className={labelClass}>Formato</label>
-          <select
-            id="schedule-format"
-            value={format}
-            onChange={(e) => setFormat(e.target.value as ScheduleFormat)}
-            className={inputClass}
-          >
-            {Object.entries(FORMAT_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
+          {isConsulta ? (
+            <p className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-[#162744] dark:text-slate-100">
+              Excel
+            </p>
+          ) : (
+            <select
+              id="schedule-format"
+              value={format}
+              onChange={(e) => setFormat(e.target.value as ScheduleFormat)}
+              className={inputClass}
+            >
+              {Object.entries(FORMAT_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          )}
           <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-            El correo incluye el resumen de indicadores; el adjunto llegará en versiones futuras.
+            {isConsulta
+              ? "El resultado de la consulta va como Excel adjunto (hasta 5.000 filas)."
+              : "El correo trae el resumen de indicadores en el cuerpo y el archivo real adjunto."}
           </p>
         </div>
       </div>

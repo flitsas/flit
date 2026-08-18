@@ -15,7 +15,7 @@
 // El resumen («2 filtros · últimos 30 días») hace además el trabajo de fondo: convierte un nombre
 // que solo significaba algo el día que se guardó en algo que se reconoce meses después.
 
-import { Bookmark, Check, ChevronRight, Lightbulb, Search, Trash2 } from "lucide-react";
+import { Bookmark, CalendarPlus, Check, ChevronRight, Lightbulb, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Modal } from "@/components/atom/Modal";
@@ -40,6 +40,7 @@ export function SavedQueryList({
   onOpen,
   onPedirBorrado,
   onConfirmarBorrado,
+  onSchedule,
   testIdPrefix,
 }: {
   queries: SavedQuery[];
@@ -51,6 +52,9 @@ export function SavedQueryList({
   onOpen: (query: SavedQuery) => void;
   onPedirBorrado: (query: SavedQuery | null) => void;
   onConfirmarBorrado: (query: SavedQuery) => void;
+  /** Reportes 2.0 (HU-D) — "Programar este informe". Sin esto (Consultas del organismo) el botón
+   * no se renderiza. */
+  onSchedule?: (query: SavedQuery) => void;
   /** Las dos consolas usan esta lista; el prefijo las hace distinguibles en las pruebas. */
   testIdPrefix: string;
 }) {
@@ -77,6 +81,7 @@ export function SavedQueryList({
             onOpen={onOpen}
             onPedirBorrado={onPedirBorrado}
             onConfirmarBorrado={onConfirmarBorrado}
+            onSchedule={onSchedule}
             testIdPrefix={testIdPrefix}
             grupoId="guardadas"
             modalTitulo="Mis consultas"
@@ -104,6 +109,7 @@ export function SavedQueryList({
             onOpen={onOpen}
             onPedirBorrado={onPedirBorrado}
             onConfirmarBorrado={onConfirmarBorrado}
+            onSchedule={onSchedule}
             testIdPrefix={testIdPrefix}
             grupoId="fabrica"
             modalTitulo="Para empezar"
@@ -133,6 +139,7 @@ function ConsultasConDesborde({
   onOpen,
   onPedirBorrado,
   onConfirmarBorrado,
+  onSchedule,
   testIdPrefix,
   grupoId,
   modalTitulo,
@@ -146,6 +153,7 @@ function ConsultasConDesborde({
   onOpen: (query: SavedQuery) => void;
   onPedirBorrado: (query: SavedQuery | null) => void;
   onConfirmarBorrado: (query: SavedQuery) => void;
+  onSchedule?: (query: SavedQuery) => void;
   testIdPrefix: string;
   /** Distingue los data-testid del «Ver todas» y el buscador de este grupo del otro grupo. */
   grupoId: string;
@@ -181,6 +189,7 @@ function ConsultasConDesborde({
             onOpen={onOpen}
             onPedirBorrado={onPedirBorrado}
             onConfirmarBorrado={onConfirmarBorrado}
+            onSchedule={onSchedule}
             testIdPrefix={testIdPrefix}
           />
         ))}
@@ -216,6 +225,7 @@ function ConsultasConDesborde({
             }}
             onPedirBorrado={onPedirBorrado}
             onConfirmarBorrado={onConfirmarBorrado}
+            onSchedule={onSchedule}
             testIdPrefix={testIdPrefix}
             grupoId={grupoId}
           />
@@ -240,6 +250,7 @@ function BuscadorDeConsultas({
   onOpen,
   onPedirBorrado,
   onConfirmarBorrado,
+  onSchedule,
   testIdPrefix,
   grupoId,
 }: {
@@ -250,6 +261,7 @@ function BuscadorDeConsultas({
   onOpen: (query: SavedQuery) => void;
   onPedirBorrado: (query: SavedQuery | null) => void;
   onConfirmarBorrado: (query: SavedQuery) => void;
+  onSchedule?: (query: SavedQuery) => void;
   testIdPrefix: string;
   grupoId: string;
 }) {
@@ -292,6 +304,7 @@ function BuscadorDeConsultas({
               onOpen={onOpen}
               onPedirBorrado={onPedirBorrado}
               onConfirmarBorrado={onConfirmarBorrado}
+              onSchedule={onSchedule}
               testIdPrefix={testIdPrefix}
             />
           ))}
@@ -355,6 +368,7 @@ function Item({
   onOpen,
   onPedirBorrado,
   onConfirmarBorrado,
+  onSchedule,
   testIdPrefix,
 }: {
   query: SavedQuery;
@@ -364,6 +378,7 @@ function Item({
   onOpen: (query: SavedQuery) => void;
   onPedirBorrado: (query: SavedQuery | null) => void;
   onConfirmarBorrado: (query: SavedQuery) => void;
+  onSchedule?: (query: SavedQuery) => void;
   testIdPrefix: string;
 }) {
   // Confirmar en la propia tarjeta y no en un diálogo del navegador: se ve QUÉ se va a borrar
@@ -451,18 +466,33 @@ function Item({
         />
       </button>
 
-      {!query.deFabrica && (
-        // El borrar aparece al apuntar o al enfocar por teclado, y NUNCA tapa la flecha: dos
-        // controles disputándose la misma esquina es cómo se borra algo sin querer.
-        <button
-          type="button"
-          onClick={() => onPedirBorrado(query)}
-          aria-label={`Borrar ${query.nombre}`}
-          title={`Borrar «${query.nombre}»`}
-          className="absolute bottom-1.5 right-1.5 rounded-md p-1 text-[#9AA5B4] opacity-0 transition hover:bg-[#C0392B]/10 hover:text-[#C0392B] focus-visible:opacity-100 group-hover:opacity-100 dark:text-white/30"
-        >
-          <Trash2 className="h-3 w-3" aria-hidden="true" />
-        </button>
+      {/* Programar y borrar comparten la esquina inferior derecha, en un grupo — así ninguno tapa
+          la flecha ni al otro, y los dos aparecen juntos al apuntar. */}
+      {(onSchedule ?? !query.deFabrica) && (
+        <span className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+          {onSchedule && (
+            <button
+              type="button"
+              onClick={() => onSchedule(query)}
+              aria-label={`Programar informe de ${query.nombre}`}
+              title={`Programar informe de «${query.nombre}»`}
+              className="rounded-md p-1 text-[#9AA5B4] transition hover:bg-[#557EFF]/10 hover:text-[#557EFF] dark:text-white/30"
+            >
+              <CalendarPlus className="h-3 w-3" aria-hidden="true" />
+            </button>
+          )}
+          {!query.deFabrica && (
+            <button
+              type="button"
+              onClick={() => onPedirBorrado(query)}
+              aria-label={`Borrar ${query.nombre}`}
+              title={`Borrar «${query.nombre}»`}
+              className="rounded-md p-1 text-[#9AA5B4] transition hover:bg-[#C0392B]/10 hover:text-[#C0392B] dark:text-white/30"
+            >
+              <Trash2 className="h-3 w-3" aria-hidden="true" />
+            </button>
+          )}
+        </span>
       )}
     </li>
   );

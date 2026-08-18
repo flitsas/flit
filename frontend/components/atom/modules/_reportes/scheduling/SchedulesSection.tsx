@@ -6,9 +6,13 @@ import { CreateButton } from "@/components/atom/CreateButton";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   createReportSchedule,
+  createSuperAdminReportSchedule,
   deleteReportSchedule,
+  deleteSuperAdminReportSchedule,
   fetchReportSchedules,
+  fetchSuperAdminReportSchedules,
   updateReportSchedule,
+  updateSuperAdminReportSchedule,
   type ReportSchedule,
   type ReportScheduleInput,
 } from "@/lib/api/analytics-scheduling";
@@ -19,10 +23,19 @@ import {
   REPORT_TYPE_LABELS,
   formatDateTime,
 } from "./labels";
-import { ScheduleForm } from "./ScheduleForm";
+import { ScheduleForm, type SchedulePresetConsulta } from "./ScheduleForm";
 
 interface SchedulesSectionProps {
   tenantId?: string;
+  /** SuperAdmin sin compañía elegida en el filtro superior ("Todas las compañías"): en vez de
+   * bloquear la vista, se listan por defecto los informes de consulta cross-compañía (alcance
+   * "superadmin") — son los únicos que no necesitan una compañía concreta. Elegir una compañía
+   * en el filtro vuelve a mostrar los informes de esa compañía. */
+  needsCompany?: boolean;
+  /** "Programar este informe": abre el formulario de creación ya prellenado con esto. */
+  presetConsulta?: SchedulePresetConsulta | null;
+  /** Se llama una vez el preset ya abrió el formulario. */
+  onConsumePreset?: () => void;
 }
 
 function describeWhen(s: ReportSchedule): string {
@@ -38,24 +51,58 @@ function describeWhen(s: ReportSchedule): string {
  * Sección "Informes programados" (Reportes 2.0, HU-D): tabla + formulario crear/editar +
  * eliminación con confirmación. Estados loading/vacío/error con UiStateBoundary.
  */
-export function SchedulesSection({ tenantId }: SchedulesSectionProps) {
+export function SchedulesSection({
+  tenantId, needsCompany = false, presetConsulta = null, onConsumePreset,
+}: SchedulesSectionProps) {
   const [items, setItems] = useState<ReportSchedule[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [editing, setEditing] = useState<ReportSchedule | null>(null);
   const [creating, setCreating] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<ReportSchedule | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Copia LOCAL del preset activo: la prop se limpia (onConsumePreset) apenas se lee, pero el
+  // formulario sigue abierto y necesita seguir sabiendo con qué consulta se prellenó.
+  const [activePreset, setActivePreset] = useState<SchedulePresetConsulta | null>(null);
+  // Alcance SuperAdmin (Reportes 2.0, HU-D, segunda ola): se fija cuando llega un preset con
+  // savedQueryScope="superadmin" y, a diferencia de leerlo directo de `presetConsulta` en cada
+  // render, NO se limpia junto con el preset — el padre lo limpia (onConsumePreset) en el mismo
+  // tick en que se consume, así que sin este estado persistido el POST del submit caía en el
+  // endpoint de empresa con tenantId en vez de /report-schedules/superadmin. Combinado con la
+  // propia prop (línea de abajo) para que el primer render — antes de que el efecto corra — ya
+  // tenga el alcance correcto y no dispare un primer fetch al endpoint equivocado.
+  const [scopeLocked, setScopeLocked] = useState(false);
+  // Sin compañía elegida (`needsCompany`) y sin preset activo: se listan los informes de consulta
+  // cross-compañía por defecto — de otro modo, los que se crearon con "Programar este informe"
+  // desde una consulta de SuperAdmin quedaban invisibles para editar/eliminar (no hay ninguna
+  // compañía "dueña" de ellos, así que exigir una para verlos los deja huérfanos en la UI).
+  const superAdminMode =
+    scopeLocked || presetConsulta?.savedQueryScope === "superadmin" || needsCompany;
+
+  // "Programar este informe": el preset abre el formulario de creación solo (nunca reemplaza una
+  // edición en curso) y se consume enseguida — sin esto, reabrir el panel en la misma sesión
+  // reabriría el formulario aunque la persona ya lo haya cerrado.
+  useEffect(() => {
+    if (!presetConsulta) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reacciona a un preset que llega de fuera, no a estado propio
+    setEditing(null);
+    setCreating(true);
+    setActivePreset(presetConsulta);
+    setScopeLocked(presetConsulta.savedQueryScope === "superadmin");
+    onConsumePreset?.();
+  }, [presetConsulta, onConsumePreset]);
 
   const load = useCallback(async () => {
     setStatus("loading");
     try {
-      const data = await fetchReportSchedules(tenantId);
+      const data = superAdminMode
+        ? await fetchSuperAdminReportSchedules()
+        : await fetchReportSchedules(tenantId);
       setItems(data.items);
       setStatus(data.items.length === 0 ? "empty" : "ready");
     } catch {
       setStatus("error");
     }
-  }, [tenantId]);
+  }, [tenantId, superAdminMode]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await
@@ -63,14 +110,23 @@ export function SchedulesSection({ tenantId }: SchedulesSectionProps) {
   }, [load]);
 
   async function handleCreate(input: ReportScheduleInput) {
-    await createReportSchedule(input, tenantId);
+    if (superAdminMode) {
+      await createSuperAdminReportSchedule(input);
+    } else {
+      await createReportSchedule(input, tenantId);
+    }
     setCreating(false);
+    setActivePreset(null);
     await load();
   }
 
   async function handleUpdate(input: ReportScheduleInput) {
     if (!editing) return;
-    await updateReportSchedule(editing.id, input, tenantId);
+    if (superAdminMode) {
+      await updateSuperAdminReportSchedule(editing.id, input);
+    } else {
+      await updateReportSchedule(editing.id, input, tenantId);
+    }
     setEditing(null);
     await load();
   }
@@ -79,7 +135,11 @@ export function SchedulesSection({ tenantId }: SchedulesSectionProps) {
     if (!confirmDelete) return;
     setActionError(null);
     try {
-      await deleteReportSchedule(confirmDelete.id, tenantId);
+      if (superAdminMode) {
+        await deleteSuperAdminReportSchedule(confirmDelete.id);
+      } else {
+        await deleteReportSchedule(confirmDelete.id, tenantId);
+      }
       setConfirmDelete(null);
       await load();
     } catch {
@@ -93,14 +153,32 @@ export function SchedulesSection({ tenantId }: SchedulesSectionProps) {
     <section data-testid="schedules-section" className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Recibe por correo un resumen de indicadores del periodo, en la hora de Bogotá que elijas.
+          {superAdminMode
+            // Se repite aquí (no solo en emptyMessage de abajo) porque esa guía desaparece en
+            // cuanto hay al menos un informe listado — sin esto, con la lista llena no quedaba
+            // ninguna pista de cómo programar uno más. También explica por qué el botón «Nuevo
+            // informe» no está: sin esto, alguien sin el contexto de por qué desapareció no
+            // sabría que elegir una compañía en el filtro superior lo hace reaparecer.
+            ? "Aquí solo se listan informes de consultas guardadas: para crear uno, ve a «Consultas personalizadas» y haz clic en el ícono de calendario junto a la consulta que quieras programar. Para un informe de resumen, operación, uso u organismo de tránsito de una compañía específica, elígela primero en el filtro «COMPAÑÍA» arriba — ahí reaparece el botón «Nuevo informe»."
+            : "Recibe por correo un resumen de indicadores del periodo, en la hora que elijas."}
         </p>
-        {!formOpen && (
+        {/* En alcance SuperAdmin no hay "informe en blanco": todo informe aquí es de tipo
+            "consulta" y se crea desde "Programar este informe" en una consulta guardada. */}
+        {!formOpen && !superAdminMode && (
           <CreateButton size="sm" label="Nuevo informe" icon={CalendarPlus} onClick={() => setCreating(true)} />
         )}
       </div>
 
-      {creating && <ScheduleForm onSubmit={handleCreate} onCancel={() => setCreating(false)} />}
+      {creating && (
+        <ScheduleForm
+          presetConsulta={activePreset ?? undefined}
+          onSubmit={handleCreate}
+          onCancel={() => {
+            setCreating(false);
+            setActivePreset(null);
+          }}
+        />
+      )}
       {editing && (
         <ScheduleForm initial={editing} onSubmit={handleUpdate} onCancel={() => setEditing(null)} />
       )}
@@ -108,7 +186,11 @@ export function SchedulesSection({ tenantId }: SchedulesSectionProps) {
       {!formOpen && (
         <UiStateBoundary
           status={status}
-          emptyMessage="Aún no hay informes programados. Crea el primero con «Nuevo informe»."
+          emptyMessage={
+            superAdminMode
+              ? "Aún no hay informes de consultas guardadas. Ve a «Consultas personalizadas» y haz clic en el ícono de calendario junto a la consulta que quieras programar."
+              : "Aún no hay informes programados. Crea el primero con «Nuevo informe»."
+          }
           errorMessage="No se pudieron cargar los informes programados."
           onRetry={() => void load()}
           skeletonRows={3}
