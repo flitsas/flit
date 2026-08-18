@@ -522,14 +522,27 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
     });
   }, [items, search, modalidad, estado, compania, soloPrioritarios]);
 
+  // HU #10536 — sin orden explicito por columna, el backend devuelve los prioritarios primero. Al
+  // marcar uno desde la tabla se replica ESE mismo criterio en cliente, para que suba a la primera
+  // fila en el acto en vez de quedarse en su sitio hasta el siguiente refetch o hasta recargar la
+  // pagina. `sort` es estable, asi que dentro de cada grupo se conserva el orden que vino del
+  // backend. Con un orden explicito por cabecera (`sortBy`) NO se reordena: ahi manda lo que pidio
+  // el usuario, y colar los prioritarios arriba contradiria la columna que acaba de elegir.
+  const ordenados = useMemo(() => {
+    if (sortBy) return filtered;
+    return [...filtered].sort(
+      (a, b) => Number(b.prioritario ?? false) - Number(a.prioritario ?? false),
+    );
+  }, [filtered, sortBy]);
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   // Página segura: si los filtros/refetch reducen los resultados por debajo de
   // la página actual, se clampa al último rango válido.
   const safePage = Math.min(page, totalPages);
   const paginated = useMemo(() => {
     const start = (safePage - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, safePage]);
+    return ordenados.slice(start, start + PAGE_SIZE);
+  }, [ordenados, safePage]);
 
   // Al cambiar cualquier filtro se vuelve a la primera página: la combinación
   // de criterios redefine el conjunto, así que arrancar desde el inicio es lo
@@ -557,8 +570,9 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
   };
 
   // HU #10536 — marca/desmarca la prioridad con actualización optimista; revierte si el backend falla.
-  // No cambia el estado del ciclo de vida, solo el flag de ordenamiento (el listado ya viene ordenado
-  // con los prioritarios primero; el reordenamiento visual se aplica al siguiente refetch).
+  // No cambia el estado del ciclo de vida, solo el flag de ordenamiento. La fila SUBE en el acto:
+  // `ordenados` reordena en cliente con el mismo criterio del backend, asi que no hay que esperar
+  // al siguiente refetch ni recargar la pagina para ver el efecto de haber marcado la prioridad.
   const handleTogglePriority = useCallback(
     async (id: string, next: boolean, tenantId: string) => {
       setItems((prev) =>
