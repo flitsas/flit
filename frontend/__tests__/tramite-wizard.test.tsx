@@ -177,12 +177,17 @@ const TRASPASO_WIZARD: WizardState = {
   blockers: ['preflight_red'],
   status: 'borrador',
   allowedTransitions: ['anulado', 'preparado'],
+  // Orden real del backend (`WizardStateQuery.StepKey`): consulta → vendedor → comprador →
+  // documentos → identidad → fur. Los datos comerciales dejaron de ser un paso propio y viven en
+  // Requisitos (`documentos`); el hueco lo ocupa Identidad, que en traspaso valida a las dos partes.
+  // Tras fusionar vendedor+comprador en "Actores", el asistente pinta CINCO pasos, los mismos de
+  // matrícula: Consulta Vehículo · Actores · Requisitos · Validación de Identidad · Resumen.
   steps: [
     { index: 0, key: 'consulta', label: 'Consulta', status: 'complete', reasons: [] },
-    { index: 1, key: 'documentos', label: 'Datos y Documentos del Trámite', status: 'complete', reasons: [] },
-    { index: 2, key: 'vendedor', label: 'Vendedor', status: 'complete', reasons: [] },
-    { index: 3, key: 'comprador', label: 'Comprador', status: 'complete', reasons: [] },
-    { index: 4, key: 'comercial', label: 'Comercial', status: 'complete', reasons: [] },
+    { index: 1, key: 'vendedor', label: 'Vendedor', status: 'complete', reasons: [] },
+    { index: 2, key: 'comprador', label: 'Comprador', status: 'complete', reasons: [] },
+    { index: 3, key: 'documentos', label: 'Documentos', status: 'complete', reasons: [] },
+    { index: 4, key: 'identidad', label: 'Identidad', status: 'complete', reasons: [] },
     { index: 5, key: 'fur', label: 'FUR', status: 'incomplete', reasons: ['fur_pendiente'] },
   ],
 };
@@ -338,13 +343,22 @@ describe('TramiteWizard — sidebar server-driven por modalidad', () => {
     expect(screen.getByRole('button', { name: /^Paso 5: Resumen/ })).toBeInTheDocument();
   });
 
-  it('traspaso pinta 6 pasos (placa-first)', async () => {
+  // Traspaso trae SEIS pasos del backend, pero vendedor y comprador se fusionan en "Actores": el
+  // gestor recorre los mismos cinco de matrícula, con los mismos nombres. Que el conteo visual no
+  // sea el del servidor es justo lo que este caso fija.
+  it('traspaso pinta los mismos 5 pasos que matrícula (placa-first)', async () => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
     renderWizard();
     const stepButtons = await screen.findAllByRole('button', { name: /^Paso \d+:/ });
-    expect(stepButtons).toHaveLength(6);
-    expect(screen.getByText('Datos y Documentos del Trámite')).toBeInTheDocument();
-    expect(screen.getByText('Comercial')).toBeInTheDocument();
+    expect(stepButtons).toHaveLength(5);
+    expect(screen.getByRole('button', { name: /^Paso 1: Consulta Vehículo/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paso 2: Actores/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paso 3: Requisitos/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paso 4: Validación de Identidad/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Paso 5: Resumen/ })).toBeInTheDocument();
+    // "Requisitos" aparece UNA sola vez: dos pasos con el mismo rótulo significa que el backend
+    // sigue emitiendo el paso `comercial` que ya no existe.
+    expect(screen.getAllByRole('button', { name: /^Paso \d+: Requisitos/ })).toHaveLength(1);
   });
 });
 
@@ -419,7 +433,7 @@ describe('TramiteWizard — solo lectura (Track C)', () => {
     expect(screen.queryByRole('button', { name: 'Finalizar' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Continuar/ })).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /Guardar y continuar/ }),
+      screen.queryByRole('button', { name: /Continuar y guardar/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -1403,13 +1417,15 @@ describe('TramiteWizard — traspaso journey (paso 2 documentos + vendedor split
   });
 });
 
-describe('TramiteWizard — paso comercial', () => {
+// Los datos comerciales dejaron de tener paso propio: se capturan en Requisitos, junto al tipo de
+// servicio, la prenda y el checklist documental.
+describe('TramiteWizard — datos comerciales dentro de Requisitos', () => {
   it('renderiza el form comercial en traspaso', async () => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
     const user = userEvent.setup();
     renderWizard();
     await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
-    await user.click(screen.getByRole('button', { name: /^Paso 5: Datos Comerciales/ }));
+    await user.click(screen.getByRole('button', { name: /^Paso 3: Requisitos/ }));
     expect(
       await screen.findByRole('form', { name: 'Datos comerciales del trámite' }),
     ).toBeInTheDocument();
@@ -1422,18 +1438,18 @@ describe('TramiteWizard — paso comercial', () => {
     const user = userEvent.setup();
     renderWizard();
     await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
-    await user.click(screen.getByRole('button', { name: /^Paso 5: Datos Comerciales/ }));
+    await user.click(screen.getByRole('button', { name: /^Paso 3: Requisitos/ }));
     await screen.findByRole('form', { name: 'Datos comerciales del trámite' });
     // El guardado vive en el footer del wizard, no en un botón propio del form.
     expect(
       screen.queryByRole('button', { name: /Guardar datos comerciales/ }),
     ).toBeNull();
     expect(
-      screen.getByRole('button', { name: /Guardar y continuar/ }),
+      screen.getByRole('button', { name: /Continuar y guardar/ }),
     ).toBeInTheDocument();
   });
 
-  it('"Guardar y continuar" persiste los datos comerciales (PUT) vía el footer', async () => {
+  it('"Continuar y guardar" persiste los datos comerciales (PUT) vía el footer', async () => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
     mocks.getCommercial.mockResolvedValue({
       valorVenta: 50_000_000,
@@ -1445,16 +1461,60 @@ describe('TramiteWizard — paso comercial', () => {
     const user = userEvent.setup();
     renderWizard();
     await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
-    await user.click(screen.getByRole('button', { name: /^Paso 5: Datos Comerciales/ }));
+    await user.click(screen.getByRole('button', { name: /^Paso 3: Requisitos/ }));
     // El form hidrata el valor formateado (COP agrupado).
     await screen.findByDisplayValue('50.000.000');
 
-    await user.click(screen.getByRole('button', { name: /Guardar y continuar/ }));
+    await user.click(screen.getByRole('button', { name: /Continuar y guardar/ }));
 
     await waitFor(() => expect(mocks.putCommercial).toHaveBeenCalledTimes(1));
     const [instanceId, data] = mocks.putCommercial.mock.calls[0];
     expect(instanceId).toBe('inst-1');
     expect(data).toMatchObject({ valorVenta: 50_000_000, causal: 'COMPRAVENTA' });
+  });
+
+  // El bloqueo real que sufrió el gestor: sin valor de venta el backend deja Requisitos
+  // `incomplete` (`comercial_valor`) y el paso siguiente `locked`. Si el pie no reconoce Requisitos
+  // como paso guardable, "Continuar y guardar" queda deshabilitado y el único disparador de
+  // persistencia del formulario embebido desaparece: el dato solo se guarda al continuar y solo se
+  // puede continuar con el dato guardado.
+  it('con Requisitos incompleto por falta de valor de venta, el pie sigue pudiendo guardar', async () => {
+    const sinValorVenta: WizardState = {
+      ...TRASPASO_WIZARD,
+      steps: TRASPASO_WIZARD.steps.map((s) =>
+        s.key === 'documentos'
+          ? { ...s, status: 'incomplete' as const, reasons: ['comercial_valor'] }
+          : s.key === 'identidad' || s.key === 'fur'
+            ? { ...s, status: 'locked' as const, reasons: [] as string[] }
+            : s,
+      ),
+    };
+    mocks.getWizardState.mockResolvedValue(sinValorVenta);
+    mocks.getCommercial.mockResolvedValue({
+      valorVenta: null,
+      causal: null,
+      tasaImpuesto: null,
+      derechos: null,
+      metodoPago: null,
+    });
+    const user = userEvent.setup();
+    renderWizard();
+    await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
+    await user.click(screen.getByRole('button', { name: /^Paso 3: Requisitos/ }));
+    await screen.findByRole('form', { name: 'Datos comerciales del trámite' });
+
+    const continuar = screen.getByRole('button', { name: /Continuar y guardar/ });
+    expect(continuar).toBeEnabled();
+
+    await user.type(screen.getByLabelText(/Valor de venta/), '50000000');
+    await user.selectOptions(screen.getByLabelText(/Causal/), 'COMPRAVENTA');
+    await user.click(continuar);
+
+    await waitFor(() => expect(mocks.putCommercial).toHaveBeenCalledTimes(1));
+    expect(mocks.putCommercial.mock.calls[0][1]).toMatchObject({
+      valorVenta: 50_000_000,
+      causal: 'COMPRAVENTA',
+    });
   });
 });
 
@@ -1588,7 +1648,7 @@ describe('TramiteWizard — inventario del paso de Requisitos', () => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
     const user = userEvent.setup();
     renderWizard();
-    await user.click(await screen.findByRole('button', { name: /^Paso 2: Requisitos/ }));
+    await user.click(await screen.findByRole('button', { name: /^Paso 3: Requisitos/ }));
 
     expect(await screen.findByRole('region', { name: 'Documentos del trámite' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Tipo de servicio')).toBeNull();

@@ -843,17 +843,29 @@ export function TramiteWizard(props: Props) {
   // donde el gestor finaliza el borrador o radica. El paso de Identidad ya NO es terminal: desde él se
   // "Continúa" al paso FUR (el FUR es alcanzable aunque la identidad esté pendiente — backend #10350).
   const isDecisionStep = activeStep?.key === 'fur';
-  // Pasos con form embebido (actores y comercial): el footer "Continuar" guarda
+  // Pasos con form embebido (actores y Requisitos de traspaso): el footer "Continuar" guarda
   // y luego avanza, así que se habilita aunque el paso aún esté incomplete (el
   // save lo completa).
+  //
+  // Requisitos de traspaso ENTRA aquí desde que los datos comerciales dejaron de tener paso propio:
+  // `CommercialForm` se monta ahí con `embeddedInWizard` (sin botón propio) y su único disparador de
+  // guardado es este pie. Mientras la clave siguió siendo la del paso viejo, el formulario quedaba
+  // sin vía de persistencia y el gate `comercial_valor` del backend no se podía satisfacer nunca:
+  // el valor de venta solo se guarda al Continuar, y Continuar solo se habilitaba con el valor ya
+  // guardado. `comercial` se conserva porque un borrador antiguo puede seguir apuntando ahí y
+  // `StepBody` lo normaliza a Requisitos: mismo cuerpo, mismo guardado.
+  const isRequisitosTraspasoStep =
+    modalidad === 'traspaso' &&
+    (activeStep?.key === 'documentos' || activeStep?.key === 'comercial');
   const isSavableStep =
     activeStep?.key === 'comprador' ||
     activeStep?.key === 'vendedor' ||
-    activeStep?.key === 'comercial';
+    isRequisitosTraspasoStep;
   const isActorStep = activeStep?.key === 'comprador' || activeStep?.key === 'vendedor';
+  // La prenda vive en Requisitos en AMBAS modalidades (declarativa en matrícula, gate en traspaso),
+  // así que su gate de documento aplica en el mismo paso para las dos.
   const isPrendaStep =
-    (activeStep?.key === 'documentos' && modalidad !== 'traspaso') ||
-    activeStep?.key === 'comercial';
+    activeStep?.key === 'documentos' || activeStep?.key === 'comercial';
   // El siguiente paso es navegable (no hay paso de datos incompleto por delante). Permite "Continuar"
   // desde un paso diferido incompleto (Identidad) hacia el FUR para finalizar/radicar.
   const nextStepNavigable = canNavigateToStep(steps, activeIndex + 1, navViewOnly);
@@ -1005,13 +1017,20 @@ export function TramiteWizard(props: Props) {
         setSubmitError(
           isActorStep
             ? 'Consulta RUNT o RUES con éxito antes de continuar. Sin datos de la consulta no se puede avanzar.'
-            : 'No se pudo guardar. Por favor, reintenta.',
+            : isRequisitosTraspasoStep
+              // El save de los datos comerciales devuelve false por dato faltante, no por fallo de
+              // red: "reintenta" mandaba a repetir un clic que iba a fallar igual. La tarjeta ya
+              // marca los campos; el pie dice cuál es el bloqueo y dónde está.
+              ? 'Faltan datos comerciales: ingresa el valor de venta y la causal en esta misma pantalla.'
+              : 'No se pudo guardar. Por favor, reintenta.',
         );
         return;
       }
 
-      // Traspaso: la prenda va en el paso comercial — mismo Continuar, sin botón dedicado.
-      if (activeStep?.key === 'comercial') {
+      // Traspaso: la prenda va en Requisitos, junto a los datos comerciales — mismo Continuar, sin
+      // botón dedicado. Con el gravamen en warn el backend exige decisión vigente para preparar o
+      // radicar, así que dejarla sin persistir aquí solo aplaza el bloqueo hasta el final del flujo.
+      if (isRequisitosTraspasoStep) {
         const okPrenda = await prendaFormRef.current?.save();
         if (okPrenda === false) {
           setSubmitError('No se pudo guardar la decisión de prenda. Por favor, reintenta.');
