@@ -513,19 +513,28 @@ function ParteBlock({
           {PARTE_LABEL[parte]}
         </h3>
       )}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <SignatureCard parte={parte} actor={actor} vaultCovered={vaultCovered} embedded={embedded} />
-        <ParteCard
-          parte={parte}
-          instanceId={instanceId}
-          provider={provider}
-          validation={validation}
-          actor={actor}
-          historial={historial}
-          vaultCovered={vaultCovered}
-          onChanged={onChanged}
-          embedded={embedded}
-        />
+      {/* Reparto 2/5 + 3/5 y `items-start`, no 50/50 estirado. La tarjeta de firma es SIEMPRE una
+          cabecera y una frase; la biometrica puede traer QR, enlace, botones e historial. Con la
+          rejilla anterior -mitad y mitad, y con el estirado por defecto de grid- la de firma se
+          inflaba hasta igualar el alto de la otra y dejaba un bloque en blanco. Ahora cada una
+          ocupa el alto de su contenido y el ancho que le corresponde, en las dos modalidades. */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-5">
+        <div className="lg:col-span-2">
+          <SignatureCard parte={parte} actor={actor} vaultCovered={vaultCovered} embedded={embedded} />
+        </div>
+        <div className="lg:col-span-3">
+          <ParteCard
+            parte={parte}
+            instanceId={instanceId}
+            provider={provider}
+            validation={validation}
+            actor={actor}
+            historial={historial}
+            vaultCovered={vaultCovered}
+            onChanged={onChanged}
+            embedded={embedded}
+          />
+        </div>
       </div>
     </div>
   );
