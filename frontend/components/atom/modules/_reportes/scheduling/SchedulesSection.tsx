@@ -157,7 +157,7 @@ export function SchedulesSection({
             // Se repite aquí (no solo en emptyMessage de abajo) porque esa guía desaparece en
             // cuanto hay al menos un informe listado — sin esto, con la lista llena no quedaba
             // ninguna pista de cómo programar uno más.
-            ? "Informes de consultas guardadas de SuperAdmin, sobre todas las compañías. Prográmalos desde una consulta guardada en «Consultas personalizadas»."
+            ? "Informes de consultas guardadas de SuperAdmin, sobre todas las compañías. Para crear uno nuevo, ve a la pestaña «Consultas personalizadas» y haz clic en el ícono de calendario junto a la consulta que quieras programar."
             : "Recibe por correo un resumen de indicadores del periodo, en la hora de Bogotá que elijas."}
         </p>
         {/* En alcance SuperAdmin no hay "informe en blanco": todo informe aquí es de tipo
@@ -186,7 +186,7 @@ export function SchedulesSection({
           status={status}
           emptyMessage={
             superAdminMode
-              ? "Aún no hay informes de consultas de SuperAdmin. Prográmalos desde una consulta guardada."
+              ? "Aún no hay informes de consultas de SuperAdmin. Ve a «Consultas personalizadas» y haz clic en el ícono de calendario junto a la consulta que quieras programar."
               : "Aún no hay informes programados. Crea el primero con «Nuevo informe»."
           }
           errorMessage="No se pudieron cargar los informes programados."
