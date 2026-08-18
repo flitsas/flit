@@ -210,6 +210,18 @@ export function ClientProcedureDetailPanel({
   ];
   const missingVehicle = vehicleFields.filter((f) => !f.value?.trim()).map((f) => f.label);
 
+  const pendingPlatePreasignada = row.plateFlowStatus === "preasignado";
+  const pendingPlateAsignada = row.plateFlowStatus === "asignado";
+  const pendingSoat = !!row.soatEstado && row.soatEstado !== "vigente";
+  const showSinPendientesFallback =
+    missingActors.length === 0 &&
+    missingVehicle.length === 0 &&
+    docs.length > 0 &&
+    !pendingPlatePreasignada &&
+    !pendingPlateAsignada;
+  const hasObservaciones =
+    pendingPlatePreasignada || pendingPlateAsignada || pendingSoat || showSinPendientesFallback;
+
   return (
     <OtSidePanel
       open
@@ -413,26 +425,22 @@ export function ClientProcedureDetailPanel({
           )}
         </Section>
 
-        <Section title="Observaciones / pendientes" defaultOpen={false}>
-          <ul className="m-0 list-disc space-y-1 pl-4 text-xs text-foreground">
-            {row.plateFlowStatus === "preasignado" ? (
-              <li>Pendiente asignar placa por el OT.</li>
-            ) : null}
-            {row.plateFlowStatus === "asignado" ? (
-              <li>Pendiente proceso del gestor (Asignado → Terminado) antes de decidir.</li>
-            ) : null}
-            {row.soatEstado && row.soatEstado !== "vigente" ? (
-              <li>SOAT RUNT no vigente ({soatEstadoLabel(row.soatEstado)}).</li>
-            ) : null}
-            {missingActors.length === 0 &&
-            missingVehicle.length === 0 &&
-            docs.length > 0 &&
-            row.plateFlowStatus !== "preasignado" &&
-            row.plateFlowStatus !== "asignado" ? (
-              <li className="text-muted-foreground">Sin pendientes destacados en este resumen.</li>
-            ) : null}
-          </ul>
-        </Section>
+        {hasObservaciones ? (
+          <Section title="Observaciones / pendientes" defaultOpen={false}>
+            <ul className="m-0 list-disc space-y-1 pl-4 text-xs text-foreground">
+              {pendingPlatePreasignada ? <li>Pendiente asignar placa por el OT.</li> : null}
+              {pendingPlateAsignada ? (
+                <li>Pendiente proceso del gestor (Asignado → Terminado) antes de decidir.</li>
+              ) : null}
+              {pendingSoat ? (
+                <li>SOAT RUNT no vigente ({soatEstadoLabel(row.soatEstado)}).</li>
+              ) : null}
+              {showSinPendientesFallback ? (
+                <li className="text-muted-foreground">Sin pendientes destacados en este resumen.</li>
+              ) : null}
+            </ul>
+          </Section>
+        ) : null}
       </div>
     </OtSidePanel>
   );
