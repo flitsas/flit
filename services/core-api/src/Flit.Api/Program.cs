@@ -288,6 +288,8 @@ app.MapDetailedReportEndpoints(); // Feature #10813
 app.MapReportSchedulesEndpoints(); // Reportes2 HU-D
 app.MapSuperAdminReportSchedulesEndpoints(); // Reportes2 HU-D 2da ola — informes de consulta SuperAdmin
 app.MapAlertRulesEndpoints(); // Reportes2 HU-D
+app.MapAdminOtReportSchedulesEndpoints(); // Reportes2 HU-D 3ra ola — informes programados del OT
+app.MapAdminOtAlertRulesEndpoints(); // Reportes2 HU-D 3ra ola — alertas por umbral del OT
 app.MapAnalyticsMetricsEndpoints(); // Reportes2 HU-B
 app.MapCompanyQueriesEndpoints(); // Consultas propias de la empresa
 app.MapSuperAdminQueriesEndpoints(); // Consultas de SuperAdmin sobre todas las compañías

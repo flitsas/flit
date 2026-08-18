@@ -265,4 +265,19 @@ public sealed class ReportScheduleValidationTests
 
         error.Should().Be("savedQueryId y el alcance de la consulta solo aplican a informes de tipo 'consulta'.");
     }
+
+    // ------------------------------------------------------------------
+    // Reportes 2.0 (HU-D, tercera ola) — informe tipo "ot_operativo" (alcance OT)
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Tipo_ot_operativo_esta_en_el_vocabulario_y_no_exige_saved_query()
+    {
+        var (result, error) = SchedulingValidation.ValidateReportSchedule(Valid(reportType: "ot_operativo"));
+
+        error.Should().BeNull();
+        result!.ReportType.Should().Be("ot_operativo");
+        result.SavedQueryId.Should().BeNull();
+        result.SavedQueryScope.Should().BeNull();
+    }
 }

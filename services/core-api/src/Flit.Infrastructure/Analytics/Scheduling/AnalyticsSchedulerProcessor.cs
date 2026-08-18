@@ -331,6 +331,8 @@ internal sealed class AnalyticsSchedulerProcessor(
                     .BuildAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
                 "ot" => await services.GetRequiredService<OtReportDocumentBuilder>()
                     .BuildAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
+                "ot_operativo" => await services.GetRequiredService<OtOwnReportDocumentBuilder>()
+                    .BuildAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
                 "resumen" or "operacion" or "productividad" =>
                     await BuildProcedureBasedAttachmentAsync(services, schedule, from, to, ct),
                 _ => null, // "consulta" (Reportes 2.0, HU-D — filas propias, ver rama dedicada) u otro tipo futuro.
