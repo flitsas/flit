@@ -13,6 +13,9 @@ export const REPORT_TYPE_LABELS: Record<ReportType, string> = {
   ot: "Organismo de Tránsito",
   uso: "Uso del aplicativo",
   productividad: "Productividad",
+  // Solo se crea desde "Programar este informe" en una consulta guardada — no aparece en el
+  // selector de "Nuevo informe programado" (ver ScheduleForm), pero sí en el listado.
+  consulta: "Consulta personalizada",
 };
 
 export const FREQUENCY_LABELS: Record<ScheduleFrequency, string> = {
