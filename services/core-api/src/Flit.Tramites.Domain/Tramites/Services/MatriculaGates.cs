@@ -39,8 +39,10 @@ public static class MatriculaGates
 
             case 2:
                 // HU #10935 — Paso 2 = Comprador (antes iba en el paso 3): parte + RUNT consultado.
-                if (!ParteCompleta(ctx.Comprador))
-                    return GateResult.Block("comprador_incompleto", "Completa nombre, documento y email del comprador");
+                // HU #11593 — exige los seis datos de contacto (nombre, documento, email, ciudad,
+                // dirección, teléfono); el mensaje enumera los campos faltantes reales.
+                if (!ParteCompletaRule.EstaCompleta(ctx.Comprador))
+                    return GateResult.Block("comprador_incompleto", ParteCompletaRule.MensajeFaltantes("comprador", ctx.Comprador));
                 if (!RuntConsultado(ctx.RuntComprador, ctx.Comprador?.Documento))
                     return GateResult.Block("runt_comprador", "Consulta RUNT del comprador antes de continuar");
                 return GateResult.Allowed;
@@ -97,12 +99,6 @@ public static class MatriculaGates
             return false;
         return paso < MaxPasoAlcanzable(ctx);
     }
-
-    private static bool ParteCompleta(ParteDatos? parte) =>
-        parte is not null &&
-        !string.IsNullOrWhiteSpace(parte.Nombre) &&
-        !string.IsNullOrWhiteSpace(parte.Documento) &&
-        TramiteDocumento.EmailValido(parte.Email);
 
     private static bool RuntConsultado(RuntSnapshot? runt, string? documentoParte)
     {

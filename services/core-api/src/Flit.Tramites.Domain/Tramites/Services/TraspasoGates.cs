@@ -66,16 +66,19 @@ public static class TraspasoGates
 
             case 2:
                 // HU #10935 — Paso 2 = Vendedor (antes iba en el paso 3): parte + RUNT consultado.
-                if (!ParteCompleta(ctx.Vendedor))
-                    return GateResult.Block("vendedor_incompleto", "Completa nombre, documento y email del vendedor");
+                // HU #11593 — la parte exige los seis datos de contacto (nombre, documento, email,
+                // ciudad, dirección, teléfono); el mensaje enumera los campos faltantes reales.
+                if (!ParteCompletaRule.EstaCompleta(ctx.Vendedor))
+                    return GateResult.Block("vendedor_incompleto", ParteCompletaRule.MensajeFaltantes("vendedor", ctx.Vendedor));
                 if (!RuntConsultado(ctx.RuntVendedor, ctx.Vendedor?.Documento))
                     return GateResult.Block("runt_vendedor", "Consulta RUNT del vendedor antes de continuar");
                 return GateResult.Allowed;
 
             case 3:
                 // HU #10935 — Paso 3 = Comprador (antes iba en el paso 4): parte + RUNT + SIMIT.
-                if (!ParteCompleta(ctx.Comprador))
-                    return GateResult.Block("comprador_incompleto", "Completa nombre, documento y email del comprador");
+                // HU #11593 — misma exigencia de los seis datos de contacto que el vendedor.
+                if (!ParteCompletaRule.EstaCompleta(ctx.Comprador))
+                    return GateResult.Block("comprador_incompleto", ParteCompletaRule.MensajeFaltantes("comprador", ctx.Comprador));
                 if (!RuntConsultado(ctx.RuntComprador, ctx.Comprador?.Documento))
                     return GateResult.Block("runt_comprador", "Consulta RUNT del comprador antes de continuar");
                 return SimitCompradorGate(ctx, forzar);
@@ -274,12 +277,6 @@ public static class TraspasoGates
             return false;
         return !pazSalvoVerificado;
     }
-
-    private static bool ParteCompleta(ParteDatos? parte) =>
-        parte is not null &&
-        !string.IsNullOrWhiteSpace(parte.Nombre) &&
-        !string.IsNullOrWhiteSpace(parte.Documento) &&
-        TramiteDocumento.EmailValido(parte.Email);
 
     private static bool RuntConsultado(RuntSnapshot? runt, string? documentoParte)
     {

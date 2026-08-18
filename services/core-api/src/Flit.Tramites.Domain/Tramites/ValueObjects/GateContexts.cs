@@ -1,7 +1,18 @@
 namespace Flit.Tramites.Domain.Tramites.ValueObjects;
 
-/// <summary>Datos mínimos de una parte para evaluar completitud en los gates.</summary>
-public sealed record ParteDatos(string? Nombre, string? Documento, string? Email);
+/// <summary>
+/// Datos mínimos de una parte para evaluar completitud en los gates.
+/// HU #11593 — Ciudad/Direccion/Telefono se suman a Nombre/Documento/Email como exigencia dura
+/// de contacto (los seis campos), para que ningún trámite avance sin poder notificar/radicar. Se
+/// dejan con default <c>null</c> para no romper los call sites existentes que aún no los pueblan.
+/// </summary>
+public sealed record ParteDatos(
+    string? Nombre,
+    string? Documento,
+    string? Email,
+    string? Ciudad = null,
+    string? Direccion = null,
+    string? Telefono = null);
 
 /// <summary>Estado de preflight (SOAT/RTM/impuesto) consolidado.</summary>
 /// <param name="Overall">Semáforo global: "green" | "amber" | "red".</param>

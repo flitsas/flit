@@ -81,7 +81,7 @@ describe('PrendaForm (matrícula, R4)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Sin prenda' }));
 
-    expect(screen.queryByLabelText('Acreedor (beneficiario)')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Acreedor (beneficiario)', { exact: false })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Documento de soporte de prenda')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Adjuntar/i })).not.toBeInTheDocument();
   });
@@ -92,7 +92,7 @@ describe('PrendaForm (matrícula, R4)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Registrar prenda' }));
 
-    expect(screen.getByLabelText('Acreedor (beneficiario)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Acreedor (beneficiario)', { exact: false })).toBeInTheDocument();
     expect(screen.getByLabelText('Documento de soporte de prenda')).toBeInTheDocument();
     expect(screen.getByText('Certificado / registro de prenda')).toBeInTheDocument();
     expect(screen.getByText(/Obligatorio/i)).toBeInTheDocument();
@@ -167,8 +167,8 @@ describe('PrendaForm (matrícula, R4)', () => {
         'true',
       );
     });
-    expect(screen.getByLabelText('Acreedor (beneficiario)')).toHaveValue('BANCO RUNT SA');
-    expect(screen.getByLabelText('NIT / documento del acreedor')).toHaveValue('900123456');
+    expect(screen.getByLabelText('Acreedor (beneficiario)', { exact: false })).toHaveValue('BANCO RUNT SA');
+    expect(screen.getByLabelText('NIT / documento del acreedor', { exact: false })).toHaveValue('900123456');
   });
 
   it('en traspaso ofrece las 4 decisiones de gestión (sin "sin prenda") como radios', async () => {
@@ -210,8 +210,12 @@ describe('PrendaForm (matrícula, R4)', () => {
     expect(screen.queryByRole('button', { name: /Guardar decisión de prenda/i })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Registrar prenda' }));
-    fireEvent.change(screen.getByLabelText('Acreedor (beneficiario)'), {
+    fireEvent.change(screen.getByLabelText('Acreedor (beneficiario)', { exact: false }), {
       target: { value: 'Banco XYZ' },
+    });
+    // HU #11594 — "registrar" constituye gravamen: el documento del acreedor también es obligatorio.
+    fireEvent.change(screen.getByLabelText('NIT / documento del acreedor', { exact: false }), {
+      target: { value: '900123456' },
     });
 
     const ok = await ref.current!.save();
@@ -220,7 +224,7 @@ describe('PrendaForm (matrícula, R4)', () => {
       expect(client.putPrenda).toHaveBeenCalledWith('abc', {
         decision: 'registrar',
         acreedorNombre: 'Banco XYZ',
-        acreedorDocumento: null,
+        acreedorDocumento: '900123456',
       }),
     );
   });
@@ -275,6 +279,160 @@ describe('PrendaForm (matrícula, R4)', () => {
     await waitFor(() => expect(screen.getByText('Banco Demo')).toBeInTheDocument());
     expect(screen.getByText(/NIT 900111222/)).toBeInTheDocument();
     expect(screen.getByText('VIGENTE')).toBeInTheDocument();
+  });
+});
+
+// HU #11594 — acreedor obligatorio en el paso de prenda (client-side, gate ya existe en backend
+// desde HU #11591/#11592).
+describe('PrendaForm — validación de acreedor obligatorio (HU #11594)', () => {
+  beforeEach(() => {
+    client.getPrenda.mockClear();
+    client.getInstance.mockClear();
+    client.putPrenda.mockClear();
+    client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
+  });
+
+  it('AC1 — con "solicitar" y acreedor diligenciado, guarda y el wizard avanza', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(
+      <PrendaForm
+        ref={ref}
+        instanceId="abc"
+        decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+        embeddedInWizard
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Solicitar constitución de prenda' }));
+    fireEvent.change(screen.getByLabelText('Acreedor (beneficiario)', { exact: false }), {
+      target: { value: 'Banco ABC' },
+    });
+    fireEvent.change(screen.getByLabelText('NIT / documento del acreedor', { exact: false }), {
+      target: { value: '900555666' },
+    });
+
+    const ok = await ref.current!.save();
+    expect(ok).toBe(true);
+    expect(client.putPrenda).toHaveBeenCalledWith('abc', {
+      decision: 'solicitar',
+      acreedorNombre: 'Banco ABC',
+      acreedorDocumento: '900555666',
+    });
+  });
+
+  it('AC2 — con "registrar" y acreedor vacío, no guarda y marca los inputs como requeridos', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(<PrendaForm ref={ref} instanceId="abc" embeddedInWizard />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar prenda' }));
+
+    const ok = await ref.current!.save();
+    expect(ok).toBe(false);
+    expect(client.putPrenda).not.toHaveBeenCalled();
+
+    const nombreInput = screen.getByLabelText('Acreedor (beneficiario)', { exact: false });
+    const docInput = screen.getByLabelText('NIT / documento del acreedor', { exact: false });
+    expect(nombreInput).toBeRequired();
+    expect(docInput).toBeRequired();
+    await waitFor(() => expect(nombreInput).toHaveAttribute('aria-invalid', 'true'));
+    expect(docInput).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(/Completa los datos del acreedor/i)).toBeInTheDocument();
+    expect(screen.getByText('Ingresa el nombre del acreedor.')).toBeInTheDocument();
+    expect(screen.getByText('Ingresa el documento del acreedor.')).toBeInTheDocument();
+  });
+
+  it('AC3 — con "sin_prenda" no exige acreedor y el wizard avanza', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(<PrendaForm ref={ref} instanceId="abc" embeddedInWizard />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sin prenda' }));
+
+    const ok = await ref.current!.save();
+    expect(ok).toBe(true);
+    expect(client.putPrenda).toHaveBeenCalledWith('abc', {
+      decision: 'sin_prenda',
+      acreedorNombre: null,
+      acreedorDocumento: null,
+    });
+  });
+
+  it('AC3b — con "omitir" (traspaso) no exige acreedor y el wizard avanza', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(
+      <PrendaForm
+        ref={ref}
+        instanceId="abc"
+        decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+        embeddedInWizard
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    fireEvent.click(
+      screen.getByRole('radio', { name: 'Continuar sin gestionar (asumo el riesgo)' }),
+    );
+
+    const ok = await ref.current!.save();
+    expect(ok).toBe(true);
+    expect(client.putPrenda).toHaveBeenCalledWith('abc', {
+      decision: 'omitir',
+      acreedorNombre: null,
+      acreedorDocumento: null,
+    });
+  });
+
+  it('AC4 — sin decisión seleccionada, el wizard NO avanza y pide elegir una decisión', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(<PrendaForm ref={ref} instanceId="abc" embeddedInWizard />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    const ok = await ref.current!.save();
+    expect(ok).toBe(false);
+    expect(client.putPrenda).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByText(/Selecciona una decisión de prenda/i)).toBeInTheDocument(),
+    );
+  });
+
+  it('corrige el error de campo al escribir en el input tras un intento fallido', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(<PrendaForm ref={ref} instanceId="abc" embeddedInWizard />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar prenda' }));
+    expect(await ref.current!.save()).toBe(false);
+
+    const nombreInput = screen.getByLabelText('Acreedor (beneficiario)', { exact: false });
+    await waitFor(() => expect(nombreInput).toHaveAttribute('aria-invalid', 'true'));
+    fireEvent.change(nombreInput, { target: { value: 'Banco XYZ' } });
+    expect(nombreInput).toHaveAttribute('aria-invalid', 'false');
+    expect(screen.queryByText('Ingresa el nombre del acreedor.')).not.toBeInTheDocument();
+  });
+
+  it('defensa en profundidad: traduce el código prenda_acreedor_requerido del backend', async () => {
+    client.putPrenda.mockRejectedValueOnce(new Error('prenda_acreedor_requerido'));
+    const ref = createRef<PrendaFormHandle>();
+    render(<PrendaForm ref={ref} instanceId="abc" embeddedInWizard />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar prenda' }));
+    fireEvent.change(screen.getByLabelText('Acreedor (beneficiario)', { exact: false }), {
+      target: { value: 'Banco XYZ' },
+    });
+    fireEvent.change(screen.getByLabelText('NIT / documento del acreedor', { exact: false }), {
+      target: { value: '900123456' },
+    });
+
+    const ok = await ref.current!.save();
+    expect(ok).toBe(false);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/requiere los datos del acreedor \(nombre y documento\)/i),
+      ).toBeInTheDocument(),
+    );
   });
 });
 

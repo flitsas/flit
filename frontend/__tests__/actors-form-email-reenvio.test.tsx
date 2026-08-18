@@ -39,6 +39,11 @@ const PERSISTED_COMPRADOR = {
   nombreCompleto: 'Juan Perez',
   email: 'juan@old.com',
   personType: 'natural' as const,
+  // HU #11595 — ciudad, dirección y teléfono ahora son obligatorios: sin ellos el submit se
+  // bloquea antes de llegar al flujo de confirmación de correo que testea este archivo.
+  telefono: '3001234567',
+  ciudad: 'Bogota',
+  direccion: 'Calle 1 # 2-3',
 };
 
 function activeValidation(overrides: Partial<Record<string, unknown>> = {}) {

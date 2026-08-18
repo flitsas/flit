@@ -115,6 +115,11 @@ const REASON_COPY: Record<string, string> = {
   // requiere…" a quien eligió "sin prenda" describe una causa que no es la suya.
   prenda_documento_requerido_ot:
     'El organismo de tránsito exige adjuntar el documento de prenda para este trámite',
+  // HU #11591/#11594 — solicitar/registrar CONSTITUYEN gravamen: exigen acreedor (nombre + NIT).
+  // El formulario ya valida esto en cliente antes de guardar; este código es la defensa del
+  // backend si algo se saltó esa validación (condición de carrera, datos legacy).
+  prenda_acreedor_requerido:
+    'La decisión de prenda seleccionada requiere los datos del acreedor (nombre y documento)',
   // R19 (HU #10604/#10605/#10697) — RNMC ya NO bloquea: la medida correctiva es informativa.
   rnmc_medida_pendiente:
     'Medida correctiva RNMC registrada (informativa, no bloquea el envío)',
@@ -148,6 +153,9 @@ const BLOCKER_COPY: Record<string, string> = {
   // CF-06 (HU #10881) — ver la nota del mapa de razones: el origen es el organismo, no la decisión.
   prenda_documento_requerido_ot:
     'El organismo de tránsito exige adjuntar el documento de prenda para este trámite',
+  // HU #11591/#11594 — ver la nota del mapa de razones.
+  prenda_acreedor_requerido:
+    'La decisión de prenda seleccionada requiere los datos del acreedor (nombre y documento)',
   // R19 (HU #10697) — RNMC ya NO bloquea el envío al OT; no hay blocker de medida correctiva.
 };
 

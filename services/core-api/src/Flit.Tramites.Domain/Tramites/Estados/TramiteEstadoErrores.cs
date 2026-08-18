@@ -68,6 +68,14 @@ public static class TramiteEstadoErrores
     public const string PrendaDocumentoRequeridoOt = "prenda_documento_requerido_ot";
 
     /// <summary>
+    /// HU #11591 — la decisión de prenda vigente CONSTITUYE gravamen (<c>solicitar</c>/<c>registrar</c>,
+    /// ver <see cref="Flit.Tramites.Domain.Tramites.ValueObjects.PrendaDecision.ImplicaGravamen"/>) y no
+    /// tiene diligenciado el acreedor (<c>AcreedorNombre</c> y/o <c>AcreedorDocumento</c>): el FUR no
+    /// puede salir con el gravamen sin beneficiario identificado (409).
+    /// </summary>
+    public const string PrendaAcreedorRequerido = "prenda_acreedor_requerido";
+
+    /// <summary>
     /// HU #11051 — el gestor pidió generar o regenerar documentación de un trámite en estado final
     /// (aprobado/anulado), cuya documentación ya es definitiva (409). No aplica a la regeneración
     /// interna del sistema (aprobación del OT, asignación de placa, identidad validada).

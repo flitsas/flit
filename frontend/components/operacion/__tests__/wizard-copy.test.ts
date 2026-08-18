@@ -51,6 +51,17 @@ describe('wizard-copy — gate de prenda (HU #10598)', () => {
   });
 });
 
+// HU #11591/#11594 — acreedor obligatorio cuando la decisión constituye gravamen.
+describe('wizard-copy — gate de acreedor de prenda (HU #11594)', () => {
+  it('traduce prenda_acreedor_requerido como razón de paso', () => {
+    expect(reasonCopy('prenda_acreedor_requerido')).toMatch(/acreedor/i);
+  });
+
+  it('traduce prenda_acreedor_requerido como bloqueo de radicación', () => {
+    expect(blockerCopy('prenda_acreedor_requerido')).toMatch(/acreedor/i);
+  });
+});
+
 describe('wizard-copy — medida correctiva RNMC informativa (HU #10697)', () => {
   it('traduce rnmc_medida_pendiente como razón informativa (no bloqueo)', () => {
     expect(reasonCopy('rnmc_medida_pendiente')).toMatch(/informativa/i);

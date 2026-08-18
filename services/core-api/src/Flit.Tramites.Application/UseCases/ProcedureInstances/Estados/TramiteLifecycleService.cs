@@ -576,8 +576,10 @@ public sealed class TramiteLifecycleService(
     }
 
     /// <summary>
-    /// Gate de prenda: (1) política compañía+OT del certificado — cualquier modalidad;
-    /// (2) R10 decisión con gravámenes en warn — solo traspaso.
+    /// Gate de prenda: (1) política compañía+OT del certificado — cualquier modalidad (CF-06);
+    /// (2) R10 decisión de prenda — traspaso con gravámenes en warn, Y matrícula inicial de forma
+    /// INCONDICIONAL (HU #11592, bloqueo duro que invierte deliberadamente la HU #10596: la prenda de
+    /// matrícula dejó de ser una declaración meramente informativa).
     /// </summary>
     private async Task<(string? Code, string? Detail)> EvaluarPrendaGateAsync(
         ProcedureInstance instance,
@@ -604,20 +606,72 @@ public sealed class TramiteLifecycleService(
                   + "prenda del trámite antes de prepararlo."
                 : "La compañía exige el documento de prenda para este organismo de tránsito.");
 
-        // R10 (HU #10597) — gate del semáforo de gravámenes (decisión de prenda), solo traspaso.
-        var esTraspaso = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada) == TramiteModalidadEntrada.Traspaso;
-        if (!esTraspaso || _prendaRepo is null || !HasGravamenWarn(instance))
+        if (_prendaRepo is null)
             return (null, null);
 
-        return PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, prenda, docTipos) switch
+        var modalidad = TramiteModalidadEntradaCodes.FromCode(instance.ModalidadEntrada);
+
+        // R10 (HU #10597) — gate del semáforo de gravámenes (decisión de prenda), solo traspaso.
+        if (modalidad == TramiteModalidadEntrada.Traspaso && HasGravamenWarn(instance))
         {
-            TramiteEstadoErrores.PrendaDecisionRequerida => (TramiteEstadoErrores.PrendaDecisionRequerida,
-                "El vehículo tiene gravámenes: registra una decisión de prenda antes de preparar el trámite."),
+            return MapPrendaGateResult(
+                PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: true, prenda, docTipos),
+                prenda,
+                documentoExigido,
+                "El vehículo tiene gravámenes: registra una decisión de prenda antes de preparar el trámite.");
+        }
+
+        // R10 aplicado a matrícula inicial (HU #11592) — INCONDICIONAL: a diferencia del traspaso, no
+        // depende de HasGravamenWarn (ese semáforo detecta gravámenes de un vehículo con historial; en
+        // matrícula el vehículo es nuevo y el gravamen, si existe, se CONSTITUYE con el trámite —mismo
+        // razonamiento que ya documenta EvaluateOtOverride para el override del OT). Sin decisión de
+        // prenda vigente, no hay soporte del gravamen: no se puede preparar el trámite.
+        if (modalidad == TramiteModalidadEntrada.MatriculaInicial)
+        {
+            return MapPrendaGateResult(
+                PrendaGate.EvaluateMatriculaInicial(prenda, docTipos),
+                prenda,
+                documentoExigido,
+                "Registra la decisión de prenda antes de preparar el trámite.");
+        }
+
+        return (null, null);
+    }
+
+    /// <summary>
+    /// Traduce el código de <see cref="PrendaGate"/> al par (código, detalle) del gate de preparación,
+    /// compartido entre traspaso y matrícula inicial (HU #11592) para no duplicar el mapeo.
+    /// </summary>
+    private static (string? Code, string? Detail) MapPrendaGateResult(
+        string? prendaGateCode,
+        ProcedureInstancePrenda? prenda,
+        bool documentoExigido,
+        string mensajeDecisionRequerida) => prendaGateCode switch
+        {
+            TramiteEstadoErrores.PrendaDecisionRequerida =>
+                (TramiteEstadoErrores.PrendaDecisionRequerida, mensajeDecisionRequerida),
             TramiteEstadoErrores.PrendaDocumentoRequerido when documentoExigido =>
                 (TramiteEstadoErrores.PrendaDocumentoRequerido,
                     "La decisión de prenda seleccionada requiere adjuntar su documento de soporte."),
+            TramiteEstadoErrores.PrendaAcreedorRequerido =>
+                (TramiteEstadoErrores.PrendaAcreedorRequerido, DescribirAcreedorFaltante(prenda)),
             _ => (null, null),
         };
+
+    /// <summary>
+    /// HU #11591 — arma el mensaje de <see cref="TramiteEstadoErrores.PrendaAcreedorRequerido"/>
+    /// enumerando dinámicamente qué campo(s) del acreedor faltan (nombre, documento o ambos).
+    /// </summary>
+    private static string DescribirAcreedorFaltante(ProcedureInstancePrenda? prenda)
+    {
+        var faltantes = new List<string>();
+        if (string.IsNullOrWhiteSpace(prenda?.AcreedorNombre))
+            faltantes.Add("nombre del acreedor");
+        if (string.IsNullOrWhiteSpace(prenda?.AcreedorDocumento))
+            faltantes.Add("documento del acreedor");
+
+        return "La decisión de prenda constituye un gravamen: falta diligenciar "
+            + string.Join(" y ", faltantes) + ".";
     }
 
     /// <summary>

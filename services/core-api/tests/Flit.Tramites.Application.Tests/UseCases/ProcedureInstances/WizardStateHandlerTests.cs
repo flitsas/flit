@@ -36,6 +36,9 @@ public sealed class WizardStateHandlerTests
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
+    // HU #11593 — contacto obligatorio (ciudad, dirección, teléfono) en los gates de actor: los
+    // fixtures de este archivo representan actores completos por defecto para no acoplar cada test
+    // de otras reglas (documentos, preflight, identidad) a esta exigencia nueva.
     private static ProcedureInstanceActor Actor(string actorType, string doc = "123") =>
         new()
         {
@@ -44,6 +47,8 @@ public sealed class WizardStateHandlerTests
             DocumentNumber = doc,
             FullName = "Persona",
             Email = "p@x.com",
+            Phone = "3001234567",
+            Metadata = ActorMetadataReader.Serialize("Bogotá", "Calle 1 # 2-3", null),
         };
 
     private static ProcedureInstancePreflightSnapshot Preflight(string overall, string checks = "[]") =>
@@ -1024,6 +1029,8 @@ public sealed class WizardStateHandlerTests
             DocumentNumber = nit,
             FullName = "Renting SAS",
             Email = "renting@x.com",
+            Phone = "3001234567",
+            Metadata = ActorMetadataReader.Serialize("Bogotá", "Calle 1 # 2-3", null),
         };
 
     private static SignatureVaultMatch VaultMatch() => new(

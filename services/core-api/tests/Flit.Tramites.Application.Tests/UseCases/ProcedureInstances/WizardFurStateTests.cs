@@ -94,6 +94,9 @@ public sealed class WizardFurStateTests
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(instance);
 
+    // HU #11593 — contacto obligatorio (ciudad, dirección, teléfono) en los gates de actor: estos
+    // fixtures representan actores completos por defecto para no acoplar los tests de FUR (que
+    // ejercitan otra regla) a esta exigencia nueva.
     private static ProcedureInstanceActor Comprador(string doc = "777") =>
         new()
         {
@@ -103,6 +106,8 @@ public sealed class WizardFurStateTests
             DocumentNumber = doc,
             FullName = "Maria",
             Email = "maria@x.com",
+            Phone = "3001234567",
+            Metadata = ActorMetadataReader.Serialize("Bogotá", "Calle 1 # 2-3", null),
             CreatedAt = DateTimeOffset.UtcNow,
         };
 
@@ -115,6 +120,8 @@ public sealed class WizardFurStateTests
             DocumentNumber = doc,
             FullName = "Juan",
             Email = "juan@x.com",
+            Phone = "3007654321",
+            Metadata = ActorMetadataReader.Serialize("Medellín", "Carrera 4 # 5-6", null),
             CreatedAt = DateTimeOffset.UtcNow,
         };
 

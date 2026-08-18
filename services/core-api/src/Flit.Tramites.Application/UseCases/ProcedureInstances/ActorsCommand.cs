@@ -563,12 +563,19 @@ public sealed class PutActorsHandler(
     {
         var input = inputs.FirstOrDefault(a => ParseRol(a.Rol) == rol);
         if (input is not null)
-            return new ParteDatos(input.NombreCompleto, input.NumeroDocumento, input.Email);
+            return new ParteDatos(
+                input.NombreCompleto, input.NumeroDocumento, input.Email,
+                input.Ciudad, input.Direccion, input.Telefono);
 
         var existing = instance.Actors.FirstOrDefault(a => ParseRol(a.ActorType) == rol);
-        return existing is null
-            ? null
-            : new ParteDatos(existing.FullName, existing.DocumentNumber, existing.Email ?? string.Empty);
+        if (existing is null)
+            return null;
+
+        // HU #11593 — ciudad/dirección viven en actor.metadata (JSON); el teléfono en la columna.
+        var (ciudad, direccion, _, _) = ActorMetadataReader.Parse(existing.Metadata);
+        return new ParteDatos(
+            existing.FullName, existing.DocumentNumber, existing.Email ?? string.Empty,
+            ciudad, direccion, existing.Phone);
     }
 
     private static TipologiaJourney? ResolveJourney(ProcedureInstance instance)
