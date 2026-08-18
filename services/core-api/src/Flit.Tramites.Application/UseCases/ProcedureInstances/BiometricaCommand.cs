@@ -62,7 +62,12 @@ public sealed record BiometricValidationsResponse(
     // HU #11014 (ADR-0025 §4) — partes cuya identidad queda cubierta por la FIRMA DEL BAÚL en vez de por
     // una validación biométrica (misma regla que el outcome `firma_baul` de EnsureIdentity, HU #10646).
     // La UI las rotula como "firmado desde el baúl" y no ofrece el certificado de identidad, que no existe.
-    IReadOnlyList<string>? FirmaBaulPartes = null);
+    IReadOnlyList<string>? FirmaBaulPartes = null,
+    // Bug #11615 — intentos de una parte que YA tiene identidad aprobada y vigente (propia o
+    // referenciada de otro trámite): rechazados, expirados o en vuelo. Salen de `validations` para no
+    // suplantar al estado vigente según la posición en que quedaran, pero siguen viajando aquí para
+    // que el histórico esté disponible sin volver a consultar. Null cuando no hay ninguno.
+    IReadOnlyList<BiometricValidationDto>? SupersededValidations = null);
 
 // NOTA: estos DOS contratos quedan en ESPAÑOL a propósito (request de iniciar + vista pública de
 // captura). El renombrado a inglés (HU10350) cubre SOLO la tabla y sus respuestas (grilla/wizard/stuck);
@@ -350,6 +355,14 @@ public sealed class ListBiometriaHandler(
                          == TramiteModalidadEntrada.Traspaso;
         var partes = esTraspaso ? new[] { "comprador", "vendedor" } : new[] { "comprador" };
         var firmaBaulPartes = new List<string>(partes.Length);
+        // Bug #11615 — identidad que PREVALECE por parte (aprobada + vigente, propia o referenciada) y
+        // resto de entradas aprobadas+vigentes de esa parte. Con esto el listado deja de depender de en
+        // qué posición cayó cada intento. Ver BiometricListPrevalence.
+        var prevalecientePorParte = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var vigentesPorParte = new Dictionary<string, IReadOnlySet<Guid>>(StringComparer.OrdinalIgnoreCase);
+        // Documento del sujeto de identidad de cada parte: sin él, el emparejamiento de las filas SIN
+        // ROL (matrícula) le atribuiría a la parte intentos de otra persona y los sacaría de la vista.
+        var documentoPorParte = new Dictionary<string, ParteDocumento>(StringComparer.OrdinalIgnoreCase);
         foreach (var parte in partes)
         {
             var actor = instance.Actors.FirstOrDefault(a =>
@@ -361,6 +374,8 @@ public sealed class ListBiometriaHandler(
             var subject = IdentitySubjectResolver.For(actor);
             if (string.IsNullOrWhiteSpace(subject.TipoDocumento) || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
                 continue;
+
+            documentoPorParte[parte] = new ParteDocumento(subject.TipoDocumento, subject.NumeroDocumento);
 
             // HU #11014 — cobertura por FIRMA DEL BAÚL: la identidad del sujeto queda satisfecha por su
             // firma vigente y NO hay validación biométrica ni certificado que mostrar.
@@ -380,20 +395,93 @@ public sealed class ListBiometriaHandler(
                     firmaBaulPartes.Add(parte);
             }
 
-            var yaLocal = instance.BiometricValidations.Any(v =>
-                string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-                && BiometricRules.EsAprobadaVigente(v, now)
-                && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, subject.NumeroDocumento));
-            if (yaLocal)
+            // Filas PROPIAS de la parte que ya están aprobadas y vigentes para el documento del sujeto:
+            // son las únicas que pueden representar el estado de la parte sin referenciar otro trámite.
+            var vigentesLocales = instance.BiometricValidations
+                .Where(v => string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+                            && BiometricRules.EsAprobadaVigente(v, now)
+                            && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, subject.NumeroDocumento))
+                .ToList();
+            if (vigentesLocales.Count > 0)
+            {
+                vigentesPorParte[parte] = vigentesLocales.Select(v => v.Id).ToHashSet();
+                // La más reciente manda: si hubo varias aprobaciones vigentes, la última aprobación es la
+                // que el gestor considera actual.
+                prevalecientePorParte[parte] = vigentesLocales
+                    .OrderByDescending(v => v.ValidatedAt ?? v.CreatedAt)
+                    .First().Id;
                 continue;
+            }
 
             var source = await repo.FindVigenteApprovedByDocumentAsync(
                 instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), now, ct);
-            if (source is not null)
+            if (source is null)
+                continue;
+
+            // La identidad referenciada solo se agrega si no está ya en el listado: la consulta busca por
+            // documento en TODO el tenant y puede devolver una fila de este mismo trámite (p.ej. rotulada
+            // con otro rol o sin rol).
+            //
+            // Cuando ya está, NO basta con marcarla como prevaleciente: los consumidores emparejan POR
+            // ROL, así que una fila de este trámite rotulada con el otro rol subía a la primera posición
+            // pero seguía sin representar a esta parte, y la parte se veía sin identidad vigente. Se
+            // re-rotula con la parte actual (mismo criterio que la fila que se agrega desde otro
+            // trámite), salvo que la etiqueta que trae sea LEGÍTIMA: si la otra parte del traspaso tiene
+            // ese mismo documento, la fila es suya y robársela dejaría a esa otra parte sin identidad.
+            var indiceExistente = dtos.FindIndex(d => d.Id == source.Id);
+            if (indiceExistente < 0)
+            {
                 dtos.Add(IniciarBiometriaHandler.ToDto(source, now) with { PartyRole = parte });
+            }
+            else if (!string.Equals(dtos[indiceExistente].PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+                     && !EsDeOtraParte(dtos[indiceExistente], parte, instance, partes))
+            {
+                dtos[indiceExistente] = dtos[indiceExistente] with { PartyRole = parte };
+            }
+
+            prevalecientePorParte[parte] = source.Id;
+            vigentesPorParte[parte] = new HashSet<Guid> { source.Id };
         }
 
-        return (new BiometricValidationsResponse(dtos, providerOptions.Provider, firmaBaulPartes), null);
+        // Bug #11615 — la entrada aprobada y vigente de cada parte prevalece sobre sus intentos
+        // rechazados / expirados / en vuelo, que pasan a `supersededValidations`.
+        var (validations, superseded) = BiometricListPrevalence.Apply(
+            dtos, prevalecientePorParte, vigentesPorParte, documentoPorParte, esTraspaso);
+
+        return (new BiometricValidationsResponse(
+            validations,
+            providerOptions.Provider,
+            firmaBaulPartes,
+            superseded.Count > 0 ? superseded : null), null);
+    }
+
+    /// <summary>
+    /// ¿La etiqueta de rol que ya trae la entrada pertenece legítimamente a OTRA parte del trámite? Lo
+    /// es cuando el sujeto de identidad de esa otra parte tiene el mismo documento que la entrada (dos
+    /// partes con el mismo documento). En ese caso la fila no se re-rotula: hacerlo dejaría sin
+    /// identidad vigente a la parte que sí la tenía.
+    /// </summary>
+    private static bool EsDeOtraParte(
+        BiometricValidationDto dto, string parte, ProcedureInstance instance, IReadOnlyList<string> partes)
+    {
+        if (dto.PartyRole is null)
+            return false;
+
+        var otra = partes.FirstOrDefault(p =>
+            !string.Equals(p, parte, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(p, dto.PartyRole, StringComparison.OrdinalIgnoreCase));
+        if (otra is null)
+            return false;
+
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, otra, StringComparison.OrdinalIgnoreCase));
+        if (actor is null)
+            return false;
+
+        var subject = IdentitySubjectResolver.For(actor);
+        return !string.IsNullOrWhiteSpace(subject.NumeroDocumento)
+            && !string.IsNullOrWhiteSpace(dto.DocumentNumber)
+            && string.Equals(subject.NumeroDocumento.Trim(), dto.DocumentNumber.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 }
 
