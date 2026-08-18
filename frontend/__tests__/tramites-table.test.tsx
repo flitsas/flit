@@ -301,6 +301,58 @@ describe('TramitesTable — HU #10536 prioridad', () => {
     ).toBeInTheDocument();
   });
 
+  it('al marcar prioritario la fila sube a la primera posición sin recargar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'x1', referenceNumber: 'TR-X1', placa: 'AAA111', prioritario: false },
+      { ...base, id: 'x2', referenceNumber: 'TR-X2', placa: 'BBB222', prioritario: false },
+    ]);
+    mocks.setPriority.mockResolvedValue({ id: 'x2', prioritario: true });
+    render(<TramitesTable />);
+
+    await screen.findByText('AAA111');
+    const filas = () =>
+      within(screen.getByRole('table', { name: 'Trámites en curso' }))
+        .getAllByRole('row')
+        .slice(1);
+    expect(filas()[0].textContent).toContain('AAA111');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Marcar como prioritario el trámite TR-X2' }),
+    );
+
+    // Sin refetch ni recarga: el listado se reordena con el MISMO criterio del backend
+    // (prioritarios primero), así que la fila marcada pasa a encabezar la tabla.
+    expect(mocks.listInstances).toHaveBeenCalledTimes(1);
+    expect(filas()[0].textContent).toContain('BBB222');
+    expect(filas()[1].textContent).toContain('AAA111');
+  });
+
+  it('al marcar prioritario la fila sube a la primera posición sin recargar', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'x1', referenceNumber: 'TR-X1', placa: 'AAA111', prioritario: false },
+      { ...base, id: 'x2', referenceNumber: 'TR-X2', placa: 'BBB222', prioritario: false },
+    ]);
+    mocks.setPriority.mockResolvedValue({ id: 'x2', prioritario: true });
+    render(<TramitesTable />);
+
+    await screen.findByText('AAA111');
+    const filas = () =>
+      within(screen.getByRole('table', { name: 'Trámites en curso' }))
+        .getAllByRole('row')
+        .slice(1);
+    expect(filas()[0].textContent).toContain('AAA111');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Marcar como prioritario el trámite TR-X2' }),
+    );
+
+    // Sin refetch ni recarga: el listado se reordena con el MISMO criterio del backend
+    // (prioritarios primero), así que la fila marcada pasa a encabezar la tabla.
+    expect(mocks.listInstances).toHaveBeenCalledTimes(1);
+    expect(filas()[0].textContent).toContain('BBB222');
+    expect(filas()[1].textContent).toContain('AAA111');
+  });
+
   it('el filtro "Prioritarios" muestra solo los trámites prioritarios', async () => {
     mocks.listInstances.mockResolvedValue([
       { ...base, id: 'a', placa: 'PRIO01', prioritario: true },
