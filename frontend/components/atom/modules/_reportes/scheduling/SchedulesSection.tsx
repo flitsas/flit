@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarPlus, Pencil, Trash2 } from "lucide-react";
 import { CreateButton } from "@/components/atom/CreateButton";
-import { CompanyNotice } from "../CompanyNotice";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   createReportSchedule,
@@ -28,8 +27,10 @@ import { ScheduleForm, type SchedulePresetConsulta } from "./ScheduleForm";
 
 interface SchedulesSectionProps {
   tenantId?: string;
-  /** SuperAdmin sin compañía elegida en el filtro superior (y sin un preset de alcance
-   * "superadmin" que la haga innecesaria): en vez de llamar a la API, se muestra un aviso. */
+  /** SuperAdmin sin compañía elegida en el filtro superior ("Todas las compañías"): en vez de
+   * bloquear la vista, se listan por defecto los informes de consulta cross-compañía (alcance
+   * "superadmin") — son los únicos que no necesitan una compañía concreta. Elegir una compañía
+   * en el filtro vuelve a mostrar los informes de esa compañía. */
   needsCompany?: boolean;
   /** "Programar este informe": abre el formulario de creación ya prellenado con esto. */
   presetConsulta?: SchedulePresetConsulta | null;
@@ -70,7 +71,12 @@ export function SchedulesSection({
   // propia prop (línea de abajo) para que el primer render — antes de que el efecto corra — ya
   // tenga el alcance correcto y no dispare un primer fetch al endpoint equivocado.
   const [scopeLocked, setScopeLocked] = useState(false);
-  const superAdminMode = scopeLocked || presetConsulta?.savedQueryScope === "superadmin";
+  // Sin compañía elegida (`needsCompany`) y sin preset activo: se listan los informes de consulta
+  // cross-compañía por defecto — de otro modo, los que se crearon con "Programar este informe"
+  // desde una consulta de SuperAdmin quedaban invisibles para editar/eliminar (no hay ninguna
+  // compañía "dueña" de ellos, así que exigir una para verlos los deja huérfanos en la UI).
+  const superAdminMode =
+    scopeLocked || presetConsulta?.savedQueryScope === "superadmin" || needsCompany;
 
   // "Programar este informe": el preset abre el formulario de creación solo (nunca reemplaza una
   // edición en curso) y se consume enseguida — sin esto, reabrir el panel en la misma sesión
@@ -85,12 +91,7 @@ export function SchedulesSection({
     onConsumePreset?.();
   }, [presetConsulta, onConsumePreset]);
 
-  // SuperAdmin sin compañía elegida: el alcance "superadmin" (consultas cross-compañía) no la
-  // necesita, así que solo bloquea el fetch cuando de verdad no hay tenant que consultar.
-  const blockedByCompany = needsCompany && !superAdminMode;
-
   const load = useCallback(async () => {
-    if (blockedByCompany) return;
     setStatus("loading");
     try {
       const data = superAdminMode
@@ -101,7 +102,7 @@ export function SchedulesSection({
     } catch {
       setStatus("error");
     }
-  }, [tenantId, superAdminMode, blockedByCompany]);
+  }, [tenantId, superAdminMode]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await
@@ -158,7 +159,7 @@ export function SchedulesSection({
         </p>
         {/* En alcance SuperAdmin no hay "informe en blanco": todo informe aquí es de tipo
             "consulta" y se crea desde "Programar este informe" en una consulta guardada. */}
-        {!formOpen && !superAdminMode && !blockedByCompany && (
+        {!formOpen && !superAdminMode && (
           <CreateButton size="sm" label="Nuevo informe" icon={CalendarPlus} onClick={() => setCreating(true)} />
         )}
       </div>
@@ -177,11 +178,7 @@ export function SchedulesSection({
         <ScheduleForm initial={editing} onSubmit={handleUpdate} onCancel={() => setEditing(null)} />
       )}
 
-      {!formOpen && blockedByCompany && (
-        <CompanyNotice message="Como SuperAdmin debes elegir una compañía en el filtro superior para ver o crear sus informes programados." />
-      )}
-
-      {!formOpen && !blockedByCompany && (
+      {!formOpen && (
         <UiStateBoundary
           status={status}
           emptyMessage={
