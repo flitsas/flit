@@ -352,12 +352,16 @@ jobs:
       # No pasar HOSTINGER_SSH_KEY (PEM multilínea) dentro del YAML anidado de
       # wretry.action `with: |`: rompe el parseo ("multiline key may not be an
       # implicit key" en `port:`). Escribir a archivo y usar key_path.
+      #
+      # appleboy/scp-action es Docker action: solo monta GITHUB_WORKSPACE (como
+      # /github/workspace). RUNNER_TEMP no está montado → key_path ahí falla con
+      # exit 1. Escribir bajo el workspace y pasar la ruta *dentro* del contenedor.
       - name: Prepare SSH deploy key
         run: |
-          KEY_FILE="${RUNNER_TEMP}/hostinger_deploy_key"
+          mkdir -p "${GITHUB_WORKSPACE}/.ci"
+          KEY_FILE="${GITHUB_WORKSPACE}/.ci/hostinger_deploy_key"
           printf '%s\n' "$HOSTINGER_SSH_KEY" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
-          echo "SSH_KEY_PATH=$KEY_FILE" >> "$GITHUB_ENV"
         env:
           HOSTINGER_SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
 
@@ -370,12 +374,16 @@ jobs:
           with: |
             host: ${{ secrets.HOSTINGER_SSH_HOST }}
             username: ${{ secrets.HOSTINGER_SSH_USER }}
-            key_path: ${{ env.SSH_KEY_PATH }}
+            key_path: /github/workspace/.ci/hostinger_deploy_key
             port: 22
             timeout: 120s
             source: docker-compose.prod.yml
             target: ${{ secrets.HOSTINGER_DEPLOY_PATH }}/
             overwrite: true
+
+      - name: Remove SSH deploy key from workspace
+        if: always()
+        run: rm -f "${GITHUB_WORKSPACE}/.ci/hostinger_deploy_key"
 
       # Pausa breve para no encadenar el SSH de deploy dentro de la ventana UFW.
       - name: Wait before SSH deploy (UFW rate limit)

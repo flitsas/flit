@@ -40,6 +40,8 @@ infra/secrets/
 *.pfx
 *.crt
 *.cer
+# Clave SSH temporal del CD (scp-action Docker monta solo el workspace)
+.ci/
 
 # .NET appsettings con secretos reales (solo Development y *.example deben commitearse)
 **/appsettings.Production.json
