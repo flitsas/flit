@@ -15,7 +15,14 @@ import {
   updateSuperAdminReportSchedule,
   type ReportSchedule,
   type ReportScheduleInput,
+  type ReportType,
 } from "@/lib/api/analytics-scheduling";
+import {
+  createOtReportSchedule,
+  deleteOtReportSchedule,
+  fetchOtReportSchedules,
+  updateOtReportSchedule,
+} from "@/lib/api/ot-scheduling";
 import {
   DAY_OF_WEEK_LABELS,
   FORMAT_LABELS,
@@ -36,7 +43,13 @@ interface SchedulesSectionProps {
   presetConsulta?: SchedulePresetConsulta | null;
   /** Se llama una vez el preset ya abrió el formulario. */
   onConsumePreset?: () => void;
+  /** Alcance Organismo de Tránsito (Reportes 2.0, HU-D, tercera ola): cuando se indica, la
+   * sección gestiona los informes propios de ESE organismo (endpoint /admin/ot/report-schedules)
+   * en vez de los de una compañía — mutuamente excluyente con `tenantId`/`needsCompany`. */
+  otTransitOfficeId?: string;
 }
+
+const OT_REPORT_TYPES: ReportType[] = ["ot_operativo"];
 
 function describeWhen(s: ReportSchedule): string {
   const hour = `${String(s.sendHour).padStart(2, "0")}:00`;
@@ -52,7 +65,7 @@ function describeWhen(s: ReportSchedule): string {
  * eliminación con confirmación. Estados loading/vacío/error con UiStateBoundary.
  */
 export function SchedulesSection({
-  tenantId, needsCompany = false, presetConsulta = null, onConsumePreset,
+  tenantId, needsCompany = false, presetConsulta = null, onConsumePreset, otTransitOfficeId,
 }: SchedulesSectionProps) {
   const [items, setItems] = useState<ReportSchedule[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -94,15 +107,17 @@ export function SchedulesSection({
   const load = useCallback(async () => {
     setStatus("loading");
     try {
-      const data = superAdminMode
-        ? await fetchSuperAdminReportSchedules()
-        : await fetchReportSchedules(tenantId);
+      const data = otTransitOfficeId
+        ? await fetchOtReportSchedules(otTransitOfficeId)
+        : superAdminMode
+          ? await fetchSuperAdminReportSchedules()
+          : await fetchReportSchedules(tenantId);
       setItems(data.items);
       setStatus(data.items.length === 0 ? "empty" : "ready");
     } catch {
       setStatus("error");
     }
-  }, [tenantId, superAdminMode]);
+  }, [tenantId, superAdminMode, otTransitOfficeId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await
@@ -110,7 +125,9 @@ export function SchedulesSection({
   }, [load]);
 
   async function handleCreate(input: ReportScheduleInput) {
-    if (superAdminMode) {
+    if (otTransitOfficeId) {
+      await createOtReportSchedule(input, otTransitOfficeId);
+    } else if (superAdminMode) {
       await createSuperAdminReportSchedule(input);
     } else {
       await createReportSchedule(input, tenantId);
@@ -122,7 +139,9 @@ export function SchedulesSection({
 
   async function handleUpdate(input: ReportScheduleInput) {
     if (!editing) return;
-    if (superAdminMode) {
+    if (otTransitOfficeId) {
+      await updateOtReportSchedule(editing.id, input, otTransitOfficeId);
+    } else if (superAdminMode) {
       await updateSuperAdminReportSchedule(editing.id, input);
     } else {
       await updateReportSchedule(editing.id, input, tenantId);
@@ -135,7 +154,9 @@ export function SchedulesSection({
     if (!confirmDelete) return;
     setActionError(null);
     try {
-      if (superAdminMode) {
+      if (otTransitOfficeId) {
+        await deleteOtReportSchedule(confirmDelete.id, otTransitOfficeId);
+      } else if (superAdminMode) {
         await deleteSuperAdminReportSchedule(confirmDelete.id);
       } else {
         await deleteReportSchedule(confirmDelete.id, tenantId);
@@ -153,7 +174,9 @@ export function SchedulesSection({
     <section data-testid="schedules-section" className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          {superAdminMode
+          {otTransitOfficeId
+            ? "Recibe por correo un resumen del panel de tu organismo, en la hora que elijas."
+            : superAdminMode
             // Se repite aquí (no solo en emptyMessage de abajo) porque esa guía desaparece en
             // cuanto hay al menos un informe listado — sin esto, con la lista llena no quedaba
             // ninguna pista de cómo programar uno más. También explica por qué el botón «Nuevo
@@ -172,6 +195,7 @@ export function SchedulesSection({
       {creating && (
         <ScheduleForm
           presetConsulta={activePreset ?? undefined}
+          allowedReportTypes={otTransitOfficeId ? OT_REPORT_TYPES : undefined}
           onSubmit={handleCreate}
           onCancel={() => {
             setCreating(false);
@@ -180,16 +204,23 @@ export function SchedulesSection({
         />
       )}
       {editing && (
-        <ScheduleForm initial={editing} onSubmit={handleUpdate} onCancel={() => setEditing(null)} />
+        <ScheduleForm
+          initial={editing}
+          allowedReportTypes={otTransitOfficeId ? OT_REPORT_TYPES : undefined}
+          onSubmit={handleUpdate}
+          onCancel={() => setEditing(null)}
+        />
       )}
 
       {!formOpen && (
         <UiStateBoundary
           status={status}
           emptyMessage={
-            superAdminMode
-              ? "Aún no hay informes de consultas guardadas. Ve a «Consultas personalizadas» y haz clic en el ícono de calendario junto a la consulta que quieras programar."
-              : "Aún no hay informes programados. Crea el primero con «Nuevo informe»."
+            otTransitOfficeId
+              ? "Aún no hay informes programados. Crea el primero con «Nuevo informe»."
+              : superAdminMode
+                ? "Aún no hay informes de consultas guardadas. Ve a «Consultas personalizadas» y haz clic en el ícono de calendario junto a la consulta que quieras programar."
+                : "Aún no hay informes programados. Crea el primero con «Nuevo informe»."
           }
           errorMessage="No se pudieron cargar los informes programados."
           onRetry={() => void load()}

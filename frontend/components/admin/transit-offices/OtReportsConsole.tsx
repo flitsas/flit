@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { CalendarClock } from "lucide-react";
 import {
   fetchOtClientCompanies,
   fetchOtReviewerOptions,
   type OtClientCompanyOption,
   type OtReviewerOption,
 } from "@/lib/api/ot-metrics";
+import { SchedulingPanel } from "@/components/atom/modules/_reportes/scheduling/SchedulingPanel";
 import { OtAnalysisTab } from "./_reportes/OtAnalysisTab";
 import { OtNowTab } from "./_reportes/OtNowTab";
 import { OtQueriesTab } from "./_reportes/OtQueriesTab";
@@ -98,6 +100,7 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
   const [tab, setTab] = useState<TabId>(initialTab);
   const [companies, setCompanies] = useState<OtClientCompanyOption[]>([]);
   const [reviewers, setReviewers] = useState<OtReviewerOption[]>([]);
+  const [schedulingOpen, setSchedulingOpen] = useState(false);
 
   // Los dos catálogos se resuelven UNA vez por organismo y se reparten a las pestañas: ninguno
   // cambia con el rango ni con la modalidad, y recargarlos en cada pestaña solo sumaría llamadas.
@@ -127,31 +130,38 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
 
   return (
     <div className="flex flex-col gap-6" data-testid="ot-reports-console">
-      <div
-        role="tablist"
-        aria-label="Reportes del organismo"
-        className="flex flex-wrap gap-1 border-b border-[#DFE5ED] dark:border-white/10"
-      >
-        {TABS.map((item) => {
-          const active = tab === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              title={item.hint}
-              onClick={() => selectTab(item.id)}
-              className={`-mb-px border-b-2 px-4 py-2 text-xs font-semibold transition ${
-                active
-                  ? "border-[#557EFF] text-[#557EFF]"
-                  : "border-transparent text-[#6B7280] hover:text-[#162744] dark:text-white/50 dark:hover:text-white"
-              }`}
-            >
-              {item.label}
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#DFE5ED] dark:border-white/10">
+        <div role="tablist" aria-label="Reportes del organismo" className="flex flex-wrap gap-1">
+          {TABS.map((item) => {
+            const active = tab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                title={item.hint}
+                onClick={() => selectTab(item.id)}
+                className={`-mb-px border-b-2 px-4 py-2 text-xs font-semibold transition ${
+                  active
+                    ? "border-[#557EFF] text-[#557EFF]"
+                    : "border-transparent text-[#6B7280] hover:text-[#162744] dark:text-white/50 dark:hover:text-white"
+                }`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={() => setSchedulingOpen(true)}
+          className="mb-2 inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-[#F4F7FC] dark:hover:bg-white/5"
+          data-testid="ot-reportes-abrir-programacion"
+        >
+          <CalendarClock className="h-4 w-4" aria-hidden="true" />
+          Programación y alertas
+        </button>
       </div>
 
       {/* Cada pestaña se monta y desmonta: son consultas distintas y mantenerlas vivas en segundo
@@ -173,6 +183,12 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
         />
       )}
       {tab === "consultas" && <OtQueriesTab transitOfficeId={transitOfficeId} />}
+
+      <SchedulingPanel
+        open={schedulingOpen}
+        onClose={() => setSchedulingOpen(false)}
+        otTransitOfficeId={transitOfficeId}
+      />
     </div>
   );
 }

@@ -16,6 +16,9 @@ export const REPORT_TYPE_LABELS: Record<ReportType, string> = {
   // Solo se crea desde "Programar este informe" en una consulta guardada — no aparece en el
   // selector de "Nuevo informe programado" (ver ScheduleForm), pero sí en el listado.
   consulta: "Consulta personalizada",
+  // Alcance Organismo de Tránsito (Reportes 2.0, HU-D, tercera ola): único tipo que se ofrece
+  // en el panel de "Programación y alertas" del propio organismo (ver SchedulesSection).
+  ot_operativo: "Mi organismo de tránsito",
 };
 
 export const FREQUENCY_LABELS: Record<ScheduleFrequency, string> = {
@@ -48,6 +51,8 @@ export const METRIC_LABELS: Record<AlertMetric, string> = {
   ict_novelty_rate_pct: "ICT · Tasa de novedades (%)",
   ict_webhook_delivery_failures: "ICT · Fallos de entrega de webhook",
   ict_jobs_out_of_sla: "ICT · Jobs fuera de SLA",
+  ot_rejection_rate_pct: "Tasa de rechazo del organismo (%)",
+  ot_stuck_count: "Trámites atascados en el organismo",
 };
 
 export const METRIC_DESCRIPTIONS: Record<AlertMetric, string> = {
@@ -67,6 +72,10 @@ export const METRIC_DESCRIPTIONS: Record<AlertMetric, string> = {
     "Webhooks ICT entregados con respuesta no satisfactoria dentro de la ventana.",
   ict_jobs_out_of_sla:
     "Corridas de los jobs ICT que incumplieron su SLA (error o duración excedida) en la ventana.",
+  ot_rejection_rate_pct:
+    "Porcentaje de trámites rechazados sobre los decididos por el organismo dentro de la ventana.",
+  ot_stuck_count:
+    "Trámites pendientes de revisión en el organismo hace más de 7 días.",
 };
 
 export const OPERATOR_LABELS: Record<AlertOperator, string> = {
