@@ -328,6 +328,44 @@ public sealed class OtClientProcedureHandlerTests
         observation.FieldSnapshot!["vin"].Should().Be("1HGCM82633A004352");
     }
 
+    [Fact] // Bug #11584 — el detalle del trámite del OT no muestra el año del modelo del vehículo.
+    public async Task Bug11584_GetById_ProyectaModeloDesdeVehicleYear()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedCatalog(seed, ClientTenant, ProcedureTypeA, "Flota Andina S.A.S.", "Matrícula inicial");
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+            // VerifikResultMapper.MapHydratedFields persiste el año bajo "vehicle_year"
+            // (services/core-api/src/Flit.Tramites.Application/UseCases/Consultations/VerifikResultMapper.cs:182).
+            // "vehicle_model" nunca se escribe en runtime.
+            seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(),
+                ProcedureInstanceId = procedureId,
+                TenantId = ClientTenant,
+                FieldKey = "vehicle_year",
+                ValueText = "2026",
+            });
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var handler = new GetOtClientProcedureHandler(new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher()));
+        var result = await handler.HandleAsync(new GetOtClientProcedureQuery
+        {
+            OtTenantId = OtTenant,
+            ProcedureInstanceId = procedureId,
+        }, TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(GetOtClientProcedureStatus.Found);
+        result.Procedure!.Modelo.Should().Be("2026");
+    }
+
     [Fact]
     public async Task AC4_GetById_ReturnsNotFoundForUnlinkedClient()
     {

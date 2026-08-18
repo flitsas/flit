@@ -333,24 +333,18 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
         // Filtro grueso en SQL por timestamp (validado_at >= corte), con un día de margen para no
         // descartar candidatos cerca del límite; el corte fino por DÍA calendario se aplica en memoria
         // con BiometricRules.EsAprobadaVigente (semántica "día de aprobación = día 1; vence el día 31").
-        // Filtro grueso en SQL. `valid_until` es la fuente de verdad del vencimiento (editable en BD); cuando
-        // está, se filtra por él (> now). Si falta (registros viejos), se cae al corte por validated_at con un
-        // día de margen. El corte fino lo aplica BiometricRules.EsAprobadaVigente (misma prioridad valid_until).
-        var cutoff = now.AddDays(-(BiometricRules.VigenciaDias + 1));
+        // Documento, ventana de vigencia y prevalidaciones standalone (HU #10867) son la MISMA cláusula
+        // que RepresentativeIdentityLookup, compuesta desde BiometricDocumentMatchQuery (Bug #11583).
         var candidates = await db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Where(v => v.TenantId == tenantId
                 && v.Status == BiometricEstados.Aprobado
-                && v.DocumentType == tipoDoc
-                && v.DocumentNumber == documento
                 // Migración V1→V2: una identidad traída de V1 vale SOLO para su trámite (ver
                 // BiometricProviders.MigracionV1). Sin esta exclusión apalancaría trámites nativos de V2.
-                && v.Provider != BiometricProviders.MigracionV1
-                && ((v.ValidUntil != null && v.ValidUntil > now)
-                    || (v.ValidUntil == null && v.ValidatedAt != null && v.ValidatedAt >= cutoff))
-                // HU #10867 — incluir prevalidaciones standalone (sin trámite) y las ligadas a instancias no eliminadas.
-                && (v.ProcedureInstanceId == null
-                    || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)))
+                && v.Provider != BiometricProviders.MigracionV1)
+            .WhereDocumentoVigenteCandidato(tipoDoc, documento)
+            .WhereVentanaVigencia(now)
+            .WhereInstanciaVigente()
             .OrderByDescending(v => v.ValidatedAt)
             .Take(10)
             .ToListAsync(ct);
@@ -361,18 +355,17 @@ internal sealed class ProcedureInstanceRepository(FlitDbContext db) : IProcedure
     public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListInFlightByDocumentAsync(
         Guid tenantId, string tipoDoc, string documento, CancellationToken ct = default)
     {
-        // HU #11265 — candidatos en vuelo para la precedencia de envío. Igualdad exacta (misma semántica
-        // que FindVigenteApprovedByDocumentAsync) para no cambiar veredictos del gate (AC5).
+        // HU #11265 — candidatos en vuelo para la precedencia de envío. Misma semántica de documento que
+        // FindVigenteApprovedByDocumentAsync (Bug #11583: normalizado vía BiometricDocumentMatchQuery) para
+        // no volver a divergir con el gate (AC5).
         return await db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Where(v => v.TenantId == tenantId
-                && v.DocumentType == tipoDoc
-                && v.DocumentNumber == documento
                 && (v.Status == BiometricEstados.PendienteEnvio
                     || v.Status == BiometricEstados.Enviado
-                    || v.Status == BiometricEstados.EnProceso)
-                && (v.ProcedureInstanceId == null
-                    || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)))
+                    || v.Status == BiometricEstados.EnProceso))
+            .WhereDocumentoVigenteCandidato(tipoDoc, documento)
+            .WhereInstanciaVigente()
             .OrderByDescending(v => v.UpdatedAt ?? v.CreatedAt)
             .Take(20)
             .ToListAsync(ct);

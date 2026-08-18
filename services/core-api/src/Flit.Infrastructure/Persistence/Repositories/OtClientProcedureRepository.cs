@@ -771,8 +771,15 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                             .Where(f => f.ProcedureInstanceId == p.Id && f.FieldKey == "vehicle_line")
                             .Select(f => f.ValueText)
                             .FirstOrDefault(),
+                        // Bug #11584 — VerifikResultMapper persiste el año bajo "vehicle_year"
+                        // (Flit.Tramites.Application/UseCases/Consultations/VerifikResultMapper.cs:182);
+                        // "vehicle_model" nunca se escribe en runtime, solo existe como alias legado
+                        // documentado en las herramientas de migración (TransferFieldMap/RegistrationFieldMap).
+                        // Se conserva como fallback por si hay datos históricos migrados con esa llave.
                         Modelo = _context.ProcedureInstanceFieldValues
-                            .Where(f => f.ProcedureInstanceId == p.Id && f.FieldKey == "vehicle_model")
+                            .Where(f => f.ProcedureInstanceId == p.Id
+                                && (f.FieldKey == "vehicle_year" || f.FieldKey == "vehicle_model"))
+                            .OrderBy(f => f.FieldKey == "vehicle_year" ? 0 : 1)
                             .Select(f => f.ValueText)
                             .FirstOrDefault(),
                         Color = _context.ProcedureInstanceFieldValues
