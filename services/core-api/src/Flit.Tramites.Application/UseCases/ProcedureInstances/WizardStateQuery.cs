@@ -931,7 +931,12 @@ public sealed class GetWizardStateHandler(
     {
         var a = instance.Actors.FirstOrDefault(x =>
             string.Equals(x.ActorType, actorType, StringComparison.OrdinalIgnoreCase));
-        return a is null ? null : new ParteDatos(a.FullName, a.DocumentNumber, a.Email);
+        if (a is null)
+            return null;
+
+        // HU #11593 — ciudad/dirección viven en actor.metadata (JSON); el teléfono en la columna.
+        var (ciudad, direccion, _, _) = ActorMetadataReader.Parse(a.Metadata);
+        return new ParteDatos(a.FullName, a.DocumentNumber, a.Email, ciudad, direccion, a.Phone);
     }
 
     /// <summary>

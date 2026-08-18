@@ -11,7 +11,7 @@ public sealed class MatriculaGatesTests
     {
         VehiculoConsultado = true,
         Preflight = new PreflightSnapshot("green", false),
-        Comprador = new ParteDatos("C", "222", "c@x.co"),
+        Comprador = new ParteDatos("C", "222", "c@x.co", "Bogotá", "Calle 1 # 2-3", "3001234567"),
         RuntComprador = new RuntSnapshot(Consultado: true, "222"),
         IdentidadAprobada = true,
         DocumentosObligatoriosCompletos = true,
@@ -177,6 +177,46 @@ public sealed class MatriculaGatesTests
     {
         MatriculaGates.PasoSoloLectura(2, BaseCtx()).Should().BeTrue();
         MatriculaGates.PasoSoloLectura(5, BaseCtx()).Should().BeFalse();
+    }
+
+    // HU #11593 — contacto obligatorio (ciudad, dirección, teléfono) en el gate del comprador.
+
+    [Fact]
+    public void Paso2_CompradorConSeisDatosCompletos_Avanza()
+    {
+        MatriculaGates.PasoCompleto(2, BaseCtx()).Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Paso2_CompradorSinTelefono_Bloquea_YEnumeraTelefono()
+    {
+        var ctx = BaseCtx() with { Comprador = new ParteDatos("C", "222", "c@x.co", "Bogotá", "Calle 1 # 2-3", null) };
+        var r = MatriculaGates.PasoCompleto(2, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("comprador_incompleto");
+        r.Message.Should().Contain("teléfono");
+    }
+
+    [Fact]
+    public void Paso2_CompradorSinCiudadNiDireccion_Bloquea_YEnumeraAmbas()
+    {
+        var ctx = BaseCtx() with { Comprador = new ParteDatos("C", "222", "c@x.co", null, null, "3001234567") };
+        var r = MatriculaGates.PasoCompleto(2, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("comprador_incompleto");
+        r.Message.Should().Contain("ciudad");
+        r.Message.Should().Contain("dirección");
+    }
+
+    [Fact]
+    public void MaxPasoAlcanzable_TramiteEnCursoSinTelefono_SeReabreEnPaso2()
+    {
+        // AC4 — un trámite en curso que ya tenía el paso de actores "completo" bajo la regla
+        // anterior (sin exigir teléfono) se reabre solo: MaxPasoAlcanzable recalcula desde cero
+        // en cada evaluación, sin migración ni script.
+        var ctx = BaseCtx() with { Comprador = new ParteDatos("C", "222", "c@x.co", "Bogotá", "Calle 1 # 2-3", null) };
+        MatriculaGates.MaxPasoAlcanzable(ctx).Should().Be(2);
+        MatriculaGates.PasoSoloLectura(2, ctx).Should().BeFalse();
     }
 
     private static void TraspasoGatesShared(MatriculaGateContext ctx, int paso, string code)

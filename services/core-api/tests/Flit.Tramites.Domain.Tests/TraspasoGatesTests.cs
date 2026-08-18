@@ -13,9 +13,9 @@ public sealed class TraspasoGatesTests
         VehiculoConsultado = true,
         Preflight = new PreflightSnapshot("green", ImpuestoVehicularUnknown: false),
         PazSalvoImpuestoVerificado = true,
-        Vendedor = new ParteDatos("V", "111", "v@x.co"),
+        Vendedor = new ParteDatos("V", "111", "v@x.co", "Bogotá", "Calle 1 # 2-3", "3001234567"),
         RuntVendedor = new RuntSnapshot(Consultado: true, "111"),
-        Comprador = new ParteDatos("C", "222", "c@x.co"),
+        Comprador = new ParteDatos("C", "222", "c@x.co", "Medellín", "Carrera 4 # 5-6", "3007654321"),
         RuntComprador = new RuntSnapshot(Consultado: true, "222"),
         SimitComprador = new SimitSnapshot(Consultado: true, "222", TotalComparendos: 0),
         ValorVenta = 50_000_000m,
@@ -304,6 +304,61 @@ public sealed class TraspasoGatesTests
             ComparendosBloquean = false,
         };
         TraspasoGates.PasoCompleto(3, ctx).Ok.Should().BeTrue();
+    }
+
+    // HU #11593 — contacto obligatorio (ciudad, dirección, teléfono) en los gates de vendedor/comprador.
+
+    [Fact]
+    public void Paso2_VendedorConSeisDatosCompletos_Avanza()
+    {
+        TraspasoGates.PasoCompleto(2, BaseCtx()).Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Paso3_CompradorConSeisDatosCompletos_Avanza()
+    {
+        TraspasoGates.PasoCompleto(3, BaseCtx()).Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Paso3_CompradorSinTelefono_Bloquea_YEnumeraTelefono()
+    {
+        var ctx = BaseCtx() with
+        {
+            Comprador = new ParteDatos("C", "222", "c@x.co", "Medellín", "Carrera 4 # 5-6", null),
+        };
+        var r = TraspasoGates.PasoCompleto(3, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("comprador_incompleto");
+        r.Message.Should().Contain("teléfono");
+    }
+
+    [Fact]
+    public void Paso3_CompradorSinCiudadNiDireccion_Bloquea_YEnumeraAmbas()
+    {
+        var ctx = BaseCtx() with
+        {
+            Comprador = new ParteDatos("C", "222", "c@x.co", null, null, "3007654321"),
+        };
+        var r = TraspasoGates.PasoCompleto(3, ctx);
+        r.Ok.Should().BeFalse();
+        r.Code.Should().Be("comprador_incompleto");
+        r.Message.Should().Contain("ciudad");
+        r.Message.Should().Contain("dirección");
+    }
+
+    [Fact]
+    public void MaxPasoAlcanzable_TramiteEnCursoSinTelefonoComprador_SeReabreEnPaso3()
+    {
+        // AC4 — un traspaso en curso que ya tenía el paso del comprador "completo" bajo la regla
+        // anterior (sin exigir teléfono) se reabre solo: MaxPasoAlcanzable recalcula desde cero en
+        // cada evaluación, sin migración ni script.
+        var ctx = BaseCtx() with
+        {
+            Comprador = new ParteDatos("C", "222", "c@x.co", "Medellín", "Carrera 4 # 5-6", null),
+        };
+        TraspasoGates.MaxPasoAlcanzable(ctx).Should().Be(3);
+        TraspasoGates.PasoSoloLectura(3, ctx).Should().BeFalse();
     }
 
     [Fact]
