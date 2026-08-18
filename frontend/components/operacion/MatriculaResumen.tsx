@@ -15,7 +15,7 @@ import { formatDateOnly } from '@/lib/format/date-only';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { WizardAccordion } from './WizardAccordion';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
-import { WIZARD_CARD, WIZARD_INPUT } from './wizard-field-styles';
+import { WIZARD_CARD, WIZARD_INPUT, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { BiometricStep } from './BiometricStep';
 import { openAttachmentInNewTab } from './ExpedienteVisor';
 import { WizardReadOnlyProvider } from './WizardReadOnlyContext';
@@ -174,7 +174,7 @@ function PrendaDocumentoVerButton({
           type="button"
           disabled={!instanceId || busy}
           className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ background: BLUE }}
+          style={{ background: WIZARD_CTA_GRADIENT }}
           aria-label={`Ver ${documento.filename || label}`}
           onClick={() => {
             if (!instanceId) return;
@@ -489,7 +489,7 @@ function CapturaLinkCopy({ link, label }: { link: string; label: string }) {
         type="button"
         onClick={() => void handleCopy()}
         className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white"
-        style={{ background: BLUE }}
+        style={{ background: WIZARD_CTA_GRADIENT }}
         aria-label="Copiar enlace"
       >
         {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
