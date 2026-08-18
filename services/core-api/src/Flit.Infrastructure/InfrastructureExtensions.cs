@@ -174,6 +174,7 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Analytics.Application.Queries.IDetailedReportExcelExporter, Documents.DetailedReportExcelExporter>(); // Feature #10813 HU #10816
         services.AddScoped<Flit.Analytics.Application.CompanyQueries.ICompanyQueryRepository, CompanyQueryRepository>();
         services.AddScoped<Flit.Analytics.Application.CompanyQueries.ISuperAdminSavedQueryRepository, SuperAdminSavedQueryRepository>();
+        services.AddScoped<Flit.Analytics.Application.IctQueries.IIctQueryRepository, IctQueryRepository>();
         services.AddScoped<IProcedureExcelExporter, Documents.ProcedureExcelExporter>();
         services.AddSingleton<IExecutiveSummaryPdfGenerator, Documents.ExecutiveSummaryPdfGenerator>();
         services.AddScoped<Analytics.Scheduling.UsageReportDocumentBuilder>(); // Reportes2 HU-D
