@@ -348,6 +348,19 @@ jobs:
       # (6 conn / 30s) la 2.ª suele morir en `dial tcp :22: i/o timeout` tras detectar
       # el OS. Mitigación: v0.1.3 (menos conexiones) + timeout 120s + reintentos con
       # espera > ventana UFW. Ver appleboy/scp-action#172.
+      #
+      # No pasar HOSTINGER_SSH_KEY (PEM multilínea) dentro del YAML anidado de
+      # wretry.action `with: |`: rompe el parseo ("multiline key may not be an
+      # implicit key" en `port:`). Escribir a archivo y usar key_path.
+      - name: Prepare SSH deploy key
+        run: |
+          KEY_FILE="${RUNNER_TEMP}/hostinger_deploy_key"
+          printf '%s\n' "$HOSTINGER_SSH_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          echo "SSH_KEY_PATH=$KEY_FILE" >> "$GITHUB_ENV"
+        env:
+          HOSTINGER_SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+
       - name: Copy compose file to VPS
         uses: Wandalen/wretry.action@v3.8.0
         with:
@@ -357,7 +370,7 @@ jobs:
           with: |
             host: ${{ secrets.HOSTINGER_SSH_HOST }}
             username: ${{ secrets.HOSTINGER_SSH_USER }}
-            key: ${{ secrets.HOSTINGER_SSH_KEY }}
+            key_path: ${{ env.SSH_KEY_PATH }}
             port: 22
             timeout: 120s
             source: docker-compose.prod.yml
