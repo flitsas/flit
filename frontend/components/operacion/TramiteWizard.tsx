@@ -862,8 +862,9 @@ export function TramiteWizard(props: Props) {
     activeStep?.key === 'vendedor' ||
     isRequisitosTraspasoStep;
   const isActorStep = activeStep?.key === 'comprador' || activeStep?.key === 'vendedor';
-  // La prenda vive en Requisitos en AMBAS modalidades (declarativa en matrícula, gate en traspaso),
-  // así que su gate de documento aplica en el mismo paso para las dos.
+  // La prenda vive en Requisitos en AMBAS modalidades: gate con decisiones de gestión en las dos
+  // (HU #11592 invirtió la HU #10596 — matrícula deja de ser declarativa/informativa y también
+  // bloquea sin decisión de prenda), así que su gate de documento aplica en el mismo paso para las dos.
   const isPrendaStep =
     activeStep?.key === 'documentos' || activeStep?.key === 'comercial';
   // El siguiente paso es navegable (no hay paso de datos incompleto por delante). Permite "Continuar"
@@ -3404,10 +3405,11 @@ function StepBody({
               embeddedInWizard
             />
           )}
-          {/* Prenda. La decisión es la misma pieza en las dos modalidades, con distinto alcance:
-              en matrícula es declarativa (informativa, no bloquea la radicación, HU #10596) y en
-              traspaso es un gate con decisiones de gestión (HU #10598, CF-06 #10881). Antes vivían
-              en pasos distintos; ahora comparten sitio, que es lo que el gestor espera. */}
+          {/* Prenda. La decisión es la misma pieza en las dos modalidades: en traspaso es un gate con
+              decisiones de gestión (HU #10598, CF-06 #10881) y desde la HU #11592 matrícula inicial
+              también bloquea sin decisión de prenda (y su documento/acreedor cuando aplica) — invierte
+              deliberadamente la HU #10596, que la dejaba como declaración puramente informativa. Antes
+              vivían en pasos distintos; ahora comparten sitio, que es lo que el gestor espera. */}
           {(() => {
             const gravamen = preflight?.checks?.find((c) => c.key === 'gravamenes');
             const esTraspaso = modalidad === 'traspaso';

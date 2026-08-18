@@ -25,8 +25,10 @@ public sealed class PrendaGateTests
         };
 
     [Fact]
-    public void No_aplica_en_matricula()
+    public void Evaluate_no_aplica_en_matricula()
     {
+        // `Evaluate` es EXCLUSIVAMENTE del gate de traspaso (semáforo de gravámenes): en matrícula
+        // inicial el gate corre por EvaluateMatriculaInicial (HU #11592, ver más abajo), no por acá.
         PrendaGate.Evaluate(esTraspaso: false, hasGravamenWarn: true, prendaVigente: null, docTipos: [])
             .Should().BeNull();
     }
@@ -241,5 +243,74 @@ public sealed class PrendaGateTests
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         disparan.Should().BeEquivalentTo(PrendaDecision.RequierenDocumento);
+    }
+
+    // ── HU #11592 — bloqueo duro de prenda en matrícula inicial ────────────────────────────────
+    // Invierte deliberadamente la HU #10596 (prenda declarativa/informativa en matrícula, sin gate).
+    // Mismo núcleo que `Evaluate`, pero SIN depender del semáforo de gravámenes (irrelevante en un
+    // vehículo nuevo: el gravamen se constituye, no se detecta).
+
+    [Fact]
+    public void MatriculaInicial_ConDecisionSinPrenda_Avanza()
+    {
+        // AC1: matrícula inicial con decisión "sin_prenda" vigente avanza.
+        PrendaGate.EvaluateMatriculaInicial(Prenda(PrendaDecision.SinPrenda), docTipos: [])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void MatriculaInicial_SinNingunaDecision_Bloquea()
+    {
+        // AC2: sin prenda vigente registrada, el gate bloquea con independencia de cualquier
+        // semáforo de gravámenes (esta función ni siquiera lo recibe como parámetro).
+        PrendaGate.EvaluateMatriculaInicial(prendaVigente: null, docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
+
+    [Fact]
+    public void MatriculaInicial_ConSolicitarSinDocumento_ExigeDocumento()
+    {
+        // AC3 (rama documento): "solicitar" sin el adjunto de soporte bloquea por documento —el
+        // acreedor ni se evalúa porque el gate corta en el primer requisito insatisfecho.
+        PrendaGate.EvaluateMatriculaInicial(Prenda(PrendaDecision.Solicitar), docTipos: [])
+            .Should().Be(TramiteEstadoErrores.PrendaDocumentoRequerido);
+    }
+
+    [Fact]
+    public void MatriculaInicial_ConSolicitarDocumentoSinAcreedor_ExigeAcreedor()
+    {
+        // AC3 (rama acreedor): con el documento adjunto pero sin acreedor diligenciado, el faltante
+        // pasa a ser el acreedor (HU #11591 también aplica en matrícula por el mismo núcleo).
+        PrendaGate.EvaluateMatriculaInicial(
+                PrendaConAcreedor(PrendaDecision.Solicitar, acreedorNombre: null, acreedorDocumento: null),
+                docTipos: ["prenda_solicitud"])
+            .Should().Be(TramiteEstadoErrores.PrendaAcreedorRequerido);
+    }
+
+    [Fact]
+    public void MatriculaInicial_ConRegistrarDocumentoYAcreedorCompletos_Avanza()
+    {
+        PrendaGate.EvaluateMatriculaInicial(
+                PrendaConAcreedor(PrendaDecision.Registrar, "Banco X", "900123456"),
+                docTipos: ["prenda_registro"])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void MatriculaInicial_ConOmitir_AvanzaSinDocumento()
+    {
+        // "omitir" = asumo el riesgo: satisface el gate sin documento ni acreedor.
+        PrendaGate.EvaluateMatriculaInicial(Prenda(PrendaDecision.Omitir), docTipos: [])
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void Traspaso_ConSemaforoGreenYSinPrendaVigente_NoRegresiona()
+    {
+        // AC4 (no regresión) — R10/HU #10597: fuera de warn, `Evaluate` (traspaso) sigue sin bloquear
+        // aunque no haya prenda vigente registrada. El bloqueo duro de la HU #11592 es EXCLUSIVO de
+        // `EvaluateMatriculaInicial`; `Evaluate` conserva su comportamiento previo.
+        PrendaGate.Evaluate(esTraspaso: true, hasGravamenWarn: false, prendaVigente: null, docTipos: [])
+            .Should().BeNull();
     }
 }

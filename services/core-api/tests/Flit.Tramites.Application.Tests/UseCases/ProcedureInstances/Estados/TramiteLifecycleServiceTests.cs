@@ -783,6 +783,129 @@ public sealed class TramiteLifecycleServiceTests
         i.Status.Should().Be(TramiteEstado.Preparado);
     }
 
+    // ── HU #11592 — bloqueo duro de prenda en matrícula inicial ────────────────────────────────
+    // Invierte deliberadamente la HU #10596 (prenda declarativa/informativa en matrícula, sin gate).
+
+    [Fact]
+    public async Task MatriculaInicial_ConDecisionSinPrenda_Avanza()
+    {
+        // AC1 — matrícula inicial con decisión "sin_prenda" vigente avanza.
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(PrendaDecision.SinPrenda));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Preparado);
+    }
+
+    [Fact]
+    public async Task MatriculaInicial_SinNingunaDecisionDePrenda_Bloquea()
+    {
+        // AC2 — sin prenda vigente registrada y el override del OT desactivado (política sin
+        // configurar ⇒ default false), el gate bloquea con independencia del semáforo de
+        // gravámenes: no hay preflight snapshot cableado en `Wire`, así que HasGravamenWarn ni
+        // siquiera se evalúa para este disparador.
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(decision: null));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+        i.Status.Should().Be(TramiteEstado.Borrador);
+        _recorder.Records.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task MatriculaInicial_ConSolicitarSinDocumento_ExigeDocumento()
+    {
+        // AC3 (rama documento) — "solicitar" sin el adjunto de soporte bloquea por documento. Con la
+        // política compañía+OT exigiendo el certificado (default), el override CF-06 (HU #10881) —que
+        // ya corre para CUALQUIER modalidad y es INDEPENDIENTE del semáforo, ver EvaluateOtOverride—
+        // captura el caso primero y devuelve su código propio "_ot"; es el MISMO bloqueo por documento
+        // faltante que exige la HU #11592, solo que vía el mecanismo que ya lo cubría.
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, i.TransitOfficeId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(PrendaDecision.Solicitar));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+        i.Status.Should().Be(TramiteEstado.Borrador);
+    }
+
+    [Fact]
+    public async Task MatriculaInicial_ConSolicitarDocumentoSinAcreedor_ExigeAcreedor()
+    {
+        // AC3 (rama acreedor) — con el documento adjunto pero sin acreedor diligenciado, el
+        // faltante pasa a ser el acreedor (HU #11591 aplicado también en matrícula).
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        i.Attachments.Add(new ProcedureInstanceAttachment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = i.TenantId,
+            ProcedureInstanceId = i.Id,
+            Tipo = "prenda_solicitud",
+            StoragePath = "p/prenda_solicitud",
+            UploadedAt = DateTimeOffset.UtcNow,
+        });
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, i.TransitOfficeId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(PrendaDecision.Solicitar));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeFalse();
+        outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaAcreedorRequerido);
+        i.Status.Should().Be(TramiteEstado.Borrador);
+    }
+
+    [Fact]
+    public async Task Traspaso_ConSemaforoGreenYSinPrendaVigente_NoRegresiona()
+    {
+        // AC4 (no regresión, R10/HU #10597) — el traspaso conserva su comportamiento previo: fuera
+        // de warn el gate no bloquea aunque no haya prenda vigente registrada. El bloqueo duro de la
+        // HU #11592 es exclusivo de matrícula inicial.
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(decision: null));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeTrue();
+        i.Status.Should().Be(TramiteEstado.Preparado);
+    }
+
     // ── HU #10872 — re-radicar re-evaluando SOLO los gates de lo corregido ────────────────
 
     private static string BaselineMetadata(Dictionary<string, string?> fieldSnapshot, string? motivo = null) =>
