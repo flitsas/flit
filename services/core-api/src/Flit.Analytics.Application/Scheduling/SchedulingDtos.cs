@@ -15,7 +15,11 @@ public sealed record ReportScheduleDto(
     string Format,
     IReadOnlyList<string> Recipients,
     bool IsActive,
-    DateTimeOffset? LastSentAt);
+    DateTimeOffset? LastSentAt,
+    /// <summary>Solo report_type=consulta. A qué SavedQuery apunta.</summary>
+    Guid? SavedQueryId = null,
+    /// <summary>Solo report_type=consulta. "empresa" | "superadmin".</summary>
+    string? SavedQueryScope = null);
 
 /// <summary>Regla de alerta por umbral (tabla <c>analytics.alert_rules</c>).</summary>
 public sealed record AlertRuleDto(
@@ -60,7 +64,11 @@ public sealed record ReportScheduleInput(
     int? SendHour,
     string? Format,
     IReadOnlyList<string>? Recipients,
-    bool? IsActive);
+    bool? IsActive,
+    /// <summary>Solo report_type=consulta.</summary>
+    Guid? SavedQueryId = null,
+    /// <summary>Solo report_type=consulta. "empresa" | "superadmin".</summary>
+    string? SavedQueryScope = null);
 
 /// <summary>Payload crudo de creación/edición de una regla de alerta (POST/PUT).</summary>
 public sealed record AlertRuleInput(
@@ -83,7 +91,9 @@ public sealed record ValidatedReportSchedule(
     int SendHour,
     string Format,
     IReadOnlyList<string> Recipients,
-    bool IsActive);
+    bool IsActive,
+    Guid? SavedQueryId = null,
+    string? SavedQueryScope = null);
 
 /// <summary>Regla de alerta ya validada y normalizada (defaults aplicados).</summary>
 public sealed record ValidatedAlertRule(

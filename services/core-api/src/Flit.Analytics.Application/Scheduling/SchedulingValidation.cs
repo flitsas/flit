@@ -20,7 +20,13 @@ public static partial class SchedulingValidation
     public const int MinCooldownMinutes = 5;
     public const int MaxCooldownMinutes = 10_080;
 
-    private static readonly string[] ReportTypes = ["resumen", "operacion", "ot", "uso", "productividad"];
+    private static readonly string[] ReportTypes =
+        ["resumen", "operacion", "ot", "uso", "productividad", "consulta"];
+    // "superadmin" queda fuera por ahora a propósito: el CHECK de BD (§75 del DDL) ya lo modela
+    // (tenant_id nulo), pero los endpoints CRUD de esta clase siguen exigiendo un tenant concreto
+    // (§4.7) — falta el endpoint dedicado de SuperAdmin (sin tenant) para poder crear uno de estos
+    // sin violar esa exigencia. Próxima pasada.
+    private static readonly string[] SavedQueryScopes = ["empresa"];
     private static readonly string[] Frequencies = ["daily", "weekly", "monthly"];
     private static readonly string[] Formats = ["excel", "pdf"];
     private static readonly string[] Metrics =
@@ -46,7 +52,24 @@ public static partial class SchedulingValidation
             return (null, $"El nombre no puede superar los {MaxNameLength} caracteres.");
 
         if (input.ReportType is null || !ReportTypes.Contains(input.ReportType))
-            return (null, "El tipo de informe debe ser uno de: resumen, operacion, ot, uso, productividad.");
+            return (null, "El tipo de informe debe ser uno de: resumen, operacion, ot, uso, productividad, consulta.");
+
+        // Reportes 2.0 (HU-D, segunda ola) — un informe de tipo "consulta" apunta a una SavedQuery
+        // en vez de a uno de los 5 tipos agregados; espejo del CHECK
+        // report_schedules_consulta_shape_check (§75 del DDL).
+        if (input.ReportType == "consulta")
+        {
+            if (input.SavedQueryId is null)
+                return (null, "Un informe de tipo 'consulta' requiere indicar savedQueryId.");
+            if (input.SavedQueryScope is null || !SavedQueryScopes.Contains(input.SavedQueryScope))
+                return (null, "El alcance de la consulta debe ser 'empresa'.");
+            if (input.Format is not null && input.Format != "excel")
+                return (null, "Un informe de tipo 'consulta' solo se entrega en formato Excel.");
+        }
+        else if (input.SavedQueryId is not null || input.SavedQueryScope is not null)
+        {
+            return (null, "savedQueryId y el alcance de la consulta solo aplican a informes de tipo 'consulta'.");
+        }
 
         if (input.Frequency is null || !Frequencies.Contains(input.Frequency))
             return (null, "La periodicidad debe ser una de: daily, weekly, monthly.");
@@ -84,7 +107,8 @@ public static partial class SchedulingValidation
 
         return (new ValidatedReportSchedule(
             name, input.ReportType, input.Frequency, input.DayOfWeek, input.DayOfMonth,
-            sendHour, input.Format, recipients!, input.IsActive ?? true), null);
+            sendHour, input.Format, recipients!, input.IsActive ?? true,
+            input.SavedQueryId, input.SavedQueryScope), null);
     }
 
     /// <summary>Valida y normaliza una regla de alerta. Error = mensaje en español; null si es válida.</summary>

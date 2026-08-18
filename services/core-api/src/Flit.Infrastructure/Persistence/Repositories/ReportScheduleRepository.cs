@@ -77,9 +77,12 @@ internal sealed class ReportScheduleRepository(FlitDbContext db) : IReportSchedu
         entity.Format = data.Format;
         entity.Recipients = data.Recipients.ToList();
         entity.IsActive = data.IsActive;
+        entity.SavedQueryId = data.SavedQueryId;
+        entity.SavedQueryScope = data.SavedQueryScope;
     }
 
     private static ReportScheduleDto ToDto(ReportSchedule s) => new(
         s.Id, s.Name, s.ReportType, s.Frequency, s.DayOfWeek, s.DayOfMonth,
-        s.SendHour, s.Format, s.Recipients, s.IsActive, s.LastSentAt);
+        s.SendHour, s.Format, s.Recipients, s.IsActive, s.LastSentAt,
+        s.SavedQueryId, s.SavedQueryScope);
 }

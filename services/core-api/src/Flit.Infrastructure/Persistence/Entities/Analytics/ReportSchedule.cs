@@ -12,12 +12,23 @@ public sealed class ReportSchedule
 {
     public Guid Id { get; set; }
 
-    public Guid TenantId { get; set; }
+    /// <summary>
+    /// Null SOLO cuando <see cref="ReportType"/> es "consulta" con <see cref="SavedQueryScope"/>
+    /// "superadmin" (cruza todas las compañías, ver <c>Persistence/Sql/Ddl/75-informes-consulta-personalizada.sql</c>).
+    /// Los otros 5 tipos lo siguen exigiendo.
+    /// </summary>
+    public Guid? TenantId { get; set; }
 
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>resumen | operacion | ot | uso | productividad.</summary>
+    /// <summary>resumen | operacion | ot | uso | productividad | consulta.</summary>
     public string ReportType { get; set; } = string.Empty;
+
+    /// <summary>Solo report_type=consulta. A qué SavedQuery apunta (empresa o superadmin, ver <see cref="SavedQueryScope"/>).</summary>
+    public Guid? SavedQueryId { get; set; }
+
+    /// <summary>Solo report_type=consulta. "empresa" (TenantId obligatorio) | "superadmin" (TenantId prohibido).</summary>
+    public string? SavedQueryScope { get; set; }
 
     /// <summary>daily | weekly | monthly.</summary>
     public string Frequency { get; set; } = string.Empty;

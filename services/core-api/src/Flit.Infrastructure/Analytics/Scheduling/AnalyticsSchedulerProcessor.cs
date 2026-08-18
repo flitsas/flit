@@ -275,12 +275,14 @@ internal sealed class AnalyticsSchedulerProcessor(
                 : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             var fileName = $"informe-{schedule.ReportType}-{from:yyyy-MM-dd}-a-{to:yyyy-MM-dd}.{extension}";
 
+            // Los 4 tipos de abajo siguen exigiendo tenant (CHECK report_schedules_consulta_shape_check,
+            // §75 del DDL) — solo "consulta" con alcance superadmin tiene TenantId nulo.
             byte[]? bytes = schedule.ReportType switch
             {
                 "uso" => await services.GetRequiredService<UsageReportDocumentBuilder>()
-                    .BuildAsync(schedule.TenantId, from, to, schedule.Format, ct),
+                    .BuildAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
                 "ot" => await services.GetRequiredService<OtReportDocumentBuilder>()
-                    .BuildAsync(schedule.TenantId, from, to, schedule.Format, ct),
+                    .BuildAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
                 "resumen" or "operacion" or "productividad" =>
                     await BuildProcedureBasedAttachmentAsync(services, schedule, from, to, ct),
                 _ => null, // "consulta" (Reportes 2.0, HU-D — filas propias, ver rama dedicada) u otro tipo futuro.
@@ -302,12 +304,12 @@ internal sealed class AnalyticsSchedulerProcessor(
         {
             var handler = services.GetRequiredService<ExportExecutivePdfHandler>();
             var (pdf, error) = await handler.HandleAsync(
-                new ExportExecutivePdfQuery(schedule.TenantId, from, to), ct);
+                new ExportExecutivePdfQuery(schedule.TenantId!.Value, from, to), ct);
             return error is null ? pdf : null;
         }
 
         var (filter, filterError) = ExportProceduresExcelHandler.Validate(
-            new ExportProceduresExcelQuery(schedule.TenantId, from, to, Category: null, Status: null));
+            new ExportProceduresExcelQuery(schedule.TenantId!.Value, from, to, Category: null, Status: null));
         if (filterError is not null || filter is null)
             return null;
 
