@@ -693,30 +693,31 @@ public sealed class GetWizardStateHandler(
         };
 
         var maxAlcanzable = TraspasoGates.MaxPasoAlcanzable(ctx);
+        // Datos (pasos 1-4) completos: maxAlcanzable >= 5 ⇒ Consulta+Vendedor+Comprador+Documentos OK.
+        // A partir de aquí los pasos diferidos (5 Identidad, 6 FUR) son ALCANZABLES aunque la identidad
+        // esté pendiente — restituye el desacople HU #10350 (paridad con BuildMatricula): el gestor
+        // recorre hasta el último paso y finaliza el borrador; la identidad pendiente NO lo atrapa en
+        // el paso 5. PasoCompleto/GateFur (el gate de AVANCE y de radicación) no cambian.
+        var datosCompletos = maxAlcanzable >= 5;
         var pasos = TipologiaMatrizCatalog.Get(TramiteTipologiaCatalog.CodigoTraspasoStandard)?.Pasos
                     ?? [];
 
         var steps = new List<WizardStepDto>(TraspasoGates.TotalPasos);
         for (var p = 1; p <= TraspasoGates.TotalPasos; p++)
         {
-            var gate = TraspasoGates.PasoCompleto(p, ctx);
             var reasons = new List<string>();
             string status;
 
-            // Flujo en cascada: un paso aún NO alcanzable (p > maxAlcanzable) se bloquea
-            // (locked, sin reasons), incluido el diferido (6 FUR). El sidebar no deja saltar
-            // a Identidad/FUR sin haber completado los pasos previos. Solo si es alcanzable se evalúa.
-            if (p > maxAlcanzable)
+            // 5 = Identidad: biométrica de AMBAS partes (slice 6). Diferido (paridad con matrícula,
+            // paso 4): alcanzable en cuanto los datos (1-4) están completos AUNQUE la identidad siga
+            // pendiente. Se sigue exponiendo la MISMA reason "pendiente_biometria" que ya consumía.
+            if (p == 5)
             {
-                status = "locked";
-            }
-            // 5 = Identidad: biométrica de AMBAS partes. Ahora es un gate propio de la cascada
-            // (TraspasoGates.PasoCompleto(5) delega en GateFur), igual que documentos/comercial en el
-            // paso 4; antes se evaluaba de forma diferida (solo para mostrar razón) en el paso 6.
-            // Se sigue exponiendo la MISMA reason "pendiente_biometria" que ya consumía el paso 6.
-            else if (p == 5)
-            {
-                if (gate.Ok)
+                if (!datosCompletos)
+                {
+                    status = "locked";
+                }
+                else if (TraspasoGates.PasoCompleto(5, ctx).Ok)
                 {
                     status = "complete";
                 }
@@ -726,30 +727,47 @@ public sealed class GetWizardStateHandler(
                     reasons.Add(PendienteBiometria);
                 }
             }
-            // 6 = Generar FUR: documentos (4) e identidad/biométrica (5) ya se exigen antes en la
-            // cascada; aquí solo queda el FUR generado (IO, fuera del contexto puro del dominio).
+            // 6 = Generar FUR (slice 7): diferido. Alcanzable en cuanto los datos están completos
+            // AUNQUE la identidad (5) siga pendiente (HU #10350), para que sea el ÚLTIMO paso del
+            // wizard donde el gestor finaliza/radica. Documentos (4) e identidad/biométrica (5) ya se
+            // exigen antes en la cascada de datos; aquí solo queda el FUR generado (IO).
             else if (p == 6)
             {
-                // B12 (HU #10661, ADR-0028): la firma de compraventa YA NO condiciona el completado
-                // del paso 6 ni aporta `pendiente_firma` — negocio aún no define la lógica ideal de
-                // firmas. El estado de firma queda informativo en el preflight `firma_compraventa`
-                // (DerivaFirmaCompraventaCheck, warn/green), sin bloquear canSubmit.
-                var furOk = FurGenerado(instance);
-                if (!furOk)
-                    reasons.Add(FurPendiente);
+                if (!datosCompletos)
+                {
+                    status = "locked";
+                }
+                else
+                {
+                    // B12 (HU #10661, ADR-0028): la firma de compraventa YA NO condiciona el completado
+                    // del paso 6 ni aporta `pendiente_firma` — negocio aún no define la lógica ideal de
+                    // firmas. El estado de firma queda informativo en el preflight `firma_compraventa`
+                    // (DerivaFirmaCompraventaCheck, warn/green), sin bloquear canSubmit.
+                    var furOk = FurGenerado(instance);
+                    if (!furOk)
+                        reasons.Add(FurPendiente);
 
-                status = furOk ? "complete" : "incomplete";
-            }
-            else if (gate.Ok)
-            {
-                status = "complete";
+                    status = furOk ? "complete" : "incomplete";
+                }
             }
             else
             {
-                // Alcanzable (p <= maxAlcanzable) pero con gate sin cumplir → incomplete.
-                status = "incomplete";
-                if (gate.Code is not null)
-                    reasons.Add(gate.Code);
+                // Pasos de datos 1-4: cascada estándar por gate (no alcanzable ⇒ locked).
+                var gate = TraspasoGates.PasoCompleto(p, ctx);
+                if (p > maxAlcanzable)
+                {
+                    status = "locked";
+                }
+                else if (gate.Ok)
+                {
+                    status = "complete";
+                }
+                else
+                {
+                    status = "incomplete";
+                    if (gate.Code is not null)
+                        reasons.Add(gate.Code);
+                }
             }
 
             steps.Add(new WizardStepDto(p, StepKey(true, p), StepLabel(pasos, p), status, reasons));

@@ -234,8 +234,11 @@ public sealed class WizardBiometricaStateTests
     // razón) en el paso 6 (FUR); ahora es el gate propio del paso 5, y sin él FUR (6) queda locked.
 
     [Fact]
-    public async Task Traspaso_NoBiometria_IdentidadHasBiometriaReasonAndFurLocked()
+    public async Task Traspaso_NoBiometria_IdentidadHasBiometriaReasonAndFurIncomplete()
     {
+        // Regla de negocio restituida (2026-08): la identidad pendiente NO atrapa al gestor en el
+        // paso 5 — paridad con matrícula (HU #10350). Datos (1-4) completos ⇒ paso 6 (FUR) ALCANZABLE
+        // (incomplete, no locked) aunque la biométrica de ambas partes siga pendiente.
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
         CompletarHastaIdentidadTraspaso(instance); // Identidad (5) alcanzable
@@ -243,9 +246,12 @@ public sealed class WizardBiometricaStateTests
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        result!.Steps.Single(s => s.Index == 5).Reasons
-            .Should().Contain(GetWizardStateHandler.PendienteBiometria);
-        result.Steps.Single(s => s.Index == 6).Status.Should().Be("locked");
+        var s5 = result!.Steps.Single(s => s.Index == 5);
+        s5.Status.Should().Be("incomplete");
+        s5.Reasons.Should().Contain(GetWizardStateHandler.PendienteBiometria);
+
+        var s6 = result.Steps.Single(s => s.Index == 6);
+        s6.Status.Should().Be("incomplete");
     }
 
     [Fact]
@@ -259,9 +265,29 @@ public sealed class WizardBiometricaStateTests
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        // Falta vendedor → biométrica aún pendiente; Identidad (5) no completa y FUR (6) sigue locked.
+        // Falta vendedor → biométrica aún pendiente; Identidad (5) no completa, pero FUR (6) sigue
+        // ALCANZABLE (incomplete, no locked): la identidad pendiente no bloquea avanzar.
         result!.Steps.Single(s => s.Index == 5).Reasons
             .Should().Contain(GetWizardStateHandler.PendienteBiometria);
+        result.Steps.Single(s => s.Index == 6).Status.Should().Be("incomplete");
+    }
+
+    [Fact]
+    public async Task Traspaso_DatosIncompletos_IdentidadYFurSiguenLocked()
+    {
+        // La cascada de DATOS (1-4) no se toca: sin documentos obligatorios (paso 4) los pasos
+        // diferidos (5 Identidad, 6 FUR) siguen locked, exactamente como antes.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
+        instance.Actors.Add(Vendedor());
+        instance.Actors.Add(Comprador("666"));
+        // Sin checklist de documentos ni comercial: el paso 4 (Documentos) no se completa.
+        Setup(instance);
+
+        var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.Steps.Single(s => s.Index == 5).Status.Should().Be("locked");
         result.Steps.Single(s => s.Index == 6).Status.Should().Be("locked");
     }
 

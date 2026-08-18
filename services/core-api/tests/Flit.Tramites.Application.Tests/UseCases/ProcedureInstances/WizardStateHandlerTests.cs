@@ -346,12 +346,12 @@ public sealed class WizardStateHandlerTests
     }
 
     [Fact]
-    public async Task Get_Traspaso_IdentidadReachable_FurLockedSinBiometria()
+    public async Task Get_Traspaso_IdentidadReachable_FurReachableSinBiometria()
     {
-        // Paridad con matrícula (2026-08) — Identidad (5) pasó a ser un gate propio de la cascada:
-        // pasos 1-4 completos (incluido el valor de venta, absorbido en Documentos) → Identidad (5)
-        // alcanzable e incomplete con la razón de biométrica; SIN biométrica de ambas partes, FUR (6)
-        // queda locked (ya no es alcanzable de forma independiente como antes de este cambio).
+        // Regla de negocio restituida (2026-08) — paridad con matrícula (HU #10350): pasos 1-4
+        // completos (incluido el valor de venta, absorbido en Documentos) → Identidad (5) alcanzable
+        // e incomplete con la razón de biométrica; SIN biométrica de ambas partes, FUR (6) sigue
+        // ALCANZABLE (incomplete, no locked) — la identidad pendiente no atrapa al gestor.
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
@@ -369,8 +369,7 @@ public sealed class WizardStateHandlerTests
         identidad.Reasons.Should().Contain(GetWizardStateHandler.PendienteBiometria);
 
         var fur = result.Steps.Single(s => s.Index == 6);
-        fur.Status.Should().Be("locked");
-        fur.Reasons.Should().BeEmpty();
+        fur.Status.Should().Be("incomplete");
     }
 
     [Fact]
