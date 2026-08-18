@@ -11,7 +11,7 @@ import { PrendaDocumentUpload } from './PrendaDocumentUpload';
 import { prendaDocTipoFor } from './prenda-document-tipos';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import type { FieldValue, PrendaDecision, WizardModalidad } from '@/lib/api/types/procedure-runtime';
-import { WIZARD_INPUT, WIZARD_CARD } from './wizard-field-styles';
+import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { WizardCardHeader, WizardSegmented, WizardSelectCards } from './wizard-atoms';
 
 /** Handle imperativo: la shell del wizard dispara guardar+validar. */
@@ -589,7 +589,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
             type="submit"
             disabled={saving}
             className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-            style={{ background: '#557EFF' }}
+            style={{ background: WIZARD_CTA_GRADIENT }}
           >
             {saving ? 'Guardando…' : 'Guardar decisión de prenda'}
           </button>

@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { CarLoaderModal } from '@/components/atom/CarLoader';
 
 /**
  * `/tramites/nuevo` — entrada al asistente SIN modalidad en la URL.
@@ -43,9 +44,8 @@ export default function NuevoTramitePage() {
     };
   }, [router]);
 
-  return (
-    <p className="rounded-2xl border px-4 py-6 text-sm opacity-70" role="status" aria-live="polite">
-      Abriendo el asistente…
-    </p>
-  );
+  // La espera se pinta con el MISMO velo que las consultas al RUNT (`CarLoaderModal`): tarjeta
+  // blanca con el carrito sobre el fondo atenuado. Antes era un rótulo suelto, que en una ruta que
+  // no dibuja nada más dejaba la pantalla prácticamente en blanco.
+  return <CarLoaderModal label="Abriendo el asistente…" />;
 }

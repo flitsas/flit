@@ -4,6 +4,7 @@ import { AlertTriangle, FileWarning, Layers } from 'lucide-react';
 import { OcrStatusPanel, tipoLabel } from './DocumentChecklist';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { WizardCardHeader } from './wizard-atoms';
+import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import type { BatchReviewItem, BatchReviewState } from '@/hooks/useProcedureBatchUpload';
 import type { OcrUiResult } from '@/hooks/useProcedureDocuments';
 
@@ -235,7 +236,7 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
           onClick={onConfirm}
           disabled={subiendo || aceptadas.length === 0}
           className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-          style={{ background: '#557EFF' }}
+          style={{ background: WIZARD_CTA_GRADIENT }}
         >
           {subiendo
             ? 'Adjuntando…'

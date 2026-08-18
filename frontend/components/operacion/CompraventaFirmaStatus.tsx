@@ -5,7 +5,7 @@ import { Check, Copy, RefreshCw } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { Signature, SignatureParte } from '@/lib/api/types/procedure-runtime';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
-import { WIZARD_INPUT } from './wizard-field-styles';
+import { WIZARD_INPUT, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
 const PARTE_LABEL: Record<SignatureParte, string> = {
   comprador: 'Comprador',
@@ -50,7 +50,7 @@ function CopyLink({ link, label }: { link: string; label: string }) {
         type="button"
         onClick={() => void handleCopy()}
         className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white shrink-0"
-        style={{ background: '#557EFF' }}
+        style={{ background: WIZARD_CTA_GRADIENT }}
         aria-label="Copiar enlace"
       >
         {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}

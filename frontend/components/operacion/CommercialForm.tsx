@@ -10,7 +10,7 @@ import type {
   CommercialCausal,
   CommercialData,
 } from '@/lib/api/types/procedure-runtime';
-import { WIZARD_INPUT, WIZARD_CARD } from './wizard-field-styles';
+import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { WizardCardHeader } from './wizard-atoms';
 import { InlineAlert, INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 
@@ -339,7 +339,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
             type="submit"
             disabled={saving || !valid}
             className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-            style={{ background: '#557EFF' }}
+            style={{ background: WIZARD_CTA_GRADIENT }}
           >
             {saving ? 'Guardando…' : 'Guardar datos comerciales'}
           </button>

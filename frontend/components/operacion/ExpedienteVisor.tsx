@@ -11,7 +11,7 @@ import {
 import { documentLabel } from '@/lib/tramites/document-labels';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { WizardCardHeader } from './wizard-atoms';
-import { WIZARD_CARD } from './wizard-field-styles';
+import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import type {
   ChecklistItemView,
   InstanceStatus,
@@ -476,11 +476,13 @@ function ExpedienteConsolidadoCard({
         ) : null}
 
         {instanceId && (!estadoFinal || consolidado) ? (
-          // Sólido azul, sin borde (captura Step5) — no el degradado que traía «Descargar todo».
+          // CTA primario en el degradado de marca (`gradient.primary`), igual que el resto de
+          // acciones principales del módulo. Antes iba en azul plano copiando la captura del Step5;
+          // el guardián de diseño rechaza el CTA primario plano, así que se unifica con el degradado.
           <button
             type="button"
             className="inline-flex items-center justify-center rounded-full px-6 py-2.5 text-xs font-semibold text-white transition hover:opacity-95 disabled:opacity-50"
-            style={{ background: BLUE }}
+            style={{ background: WIZARD_CTA_GRADIENT }}
             disabled={busy}
             onClick={() => void handleVerExpediente()}
             aria-label="Ver expediente consolidado (PDF)"

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { notFound, useParams, useRouter, useSearchParams } from 'next/navigation';
 import { TramiteWizard } from '@/components/operacion/TramiteWizard';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { CarLoaderModal } from '@/components/atom/CarLoader';
 import type { WizardModalidad } from '@/lib/api/types/procedure-runtime';
 
 /**
@@ -64,9 +65,9 @@ function PasoConsulta({ modalidad }: { modalidad: WizardModalidad }) {
 
   if (gate === 'loading') {
     return (
-      <div className="rounded-2xl border px-4 py-6 text-sm opacity-70" role="status">
-        Verificando permisos de la compañía…
-      </div>
+      // Mismo velo que las consultas al RUNT: mientras se resuelve el gate no hay nada más en
+      // pantalla, y una línea suelta no se leía como una espera.
+      <CarLoaderModal label="Verificando permisos de la compañía…" />
     );
   }
 

@@ -22,6 +22,8 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
 import { TramitesListToolbar } from './TramitesListToolbar';
+import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { CarLoaderModal } from '@/components/atom/CarLoader';
 import {
   TramitesFiltrosBar,
   TramitesFiltrosChips,
@@ -870,7 +872,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
             // Sin icono: en la propuesta el botón es solo el rótulo en dos líneas. El "+" no añadía
             // nada que el texto no dijera y competía con él por el centro del botón.
             className="flex min-h-[88px] w-28 shrink-0 flex-col items-center justify-center rounded-2xl text-sm font-semibold leading-tight text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
-            style={{ background: '#557EFF' }}
+            style={{ background: WIZARD_CTA_GRADIENT }}
           >
             <span>
               Nuevo
@@ -1113,7 +1115,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
                 <button
                   type="button"
                   className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white"
-                  style={{ background: '#557EFF' }}
+                  style={{ background: WIZARD_CTA_GRADIENT }}
                   onClick={() => setProcessTarget(null)}
                 >
                   Entendido
@@ -1131,7 +1133,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite }: TramitesTablePro
                   <button
                     type="button"
                     className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                    style={{ background: '#557EFF' }}
+                    style={{ background: WIZARD_CTA_GRADIENT }}
                     disabled={processActing}
                     onClick={() => void confirmProcesar()}
                   >
@@ -1250,21 +1252,11 @@ function TableBody({
   onOpenDetalle: (item: InstanceSummary) => void;
 }) {
   if (loading) {
-    return (
-      <div
-        className="flex flex-col gap-2"
-        aria-busy="true"
-        aria-label="Cargando trámites"
-      >
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-12 rounded-xl animate-pulse"
-            style={{ background: 'rgba(223,229,237,0.5)' }}
-          />
-        ))}
-      </div>
-    );
+    // Carga de la pantalla principal del módulo: va con el loader de marca y no con barras de
+    // esqueleto. Las barras siguen siendo el patrón correcto DENTRO del detalle —allí cada bloque
+    // carga por separado y el esqueleto conserva la silueta de la sección—, pero aquí se está
+    // esperando la pantalla entera, y esa espera es la que el loader del módulo tiene que nombrar.
+    return <CarLoaderModal label="Cargando trámites…" />;
   }
 
   if (error) {

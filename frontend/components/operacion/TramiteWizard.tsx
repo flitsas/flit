@@ -1326,9 +1326,16 @@ export function TramiteWizard(props: Props) {
       <section id="tramite-wizard-scroll">
         <div className="py-1">
           {!activeStep ? (
-            <p className="text-xs opacity-60">
-              {wizardLoading ? 'Cargando el asistente…' : 'Este flujo no tiene pasos.'}
-            </p>
+            wizardLoading ? (
+              // Cuerpo del asistente vacío mientras cargan los pasos: mismo velo que las consultas
+              // al RUNT, porque es la espera más larga y más visible del módulo y una línea de 12px
+              // era casi indistinguible de una pantalla en blanco. El velo va SOLO aquí y no también
+              // en el stepper de arriba —los dos los gobierna `wizardLoading`— porque dos velos
+              // superpuestos oscurecerían el fondo dos veces.
+              <CarLoaderModal label="Cargando el asistente…" />
+            ) : (
+              <p className="text-xs opacity-60">Este flujo no tiene pasos.</p>
+            )
           ) : (
             <div className="space-y-6">
               {/* El título del paso deja de VERSE: en la propuesta el nombre vive en el asistente
@@ -2716,7 +2723,7 @@ function ConsultaStep({
       // backend como en el gate de "Continuar y guardar".
       disabled={loading || familyBlocked || !identificadorCompleto}
       className={`${WIZARD_BTN} flex shrink-0 items-center justify-center gap-2 text-white focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50`}
-      style={{ background: '#557EFF' }}
+      style={{ background: WIZARD_CTA_GRADIENT }}
       aria-label={familyBlocked ? 'Consulta no permitida para esta compañía' : 'Consultar RUNT'}
     >
       <Search className="h-3.5 w-3.5" />

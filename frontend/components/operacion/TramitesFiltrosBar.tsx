@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { ChevronDown, Search, X } from 'lucide-react';
+import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
 /**
  * Fila de acciones compactas del listado de trámites (Track A). Reemplaza a la tarjeta blanca de
@@ -304,7 +305,8 @@ function PeriodoPopover({
             <button
               type="button"
               onClick={handleAplicar}
-              className="rounded-xl bg-[#557EFF] px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+              className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+              style={{ background: WIZARD_CTA_GRADIENT }}
             >
               Aplicar
             </button>
@@ -516,7 +518,8 @@ function FiltroEspecificoPopover({
             <button
               type="button"
               onClick={handleAplicar}
-              className="rounded-xl bg-[#557EFF] px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+              className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+              style={{ background: WIZARD_CTA_GRADIENT }}
             >
               Aplicar
             </button>

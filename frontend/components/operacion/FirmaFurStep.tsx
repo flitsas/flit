@@ -42,7 +42,7 @@ import type {
   TransitOfficeOption,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
-import { WIZARD_INPUT, WIZARD_CARD } from './wizard-field-styles';
+import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
 /** Estado de la pre-generación del paquete al entrar al paso FUR (Feature #11066). */
 export type PaqueteDocsStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -217,7 +217,7 @@ export function CopyLink({
         type="button"
         onClick={() => void handleCopy()}
         className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white shrink-0"
-        style={{ background: '#557EFF' }}
+        style={{ background: WIZARD_CTA_GRADIENT }}
         aria-label="Copiar enlace"
       >
         {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
@@ -1371,7 +1371,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
             type="submit"
             disabled={submitting || !instanceId}
             className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-            style={{ background: '#557EFF' }}
+            style={{ background: WIZARD_CTA_GRADIENT }}
           >
             {submitting ? 'Invitando…' : 'Invitar participante'}
           </button>
@@ -1596,7 +1596,7 @@ function PlateFlowCompleteSection({
           disabled={working}
           onClick={() => void completar()}
           className="rounded-lg px-3.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ background: '#557EFF' }}
+          style={{ background: WIZARD_CTA_GRADIENT }}
         >
           {working ? 'Procesando…' : 'Marcar como Terminado'}
         </button>

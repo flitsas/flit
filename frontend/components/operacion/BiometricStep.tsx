@@ -16,7 +16,7 @@ import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { WizardCardHeader } from './wizard-atoms';
-import { WIZARD_CARD } from './wizard-field-styles';
+import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import type {
   BiometricEstado,
@@ -934,7 +934,7 @@ function KyverumPendingView({
             target="_blank"
             rel="noopener noreferrer"
             className="flex w-fit items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{ background: '#557EFF' }}
+            style={{ background: WIZARD_CTA_GRADIENT }}
           >
             <ExternalLink className="h-3 w-3" aria-hidden />
             Abrir captura Kyverum
@@ -1293,7 +1293,7 @@ function StartAction({
               ? 'flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2'
               : 'rounded-xl px-3 py-2 text-xs font-semibold text-white disabled:opacity-50'
           }
-          style={variant === 'secondary' ? { borderColor: '#557EFF', color: '#557EFF' } : { background: '#557EFF' }}
+          style={variant === 'secondary' ? { borderColor: '#557EFF', color: '#557EFF' } : { background: WIZARD_CTA_GRADIENT }}
         >
           {buttonLabel}
         </button>
@@ -1319,7 +1319,7 @@ function StartAction({
             <button
               type="button"
               className="rounded-lg px-2 py-1 font-semibold text-white disabled:opacity-50"
-              style={{ background: '#557EFF' }}
+              style={{ background: WIZARD_CTA_GRADIENT }}
               onClick={() => void doStart()}
               disabled={submitting}
             >
