@@ -2,6 +2,9 @@
 
 import { AlertTriangle, FileWarning, Layers } from 'lucide-react';
 import { OcrStatusPanel, tipoLabel } from './DocumentChecklist';
+import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
+import { WizardCardHeader } from './wizard-atoms';
+import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import type { BatchReviewItem, BatchReviewState } from '@/hooks/useProcedureBatchUpload';
 import type { OcrUiResult } from '@/hooks/useProcedureDocuments';
 
@@ -32,19 +35,12 @@ function rangoPaginas(paginas: number[], total: number): string {
     : `págs. ${paginas.join(', ')} de ${total}`;
 }
 
-function Chip({ text, tone = 'info' }: { text: string; tone?: 'info' | 'warn' | 'muted' }) {
-  const palette =
-    tone === 'warn'
-      ? { background: 'rgba(249,172,0,0.18)', color: '#B77900' }
-      : tone === 'muted'
-        ? { background: 'rgba(120,130,145,0.15)', color: '#5B6472' }
-        : { background: 'rgba(85,126,255,0.10)', color: '#557EFF' };
-  return (
-    <span className="rounded px-1.5 py-0.5 text-[9px] font-semibold" style={palette}>
-      {text}
-    </span>
-  );
-}
+/** Tono semántico del `StatusBadge` para las etiquetas de esta pantalla (HU consolidación). */
+const CHIP_TONE: Record<'info' | 'warn' | 'muted', StatusTone> = {
+  info: 'info',
+  warn: 'warning',
+  muted: 'neutral',
+};
 
 /** Una pieza propuesta, con su casilla, sus avisos y el mismo resumen OCR del cargue campo a campo. */
 function PieceRow({
@@ -85,18 +81,24 @@ function PieceRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs font-semibold">{tipoLabel(piece.tipo)}</span>
-            <Chip text={`${Math.round(piece.confianza * 100)}% de certeza`} tone="muted" />
+            <StatusBadge
+              label={`${Math.round(piece.confianza * 100)}% de certeza`}
+              tone={CHIP_TONE.muted}
+            />
             {recortada && (
-              <Chip text={`recorte · ${rangoPaginas(piece.paginas, piece.totalPaginasOrigen)}`} />
+              <StatusBadge
+                label={`recorte · ${rangoPaginas(piece.paginas, piece.totalPaginasOrigen)}`}
+                tone={CHIP_TONE.info}
+              />
             )}
           </div>
 
-          <p className="mt-1 truncate text-[11px] opacity-70">
+          <p className="mt-1 truncate text-xs opacity-70">
             De {piece.sourceFilename} · {formatSize(piece.sizeBytes)}
           </p>
 
           {piece.motivo && (
-            <p className="mt-0.5 text-[10px] opacity-50">{piece.motivo}</p>
+            <p className="mt-0.5 text-xs opacity-50">{piece.motivo}</p>
           )}
         </div>
 
@@ -106,8 +108,8 @@ function PieceRow({
       {/* Avisos que explican por qué la pieza llegó desmarcada. */}
       {conflicto && (
         <p
-          className="mt-2 flex items-start gap-1.5 text-[10px] font-medium"
-          style={{ color: '#B77900' }}
+          className="mt-2 flex items-start gap-1.5 text-xs font-medium"
+          style={{ color: 'var(--badge-warning-fg)' }}
         >
           <AlertTriangle className="mt-px h-3 w-3 shrink-0" aria-hidden="true" />
           <span>
@@ -118,8 +120,8 @@ function PieceRow({
 
       {duplicado && (
         <p
-          className="mt-2 flex items-start gap-1.5 text-[10px] font-medium"
-          style={{ color: '#B77900' }}
+          className="mt-2 flex items-start gap-1.5 text-xs font-medium"
+          style={{ color: 'var(--badge-warning-fg)' }}
         >
           <Layers className="mt-px h-3 w-3 shrink-0" aria-hidden="true" />
           <span>
@@ -147,26 +149,26 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
       style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.04)' }}
       aria-label="Revisión de la carga masiva"
     >
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h4 className="text-sm font-bold">Revisa antes de adjuntar</h4>
-          <p className="text-[11px] opacity-60">
-            {nada
-              ? 'No pudimos identificar documentos en lo que cargaste.'
-              : `Encontramos ${items.length} documento${items.length === 1 ? '' : 's'}. Marca los que quieras adjuntar; nada se guarda hasta que confirmes.`}
-          </p>
-        </div>
-        {!nada && (
-          <span
-            className="shrink-0 rounded-full px-3 py-1 text-[11px] font-bold"
-            style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
-            role="status"
-            aria-live="polite"
-          >
-            {aceptadas.length} seleccionado{aceptadas.length === 1 ? '' : 's'}
-          </span>
-        )}
-      </div>
+      <WizardCardHeader
+        title="Revisa antes de adjuntar"
+        subtitle={
+          nada
+            ? 'No pudimos identificar documentos en lo que cargaste.'
+            : `Encontramos ${items.length} documento${items.length === 1 ? '' : 's'}. Marca los que quieras adjuntar; nada se guarda hasta que confirmes.`
+        }
+        action={
+          !nada ? (
+            <span
+              className="shrink-0 rounded-full px-3 py-1 text-xs font-bold"
+              style={{ background: 'rgba(85,126,255,0.12)', color: '#557EFF' }}
+              role="status"
+              aria-live="polite"
+            >
+              {aceptadas.length} seleccionado{aceptadas.length === 1 ? '' : 's'}
+            </span>
+          ) : undefined
+        }
+      />
 
       {items.length > 0 && (
         <ul className="space-y-2" aria-label="Documentos encontrados">
@@ -180,20 +182,20 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
           error: en un expediente real la mayoría de páginas son mandatos, cédulas y portadas. */}
       {noReconocidos.length > 0 && (
         <div className="mt-3 rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
-          <p className="flex items-center gap-1.5 text-[11px] font-semibold">
-            <FileWarning className="h-3.5 w-3.5" style={{ color: '#B77900' }} aria-hidden="true" />
+          <p className="flex items-center gap-1.5 text-xs font-semibold">
+            <FileWarning className="h-3.5 w-3.5" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
             Páginas que no pudimos ubicar
           </p>
           <ul className="mt-1.5 space-y-1">
             {noReconocidos.map((n) => (
-              <li key={n.sourceFilename} className="text-[11px] opacity-70">
+              <li key={n.sourceFilename} className="text-xs opacity-70">
                 <span className="font-medium">{n.sourceFilename}</span>{' '}
                 — {n.paginas.length} de {n.totalPaginas} página
                 {n.totalPaginas === 1 ? '' : 's'} sin clasificar.
               </li>
             ))}
           </ul>
-          <p className="mt-1.5 text-[10px] opacity-60">
+          <p className="mt-1.5 text-xs opacity-60">
             Si falta algún documento, cárgalo directamente en su casilla más abajo: ahí el análisis se
             hace sabiendo qué tipo esperas y suele acertar donde el reparto automático no pudo.
           </p>
@@ -206,12 +208,12 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
           style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)' }}
           role="alert"
         >
-          <p className="text-[11px] font-semibold" style={{ color: '#FF4E00' }}>
+          <p className="text-xs font-semibold" style={{ color: '#FF4E00' }}>
             Archivos que no pudimos procesar
           </p>
           <ul className="mt-1.5 space-y-1">
             {errores.map((e) => (
-              <li key={`${e.filename}-${e.motivo}`} className="text-[11px]" style={{ color: '#FF4E00' }}>
+              <li key={`${e.filename}-${e.motivo}`} className="text-xs" style={{ color: '#FF4E00' }}>
                 <span className="font-medium">{e.filename}</span> — {e.motivo}
               </li>
             ))}
@@ -224,7 +226,7 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
           type="button"
           onClick={onCancel}
           disabled={subiendo}
-          className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
           style={{ borderColor: 'var(--color-border)' }}
         >
           Descartar
@@ -233,8 +235,8 @@ export function BatchReviewPanel({ state, aceptadas, onToggle, onConfirm, onCanc
           type="button"
           onClick={onConfirm}
           disabled={subiendo || aceptadas.length === 0}
-          className="rounded-xl px-3 py-1.5 text-[11px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-          style={{ background: '#557EFF' }}
+          className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+          style={{ background: WIZARD_CTA_GRADIENT }}
         >
           {subiendo
             ? 'Adjuntando…'

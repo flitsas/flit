@@ -44,7 +44,7 @@ export function CatalogSearchSelect({
 
   return (
     <div className="relative">
-      <label htmlFor={id} className="block text-[11px] font-medium opacity-70 mb-1">
+      <label htmlFor={id} className="block text-xs font-medium opacity-70 mb-1">
         {label}
       </label>
       <button
@@ -59,7 +59,7 @@ export function CatalogSearchSelect({
           setOpen((v) => !v);
           setTimeout(() => inputRef.current?.focus(), 0);
         }}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14]"
+        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none transition focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-60 dark:bg-[#162744]"
       >
         <span className={display ? 'font-medium' : 'opacity-50'}>
           {display || 'Selecciona…'}
@@ -69,7 +69,7 @@ export function CatalogSearchSelect({
 
       {open && !disabled && (
         <div
-          className="absolute z-30 mt-1 w-full rounded-xl border bg-white p-2 shadow-lg dark:bg-[#0B0F14]"
+          className="absolute z-30 mt-1 w-full rounded-xl border bg-white p-2 shadow-lg dark:bg-[#162744]"
           role="listbox"
           aria-label={label}
         >
@@ -84,14 +84,14 @@ export function CatalogSearchSelect({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={placeholder}
-              className="w-full rounded-lg border bg-transparent py-1.5 pl-8 pr-2 text-xs outline-none focus:border-[#557EFF]"
+              className="w-full rounded-lg border bg-transparent py-1.5 pl-8 pr-2 text-xs outline-none transition focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
               aria-label={`Buscar en ${label}`}
               autoComplete="off"
             />
           </div>
           <ul className="max-h-48 overflow-y-auto">
             {filtered.length === 0 ? (
-              <li className="px-2 py-2 text-[11px] opacity-55">Sin coincidencias</li>
+              <li className="px-2 py-2 text-xs opacity-55">Sin coincidencias</li>
             ) : (
               filtered.map((opt) => {
                 const selected = opt.toUpperCase() === display.toUpperCase();

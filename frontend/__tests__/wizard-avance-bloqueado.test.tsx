@@ -105,13 +105,13 @@ describe('Wizard — avance rechazado por un gate del backend', () => {
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     // El wizard abre en la frontera: el paso del comprador.
-    await screen.findByRole('button', { name: /^Paso 4: Comprador/ });
+    await screen.findByRole('button', { name: /^Paso 4: Actores/ });
 
     await user.click(await screen.findByRole('button', { name: /Guardar y continuar/ }));
 
     await waitFor(() => expect(mocks.saveActors).toHaveBeenCalled());
     // Comportamiento original: se queda en el mismo paso (el motivo se lee en el sidebar).
-    expect(screen.getByRole('button', { name: /^Paso 4: Comprador/ })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: /^Paso 4: Actores/ })).toHaveAttribute(
       'aria-label',
       expect.stringContaining('incomplete'),
     );
@@ -121,7 +121,7 @@ describe('Wizard — avance rechazado por un gate del backend', () => {
   it('el código crudo del gate ya no se muestra humanizado ("Simit Pendiente")', async () => {
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
-    await screen.findByRole('button', { name: /^Paso 4: Comprador/ });
+    await screen.findByRole('button', { name: /^Paso 4: Actores/ });
 
     expect(screen.queryByText('Simit Pendiente')).not.toBeInTheDocument();
     expect(

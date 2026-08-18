@@ -10,6 +10,9 @@ import type {
   CommercialCausal,
   CommercialData,
 } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { WizardCardHeader } from './wizard-atoms';
+import { InlineAlert, INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 
 /** Handle imperativo: la shell del wizard dispara guardar+validar. */
 export type CommercialFormHandle = WizardStepFormHandle;
@@ -37,8 +40,10 @@ const CAUSAL_OPTIONS: { value: CommercialCausal; label: string }[] = [
   { value: 'ADJUDICACION', label: 'Adjudicación' },
 ];
 
-const INPUT_BASE =
-  'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF] aria-[invalid=true]:border-[#FF4E00]';
+const INPUT_BASE = WIZARD_INPUT;
+/** Rótulo de campo: mismo color/tamaño del sistema (`wizard-field-styles`), con hueco para el asterisco. */
+const FIELD_LABEL = 'text-xs font-medium text-[#59677D] dark:text-white/70 mb-1.5 block';
+const REQUIRED_LABEL = 'text-xs font-medium text-[#59677D] dark:text-white/70 mb-1.5 flex items-center gap-1.5';
 
 const EMPTY: CommercialData = {
   valorVenta: null,
@@ -146,69 +151,47 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
+      className={WIZARD_CARD}
       aria-label="Datos comerciales del trámite"
       noValidate
     >
       {!hideHeader && (
-        <div className="mb-3">
-          <h4 className="text-sm font-bold">Datos comerciales</h4>
-          <p className="text-[11px] opacity-60">
-            Valor de la venta, causal e impuestos del traspaso.
-          </p>
-        </div>
-      )}
-
-      {error && (
-        <div
-          className="rounded-xl p-3 text-xs border mb-3 flex items-center justify-between gap-3"
-          style={{
-            borderColor: '#FF4E00',
-            background: 'rgba(255,78,0,0.06)',
-            color: '#FF4E00',
-          }}
-          role="alert"
-          aria-live="polite"
-        >
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={() => setError(null)}
-            className="font-bold"
-            aria-label="Descartar error"
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {!readOnly && (
-        <AvaluoComercialCard
-          instanceId={instanceId}
-          disabled={readOnly}
-          accepted={data.valueOrigin === 'suggestion'}
-          onAccept={(value, source, sugerido) =>
-            setData((d) => ({
-              ...d,
-              valorVenta: value,
-              valueOrigin: 'suggestion',
-              suggestedSource: source,
-              suggestedValue: sugerido,
-            }))
-          }
+        <WizardCardHeader
+          title="Datos comerciales"
+          subtitle="Valor de la venta, causal e impuestos del traspaso."
         />
       )}
 
+      {error && (
+        <InlineAlert
+          tone="error"
+          className="mb-3"
+          action={
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className="font-bold"
+              style={{ color: INLINE_ALERT_TONES.error.color }}
+              aria-label="Descartar error"
+            >
+              ×
+            </button>
+          }
+        >
+          {error}
+        </InlineAlert>
+      )}
+
      <fieldset disabled={readOnly} className="contents">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div>
-          <label htmlFor="comercial-valor" className="text-xs font-semibold mb-1.5 flex items-center gap-1.5">
+          <label htmlFor="comercial-valor" className={REQUIRED_LABEL}>
             Valor de venta
             <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
           </label>
           <div className="relative">
             <span
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs opacity-60"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs opacity-70"
               aria-hidden="true"
             >
               $
@@ -236,7 +219,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
         </div>
 
         <div>
-          <label htmlFor="comercial-causal" className="text-xs font-semibold mb-1.5 flex items-center gap-1.5">
+          <label htmlFor="comercial-causal" className={REQUIRED_LABEL}>
             Causal
             <span style={{ color: '#FF4E00' }} aria-label="obligatorio">*</span>
           </label>
@@ -261,8 +244,8 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
         </div>
 
         <div>
-          <label htmlFor="comercial-tasa" className="text-xs font-semibold mb-1.5 block">
-            Tasa de impuesto <span className="opacity-50 font-normal">(%)</span>
+          <label htmlFor="comercial-tasa" className={FIELD_LABEL}>
+            Tasa de impuesto <span className="opacity-70 font-normal">(%)</span>
           </label>
           <input
             id="comercial-tasa"
@@ -280,7 +263,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
         </div>
 
         <div>
-          <label htmlFor="comercial-derechos" className="text-xs font-semibold mb-1.5 block">
+          <label htmlFor="comercial-derechos" className={FIELD_LABEL}>
             Derechos
           </label>
           <input
@@ -297,8 +280,8 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
           />
         </div>
 
-        <div className="md:col-span-2">
-          <label htmlFor="comercial-metodo" className="text-xs font-semibold mb-1.5 block">
+        <div>
+          <label htmlFor="comercial-metodo" className={FIELD_LABEL}>
             Método de pago
           </label>
           <input
@@ -314,21 +297,41 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
       </div>
      </fieldset>
 
+      {/* Avalúo comercial: ayuda de captura, debajo de la rejilla de datos. */}
+      {!readOnly && (
+        <div className="mt-4">
+          <AvaluoComercialCard
+            instanceId={instanceId}
+            disabled={readOnly}
+            accepted={data.valueOrigin === 'suggestion'}
+            onAccept={(value, source, sugerido) =>
+              setData((d) => ({
+                ...d,
+                valorVenta: value,
+                valueOrigin: 'suggestion',
+                suggestedSource: source,
+                suggestedValue: sugerido,
+              }))
+            }
+          />
+        </div>
+      )}
+
       {/* Embebido en el wizard el guardado lo dispara el footer "Guardar y
           continuar" (vía save() del ref); aquí se omite el botón propio. */}
       {!readOnly && !embeddedInWizard && (
         <div className="flex items-center justify-between gap-3 mt-4">
           {saved ? (
             <span
-              className="text-[11px] font-semibold"
-              style={{ color: '#8CC63F' }}
+              className="text-xs font-semibold"
+              style={{ color: 'var(--flit-success-ink)' }}
               role="status"
               aria-live="polite"
             >
               Datos comerciales guardados ✓
             </span>
           ) : (
-            <span className="text-[11px] opacity-50">
+            <span className="text-xs opacity-70">
               {loading ? 'Cargando…' : ''}
             </span>
           )}
@@ -336,7 +339,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
             type="submit"
             disabled={saving || !valid}
             className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-            style={{ background: '#557EFF' }}
+            style={{ background: WIZARD_CTA_GRADIENT }}
           >
             {saving ? 'Guardando…' : 'Guardar datos comerciales'}
           </button>

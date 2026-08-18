@@ -1,9 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Check,
-  ChevronDown,
   Copy,
   RefreshCw,
   Search,
@@ -15,7 +14,7 @@ import {
   listAvailablePlatesForCompany,
   type PlateDetail,
 } from '@/lib/api/admin-plate-ranges';
-import MatriculaResumen from './MatriculaResumen';
+import MatriculaResumen, { ResumenCard } from './MatriculaResumen';
 import ExpedienteVisor from './ExpedienteVisor';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
@@ -23,10 +22,14 @@ import { PRENDA_DECISION_LABELS } from './PrendaForm';
 import { prendaDocLabelFor, prendaDocTipoFor } from './prenda-document-tipos';
 import { summarizeDeclaredTransformations } from './VehicleTransformationsCard';
 import { InlineAlert } from '@/components/atom/InlineAlert';
+import { StatusBadge } from '@/components/atom/StatusBadge';
+import { WizardCardHeader } from './wizard-atoms';
+import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import type {
   Actor,
   BiometricParte,
   BiometricValidation,
+  ChecklistItemView,
   FieldValue,
   InstanceStatus,
   Participant,
@@ -39,6 +42,7 @@ import type {
   TransitOfficeOption,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
 /** Estado de la pre-generación del paquete al entrar al paso FUR (Feature #11066). */
 export type PaqueteDocsStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -59,14 +63,25 @@ interface Props {
   vaultCoveredPartes?: BiometricParte[];
   /** Borrador finalizado: biométrica editable aunque el wizard esté read-only. */
   biometricForceEditable?: boolean;
+  /**
+   * Rediseño Step5 (punto 6) — «Confirmaciones pendientes» de `ExpedienteVisor` (las casillas del
+   * expediente consolidado, nacidas desmarcadas: datos del vehículo, autorización de datos,
+   * radicación, trámites simultáneos). Se dispara con la lista de textos SIN confirmar cada vez que
+   * cambia — `[]` cuando no falta ninguna o cuando el expediente todavía no aplica (trámite en
+   * estado final o sin `instanceId`). Las casillas NO gatean nada por sí mismas — solo abren el PDF
+   * del consolidado en pestaña, que no exige confirmación—; es el wizard (`TramiteWizard`) quien
+   * debe sumar esta lista a «Requisitos pendientes antes del envío» y usarla para deshabilitar
+   * «Finalizar y enviar trámite», el mismo mecanismo que ya usa para sus otros bloqueos.
+   */
+  onConfirmacionesExpedienteChange?: (pendientes: string[]) => void;
 }
 
 // FEATURE 05 — colores por estado del check RNMC (mismo semáforo del pre-vuelo: ok verde, warn ámbar).
 const RNMC_STATUS_STYLE: Record<string, { dot: string; text: string }> = {
-  ok: { dot: '#8CC63F', text: '#8CC63F' },
-  warn: { dot: '#F9AC00', text: '#F9AC00' },
+  ok: { dot: '#8CC63F', text: 'var(--flit-success-ink)' },
+  warn: { dot: '#F9AC00', text: 'var(--badge-warning-fg)' },
   fail: { dot: '#FF4E00', text: '#FF4E00' },
-  unknown: { dot: '#9AA5B1', text: '#9AA5B1' },
+  unknown: { dot: '#59677D', text: '#59677D' },
   error: { dot: '#FF4E00', text: '#FF4E00' },
 };
 
@@ -77,16 +92,21 @@ const RNMC_STATUS_STYLE: Record<string, { dot: string; text: string }> = {
  */
 function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: boolean }) {
   return (
-    <div className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]">
-      <div className="mb-3 flex items-center gap-2">
-        <Search className="h-4 w-4 opacity-60" aria-hidden="true" />
-        <h3 className="text-sm font-semibold">Consulta RNMC — Medidas correctivas</h3>
-        {loading && <RefreshCw className="h-3.5 w-3.5 animate-spin opacity-60" aria-hidden="true" />}
-      </div>
+    <div className={WIZARD_CARD}>
+      <WizardCardHeader
+        title="Consulta RNMC — Medidas correctivas"
+        action={
+          loading ? (
+            <RefreshCw className="h-3.5 w-3.5 animate-spin opacity-70" aria-hidden="true" />
+          ) : (
+            <Search className="h-4 w-4 opacity-70" aria-hidden="true" />
+          )
+        }
+      />
       {loading && checks.length === 0 ? (
-        <p className="text-[11px] opacity-60">Consultando el RNMC de los actores…</p>
+        <p className="text-xs opacity-70">Consultando el RNMC de los actores…</p>
       ) : checks.length === 0 ? (
-        <p className="text-[11px] opacity-60">Sin resultados del RNMC para los actores del trámite.</p>
+        <p className="text-xs opacity-70">Sin resultados del RNMC para los actores del trámite.</p>
       ) : (
         <ul className="space-y-1.5" aria-label="Resultados RNMC por actor">
           {checks.map((c) => {
@@ -104,17 +124,12 @@ function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: b
                       {c.label}
                       {checkRoleSuffix(c.key)}
                     </span>
-                    <span className="text-[10px] uppercase font-bold" style={{ color: s.text }}>
+                    <span className="text-xs uppercase font-bold" style={{ color: s.text }}>
                       {c.status}
                     </span>
-                    <span
-                      className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
-                      style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
-                    >
-                      {sourceLabel(c.source)}
-                    </span>
+                    <StatusBadge label={sourceLabel(c.source)} tone="info" />
                   </div>
-                  {c.message && <p className="mt-0.5 text-[11px] opacity-70">{c.message}</p>}
+                  {c.message && <p className="mt-0.5 text-xs opacity-70">{c.message}</p>}
                 </div>
               </li>
             );
@@ -122,6 +137,30 @@ function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: b
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * Ficha informativa del organismo de tránsito ya resuelto (paso 1, HU #11199, o RUNT en traspaso).
+ * Solo lectura: no repite el buscador ni el modal de selección —eso ya se resolvió antes de llegar
+ * aquí— por eso NO es una región nombrada «Organismo de tránsito»: ese landmark identificaba al
+ * selector editable que se retiró (B11/HU #10659, AC4/HU #11199) y varios tests fijan a propósito
+ * que ya no vuelva a aparecer. Esta es solo la nota de contexto junto a la preasignación de placa,
+ * como en la propuesta («Organismo de tránsito y preasignación de placa», Step5).
+ */
+// `ResumenCard` en vez de una tarjeta propia: era la única del resumen sin la franja azul junto al
+// título, así que se leía como una pieza ajena entre prenda y placa preasignada.
+function OrganismoInfoCard({ name }: { name: string }) {
+  return (
+    <ResumenCard title="Organismo de tránsito">
+      <p className="text-sm font-semibold" style={{ color: '#162744' }}>
+        {name || 'Sin seleccionar'}
+      </p>
+      {/* El gestor solo llega a este paso con un OT que ya pasó la re-confirmación contra grants y
+          catálogo (HU #11199): el convenio activo y la radicación electrónica son una garantía del
+          sistema en este punto, no un dato que haya que consultar aparte. */}
+      <p className="mt-1 text-xs opacity-70">Convenio activo · Radicación electrónica habilitada</p>
+    </ResumenCard>
   );
 }
 
@@ -133,8 +172,7 @@ const ROL_OPTIONS: { value: ParticipantRol; label: string }[] = [
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const INPUT_BASE =
-  'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]';
+const INPUT_BASE = WIZARD_INPUT;
 
 /** Construye el magic-link absoluto a partir del path relativo del backend. */
 function absoluteLink(path: string): string {
@@ -142,8 +180,20 @@ function absoluteLink(path: string): string {
   return `${window.location.origin}${path}`;
 }
 
-/** Botón reutilizable de copiar un enlace al portapapeles. */
-function CopyLink({ link, label }: { link: string; label: string }) {
+/**
+ * Botón reutilizable de copiar un enlace al portapapeles. `mono` lo usa el enlace de captura
+ * biométrica del resumen (tracking por actor): un enlace se lee como dato técnico, no como texto.
+ */
+export function CopyLink({
+  link,
+  label,
+  mono = false,
+}: {
+  link: string;
+  label: string;
+  /** Tipografía monoespaciada del campo — el enlace de captura biométrica, no el de participantes. */
+  mono?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   const handleCopy = async () => {
     try {
@@ -161,13 +211,13 @@ function CopyLink({ link, label }: { link: string; label: string }) {
         readOnly
         value={link}
         aria-label={label}
-        className={INPUT_BASE}
+        className={mono ? `${INPUT_BASE} font-mono` : INPUT_BASE}
       />
       <button
         type="button"
         onClick={() => void handleCopy()}
-        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-semibold text-white shrink-0"
-        style={{ background: '#557EFF' }}
+        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white shrink-0"
+        style={{ background: WIZARD_CTA_GRADIENT }}
         aria-label="Copiar enlace"
       >
         {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
@@ -193,6 +243,7 @@ export function FirmaFurStep({
   onPaqueteStatusChange,
   vaultCoveredPartes = [],
   biometricForceEditable = false,
+  onConfirmacionesExpedienteChange,
 }: Props) {
   // Solo lectura (Track C): sin acciones (organismo, firma, participantes, FUR);
   // se conserva la visualización (resumen, expediente, timeline, descargas).
@@ -210,6 +261,9 @@ export function FirmaFurStep({
   // Adjuntos + biométrica del expediente (alimentan MatriculaResumen y ExpedienteVisor).
   const [attachments, setAttachments] = useState<ProcedureAttachment[]>([]);
   const [biometric, setBiometric] = useState<BiometricValidation[]>([]);
+  // Checklist de documentos requeridos por la tipología (rediseño «Documentos cargados», Step5):
+  // fuente de la rejilla de `ExpedienteVisor` — no los adjuntos ya generados (`attachments`).
+  const [checklist, setChecklist] = useState<ChecklistItemView[]>([]);
   // HU #11014 — partes cubiertas por la firma del baúl: el expediente las rotula como firmadas desde
   // el baúl en vez de hablar del certificado de validación de identidad.
   const [firmaBaulPartes, setFirmaBaulPartes] = useState<string[]>([]);
@@ -217,6 +271,10 @@ export function FirmaFurStep({
   const [prenda, setPrenda] = useState<PrendaData | null>(null);
   // HU #10988 — fecha del trámite en el resumen (estampa FUR y documentos).
   const [fechaTramite, setFechaTramite] = useState(todayIsoDate);
+  // HU #10536 — trámite prioritario, visible y accionable desde la cabecera del resumen (antes solo
+  // se podía marcar en el paso 1 o desde el listado). Vive en una columna del expediente, no en
+  // `fieldValues`: se hidrata de `getInstance` y se cambia con su propio endpoint idempotente.
+  const [prioritario, setPrioritario] = useState(false);
   // FEATURE 05 — resultado RNMC por actor (medidas correctivas). Se consulta al entrar a este paso
   // (cuando ya se capturó la fecha de expedición de cada actor), no en el pre-vuelo.
   const [rnmcChecks, setRnmcChecks] = useState<PreflightCheck[]>([]);
@@ -245,6 +303,7 @@ export function FirmaFurStep({
       });
       setActorsContact(actors);
       setPrenda(p);
+      setPrioritario(d.prioritario ?? false);
       // Siempre la fecha del día (no editable en el resumen).
       const fecha = todayIsoDate();
       setFechaTramite(fecha);
@@ -272,20 +331,37 @@ export function FirmaFurStep({
     }
   }, [instanceId, fechaTramite]);
 
+  // HU #10536 — optimista con reversión: es una preferencia de orden en la bandeja del OT, no un
+  // requisito, y no merece bloquear el resumen. Mismo patrón que `handlePrioritario` del paso 1
+  // (TramiteWizard → ConsultaStep).
+  const handlePrioritarioChange = useCallback(
+    (value: boolean) => {
+      if (!instanceId) return;
+      setPrioritario(value);
+      void tramitesClient
+        .setPriority(instanceId, value)
+        .then(() => onRefresh?.())
+        .catch(() => setPrioritario(!value));
+    },
+    [instanceId, onRefresh],
+  );
+
   const loadExpediente = useCallback(async () => {
     if (!instanceId) return;
     try {
-      // allSettled: si la biométrica falla (404 en estados tempranos) no se
-      // pierde el listado de adjuntos, y viceversa. Ambos son informativos.
-      const [att, bio] = await Promise.allSettled([
+      // allSettled: si la biométrica o el checklist fallan (404 en estados tempranos) no se
+      // pierde el listado de adjuntos, y viceversa. Los tres son informativos.
+      const [att, bio, chk] = await Promise.allSettled([
         tramitesClient.getAttachments(instanceId),
         tramitesClient.listBiometricExpediente(instanceId),
+        tramitesClient.getChecklist(instanceId),
       ]);
       if (att.status === 'fulfilled') setAttachments(att.value);
       if (bio.status === 'fulfilled') {
         setBiometric(bio.value.validations);
         setFirmaBaulPartes(bio.value.firmaBaulPartes);
       }
+      if (chk.status === 'fulfilled') setChecklist(chk.value.items);
     } catch {
       // El expediente es informativo; no bloquea el render del paso.
     }
@@ -499,6 +575,42 @@ export function FirmaFurStep({
     })();
   }, [instanceId, readOnly, organismoSelected, estadoDetalle, loadExpediente]);
 
+  // Transformaciones de vehículo declaradas (`VehicleTransformationsCard`, paso de Requisitos): la
+  // reutiliza «Expediente consolidado» como su cuarta casilla de confirmación dinámica — «trámites
+  // simultáneos» (captura Step5, `subs`) — porque este módulo no tiene su propio concepto de
+  // sub-trámite. Se computa una sola vez para no repetir la lectura de `fieldValues`.
+  const transformacionesDeclaradas = summarizeDeclaredTransformations(detail?.fieldValues ?? []);
+
+  // «Organismo de tránsito y preasignación de placa» (captura Step5) — este módulo sigue siendo
+  // quien tiene los datos (OT resuelto, catálogo de placas). Antes viajaba como `organismoSlot` para
+  // que `MatriculaResumen` lo pintara junto a «Estado de validación de identidad», en la MISMA `grid
+  // lg:grid-cols-2` de la captura; al retirarse esa tarjeta (rediseño, la identidad ya vive dentro de
+  // cada actor), el organismo vuelve a su propia fila del paso, debajo del resumen — visible en las
+  // DOS modalidades (HU #10659/#11199: en traspaso el OT lo fija el RUNT). HU #10799 — la
+  // preasignación de placa (Flujo A) sigue exclusiva de matrícula inicial.
+  // Sin envolver en un `div`: van como celdas hermanas de la rejilla de tres columnas que pinta
+  // `MatriculaResumen`; envolverlas las volvería una sola celda apilada.
+  const organismoRow =
+    organismoSelected && instanceId ? (
+      <>
+        <OrganismoInfoCard name={organismo.name} />
+        {modalidad === 'matricula_inicial' && organismo.id && (
+          <PlacaPreasignadaSection
+            instanceId={instanceId}
+            organismoId={organismo.id}
+            plateValue={fv('plate')}
+            plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
+            preferredDigitValue={fv('plate_preferred_last_digit')}
+            readOnly={readOnly}
+            onRefresh={() => {
+              void loadDetail();
+              onRefresh?.();
+            }}
+          />
+        )}
+      </>
+    ) : null;
+
   return (
     <div className="space-y-8">
       <MatriculaResumen
@@ -521,6 +633,9 @@ export function FirmaFurStep({
           motor: fv('vehicle_engine_number'),
           chasis: fv('vehicle_chassis'),
           serie: fv('vehicle_series'),
+          // Casilla 19 del FUR — solo aplica con servicio Público o Especial (las dos modalidades).
+          empresaVinculadoraRazonSocial: fv('empresa_vinculadora_razon_social'),
+          empresaVinculadoraNit: fv('empresa_vinculadora_nit'),
         }}
         vendedor={toResumenActor(vendedor, vendedorContact)}
         comprador={toResumenActor(comprador, compradorContact)}
@@ -528,7 +643,7 @@ export function FirmaFurStep({
         identidadAprobada={identidadAprobada}
         firmaBaulPartes={firmaBaulPartes}
         soat={{ estado: fv('soat_estado'), vencimiento: fv('soat_vencimiento') }}
-        transformaciones={summarizeDeclaredTransformations(detail?.fieldValues ?? [])}
+        transformaciones={transformacionesDeclaradas}
         prenda={
           prenda
             ? (() => {
@@ -568,36 +683,31 @@ export function FirmaFurStep({
         }}
         vaultCoveredPartes={vaultCoveredPartes}
         biometricForceEditable={biometricForceEditable}
+        observacionesFur={fv('fur_observations') || null}
+        prioritario={prioritario}
+        onPrioritarioChange={instanceId ? handlePrioritarioChange : undefined}
+        extrasSlot={organismoRow}
       />
-
-      {/* HU #10799 — selección de placa preasignada como SECCIÓN explícita (Flujo A), solo en matrícula
-          inicial y una vez elegido el OT. No aplica si el VIN ya tiene placa del RUNT (AC2). */}
-      {modalidad === 'matricula_inicial' && organismoSelected && organismo.id && instanceId && (
-        <PlacaPreasignadaSection
-          instanceId={instanceId}
-          organismoId={organismo.id}
-          plateValue={fv('plate')}
-          plateSource={detail?.fieldValues.find((f) => f.fieldKey === 'plate')?.source ?? ''}
-          preferredDigitValue={fv('plate_preferred_last_digit')}
-          readOnly={readOnly}
-          onRefresh={() => {
-            void loadDetail();
-            onRefresh?.();
-          }}
-        />
-      )}
 
       <ExpedienteVisor
         instanceId={instanceId}
         attachments={attachments}
+        checklist={checklist}
         modalidad={modalidad}
         status={detail?.status ?? 'borrador'}
+        organismoNombre={organismo.name}
+        tramitesSimultaneos={transformacionesDeclaradas}
         onBeforeGenerateConsolidado={guardarFechaTramite}
+        onConfirmacionesPendientesChange={onConfirmacionesExpedienteChange}
         onAttachmentsChange={() => {
           void loadExpediente();
           onRefresh?.();
         }}
       />
+
+      {/* La trazabilidad cronológica del trámite NO va en el resumen (decisión del usuario): este
+          paso es para revisar antes de radicar, no para consultar el historial. `ExpedienteTimeline`
+          se conserva sin montar aquí — es la pieza natural del modal de detalle del trámite. */}
 
       {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
 
@@ -651,9 +761,6 @@ export function PlacaPreasignadaSection({
   const [savingDigit, setSavingDigit] = useState(false);
   // HU #10806 (AC3) — ¿la ruta de preasignación está activa para esta compañía/OT? null = cargando.
   const [preassignEnabled, setPreassignEnabled] = useState<boolean | null>(null);
-  // Mismo patrón de desplegable que MatriculaResumen (Vehículo, Comprador, …).
-  const [open, setOpen] = useState(true);
-  const panelId = useId();
 
   const placa = plateValue.trim();
   // AC2 — el VIN ya tiene placa del RUNT (no la eligió el usuario): no aplica la preasignación.
@@ -764,49 +871,21 @@ export function PlacaPreasignadaSection({
     ? plates.filter((p) => p.plate.toLowerCase().includes(query.trim().toLowerCase()))
     : plates;
 
+  // Tarjeta siempre abierta (rediseño): en la propuesta, «Organismo de tránsito y preasignación de
+  // placa» es una tarjeta fija, no un desplegable — el gestor la necesita visible junto al organismo,
+  // no detrás de un clic. Mismo tratamiento que `ResumenCard` de `MatriculaResumen`.
   const shell = (children: ReactNode) => (
-    <div
-      className="overflow-hidden rounded-xl border bg-white dark:bg-[#0B0F14]"
-      style={{ borderColor: '#DFE5ED' }}
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
-        aria-expanded={open}
-        aria-controls={panelId}
-      >
-        <span className="flex items-center gap-2">
-          <span
-            className="h-4 w-1 rounded-full"
-            style={{ background: '#557EFF' }}
-            aria-hidden="true"
-          />
-          <span
-            className="text-xs font-bold uppercase tracking-[0.2em]"
-            style={{ color: '#557EFF' }}
-          >
-            Placa preasignada
-          </span>
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-          style={{ color: '#9AA5B1' }}
-          aria-hidden
+    <section aria-label="Placa preasignada" className={WIZARD_CARD}>
+      <div className="mb-3 flex items-center gap-2">
+        <span
+          className="h-4 w-1 shrink-0 rounded-full"
+          style={{ background: '#557EFF' }}
+          aria-hidden="true"
         />
-      </button>
-      {open ? (
-        <div
-          id={panelId}
-          className="border-t px-4 py-3"
-          style={{ borderColor: '#DFE5ED' }}
-          role="region"
-          aria-label="Placa preasignada"
-        >
-          {children}
-        </div>
-      ) : null}
-    </div>
+        <WizardCardHeader title="Placa preasignada" level="h4" className="" />
+      </div>
+      {children}
+    </section>
   );
 
   if (vinTienePlacaRunt) {
@@ -831,7 +910,7 @@ export function PlacaPreasignadaSection({
               type="button"
               disabled={saving}
               onClick={() => setChanging(true)}
-              className="rounded-lg border px-3 py-1 text-[11px] font-semibold disabled:opacity-50"
+              className="rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50"
             >
               Cambiar
             </button>
@@ -839,7 +918,7 @@ export function PlacaPreasignadaSection({
               type="button"
               disabled={saving}
               onClick={() => void clearPlate()}
-              className="rounded-lg border px-3 py-1 text-[11px] font-semibold disabled:opacity-50"
+              className="rounded-lg border px-3 py-1 text-xs font-semibold disabled:opacity-50"
             >
               Quitar placa
             </button>
@@ -866,12 +945,12 @@ export function PlacaPreasignadaSection({
 
   return shell(
     <div className="mt-2 flex flex-col gap-3">
-      <p className="text-[11px] opacity-70">
+      <p className="text-xs opacity-70">
         Selecciona una placa del rango asignado por el organismo de tránsito. Si no seleccionas ninguna, el
         trámite se enviará al OT para que asigne la placa.
       </p>
       {error && (
-        <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
           {error}
         </p>
       )}
@@ -881,14 +960,16 @@ export function PlacaPreasignadaSection({
         </p>
       ) : (
         <>
-          <div className="flex items-center gap-2 rounded-xl border px-3 py-2">
+          {/* El anillo de foco va en el contenedor (el input pinta el borde de todo el grupo),
+              con `focus-within:ring-2`: así el buscador sí da una señal clara al tabular. */}
+          <div className="flex items-center gap-2 rounded-xl border border-[#DFE5ED] px-3 py-2 transition focus-within:border-[#557EFF] focus-within:ring-2 focus-within:ring-[#557EFF]/20 dark:border-white/15">
             <Search className="h-4 w-4 opacity-60" aria-hidden="true" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Buscar placa…"
               aria-label="Buscar placa disponible"
-              className="w-full bg-transparent text-xs outline-none"
+              className="w-full bg-transparent text-xs outline-none focus:ring-0"
             />
           </div>
           <div className="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
@@ -907,9 +988,9 @@ export function PlacaPreasignadaSection({
         </>
       )}
       {/* HU #10805 — dígito de preferencia para radicar sin placa (guía para el OT; opcional). */}
-      <label className="mt-1 flex flex-col gap-1 text-[11px] font-semibold">
+      <label className="mt-1 flex flex-col gap-1 text-xs font-semibold">
         Dígito de preferencia (opcional)
-        <span className="text-[10px] font-normal opacity-70">
+        <span className="text-xs font-normal opacity-70">
           Si radicas sin placa, indica el número en el que prefieres que termine. El OT lo toma como
           guía: puede asignar una placa que termine en ese dígito u otra.
         </span>
@@ -933,7 +1014,7 @@ export function PlacaPreasignadaSection({
         <button
           type="button"
           onClick={() => setChanging(false)}
-          className="self-start rounded-lg border px-3 py-1 text-[11px] font-semibold"
+          className="self-start rounded-lg border px-3 py-1 text-xs font-semibold"
         >
           Cancelar
         </button>
@@ -962,6 +1043,11 @@ function OrganismoModal({
   // solo puede elegir de esta lista; ya no es un catálogo estático del frontend.
   const [offices, setOffices] = useState<TransitOfficeOption[]>([]);
   const [loading, setLoading] = useState(true);
+  // B5 (guardián de diseño) — trampa de foco + retorno de foco + Escape. El foco inicial va al
+  // buscador (antes `autoFocus` nativo), no al primer focusable del DOM (el botón Cerrar).
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useWizardFocusTrap(dialogRef, { active: true, onEscape: onClose, initialFocusRef: searchInputRef });
 
   useEffect(() => {
     let active = true;
@@ -1024,25 +1110,26 @@ function OrganismoModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4"
+      // B6 (guardián de diseño) — overlay único del sistema (antes `bg-black/40 backdrop-blur-sm`).
+      className="fixed inset-0 z-50 grid place-items-center bg-[rgba(22,39,68,0.45)] backdrop-blur-[6px] px-4"
       role="dialog"
       aria-modal="true"
       aria-label="Seleccionar organismo de tránsito"
     >
       <div
-        className="bg-white dark:bg-[#0B0F14] rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh]"
+        ref={dialogRef}
+        tabIndex={-1}
+        className="bg-white dark:bg-[#162744] rounded-2xl p-6 w-full max-w-lg border flex flex-col max-h-[85vh] outline-none focus:ring-0"
       >
-        <div className="flex items-start justify-between mb-3">
-          <div>
-            <h3 className="text-sm font-bold">Organismo de tránsito</h3>
-            <p className="text-[11px] opacity-70">
-              Elige dónde se radicará el trámite.
-            </p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Cerrar">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+        <WizardCardHeader
+          title="Organismo de tránsito"
+          subtitle="Elige dónde se radicará el trámite."
+          action={
+            <button type="button" onClick={onClose} aria-label="Cerrar">
+              <X className="h-5 w-5" />
+            </button>
+          }
+        />
 
         {runtSuggestion && (
           <button
@@ -1052,12 +1139,12 @@ function OrganismoModal({
             className="mb-3 w-full text-left rounded-xl border p-3 disabled:opacity-50"
             style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' }}
           >
-            <p className="text-[10px] font-semibold uppercase" style={{ color: '#557EFF' }}>
+            <p className="text-xs font-semibold uppercase" style={{ color: '#557EFF' }}>
               Usar el organismo registrado en RUNT
             </p>
             <p className="text-xs font-semibold mt-0.5">{runtSuggestion.name}</p>
             {runtSuggestion.code && (
-              <p className="text-[11px] opacity-70">{runtSuggestion.code}</p>
+              <p className="text-xs opacity-70">{runtSuggestion.code}</p>
             )}
           </button>
         )}
@@ -1065,18 +1152,18 @@ function OrganismoModal({
         <div className="relative mb-3">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 opacity-50" aria-hidden="true" />
           <input
+            ref={searchInputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar por nombre o código…"
             aria-label="Buscar organismo de tránsito"
             className={`${INPUT_BASE} pl-9`}
-            autoFocus
           />
         </div>
 
         {error && (
-          <p className="text-[11px] font-medium mb-2" style={{ color: '#FF4E00' }} role="alert">
+          <p className="text-xs font-medium mb-2" style={{ color: '#FF4E00' }} role="alert">
             {error}
           </p>
         )}
@@ -1091,23 +1178,23 @@ function OrganismoModal({
                 className="w-full text-left rounded-xl border p-2.5 hover:border-[#557EFF] disabled:opacity-50"
               >
                 <p className="text-xs font-semibold">{o.name}</p>
-                <p className="text-[11px] opacity-70">{o.code}</p>
+                <p className="text-xs opacity-70">{o.code}</p>
               </button>
             </li>
           ))}
           {loading && (
-            <li className="text-[11px] opacity-60 py-3 text-center">
+            <li className="text-xs opacity-60 py-3 text-center">
               Cargando organismos habilitados…
             </li>
           )}
           {!loading && offices.length === 0 && (
-            <li className="text-[11px] py-3 text-center" style={{ color: '#F9AC00' }}>
+            <li className="text-xs py-3 text-center" style={{ color: 'var(--badge-warning-fg)' }}>
               Tu compañía no tiene organismos de tránsito habilitados. Contacta al
               administrador para habilitarlos.
             </li>
           )}
           {!loading && offices.length > 0 && results.length === 0 && (
-            <li className="text-[11px] opacity-60 py-3 text-center">
+            <li className="text-xs opacity-60 py-3 text-center">
               Sin resultados para «{query}».
             </li>
           )}
@@ -1195,14 +1282,10 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
 
   return (
     <section className="space-y-4" aria-label="Participantes del portal">
-      <div>
-        <h4 className="text-sm font-bold">Participantes (portal)</h4>
-        <p className="text-xs opacity-70">
-          Invita a las partes a completar su parte vía un enlace de portal
-          (consentimiento, documentos, biométrica y firma). En DEV el enlace se
-          entrega manualmente (sin envío de correo).
-        </p>
-      </div>
+      <WizardCardHeader
+        title="Participantes (portal)"
+        subtitle="Invita a las partes a completar su parte vía un enlace de portal (consentimiento, documentos, biométrica y firma). En DEV el enlace se entrega manualmente (sin envío de correo)."
+      />
 
       {error && (
         <div
@@ -1278,7 +1361,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
         </div>
 
         {formError && (
-          <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }} role="alert">
+          <p className="text-xs font-medium" style={{ color: '#FF4E00' }} role="alert">
             {formError}
           </p>
         )}
@@ -1288,7 +1371,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
             type="submit"
             disabled={submitting || !instanceId}
             className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-            style={{ background: '#557EFF' }}
+            style={{ background: WIZARD_CTA_GRADIENT }}
           >
             {submitting ? 'Invitando…' : 'Invitar participante'}
           </button>
@@ -1298,7 +1381,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
 
       {lastLink && (
         <div className="space-y-2">
-          <p className="text-[11px] font-semibold" style={{ color: '#5B8A1F' }}>
+          <p className="text-xs font-semibold" style={{ color: 'var(--flit-success-ink)' }}>
             Enlace de portal generado (DEV: sin envío de correo).
           </p>
           <CopyLink link={lastLink} label="Enlace de portal del participante" />
@@ -1316,7 +1399,7 @@ export function ParticipantesSection({ instanceId }: { instanceId: string | null
           />
         ))}
         {participants !== null && participants.length === 0 && (
-          <li className="text-[11px] opacity-60">Aún no hay participantes invitados.</li>
+          <li className="text-xs opacity-60">Aún no hay participantes invitados.</li>
         )}
       </ul>
     </section>
@@ -1367,29 +1450,18 @@ function ParticipantRow({
           <p className="text-xs font-semibold capitalize">
             {p.rol} · {p.nombre}
           </p>
-          <p className="text-[11px] opacity-70 truncate">{p.email}</p>
+          <p className="text-xs opacity-70 truncate">{p.email}</p>
           <div className="mt-1 flex flex-wrap gap-1.5">
-            <StatusChip
-              ok={p.consentDado}
-              okLabel="Consentimiento dado"
-              pendingLabel="Sin consentimiento"
+            <StatusBadge
+              label={p.consentDado ? 'Consentimiento dado' : 'Sin consentimiento'}
+              tone={p.consentDado ? 'success' : 'neutral'}
             />
             {p.completado ? (
-              <StatusChip ok okLabel="Completado" pendingLabel="" />
+              <StatusBadge label="Completado" tone="success" />
             ) : p.expirado ? (
-              <span
-                className="rounded-full px-2 py-0.5 text-[9px] font-bold"
-                style={{ background: '#EEF1F5', color: '#9AA5B1' }}
-              >
-                Expirado
-              </span>
+              <StatusBadge label="Expirado" tone="neutral" />
             ) : (
-              <span
-                className="rounded-full px-2 py-0.5 text-[9px] font-bold"
-                style={{ background: 'rgba(249,172,0,0.15)', color: '#F9AC00' }}
-              >
-                Pendiente
-              </span>
+              <StatusBadge label="Pendiente" tone="warning" />
             )}
           </div>
         </div>
@@ -1398,7 +1470,7 @@ function ParticipantRow({
             type="button"
             onClick={() => void handleReinvite()}
             disabled={busy || !instanceId}
-            className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold shrink-0 disabled:opacity-50"
+            className="rounded-xl border px-3 py-1.5 text-xs font-semibold shrink-0 disabled:opacity-50"
             style={{ borderColor: '#557EFF', color: '#557EFF' }}
           >
             {busy ? 'Reinvitando…' : 'Reinvitar'}
@@ -1406,35 +1478,11 @@ function ParticipantRow({
         )}
       </div>
       {error && (
-        <p className="text-[11px] font-medium mt-1.5" style={{ color: '#FF4E00' }} role="alert">
+        <p className="text-xs font-medium mt-1.5" style={{ color: '#FF4E00' }} role="alert">
           {error}
         </p>
       )}
     </li>
-  );
-}
-
-function StatusChip({
-  ok,
-  okLabel,
-  pendingLabel,
-}: {
-  ok: boolean;
-  okLabel: string;
-  pendingLabel: string;
-}) {
-  if (!ok && !pendingLabel) return null;
-  return (
-    <span
-      className="rounded-full px-2 py-0.5 text-[9px] font-bold"
-      style={
-        ok
-          ? { background: 'rgba(140,198,63,0.15)', color: '#5B8A1F' }
-          : { background: '#EEF1F5', color: '#9AA5B1' }
-      }
-    >
-      {ok ? okLabel : pendingLabel}
-    </span>
   );
 }
 
@@ -1515,56 +1563,52 @@ function PlateFlowCompleteSection({
   if (plateFlowStatus !== 'asignado') return null;
 
   return (
-    <div className="space-y-3 pt-2 border-t">
-      <div>
-        <h5 className="text-xs font-bold">Procesar trámite (Asignado → Terminado)</h5>
-        <p className="text-[11px] opacity-70">
-          Marca los checks opcionales si aplican y procesa el trámite. Sin pasar a Terminado el OT
-          no puede aprobar ni rechazar.
-        </p>
+    <div className={WIZARD_CARD}>
+      <WizardCardHeader
+        title="Procesar trámite (Asignado → Terminado)"
+        subtitle="Marca los checks opcionales si aplican y procesa el trámite. Sin pasar a Terminado el OT no puede aprobar ni rechazar."
+      />
+
+      <div className="space-y-3">
+        <label className="flex cursor-pointer items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[#557EFF]"
+            checked={soatPagado}
+            onChange={(e) => setSoatPagado(e.target.checked)}
+            disabled={working}
+          />
+          SOAT pagado
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[#557EFF]"
+            checked={impuestoPagado}
+            onChange={(e) => setImpuestoPagado(e.target.checked)}
+            disabled={working}
+          />
+          Impuesto departamental pagado
+        </label>
+
+        <button
+          type="button"
+          disabled={working}
+          onClick={() => void completar()}
+          className="rounded-lg px-3.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+          style={{ background: WIZARD_CTA_GRADIENT }}
+        >
+          {working ? 'Procesando…' : 'Marcar como Terminado'}
+        </button>
+
+        {msg ? <InlineAlert tone="success">{msg}</InlineAlert> : null}
+        {warning ? (
+          <InlineAlert tone="warning" title="Trámite enviado al OT con advertencia">
+            {warning}
+          </InlineAlert>
+        ) : null}
+        {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
       </div>
-
-      <label className="flex cursor-pointer items-center gap-2 text-xs">
-        <input
-          type="checkbox"
-          className="h-4 w-4 accent-[#557EFF]"
-          checked={soatPagado}
-          onChange={(e) => setSoatPagado(e.target.checked)}
-          disabled={working}
-        />
-        SOAT pagado
-      </label>
-      <label className="flex cursor-pointer items-center gap-2 text-xs">
-        <input
-          type="checkbox"
-          className="h-4 w-4 accent-[#557EFF]"
-          checked={impuestoPagado}
-          onChange={(e) => setImpuestoPagado(e.target.checked)}
-          disabled={working}
-        />
-        Impuesto departamental pagado
-      </label>
-
-      <button
-        type="button"
-        disabled={working}
-        onClick={() => void completar()}
-        className="rounded-lg bg-[#557eff] px-3.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-      >
-        {working ? 'Procesando…' : 'Marcar como Terminado'}
-      </button>
-
-      {msg ? <p className="m-0 text-xs text-green-700">{msg}</p> : null}
-      {warning ? (
-        <InlineAlert tone="warning" title="Trámite enviado al OT con advertencia">
-          {warning}
-        </InlineAlert>
-      ) : null}
-      {error ? (
-        <p role="alert" className="m-0 text-xs text-orange-700">
-          {error}
-        </p>
-      ) : null}
     </div>
   );
 }

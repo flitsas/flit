@@ -165,3 +165,57 @@ export function reasonCopy(code: string): string {
 export function blockerCopy(code: string): string {
   return BLOCKER_COPY[code] ?? humanize(code);
 }
+
+/**
+ * Nombre del paso en la nomenclatura de la propuesta de diseño.
+ *
+ * El backend manda el label junto a cada paso; esto NO lo sustituye como fuente de verdad de la
+ * estructura —los pasos, su orden y su estado siguen viniendo del servidor—, solo unifica cómo se
+ * escriben en pantalla. La misma etapa se llamaba distinto según la modalidad ("Consulta VIN" vs
+ * "Consulta del vehículo") y el paso final aparecía como "Resumen del trámite" pese a ser donde se
+ * genera el FUR y el expediente.
+ *
+ * `actores` es la clave del paso visual que fusiona vendedor+comprador en traspaso.
+ */
+/**
+ * UN diccionario, no uno por modalidad.
+ *
+ * Había dos, y tres claves se llamaban distinto en cada uno: `documentos` era "Requisitos" en
+ * matrícula y "Documentos" en traspaso; `fur` era "Resumen" y "FUR y Expediente". La diferencia no
+ * venía de que los pasos hicieran cosas distintas —hacen exactamente lo mismo, con el mismo
+ * componente— sino de que cada modalidad se portó de un asistente distinto del repo de propuesta.
+ * Un gestor que trabaja las dos modalidades tenía que aprender dos vocabularios para el mismo
+ * trabajo.
+ *
+ * Nomenclatura fijada por el equipo: Consulta Vehículo · Actores · Requisitos · Validación de
+ * Identidad · Resumen. Los mismos nombres para cualquier tipo de trámite.
+ *
+ * `Datos Comerciales` no está en esa lista porque el paso solo existe en traspaso: no hay nada que
+ * unificar, ninguna otra modalidad lo tiene. Los pasos y su orden los sigue definiendo el backend;
+ * esto solo decide cómo se escriben.
+ */
+const STEP_LABELS: Record<string, string> = {
+  consulta: 'Consulta Vehículo',
+  consulta_vin: 'Consulta Vehículo',
+  actores: 'Actores',
+  vendedor: 'Actores',
+  comprador: 'Actores',
+  documentos: 'Requisitos',
+  // `comercial` ya no es un paso: sus datos viven en Requisitos y el asistente normaliza la clave
+  // a `documentos`. Solo puede llegar desde un borrador antiguo, y entonces el panel pinta
+  // Requisitos entero. Rotularlo "Datos Comerciales" hacía que el nombre del paso mintiera sobre
+  // lo que hay dentro, así que se rotula por lo que se ve.
+  comercial: 'Requisitos',
+  identidad: 'Validación de Identidad',
+  fur: 'Resumen',
+};
+
+/**
+ * Etiqueta a mostrar para un paso. Cae al label del servidor cuando la clave no está mapeada:
+ * un paso nuevo en backend aparece con su nombre, nunca en blanco.
+ *
+ * Ya no recibe la modalidad: una misma clave se llama igual en todos los trámites.
+ */
+export function stepLabelCopy(key: string, serverLabel: string): string {
+  return STEP_LABELS[key] ?? serverLabel;
+}

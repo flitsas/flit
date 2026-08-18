@@ -20,13 +20,16 @@ Describir en un párrafo si la entrega conserva el prototipo FLIT, cuáles fuero
 | Dimensión | Cumple | Evidencia | Corrección requerida |
 |---|---|---|---|
 | Fondo azul claro global |  |  |  |
-| Sidebar gradiente y radio amplio |  |  |  |
+| Dock inferior: píldoras, gradiente activo, superficie casi opaca |  |  |  |
 | Topbar con rol, usuario, notificación y menú |  |  |  |
 | Título en tarjeta blanca |  |  |  |
 | Tarjetas blancas con radio amplio |  |  |  |
 | Botones primarios degradados |  |  |  |
 | Botones secundarios autorizados |  |  |  |
-| Paleta de estados correcta |  |  |  |
+| Paleta de estados correcta (badges tintados) |  |  |  |
+| Separación brand / chrome respetada |  |  |  |
+| Tema oscuro desde la capa `dark` del token file |  |  |  |
+| Piso tipográfico de 12px |  |  |  |
 | Formularios con patrón FLIT |  |  |  |
 | Tablas/chips/progreso coherentes |  |  |  |
 | Modales con blur y CTA degradado |  |  |  |

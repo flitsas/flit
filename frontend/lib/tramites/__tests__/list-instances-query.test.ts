@@ -66,13 +66,10 @@ describe('tramitesColumnToSortBy', () => {
 
   it('marca ordenables las columnas pedidas por negocio', () => {
     const sortable = TRAMITES_COLUMNS.filter((c) => c.sortable).map((c) => c.key);
-    expect(sortable).toEqual([
-      'vin',
-      'placa',
-      'comprador',
-      'fechaCreacion',
-      'fechaActualizacion',
-      'gestor',
-    ]);
+    // Se compara el CONJUNTO, no el orden: el orden del catálogo es la disposición de la tabla
+    // y cambia cuando se reorganizan las columnas; qué columnas son ordenables, no.
+    expect([...sortable].sort()).toEqual(
+      ['comprador', 'fechaActualizacion', 'fechaCreacion', 'gestor', 'placa', 'vin'].sort(),
+    );
   });
 });

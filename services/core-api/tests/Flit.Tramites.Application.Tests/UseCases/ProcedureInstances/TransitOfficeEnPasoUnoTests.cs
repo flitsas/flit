@@ -124,7 +124,7 @@ public sealed class TransitOfficeEnPasoUnoTests
     }
 
     [Fact]
-    public async Task AC2_SinSecretaria_NoSeGastaLaConsultaAlRunt()
+    public async Task SinSecretaria_LaConsultaCorre_ElOrganismoSeEligeDespues()
     {
         var tenant = Guid.NewGuid();
         SinDuplicados(tenant);
@@ -133,24 +133,29 @@ public sealed class TransitOfficeEnPasoUnoTests
         var (result, error, _, _) = await handler.HandleAsync(
             Matricula(tenant, null), TestContext.Current.CancellationToken);
 
-        error.Should().Be(TransitOfficeSelectionPolicy.RequiredErrorCode);
-        result.Should().BeNull();
-        // Lo importante no es solo el rechazo: la consulta al RUNT se cobra, y sin secretaría el
-        // trámite no puede seguir de todos modos.
-        provider.Calls.Should().Be(0);
+        // El paso 1 pregunta dónde se radica DESPUÉS de identificar el vehículo: exigir el organismo
+        // aquí obligaba a elegirlo a ciegas, antes de saber siquiera de qué vehículo se habla. El
+        // requisito sigue vivo en la creación (CreateFromConsultaCommand), que es cuando el
+        // organismo tiene que quedar guardado; aquí no se persiste nada.
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        provider.Calls.Should().Be(1);
     }
 
     [Fact]
-    public async Task AC2_SecretariaEnGuidVacio_SeTrataComoAusente()
+    public async Task SecretariaEnGuidVacio_SeTrataComoAusente()
     {
         var tenant = Guid.NewGuid();
         SinDuplicados(tenant);
         var (handler, _) = PreviewHandler();
 
-        var (_, error, _, _) = await handler.HandleAsync(
+        // `Guid.Empty` es "no elegida", no un organismo inválido: ni se intenta resolver ni se
+        // rechaza — se consulta igual que cuando no viene organismo.
+        var (result, error, _, _) = await handler.HandleAsync(
             Matricula(tenant, Guid.Empty), TestContext.Current.CancellationToken);
 
-        error.Should().Be(TransitOfficeSelectionPolicy.RequiredErrorCode);
+        error.Should().BeNull();
+        result.Should().NotBeNull();
     }
 
     // ── AC3 — solo organismos activos y habilitados ───────────────────────────

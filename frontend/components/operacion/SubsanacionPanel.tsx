@@ -124,7 +124,7 @@ export function SubsanacionPanel({
         aria-live="polite"
         aria-busy="true"
       >
-        <Loader2 className="h-4 w-4 shrink-0 animate-spin" style={{ color: '#F9AC00' }} aria-hidden="true" />
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
         <span>Cargando el detalle de la subsanación…</span>
       </div>
     );
@@ -151,7 +151,7 @@ export function SubsanacionPanel({
       aria-labelledby="subsanacion-heading"
     >
       <div className="flex items-start gap-2">
-        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#F9AC00' }} aria-hidden="true" />
+        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
         <div className="min-w-0">
           <h3 id="subsanacion-heading" className="text-sm font-bold" style={{ color: '#B45309' }}>
             Trámite en subsanación
@@ -170,7 +170,7 @@ export function SubsanacionPanel({
       </div>
 
       <div>
-        <p className="text-[10px] font-semibold uppercase opacity-60 mb-2">
+        <p className="text-xs font-semibold uppercase opacity-60 mb-2">
           Checklist de ítems a subsanar
         </p>
         {hasChecklist ? (
@@ -181,7 +181,7 @@ export function SubsanacionPanel({
               return (
                 <li
                   key={i}
-                  className="flex items-start gap-2 rounded-lg border bg-white dark:bg-[#0B0F14] p-2"
+                  className="flex items-start gap-2 rounded-lg border bg-white dark:bg-[#162744] p-2"
                 >
                   <input
                     id={inputId}
@@ -267,16 +267,16 @@ export function SubsanacionPanel({
       </div>
 
       {hasUnsavedChanges ? (
-        <p className="text-[11px] opacity-70">
+        <p className="text-xs opacity-70">
           Hay cambios sin guardar. Usa Guardar y continuar; después podrás re-radicar.
         </p>
       ) : !canReradicar ? (
-        <p className="text-[11px] opacity-70">
+        <p className="text-xs opacity-70">
           Edita lo necesario y pulsa Guardar y continuar para habilitar Re-radicar. Si no hace falta
           corregir, usa Cancelar.
         </p>
       ) : (
-        <p className="text-[11px] opacity-70" role="status">
+        <p className="text-xs opacity-70" role="status">
           Cambios guardados. Ya puedes re-radicar.
         </p>
       )}

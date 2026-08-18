@@ -81,7 +81,10 @@ describe('IdentityValidationTrackingPanel (HU #11007)', () => {
 
     expect(await screen.findByText('Notificación recibida')).toBeInTheDocument();
     expect(screen.getByText('Aprobado')).toBeInTheDocument();
-    expect(screen.getByText('OK')).toBeInTheDocument();
+    // La columna «Cifrado» dice si el cuerpo cifrado del proveedor se pudo descifrar. Antes lo
+    // resumía en «OK», que bajo ese encabezado se leía como el algoritmo; ahora lo dice en
+    // palabras.
+    expect(screen.getByText('Verificado')).toBeInTheDocument();
   });
 
   it('AC3 — un 404 cross-tenant se muestra como error, sin filtrar la existencia del registro', async () => {

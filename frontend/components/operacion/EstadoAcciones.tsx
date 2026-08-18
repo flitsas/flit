@@ -9,6 +9,7 @@ import {
   plateFlowLabel,
 } from '@/lib/tramites/estados';
 import type { PlateFlowStatus } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
 /**
  * Política de UI: `anulado` → "Anular trámite" (destructivo, motivo OBLIGATORIO);
@@ -269,7 +270,7 @@ export function EstadoAcciones({
               disabled={working}
               onClick={() => void ejecutar(pending)}
               style={{
-                background: pending.destructive ? '#dc2626' : '#557eff',
+                background: pending.destructive ? '#dc2626' : WIZARD_CTA_GRADIENT,
                 border: 'none',
                 color: '#fff',
                 borderRadius: 8,

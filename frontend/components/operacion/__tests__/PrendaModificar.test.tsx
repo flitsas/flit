@@ -72,7 +72,9 @@ describe('PrendaModificar (R17)', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Modificar elección de prenda' }));
 
-    expect(screen.getByLabelText('Decisión de prenda')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('¿Al vehículo se le asociará una prenda?'),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByLabelText('Documento de soporte de prenda')).toBeInTheDocument(),
     );

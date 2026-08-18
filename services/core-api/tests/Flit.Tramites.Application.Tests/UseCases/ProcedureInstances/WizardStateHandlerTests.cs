@@ -346,28 +346,30 @@ public sealed class WizardStateHandlerTests
     }
 
     [Fact]
-    public async Task Get_Traspaso_FurReachable_DefersBiometric()
+    public async Task Get_Traspaso_IdentidadReachable_FurReachableSinBiometria()
     {
-        // Pasos 1-5 completos → FUR (6) alcanzable. Sin biométrica/FUR generado → incomplete con la
-        // razón diferida de biométrica. B12 (HU #10661, ADR-0028): la firma de compraventa YA NO
-        // aporta `pendiente_firma` ni condiciona el completado del paso 6.
+        // Regla de negocio restituida (2026-08) — paridad con matrícula (HU #10350): pasos 1-4
+        // completos (incluido el valor de venta, absorbido en Documentos) → Identidad (5) alcanzable
+        // e incomplete con la razón de biométrica; SIN biométrica de ambas partes, FUR (6) sigue
+        // ALCANZABLE (incomplete, no locked) — la identidad pendiente no atrapa al gestor.
         var ct = TestContext.Current.CancellationToken;
         var instance = Base("traspaso", TramiteTipologiaCatalog.CodigoTraspasoStandard);
         instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
         instance.Actors.Add(Actor("vendedor", "555"));
         instance.Actors.Add(Actor("comprador", "666"));
         instance.PreflightSnapshots.Add(Preflight("green"));
-        CompletarDocsTraspaso(instance); // docs gobiernan el paso 2; sin ellos FUR queda locked.
+        CompletarDocsTraspaso(instance);
         instance.Commercial = new ProcedureInstanceCommercial { Id = Guid.NewGuid(), ValorVenta = 100m, CreatedAt = DateTimeOffset.UtcNow };
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        var fur = result!.Steps.Single(s => s.Index == 6);
+        var identidad = result!.Steps.Single(s => s.Index == 5);
+        identidad.Status.Should().Be("incomplete");
+        identidad.Reasons.Should().Contain(GetWizardStateHandler.PendienteBiometria);
+
+        var fur = result.Steps.Single(s => s.Index == 6);
         fur.Status.Should().Be("incomplete");
-        fur.Reasons.Should().Contain(GetWizardStateHandler.PendienteBiometria);
-        // B12: la firma ya no es una razón de incompletitud del paso 6.
-        fur.Reasons.Should().NotContain(GetWizardStateHandler.PendienteFirma);
     }
 
     [Fact]
@@ -654,14 +656,16 @@ public sealed class WizardStateHandlerTests
         instance.Actors.Add(Actor("vendedor", "555"));
         instance.Actors.Add(Actor("comprador", "666"));
         instance.PreflightSnapshots.Add(Preflight("green"));
-        CompletarDocsTraspaso(instance); // HU #10935: documentos (paso 4) tras los actores; habilita el 5.
+        CompletarDocsTraspaso(instance); // HU #10935: documentos (paso 4) tras los actores.
         instance.Commercial = new ProcedureInstanceCommercial { Id = Guid.NewGuid(), ValorVenta = 100m, CreatedAt = DateTimeOffset.UtcNow };
         Setup(instance);
 
         var (result, _) = await _handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
 
-        // Paso 5 (comercial) completo gracias a ValorVenta > 0.
-        result!.Steps.Single(s => s.Index == 5).Status.Should().Be("complete");
+        // Paridad con matrícula (2026-08) — los datos comerciales se absorbieron en el paso 4
+        // (Documentos): completo gracias al checklist + ValorVenta > 0, y habilita el 5 (Identidad).
+        result!.Steps.Single(s => s.Index == 4).Status.Should().Be("complete");
+        result.Steps.Single(s => s.Index == 5).Status.Should().Be("incomplete");
     }
 
     // ── Blockers / canSubmit ──────────────────────────────────────────────────
@@ -935,7 +939,7 @@ public sealed class WizardStateHandlerTests
         var documentos = result!.Steps.Single(s => s.Key == "documentos");
         var comprador = result.Steps.Single(s => s.Key == "comprador");
         var vendedor = result.Steps.Single(s => s.Key == "vendedor");
-        // Orden: consulta → vendedor → comprador → documentos → comercial → fur.
+        // Orden: consulta → vendedor → comprador → documentos → identidad → fur.
         documentos.Index.Should().Be(4);
         documentos.Index.Should().BeGreaterThan(comprador.Index);
         documentos.Index.Should().BeGreaterThan(vendedor.Index);

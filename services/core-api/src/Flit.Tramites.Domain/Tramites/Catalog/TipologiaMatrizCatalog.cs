@@ -59,11 +59,13 @@ public static class TipologiaMatrizCatalog
             Pasos:
             [
                 // HU #10935 — los documentos van DESPUÉS del vendedor y comprador.
+                // Paridad de pasos con matrícula (2026-08) — los datos comerciales se absorben en
+                // Documentos (4) y el hueco lo ocupa Identidad (5): misma secuencia que matrícula.
                 new PasoTipologia(1, "Consulta del vehículo", Aplica: true, Nota: "Pre-vuelo SOAT/SIMIT/RUNT del vehículo por placa y de ambas partes."),
                 new PasoTipologia(2, "Vendedor", Aplica: true, Nota: "Parte saliente; consulta RUNT del vendedor."),
                 new PasoTipologia(3, "Comprador", Aplica: true, Nota: "Parte entrante; RUNT + SIMIT del comprador."),
-                new PasoTipologia(4, "Documentos", Aplica: true, Nota: "Contrato de compraventa + impronta + SOAT del vehículo."),
-                new PasoTipologia(5, "Datos comerciales", Aplica: true, Nota: "Valor de venta > 0."),
+                new PasoTipologia(4, "Documentos", Aplica: true, Nota: "Contrato de compraventa + impronta + SOAT del vehículo + datos comerciales (valor de venta > 0)."),
+                new PasoTipologia(5, "Identidad", Aplica: true, Nota: "Validación de identidad (biométrica) de vendedor y comprador."),
                 new PasoTipologia(6, "Resumen del trámite", Aplica: true, Nota: "Revisión y cierre: FUR/impronta se generan automáticamente; Preparar/Radicar envían a tránsito."),
             ]),
     ];

@@ -125,14 +125,16 @@ describe('ExpedienteVisor — documentos (sin repetir vehículo/actores)', () =>
       />,
     );
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Documentos' })).toBeInTheDocument();
+    // «Documentos cargados» ya no es un acordeón (rediseño): tarjeta siempre abierta, sin botón.
+    expect(screen.getByRole('region', { name: 'Documentos cargados' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Documentos' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Vehículo' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Especificaciones técnicas' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Validación de identidad' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Organismo de tránsito' })).not.toBeInTheDocument();
   });
 
-  it('sin consolidado muestra el CTA Descargar todo (genera + abre)', () => {
+  it('sin consolidado muestra el CTA Ver expediente consolidado (genera + abre en pestaña)', () => {
     render(
       <ExpedienteVisor
         instanceId="inst-1"
@@ -140,7 +142,7 @@ describe('ExpedienteVisor — documentos (sin repetir vehículo/actores)', () =>
       />,
     );
     expect(
-      screen.getByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }),
+      screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /Generar expediente consolidado/i }),
@@ -150,7 +152,7 @@ describe('ExpedienteVisor — documentos (sin repetir vehículo/actores)', () =>
     ).not.toBeInTheDocument();
   });
 
-  it('con consolidado muestra Re-generar y el CTA Descargar todo', () => {
+  it('con consolidado muestra Re-generar y el CTA Ver expediente consolidado', () => {
     render(
       <ExpedienteVisor
         instanceId="inst-1"
@@ -172,7 +174,7 @@ describe('ExpedienteVisor — documentos (sin repetir vehículo/actores)', () =>
       screen.getByRole('button', { name: 'Re-generar expediente consolidado' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Descargar todo · Expediente consolidado (PDF)' }),
+      screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }),
     ).toBeInTheDocument();
   });
 });

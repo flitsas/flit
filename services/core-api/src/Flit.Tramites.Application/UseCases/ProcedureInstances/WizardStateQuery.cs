@@ -106,11 +106,14 @@ public sealed record WizardStateDto(
 /// actores → <see cref="ParteDatos"/> + <see cref="RuntSnapshot"/> (RUNT se asume consultado
 /// cuando el actor tiene documento; el RUNT vive en field_values, sin entidad propia en este slice);
 /// último preflight → <see cref="PreflightSnapshot"/> (Overall);
-/// comercial → ValorVenta;
+/// comercial → ValorVenta, exigido AHORA por el gate del paso de documentos (traspaso 4: los datos
+/// comerciales se absorbieron ahí, paridad con matrícula);
 /// checklist (<see cref="ChecklistEngine"/> sobre adjuntos) → completitud del paso de documentos
 /// (HU #10935: paso 4 en traspaso, paso 3 en matrícula — después de los actores);
-/// biométrica → <c>null</c> (diferida, slice 6) → los pasos finales se marcan incomplete con
-/// reason explícita ("pendiente_biometria"/"pendiente_firma"), NO se bloquean con error.</para>
+/// biométrica → <see cref="BiometriaSnapshot"/>, exigida por el gate del paso de Identidad (traspaso 5:
+/// ambas partes; matrícula 4: comprador, evaluado aparte por el flag <c>IdentidadAprobada</c>). El
+/// paso de FUR (diferido, IO) se marca incomplete con reason explícita ("fur_pendiente"/
+/// "pendiente_firma"), NO se bloquea con error.</para>
 /// </summary>
 public sealed class GetWizardStateHandler(
     IProcedureInstanceRepository repo,
@@ -690,57 +693,81 @@ public sealed class GetWizardStateHandler(
         };
 
         var maxAlcanzable = TraspasoGates.MaxPasoAlcanzable(ctx);
+        // Datos (pasos 1-4) completos: maxAlcanzable >= 5 ⇒ Consulta+Vendedor+Comprador+Documentos OK.
+        // A partir de aquí los pasos diferidos (5 Identidad, 6 FUR) son ALCANZABLES aunque la identidad
+        // esté pendiente — restituye el desacople HU #10350 (paridad con BuildMatricula): el gestor
+        // recorre hasta el último paso y finaliza el borrador; la identidad pendiente NO lo atrapa en
+        // el paso 5. PasoCompleto/GateFur (el gate de AVANCE y de radicación) no cambian.
+        var datosCompletos = maxAlcanzable >= 5;
         var pasos = TipologiaMatrizCatalog.Get(TramiteTipologiaCatalog.CodigoTraspasoStandard)?.Pasos
                     ?? [];
 
         var steps = new List<WizardStepDto>(TraspasoGates.TotalPasos);
         for (var p = 1; p <= TraspasoGates.TotalPasos; p++)
         {
-            var gate = TraspasoGates.PasoCompleto(p, ctx);
             var reasons = new List<string>();
             string status;
 
-            // Flujo en cascada: un paso aún NO alcanzable (p > maxAlcanzable) se bloquea
-            // (locked, sin reasons), incluido el diferido (6 FUR). El sidebar no deja saltar
-            // a FUR sin haber completado los pasos previos. Solo si es alcanzable se evalúa.
-            if (p > maxAlcanzable)
+            // 5 = Identidad: biométrica de AMBAS partes (slice 6). Diferido (paridad con matrícula,
+            // paso 4): alcanzable en cuanto los datos (1-4) están completos AUNQUE la identidad siga
+            // pendiente. Se sigue exponiendo la MISMA reason "pendiente_biometria" que ya consumía.
+            if (p == 5)
             {
-                status = "locked";
+                if (!datosCompletos)
+                {
+                    status = "locked";
+                }
+                else if (TraspasoGates.PasoCompleto(5, ctx).Ok)
+                {
+                    status = "complete";
+                }
+                else
+                {
+                    status = "incomplete";
+                    reasons.Add(PendienteBiometria);
+                }
             }
-            // 6 = Generar FUR: docs obligatorios + biométrica de AMBAS partes (slice 6) +
-            // firma de AMBAS partes (slice 7) + FUR generado. Completa solo cuando todo está listo;
-            // emite las razones precisas de lo que falta.
+            // 6 = Generar FUR (slice 7): diferido. Alcanzable en cuanto los datos están completos
+            // AUNQUE la identidad (5) siga pendiente (HU #10350), para que sea el ÚLTIMO paso del
+            // wizard donde el gestor finaliza/radica. Documentos (4) e identidad/biométrica (5) ya se
+            // exigen antes en la cascada de datos; aquí solo queda el FUR generado (IO).
             else if (p == 6)
             {
-                // Paso 6 = Generar FUR: biométrica de AMBAS partes (slice 6) + FUR generado. Los
-                // documentos ya se exigen en el paso 4 (HU #10935, después de los actores); aquí NO
-                // se listan como reason. El faltante de docs sigue vetando el submit vía el blocker
-                // global documentos_incompletos.
-                //
-                // B12 (HU #10661, ADR-0028): la firma de compraventa YA NO condiciona el completado
-                // del paso 6 ni aporta `pendiente_firma` — negocio aún no define la lógica ideal de
-                // firmas. El estado de firma queda informativo en el preflight `firma_compraventa`
-                // (DerivaFirmaCompraventaCheck, warn/green), sin bloquear canSubmit.
-                var biometriaOk = TraspasoGates.GateFur(ctx.Biometria, ctx.ForzarContinuar).Ok;
-                var furOk = FurGenerado(instance);
+                if (!datosCompletos)
+                {
+                    status = "locked";
+                }
+                else
+                {
+                    // B12 (HU #10661, ADR-0028): la firma de compraventa YA NO condiciona el completado
+                    // del paso 6 ni aporta `pendiente_firma` — negocio aún no define la lógica ideal de
+                    // firmas. El estado de firma queda informativo en el preflight `firma_compraventa`
+                    // (DerivaFirmaCompraventaCheck, warn/green), sin bloquear canSubmit.
+                    var furOk = FurGenerado(instance);
+                    if (!furOk)
+                        reasons.Add(FurPendiente);
 
-                if (!biometriaOk)
-                    reasons.Add(PendienteBiometria);
-                if (!furOk)
-                    reasons.Add(FurPendiente);
-
-                status = (biometriaOk && furOk) ? "complete" : "incomplete";
-            }
-            else if (gate.Ok)
-            {
-                status = "complete";
+                    status = furOk ? "complete" : "incomplete";
+                }
             }
             else
             {
-                // Alcanzable (p <= maxAlcanzable) pero con gate sin cumplir → incomplete.
-                status = "incomplete";
-                if (gate.Code is not null)
-                    reasons.Add(gate.Code);
+                // Pasos de datos 1-4: cascada estándar por gate (no alcanzable ⇒ locked).
+                var gate = TraspasoGates.PasoCompleto(p, ctx);
+                if (p > maxAlcanzable)
+                {
+                    status = "locked";
+                }
+                else if (gate.Ok)
+                {
+                    status = "complete";
+                }
+                else
+                {
+                    status = "incomplete";
+                    if (gate.Code is not null)
+                        reasons.Add(gate.Code);
+                }
             }
 
             steps.Add(new WizardStepDto(p, StepKey(true, p), StepLabel(pasos, p), status, reasons));
@@ -749,9 +776,16 @@ public sealed class GetWizardStateHandler(
         // N 03 (RF03): mismo gate de preparación que matrícula — la identidad exigida es la del
         // comprador (endurecer vendedor+firma en traspaso sigue como deuda M5, ver SubmitGate).
         // CF-06 (HU #10881): + override OT del documento de prenda (independiente del gravamen).
+        //
+        // deferredIndexes = [5, 6]: Identidad (5, biométrica de ambas partes) y FUR (6) quedan
+        // diferidos del cómputo "todos los pasos completos" de CanSubmit — EXACTAMENTE igual que
+        // antes, cuando comercial (5) exigía completarse para el submit pero Identidad/FUR (6, con la
+        // biométrica) NO. Ahora que comercial se folded al paso 4 y la biométrica es el gate propio
+        // del paso 5, diferir 5 preserva que el submit siga exigiendo lo mismo que hoy: SOLO la
+        // identidad del comprador (vía blocker) y NO la del vendedor.
         var blockers = BlockersFrom(
             preflight, docsCompletos, riesgoAceptado, ctx.Biometria.Comprador, prendaOtBlocker);
-        var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [6]);
+        var canSubmit = CanSubmit(steps, blockers, deferredIndexes: [5, 6]);
 
         return new WizardStateDto(
             TramiteModalidadEntradaCodes.Traspaso,
@@ -1145,8 +1179,10 @@ public sealed class GetWizardStateHandler(
     }
 
     // HU #10935 — orden del wizard: los documentos van DESPUÉS de la información del comprador y/o
-    // vendedor (traspaso: consulta → vendedor → comprador → documentos → comercial → fur;
-    // matrícula: consulta_vin → comprador → documentos → identidad → fur). Este mapeo índice→key
+    // vendedor. Paridad de pasos con matrícula (2026-08) — los datos comerciales se absorben en
+    // Documentos y el hueco lo ocupa Identidad (biométrica de ambas partes):
+    // traspaso: consulta → vendedor → comprador → documentos → identidad → fur;
+    // matrícula: consulta_vin → comprador → documentos → identidad → fur. Este mapeo índice→key
     // debe seguir el MISMO orden que la cascada de gates (TraspasoGates/MatriculaGates.PasoCompleto).
     private static string StepKey(bool traspaso, int index) =>
         traspaso
@@ -1156,7 +1192,7 @@ public sealed class GetWizardStateHandler(
                 2 => "vendedor",
                 3 => "comprador",
                 4 => "documentos",
-                5 => "comercial",
+                5 => "identidad",
                 6 => "fur",
                 _ => $"paso_{index}",
             }

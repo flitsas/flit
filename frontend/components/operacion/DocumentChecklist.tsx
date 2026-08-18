@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import { Eye, FileText, Info } from 'lucide-react';
 import {
   resumirVins,
@@ -11,6 +12,10 @@ import { useProcedureBatchUpload } from '@/hooks/useProcedureBatchUpload';
 import { BatchDropzone } from './BatchDropzone';
 import { BatchReviewPanel } from './BatchReviewPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
+import { WizardCardHeader, WizardSegmented } from './wizard-atoms';
+import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
+import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
+import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { isPrendaManagedChecklistTipo } from './prenda-document-tipos';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
@@ -191,13 +196,19 @@ export function tipoLabel(tipo: string): string {
   return TIPO_LABEL[tipo] ?? tipo;
 }
 
-/** Colores del chip de estado (coincide / no_coincide / no_aplica / no_verificado). */
-function stateChipStyle(value: string): { color: string; background: string } {
+/**
+ * Tono semántico del chip de estado (coincide / no_coincide / no_aplica / no_verificado).
+ *
+ * B4 (guardián de diseño) — antes pintaba con hex propios fuera de la paleta autorizada
+ * (`#3B8A00` 3.8:1, `#B77900` 3.2:1, `#F9AC00` fuera de token). Ahora resuelve un tono de
+ * `StatusBadge`, la única fuente de color de estado del sistema.
+ */
+function ocrFieldTone(value: string): StatusTone {
   const v = value.toLowerCase();
-  if (v === 'coincide') return { color: '#3B8A00', background: 'rgba(140,198,63,0.20)' };
-  if (v === 'no_coincide') return { color: '#FF4E00', background: 'rgba(255,78,0,0.12)' };
-  if (v === 'no_aplica') return { color: '#5B6472', background: 'rgba(120,130,145,0.15)' };
-  return { color: '#B77900', background: 'rgba(249,172,0,0.18)' }; // no_verificado / otros
+  if (v === 'coincide') return 'success';
+  if (v === 'no_coincide') return 'danger';
+  if (v === 'no_aplica') return 'neutral';
+  return 'warning'; // no_verificado / otros
 }
 
 /** Chip "PDF recortado (X/Y págs)" cuando el OCR recortó un subconjunto de páginas. */
@@ -216,27 +227,28 @@ function recorteLabel(data: Record<string, unknown> | null): string | null {
 export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
-  const palette =
-    ocr.status === 'verified'
-      ? {
-          color: '#3B8A00',
-          border: '#8CC63F',
-          bg: 'rgba(140,198,63,0.12)',
-          label: 'Verificado',
-        }
-      : ocr.status === 'rejected'
-        ? {
-            color: '#FF4E00',
-            border: '#FF4E00',
-            bg: 'rgba(255,78,0,0.10)',
-            label: 'Rechazado',
-          }
-        : {
-            color: '#B77900',
-            border: '#F9AC00',
-            bg: 'rgba(249,172,0,0.14)',
-            label: 'No analizado',
-          };
+  // B5 (guardián de diseño) — trampa de foco + retorno de foco + Escape del modal de detalle OCR.
+  const ocrDialogRef = useRef<HTMLDivElement>(null);
+  useWizardFocusTrap(ocrDialogRef, {
+    active: detailOpen,
+    onEscape: () => setDetailOpen(false),
+  });
+  // B4 (guardián de diseño) — antes traía hex propios fuera de la paleta autorizada (`#3B8A00`
+  // 3.8:1, `#B77900` 3.2:1, `#F9AC00` fuera de token). El tono sale de `--badge-*`
+  // (`globals.css`), la misma fuente que usa `StatusBadge`, y queda theme-aware de paso.
+  const ocrTone: StatusTone =
+    ocr.status === 'verified' ? 'success' : ocr.status === 'rejected' ? 'danger' : 'warning';
+  const palette = {
+    color: `var(--badge-${ocrTone}-fg)`,
+    border: `var(--badge-${ocrTone}-border)`,
+    bg: `var(--badge-${ocrTone}-bg)`,
+    label:
+      ocr.status === 'verified'
+        ? 'Verificado'
+        : ocr.status === 'rejected'
+          ? 'Rechazado'
+          : 'No analizado',
+  };
 
   const data = ocr.data;
   const nombre = TIPO_LABEL[tipo] ?? tipo;
@@ -277,22 +289,22 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
         <div
           id={tipId}
           role="tooltip"
-          className="absolute right-0 z-40 mt-1.5 w-56 rounded-xl border bg-white p-2.5 text-left shadow-lg dark:bg-[#0B0F14]"
+          className="absolute right-0 z-40 mt-1.5 w-56 rounded-xl border bg-white p-2.5 text-left shadow-lg dark:bg-[#162744]"
           style={{ borderColor: palette.border }}
         >
-          <p className="text-[11px] font-bold" style={{ color: palette.color }}>
+          <p className="text-xs font-bold" style={{ color: palette.color }}>
             OCR — {palette.label}
           </p>
           {ocr.motivo && (
-            <p className="mt-1 text-[10px] leading-snug opacity-80">{ocr.motivo}</p>
+            <p className="mt-1 text-xs leading-snug opacity-80">{ocr.motivo}</p>
           )}
           {(tipoDocumento || recorte) && (
-            <p className="mt-1 text-[10px] opacity-60">
+            <p className="mt-1 text-xs opacity-70">
               {[tipoDocumento, recorte].filter(Boolean).join(' · ')}
             </p>
           )}
           {fields.length > 0 && (
-            <p className="mt-1.5 text-[10px] font-medium" style={{ color: '#557EFF' }}>
+            <p className="mt-1.5 text-xs font-medium" style={{ color: '#557EFF' }}>
               Clic para ver {fields.length} campo{fields.length === 1 ? '' : 's'}
             </p>
           )}
@@ -301,14 +313,19 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
 
       {detailOpen && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4 backdrop-blur-sm"
+          // B6 (guardián de diseño) — overlay único del sistema: `rgba(22,39,68,0.45)` +
+          // `backdrop-blur-[6px]` (antes `bg-black/40 backdrop-blur-sm`, uno de los cuatro
+          // overlays distintos del asistente).
+          className="fixed inset-0 z-50 grid place-items-center bg-[rgba(22,39,68,0.45)] px-4 backdrop-blur-[6px]"
           role="dialog"
           aria-modal="true"
           aria-labelledby={`ocr-detail-title-${tipo}`}
           onClick={() => setDetailOpen(false)}
         >
           <div
-            className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-white p-4 shadow-xl dark:bg-[#0B0F14]"
+            ref={ocrDialogRef}
+            tabIndex={-1}
+            className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-white p-4 shadow-xl outline-none focus:ring-0 dark:bg-[#162744]"
             style={{ borderColor: palette.border }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -327,7 +344,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
                   style={{ color: '#162744' }}
                 >
                   OCR — {nombre}
-                  <span className="mt-0.5 block text-[11px] font-bold" style={{ color: palette.color }}>
+                  <span className="mt-0.5 block text-xs font-bold" style={{ color: palette.color }}>
                     {palette.label}
                   </span>
                 </h3>
@@ -335,36 +352,31 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
               <button
                 type="button"
                 onClick={() => setDetailOpen(false)}
-                className="rounded-lg px-2 py-1 text-[11px] font-medium opacity-70 hover:opacity-100"
+                className="rounded-lg px-2 py-1 text-xs font-medium opacity-70 hover:opacity-100"
               >
                 Cerrar
               </button>
             </div>
             {ocr.motivo && (
-              <p className="mb-2 text-[11px] font-medium" style={{ color: palette.color }}>
+              <p className="mb-2 text-xs font-medium" style={{ color: palette.color }}>
                 {ocr.motivo}
               </p>
             )}
             {(tipoDocumento || recorte) && (
-              <p className="mb-2 text-[10px] opacity-60">
+              <p className="mb-2 text-xs opacity-70">
                 {[tipoDocumento, recorte].filter(Boolean).join(' · ')}
               </p>
             )}
             {fields.length === 0 ? (
-              <p className="text-[11px] opacity-55">Sin campos adicionales detectados.</p>
+              <p className="text-xs opacity-70">Sin campos adicionales detectados.</p>
             ) : (
               <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
                 {fields.map(({ field, value }) => (
-                  <div key={field.label} className="flex items-baseline gap-1.5 text-[11px]">
-                    <dt className="shrink-0 opacity-60">{field.label}:</dt>
+                  <div key={field.label} className="flex items-baseline gap-1.5 text-xs">
+                    <dt className="shrink-0 opacity-70">{field.label}:</dt>
                     {field.kind === 'state' ? (
                       <dd>
-                        <span
-                          className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                          style={stateChipStyle(value)}
-                        >
-                          {value.replace(/_/g, ' ')}
-                        </span>
+                        <StatusBadge tone={ocrFieldTone(value)} label={value.replace(/_/g, ' ')} />
                       </dd>
                     ) : (
                       <dd
@@ -465,64 +477,99 @@ export function DocumentSlot({
 
   return (
     <li
-      className="flex h-full flex-col rounded-2xl border bg-white p-3 dark:bg-[#0B0F14]"
+      className={
+        'flex h-full flex-col rounded-2xl bg-white p-4 transition dark:bg-[#162744] ' +
+        // La caja punteada del diseño es la señal de "aquí falta algo": se reserva para el slot
+        // vacío y desaparece en cuanto hay archivo, que pasa a borde sólido de tarjeta normal.
+        (done
+          ? 'border shadow-sm hover:shadow-md'
+          : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#EFF6FF]')
+      }
       style={{
         borderColor: done
           ? 'rgba(140,198,63,0.45)'
           : item.obligatorio
             ? 'rgba(255,78,0,0.35)'
             : '#DFE5ED',
-        boxShadow: item.obligatorio && !done ? 'inset 3px 0 0 #FF4E00' : undefined,
       }}
     >
-      <div className="flex min-w-0 items-start gap-2.5">
-        <FileText
-          className="mt-0.5 h-4 w-4 shrink-0"
-          style={{ color: done ? '#8CC63F' : '#9AA5B1' }}
-          aria-hidden="true"
-        />
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-bold leading-snug">{item.label}</p>
-          {item.obligatorio ? (
-            <span
-              className="mt-0.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-              style={{
-                background: 'rgba(255,78,0,0.14)',
-                color: '#FF4E00',
-                border: '1px solid rgba(255,78,0,0.40)',
-              }}
-            >
-              <span aria-hidden="true">●</span>
-              Obligatorio
-            </span>
-          ) : (
-            <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide opacity-50">
-              Opcional
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <FileText
+            className="mt-0.5 h-4 w-4 shrink-0"
+            style={{ color: done ? '#8CC63F' : '#59677D' }}
+            aria-hidden="true"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold leading-snug">{item.label}</p>
+            <p className="mt-1 text-xs opacity-70">
+              {ALLOWED_LABEL}
+              {item.maxSizeBytes ? ` · hasta ${formatSize(item.maxSizeBytes)}` : ''}
             </p>
-          )}
-          {attachment && (
-            <p className="mt-1 truncate text-[11px] opacity-70">
-              {attachment.filename} · {formatSize(attachment.sizeBytes)}
-            </p>
-          )}
+            {attachment && (
+              <p className="mt-1 truncate text-xs opacity-70">
+                {attachment.filename} · {formatSize(attachment.sizeBytes)}
+              </p>
+            )}
+          </div>
         </div>
-        {ocr ? <OcrStatusPanel tipo={tipo} ocr={ocr} /> : null}
+        {/* Insignias arriba a la derecha, como en la propuesta: el estado del documento se lee
+            antes que su nombre cuando se barre la grilla en diagonal. */}
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          {item.obligatorio ? (
+            // B4 (guardián de diseño) — el badge iba en `#FF4E00` sobre `rgba(255,78,0,0.14)`
+            // (3.0:1). `StatusBadge tone="danger"` resuelve la paleta con contraste AA.
+            <StatusBadge
+              tone="danger"
+              className="uppercase tracking-wide"
+              label={
+                <span className="inline-flex items-center gap-1">
+                  <span aria-hidden="true">●</span>
+                  Obligatorio
+                </span>
+              }
+            />
+          ) : (
+            <span className="whitespace-nowrap text-xs font-medium uppercase tracking-wide opacity-70">
+              Opcional
+            </span>
+          )}
+          {ocr ? <OcrStatusPanel tipo={tipo} ocr={ocr} /> : null}
+        </div>
       </div>
 
-      <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
-        <span
-          className="rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
-          style={{ background: done ? '#8CC63F' : '#9AA5B1' }}
+      {/* Barra de avance del diseño: llena y verde cuando el documento está resuelto, en pulso
+          azul mientras el OCR lo analiza. Es decorativa — el estado ya va escrito en la píldora. */}
+      {(done || analyzing) && (
+        <div
+          className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
+          style={{ background: '#DFE5ED' }}
+          aria-hidden="true"
         >
-          {done ? 'Adjunto' : 'Sin adjuntar'}
-        </span>
+          <div
+            className={`h-full rounded-full ${analyzing ? 'animate-pulse' : ''}`}
+            style={{
+              width: analyzing ? '60%' : '100%',
+              background: analyzing ? '#557EFF' : '#8CC63F',
+            }}
+          />
+        </div>
+      )}
+
+      <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
+        {/* Tintado y no de relleno pleno con texto blanco: el verde de marca sobre blanco da 2.05:1
+            y el sistema prohíbe expresamente ese badge. `StatusBadge` resuelve tono y contraste. */}
+        <StatusBadge
+          label={done ? 'Adjunto' : 'Sin adjuntar'}
+          tone={done ? 'success' : 'neutral'}
+        />
 
         {readOnly ? (
           attachment && onPreview ? (
             <button
               type="button"
               onClick={() => onPreview(attachment)}
-              className="text-[11px] font-semibold"
+              className="text-xs font-semibold"
               style={{ color: '#557EFF' }}
               aria-label={`Previsualizar ${item.label}`}
             >
@@ -550,12 +597,14 @@ export function DocumentSlot({
               className="hidden"
               aria-label={`Subir ${item.label}`}
             />
+            {/* CTA con borde, no enlace: en la grilla de la propuesta es la única acción primaria
+                de la tarjeta y tiene que competir con la insignia de obligatorio. */}
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
               disabled={busy}
-              className="text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-              style={{ color: '#557EFF' }}
+              className="rounded-lg border bg-white px-3 py-1.5 text-xs font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-transparent"
+              style={{ borderColor: '#557EFF', color: '#557EFF' }}
             >
               {analyzing
                 ? 'Analizando…'
@@ -570,7 +619,7 @@ export function DocumentSlot({
                 type="button"
                 onClick={() => onRemove(attachment.id)}
                 disabled={busy}
-                className="text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                className="text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ color: '#FF4E00' }}
                 aria-label={`Borrar ${item.label}`}
               >
@@ -582,7 +631,7 @@ export function DocumentSlot({
       </div>
 
       {canDefer && (
-        <label className="mt-2 flex items-start gap-2 text-[11px] cursor-pointer">
+        <label className="mt-2 flex items-start gap-2 text-xs cursor-pointer">
           <input
             type="checkbox"
             checked={deferred}
@@ -593,7 +642,7 @@ export function DocumentSlot({
           <span className="opacity-80">
             La impronta se generará automáticamente en el paso de firma (FUR).
             {deferred && (
-              <span className="block opacity-60">
+              <span className="block opacity-70">
                 Marcada como diferida — se generará más adelante; no necesitas cargarla aquí.
               </span>
             )}
@@ -603,7 +652,7 @@ export function DocumentSlot({
 
       {localError && (
         <p
-          className="mt-1.5 text-[10px]"
+          className="mt-1.5 text-xs"
           style={{ color: '#FF4E00' }}
           role="alert"
           aria-live="polite"
@@ -715,8 +764,15 @@ export function DocumentChecklist({
     }
   };
 
+  // El OCR de la carga masiva analiza el lote entero y puede tardar bastante; mientras corre no hay
+  // nada útil que hacer en la pantalla, así que la propuesta la cubre con la escena de espera. El
+  // análisis de un documento suelto NO la levanta: su tarjeta ya muestra "Analizando…" con su barra,
+  // y tapar la pantalla entera por un archivo impediría seguir adjuntando los demás.
+  const analizandoLote = batch.state.phase === 'analyzing';
+
   return (
     <>
+    {analizandoLote && <CarLoaderModal mode="ocr" />}
     <DocumentPreviewModal
       open={!!previewAttachment}
       onClose={closePreview}
@@ -728,40 +784,48 @@ export function DocumentChecklist({
       onDownload={previewAttachment ? () => void handleDownloadFromPreview() : undefined}
     />
     <section
-      className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14] mt-4"
+      className="rounded-2xl p-4 border bg-white dark:bg-[#162744]"
       aria-label="Documentos del trámite"
     >
-      <div className="mb-3 flex items-center justify-between gap-3">
-        {hideHeader ? (
-          <div />
-        ) : (
-          <div>
-            <h4 className="text-sm font-bold">Documentos requeridos</h4>
-            <p className="text-[11px] opacity-60">
-              Adjunta los documentos que exige el trámite ({ALLOWED_LABEL}, máx
-              20 MB).
-            </p>
-          </div>
-        )}
-        {checklist && (
-          <span
-            className="shrink-0 rounded-full px-3 py-1 text-[11px] font-bold"
-            style={
-              checklist.completo
-                ? { background: 'rgba(140,198,63,0.15)', color: '#8CC63F' }
-                : { background: 'rgba(249,172,0,0.15)', color: '#F9AC00' }
-            }
-            role="status"
-            aria-live="polite"
-          >
-            {checklist.completo
-              ? 'Documentos completos'
-              : `Faltan ${checklist.faltanObligatorios} obligatorio${
-                  checklist.faltanObligatorios === 1 ? '' : 's'
-                }`}
-          </span>
-        )}
-      </div>
+      {/* Embebido en el asistente el paso ya tiene su título, pero la tarjeta necesita el suyo:
+          desde el rediseño comparte el paso con las declaraciones, la prenda y las observaciones,
+          y sin nombre propio las cuatro se leían como un único bloque continuo. */}
+      <WizardCardHeader
+        title={hideHeader ? 'Gestión de documentos' : 'Documentos requeridos'}
+        subtitle={
+          hideHeader
+            ? undefined
+            : `Adjunta los documentos que exige el trámite (${ALLOWED_LABEL}, máx 20 MB).`
+        }
+      />
+
+      {/* Banda de completitud, no píldora en la esquina: es la respuesta a "¿ya puedo seguir?" y
+          en la propuesta ocupa el ancho de la tarjeta, con el ámbar de lo que falta o el verde de
+          lo resuelto. */}
+      {checklist &&
+        (() => {
+          // Los tonos salen de INLINE_ALERT_TONES y no de hex sueltos: es la misma paleta con la
+          // que el resto del asistente pinta "todo bien" y "falta algo".
+          const tono = INLINE_ALERT_TONES[checklist.completo ? 'success' : 'warning'];
+          const Icono = tono.Icon;
+          return (
+            <div
+              className="mb-3 flex items-center gap-2.5 rounded-xl px-4 py-3"
+              style={{ background: tono.background, border: `1px solid ${tono.border}` }}
+              role="status"
+              aria-live="polite"
+            >
+              <Icono className="h-4 w-4 shrink-0" style={{ color: tono.color }} aria-hidden="true" />
+              <span className="text-xs font-bold" style={{ color: tono.color }}>
+                {checklist.completo
+                  ? 'Documentos completos'
+                  : `Faltan ${checklist.faltanObligatorios} obligatorio${
+                      checklist.faltanObligatorios === 1 ? '' : 's'
+                    }`}
+              </span>
+            </div>
+          );
+        })()}
 
       {state.error && (
         <div
@@ -789,38 +853,19 @@ export function DocumentChecklist({
       {/* Feature #11211 — selector de modo (excluyente) + UI correspondiente. Default: uno a uno. */}
       {showModeToggle && (
         <div className="mb-3 space-y-2">
-          <div
-            className="flex flex-wrap gap-2"
-            role="radiogroup"
-            aria-label="Modo de cargue de documentos"
-          >
-            {(
-              [
-                { value: 'individual' as const, label: 'Uno a uno' },
-                { value: 'batch' as const, label: 'Masivo' },
-              ] as const
-            ).map((opt) => {
-              const selected = uploadMode === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => setUploadMode(opt.value)}
-                  className="rounded-full px-3 py-1.5 text-[11px] font-semibold border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                  style={
-                    selected
-                      ? { borderColor: '#557EFF', background: 'rgba(85,126,255,0.12)', color: '#557EFF' }
-                      : { borderColor: '#DFE5ED', color: '#162744' }
-                  }
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-[11px] opacity-60" role="note">
+          {/* Pista segmentada como en la propuesta (Carga Individual / Carga Masiva): las dos
+              opciones son excluyentes y cambian lo que se ve debajo, así que conviene verlas
+              juntas y no como dos píldoras sueltas que se leen como filtros. */}
+          <WizardSegmented
+            label="Modo de cargue de documentos"
+            value={uploadMode}
+            options={[
+              { value: 'individual', label: 'Uno a uno' },
+              { value: 'batch', label: 'Masivo' },
+            ]}
+            onChange={setUploadMode}
+          />
+          <p className="text-xs opacity-70" role="note">
             {uploadMode === 'individual'
               ? 'Puedes cargar cada documento en su casilla, uno a uno. También puedes cambiar a Masivo para subir varios archivos juntos.'
               : 'Carga varios archivos a la vez: el sistema los clasifica y tú confirmas. Las casillas de abajo siguen disponibles por si falta alguno.'}
@@ -877,19 +922,23 @@ export function DocumentChecklist({
       )}
 
       {items.length === 0 ? (
-        <p className="text-[11px] opacity-60">
+        <p className="text-xs opacity-70">
           {state.loading
             ? 'Cargando documentos requeridos…'
             : 'Este trámite no requiere documentos.'}
         </p>
       ) : (
         <ul
+          // La propuesta llega a cuatro columnas en pantalla ancha; el checklist se quedaba en tres
+          // y dejaba una franja muerta a la derecha en trámites con muchos documentos.
           className={`grid gap-3 ${
             items.length === 1
               ? 'grid-cols-1'
               : items.length === 2
                 ? 'grid-cols-1 sm:grid-cols-2'
-                : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+                : items.length === 3
+                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+                  : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
           }`}
           aria-label="Checklist de documentos"
         >

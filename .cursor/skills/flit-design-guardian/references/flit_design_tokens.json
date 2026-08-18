@@ -1,67 +1,189 @@
 {
   "$schema": "https://www.designtokens.org/TR/drafts/format/",
   "meta": {
-    "name": "FLIT Prototype Design Tokens",
-    "version": "1.0.0",
-    "source": "prototipo_flit_original.pdf",
-    "purpose": "Preservar la identidad visual del prototipo FLIT en diseño y desarrollo frontend. Los valores son aproximaciones visuales extraídas del prototipo y deben ajustarse únicamente mediante comparación visual contra el PDF."
+    "name": "FLIT Design Tokens",
+    "version": "2.0.0",
+    "baseline": "frontend/app/globals.css @ develop",
+    "sources": [
+      "frontend/app/globals.css (fuente normativa: @theme inline, :root, .dark)",
+      "GUIA-DOCK-INFERIOR-FLOTANTE — Contrato D (tokens --nav-*)",
+      "HU #10844 — badges de estado y tabla card-list",
+      "prototipo flit 2.0 (v4).pdf (referencia histórica de composición)"
+    ],
+    "purpose": "Fuente única de color, tipografía, radios, sombras y motion para diseño y frontend FLIT. Cuando este archivo y el PDF discrepen, MANDA ESTE ARCHIVO: el PDF documenta la composición original, no los valores vigentes.",
+    "changelog": {
+      "2.0.0": "Alineación con la línea base de develop. (1) La paleta de marca pasa a los valores vigentes #557EFF/#00DBD5/#FF4E00/#8CC63F; los valores del prototipo v4 se conservan bajo `color.chrome` porque siguen vivos y citados por nombre en el Contrato D del dock. (2) Se agrega capa `dark`, que antes no existía y obligaba a inventar surfaces por componente. (3) Se incorporan `color.badge` (5 tonos accesibles) y `color.table` de la HU #10844. (4) Escala de radios corregida a la real (base 10px), antes desalineada. (5) `typography.fontSize.min` como piso explícito y auditable. (6) `component.dock` con el Contrato D completo.",
+      "1.0.0": "Extracción visual del prototipo flit 2.0 (v4)."
+    },
+    "pendiente": "Las variables shadcn/ui (--card, --popover, --primary…) siguen en los oklch por defecto de la librería y NO están alineadas a FLIT. No tomar sus valores como referencia; ver regla de librería sin tematizar en prototype_rules.md."
   },
+
   "color": {
     "background": {
-      "app": { "$type": "color", "$value": "#EAF2FF" },
+      "app": { "$type": "color", "$value": "#EEF5FF", "$description": "Fondo de app interna. Se aplica vía .app-bg junto a dos radial-gradients (ver gradient.appWash)." },
       "modal": { "$type": "color", "$value": "#EEF5FF" },
       "card": { "$type": "color", "$value": "#FFFFFF" },
-      "tableHeader": { "$type": "color", "$value": "#F4F6FA" }
+      "tableHeader": { "$type": "color", "$value": "#DFE5ED", "$description": "Gris de marca. Elegido deliberadamente sobre un gris casi blanco (HU #10844): el casi blanco se aplanaba sobre paneles blancos." }
     },
+
     "brand": {
+      "blue": { "$type": "color", "$value": "#557EFF", "$description": "Acción principal, títulos de módulo, estado activo." },
+      "cyan": { "$type": "color", "$value": "#00DBD5", "$description": "Acento tecnológico, validaciones, segundo stop de gradientes." },
+      "green": { "$type": "color", "$value": "#8CC63F", "$description": "Completado/válido. Marcador de paso cumplido en el wizard." },
+      "alert": { "$type": "color", "$value": "#FF4E00", "$description": "Alerta, rechazo, acción destructiva." },
+      "navy": { "$type": "color", "$value": "#162744", "$description": "Texto principal, botón Anterior, panel oscuro." },
+      "gray": { "$type": "color", "$value": "#DFE5ED", "$description": "Borde de marca y cabecera de tabla." }
+    },
+
+    "chrome": {
+      "$description": "Paleta del cromo de navegación (dock inferior, Contrato D). Convive a propósito con `brand` y NO debe fusionarse sin decisión explícita: unificarlas cambia píxeles en producción.",
       "cyan": { "$type": "color", "$value": "#4FD4CC" },
       "blue": { "$type": "color", "$value": "#4F74C9" },
-      "blueDark": { "$type": "color", "$value": "#162744" },
-      "blueText": { "$type": "color", "$value": "#526FB8" },
-      "green": { "$type": "color", "$value": "#70CF3A" }
+      "appBg": { "$type": "color", "$value": "#EAF2FF" },
+      "border": { "$type": "color", "$value": "#DDE5F0" },
+      "text": { "$type": "color", "$value": "#59677D" },
+      "textStrong": { "$type": "color", "$value": "#162744" },
+      "textFaint": { "$type": "color", "$value": "#667085" },
+      "focus": { "$type": "color", "$value": "#4F74C9" }
     },
+
     "state": {
-      "success": { "$type": "color", "$value": "#70CF3A" },
-      "active": { "$type": "color", "$value": "#4F74C9" },
-      "warning": { "$type": "color", "$value": "#F05A35" },
-      "danger": { "$type": "color", "$value": "#E43D30" },
+      "$description": "Semántica cromática base. Para píldoras y chips NO usar estos valores como relleno con texto blanco: usar `color.badge`, que ya cumple contraste.",
+      "success": { "$type": "color", "$value": "#8CC63F" },
+      "active": { "$type": "color", "$value": "#557EFF" },
+      "warning": { "$type": "color", "$value": "#F59E0B" },
+      "danger": { "$type": "color", "$value": "#FF4E00" },
       "draft": { "$type": "color", "$value": "#59677D" },
       "muted": { "$type": "color", "$value": "#7D8798" }
     },
-    "border": {
-      "soft": { "$type": "color", "$value": "#DDE5F0" },
-      "input": { "$type": "color", "$value": "#D9DEE8" },
-      "focus": { "$type": "color", "$value": "#4F74C9" }
+
+    "badge": {
+      "$description": "Escala de badges de la HU #10844: forma tintada (fondo translúcido + texto + borde). Los `fg` están calculados para cumplir 4.5:1 sobre el `bg` correspondiente. Prohibido el badge de relleno sólido con texto blanco.",
+      "success": {
+        "bg": { "$type": "color", "$value": "rgba(0, 219, 213, 0.15)" },
+        "fg": { "$type": "color", "$value": "#0F766E" },
+        "border": { "$type": "color", "$value": "rgba(0, 219, 213, 0.35)" }
+      },
+      "warning": {
+        "bg": { "$type": "color", "$value": "rgba(245, 158, 11, 0.15)" },
+        "fg": { "$type": "color", "$value": "#B45309" },
+        "border": { "$type": "color", "$value": "rgba(245, 158, 11, 0.35)" }
+      },
+      "danger": {
+        "bg": { "$type": "color", "$value": "rgba(255, 78, 0, 0.12)" },
+        "fg": { "$type": "color", "$value": "#C2410C" },
+        "border": { "$type": "color", "$value": "rgba(255, 78, 0, 0.32)" }
+      },
+      "info": {
+        "bg": { "$type": "color", "$value": "rgba(85, 126, 255, 0.14)" },
+        "fg": { "$type": "color", "$value": "#3B4FD6" },
+        "border": { "$type": "color", "$value": "rgba(85, 126, 255, 0.35)" }
+      },
+      "neutral": {
+        "bg": { "$type": "color", "$value": "rgba(223, 229, 237, 0.55)" },
+        "fg": { "$type": "color", "$value": "#445569" },
+        "border": { "$type": "color", "$value": "rgba(223, 229, 237, 0.9)" }
+      }
     },
+
+    "table": {
+      "headerBg": { "$type": "color", "$value": "#DFE5ED" },
+      "headerFg": { "$type": "color", "$value": "#162744" },
+      "rowBorder": { "$type": "color", "$value": "#DFE5ED" },
+      "rowHover": { "$type": "color", "$value": "#F4F8FF" }
+    },
+
+    "border": {
+      "soft": { "$type": "color", "$value": "#DFE5ED" },
+      "input": { "$type": "color", "$value": "#DFE5ED" },
+      "focus": { "$type": "color", "$value": "#557EFF" }
+    },
+
     "text": {
       "primary": { "$type": "color", "$value": "#162744" },
       "secondary": { "$type": "color", "$value": "#59677D" },
       "muted": { "$type": "color", "$value": "#7D8798" },
       "inverse": { "$type": "color", "$value": "#FFFFFF" },
-      "brandTitle": { "$type": "color", "$value": "#526FB8" }
+      "brandTitle": { "$type": "color", "$value": "#557EFF" }
     }
   },
+
+  "dark": {
+    "$description": "Capa de tema oscuro. Antes inexistente: esa ausencia es la razón por la que aparecieron surfaces inventadas por componente (#0B0F14, #05060A, #1A1F2B). Ningún surface oscuro fuera de esta capa está autorizado.",
+    "background": {
+      "app": { "$type": "color", "$value": "#0A1428" },
+      "modal": { "$type": "color", "$value": "#162744" },
+      "card": { "$type": "color", "$value": "#162744" },
+      "tableHeader": { "$type": "color", "$value": "rgba(255, 255, 255, 0.06)" }
+    },
+    "border": {
+      "soft": { "$type": "color", "$value": "rgba(255, 255, 255, 0.10)" },
+      "input": { "$type": "color", "$value": "rgba(255, 255, 255, 0.15)" },
+      "focus": { "$type": "color", "$value": "#7C9BFF" }
+    },
+    "text": {
+      "primary": { "$type": "color", "$value": "#FFFFFF" },
+      "secondary": { "$type": "color", "$value": "rgba(255, 255, 255, 0.78)" },
+      "muted": { "$type": "color", "$value": "rgba(255, 255, 255, 0.55)" },
+      "inverse": { "$type": "color", "$value": "#162744" }
+    },
+    "table": {
+      "headerBg": { "$type": "color", "$value": "rgba(255, 255, 255, 0.06)" },
+      "headerFg": { "$type": "color", "$value": "rgba(255, 255, 255, 0.72)" },
+      "rowBorder": { "$type": "color", "$value": "rgba(255, 255, 255, 0.10)" },
+      "rowHover": { "$type": "color", "$value": "rgba(255, 255, 255, 0.04)" }
+    },
+    "badge": {
+      "success": {
+        "bg": { "$type": "color", "$value": "rgba(0, 219, 213, 0.18)" },
+        "fg": { "$type": "color", "$value": "#5EEAD4" },
+        "border": { "$type": "color", "$value": "rgba(0, 219, 213, 0.35)" }
+      },
+      "warning": {
+        "bg": { "$type": "color", "$value": "rgba(245, 158, 11, 0.20)" },
+        "fg": { "$type": "color", "$value": "#FBBF24" },
+        "border": { "$type": "color", "$value": "rgba(245, 158, 11, 0.40)" }
+      },
+      "danger": {
+        "bg": { "$type": "color", "$value": "rgba(255, 78, 0, 0.20)" },
+        "fg": { "$type": "color", "$value": "#FCA574" },
+        "border": { "$type": "color", "$value": "rgba(255, 78, 0, 0.40)" }
+      },
+      "info": {
+        "bg": { "$type": "color", "$value": "rgba(85, 126, 255, 0.22)" },
+        "fg": { "$type": "color", "$value": "#A5B8FF" },
+        "border": { "$type": "color", "$value": "rgba(85, 126, 255, 0.40)" }
+      },
+      "neutral": {
+        "bg": { "$type": "color", "$value": "rgba(255, 255, 255, 0.08)" },
+        "fg": { "$type": "color", "$value": "#CBD5E1" },
+        "border": { "$type": "color", "$value": "rgba(255, 255, 255, 0.15)" }
+      }
+    },
+    "chrome": {
+      "vidrio": { "$type": "color", "$value": "rgba(22, 39, 68, 0.90)" },
+      "panelBg": { "$type": "color", "$value": "#162744" },
+      "border": { "$type": "color", "$value": "rgba(255, 255, 255, 0.10)" },
+      "appBg": { "$type": "color", "$value": "rgba(255, 255, 255, 0.08)" },
+      "text": { "$type": "color", "$value": "rgba(255, 255, 255, 0.78)" },
+      "textStrong": { "$type": "color", "$value": "#FFFFFF" },
+      "textFaint": { "$type": "color", "$value": "rgba(255, 255, 255, 0.55)" }
+    }
+  },
+
   "gradient": {
-    "primary": {
-      "$type": "gradient",
-      "$value": "linear-gradient(90deg, #4FD4CC 0%, #4F74C9 100%)"
-    },
-    "success": {
-      "$type": "gradient",
-      "$value": "linear-gradient(90deg, #4FD4CC 0%, #70CF3A 100%)"
-    },
-    "sidebar": {
-      "$type": "gradient",
-      "$value": "linear-gradient(180deg, #4FD4CC 0%, #4F74C9 100%)"
-    },
-    "danger": {
-      "$type": "gradient",
-      "$value": "linear-gradient(90deg, #F05A35 0%, #E43D30 100%)"
-    }
+    "primary": { "$type": "gradient", "$value": "linear-gradient(135deg, #557EFF 0%, #00DBD5 100%)", "$description": "CTA primario." },
+    "success": { "$type": "gradient", "$value": "linear-gradient(135deg, #00DBD5 0%, #8CC63F 100%)", "$description": "CTA de cierre/finalizar." },
+    "danger": { "$type": "gradient", "$value": "linear-gradient(135deg, #FF4E00 0%, #E43D30 100%)" },
+    "navActive": { "$type": "gradient", "$value": "linear-gradient(90deg, #4FD4CC 0%, #4F74C9 100%)", "$description": "Píldora activa del dock (Contrato D). Usa la paleta chrome, no la de marca." },
+    "appWash": { "$type": "gradient", "$value": "radial-gradient(at 20% 0%, rgba(85,126,255,0.08), transparent 50%), radial-gradient(at 100% 100%, rgba(0,219,213,0.07), transparent 50%)" },
+    "appWashDark": { "$type": "gradient", "$value": "radial-gradient(at 20% 0%, rgba(85,126,255,0.18), transparent 50%), radial-gradient(at 100% 100%, rgba(0,219,213,0.12), transparent 50%)" }
   },
+
   "typography": {
     "fontFamily": {
-      "primary": { "$type": "fontFamily", "$value": "Inter, Poppins, Montserrat, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }
+      "sans": { "$type": "fontFamily", "$value": "Poppins, ui-sans-serif, system-ui, sans-serif" },
+      "mono": { "$type": "fontFamily", "$value": "'JetBrains Mono', ui-monospace, monospace", "$description": "Radicados, VIN, placas, hashes y cualquier dato tabular." }
     },
     "fontWeight": {
       "regular": { "$type": "fontWeight", "$value": 400 },
@@ -70,6 +192,7 @@
       "bold": { "$type": "fontWeight", "$value": 700 }
     },
     "fontSize": {
+      "min": { "$type": "dimension", "$value": "12px", "$description": "PISO ABSOLUTO. Ningún texto legible por el usuario puede bajar de aquí. Auditable: buscar text-[10px] y text-[11px]." },
       "xs": { "$type": "dimension", "$value": "12px" },
       "sm": { "$type": "dimension", "$value": "14px" },
       "base": { "$type": "dimension", "$value": "16px" },
@@ -82,8 +205,10 @@
       "tight": { "$type": "number", "$value": 1.15 },
       "normal": { "$type": "number", "$value": 1.35 },
       "relaxed": { "$type": "number", "$value": 1.55 }
-    }
+    },
+    "opacityFloor": { "$type": "number", "$value": 0.7, "$description": "Opacidad mínima sobre texto. Por debajo (opacity-55/60 sobre 10px) el contraste efectivo cae bajo AA." }
   },
+
   "spacing": {
     "1": { "$type": "dimension", "$value": "4px" },
     "2": { "$type": "dimension", "$value": "8px" },
@@ -96,25 +221,31 @@
     "12": { "$type": "dimension", "$value": "48px" },
     "16": { "$type": "dimension", "$value": "64px" }
   },
+
   "radius": {
-    "sm": { "$type": "dimension", "$value": "8px" },
-    "md": { "$type": "dimension", "$value": "12px" },
-    "lg": { "$type": "dimension", "$value": "18px" },
-    "xl": { "$type": "dimension", "$value": "24px" },
-    "2xl": { "$type": "dimension", "$value": "32px" },
-    "pill": { "$type": "dimension", "$value": "999px" },
-    "sidebar": { "$type": "dimension", "$value": "56px" }
+    "$description": "Escala real derivada de --radius: 0.625rem (10px) en globals.css.",
+    "base": { "$type": "dimension", "$value": "10px" },
+    "sm": { "$type": "dimension", "$value": "6px" },
+    "md": { "$type": "dimension", "$value": "8px" },
+    "lg": { "$type": "dimension", "$value": "10px" },
+    "xl": { "$type": "dimension", "$value": "14px" },
+    "2xl": { "$type": "dimension", "$value": "18px" },
+    "3xl": { "$type": "dimension", "$value": "22px" },
+    "4xl": { "$type": "dimension", "$value": "26px" },
+    "pill": { "$type": "dimension", "$value": "999px" }
   },
+
   "shadow": {
     "card": { "$type": "shadow", "$value": "0 8px 24px rgba(22, 39, 68, 0.08)" },
     "modal": { "$type": "shadow", "$value": "0 24px 60px rgba(22, 39, 68, 0.18)" },
     "button": { "$type": "shadow", "$value": "0 10px 22px rgba(79, 116, 201, 0.22)" }
   },
+
   "component": {
     "button": {
+      "radius": { "$type": "dimension", "$value": "999px", "$description": "CTA primario: pastilla degradada. Los CTA rectangulares planos son desviación." },
       "height": { "$type": "dimension", "$value": "56px" },
-      "paddingInline": { "$type": "dimension", "$value": "32px" },
-      "radius": { "$type": "dimension", "$value": "999px" }
+      "paddingInline": { "$type": "dimension", "$value": "32px" }
     },
     "input": {
       "height": { "$type": "dimension", "$value": "48px" },
@@ -126,17 +257,34 @@
       "padding": { "$type": "dimension", "$value": "24px" }
     },
     "modal": {
-      "radius": { "$type": "dimension", "$value": "24px" },
-      "padding": { "$type": "dimension", "$value": "40px" }
+      "radius": { "$type": "dimension", "$value": "18px" },
+      "padding": { "$type": "dimension", "$value": "24px" },
+      "overlay": { "$type": "color", "$value": "rgba(22, 39, 68, 0.45)" },
+      "overlayBlur": { "$type": "dimension", "$value": "6px", "$description": "Único blur autorizado junto al del dock." }
     },
-    "sidebarCompact": {
-      "width": { "$type": "dimension", "$value": "138px" },
-      "radiusRight": { "$type": "dimension", "$value": "56px" }
+    "dock": {
+      "$description": "Dock inferior flotante — Contrato D. Sustituye a la sidebar del prototipo v4 como patrón de navegación principal.",
+      "vidrio": { "$type": "color", "$value": "rgba(255, 255, 255, 0.94)", "$description": "Casi opaco a propósito: mantiene legibilidad sobre contenido en scroll." },
+      "panelBg": { "$type": "color", "$value": "#FFFFFF" },
+      "radiusPill": { "$type": "dimension", "$value": "999px" },
+      "radiusPanel": { "$type": "dimension", "$value": "18px" },
+      "shadowDock": { "$type": "shadow", "$value": "0 8px 24px rgba(22, 39, 68, 0.08)" },
+      "shadowPanel": { "$type": "shadow", "$value": "0 24px 60px rgba(22, 39, 68, 0.18)" },
+      "shadowActive": { "$type": "shadow", "$value": "0 10px 22px rgba(79, 116, 201, 0.22)" }
+    },
+    "focusRing": {
+      "$description": "Obligatorio en todo elemento interactivo. outline-none sin sustituto es desviación bloqueante.",
+      "width": { "$type": "dimension", "$value": "2px" },
+      "offset": { "$type": "dimension", "$value": "2px" },
+      "color": { "$type": "color", "$value": "#557EFF" },
+      "colorDark": { "$type": "color", "$value": "#7C9BFF" }
     }
   },
+
   "motion": {
     "durationFast": { "$type": "duration", "$value": "120ms" },
     "durationBase": { "$type": "duration", "$value": "180ms" },
-    "easing": { "$type": "cubicBezier", "$value": [0.2, 0, 0, 1] }
+    "easing": { "$type": "cubicBezier", "$value": [0.2, 0, 0, 1] },
+    "reducedMotion": { "$type": "string", "$value": "obligatorio", "$description": "Toda animación ambiental o decorativa debe respetar prefers-reduced-motion." }
   }
 }

@@ -97,23 +97,9 @@ function renderNuevo(modalidad: 'matricula_inicial' | 'traspaso' = 'matricula_in
 }
 
 async function elegirSecretaria(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(
-    await screen.findByRole('button', { name: /Seleccionar secretaría de tránsito/i }),
-  );
-  await user.click(await screen.findByRole('button', { name: /Medellín/ }));
-}
-
-/** Tipo de servicio (sección 18 del FUR): requisito independiente de la secretaría, ver TramiteWizard. */
-const TIPOS_SERVICIO = [
-  { id: 'ts-particular', code: 'PARTICULAR', name: 'Particular', sortOrder: 1 },
-  { id: 'ts-publico', code: 'PUBLICO', name: 'Público', sortOrder: 2 },
-];
-
-async function elegirTipoServicio(
-  user: ReturnType<typeof userEvent.setup>,
-  code = 'PARTICULAR',
-) {
-  await user.selectOptions(await screen.findByLabelText('Tipo de servicio'), code);
+  // Combobox en línea: enfocar el campo despliega la lista, y la opción se elige de ella.
+  await user.click(await screen.findByRole('combobox', { name: /secretaría de tránsito/i }));
+  await user.click(await screen.findByRole('option', { name: /Medellín/ }));
 }
 
 beforeEach(() => {
@@ -122,7 +108,6 @@ beforeEach(() => {
   mocks.runPreflightPreview.mockResolvedValue(PREVIEW_RESULT);
   mocks.getConsultationConfig.mockResolvedValue({ vehiclePlate: 'kyverum_runt', onlyOwnVehicles: false });
   mocks.listTransitOffices.mockResolvedValue(SECRETARIAS);
-  mocks.listVehicleServiceTypes.mockResolvedValue(TIPOS_SERVICIO);
   mocks.setCurrentStep.mockResolvedValue({ id: 'inst-1', currentStep: 'documentos' });
   mocks.createInstanceFromConsulta.mockResolvedValue({
     instance: {
@@ -142,44 +127,47 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     const user = userEvent.setup();
     renderNuevo();
 
-    expect(
-      await screen.findByRole('button', { name: /Seleccionar secretaría de tránsito/i }),
-    ).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Seleccionar secretaría de tránsito/i }));
-    expect(await screen.findByRole('dialog', { name: /Seleccionar secretaría/i })).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: /Medellín/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Envigado/ })).toBeInTheDocument();
-  });
-
-  it('AC2: sin secretaría la consulta por VIN no se habilita', async () => {
-    const user = userEvent.setup();
-    renderNuevo();
-
+    // La tarjeta de radicación aparece CON el resultado de la consulta: primero se identifica el
+    // vehículo, después se elige dónde radicarlo.
     await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+    await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
 
-    expect(screen.getByRole('button', { name: 'Consultar RUNT' })).toBeDisabled();
-    expect(mocks.runPreflightPreview).not.toHaveBeenCalled();
+    const campo = await screen.findByRole('combobox', { name: /secretaría de tránsito/i });
+    await user.click(campo);
+    expect(await screen.findByRole('option', { name: /Medellín/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Envigado/ })).toBeInTheDocument();
   });
 
-  it('AC2: al elegir la secretaría la consulta se habilita y lleva su id', async () => {
+  it('la consulta corre sin secretaría: el organismo se elige después', async () => {
     const user = userEvent.setup();
     renderNuevo();
 
-    await elegirSecretaria(user);
-    await user.type(screen.getByLabelText('Número VIN'), VIN_VALIDO);
+    // El organismo ya no gatea la consulta: se pregunta dónde radicar sobre un vehículo YA
+    // identificado, no antes de saber de cuál se habla.
+    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
 
     const boton = screen.getByRole('button', { name: 'Consultar RUNT' });
     expect(boton).toBeEnabled();
     await user.click(boton);
 
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(1));
+    // Y viaja como null, NO como cadena vacía: el backend lee `Guid?` y un "" lo rechaza el binder
+    // con un 400 sin cuerpo, que en pantalla aparecía como "Revisa los datos e inténtalo de nuevo".
     expect(mocks.runPreflightPreview).toHaveBeenCalledWith(
-      expect.objectContaining({ vin: VIN_VALIDO, transitOfficeId: SECRETARIA_ID }),
+      expect.objectContaining({ transitOfficeId: null }),
     );
+    // La tarjeta de radicación aparece con el resultado, no antes.
+    await elegirSecretaria(user);
   });
 
   it('AC3: se advierte que solo hay organismos activos y qué hacer si falta el buscado', async () => {
+    const user = userEvent.setup();
     renderNuevo();
+
+    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
+    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
+    await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
 
     expect(
       await screen.findByText(/Solo se muestran los organismos de tránsito activos en FLIT/),
@@ -195,8 +183,7 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     mocks.runPreflightPreview.mockRejectedValue(new Error('422'));
     renderNuevo();
 
-    await elegirSecretaria(user);
-    await user.type(screen.getByLabelText('Número VIN'), VIN_VALIDO);
+    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
 
     expect(await screen.findByText(/No puedes radicar en este organismo de tránsito/)).toBeInTheDocument();
@@ -208,11 +195,10 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     const user = userEvent.setup();
     renderNuevo();
 
-    await elegirSecretaria(user);
-    await user.type(screen.getByLabelText('Número VIN'), VIN_VALIDO);
+    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
-    await elegirTipoServicio(user);
+    await elegirSecretaria(user);
 
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
 
@@ -223,22 +209,23 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     );
   });
 
-  it('cambiar de secretaría invalida la consulta anterior', async () => {
+  it('cambiar de secretaría NO invalida la consulta ya hecha', async () => {
     const user = userEvent.setup();
     renderNuevo();
 
-    await elegirSecretaria(user);
-    await user.type(screen.getByLabelText('Número VIN'), VIN_VALIDO);
+    await user.type(await screen.findByLabelText('Número VIN'), VIN_VALIDO);
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
-    await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
-    await elegirTipoServicio(user);
+    await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(1));
+    await elegirSecretaria(user);
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
 
-    // El trámite se crea con la secretaría que esté en pantalla: no puede quedar un preview de otra.
-    await user.click(screen.getByRole('button', { name: /Cambiar secretaría de tránsito/i }));
-    await user.click(await screen.findByRole('button', { name: /Envigado/ }));
+    // La consulta ya no se corre contra el organismo, así que corregirlo no la invalida: borrarla
+    // obligaría a repetir el RUNT por cambiar un dato que no intervino en él.
+    await user.click(screen.getByRole('combobox', { name: /secretaría de tránsito/i }));
+    await user.click(await screen.findByRole('option', { name: /Envigado/ }));
 
-    expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
+    expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(1);
   });
 
   it('AC5: en traspaso no se pide la secretaría y el flujo es el actual', async () => {

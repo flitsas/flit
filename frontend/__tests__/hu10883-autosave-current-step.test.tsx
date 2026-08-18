@@ -201,11 +201,11 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
   it('al pulsar Continuar desde Consulta VIN (tras consultar el vehículo), persiste el paso destino vía PATCH current-step', async () => {
     const user = userEvent.setup();
     renderMatricula();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
 
     expect(mocks.setCurrentStep).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: /^Continuar$/ }));
+    await user.click(screen.getByRole('button', { name: /^Continuar y guardar$/ }));
 
     await waitFor(() =>
       expect(mocks.setCurrentStep).toHaveBeenCalledWith('inst-1', 'documentos'),
@@ -222,9 +222,9 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
       ),
     });
     renderMatricula();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
 
-    await user.click(screen.getByRole('button', { name: /^Paso 3: Comprador/ }));
+    await user.click(screen.getByRole('button', { name: /^Paso 3: Actores/ }));
 
     await waitFor(() =>
       expect(mocks.setCurrentStep).toHaveBeenCalledWith('inst-1', 'comprador'),
@@ -240,16 +240,16 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
       ),
     });
     renderMatricula();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
 
-    await user.click(screen.getByRole('button', { name: /^Continuar$/ }));
+    await user.click(screen.getByRole('button', { name: /^Continuar y guardar$/ }));
     await waitFor(() =>
       expect(mocks.setCurrentStep).toHaveBeenCalledWith('inst-1', 'documentos'),
     );
     mocks.setCurrentStep.mockClear();
 
     await user.click(screen.getByRole('button', { name: /Anterior/ }));
-    await screen.findByRole('heading', { level: 2, name: 'Consulta VIN' });
+    await screen.findByRole('heading', { level: 2, name: 'Consulta Vehículo' });
 
     expect(mocks.setCurrentStep).not.toHaveBeenCalled();
   });
@@ -258,12 +258,12 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
     const user = userEvent.setup();
     mocks.setCurrentStep.mockRejectedValue(new Error('vehiculo_no_consultado'));
     renderMatricula();
-    await screen.findByRole('button', { name: /^Paso 1: Consulta VIN/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
 
-    await user.click(screen.getByRole('button', { name: /^Continuar$/ }));
+    await user.click(screen.getByRole('button', { name: /^Continuar y guardar$/ }));
 
     // El wizard avanza igual (heading del paso 2) y no aparece ningún error visible.
-    expect(await screen.findByRole('heading', { level: 2, name: 'Datos y Documentos del Trámite' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Requisitos' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -279,9 +279,9 @@ describe('HU #10883 — AC1: autosave del paso al avanzar', () => {
     ]);
 
     render(<TramiteWizard configuration={{ ...CONFIG, code: 'TRASPASO_STD' }} procedureTypeId="type-1" onExit={() => {}} />);
-    await screen.findByRole('button', { name: /^Paso 1: Consulta/ });
+    await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
 
-    await user.click(screen.getByRole('button', { name: /^Paso 3: Vendedor/ }));
+    await user.click(screen.getByRole('button', { name: /^Paso 3: Actores/ }));
     await screen.findByDisplayValue('Pedro Vendedor');
     // Sin consulta RUNT lista el footer queda deshabilitado (actorsConsultationReady).
     await screen.findByText(/Persona encontrada en RUNT/i);
@@ -336,10 +336,10 @@ describe('HU #10883 — AC2: reposición en el paso persistido al reabrir', () =
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'FUR' }),
+      await screen.findByRole('heading', { level: 2, name: 'Resumen' }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('heading', { level: 2, name: 'Identidad' }),
+      screen.queryByRole('heading', { level: 2, name: 'Validación de Identidad' }),
     ).not.toBeInTheDocument();
   });
 
@@ -362,10 +362,10 @@ describe('HU #10883 — AC2: reposición en el paso persistido al reabrir', () =
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Datos y Documentos del Trámite' }),
+      await screen.findByRole('heading', { level: 2, name: 'Requisitos' }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('heading', { level: 2, name: 'Comprador' }),
+      screen.queryByRole('heading', { level: 2, name: 'Actores' }),
     ).not.toBeInTheDocument();
   });
 
@@ -386,7 +386,7 @@ describe('HU #10883 — AC2: reposición en el paso persistido al reabrir', () =
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Datos y Documentos del Trámite' }),
+      await screen.findByRole('heading', { level: 2, name: 'Requisitos' }),
     ).toBeInTheDocument();
   });
 
@@ -407,7 +407,7 @@ describe('HU #10883 — AC2: reposición en el paso persistido al reabrir', () =
     render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
 
     expect(
-      await screen.findByRole('heading', { level: 2, name: 'Datos y Documentos del Trámite' }),
+      await screen.findByRole('heading', { level: 2, name: 'Requisitos' }),
     ).toBeInTheDocument();
   });
 });

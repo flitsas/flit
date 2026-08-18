@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import { forwardRef, useEffect, useId, useImperativeHandle, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { digitsOnly } from '@/lib/format/currency';
@@ -11,6 +11,8 @@ import { PrendaDocumentUpload } from './PrendaDocumentUpload';
 import { prendaDocTipoFor } from './prenda-document-tipos';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import type { FieldValue, PrendaDecision, WizardModalidad } from '@/lib/api/types/procedure-runtime';
+import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { WizardCardHeader, WizardSegmented, WizardSelectCards } from './wizard-atoms';
 
 /** Handle imperativo: la shell del wizard dispara guardar+validar. */
 export type PrendaFormHandle = WizardStepFormHandle;
@@ -110,8 +112,7 @@ interface Props {
   onDocumentGateChange?: (ready: boolean) => void;
 }
 
-const INPUT_BASE =
-  'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF] aria-[invalid=true]:border-[#FF4E00]';
+const INPUT_BASE = WIZARD_INPUT;
 
 function byKey(fields: FieldValue[], key: string): string {
   return fields.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
@@ -203,7 +204,7 @@ function RuntField({ label, value }: { label: string; value: string | null | und
   if (!value?.trim()) return null;
   return (
     <div>
-      <dt className="text-[10px] font-bold uppercase opacity-55">{label}</dt>
+      <dt className="text-xs font-bold uppercase opacity-70">{label}</dt>
       <dd className="font-semibold">{value}</dd>
     </div>
   );
@@ -231,6 +232,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   ref,
 ) {
   const readOnly = useWizardReadOnly();
+  const runtDetailId = useId();
   const [decision, setDecision] = useState<PrendaDecision | ''>('');
   const [acreedorNombre, setAcreedorNombre] = useState('');
   const [acreedorDocumento, setAcreedorDocumento] = useState('');
@@ -327,6 +329,15 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     }
   };
 
+  /**
+   * `WizardSegmented`/`WizardSelectCards` trabajan con un tipo cerrado (nunca ''): el asistente
+   * arranca sin decisión y ninguna opción queda marcada, así que el wrapper descarta la cadena
+   * vacía antes de llegar a `selectDecision`.
+   */
+  const handleDecisionChange = (d: PrendaDecision | '') => {
+    if (d) selectDecision(d);
+  };
+
   const submit = async (): Promise<boolean> => {
     if (!instanceId) return false;
     if (decision === '') return true;
@@ -364,18 +375,15 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-2xl p-4 border bg-white dark:bg-[#0B0F14]"
+      className={WIZARD_CARD}
       aria-label="Prenda o gravamen del trámite"
       noValidate
     >
       {!hideHeader && (
-        <div className="mb-3">
-          <h4 className="text-sm font-bold">Prenda / gravamen</h4>
-          <p className="text-[11px] opacity-60">
-            Declara si el vehículo tiene prenda. Si registras, solicitas o levantas, adjunta el
-            certificado en esta sección.
-          </p>
-        </div>
+        <WizardCardHeader
+          title="Asignación de Prenda / Limitación a la Propiedad"
+          subtitle="Declara si el vehículo tiene prenda. Si registras, solicitas o levantas, adjunta el certificado en esta sección."
+        />
       )}
 
       {showRuntPanel && (
@@ -390,9 +398,9 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               type="button"
               onClick={() => setRuntOpen((o) => !o)}
               className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-xs font-semibold"
-              style={{ background: 'rgba(245,158,11,0.08)', color: '#B45309' }}
+              style={{ background: 'rgba(245,158,11,0.08)', color: 'var(--badge-warning-fg)' }}
               aria-expanded={runtOpen}
-              aria-controls="runt-prenda-detail"
+              aria-controls={runtDetailId}
             >
               <span>Ver información de prenda / gravamen del RUNT</span>
               <ChevronDown
@@ -402,7 +410,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
             </button>
             {runtOpen && (
               <div
-                id="runt-prenda-detail"
+                id={runtDetailId}
                 className="space-y-3 border-t px-3 py-3 text-xs"
                 style={{ borderColor: 'rgba(245,158,11,0.25)' }}
                 role="region"
@@ -424,7 +432,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                             key={`${item.idPrenda ?? 'p'}-${idx}`}
                             className="rounded-lg border px-3 py-2"
                           >
-                            <p className="mb-2 text-[10px] font-bold uppercase opacity-55">
+                            <p className="mb-2 text-xs font-bold uppercase opacity-70">
                               Prenda {item.idPrenda ? `#${item.idPrenda}` : idx + 1}
                             </p>
                             <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -487,34 +495,38 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
         </div>
       )}
 
+      {/* Item 3 (guardián de diseño): el estado de carga solo se pintaba fuera del wizard —dentro
+          los controles aparecían vacíos y el gestor podía creer que no había decisión guardada y
+          pisarla con otra. Se pinta aquí, antes del fieldset, para los dos modos; fuera del
+          wizard la barra inferior ya cubre el aviso y no hace falta duplicarlo. */}
+      {embeddedInWizard && loading && (
+        <p className="mb-3 text-xs opacity-70">Cargando la decisión de prenda guardada…</p>
+      )}
+
       <fieldset disabled={readOnly} className="contents">
         <div className="grid grid-cols-1 gap-4">
           <div>
-            <p className="text-xs font-semibold mb-2">Decisión de prenda</p>
-            <div
-              className="flex flex-wrap gap-2"
-              role="radiogroup"
-              aria-label="Decisión de prenda"
-            >
-              {decisions.map((d) => (
-                <label
-                  key={d}
-                  className="flex flex-1 min-w-[9rem] items-center gap-2 cursor-pointer rounded-xl border px-3 py-2.5 transition-colors hover:bg-[rgba(85,126,255,0.04)]"
-                  style={decision === d ? { borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' } : undefined}
-                >
-                  <input
-                    type="radio"
-                    name="prenda-decision"
-                    value={d}
-                    checked={decision === d}
-                    onChange={() => selectDecision(d)}
-                    className="h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
-                    disabled={readOnly}
-                  />
-                  <span className="text-xs font-medium leading-snug">{PRENDA_DECISION_LABELS[d]}</span>
-                </label>
-              ))}
-            </div>
+            {/* Matrícula (2 opciones cortas) usa el segmentado; traspaso (3-4, con rótulos de hasta
+                42 caracteres como "Continuar sin gestionar (asumo el riesgo)") no cabe en una
+                pista y pasa a tarjetas de selección — la norma FLIT del "select tipo tarjeta". */}
+            {decisions.length > 2 ? (
+              <WizardSelectCards<PrendaDecision | ''>
+                label="¿Al vehículo se le asociará una prenda?"
+                name="prenda-decision"
+                value={decision}
+                onChange={handleDecisionChange}
+                disabled={readOnly}
+                options={decisions.map((d) => ({ value: d, label: PRENDA_DECISION_LABELS[d] }))}
+              />
+            ) : (
+              <WizardSegmented<PrendaDecision | ''>
+                label="¿Al vehículo se le asociará una prenda?"
+                value={decision}
+                onChange={handleDecisionChange}
+                disabled={readOnly}
+                options={decisions.map((d) => ({ value: d, label: PRENDA_DECISION_LABELS[d] }))}
+              />
+            )}
           </div>
 
           {capturaAcreedor && (
@@ -567,17 +579,17 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
       {!readOnly && !embeddedInWizard && (
         <div className="flex items-center justify-between gap-3 mt-4">
           {saved ? (
-            <span className="text-[11px] font-semibold" style={{ color: '#8CC63F' }} role="status" aria-live="polite">
+            <span className="text-xs font-semibold" style={{ color: 'var(--flit-success-ink)' }} role="status" aria-live="polite">
               Decisión de prenda guardada ✓
             </span>
           ) : (
-            <span className="text-[11px] opacity-50">{loading ? 'Cargando…' : ''}</span>
+            <span className="text-xs opacity-70">{loading ? 'Cargando…' : ''}</span>
           )}
           <button
             type="submit"
             disabled={saving}
             className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-            style={{ background: '#557EFF' }}
+            style={{ background: WIZARD_CTA_GRADIENT }}
           >
             {saving ? 'Guardando…' : 'Guardar decisión de prenda'}
           </button>

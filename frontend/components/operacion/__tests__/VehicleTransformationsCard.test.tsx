@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { VehicleTransformationsCard } from '../VehicleTransformationsCard';
@@ -18,16 +18,21 @@ function fv(fieldKey: string, valueText: string | null): FieldValue {
   return { formFieldId: '', fieldKey, valueText, valueJson: null, source: 'consultation' };
 }
 
-function renderCard(values: FieldValue[], onPatch = vi.fn().mockResolvedValue(undefined)) {
+function renderCard(values: FieldValue[], onPatch = vi.fn().mockResolvedValue(undefined), readOnly = false) {
   render(
     <VehicleTransformationsCard
       fieldValues={values}
-      readOnly={false}
+      readOnly={readOnly}
       saving={false}
       onPatch={onPatch}
     />,
   );
   return onPatch;
+}
+
+/** Agrega un subtrámite desde el selector "Agregar trámite simultáneo". */
+async function agregar(user: ReturnType<typeof userEvent.setup>, optionLabel: string) {
+  await user.selectOptions(screen.getByLabelText('Agregar trámite simultáneo'), optionLabel);
 }
 
 // RUNT ya consultado (color plata, combustible gasolina), sin transformación declarada.
@@ -39,7 +44,7 @@ const runtBase: FieldValue[] = [
   fv('vehicle_fuel_runt', 'GASOLINA'),
 ];
 
-describe('VehicleTransformationsCard', () => {
+describe('VehicleTransformationsCard — tarjeta "Trámites Simultáneos (Opcional)"', () => {
   it('no renderiza antes de consultar el RUNT (sin datos de vehículo)', () => {
     const { container } = render(
       <VehicleTransformationsCard fieldValues={[]} readOnly={false} saving={false} onPatch={vi.fn()} />,
@@ -47,21 +52,27 @@ describe('VehicleTransformationsCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('estado neutro: muestra los valores RUNT y el resumen "sin transformaciones"', () => {
+  it('estado neutro: sin subtrámites seleccionados y resumen "sin transformaciones"', () => {
     renderCard(runtBase);
-    expect(screen.getByText('Transformaciones del vehículo')).toBeInTheDocument();
-    expect(screen.getByText(/RUNT: PLATA/)).toBeInTheDocument();
-    expect(screen.getByText(/RUNT: GASOLINA/)).toBeInTheDocument();
+    expect(screen.getByText('Trámites Simultáneos (Opcional)')).toBeInTheDocument();
+    expect(screen.getByText('Sin trámites simultáneos seleccionados')).toBeInTheDocument();
     expect(screen.getByText(/Sin transformaciones declaradas/)).toBeInTheDocument();
-    // Sin declarar cambio, no hay selector visible.
-    expect(screen.queryByLabelText('Nuevo color')).not.toBeInTheDocument();
+    // El selector ofrece las tres opciones del catálogo, ninguna del catálogo de la propuesta que
+    // FLIT excluye a propósito.
+    const select = screen.getByLabelText('Agregar trámite simultáneo');
+    expect(screen.getByRole('option', { name: 'Cambio de Color' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Conversiones de Combustible' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Cambio de Carrocería' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Inscribir Prenda' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Blindaje' })).not.toBeInTheDocument();
+    expect(select).toBeInTheDocument();
   });
 
-  it('activar "Cambió el color" marca el flag y deja el efectivo en el valor RUNT', async () => {
+  it('seleccionar "Cambio de Color" lo agrega como chip, marca el flag y persiste el valor RUNT por defecto', async () => {
     const user = userEvent.setup();
     const onPatch = renderCard(runtBase);
 
-    await user.click(screen.getByLabelText('Cambió el color'));
+    await agregar(user, 'Cambio de Color');
 
     expect(onPatch).toHaveBeenCalledWith([
       { fieldKey: 'cambio_color', valueText: 'true' },
@@ -69,20 +80,41 @@ describe('VehicleTransformationsCard', () => {
     ]);
   });
 
-  it('con transformación de color activa muestra el selector y el diff RUNT → nuevo', () => {
+  it('con cambio_color activo, el subtrámite aparece seleccionado con su chip y su bloque de valor', () => {
     renderCard([
       ...runtBase.filter((f) => f.fieldKey !== 'vehicle_color'),
       fv('vehicle_color', 'NEGRO'),
       fv('cambio_color', 'true'),
     ]);
 
+    // Chip, identificado por su botón de quitar (el nombre también aparece en el bloque de valor).
+    expect(screen.getByRole('button', { name: 'Quitar Cambio de Color' })).toBeInTheDocument();
+    // Ya no está disponible para volver a agregarlo
+    expect(screen.queryByRole('option', { name: 'Cambio de Color' })).not.toBeInTheDocument();
+    // Bloque de valor con el campo del color efectivo
     expect(screen.getByLabelText('Nuevo color')).toHaveTextContent('NEGRO');
+    expect(screen.getByText(/RUNT: PLATA/)).toBeInTheDocument();
     // El resumen para el FUR muestra solo el valor NUEVO (sin flecha ni origen RUNT).
     expect(screen.getByText(/Se registrará en el FUR — Color: NEGRO/)).toBeInTheDocument();
-    expect(screen.queryByText(/Se registrará en el FUR — Color: PLATA/)).not.toBeInTheDocument();
   });
 
-  it('elegir un nuevo combustible persiste el efectivo con el flag activo', async () => {
+  it('elegir un nuevo color desde el bloque de valor persiste el efectivo con el flag activo', async () => {
+    const user = userEvent.setup();
+    const onPatch = renderCard([
+      ...runtBase,
+      fv('cambio_color', 'true'),
+    ]);
+
+    await user.click(screen.getByLabelText('Nuevo color'));
+    await user.click(screen.getByRole('option', { name: 'NEGRO' }));
+
+    expect(onPatch).toHaveBeenCalledWith([
+      { fieldKey: 'cambio_color', valueText: 'true' },
+      { fieldKey: 'vehicle_color', valueText: 'NEGRO' },
+    ]);
+  });
+
+  it('elegir un nuevo combustible desde el selector de valor persiste el efectivo con el flag activo', async () => {
     const user = userEvent.setup();
     const onPatch = renderCard([
       ...runtBase,
@@ -98,7 +130,7 @@ describe('VehicleTransformationsCard', () => {
     ]);
   });
 
-  it('desactivar el cambio restaura el efectivo al snapshot RUNT y baja el flag', async () => {
+  it('quitar un subtrámite pide confirmación: cancelar no toca el flag ni el valor', async () => {
     const user = userEvent.setup();
     const onPatch = renderCard([
       ...runtBase.filter((f) => f.fieldKey !== 'vehicle_color'),
@@ -106,7 +138,28 @@ describe('VehicleTransformationsCard', () => {
       fv('cambio_color', 'true'),
     ]);
 
-    await user.click(screen.getByLabelText('Cambió el color'));
+    await user.click(screen.getByRole('button', { name: 'Quitar Cambio de Color' }));
+    expect(
+      screen.getByText(/¿Estás seguro de eliminar «Cambio de Color»\?/),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    expect(onPatch).not.toHaveBeenCalled();
+    // Sigue seleccionado: el diálogo se cerró sin aplicar el cambio.
+    expect(screen.getByRole('button', { name: 'Quitar Cambio de Color' })).toBeInTheDocument();
+  });
+
+  it('quitar un subtrámite, al confirmar, baja el flag y restaura el efectivo al snapshot RUNT', async () => {
+    const user = userEvent.setup();
+    const onPatch = renderCard([
+      ...runtBase.filter((f) => f.fieldKey !== 'vehicle_color'),
+      fv('vehicle_color', 'NEGRO'),
+      fv('cambio_color', 'true'),
+    ]);
+
+    await user.click(screen.getByRole('button', { name: 'Quitar Cambio de Color' }));
+    await user.click(screen.getByRole('button', { name: 'Sí, eliminar' }));
 
     expect(onPatch).toHaveBeenCalledWith([
       { fieldKey: 'cambio_color', valueText: 'false' },
@@ -114,7 +167,29 @@ describe('VehicleTransformationsCard', () => {
     ]);
   });
 
-  it('un color RUNT fuera del catálogo API sigue siendo opción válida del selector', async () => {
+  it('un borrador retomado con banderas en true rehidrata los subtrámites ya seleccionados', () => {
+    renderCard([
+      ...runtBase.filter((f) => f.fieldKey !== 'vehicle_color' && f.fieldKey !== 'vehicle_fuel'),
+      fv('vehicle_color', 'NEGRO'),
+      fv('cambio_color', 'true'),
+      fv('vehicle_fuel', 'ELECTRICO'),
+      fv('cambio_combustible', 'true'),
+    ]);
+
+    // Ambos chips presentes, cada uno con su valor ya cargado.
+    expect(screen.getByRole('button', { name: 'Quitar Cambio de Color' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Quitar Conversiones de Combustible' }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Nuevo color')).toHaveTextContent('NEGRO');
+    expect(screen.getByLabelText('Nuevo combustible')).toHaveTextContent('ELECTRICO');
+    // Solo queda disponible el tercero.
+    expect(screen.getByRole('option', { name: 'Cambio de Carrocería' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Cambio de Color' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Conversiones de Combustible' })).not.toBeInTheDocument();
+  });
+
+  it('un color RUNT fuera del catálogo API sigue siendo opción válida del selector de valor', async () => {
     const user = userEvent.setup();
     renderCard([
       fv('plate', 'ABC123'),
@@ -128,13 +203,18 @@ describe('VehicleTransformationsCard', () => {
     expect(await screen.findByRole('option', { name: 'FUCSIA' })).toBeInTheDocument();
   });
 
-  it('en modo readOnly los controles quedan deshabilitados', () => {
-    render(
-      <VehicleTransformationsCard fieldValues={runtBase} readOnly saving={false} onPatch={vi.fn()} />,
+  it('en modo readOnly: el selector de agregar está deshabilitado y los chips no ofrecen quitar', () => {
+    renderCard(
+      [
+        ...runtBase.filter((f) => f.fieldKey !== 'vehicle_color'),
+        fv('vehicle_color', 'NEGRO'),
+        fv('cambio_color', 'true'),
+      ],
+      vi.fn(),
+      true,
     );
-    expect(screen.getByLabelText('Cambió el color')).toBeDisabled();
-    expect(screen.getByLabelText('Cambió el combustible')).toBeDisabled();
-    expect(screen.getByLabelText('Cambió la carrocería')).toBeDisabled();
+    expect(screen.getByLabelText('Agregar trámite simultáneo')).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Quitar Cambio de Color' })).not.toBeInTheDocument();
   });
 });
 
@@ -150,27 +230,19 @@ describe('VehicleTransformationsCard — carrocería (P2/P3)', () => {
     fv('vehicle_body_type_runt', 'ESTACAS'),
   ];
 
-  it('muestra la fila Cambió la carrocería cuando hay datos del vehículo', () => {
-    render(
-      <VehicleTransformationsCard fieldValues={runtConClase} readOnly={false} saving={false} onPatch={vi.fn()} />,
-    );
-    expect(screen.getByLabelText('Cambió la carrocería')).toBeInTheDocument();
-    expect(screen.getByText(/RUNT: ESTACAS/)).toBeInTheDocument();
-  });
-
-  it('al activar carrocería dispara onPatch con el flag correcto', async () => {
+  it('seleccionar "Cambio de Carrocería" dispara onPatch con el flag correcto', async () => {
     const user = userEvent.setup();
     const onPatch = vi.fn().mockResolvedValue(undefined);
     render(
       <VehicleTransformationsCard fieldValues={runtConClase} readOnly={false} saving={false} onPatch={onPatch} />,
     );
-    await user.click(screen.getByLabelText('Cambió la carrocería'));
+    await agregar(user, 'Cambio de Carrocería');
     expect(onPatch).toHaveBeenCalledWith(
       expect.arrayContaining([{ fieldKey: 'cambio_carroceria', valueText: 'true' }]),
     );
   });
 
-  it('con cambio_carroceria activo y clase CAMION muestra selector filtrado', async () => {
+  it('con cambio_carroceria activo y clase CAMION muestra el selector de valor filtrado', async () => {
     const user = userEvent.setup();
     render(
       <VehicleTransformationsCard

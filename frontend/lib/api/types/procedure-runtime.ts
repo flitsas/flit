@@ -334,6 +334,11 @@ export interface ProcedureInstanceDetail {
   subsanacionActiva?: boolean;
   /** Veces que se activó la subsanación en este expediente. */
   subsanacionCount?: number;
+  /**
+   * HU #10536 — marca de prioridad. Vive en una columna del expediente, no en `fieldValues`, así que
+   * es el único dato del paso 1 que no se puede releer desde ahí al volver sobre un trámite creado.
+   */
+  prioritario?: boolean;
   fieldValues: FieldValue[];
   statusHistory: StatusHistory[];
   actors: Actor[];

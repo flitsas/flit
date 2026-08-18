@@ -3,32 +3,20 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Briefcase,
-  Building2,
   Calendar,
   Car,
   ChevronLeft,
   ChevronRight,
   Eye,
-  Fuel,
-  Gauge,
-  Hash,
-  Info,
-  Layers,
-  Palette,
   RefreshCw,
   Search,
   Shield,
-  Tag,
-  Users,
   Wrench,
 } from 'lucide-react';
 import { useProcedureInstance } from '@/hooks/useProcedureInstance';
 import { useWizard } from '@/hooks/useWizard';
 import { useWizardTelemetry } from '@/hooks/useWizardTelemetry'; // Reportes2 HU-A
-import { PreflightPanel } from './PreflightPanel';
-import { ActiveDeedsCollapse } from './ActiveDeedsCollapse';
-import { ProcedureDocsPreviewInformativo } from './ProcedureDocsPreviewInformativo';
+import { PreflightPanel, preflightOverall } from './PreflightPanel';
 import { TransitOfficeSearchPicker } from './TransitOfficeSearchPicker';
 import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
@@ -36,17 +24,17 @@ import { CommercialForm } from './CommercialForm';
 import { PrendaForm, traspasoDecisions } from './PrendaForm';
 import { furObservationsPreview } from './fur-auto-observations';
 import { SubsanacionPanel } from './SubsanacionPanel';
-import { AvisosCorreoPanel } from './AvisosCorreoPanel';
-import { EstadoTimelinePanel } from './EstadoTimeline';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
-import { blockerCopy, identidadAutomaticaCopy } from './wizard-copy';
+import { blockerCopy, identidadAutomaticaCopy, stepLabelCopy } from './wizard-copy';
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
-import { VehicleTransformationsCard } from './VehicleTransformationsCard';
+import { DeclaracionesTramite } from './DeclaracionesTramite';
 import { EstadoAcciones } from './EstadoAcciones';
 import { WizardStepTracker } from './WizardStepTracker';
+import { Modal } from '@/components/atom/Modal';
+import { StatusBadge } from '@/components/atom/StatusBadge';
 import {
   isTraspasoActorStepKey,
   nextIndexAfterUnifiedActores,
@@ -58,9 +46,11 @@ import {
   getDuplicateActiveProcedureId,
   getVehicleStateBlock,
   isTransitOfficeUnavailable,
-  isRuesPreviewUnavailable,
   type VehicleStateBlockInfo,
 } from '@/lib/api/tramites-client';
+// HU #10806 — ¿la ruta de preasignación de placa está activa para esta compañía en el organismo
+// elegido? Es la misma consulta que hace el paso del FUR antes de ofrecer la placa preasignada.
+import { getPlatePreassignStatus } from '@/lib/api/admin-plate-ranges';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import {
@@ -87,10 +77,24 @@ import type {
   ProcedureInstanceSummary,
   StatusHistory,
   TransitOfficeOption,
-  VehicleServiceTypeOption,
   WizardModalidad,
   WizardStep,
 } from '@/lib/api/types/procedure-runtime';
+import {
+  WIZARD_BTN,
+  WIZARD_CARD,
+  WIZARD_CTA_GRADIENT,
+  WIZARD_CTA_GRADIENT_DONE,
+  WIZARD_INPUT,
+  WIZARD_LABEL,
+} from './wizard-field-styles';
+import { WizardAccordion } from './WizardAccordion';
+import { WizardHelpRail } from './WizardHelpRail';
+import { WizardModal } from './WizardModal';
+import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
+import { WizardCardHeader, WizardPair } from './wizard-atoms';
+import { CarLoaderModal } from '@/components/atom/CarLoader';
+import { InlineAlert } from '@/components/atom/InlineAlert';
 
 /**
  * El wizard es server-driven: una vez creada la instancia, GET /wizard decide
@@ -149,44 +153,12 @@ type PendingConsulta = {
 };
 
 /**
- * Captura del TIPO DE SERVICIO en el paso 1 (solo matrícula inicial, sección 18 del FUR). Igual que
- * `PendingConsulta`, solo existe MIENTRAS el trámite no se ha creado: no hay contrato de backend para
- * leerlo o editarlo después de la creación (`createInstanceFromConsulta` es el único punto que lo
- * recibe), así que la tarjeta que lo captura no vuelve a aparecer en un borrador ya existente —ver
- * `eligeTipoServicio` en `ConsultaStep`, misma condición exacta que `eligeSecretaria` (HU #11199).
- */
-type TipoServicioInfo = {
-  tipoServicioCode: string | null;
-  /** Solo con `tipoServicioCode === 'PUBLICO'`; null en cualquier otro tipo. */
-  empresaVinculadoraNit: string | null;
-  /** Solo lectura: la llena la consulta RUES. null hasta que la consulta encuentre la empresa. */
-  empresaVinculadoraRazonSocial: string | null;
-};
-
-const TIPO_SERVICIO_INFO_VACIO: TipoServicioInfo = {
-  tipoServicioCode: null,
-  empresaVinculadoraNit: null,
-  empresaVinculadoraRazonSocial: null,
-};
-
-/**
  * HU #11199 (AC3) — el listado solo trae los organismos ACTIVOS en FLIT y habilitados para la
  * compañía, así que hay que decir qué hacer cuando el que se busca no aparece: de otro modo el
  * gestor concluye que FLIT no lo cubre y abandona el trámite.
  */
 const SECRETARIA_LISTA_AVISO =
   'Solo se muestran los organismos de tránsito activos en FLIT. Si el organismo donde vas a radicar no aparece en la lista, solicita al administrador que lo agregue y lo active.';
-
-/** HU #11199 (AC2) — sin secretaría no se gasta una consulta al RUNT. */
-const SECRETARIA_REQUERIDA = 'Selecciona la secretaría de tránsito antes de consultar el vehículo.';
-
-/** El proveedor RUES respondió y no existe empresa con ese NIT — distinto del fallo transitorio 503. */
-const RUES_NO_ENCONTRADO =
-  'No se encontró una empresa con ese NIT en el RUES. Verifica el número e inténtalo de nuevo.';
-
-/** 503 del proveedor RUES: fallo transitorio, no es un error del operador — se ofrece reintentar. */
-const RUES_NO_DISPONIBLE =
-  'El RUES no respondió en este momento. No es un error tuyo: puedes reintentar en unos segundos.';
 
 /**
  * HU #11200 (AC2/AC3) — el vehículo está matriculado en un organismo donde la compañía no puede
@@ -204,26 +176,9 @@ const ORGANISMO_NO_DISPONIBLE =
  * subtítulo. El paso `fur` no pinta título/subtítulo aquí (el resumen tiene su propio encabezado).
  */
 const STEP_SUBTITLE: Record<string, string> = {
-  consulta_vin: 'Ingresa el VIN para consultar los datos del vehículo en el RUNT.',
-  consulta: 'Ingresa la placa y el propietario para consultar los datos del RUNT.',
-  // En traspaso la prenda va en Comercial (HU #10598); aquí solo observaciones + adjuntos.
-  documentos:
-    'Agrega observaciones y adjunta los documentos del trámite (PDF, JPG, PNG o WEBP, máx 20 MB).',
-  comercial:
-    'Valor de la venta, causal, impuestos del traspaso y decisión de prenda / gravamen.',
-  identidad:
-    'Validación de identidad de cada parte. La biométrica real llegará en una iteración futura; por ahora puedes simular la validación de cada parte.',
-  actores:
-    'Registra los datos del vendedor y del comprador. Cada parte en su tarjeta; consulta RUNT/RUES antes de continuar.',
-  vendedor:
-    'Registra los datos del vendedor y del comprador. Cada parte en su tarjeta; consulta RUNT/RUES antes de continuar.',
-  comprador:
-    'Registra los datos del vendedor y del comprador. Cada parte en su tarjeta; consulta RUNT/RUES antes de continuar.',
+  identidad: 'Verificación de autenticidad de las partes involucradas.',
 };
 
-/** Subtítulo del paso Documentos en matrícula (incluye prenda declarativa, HU #10596). */
-const DOCUMENTOS_SUBTITLE_MATRICULA =
-  'Declara la prenda, agrega observaciones y adjunta los documentos del trámite (PDF, JPG, PNG o WEBP, máx 20 MB).';
 
 /**
  * ¿La validación de identidad está aprobada? (HU #10350) Se deriva del estado server-driven de los
@@ -251,64 +206,77 @@ function isIdentityApproved(steps: WizardStep[], modalidad: WizardModalidad): bo
  * la HU #11051, el backend rechaza en estado final. Ahora el mensaje se deriva del estado real y solo
  * menciona generar donde de verdad se puede.
  */
-const READ_ONLY_NOTICE: Record<string, { titulo: string; detalle: string; color: string; bg: string }> = {
+interface ReadOnlyNoticeStyle {
+  titulo: string;
+  detalle: string;
+  border: string;
+  bg: string;
+  /** Tinta legible del texto/icono cuando difiere del borde (verdes de marca — HU consolidación). */
+  ink?: string;
+}
+
+const READ_ONLY_NOTICE: Record<string, ReadOnlyNoticeStyle> = {
   entregado: {
     titulo: 'Enviado a tránsito — solo visualización.',
     detalle:
       'Este trámite ya no puede editarse, pero aún puedes generar o descargar el expediente consolidado.',
-    color: '#557EFF',
+    border: '#557EFF',
     bg: 'rgba(85,126,255,0.06)',
   },
   aprobado: {
     titulo: 'Trámite aprobado — solo visualización.',
     detalle:
       'El organismo de tránsito lo aprobó. Su documentación es definitiva: puedes consultarla y descargarla, pero ya no se regenera.',
-    color: '#5B8A1F',
+    // El borde/fondo conservan el verde de marca crudo (relleno tintado); el texto/icono usan la
+    // tinta legible unificada (`--flit-success-ink`, consolidación de verdes de texto).
+    border: '#5B8A1F',
     bg: 'rgba(140,198,63,0.10)',
+    ink: 'var(--flit-success-ink)',
   },
   rechazado: {
     titulo: 'Trámite rechazado — solo visualización.',
     detalle:
       'El organismo de tránsito lo rechazó. Revisa el motivo para saber qué corregir; mientras no se active la subsanación no puede editarse.',
-    color: '#c2410c',
+    border: '#c2410c',
     bg: 'rgba(255,78,0,0.06)',
   },
   anulado: {
     titulo: 'Trámite anulado — solo visualización.',
     detalle:
       'Este trámite quedó sin efecto. Puedes consultar y descargar su documentación, pero no editarlo ni regenerarlo.',
-    color: '#b91c1c',
+    border: '#b91c1c',
     bg: 'rgba(185,28,28,0.06)',
   },
   preparado: {
     titulo: 'Borrador preparado — solo visualización.',
     detalle:
       'Los datos quedaron en firme. Desde el paso de decisión puedes radicar el trámite a tránsito.',
-    color: '#B45309',
+    border: '#B45309',
     bg: 'rgba(249,172,0,0.08)',
   },
 };
 
 /** Fallback para un estado no editable no contemplado (nunca debería ocurrir con los estados de N 03). */
-const READ_ONLY_NOTICE_FALLBACK = {
+const READ_ONLY_NOTICE_FALLBACK: ReadOnlyNoticeStyle = {
   titulo: 'Solo visualización.',
   detalle: 'Este trámite no puede editarse en su estado actual.',
-  color: '#557EFF',
+  border: '#557EFF',
   bg: 'rgba(85,126,255,0.06)',
 };
 
 function ReadOnlyStateNotice({ estado }: { estado: InstanceStatus | null }) {
   const notice = (estado && READ_ONLY_NOTICE[estado]) || READ_ONLY_NOTICE_FALLBACK;
+  const ink = notice.ink ?? notice.border;
   return (
     <div
       className="rounded-xl p-3 text-xs border shrink-0 flex items-start gap-2"
-      style={{ borderColor: notice.color, background: notice.bg, color: '#162744' }}
+      style={{ borderColor: notice.border, background: notice.bg, color: '#162744' }}
       role="status"
       aria-live="polite"
     >
-      <Eye className="h-4 w-4 shrink-0 mt-0.5" style={{ color: notice.color }} aria-hidden="true" />
+      <Eye className="h-4 w-4 shrink-0 mt-0.5" style={{ color: ink }} aria-hidden="true" />
       <span>
-        <span className="font-semibold" style={{ color: notice.color }}>
+        <span className="font-semibold" style={{ color: ink }}>
           {notice.titulo}
         </span>{' '}
         {notice.detalle}
@@ -372,10 +340,15 @@ export function TramiteWizard(props: Props) {
     }
   }, []);
 
-  // Tipo de servicio + empresa vinculadora elegidos en el paso 1 (solo matrícula inicial). A
-  // diferencia de `pendingConsulta`, es independiente de la consulta RUNT del vehículo: editar el VIN
-  // no debe borrar el tipo de servicio ya elegido, así que vive en su propio estado.
-  const [tipoServicioInfo, setTipoServicioInfo] = useState<TipoServicioInfo>(TIPO_SERVICIO_INFO_VACIO);
+  // HU #10536 — prioridad marcada en el paso 1. No es un field_value (vive en una columna del
+  // expediente, y su endpoint necesita el id), así que no puede viajar en `pendingFieldValuesRef`:
+  // se recuerda aquí y se aplica con `setPriority` en cuanto la creación devuelve el trámite.
+  const [pendingPrioritario, setPendingPrioritario] = useState(false);
+
+  // Tipo de servicio (casilla 18 del FUR): completo o no, tal como lo reporta el paso de requisitos,
+  // que es donde se captura desde el rediseño. Arranca en `true` — mientras el paso no se monta no
+  // hay nada que gatear — y `DeclaracionesTramite` lo corrige en cuanto se abre.
+  const [tipoServicioGateOk, setTipoServicioGateOk] = useState(true);
 
   // Estado de la instancia existente + sello de borrador finalizado (HU #10350). Se derivan
   // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
@@ -502,11 +475,31 @@ export function TramiteWizard(props: Props) {
   // re-saltar en cada refresh posterior (p.ej. tras "Guardar y continuar").
   const stepInitializedRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
+  /**
+   * Trámite radicado → modal de acuse del diseño. La placa puede no existir todavía: en matrícula
+   * inicial la asigna el organismo, así que el modal cae al radicado, que siempre está.
+   */
+  const [radicado, setRadicado] = useState<{
+    placa: string | null;
+    referencia: string | null;
+  } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Confirmación de "Cancelar trámite" (propuesta): salir pierde lo no guardado, y el botón vive
+  // junto al de avance, donde un clic de más es fácil.
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  // Confirmación de "Finalizar y enviar trámite" (propuesta, MatriculaInicial.tsx:1111-1121): la
+  // acción terminal ya no radica al primer clic — abre "Confirmar radicación" y el radicado real
+  // ocurre solo tras "Sí, radicar trámite".
+  const [confirmRadicar, setConfirmRadicar] = useState(false);
   // Feature #11066 — estado informativo del paquete (FUR/certs/impronta). No bloquea Preparar.
   const [paqueteDocsStatus, setPaqueteDocsStatus] = useState<
     'idle' | 'loading' | 'ready' | 'error'
   >('idle');
+  // Confirmaciones del expediente consolidado (propuesta, Step5): nacen desmarcadas y se suman a
+  // «Requisitos pendientes antes del envío». Gatean radicar —el acto que hay que confirmar—, no la
+  // vista del PDF. En la maqueta van premarcadas y no gatean nada; una casilla de consentimiento
+  // premarcada no constituye autorización, así que aquí nacen vacías.
+  const [confirmacionesExpediente, setConfirmacionesExpediente] = useState<string[]>([]);
   // HU #10646 — partes (NIT/jurídicas) cuya identidad quedó cubierta por la firma electrónica del baúl.
   // El backend no expone un flag "cubierto por baúl" por parte en el estado biométrico, así que la señal
   // se captura del outcome `firma_baul` que devuelve ensureIdentity al guardar la parte, y desde aquí se
@@ -537,6 +530,31 @@ export function TramiteWizard(props: Props) {
    */
   const [subsanacionSavedEdits, setSubsanacionSavedEdits] = useState(false);
 
+  /**
+   * Cabecera compacta al hacer scroll: el título y su descripción se pliegan y el seguimiento de
+   * pasos se queda. Es información que solo hace falta al llegar —una vez dentro, lo que el gestor
+   * necesita ver es en qué paso está—, y en pantallas de portátil el bloque completo se comía un
+   * tercio del alto útil del formulario.
+   *
+   * Se resuelve con un centinela y un IntersectionObserver en vez de escuchar el scroll: el
+   * observador no corre en cada píxel movido, solo cuando el centinela cruza el borde.
+   */
+  const centinelaCabeceraRef = useRef<HTMLDivElement | null>(null);
+  const [cabeceraCompacta, setCabeceraCompacta] = useState(false);
+
+  useEffect(() => {
+    const centinela = centinelaCabeceraRef.current;
+    if (!centinela || typeof IntersectionObserver === 'undefined') return;
+    // El scroll no es el de la ventana: el contenido vive dentro del contenedor del Shell.
+    const contenedor = document.querySelector('[data-shell-scroll]');
+    const observador = new IntersectionObserver(
+      ([entrada]) => setCabeceraCompacta(!entrada.isIntersecting),
+      { root: contenedor ?? null },
+    );
+    observador.observe(centinela);
+    return () => observador.disconnect();
+  }, []);
+
   // Preflight local (semáforo) para los pasos consulta/validación.
   const [preflight, setPreflight] = useState<PreflightSnapshot | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
@@ -555,17 +573,28 @@ export function TramiteWizard(props: Props) {
   const identityApproved = isIdentityApproved(steps, modalidad);
   const canRadicar = canSubmit && identityApproved;
 
-  // Header: tarjeta blanca FLIT — "Nuevo Trámite · {modalidad}" + referencia.
+  // Header en la forma de la propuesta: el título ES el trámite, con una frase que dice qué hace, y
+  // la identidad del expediente (referencia, tipo, identificador, estado) baja a su propia franja.
   const modalidadLabel =
     modalidad === 'traspaso' ? 'Traspaso Estándar' : 'Matrícula Inicial';
-  const displayTitle = editLocked
-    ? `Trámite · ${modalidadLabel}`
-    : `Nuevo Trámite · ${modalidadLabel}`;
-  const refLabel =
-    referenceNumber ?? state.detail?.referenceNumber ?? null;
-  const displaySubtitle = refLabel
-    ? `${refLabel} · Gestión integral de trámites`
-    : 'Gestión integral de trámites';
+  const displayTitle = modalidadLabel;
+  const displaySubtitle =
+    modalidad === 'traspaso'
+      ? 'Traspasa la propiedad del vehículo ante el organismo de tránsito.'
+      : 'Radica el registro inicial del vehículo ante el organismo de tránsito.';
+  const refLabel = referenceNumber ?? state.detail?.referenceNumber ?? null;
+  // Identificador del expediente: el VIN manda en matrícula y la placa en traspaso, que es el dato
+  // por el que se consultó el vehículo en cada modalidad.
+  const fvOf = (key: string) =>
+    state.detail?.fieldValues?.find((f) => f.fieldKey === key)?.valueText?.trim() || null;
+  // Organismo real del trámite, para el texto del modal "Confirmar radicación" (propuesta:
+  // MatriculaInicial.tsx:1114) — nunca un literal de maqueta.
+  const organismoNombre = fvOf('transit_office_name');
+  const identificador =
+    modalidad === 'traspaso'
+      ? (fvOf('plate') ?? fvOf('vin'))
+      : (fvOf('vin') ?? fvOf('plate'));
+  const identificadorLabel = modalidad === 'traspaso' ? 'PLACA' : 'VIN';
 
   // AC1 (HU #10883) — autosave del paso: al AVANZAR (no al retroceder) persiste la `key` del paso
   // destino vía PATCH /instances/{id}/current-step (HU #10879), para retomar ahí al reabrir el
@@ -771,13 +800,16 @@ export function TramiteWizard(props: Props) {
 
       await tramitesClient.transitionInstance(instanceId, 'entregado');
       telemetry.trackComplete();
-      show(
-        modalidad === 'traspaso'
-          ? 'Traspaso enviado a tránsito correctamente.'
-          : 'Matrícula inicial enviada a tránsito correctamente.',
-        'success',
-      );
-      onExit();
+      // Flujo del diseño: al radicar se abre el modal de trámite completado en vez de salir de
+      // golpe con un toast. El gestor confirma qué quedó radicado y sale desde el CTA. La
+      // transición ya ocurrió: el modal es acuse de recibo, no un paso más que haya que aprobar.
+      const placaRadicada =
+        state.detail?.fieldValues?.find((f) => f.fieldKey === 'placa')?.valueText?.trim() || null;
+      setRadicado({
+        placa: placaRadicada,
+        referencia: referenceNumber ?? state.detail?.referenceNumber ?? null,
+      });
+      setSubmitting(false);
     } catch (err) {
       setSubmitError(
         err instanceof Error ? err.message : 'Error al enviar el trámite',
@@ -811,17 +843,29 @@ export function TramiteWizard(props: Props) {
   // donde el gestor finaliza el borrador o radica. El paso de Identidad ya NO es terminal: desde él se
   // "Continúa" al paso FUR (el FUR es alcanzable aunque la identidad esté pendiente — backend #10350).
   const isDecisionStep = activeStep?.key === 'fur';
-  // Pasos con form embebido (actores y comercial): el footer "Continuar" guarda
+  // Pasos con form embebido (actores y Requisitos de traspaso): el footer "Continuar" guarda
   // y luego avanza, así que se habilita aunque el paso aún esté incomplete (el
   // save lo completa).
+  //
+  // Requisitos de traspaso ENTRA aquí desde que los datos comerciales dejaron de tener paso propio:
+  // `CommercialForm` se monta ahí con `embeddedInWizard` (sin botón propio) y su único disparador de
+  // guardado es este pie. Mientras la clave siguió siendo la del paso viejo, el formulario quedaba
+  // sin vía de persistencia y el gate `comercial_valor` del backend no se podía satisfacer nunca:
+  // el valor de venta solo se guarda al Continuar, y Continuar solo se habilitaba con el valor ya
+  // guardado. `comercial` se conserva porque un borrador antiguo puede seguir apuntando ahí y
+  // `StepBody` lo normaliza a Requisitos: mismo cuerpo, mismo guardado.
+  const isRequisitosTraspasoStep =
+    modalidad === 'traspaso' &&
+    (activeStep?.key === 'documentos' || activeStep?.key === 'comercial');
   const isSavableStep =
     activeStep?.key === 'comprador' ||
     activeStep?.key === 'vendedor' ||
-    activeStep?.key === 'comercial';
+    isRequisitosTraspasoStep;
   const isActorStep = activeStep?.key === 'comprador' || activeStep?.key === 'vendedor';
+  // La prenda vive en Requisitos en AMBAS modalidades (declarativa en matrícula, gate en traspaso),
+  // así que su gate de documento aplica en el mismo paso para las dos.
   const isPrendaStep =
-    (activeStep?.key === 'documentos' && modalidad !== 'traspaso') ||
-    activeStep?.key === 'comercial';
+    activeStep?.key === 'documentos' || activeStep?.key === 'comercial';
   // El siguiente paso es navegable (no hay paso de datos incompleto por delante). Permite "Continuar"
   // desde un paso diferido incompleto (Identidad) hacia el FUR para finalizar/radicar.
   const nextStepNavigable = canNavigateToStep(steps, activeIndex + 1, navViewOnly);
@@ -833,6 +877,11 @@ export function TramiteWizard(props: Props) {
     (isActorStep && !actorsConsultationReady) ||
     // Certificado de prenda obligatorio sin adjuntar: no Continuar.
     (isPrendaStep && !prendaDocGateOk) ||
+    // Tipo de servicio (casilla 18 del FUR, solo matrícula inicial): sin tipo elegido no se avanza
+    // del paso de requisitos; si el tipo es PÚBLICO, tampoco hasta que la consulta devuelva la razón
+    // social de la empresa vinculadora (casilla 19). Misma regla que antes gobernaba el paso 1, en el
+    // paso donde ahora se captura — ver `DeclaracionesTramite`.
+    (activeStep?.key === 'documentos' && modalidad !== 'traspaso' && !tipoServicioGateOk) ||
     // CF-02 — sin trámite creado, "Continuar" es justamente lo que lo crea: se habilita en cuanto la
     // consulta del vehículo salió bien (sin bloqueos), que es el único requisito del paso 1.
     // Sin instancia no hay gates de backend que evaluar (WizardStateQuery necesita la instancia), así
@@ -843,14 +892,7 @@ export function TramiteWizard(props: Props) {
         // Vehículo inexistente en RUNT o consulta no verificable: bloqueo DURO, sin escape.
         pendingConsulta.hardBlocked === true ||
         // Rojo subsanable (SOAT/RTM/comparendos): solo se avanza aceptando el riesgo.
-        (pendingConsulta.red === true && !pendingRiesgoAceptado) ||
-        // Tipo de servicio (paso 1, solo matrícula inicial, sección 18 del FUR): sin tipo elegido no
-        // se avanza; si el tipo es PUBLICO, tampoco hasta que la consulta RUES devuelva la razón
-        // social de la empresa vinculadora (campo de solo lectura, ver ConsultaStep).
-        (entryModalidad === 'matricula_inicial' &&
-          (!tipoServicioInfo.tipoServicioCode ||
-            (tipoServicioInfo.tipoServicioCode === 'PUBLICO' &&
-              !tipoServicioInfo.empresaVinculadoraRazonSocial)))
+        (pendingConsulta.red === true && !pendingRiesgoAceptado)
       : !isSavableStep && activeStep.status !== 'complete' && !nextStepNavigable);
 
   // "Guardar y continuar" para pasos con form embebido: valida + persiste (vía
@@ -874,11 +916,9 @@ export function TramiteWizard(props: Props) {
           previewToken: pendingConsulta.previewToken,
           // HU #11199 — la secretaría elegida en el paso 1 queda escrita con el trámite.
           transitOfficeId: pendingConsulta.transitOfficeId,
-          // Tipo de servicio (paso 1, matrícula inicial): mismo patrón que transitOfficeId — se
-          // elige antes de que exista el trámite y viaja explícito a la creación.
-          tipoServicioCode: tipoServicioInfo.tipoServicioCode,
-          empresaVinculadoraNit: tipoServicioInfo.empresaVinculadoraNit,
-          empresaVinculadoraRazonSocial: tipoServicioInfo.empresaVinculadoraRazonSocial,
+          // El tipo de servicio (casilla 18) ya no viaja aquí: se captura en el paso de requisitos,
+          // contra el trámite ya creado. El backend lo sigue aceptando (opcional) por compatibilidad
+          // con clientes anteriores; sin él simplemente no escribe `vehicle_service` al crear.
         });
 
         // Condiciones marcadas en el paso 1 (leasing, carrocería, paz y salvo, riesgo,
@@ -900,6 +940,20 @@ export function TramiteWizard(props: Props) {
           }
         }
         pendingFieldValuesRef.current.clear();
+
+        // HU #10536 — la prioridad marcada en el paso 1, ya con el id del trámite. Va aparte del
+        // patch de arriba porque no es un field_value: es una columna del expediente con su propio
+        // endpoint. Solo se llama si se marcó (el default de la columna ya es `false`) y en modo
+        // best-effort: es una preferencia de orden en la bandeja del OT, no un requisito para
+        // avanzar, y sigue siendo alternable desde el listado.
+        if (pendingPrioritario) {
+          try {
+            await tramitesClient.setPriority(created.instance.id, true, created.instance.tenantId);
+          } catch {
+            // Silencioso: el trámite ya existe y la prioridad se puede marcar desde el listado.
+          }
+          setPendingPrioritario(false);
+        }
 
         telemetry.trackStepComplete();
         // AC1 (HU #10883) — el paso de retoma queda en el segundo paso, que es donde continúa el
@@ -963,13 +1017,20 @@ export function TramiteWizard(props: Props) {
         setSubmitError(
           isActorStep
             ? 'Consulta RUNT o RUES con éxito antes de continuar. Sin datos de la consulta no se puede avanzar.'
-            : 'No se pudo guardar. Por favor, reintenta.',
+            : isRequisitosTraspasoStep
+              // El save de los datos comerciales devuelve false por dato faltante, no por fallo de
+              // red: "reintenta" mandaba a repetir un clic que iba a fallar igual. La tarjeta ya
+              // marca los campos; el pie dice cuál es el bloqueo y dónde está.
+              ? 'Faltan datos comerciales: ingresa el valor de venta y la causal en esta misma pantalla.'
+              : 'No se pudo guardar. Por favor, reintenta.',
         );
         return;
       }
 
-      // Traspaso: la prenda va en el paso comercial — mismo Continuar, sin botón dedicado.
-      if (activeStep?.key === 'comercial') {
+      // Traspaso: la prenda va en Requisitos, junto a los datos comerciales — mismo Continuar, sin
+      // botón dedicado. Con el gravamen en warn el backend exige decisión vigente para preparar o
+      // radicar, así que dejarla sin persistir aquí solo aplaza el bloqueo hasta el final del flujo.
+      if (isRequisitosTraspasoStep) {
         const okPrenda = await prendaFormRef.current?.save();
         if (okPrenda === false) {
           setSubmitError('No se pudo guardar la decisión de prenda. Por favor, reintenta.');
@@ -1081,19 +1142,45 @@ export function TramiteWizard(props: Props) {
   return (
    <WizardReadOnlyProvider readOnly={editLocked}>
     <div id="tramite-wizard-root" className="flex w-full flex-col gap-3 pb-2">
+      {/* Radicar es la espera más larga del flujo y la que más ansiedad genera: mientras dura, el
+          velo impide el doble envío y el mensaje nombra al organismo de tránsito, para que la
+          demora se lea como lo que es —un tercero respondiendo— y no como un cuelgue. */}
+      {submitting && <CarLoaderModal mode="radicacion" />}
+      {/* Centinela del colapso: mientras se ve, la cabecera va completa; al salir de cuadro el
+          asistente ya está en marcha y el título deja sitio a los pasos. Va FUERA del bloque
+          sticky —si estuviera dentro nunca saldría de vista— y mide un píxel: no ocupa hueco. */}
+      <div ref={centinelaCabeceraRef} aria-hidden="true" className="h-px" />
       {/* Título + seguimiento fijos al scroll de main; fondo sólido app-bg (no transparente). */}
-      <div className="sticky top-0 z-30 -mx-1 space-y-3 bg-[#eef5ff] px-1 pb-3 pt-1 dark:bg-[#0a1428]">
+      {/* Al condensar también se aprieta el propio contenedor: la separación entre tarjeta, pasos y
+          franja de identidad estaba calculada para la cabecera completa. */}
+      <div
+        className={`sticky top-0 z-30 -mx-1 bg-[#eef5ff] px-1 pt-1 transition-[padding] duration-200 motion-reduce:transition-none dark:bg-[#0a1428] ${
+          cabeceraCompacta ? 'space-y-1.5 pb-1.5' : 'space-y-3 pb-3'
+        }`}
+      >
         <div
-          className="flex items-center justify-between gap-3 rounded-2xl border border-[#DFE5ED] bg-white px-5 py-4 dark:border-[#1A1F2B] dark:bg-[#0B0F14]"
+          className={`flex items-center justify-between gap-3 rounded-2xl border border-[#DFE5ED] bg-white px-5 transition-[padding] duration-200 motion-reduce:transition-none dark:border-[#1A1F2B] dark:bg-[#162744] ${
+            cabeceraCompacta ? 'py-2' : 'py-4'
+          }`}
           style={{ boxShadow: '0 8px 24px rgba(22, 39, 68, 0.08)' }}
         >
-          <div className="min-w-0">
-            <h1 className="truncate text-lg font-bold sm:text-xl" style={{ color: '#557EFF' }}>
-              {displayTitle}
-            </h1>
-            <p className="mt-0.5 truncate text-[11px]" style={{ color: '#9AA5B1' }}>
-              {displaySubtitle}
-            </p>
+          {/* Colapso por `grid-template-rows`, no por `display:none`: el h1 y su descripción siguen
+              en el documento y en el árbol de accesibilidad, así que el lector de pantalla puede
+              seguir anunciando de qué trámite se trata aunque en pantalla no se vean. El dato
+              tampoco se pierde a la vista: la franja azul de abajo repite tipo, id y estado. */}
+          <div
+            className={`grid min-w-0 transition-[grid-template-rows] duration-200 motion-reduce:transition-none ${
+              cabeceraCompacta ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'
+            }`}
+          >
+            <div className="min-w-0 overflow-hidden">
+              <h1 className="truncate text-lg font-bold sm:text-xl" style={{ color: '#557EFF' }}>
+                {displayTitle}
+              </h1>
+              <p className="mt-0.5 truncate text-xs" style={{ color: '#59677D' }}>
+                {displaySubtitle}
+              </p>
+            </div>
           </div>
           <button
             onClick={() => {
@@ -1103,7 +1190,7 @@ export function TramiteWizard(props: Props) {
               onExit();
             }}
             className="shrink-0 text-xs font-medium hover:opacity-100"
-            style={{ color: '#9AA5B1' }}
+            style={{ color: '#59677D' }}
             aria-label={editLocked ? 'Volver al listado' : 'Cancelar y volver al selector'}
           >
             {editLocked ? '← Volver al listado' : '← Cancelar'}
@@ -1111,7 +1198,7 @@ export function TramiteWizard(props: Props) {
         </div>
 
         {steps.length === 0 ? (
-          <p className="text-[11px] opacity-60">
+          <p className="text-xs opacity-60">
             {wizardLoading ? 'Cargando pasos…' : 'Sin pasos disponibles.'}
           </p>
         ) : (
@@ -1121,7 +1208,51 @@ export function TramiteWizard(props: Props) {
             onGoToStep={goToStep}
             viewOnly={navViewOnly}
             coalesceActores={modalidad === 'traspaso'}
+            compacto={cabeceraCompacta}
           />
+        )}
+
+        {/* Franja de identidad del expediente (propuesta): referencia, tipo, identificador y
+            estado, centrada bajo los pasos. Solo aparece cuando hay algo que identificar — antes
+            de crear el trámite no hay referencia ni vehículo consultado.
+            B1 (guardián de diseño) — el relleno sólido `#557EFF` con texto blanco a 12px daba
+            3.61:1 (rótulos en white/80, 2.88:1): el mismo patrón que ya se retiró de `WizardPill`
+            por insuficiente. Pasa a forma tintada (fondo `rgba(85,126,255,0.14)`, texto principal
+            `--badge-info-fg`, rótulos en `#59677D` — `color.text.secondary` del sistema), como el
+            resto de badges. */}
+        {(refLabel || identificador) && (
+          <div
+            className="mx-auto flex w-fit max-w-full flex-wrap items-center justify-center gap-x-6 gap-y-1 rounded-xl px-4 py-2.5"
+            style={{ background: 'rgba(85,126,255,0.14)', color: 'var(--badge-info-fg)' }}
+          >
+            {refLabel && (
+              <p className="text-xs">
+                <span className="font-medium uppercase" style={{ color: '#59677D' }}>
+                  ID trámite:{' '}
+                </span>
+                <span className="font-semibold">{refLabel}</span>
+              </p>
+            )}
+            <p className="text-xs">
+              <span className="font-medium uppercase" style={{ color: '#59677D' }}>
+                Tipo:{' '}
+              </span>
+              <span className="font-semibold">{modalidadLabel}</span>
+            </p>
+            {identificador && (
+              <p className="text-xs">
+                <span className="font-medium uppercase" style={{ color: '#59677D' }}>
+                  Identificador:{' '}
+                </span>
+                <span className="font-semibold">
+                  {identificadorLabel}: {identificador}
+                </span>
+              </p>
+            )}
+            {estadoTramite && (
+              <StatusBadge label={estadoLabel(estadoTramite)} {...estadoChipStyle(estadoTramite)} />
+            )}
+          </div>
         )}
       </div>
 
@@ -1138,7 +1269,7 @@ export function TramiteWizard(props: Props) {
           role="status"
           aria-live="polite"
         >
-          <Shield className="mt-0.5 h-4 w-4 shrink-0" style={{ color: '#F9AC00' }} aria-hidden="true" />
+          <Shield className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--badge-warning-fg)' }} aria-hidden="true" />
           <span>
             <span className="font-semibold" style={{ color: '#B45309' }}>
               Borrador finalizado — esperando validación del cliente.
@@ -1195,29 +1326,27 @@ export function TramiteWizard(props: Props) {
       <section id="tramite-wizard-scroll">
         <div className="py-1">
           {!activeStep ? (
-            <p className="text-xs opacity-60">
-              {wizardLoading ? 'Cargando el asistente…' : 'Este flujo no tiene pasos.'}
-            </p>
+            wizardLoading ? (
+              // Cuerpo del asistente vacío mientras cargan los pasos: mismo velo que las consultas
+              // al RUNT, porque es la espera más larga y más visible del módulo y una línea de 12px
+              // era casi indistinguible de una pantalla en blanco. El velo va SOLO aquí y no también
+              // en el stepper de arriba —los dos los gobierna `wizardLoading`— porque dos velos
+              // superpuestos oscurecerían el fondo dos veces.
+              <CarLoaderModal label="Cargando el asistente…" />
+            ) : (
+              <p className="text-xs opacity-60">Este flujo no tiene pasos.</p>
+            )
           ) : (
             <div className="space-y-6">
-              {activeStep.key !== 'fur' && activeStep.key !== 'identidad' && (
-                <div>
-                  <h2 className="text-base font-bold">
-                    {modalidad === 'traspaso' && isTraspasoActorStepKey(activeStep.key)
-                      ? 'Actores'
-                      : activeStep.label}
-                  </h2>
-                  {(activeStep.key === 'documentos' && modalidad !== 'traspaso'
-                    ? DOCUMENTOS_SUBTITLE_MATRICULA
-                    : STEP_SUBTITLE[activeStep.key]) && (
-                    <p className="mt-1 text-xs opacity-60">
-                      {activeStep.key === 'documentos' && modalidad !== 'traspaso'
-                        ? DOCUMENTOS_SUBTITLE_MATRICULA
-                        : STEP_SUBTITLE[activeStep.key]}
-                    </p>
-                  )}
-                </div>
-              )}
+              {/* El título del paso deja de VERSE: en la propuesta el nombre vive en el asistente
+                  de arriba y cada tarjeta trae su propio encabezado, así que repetirlo dejaba dos
+                  rótulos seguidos diciendo lo mismo. Se conserva como encabezado accesible para no
+                  dejar el cuerpo del paso sin nombre en el árbol de encabezados. */}
+              <h2 className="sr-only">
+                {modalidad === 'traspaso' && isTraspasoActorStepKey(activeStep.key)
+                  ? stepLabelCopy('actores', 'Actores')
+                  : stepLabelCopy(activeStep.key, activeStep.label)}
+              </h2>
               <StepBody
                 step={activeStep}
                 modalidad={modalidad}
@@ -1242,41 +1371,80 @@ export function TramiteWizard(props: Props) {
                 seedPlaca={seedPlaca}
                 onPreviewDone={handlePreviewDone}
                 onPendingFieldValues={collectPendingFieldValues}
-                onTipoServicioChange={setTipoServicioInfo}
+                prioritario={pendingPrioritario}
+                onPrioritarioChange={setPendingPrioritario}
+                onTipoServicioGateChange={setTipoServicioGateOk}
                 paqueteDocsStatus={paqueteDocsStatus}
                 onPaqueteStatusChange={setPaqueteDocsStatus}
+                onConfirmacionesExpedienteChange={setConfirmacionesExpediente}
                 onMarkDirty={() => setHasUnsavedChanges(true)}
               />
             </div>
           )}
 
           {/* Bloqueos de envío traducidos (en el paso de decisión). */}
-          {isDecisionStep && blockers.length > 0 && (
-            <div
-              className="mt-6 rounded-xl border p-3 text-xs"
-              style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)' }}
-              role="status"
-              aria-live="polite"
+          {isDecisionStep && (blockers.length > 0 || confirmacionesExpediente.length > 0) && (
+            <InlineAlert
+              tone="error"
+              title="Requisitos pendientes antes del envío"
+              className="mt-6"
             >
-              <p className="mb-1 font-semibold" style={{ color: '#F9AC00' }}>
-                Antes de enviar, resuelve:
-              </p>
               <ul className="space-y-0.5" aria-label="Bloqueos de envío">
                 {blockers.map((b) => (
-                  <li key={b} style={{ color: '#F9AC00' }}>
-                    • {blockerCopy(b)}
-                  </li>
+                  <li key={b}>• {blockerCopy(b)}</li>
+                ))}
+                {/* Las del servidor llegan como código y se traducen; estas ya son texto legible
+                    porque las redacta el propio expediente. */}
+                {confirmacionesExpediente.map((c) => (
+                  <li key={c}>• {c}</li>
                 ))}
               </ul>
-            </div>
+            </InlineAlert>
           )}
+
+          {/* Acción terminal del asistente (propuesta: MatriculaInicial.tsx:1100-1109) — vive en el
+              CUERPO del paso de decisión, no en el pie. Es la ÚNICA pieza que se mueve: "Anterior",
+              EstadoAcciones y "Cancelar trámite" son función existente del pie y se quedan ahí; el
+              pie de FLIT tampoco desaparece en este paso como en la propuesta, porque sigue
+              haciendo falta para navegar hacia atrás y para cancelar.
+              Cubre las tres variantes que antes vivían en el pie con el rótulo "Radicar trámite"
+              (entrega desde preparado, radicar desde borrador con identidad, y el disabled a la
+              espera de identidad): las tres son la misma acción de cierre. */}
+          {isDecisionStep &&
+            !inSubsanacion &&
+            ((fullReadOnly && canEntregar) || (!fullReadOnly && (canRadicar || draftFinalized))) && (
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setConfirmRadicar(true)}
+                  disabled={
+                    submitting ||
+                    (!fullReadOnly && !canRadicar && draftFinalized) ||
+                    confirmacionesExpediente.length > 0
+                  }
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                  style={{ background: WIZARD_CTA_GRADIENT_DONE }}
+                  title={
+                    fullReadOnly
+                      ? 'Entrega el trámite al organismo de tránsito'
+                      : canRadicar
+                        ? 'Prepara y radica el trámite en un solo paso (queda en entregado)'
+                        : 'Disponible cuando el cliente valide su identidad'
+                  }
+                >
+                  {submitting ? 'Radicando…' : 'Finalizar y enviar trámite'}
+                </button>
+              </div>
+            )}
         </div>
 
-          <div className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-t px-2 py-3 sm:px-5">
+          <div className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-t px-2 pb-3 pt-4 sm:px-5">
             <button
               onClick={() => goToStep(Math.max(0, activeIndex - 1))}
               disabled={activeIndex === 0}
-              className="flex items-center gap-1 rounded-xl border px-4 py-2 text-xs font-medium disabled:opacity-30"
+              // Misma altura que las acciones de la derecha: en la propuesta el pie es una sola
+              // línea de botones, y un "Anterior" más bajo la partía en dos.
+              className={`${WIZARD_BTN} flex items-center gap-1 border focus-visible:ring-[#162744] disabled:opacity-30`}
               style={{ borderColor: '#162744', color: '#162744' }}
             >
               <ChevronLeft className="h-3 w-3" /> Anterior
@@ -1292,26 +1460,20 @@ export function TramiteWizard(props: Props) {
               ) : null}
             </div>
 
-            <div className="flex justify-end">
+            {/* `gap-3` como el pie de la propuesta: sin él los botones quedaban pegados y se leían
+                como una sola pieza, con "Cancelar trámite" y el avance sin aire entre medias. */}
+            <div className="flex flex-wrap items-center justify-end gap-3">
             {/* Acción derecha del footer:
-                · Preparado o borrador con identidad OK: "Radicar trámite" (encadena preparado→entregado).
+                · Preparado o borrador con identidad OK / en borrador finalizado: la acción terminal
+                  ("Finalizar y enviar trámite") ya NO vive aquí — se movió al cuerpo del paso de
+                  decisión (justo debajo del InlineAlert de requisitos pendientes), igual que en la
+                  propuesta. Aquí no queda nada para esos casos.
                 · Solo visualización (otros estados no editables): sin acciones, solo se recorre.
-                · Paso de decisión en borrador sin identidad: "Finalizar" (finalize-draft).
-                · En borrador ya finalizado: "Radicar trámite" deshabilitado hasta identidad.
+                · Paso de decisión en borrador sin identidad: "Finalizar" (finalize-draft) — esta SÍ
+                  se queda en el pie: no es la acción de cierre, solo sella el borrador a la espera
+                  de la validación de identidad.
                 · Pasos de datos: "Guardar y continuar". */}
-            {fullReadOnly ? (
-              isDecisionStep && canEntregar ? (
-                <button
-                  onClick={() => void handleRadicarTramite()}
-                  disabled={submitting}
-                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-                  title="Entrega el trámite al organismo de tránsito"
-                >
-                  {submitting ? 'Radicando…' : 'Radicar trámite'}
-                </button>
-              ) : null
-            ) : isDecisionStep ? (
+            {fullReadOnly ? null : isDecisionStep ? (
               // HU #10874 — en subsanación NO Preparar/Finalizar: re-radicar vive en SubsanacionPanel.
               // En el último paso de subsanación: "Guardar y continuar" habilita Re-radicar.
               inSubsanacion ? (
@@ -1341,38 +1503,18 @@ export function TramiteWizard(props: Props) {
                     })();
                   }}
                   disabled={continuing}
-                  className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                  style={{ background: WIZARD_CTA_GRADIENT }}
                   title="Guarda los cambios de este paso y habilita Re-radicar"
                 >
                   {continuing ? 'Guardando…' : 'Guardar y continuar'}
                 </button>
-              ) : canRadicar ? (
-                <button
-                  onClick={() => void handleRadicarTramite()}
-                  disabled={submitting}
-                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-                  title="Prepara y radica el trámite en un solo paso (queda en entregado)"
-                >
-                  {submitting ? 'Radicando…' : 'Radicar trámite'}
-                </button>
-              ) : draftFinalized ? (
-                <button
-                  onClick={() => void handleRadicarTramite()}
-                  disabled
-                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-                  title="Disponible cuando el cliente valide su identidad"
-                >
-                  Radicar trámite
-                </button>
-              ) : (
+              ) : canRadicar || draftFinalized ? null : (
                 <button
                   onClick={() => void handleFinalizeDraft()}
                   disabled={!canSubmit || submitting}
-                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                  style={{ background: WIZARD_CTA_GRADIENT }}
                 >
                   {submitting ? 'Finalizando…' : 'Finalizar'}
                 </button>
@@ -1381,37 +1523,158 @@ export function TramiteWizard(props: Props) {
               <button
                 onClick={() => goToStep(activeIndex + 1)}
                 disabled={!canNavigateToStep(steps, activeIndex + 1, navViewOnly)}
-                className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+                className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                style={{ background: WIZARD_CTA_GRADIENT }}
               >
                 Continuar
                 <ChevronRight className="h-3 w-3" />
               </button>
             ) : (
-              <button
-                onClick={() => void handleContinue()}
-                disabled={continueDisabled}
-                className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-              >
-                {continuing
-                  ? 'Guardando…'
-                  : inSubsanacion || isSavableStep
-                    ? 'Guardar y continuar'
-                    : 'Continuar'}
-                <ChevronRight className="h-3 w-3" />
-              </button>
+              <>
+                {/* Cancelar trámite (propuesta): acción destructiva en naranja de alerta, junto al
+                    avance y no escondida en la cabecera, con confirmación porque se pierde lo no
+                    guardado. Solo mientras el trámite se está capturando: ya radicado no hay nada
+                    que cancelar desde aquí. */}
+                {!fullReadOnly && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmCancel(true)}
+                    className={`${WIZARD_BTN} text-white focus-visible:ring-[#FF4E00]`}
+                    style={{ background: '#FF4E00' }}
+                  >
+                    Cancelar trámite
+                  </button>
+                )}
+                <button
+                  onClick={() => void handleContinue()}
+                  disabled={continueDisabled}
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-40`}
+                  // Deshabilitado en gris pleno, no el degradado atenuado: media opacidad sobre un
+                  // degradado deja un azul lavado que sigue leyéndose como acción disponible.
+                  style={{ background: continueDisabled ? '#94A3B8' : WIZARD_CTA_GRADIENT }}
+                >
+                  {continuing ? 'Guardando…' : 'Continuar y guardar'}
+                </button>
+              </>
             )}
             </div>
           </div>
         </section>
 
-      {instanceId ? (
-        <>
-          <EstadoTimelinePanel instanceId={instanceId} />
-          <AvisosCorreoPanel instanceId={instanceId} />
-        </>
-      ) : null}
+      {confirmCancel && (
+        <WizardModal title="Cancelar trámite" onClose={() => setConfirmCancel(false)}>
+          <p className="text-xs leading-relaxed opacity-80">
+            ¿Deseas cancelar el trámite en curso? Los datos no guardados se perderán.
+          </p>
+          <div className="mt-6 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmCancel(false)}
+              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            >
+              Continuar editando
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                // Reportes2 HU-A — salida sin radicar = wizard_abandon.
+                if (!fullReadOnly) telemetry.trackAbandon();
+                onExit();
+              }}
+              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4E00] focus-visible:ring-offset-2"
+              style={{ background: '#FF4E00' }}
+            >
+              Sí, cancelar
+            </button>
+          </div>
+        </WizardModal>
+      )}
+
+      {/* Confirmación de la acción terminal (propuesta: MatriculaInicial.tsx:1111-1121). Pulsar
+          "Finalizar y enviar trámite" ya NO radica al primer clic: abre este modal, con la
+          modalidad y el organismo reales del trámite (nunca literales de maqueta), y solo
+          "Sí, radicar trámite" dispara handleRadicarTramite. */}
+      {confirmRadicar && (
+        <WizardModal title="Confirmar radicación" onClose={() => setConfirmRadicar(false)}>
+          <p className="text-xs leading-relaxed opacity-80">
+            ¿Estás seguro de finalizar y radicar este trámite de {modalidadLabel} ante la{' '}
+            {organismoNombre ?? 'entidad de tránsito seleccionada'}?
+          </p>
+          <div className="mt-6 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmRadicar(false)}
+              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            >
+              Revisar datos
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmRadicar(false);
+                void handleRadicarTramite();
+              }}
+              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+              style={{ background: WIZARD_CTA_GRADIENT_DONE }}
+            >
+              Sí, radicar trámite
+            </button>
+          </div>
+        </WizardModal>
+      )}
+
+      {/* El "Historial de estados" y los "Avisos de correo" NO van en el asistente: colgaban sueltos
+          bajo el pie, en todos los pasos, y el asistente es para capturar el trámite, no para
+          auditarlo. En el repo de diseño la trazabilidad vive en la vista de detalle del trámite
+          (`DetalleTramiteModal`, "Historial de auditoría"), que es donde deben reaparecer.
+          `EstadoTimelinePanel` y `AvisosCorreoPanel` siguen en el repo, listos para montarse ahí. */}
+
+      {/* Acuse de radicación — patrón "trámite completado" del diseño: título de éxito, el
+          identificador en grande con tracking amplio, mensaje de confirmación y CTA degradado.
+          Sustituye al toast + salida inmediata: el gestor ve QUÉ quedó radicado antes de salir. */}
+      <Modal
+        open={!!radicado}
+        onClose={() => {
+          setRadicado(null);
+          onExit();
+        }}
+        title="¡Trámite completado!"
+        titleClassName="text-lg font-bold text-[#557EFF]"
+        size="sm"
+      >
+        <div className="text-center">
+          <p className="text-xs uppercase tracking-wide opacity-55">
+            {radicado?.placa ? 'Placa asociada' : 'Radicado'}
+          </p>
+          <p
+            className="mt-1 text-3xl font-bold"
+            style={{ color: '#162744', letterSpacing: radicado?.placa ? '0.35em' : '0.12em' }}
+          >
+            {radicado?.placa ?? radicado?.referencia ?? '—'}
+          </p>
+          {/* En matrícula inicial la placa la asigna el organismo: se dice, en vez de dejar un
+              hueco que parezca un dato perdido. */}
+          {!radicado?.placa ? (
+            <p className="mt-2 text-xs opacity-60">
+              La placa la asigna el organismo de tránsito.
+            </p>
+          ) : null}
+          <p className="mt-4 text-xs opacity-70">
+            El trámite fue validado y enviado correctamente al organismo de tránsito.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setRadicado(null);
+              onExit();
+            }}
+            className="mt-5 w-full rounded-xl py-2.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+          >
+            Ir al listado de trámites
+          </button>
+        </div>
+      </Modal>
     </div>
    </WizardReadOnlyProvider>
   );
@@ -1420,24 +1683,62 @@ export function TramiteWizard(props: Props) {
 const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS'];
 
 /**
- * Atributos de detalle del vehículo (los que NO van en el hero placa/marca/línea/
- * modelo). Cada uno con su icono para una grilla legible. Origen RUNT, hidratados
- * en field_values por la consulta del preflight. Solo se pinta lo presente.
+ * Trámites principales del selector del paso 1, en el orden y con el copy de la propuesta.
+ *
+ * "Otros Trámites" viaja con `disponible: false`: la propuesta lo contempla como tercera familia
+ * (modificaciones y novedades) pero el asistente todavía no la sabe recorrer —no hay modalidad ni
+ * pasos para ella—. Se pinta apagada en vez de omitirla porque el gestor la busca; ofrecerla
+ * seleccionable sería un camino sin salida.
  */
-const VEHICLE_DETAILS: { key: string; label: string; icon: typeof Car }[] = [
-  { key: 'vin', label: 'VIN', icon: Hash },
-  { key: 'vehicle_color', label: 'Color', icon: Palette },
-  { key: 'vehicle_class', label: 'Clase', icon: Tag },
-  { key: 'vehicle_service', label: 'Servicio', icon: Briefcase },
-  { key: 'vehicle_fuel', label: 'Combustible', icon: Fuel },
-  { key: 'vehicle_engine_displacement', label: 'Cilindraje', icon: Gauge },
-  { key: 'vehicle_body_type', label: 'Carrocería', icon: Layers },
-  { key: 'vehicle_engine_number', label: 'Nº Motor', icon: Wrench },
-  { key: 'vehicle_chassis', label: 'Nº Chasis', icon: Hash },
-  { key: 'vehicle_series', label: 'Nº Serie', icon: Hash },
-  { key: 'vehicle_passengers', label: 'Pasajeros', icon: Users },
-  { key: 'vehicle_registration_date', label: 'Fecha matrícula', icon: Calendar },
-  { key: 'transit_office_name', label: 'Organismo de tránsito', icon: Building2 },
+const MODALIDAD_OPCIONES: {
+  id: string;
+  label: string;
+  descripcion: string;
+  disponible: boolean;
+}[] = [
+  {
+    id: 'matricula_inicial',
+    label: 'Matrícula Inicial',
+    descripcion: 'Vehículo nuevo sin placa asignada',
+    disponible: true,
+  },
+  {
+    id: 'traspaso',
+    label: 'Traspaso',
+    descripcion: 'Cambio de propietario del vehículo',
+    disponible: true,
+  },
+  {
+    id: 'otros',
+    label: 'Otros Trámites',
+    descripcion: 'Modificaciones y novedades',
+    disponible: false,
+  },
+];
+
+/**
+ * Atributos de detalle del vehículo (los que NO van en el hero placa/marca/línea/
+ * modelo). Origen RUNT, hidratados en field_values por la consulta del preflight.
+ * Solo se pinta lo presente.
+ *
+ * Sin icono por atributo: la propuesta presenta estos datos como una retícula de pares
+ * rótulo/valor. Trece iconos distintos en una rejilla de consulta no distinguen nada —el rótulo ya
+ * nombra el dato— y sí compiten con el valor, que es lo único que el gestor viene a leer.
+ */
+const VEHICLE_DETAILS: { key: string; label: string }[] = [
+  { key: 'vin', label: 'VIN' },
+  { key: 'vehicle_color', label: 'Color' },
+  { key: 'vehicle_class', label: 'Clase' },
+  { key: 'vehicle_service', label: 'Servicio' },
+  { key: 'vehicle_fuel', label: 'Combustible' },
+  { key: 'vehicle_engine_displacement', label: 'Cilindraje' },
+  { key: 'vehicle_body_type', label: 'Carrocería' },
+  { key: 'vehicle_engine_number', label: 'Nº Motor' },
+  { key: 'vehicle_chassis', label: 'Nº Chasis' },
+  { key: 'vehicle_series', label: 'Nº Serie' },
+  { key: 'vehicle_passengers', label: 'Pasajeros' },
+  { key: 'vehicle_registration_date', label: 'Fecha matrícula' },
+  { key: 'transit_office_name', label: 'Organismo de tránsito' },
 ];
 
 /**
@@ -1446,7 +1747,21 @@ const VEHICLE_DETAILS: { key: string; label: string; icon: typeof Car }[] = [
  * hero (placa + marca/línea/modelo + estado) y una grilla de atributos con
  * iconos. Solo se pinta lo presente; nada de proveedor.
  */
-function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
+function VehicleDataCard({
+  fieldValues,
+  bare = false,
+  validadoEnRunt = false,
+}: {
+  fieldValues: FieldValue[];
+  /** Dentro del acordeón "Datos consolidados del vehículo (RUNT)": sin marco ni cabecera propia. */
+  bare?: boolean;
+  /**
+   * Añade el distintivo "Validado en RUNT" a la franja de identificación. Se usa donde la tarjeta
+   * NO va bajo una cabecera que ya nombre la fuente —dentro de la tarjeta de consulta de
+   * matrícula—, para no perder de dónde salieron los datos.
+   */
+  validadoEnRunt?: boolean;
+}) {
   const byKey = (key: string) =>
     fieldValues.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
 
@@ -1475,37 +1790,39 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
 
   return (
     <div
-      className="overflow-hidden rounded-2xl border bg-white dark:bg-[#0B0F14]"
+      className={
+        bare ? '' : 'overflow-hidden rounded-2xl border bg-white dark:bg-[#162744]'
+      }
     >
-      {/* Header */}
-      <div
-        className="flex items-center justify-between gap-3 border-b px-4 py-3"
-      >
-        <div className="flex items-center gap-2">
+      {/* Header — embebido lo pinta el acordeón, que ya dice de dónde vienen los datos. */}
+      {!bare && (
+        <div className="flex items-center gap-3 border-b px-4 py-3">
           <span
-            className="grid h-7 w-7 place-items-center rounded-lg"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg"
             style={{ background: 'rgba(85,126,255,0.10)' }}
           >
             <Car className="h-4 w-4" style={{ color: '#557EFF' }} />
           </span>
-          <h4 className="text-sm font-bold">Datos del vehículo</h4>
+          <div className="min-w-0 flex-1">
+            <WizardCardHeader
+              title="Datos del vehículo"
+              action={<StatusBadge label="RUNT" tone="info" />}
+              className=""
+            />
+          </div>
         </div>
-        <span
-          className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
-          style={{ background: 'rgba(85,126,255,0.10)', color: '#557EFF' }}
-        >
-          RUNT
-        </span>
-      </div>
+      )}
 
       {/* Hero: placa + marca/línea/modelo + estado */}
-      <div className="flex flex-wrap items-center gap-4 px-4 py-4">
+      <div
+        className={`flex flex-wrap items-center gap-4 ${bare ? 'pb-4' : 'px-4 py-4'}`}
+      >
         {plate && (
           <div
             className="rounded-xl border-2 px-4 py-2 text-center"
             style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' }}
           >
-            <p className="text-[9px] font-semibold uppercase opacity-50">Placa</p>
+            <p className="text-xs font-semibold uppercase opacity-50">Placa</p>
             <p
               className="font-mono text-lg font-extrabold tracking-widest"
               style={{ color: '#557EFF' }}
@@ -1518,56 +1835,37 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
           <p className="truncate text-base font-bold">{title}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             {year && (
-              <span className="inline-flex items-center gap-1 text-[11px] opacity-70">
+              <span className="inline-flex items-center gap-1 text-xs opacity-70">
                 <Calendar className="h-3 w-3" /> Modelo {year}
               </span>
             )}
             {estado && (
-              <span
-                className="rounded-full px-2 py-0.5 text-[10px] font-bold"
-                style={
-                  estadoActivo
-                    ? { background: 'rgba(140,198,63,0.15)', color: '#8CC63F' }
-                    : { background: 'rgba(154,165,177,0.15)', color: '#9AA5B1' }
-                }
-              >
-                {estado}
-              </span>
+              <StatusBadge label={estado} tone={estadoActivo ? 'success' : 'neutral'} />
             )}
+            {validadoEnRunt && <StatusBadge label="Validado en RUNT" tone="success" />}
           </div>
         </div>
       </div>
 
-      {/* Grilla de atributos — 4 columnas */}
+      {/* Retícula de pares rótulo/valor de la propuesta: 2 columnas en móvil, 3 en tablet, 5 en
+          escritorio. Sin hairlines entre celdas — el aire separa mejor que la línea cuando lo que
+          se compara son datos cortos. */}
       {details.length > 0 && (
         <div
-          className="grid gap-px border-t sm:grid-cols-2 lg:grid-cols-4"
-          style={{ background: '#DFE5ED' }}
+          className={`grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-5 ${
+            bare ? 'border-t pt-4' : 'border-t px-4 py-4'
+          }`}
         >
-          {details.map((d) => {
-            const Icon = d.icon;
-            return (
-              <div
-                key={d.key}
-                className="flex items-center gap-2.5 bg-white px-4 py-2.5 dark:bg-[#0B0F14]"
-              >
-                <Icon className="h-3.5 w-3.5 shrink-0 opacity-40" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] uppercase opacity-50">{d.label}</p>
-                  <p className="truncate text-xs font-semibold">{d.value}</p>
-                </div>
-              </div>
-            );
-          })}
+          {details.map((d) => (
+            <WizardPair key={d.key} label={d.label} value={d.value} />
+          ))}
         </div>
       )}
 
       {/* Sección SOAT / RTM */}
       {hasSoatRtm && (
-        <div
-          className="border-t px-4 py-3"
-        >
-          <p className="mb-2 text-[10px] font-semibold uppercase opacity-50">
+        <div className={bare ? 'mt-4 border-t pt-3' : 'border-t px-4 py-3'}>
+          <p className="mb-2 text-xs font-semibold uppercase opacity-50">
             Documentos del vehículo
           </p>
           <div className="flex flex-wrap gap-3">
@@ -1577,16 +1875,16 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
               >
                 <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#557EFF' }} />
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase" style={{ color: '#557EFF' }}>
+                  <p className="text-xs font-bold uppercase" style={{ color: '#557EFF' }}>
                     SOAT
                   </p>
                   {soatVencimiento && (
-                    <p className="text-[11px] font-semibold">
+                    <p className="text-xs font-semibold">
                       Vence: {formatDateOnly(soatVencimiento)}
                     </p>
                   )}
                   {soatAseguradora && (
-                    <p className="truncate text-[10px] opacity-60">{soatAseguradora}</p>
+                    <p className="truncate text-xs opacity-60">{soatAseguradora}</p>
                   )}
                 </div>
               </div>
@@ -1595,12 +1893,12 @@ function VehicleDataCard({ fieldValues }: { fieldValues: FieldValue[] }) {
               <div
                 className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2"
               >
-                <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#8CC63F' }} />
+                <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--flit-success-ink)' }} />
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase" style={{ color: '#8CC63F' }}>
+                  <p className="text-xs font-bold uppercase" style={{ color: 'var(--flit-success-ink)' }}>
                     Tecno-mecánica
                   </p>
-                  <p className="text-[11px] font-semibold">
+                  <p className="text-xs font-semibold">
                     Vence: {formatDateOnly(rtmVencimiento)}
                   </p>
                 </div>
@@ -1682,14 +1980,11 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
   };
 
   return (
-    <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-2">
-      <div>
-        <p className="text-xs font-semibold opacity-80">Observaciones del trámite</p>
-        <p className="text-[11px] opacity-55">
-          Se incluirán en el recuadro de observaciones del FUR. Puedes editarlas también en el paso
-          final antes de preparar el expediente.
-        </p>
-      </div>
+    <div className="rounded-2xl border bg-white p-4 dark:bg-[#162744] space-y-2">
+      <WizardCardHeader
+        title="Observaciones del trámite"
+        subtitle="Se incluirán en el recuadro de observaciones del FUR. Puedes editarlas también en el paso final antes de preparar el expediente."
+      />
       <textarea
         id="tramite-observaciones"
         aria-label="Observaciones del trámite"
@@ -1699,10 +1994,10 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
         disabled={readOnly || saving}
         rows={3}
         placeholder="Ingresa observaciones relevantes para el FUR…"
-        className="w-full resize-none rounded-xl border bg-white px-3 py-2 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60 dark:bg-[#0B0F14]"
+        className={`${WIZARD_INPUT} resize-none`}
       />
       {saving && (
-        <p className="text-[10px] opacity-50" role="status" aria-live="polite">
+        <p className="text-xs opacity-50" role="status" aria-live="polite">
           Guardando…
         </p>
       )}
@@ -1713,8 +2008,8 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
           el formulario necesita. */}
       {(preview.manual || preview.auto.length > 0) && (
         <div className="rounded-xl bg-[#F4F6FA] px-3 py-2 dark:bg-[#131A22]">
-          <p className="text-[10px] font-bold uppercase opacity-55">Así quedarán en el FUR</p>
-          <div className="mt-1 space-y-0.5 text-[11px] leading-relaxed">
+          <p className="text-xs font-bold uppercase opacity-55">Así quedarán en el FUR</p>
+          <div className="mt-1 space-y-0.5 text-xs leading-relaxed">
             {preview.manual && (
               <p className="whitespace-pre-line break-words">{preview.manual}</p>
             )}
@@ -1750,7 +2045,8 @@ function ConsultaStep({
   seedPlaca,
   onPreviewDone,
   onPendingFieldValues,
-  onTipoServicioChange,
+  prioritario = false,
+  onPrioritarioChange,
   esMigrado = false,
 }: {
   step: WizardStep;
@@ -1766,9 +2062,9 @@ function ConsultaStep({
   onPreviewDone?: (consulta: PendingConsulta | null) => void;
   /** CF-02 — condiciones marcadas antes de existir el trámite; el shell las guarda al crearlo. */
   onPendingFieldValues?: (items: { fieldKey: string; valueText: string }[]) => void;
-  /** Tipo de servicio + empresa vinculadora elegidos aquí (solo matrícula inicial); el shell los
-   * gatea y los envía a la creación del trámite. */
-  onTipoServicioChange?: (info: TipoServicioInfo) => void;
+  /** HU #10536 — marca de prioridad elegida aquí; el shell la aplica al crear el trámite. */
+  prioritario?: boolean;
+  onPrioritarioChange?: (value: boolean) => void;
   /** Migración V1→V2 — explica en el panel por qué el pre-vuelo llega vacío. */
   esMigrado?: boolean;
 }) {
@@ -1783,10 +2079,6 @@ function ConsultaStep({
   // preflight no pudo verificar el impuesto vehicular (check 'impuesto' en unknown/warn).
   const [pazSalvoSaving, setPazSalvoSaving] = useState(false);
   const [riesgoSaving, setRiesgoSaving] = useState(false);
-  // Banderas manuales del vehículo (leasing / cambio de carrocería / acción de prenda) que
-  // alimentan el motor de reglas condicionales del checklist (RF33/37/38) vía field_values.
-  const [atributosSaving, setAtributosSaving] = useState(false);
-
   // R3 (HU #10539) — el CTA "Iniciar traspaso" siembra el vehículo por query param. Con la creación
   // diferida ya no hay instancia donde persistirlo: simplemente prellena el input del paso 1.
   const [vin, setVin] = useState(seedVin ?? '');
@@ -1824,12 +2116,33 @@ function ConsultaStep({
   // existe (AC5 + convivencia D8): los borradores abiertos antes del cambio siguen eligiendo el
   // organismo en el paso del FUR, donde ya lo tenían.
   const eligeSecretaria = deferred && deferredModalidad === 'matricula_inicial';
+  /**
+   * Si la TARJETA de radicación se pinta. Distinto de `eligeSecretaria`, que decide si el organismo
+   * viaja en la creación y si el gate de "Continuar" lo exige.
+   *
+   * Se separaron porque compartían condición y eso escondía un defecto: la tarjeta desaparecía en
+   * cuanto el trámite existía. El gestor elegía secretaría, dígito y prioridad, continuaba, volvía
+   * al paso 1 — y los tres datos ya no estaban en pantalla. Estaban guardados; simplemente no había
+   * dónde verlos ni cómo corregirlos sin llegar al paso del FUR.
+   */
+  const muestraRadicacion = isVin;
   const [secretarias, setSecretarias] = useState<TransitOfficeOption[]>([]);
   const [secretariasError, setSecretariasError] = useState<string | null>(null);
   const [transitOfficeId, setTransitOfficeId] = useState('');
+  /** Prioridad del trámite YA creado (en creación diferida manda la del shell, que viaja con el id). */
+  const [prioritarioInstancia, setPrioritarioInstancia] = useState(false);
+  /**
+   * Consulta desacoplada ya resuelta, a la espera de que estén los datos que viajan con ella a la
+   * creación. Se guarda en vez de emitirse en el acto porque el organismo de tránsito se elige
+   * DESPUÉS de consultar (orden del diseño) y sin él no se puede crear el trámite.
+   */
+  const [pendingPreview, setPendingPreview] = useState<Omit<
+    PendingConsulta,
+    'transitOfficeId'
+  > | null>(null);
 
   useEffect(() => {
-    if (!eligeSecretaria) return;
+    if (!muestraRadicacion) return;
     let active = true;
     void tramitesClient
       .listTransitOffices()
@@ -1842,129 +2155,34 @@ function ConsultaStep({
     return () => {
       active = false;
     };
-  }, [eligeSecretaria]);
-
-  // Tipo de servicio (sección 18 del FUR) — MISMA condición exacta que `eligeSecretaria` (HU #11199):
-  // solo matrícula inicial y solo mientras el trámite no existe. No hay contrato de backend para
-  // leer/editar el tipo de servicio de un trámite ya creado (`createInstanceFromConsulta` es el único
-  // punto que lo recibe), así que la tarjeta NO vuelve a aparecer en un borrador retomado — decisión
-  // documentada aquí porque no hay "elsewhere" (como sí lo hay para la secretaría, que se reubica en
-  // el paso del FUR) donde ofrecer editarlo después.
-  const eligeTipoServicio = deferred && deferredModalidad === 'matricula_inicial';
-  const [tiposServicio, setTiposServicio] = useState<VehicleServiceTypeOption[]>([]);
-  // Estado inicial derivado de `eligeTipoServicio` (estable durante el ciclo de vida del componente,
-  // igual que `instanceDetailLoading` más arriba): evita un setState síncrono dentro del efecto.
-  const [tiposServicioLoading, setTiposServicioLoading] = useState(() => eligeTipoServicio);
-  const [tiposServicioError, setTiposServicioError] = useState<string | null>(null);
-  const [tipoServicioCode, setTipoServicioCode] = useState('');
-  const [empresaVinculadoraNit, setEmpresaVinculadoraNit] = useState('');
-  const [empresaVinculadoraRazonSocial, setEmpresaVinculadoraRazonSocial] = useState<string | null>(
-    null,
-  );
-  const [ruesLoading, setRuesLoading] = useState(false);
-  const [ruesError, setRuesError] = useState<string | null>(null);
-  const [ruesUnavailable, setRuesUnavailable] = useState(false);
-  /** La razón social salió del directorio de la compañía, no del RUES: hay que decirlo. */
-  const [razonSocialDesdeDirectorio, setRazonSocialDesdeDirectorio] = useState(false);
-
-  useEffect(() => {
-    if (!eligeTipoServicio) return;
-    let active = true;
-    void tramitesClient
-      .listVehicleServiceTypes()
-      .then((list) => {
-        if (active) setTiposServicio(list);
-      })
-      .catch(() => {
-        if (active) setTiposServicioError('No se pudieron cargar los tipos de servicio.');
-      })
-      .finally(() => {
-        if (active) setTiposServicioLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [eligeTipoServicio]);
-
-  // Notifica al shell el estado vigente (código + NIT/razón social solo si PUBLICO) para que gatee
-  // "Continuar" y lo envíe a la creación del trámite — mismo patrón que `onPreviewDone`.
-  const emitTipoServicio = (code: string, nit: string, razonSocial: string | null) => {
-    onTipoServicioChange?.({
-      tipoServicioCode: code || null,
-      empresaVinculadoraNit: code === 'PUBLICO' ? nit.trim() || null : null,
-      empresaVinculadoraRazonSocial: code === 'PUBLICO' ? razonSocial : null,
-    });
-  };
-
-  const handleTipoServicioChange = (code: string) => {
-    setTipoServicioCode(code);
-    setEmpresaVinculadoraNit('');
-    setEmpresaVinculadoraRazonSocial(null);
-    setRuesError(null);
-    setRuesUnavailable(false);
-    emitTipoServicio(code, '', null);
-  };
-
-  const handleEmpresaVinculadoraNitChange = (nit: string) => {
-    setEmpresaVinculadoraNit(nit);
-    // Editar el NIT invalida la razón social ya encontrada: exige una nueva consulta RUES.
-    setEmpresaVinculadoraRazonSocial(null);
-    setRuesError(null);
-    setRuesUnavailable(false);
-    emitTipoServicio(tipoServicioCode, nit, null);
-  };
+  }, [muestraRadicacion]);
 
   /**
-   * Misma escalera que usa el actor jurídico (HU #10906, R3): PRIMERO el directorio de la compañía,
-   * y solo si el NIT no está ahí se gasta una consulta al proveedor externo. Dos motivos: es
-   * instantáneo cuando la empresa ya se consultó antes, y deja de depender de que el RUES esté arriba
-   * para el caso más común. Si el directorio falla no se bloquea nada — se cae al RUES, que es lo que
-   * se hacía antes de este cambio.
+   * Dígito de preferencia de placa (HU #10805) declarado aquí, donde lo ubica el diseño. Es el MISMO
+   * dato que el paso del FUR sigue ofreciendo al radicar sin placa (`plate_preferred_last_digit`):
+   * una guía para que el OT elija una placa terminada en ese número al asignarla desde su rango
+   * —en la consola del organismo esas placas salen marcadas y ordenadas primero—. No enruta nada:
+   * el trámite cae por preasignación por NO llevar placa, no por este dígito.
+   *
+   * `preasignacionActiva` (HU #10806) responde si la ruta está viva para esta compañía en ESE
+   * organismo; sin ella el OT no asigna desde un rango y el dígito no tendría a quién guiar.
+   * `null` = todavía consultando.
    */
-  const handleConsultarRues = async () => {
-    const nit = empresaVinculadoraNit.trim();
-    if (!nit) {
-      setRuesError('Ingresa el NIT de la empresa vinculadora antes de consultar.');
-      return;
-    }
-    setRuesLoading(true);
-    setRuesError(null);
-    setRuesUnavailable(false);
-    setRazonSocialDesdeDirectorio(false);
-    try {
-      const preload = await tramitesClient
-        .lookupLegalRepresentativeByNit(nit)
-        .catch(() => null); // el directorio es un atajo, no un requisito: su fallo no corta el flujo
-      const razonSocialDirectorio = preload?.company.razonSocial?.trim();
-      if (razonSocialDirectorio) {
-        setEmpresaVinculadoraRazonSocial(razonSocialDirectorio);
-        setRazonSocialDesdeDirectorio(true);
-        emitTipoServicio(tipoServicioCode, preload!.company.nit || nit, razonSocialDirectorio);
-        return;
-      }
+  const [digitoPlaca, setDigitoPlaca] = useState('');
+  const [preasignacionActiva, setPreasignacionActiva] = useState<boolean | null>(null);
 
-      const result = await tramitesClient.ruesPreview({ documentNumber: nit });
-      if (result.found) {
-        const razonSocial = result.razonSocial ?? '';
-        setEmpresaVinculadoraRazonSocial(razonSocial);
-        emitTipoServicio(tipoServicioCode, nit, razonSocial);
-      } else {
-        setEmpresaVinculadoraRazonSocial(null);
-        setRuesError(RUES_NO_ENCONTRADO);
-        emitTipoServicio(tipoServicioCode, nit, null);
-      }
-    } catch (err) {
-      setEmpresaVinculadoraRazonSocial(null);
-      emitTipoServicio(tipoServicioCode, nit, null);
-      if (isRuesPreviewUnavailable(err)) {
-        setRuesUnavailable(true);
-      } else {
-        setRuesError(err instanceof Error ? err.message : 'No se pudo consultar el RUES.');
-      }
-    } finally {
-      setRuesLoading(false);
-    }
-  };
+  /**
+   * AC2 (HU #10799) — el vehículo YA tiene placa según el RUNT: la preasignación no aplica en
+   * absoluto. Misma regla y misma señal que `PlacaPreasignadaSection` en el paso del FUR
+   * (`vinTienePlacaRunt`): placa presente y `source === 'consultation'`, es decir traída por la
+   * consulta, no elegida por el gestor. Un VIN ya matriculado no necesita que el OT le asigne nada,
+   * así que no se ofrece el dígito, no se consulta el estado de la ruta y no se marca `plate_route_active`.
+   */
+  const placaRunt = fieldValues.find(
+    (f) => f.fieldKey === 'plate' && f.source === 'consultation',
+  )?.valueText?.trim() ?? '';
+  const vehiculoConPlacaRunt = placaRunt !== '';
+
 
   // FEATURE 02 — política "solo vehículos propios" por familia (MATRICULAS | TRASPASO) y NIT del tenant.
   // En traspaso (placa) se autorrellena el documento del propietario con el NIT y, si se edita a otro,
@@ -1996,6 +2214,14 @@ function ConsultaStep({
     if (docType && DOC_TYPES.includes(docType as ActorDocumentType)) {
       setOwnerDocType(docType as ActorDocumentType);
     }
+    // Decisiones de radicación. Sin esto, al volver al paso 1 sobre un trámite YA creado la tarjeta
+    // aparecía vacía: los tres datos existen en el expediente pero el paso no los releía, así que
+    // el organismo elegido hace un minuto se mostraba como "Aún no has seleccionado la secretaría".
+    setTransitOfficeId((v) => v || byKey('transit_office_id'));
+    setDigitoPlaca((v) => v || byKey('plate_preferred_last_digit'));
+    // La prioridad NO está en field_values (es una columna del expediente), por eso viaja aparte en
+    // el detalle. Es la única de las tres que necesitó exponerse en el contrato.
+    setPrioritarioInstancia(detail.prioritario ?? false);
   };
 
   // Rehidrata los inputs desde los field_values guardados de la instancia.
@@ -2103,12 +2329,6 @@ function ConsultaStep({
       );
       return;
     }
-    // HU #11199 (AC2) — la secretaría es requisito de la consulta. El botón ya está deshabilitado sin
-    // ella; esta guarda cubre el disparo por Enter en el input del VIN.
-    if (eligeSecretaria && !transitOfficeId) {
-      setError(SECRETARIA_REQUERIDA);
-      return;
-    }
     // Familia bloqueada en config de compañía: no consultar ni crear.
     if (familyBlocked) {
       setError(
@@ -2148,20 +2368,36 @@ function ConsultaStep({
           plate: isVin ? null : plate.trim(),
           ownerDocumentType: isVin ? null : ownerDocType,
           ownerDocumentNumber: isVin ? null : ownerDocNumber.trim(),
-          transitOfficeId: eligeSecretaria ? transitOfficeId : null,
+          // `|| null`, no a secas: el organismo se elige DESPUÉS de consultar, así que aquí el
+          // estado suele ser cadena vacía. Mandarla tal cual rompía la consulta antes de llegar al
+          // handler — el binder no sabe leer "" como `Guid?` y devuelve un 400 con cuerpo vacío,
+          // que en pantalla se veía como "Revisa los datos e inténtalo de nuevo".
+          transitOfficeId: eligeSecretaria ? transitOfficeId || null : null,
         });
         setPreviewSnapshot(result.preflight);
         setFieldValues(result.vehicleFields);
+        // AC2 (HU #10799) — el vehículo consultado ya trae placa del RUNT: lo que se hubiera
+        // declarado sobre otro VIN deja de aplicar. Se borra la preferencia (también la anotada
+        // para la creación) y se apaga la ruta, o viajaría un `plate_route_active` en true que el
+        // trigger leería al radicar un trámite que no necesita que le asignen placa.
+        if (result.vehicleFields.some(
+          (f) => f.fieldKey === 'plate' && (f.valueText ?? '').trim() !== '',
+        )) {
+          setPreasignacionActiva(null);
+          if (digitoPlaca) handleDigitoPlaca('');
+          upsertLocal([{ fieldKey: 'plate_route_active', valueText: 'false' }]);
+        }
         // Un 200 con el semáforo en rojo NO es una excepción: sin esto el shell solo sabría que
         // "hay consulta" y habilitaría Continuar aunque el vehículo no exista en el RUNT.
         const previewChecks = result.preflight?.checks ?? [];
-        onPreviewDone?.({
+        // Se guarda la consulta y se emite en un efecto: el organismo se elige DESPUÉS de consultar,
+        // y "Continuar y guardar" —que es lo que crea el trámite— no puede habilitarse sin él.
+        setPendingPreview({
           previewToken: result.previewToken,
           vin: isVin ? vin.trim() : undefined,
           plate: isVin ? undefined : plate.trim(),
           ownerDocumentType: isVin ? undefined : ownerDocType,
           ownerDocumentNumber: isVin ? undefined : ownerDocNumber.trim(),
-          transitOfficeId: eligeSecretaria ? transitOfficeId : undefined,
           hardBlocked:
             previewChecks.some((c) => c.status === 'error') ||
             previewChecks.some((c) => c.key === 'vehiculo' && c.status === 'fail'),
@@ -2217,8 +2453,9 @@ function ConsultaStep({
     router.push(`/tramites/${duplicateInstanceId}`);
   };
 
-  const inputClass =
-    'w-full px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]';
+  // B4 (guardián de diseño) — misma clase duplicada a mano en dos sitios, ambas sin `focus:ring`.
+  // Se usa `WIZARD_INPUT`, la única fuente para el anillo de foco de 2px.
+  const inputClass = WIZARD_INPUT;
 
   const loading = preflightLoading || persisting;
   // Con creación diferida el semáforo vive en memoria (no hay snapshot persistido que releer).
@@ -2230,8 +2467,28 @@ function ConsultaStep({
   const invalidatePreview = () => {
     if (!deferred) return;
     setPreviewSnapshot(null);
+    setPendingPreview(null);
     onPreviewDone?.(null);
   };
+
+  // La consulta solo habilita "Continuar y guardar" cuando además está el organismo de tránsito
+  // (matrícula), que se elige después de consultar. Elegirlo NO invalida la consulta: sería borrar
+  // lo que el gestor acaba de hacer, y el organismo viaja igualmente a la creación desde aquí.
+  useEffect(() => {
+    if (!deferred) return;
+    if (!pendingPreview) return;
+    if (eligeSecretaria && !transitOfficeId) {
+      onPreviewDone?.(null);
+      return;
+    }
+    onPreviewDone?.({
+      ...pendingPreview,
+      transitOfficeId: eligeSecretaria ? transitOfficeId : undefined,
+    });
+    // `onPreviewDone` es un callback del shell recreado en cada render: incluirlo re-emitiría en
+    // bucle. Lo que gobierna la emisión es la consulta y el organismo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deferred, pendingPreview, eligeSecretaria, transitOfficeId]);
 
   /**
    * CF-02 — el paso 1 ofrece EXACTAMENTE los mismos controles que antes (condiciones del trámite,
@@ -2257,6 +2514,110 @@ function ConsultaStep({
       return next;
     });
     onPendingFieldValues?.(items);
+  };
+
+  useEffect(() => {
+    // Sin organismo no hay nada que consultar. El estado vuelve a "cargando" al cambiar de
+    // organismo desde el propio selector, no aquí: así el efecto solo escribe el resultado.
+    if (!muestraRadicacion || !transitOfficeId || vehiculoConPlacaRunt) return;
+    let active = true;
+    /**
+     * HU #10806 (Alternativa C) — la decisión de ruta se persiste como `plate_route_active`: es la
+     * fuente que consume el trigger de BD para fijar `plate_flow_status = 'preasignado'` al radicar
+     * sin placa. El paso del FUR hace exactamente esto al abrir su sección; aquí se anota con el
+     * resto de lo capturado y viaja con la creación del trámite.
+     */
+    const persistRouteActive = (enabled: boolean) => {
+      if (deferred) {
+        upsertLocal([{ fieldKey: 'plate_route_active', valueText: String(enabled) }]);
+        return;
+      }
+      if (!instanceId) return;
+      void tramitesClient
+        .patchFieldValues(instanceId, [
+          { formFieldId: null, fieldKey: 'plate_route_active', valueText: String(enabled), valueJson: null },
+        ])
+        .catch(() => {
+          /* no bloquear el paso si la persistencia falla; el submit sigue decidiendo la ruta */
+        });
+    };
+    getPlatePreassignStatus(transitOfficeId)
+      .then((s) => {
+        if (!active) return;
+        setPreasignacionActiva(s.enabled);
+        persistRouteActive(s.enabled);
+      })
+      .catch(() => {
+        // Mismo criterio que el paso del FUR ante un fallo de esta consulta: no bloquear el flujo.
+        if (!active) return;
+        setPreasignacionActiva(true);
+        persistRouteActive(true);
+      });
+    return () => {
+      active = false;
+    };
+    // `upsertLocal` se recrea en cada render; lo que gobierna la consulta es el organismo elegido.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [muestraRadicacion, transitOfficeId, vehiculoConPlacaRunt, deferred, instanceId]);
+
+  /**
+   * HU #10805 — dígito de preferencia. Sin trámite todavía se anota en memoria y viaja con la
+   * creación (mismo mecanismo que paz y salvo o la aceptación de riesgo); sobre un borrador ya
+   * creado hace su PATCH inmediato. La clave es la MISMA que lee el paso del FUR y que la consola
+   * del OT usa para marcar las placas candidatas, así que declararlo aquí o allá es equivalente.
+   */
+  /**
+   * Organismo elegido sobre un trámite YA creado. En creación diferida no hace nada: allí el id
+   * viaja en el cuerpo de la creación y persistirlo antes sería escribir sobre un trámite que no
+   * existe. Guarda también el nombre porque es lo que leen el FUR y el listado, que no resuelven
+   * el id contra el catálogo.
+   */
+  const handleOrganismo = (id: string) => {
+    if (deferred || !instanceId || !id) return;
+    const nombre = secretarias.find((s) => s.id === id)?.name ?? '';
+    void tramitesClient
+      .patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'transit_office_id', valueText: id, valueJson: null },
+        ...(nombre
+          ? [{ formFieldId: null, fieldKey: 'transit_office_name', valueText: nombre, valueJson: null }]
+          : []),
+      ])
+      .then(() => onRefresh())
+      .catch(() => setError('No se pudo guardar el organismo de tránsito. Reintenta.'));
+  };
+
+  /**
+   * Prioridad. Dos vías según el momento: antes de crear la marca viaja al shell, que la aplica con
+   * `setPriority` en cuanto tiene el id; después se aplica en el acto. Optimista con reversión —es
+   * una preferencia de orden en la bandeja del OT, no un requisito, y no merece bloquear la pantalla.
+   */
+  const prioritarioVigente = deferred ? prioritario : prioritarioInstancia;
+  const handlePrioritario = (value: boolean) => {
+    if (deferred) {
+      onPrioritarioChange?.(value);
+      return;
+    }
+    if (!instanceId) return;
+    setPrioritarioInstancia(value);
+    void tramitesClient
+      .setPriority(instanceId, value)
+      .then(() => onRefresh())
+      .catch(() => setPrioritarioInstancia(!value));
+  };
+
+  const handleDigitoPlaca = (value: string) => {
+    setDigitoPlaca(value);
+    if (deferred) {
+      upsertLocal([{ fieldKey: 'plate_preferred_last_digit', valueText: value }]);
+      return;
+    }
+    if (!instanceId) return;
+    void tramitesClient
+      .patchFieldValues(instanceId, [
+        { formFieldId: null, fieldKey: 'plate_preferred_last_digit', valueText: value, valueJson: null },
+      ])
+      .then(() => onRefresh())
+      .catch(() => {});
   };
 
   // Paz y salvo de impuesto: solo traspaso (placa-first) y solo si el preflight dejó el
@@ -2312,58 +2673,12 @@ function ConsultaStep({
     }
   };
 
-  // Banderas manuales que gatillan documentos condicionales (el backend las lee en
-  // TramiteDocumentContextMapper). Leasing solo aplica en traspaso. La prenda se gestiona aparte con
-  // PrendaForm (Feature #10585). Carrocería se mueve a VehicleTransformationsCard (P2/P3).
-  const esLeasing = fieldValues.find((f) => f.fieldKey === 'es_leasing')?.valueText === 'true';
-
   // Hay datos del vehículo cuando el RUNT ya respondió: permite mostrar condiciones y pre-vuelo.
   const hasVehicleData = fieldValues.some(
     (f) =>
       ['plate', 'vin', 'vehicle_brand', 'vehicle_line', 'vehicle_year'].includes(f.fieldKey) &&
       (f.valueText ?? '').trim() !== '',
   );
-
-  const saveAtributo = async (fieldKey: string, valueText: string) => {
-    if (deferred) {
-      upsertLocal([{ fieldKey, valueText }]);
-      return;
-    }
-    if (!instanceId) return;
-    setAtributosSaving(true);
-    try {
-      await tramitesClient.patchFieldValues(instanceId, [
-        { formFieldId: null, fieldKey, valueText, valueJson: null },
-      ]);
-      await loadInstance();
-      onRefresh();
-    } finally {
-      setAtributosSaving(false);
-    }
-  };
-
-  // A4/B4 (HU #10674) — transformaciones color/combustible: patch atómico de varias claves
-  // (efectivo + flag) en una sola llamada, para que el valor declarado y su bandera queden
-  // consistentes tras la re-consulta del RUNT (el backend no pisa el efectivo si el flag está activo).
-  const saveTransformacion = async (items: { fieldKey: string; valueText: string }[]) => {
-    if (items.length === 0) return;
-    if (deferred) {
-      upsertLocal(items);
-      return;
-    }
-    if (!instanceId) return;
-    setAtributosSaving(true);
-    try {
-      await tramitesClient.patchFieldValues(
-        instanceId,
-        items.map((i) => ({ formFieldId: null, fieldKey: i.fieldKey, valueText: i.valueText, valueJson: null })),
-      );
-      await loadInstance();
-      onRefresh();
-    } finally {
-      setAtributosSaving(false);
-    }
-  };
 
   // R3 (HU #10539) — CTA "Iniciar traspaso": navega a la ruta de traspaso sembrando el vehículo
   // (placa/VIN) por query param; la página `nuevo/traspaso` crea la instancia y persiste el seed.
@@ -2380,16 +2695,35 @@ function ConsultaStep({
     router.push(`/tramites/nuevo/traspaso${qs ? `?${qs}` : ''}`);
   };
 
-  // Botón "Consultar RUNT": mismo estilo gradiente que "Enviar a tránsito"
-  // (unificación de estilos pedida). Disparo único de la consulta.
+  // Trámite principal que gobierna el paso. Con creación diferida la trae la ruta; con el trámite
+  // ya creado se deduce de la clave del paso, que es lo único que distingue las dos ramas aquí.
+  const modalidadVigente: WizardModalidad =
+    deferredModalidad ?? (isVin ? 'matricula_inicial' : 'traspaso');
+
+  // Cambiar de tipo se confirma antes de navegar, como en la propuesta: al hacerlo cambian las
+  // validaciones y los documentos exigidos, y lo poco que ya se hubiera capturado en este paso
+  // (placa, documento del propietario, secretaría) se pierde al montar el otro asistente.
+  const [pendingTipo, setPendingTipo] = useState<string | null>(null);
+
+  // El identificador del vehículo está completo: el VIN en matrícula; la placa Y el documento del
+  // propietario en traspaso, porque el RUNT los cruza y con uno solo la consulta no resuelve.
+  const identificadorCompleto = isVin
+    ? vin.trim().length > 0
+    : plate.trim().length > 0 && ownerDocNumber.trim().length > 0;
+
+  // Botón "Consultar RUNT" — azul pleno de marca, como en la propuesta.
   const consultButton = (
     <button
       type="button"
       onClick={() => void handleRun()}
-      // HU #11199 (AC2) — sin secretaría la consulta no se habilita.
-      disabled={loading || familyBlocked || (eligeSecretaria && !transitOfficeId)}
-      className="flex shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-      style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+      // Sin los datos que se van a consultar el botón no se habilita: pulsarlo solo devolvía un
+      // error que el gestor ya podía ver por sí mismo mirando el campo vacío.
+      // La secretaría ya NO gatea la consulta (antes sí, HU #11199 AC2): se elige después, sobre un
+      // vehículo ya identificado. El requisito sigue vivo donde importa —la creación—, tanto en el
+      // backend como en el gate de "Continuar y guardar".
+      disabled={loading || familyBlocked || !identificadorCompleto}
+      className={`${WIZARD_BTN} flex shrink-0 items-center justify-center gap-2 text-white focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50`}
+      style={{ background: WIZARD_CTA_GRADIENT }}
       aria-label={familyBlocked ? 'Consulta no permitida para esta compañía' : 'Consultar RUNT'}
     >
       <Search className="h-3.5 w-3.5" />
@@ -2398,184 +2732,379 @@ function ConsultaStep({
   );
 
   return (
-    <div className="space-y-4">
-      {/* HU #10906 — collapse (contraído, carga perezosa) de las escrituras vigentes de la compañía.
-          Tenant-scoped por el header; el NIT del tenant (tenantNitDigits) queda disponible arriba. */}
-      <ActiveDeedsCollapse />
-      {/* HU #11199 — secretaría ANTES de consultar VIN (matrícula). Guía de documentos: enlace
-          discreto → panel lateral (no ocupa el layout del paso 1). */}
-      {eligeSecretaria && (
-        <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]">
-          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-semibold">Secretaría de tránsito</p>
-            <ProcedureDocsPreviewInformativo
-              modalidad="matricula_inicial"
-              transitOfficeId={transitOfficeId || undefined}
-            />
+    // `pr-16` reserva el ancho del carril de consulta anclado a la derecha (propuesta).
+    <div className="space-y-3 pr-16">
+      {/* La consulta al RUNT tarda segundos. Hasta ahora la única señal era el rótulo del botón, que
+          se pierde en cuanto la atención se va a otra parte de la pantalla; la propuesta cubre la
+          espera con la escena del vehículo y dice ante quién se está esperando.
+
+          Cuelga de `persisting` y NO de `loading`: `loading` incluye `preflightLoading`, que también
+          se enciende cuando el pre-vuelo se recarga solo al abrir el paso. Con eso el velo salía en
+          cada entrada al asistente sin que nadie hubiera pulsado nada. `persisting` solo lo levanta
+          el gestor al consultar. El rótulo del botón sigue usando `loading`: ahí sí interesa que se
+          vea ocupado por cualquier motivo. */}
+      {persisting && <CarLoaderModal mode="runt" />}
+      <WizardHelpRail
+        modalidad={modalidadVigente}
+        transitOfficeId={transitOfficeId || undefined}
+      />
+
+      {/* 1ª tarjeta: Configuración del Trámite. La propuesta elige el tipo con tarjetas, no con un
+          desplegable: son tres opciones fijas, cada una con una frase que dice qué resuelve, y así
+          se leen de un vistazo en vez de tener que abrir una lista. Operable solo mientras el
+          trámite no existe (creación diferida): ahí cambiar de tipo es navegar al otro, no hay nada
+          creado que migrar. Con el trámite ya creado la modalidad gobierna sus pasos y documentos,
+          así que queda fija y las demás tarjetas se apagan. */}
+      <div className={WIZARD_CARD}>
+        <WizardCardHeader
+          title="Configuración del Trámite"
+          subtitle="Define el trámite principal que se radicará con este expediente."
+        />
+        <fieldset className="mt-4">
+          <legend className="text-xs font-semibold">Tipo de Trámite Principal</legend>
+          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {MODALIDAD_OPCIONES.map((o) => {
+              const activa = o.id === modalidadVigente;
+              // `disponible: false` (Otros Trámites) es una familia que la propuesta contempla y el
+              // sistema todavía no radica. Se muestra —está en el diseño y el gestor pregunta por
+              // ella— pero apagada y anunciada como tal, en vez de ofrecer un camino sin salida.
+              const seleccionable = o.disponible && deferred && !readOnly && !activa;
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => setPendingTipo(o.id)}
+                  disabled={!seleccionable}
+                  aria-current={activa ? 'step' : undefined}
+                  className="w-full rounded-xl border p-3.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed enabled:hover:border-[#557EFF]"
+                  style={
+                    activa
+                      ? {
+                          borderColor: '#557EFF',
+                          background: '#EFF6FF',
+                          boxShadow: '0 0 0 3px rgba(85,126,255,0.15)',
+                        }
+                      : { opacity: o.disponible ? 1 : 0.55 }
+                  }
+                >
+                  <p
+                    className="text-xs font-semibold"
+                    style={{ color: activa ? '#557EFF' : '#162744' }}
+                  >
+                    {o.label}
+                  </p>
+                  <p className="mt-0.5 text-xs opacity-70">
+                    {o.disponible ? o.descripcion : `${o.descripcion} · aún no disponible`}
+                  </p>
+                </button>
+              );
+            })}
           </div>
-          <TransitOfficeSearchPicker
-            offices={secretarias}
-            valueId={transitOfficeId}
-            onChange={(id) => {
-              setTransitOfficeId(id);
-              invalidatePreview();
-              setError(null);
-            }}
-            disabled={readOnly}
-            describedBy="consulta-secretaria-aviso"
-          />
-          <p id="consulta-secretaria-aviso" className="mt-2 text-[11px] leading-tight opacity-70">
-            {SECRETARIA_LISTA_AVISO}
-          </p>
-          {secretariasError && (
-            <p className="mt-1 text-[11px] leading-tight" style={{ color: '#E5484D' }}>
-              {secretariasError}
-            </p>
-          )}
-        </div>
-      )}
-      {deferred && deferredModalidad === 'traspaso' && (
-        <div className="flex justify-end">
-          <ProcedureDocsPreviewInformativo modalidad="traspaso" />
-        </div>
-      )}
-      {isVin ? (
-        <div
-          className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
-        >
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <input
-              id="consulta-vin"
-              type="text"
-              value={vin}
-              onChange={(e) => {
-                setVin(sanitizeVin(e.target.value));
-                invalidatePreview();
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void handleRun();
-              }}
-              disabled={readOnly}
-              className={`${inputClass} sm:flex-1 disabled:opacity-60`}
-              placeholder="Número VIN…"
-              aria-label="Número VIN"
-            />
-            {!readOnly && consultButton}
-          </div>
-        </div>
-      ) : (
-        <div
-          className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]"
-        >
-          {/* Una sola fila de consulta (mismo patrón que la rama VIN de arriba): cada campo ocupa
-              el ancho que pide su dato —placa 6 caracteres, tipo de documento una sigla— y el
-              número toma el resto, con el CTA cerrando la línea. Antes la placa ocupaba media
-              rejilla y el número la fila entera, lo que dejaba anchos dispares y un hueco grande
-              a la derecha. */}
-          <div className="flex max-w-4xl flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
-            <div className="sm:w-36">
-              <label htmlFor="consulta-plate" className="mb-1.5 block text-xs font-semibold">
-                Placa
+        </fieldset>
+      </div>
+
+      {/* 2ª tarjeta: Consulta del Vehículo. En la propuesta la consulta tiene su propia tarjeta,
+          con el identificador y el CTA en una línea. Los campos son los que pide cada modalidad:
+          el VIN en matrícula; placa, tipo y número de documento del propietario en traspaso. */}
+      <div className={WIZARD_CARD}>
+        <WizardCardHeader
+          title="Consulta del Vehículo"
+          subtitle={`Validamos ${isVin ? 'el VIN' : 'la placa'} en el RUNT antes de configurar el trámite.`}
+        />
+
+
+        <div className="mt-4 flex flex-wrap items-end gap-4">
+          {isVin ? (
+            <div className="min-w-0 max-w-md flex-1">
+              <label htmlFor="consulta-vin" className={WIZARD_LABEL}>
+                Número VIN
               </label>
               <input
-                id="consulta-plate"
+                id="consulta-vin"
                 type="text"
-                value={plate}
+                value={vin}
                 onChange={(e) => {
-                  setPlate(sanitizePlate(e.target.value));
+                  setVin(sanitizeVin(e.target.value));
                   invalidatePreview();
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleRun();
+                }}
                 disabled={readOnly}
-                // Prototipo FLIT: la placa se lee como código —mayúscula y espaciada—.
-                // El placeholder vuelve a texto normal para no leerse como un valor cargado.
-                className={`${inputClass} uppercase tracking-[0.14em] font-semibold placeholder:normal-case placeholder:tracking-normal placeholder:font-normal disabled:opacity-60`}
-                placeholder="Ej. ABC123"
+                className={`mt-1 ${inputClass} disabled:opacity-60`}
+                placeholder="Ej. LZWCDAGA4SC802801"
               />
             </div>
-            {!hideOwnerDocType && (
-              <div className="sm:w-48">
-                <label
-                  htmlFor="consulta-owner-doc-type"
-                  className="mb-1.5 block text-xs font-semibold"
-                >
-                  Tipo documento propietario
+          ) : (
+            <>
+              <div className="w-36">
+                <label htmlFor="consulta-plate" className={WIZARD_LABEL}>
+                  Placa
                 </label>
-                <select
-                  id="consulta-owner-doc-type"
-                  value={ownerDocType}
+                <input
+                  id="consulta-plate"
+                  type="text"
+                  value={plate}
                   onChange={(e) => {
-                    const next = e.target.value as ActorDocumentType;
-                    setOwnerDocType(next);
-                    // Re-sanea el número al cambiar de tipo (p.ej. PAS→CC quita letras).
-                    setOwnerDocNumber((n) => sanitizeDocNumber(n, next));
+                    setPlate(sanitizePlate(e.target.value));
                     invalidatePreview();
                   }}
-                  // Un <select> no admite readOnly: con la política activa se deshabilita,
-                  // el valor (NIT) igual viaja porque vive en estado de React, no en un submit.
-                  disabled={readOnly || ownerDocLocked}
+                  disabled={readOnly}
+                  // Prototipo FLIT: la placa se lee como código —mayúscula y espaciada—.
+                  // El placeholder vuelve a texto normal para no leerse como un valor cargado.
+                  className={`mt-1 ${inputClass} font-semibold uppercase tracking-[0.14em] placeholder:font-normal placeholder:normal-case placeholder:tracking-normal disabled:opacity-60`}
+                  placeholder="Ej. ABC123"
+                />
+              </div>
+              {!hideOwnerDocType && (
+                <div className="w-44">
+                  <label htmlFor="consulta-owner-doc-type" className={WIZARD_LABEL}>
+                    Tipo documento propietario
+                  </label>
+                  <select
+                    id="consulta-owner-doc-type"
+                    value={ownerDocType}
+                    onChange={(e) => {
+                      const next = e.target.value as ActorDocumentType;
+                      setOwnerDocType(next);
+                      // Re-sanea el número al cambiar de tipo (p.ej. PAS→CC quita letras).
+                      setOwnerDocNumber((n) => sanitizeDocNumber(n, next));
+                      invalidatePreview();
+                    }}
+                    // Un <select> no admite readOnly: con la política activa se deshabilita,
+                    // el valor (NIT) igual viaja porque vive en estado de React, no en un submit.
+                    disabled={readOnly || ownerDocLocked}
+                    className={`mt-1 ${inputClass} disabled:opacity-60`}
+                  >
+                    {DOC_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="min-w-56 max-w-xs flex-1">
+                <label htmlFor="consulta-owner-doc-number" className={WIZARD_LABEL}>
+                  Número documento propietario
+                </label>
+                <input
+                  id="consulta-owner-doc-number"
+                  type="text"
+                  value={ownerDocNumber}
+                  onChange={(e) => {
+                    setOwnerDocNumber(sanitizeDocNumber(e.target.value, ownerDocType));
+                    invalidatePreview();
+                  }}
+                  disabled={readOnly}
+                  // readOnly (no disabled): el gestor debe poder ver, enfocar y copiar el NIT, y
+                  // el campo sigue en el orden de tabulación y se anuncia como de solo lectura.
+                  readOnly={ownerDocLocked}
+                  aria-describedby={ownerDocLocked ? 'consulta-owner-doc-locked' : undefined}
+                  className={`mt-1 ${inputClass} disabled:opacity-60 ${
+                    ownerDocLocked ? 'cursor-not-allowed bg-[#F4F6FA] dark:bg-[#131A22]' : ''
+                  }`}
+                  placeholder="Ej. 1020304050"
+                />
+              </div>
+            </>
+          )}
+          {!readOnly && consultButton}
+        </div>
+
+        {/* Notas de los campos de arriba: a lo ancho de la tarjeta, no dentro de una columna,
+            donde descuadraban la altura de su campo. */}
+        {(ownerDocLocked ||
+          (!hideOwnerDocType && ownerDocTypeSuggested) ||
+          (deferred && deferredModalidad === 'traspaso')) && (
+          <div className="mt-3 space-y-1.5">
+            {/* El fondo gris por sí solo no comunica "no editable": se dice con texto, y este
+                párrafo es además el nombre accesible del estado (aria-describedby del campo). */}
+            {ownerDocLocked && (
+              <p id="consulta-owner-doc-locked" className="text-xs leading-tight opacity-70">
+                Tu compañía solo tramita vehículos propios, así que el propietario queda fijo en su
+                NIT y no se puede editar durante el trámite.
+              </p>
+            )}
+            {!hideOwnerDocType && ownerDocTypeSuggested && (
+              <p className="text-xs leading-tight opacity-70">
+                No se encontró el vehículo en RUNT. Si es maquinaria o remolque, verifica el tipo de
+                documento del propietario (p. ej. NIT) y vuelve a consultar.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Matrícula: el resultado de la consulta vive DENTRO de esta tarjeta, como en la propuesta
+            —la franja con la placa y la retícula de datos aparecen bajo el campo que los trajo—.
+            En traspaso el diseño lo saca a un acordeón propio, que se pinta más abajo. */}
+        {/* El resultado de la consulta vive DENTRO de la tarjeta que lo trajo, en las dos
+            modalidades. En traspaso salía a un acordeón propio porque así lo hace el otro asistente
+            de la propuesta; el dato es el mismo y el sitio debe ser el mismo. Además un desplegable
+            sobre el resultado que el gestor viene a ver es un clic para nada. */}
+        {hasVehicleData && (
+          <div className="mt-4 border-t pt-4">
+            <VehicleDataCard fieldValues={fieldValues} bare validadoEnRunt />
+          </div>
+        )}
+      </div>
+
+      {/* 3ª tarjeta: Organismo de Tránsito y Radicación (HU #11199 — solo matrícula y solo mientras
+          el trámite no existe). La propuesta le da tarjeta propia después de la consulta: es una
+          decisión de radicación, no un parámetro más del vehículo. */}
+      {/* Tras la consulta: dónde se radica es una decisión sobre un vehículo YA identificado, y ese
+          es el orden del diseño. `/preflight-preview` acepta consultar sin organismo; el requisito
+          vive en la creación (`CreateFromConsultaCommand`) y, en pantalla, en el gate de
+          "Continuar y guardar". */}
+      {muestraRadicacion && hasVehicleData && (
+        <div className={WIZARD_CARD}>
+          <WizardCardHeader
+            title="Organismo de Tránsito y Radicación"
+            subtitle="Selecciona la secretaría donde se radicará el expediente."
+          />
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="min-w-0">
+            <span className={`mb-1 block ${WIZARD_LABEL}`}>Secretaría de tránsito *</span>
+            <TransitOfficeSearchPicker
+              offices={secretarias}
+              valueId={transitOfficeId}
+              onChange={(id) => {
+                // NO invalida la consulta: se elige después de consultar y la consulta no se corrió
+                // contra ningún organismo. Borrarla sería deshacer lo que el gestor acaba de hacer;
+                // el id viaja a la creación desde aquí y allí se valida.
+                setTransitOfficeId(id);
+                setError(null);
+                // La preasignación es del organismo: al cambiarlo, el estado vuelve a "consultando"
+                // y la preferencia de dígito se reinicia (también la ya anotada para la creación),
+                // o viajaría una preferencia que el organismo nuevo quizá ni atiende.
+                setPreasignacionActiva(null);
+                if (digitoPlaca) handleDigitoPlaca('');
+                handleOrganismo(id);
+              }}
+              disabled={readOnly}
+              describedBy="consulta-secretaria-aviso"
+            />
+            {/* Aviso ámbar mientras falta: sin secretaría la consulta no se habilita, y el botón
+                deshabilitado por sí solo no dice por qué. */}
+            {!transitOfficeId && (
+              <p className="mt-1.5 text-xs font-medium leading-tight" style={{ color: '#B45309' }}>
+                Aún no has seleccionado la secretaría de tránsito.
+              </p>
+            )}
+            <p id="consulta-secretaria-aviso" className="mt-1 text-xs leading-tight opacity-70">
+              {SECRETARIA_LISTA_AVISO}
+            </p>
+            {secretariasError && (
+              <p className="mt-1 text-xs leading-tight" style={{ color: '#E5484D' }}>
+                {secretariasError}
+              </p>
+            )}
+          </div>
+
+          {/* Dígito de preasignación (HU #10805) — la misma preferencia que el paso del FUR ofrece
+              al radicar sin placa (`plate_preferred_last_digit`, ver PlacaPreasignadaSection), aquí
+              declarada de entrada porque es donde la pone el diseño. Solo se ofrece si el organismo
+              elegido tiene la ruta de preasignación activa para la compañía (HU #10806): con ella
+              apagada el OT no asigna placa desde un rango y el dígito no tendría a quién guiar. */}
+          <div className="min-w-0">
+            <label htmlFor="consulta-digito-placa" className={`mb-1 block ${WIZARD_LABEL}`}>
+              Dígito de preasignación de placa
+            </label>
+            {/* AC2 (HU #10799) — con placa del RUNT no hay nada que preasignar: se dice, con la
+                placa delante, en vez de dejar un selector apagado que parece un fallo. Es la misma
+                salida temprana que hace el paso del FUR. */}
+            {vehiculoConPlacaRunt ? (
+              <p
+                id="consulta-digito-placa-nota"
+                className="mt-1 rounded-xl border border-dashed px-3 py-2 text-xs leading-tight opacity-80"
+              >
+                El vehículo ya tiene placa según el RUNT (
+                <span className="font-mono font-semibold">{placaRunt}</span>
+                ). No aplica la preasignación de placa.
+              </p>
+            ) : (
+              <>
+                <select
+                  id="consulta-digito-placa"
+                  value={digitoPlaca}
+                  onChange={(e) => handleDigitoPlaca(e.target.value)}
+                  disabled={readOnly || !transitOfficeId || preasignacionActiva !== true}
+                  aria-describedby="consulta-digito-placa-nota"
                   className={`${inputClass} disabled:opacity-60`}
                 >
-                  {DOC_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
+                  <option value="">Sin preferencia</option>
+                  {Array.from({ length: 10 }, (_, i) => (
+                    <option key={i} value={String(i)}>{`Termina en ${i}`}</option>
                   ))}
                 </select>
-              </div>
+                {/* Cuatro estados más, porque un selector apagado sin explicación se lee como un
+                    fallo: falta el organismo · consultando · sin preasignación · disponible. */}
+                <p id="consulta-digito-placa-nota" className="mt-1 text-xs leading-tight opacity-70">
+                  {!transitOfficeId
+                    ? 'Elige primero la secretaría: la preasignación depende del organismo donde radiques.'
+                    : preasignacionActiva === null
+                      ? 'Consultando si el organismo tiene preasignación de placa…'
+                      : preasignacionActiva === false
+                        ? 'Este organismo (o tu compañía) no tiene preasignación de placa activa: el trámite se entregará de forma estándar.'
+                        : 'Si radicas sin placa, indica el número en el que prefieres que termine. El organismo lo toma como guía; podrás cambiarlo en el paso final.'}
+                </p>
+              </>
             )}
-            <div className="sm:min-w-56 sm:flex-1">
-              <label
-                htmlFor="consulta-owner-doc-number"
-                className="mb-1.5 block text-xs font-semibold"
-              >
-                Número documento propietario
-              </label>
-              <input
-                id="consulta-owner-doc-number"
-                type="text"
-                value={ownerDocNumber}
-                onChange={(e) => {
-                  setOwnerDocNumber(sanitizeDocNumber(e.target.value, ownerDocType));
-                  invalidatePreview();
-                }}
-                disabled={readOnly}
-                // readOnly (no disabled): el gestor debe poder ver, enfocar y copiar el NIT, y
-                // el campo sigue en el orden de tabulación y se anuncia como de solo lectura.
-                readOnly={ownerDocLocked}
-                aria-describedby={ownerDocLocked ? 'consulta-owner-doc-locked' : undefined}
-                className={`${inputClass} disabled:opacity-60 ${
-                  ownerDocLocked ? 'cursor-not-allowed bg-[#F4F6FA] dark:bg-[#131A22]' : ''
-                }`}
-                placeholder="Ej. 1020304050"
-              />
-            </div>
-            {!readOnly && <div className="sm:shrink-0">{consultButton}</div>}
           </div>
-          {/* El fondo gris por sí solo no comunica "no editable": se dice con texto, y este párrafo
-              es además el nombre accesible del estado (aria-describedby del campo). */}
-          {ownerDocLocked && (
-            <p
-              id="consulta-owner-doc-locked"
-              className="mt-3 max-w-4xl text-[11px] leading-tight opacity-70"
+
+          </div>
+        </div>
+      )}
+
+      {/* Trámite prioritario (HU #10536). Vivía DENTRO de la tarjeta de organismo, que solo existe
+          en matrícula, así que en traspaso no había forma de marcarlo desde el asistente — solo
+          después, desde el listado. La prioridad no depende del organismo: es una columna del
+          expediente (`procedure_instances.prioritario`) con su propio endpoint. Sale a su propia
+          tarjeta y existe en las dos modalidades, en el mismo sitio. */}
+      {hasVehicleData && (
+        <div className={WIZARD_CARD}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <span id="consulta-prioritario-label" className="text-sm font-bold" style={{ color: '#557EFF' }}>
+                Trámite prioritario
+              </span>
+              <p id="consulta-prioritario-nota" className="mt-1 text-xs leading-tight opacity-70">
+                Prioriza la gestión de este expediente: el organismo lo revisa con primacía.{' '}
+                {deferred
+                  ? 'Se aplica al crear el trámite y podrás cambiarlo después desde el listado.'
+                  : 'El cambio se guarda al instante; también puedes alternarlo desde el listado.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handlePrioritario(!prioritarioVigente)}
+              disabled={readOnly}
+              aria-pressed={prioritarioVigente}
+              aria-labelledby="consulta-prioritario-label"
+              aria-describedby="consulta-prioritario-nota"
+              className="flex h-[38px] shrink-0 items-center justify-between gap-3 rounded-xl border bg-white px-3 text-xs font-medium transition disabled:opacity-60 dark:bg-[#162744]"
+              style={prioritarioVigente ? { borderColor: '#557EFF', color: '#557EFF' } : undefined}
             >
-              Tu compañía solo tramita vehículos propios, así que el propietario queda fijo en su
-              NIT y no se puede editar durante el trámite.
-            </p>
-          )}
-          {/* La sugerencia habla de la consulta completa, no solo del selector: fuera de la fila
-              se lee en una línea y deja de descuadrar la altura de esa columna. */}
-          {!hideOwnerDocType && ownerDocTypeSuggested && (
-            <p className="mt-3 max-w-4xl text-[11px] leading-tight opacity-70">
-              No se encontró el vehículo en RUNT. Si es maquinaria o remolque, verifica el tipo de
-              documento del propietario (p. ej. NIT) y vuelve a consultar.
-            </p>
-          )}
+              {prioritarioVigente ? 'Activado' : 'Desactivado'}
+              <span
+                aria-hidden="true"
+                className="relative inline-block h-5 w-9 rounded-full transition-colors"
+                style={{ background: prioritarioVigente ? '#557EFF' : '#DFE5ED' }}
+              >
+                <span
+                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
+                    prioritarioVigente ? 'left-[1.125rem]' : 'left-0.5'
+                  }`}
+                />
+              </span>
+            </button>
+          </div>
         </div>
       )}
 
       {error && (
         <p
-          className="text-[11px] font-medium"
+          className="text-xs font-medium"
           style={{ color: '#FF4E00' }}
           role="alert"
           aria-live="polite"
@@ -2627,215 +3156,19 @@ function ConsultaStep({
         </div>
       )}
 
-      <VehicleDataCard fieldValues={fieldValues} />
+      {/* Datos consolidados del vehículo. Solo traspaso: es el asistente de la propuesta que los
+          saca a un acordeón propio (en matrícula van dentro de la tarjeta de consulta). Abierto de
+          entrada —es el resultado de la consulta, lo que el gestor viene a ver—.
 
-      <VehicleTransformationsCard
-        fieldValues={fieldValues}
-        readOnly={readOnly}
-        saving={atributosSaving}
-        onPatch={saveTransformacion}
-      />
-
-      {/* Tipo de servicio (sección 18 del FUR) — solo matrícula inicial, solo mientras el trámite no
-          existe (ver `eligeTipoServicio`) y SOLO DESPUÉS de consultar el vehículo: antes de la
-          consulta no hay nada que clasificar, y aparecer de entrada empujaba la consulta —que es la
-          tarea real del paso— hacia abajo. Mismo criterio de `hasVehicleData` que ya usan
-          VehicleDataCard y VehicleTransformationsCard, para que las tres aparezcan juntas.
-          Seis valores fijos: un <select> simple es más accesible y más rápido de operar que un
-          combobox con buscador (SearchableSelect) pensado para catálogos largos, como ya se decidió
-          para "Tipo documento propietario" arriba en este mismo paso. */}
-      {eligeTipoServicio && hasVehicleData && (
-        <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
-          {tiposServicioLoading ? (
-            <p className="text-[11px] opacity-60" role="status" aria-live="polite">
-              Cargando tipos de servicio…
-            </p>
-          ) : tiposServicioError ? (
-            <p className="text-[11px] font-medium" style={{ color: '#FF4E00' }} role="alert">
-              {tiposServicioError}
-            </p>
-          ) : (
-            <div className="sm:max-w-xs">
-              <label htmlFor="tramite-tipo-servicio" className="mb-1.5 block text-xs font-semibold">
-                Tipo de servicio
-              </label>
-              <select
-                id="tramite-tipo-servicio"
-                value={tipoServicioCode}
-                onChange={(e) => handleTipoServicioChange(e.target.value)}
-                disabled={readOnly}
-                className={`${inputClass} disabled:opacity-60`}
-              >
-                <option value="">Selecciona…</option>
-                {tiposServicio.map((t) => (
-                  <option key={t.id} value={t.code}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Empresa vinculadora: dos columnas alineadas. El botón va PEGADO al NIT porque actúa
-              sobre él, y el error se pinta bajo ese mismo campo — no suelto al final de la tarjeta,
-              donde el operador no sabía a cuál de los dos campos se refería. */}
-          {tipoServicioCode === 'PUBLICO' && (
-            <div className="grid max-w-3xl gap-4 sm:grid-cols-2">
-              <div>
-                <label
-                  htmlFor="tramite-empresa-vinculadora-nit"
-                  className="mb-1.5 block text-xs font-semibold"
-                >
-                  NIT empresa vinculadora
-                </label>
-                <div className="flex items-stretch gap-2">
-                  <input
-                    id="tramite-empresa-vinculadora-nit"
-                    type="text"
-                    inputMode="numeric"
-                    value={empresaVinculadoraNit}
-                    onChange={(e) => handleEmpresaVinculadoraNitChange(e.target.value)}
-                    disabled={readOnly}
-                    className={`${inputClass} min-w-0 flex-1 disabled:opacity-60`}
-                    placeholder="Ej. 900123456"
-                    aria-describedby={ruesError ? 'tramite-rues-error' : undefined}
-                    aria-invalid={ruesError ? true : undefined}
-                  />
-                  {!readOnly && (
-                    <button
-                      type="button"
-                      onClick={() => void handleConsultarRues()}
-                      disabled={ruesLoading || !empresaVinculadoraNit.trim()}
-                      className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                      style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-                      aria-label="Buscar empresa en RUES"
-                    >
-                      <Search className="h-3.5 w-3.5" aria-hidden="true" />
-                      {ruesLoading ? 'Consultando…' : 'Buscar'}
-                    </button>
-                  )}
-                </div>
-                {ruesError && (
-                  <p
-                    id="tramite-rues-error"
-                    className="mt-1.5 text-[11px] font-medium leading-tight"
-                    style={{ color: '#FF4E00' }}
-                    role="alert"
-                    aria-live="polite"
-                  >
-                    {ruesError}
-                  </p>
-                )}
-              </div>
-
-              {/* Fila completa: las razones sociales del RUES llegan largas (la de Bancolombia son
-                  79 caracteres, con su cláusula de denominación alterna) y a media rejilla no se
-                  leen. */}
-              {/* El campo NO existe hasta que se consulta. Un recuadro vacío con "la trae el RUES"
-                  ocupa sitio para no decir nada y se lee como un dato pendiente de llenar, cuando en
-                  realidad no hay nada que el gestor pueda hacer ahí: aparece solo, con el nombre
-                  dentro, en cuanto el directorio o el RUES responden. `null` es exactamente eso —
-                  "todavía no se ha consultado" — y vuelve a null al cambiar el NIT, así que el campo
-                  también desaparece si el gestor corrige el número. */}
-              {empresaVinculadoraRazonSocial !== null && (
-              <div className="sm:col-span-2">
-                <label
-                  htmlFor="tramite-empresa-vinculadora-razon-social"
-                  className="mb-1.5 block text-xs font-semibold"
-                >
-                  Razón social
-                </label>
-                {/* `output`, no `input`: el dato NO se edita, y un campo de una línea recorta el
-                    nombre dejando el resto accesible solo moviendo el cursor — en un campo de solo
-                    lectura, inalcanzable. `output` envuelve el texto, es etiquetable (conserva el
-                    `htmlFor` de arriba) y su rol implícito `status` anuncia el valor cuando el RUES
-                    responde, que es justo cuando el gestor quiere oírlo. */}
-                <output
-                  id="tramite-empresa-vinculadora-razon-social"
-                  aria-describedby={razonSocialDesdeDirectorio ? 'tramite-razon-social-origen' : undefined}
-                  className={`block w-full whitespace-pre-line break-words rounded-xl border bg-[#F4F6FA] px-3 py-2 text-xs leading-relaxed dark:bg-[#131A22] ${
-                    empresaVinculadoraRazonSocial ? '' : 'opacity-60'
-                  }`}
-                >
-                  {/* Aquí ya se consultó (el `null` no llega: el campo entero no se pinta). Falta
-                      distinguir el otro vacío, que sí es un resultado: el RUES respondió `found` SIN
-                      razón social, y la consulta lo guarda como cadena vacía. Sin este `||` el
-                      recuadro aparecería colapsado a puro padding justo cuando hay algo que explicar. */}
-                  {empresaVinculadoraRazonSocial || 'El RUES no reportó razón social para este NIT'}
-                </output>
-                {/* De dónde salió el dato, con el mismo criterio honesto del actor jurídico: si vino
-                    del directorio NO se consultó el RUES, y el gestor tiene derecho a saberlo. */}
-                {razonSocialDesdeDirectorio && (
-                  <p
-                    id="tramite-razon-social-origen"
-                    className="mt-1.5 flex items-center gap-1 text-[11px] leading-tight"
-                    style={{ color: '#557EFF' }}
-                    role="status"
-                    aria-live="polite"
-                  >
-                    <Info className="h-3 w-3 shrink-0" aria-hidden="true" />
-                    Precargado desde el directorio de la compañía
-                  </p>
-                )}
-              </div>
-              )}
-            </div>
-          )}
-
-          {ruesUnavailable && (
-            <div
-              className="flex flex-col gap-2 rounded-xl p-3 sm:flex-row sm:items-center sm:justify-between"
-              style={{ background: 'rgba(255,78,0,0.08)', border: '1px solid rgba(255,78,0,0.30)' }}
-              role="alert"
-              aria-live="assertive"
-            >
-              <span className="text-xs font-medium" style={{ color: '#FF4E00' }}>
-                {RUES_NO_DISPONIBLE}
-              </span>
-              <button
-                type="button"
-                onClick={() => void handleConsultarRues()}
-                className="shrink-0 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-                style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
-                aria-label="Reintentar consulta al RUES"
-              >
-                Reintentar
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Condiciones: en traspaso el leasing; en matrícula ya no hay flags aquí (carrocería
-          vive en Transformaciones). Solo se pinta el bloque si hay algo que marcar. */}
-      {hasVehicleData && !isVin && (
-        <div className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14] space-y-3">
-          <p className="text-xs font-semibold opacity-80">Condiciones del trámite</p>
-          <p className="text-[11px] opacity-55 -mt-1.5">
-            Marca las condiciones que apliquen; el checklist de documentos se ajusta automáticamente.
-          </p>
-
-          <label className="flex items-start gap-2.5">
-            <input
-              type="checkbox"
-              checked={esLeasing}
-              onChange={(e) => void saveAtributo('es_leasing', e.target.checked ? 'true' : 'false')}
-              disabled={readOnly || atributosSaving}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
-            />
-            <span className="text-xs">
-              <span className="font-semibold">Vehículo en leasing</span>
-              <span className="mt-0.5 block opacity-55">
-                Exige contrato de leasing y declaración de la arrendadora.
-              </span>
-            </span>
-          </label>
-        </div>
-      )}
+          Aparece SOLO cuando hay datos. Antes se pintaba siempre, con una píldora "Pendiente" y una
+          frase pidiendo consultar: una sección vacía que ocupaba sitio para repetir lo que la
+          tarjeta de arriba ya dice, con su botón al lado. Es andamio, no información — y en
+          matrícula, donde estos mismos datos viven dentro de la tarjeta de consulta, no aparece
+          nada hasta consultar. Las dos modalidades se comportan ya igual. */}
 
       {mostrarPazSalvo && (
         <label
-          className="flex items-start gap-2.5 rounded-2xl border p-4 bg-white dark:bg-[#0B0F14]"
+          className="flex items-start gap-2.5 rounded-2xl border p-4 bg-white dark:bg-[#162744]"
           style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.06)' }}
         >
           <input
@@ -2855,18 +3188,64 @@ function ConsultaStep({
         </label>
       )}
 
+      {/* Semáforo de requisitos. Abierto de entrada y con el resultado global en la cabecera: es lo
+          que decide si el trámite puede seguir, así que plegado tiene que seguir diciéndolo. */}
       {(hasVehicleData || !!effectivePreflight) && (
-        <PreflightPanel
-          snapshot={effectivePreflight}
-          loading={loading}
-          onRun={() => void handleRun()}
-          riesgoAceptado={riesgoAceptado}
-          onToggleRiesgo={(v) => void handleRiesgo(v)}
-          saving={riesgoSaving}
-          showRunButton={false}
-          onIniciarTraspaso={isVin ? handleIniciarTraspaso : undefined}
-          esMigrado={esMigrado}
-        />
+        <WizardAccordion
+          title="Pre-vuelo de requisitos (RUNT · SIMIT · RNMC)"
+          defaultOpen
+          badge={
+            preflightOverall(effectivePreflight?.overall) ? (
+              <StatusBadge
+                label={preflightOverall(effectivePreflight?.overall)!.label}
+                tone={preflightOverall(effectivePreflight?.overall)!.tone}
+              />
+            ) : null
+          }
+        >
+          <PreflightPanel
+            snapshot={effectivePreflight}
+            loading={loading}
+            onRun={() => void handleRun()}
+            riesgoAceptado={riesgoAceptado}
+            onToggleRiesgo={(v) => void handleRiesgo(v)}
+            saving={riesgoSaving}
+            showRunButton={false}
+            bare
+            onIniciarTraspaso={isVin ? handleIniciarTraspaso : undefined}
+            esMigrado={esMigrado}
+          />
+        </WizardAccordion>
+      )}
+
+      {/* Confirmación de cambio de tipo de trámite (propuesta: modal "Cambiar tipo de trámite").
+          B5/B6 (guardián de diseño) — migrado a `WizardModal`: overlay opaco de marca (antes
+          `bg-[#162744]/40 backdrop-blur-sm`, uno de los cuatro overlays distintos del asistente) y
+          trampa de foco + retorno de foco + Escape, en vez de un `<div role="dialog">` a mano. */}
+      {pendingTipo && (
+        <WizardModal title="Cambiar tipo de trámite" onClose={() => setPendingTipo(null)}>
+          <p className="text-xs leading-relaxed opacity-80">
+            ¿Deseas cambiar el tipo de trámite? Se actualizarán las validaciones y los documentos
+            requeridos, y se perderá lo capturado en este paso.
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPendingTipo(null)}
+              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push(`/tramites/nuevo/${pendingTipo}`)}
+              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+            >
+              Sí, cambiar
+            </button>
+          </div>
+        </WizardModal>
       )}
     </div>
   );
@@ -2900,9 +3279,12 @@ function StepBody({
   seedPlaca,
   onPreviewDone,
   onPendingFieldValues,
-  onTipoServicioChange,
+  prioritario = false,
+  onPrioritarioChange,
+  onTipoServicioGateChange,
   paqueteDocsStatus = 'idle',
   onPaqueteStatusChange,
+  onConfirmacionesExpedienteChange,
   onMarkDirty,
 }: {
   step: WizardStep;
@@ -2918,8 +3300,11 @@ function StepBody({
   onPreviewDone?: (consulta: PendingConsulta | null) => void;
   /** CF-02 — condiciones marcadas en el paso 1 antes de existir el trámite; se guardan al crearlo. */
   onPendingFieldValues?: (items: { fieldKey: string; valueText: string }[]) => void;
-  /** Tipo de servicio + empresa vinculadora elegidos en el paso 1 (solo matrícula inicial). */
-  onTipoServicioChange?: (info: TipoServicioInfo) => void;
+  /** HU #10536 — marca de prioridad del paso 1; se aplica al crear el trámite. */
+  prioritario?: boolean;
+  onPrioritarioChange?: (value: boolean) => void;
+  /** Gate Continuar: tipo de servicio (+ empresa vinculadora si es PÚBLICO) completo en requisitos. */
+  onTipoServicioGateChange?: (ok: boolean) => void;
   preflight: PreflightSnapshot | null;
   preflightLoading: boolean;
   onRunPreflight: () => Promise<void>;
@@ -2951,10 +3336,15 @@ function StepBody({
   /** Feature #11066 — estado de pre-generación del paquete al entrar al paso FUR. */
   paqueteDocsStatus?: 'idle' | 'loading' | 'ready' | 'error';
   onPaqueteStatusChange?: (status: 'idle' | 'loading' | 'ready' | 'error') => void;
+  /** Confirmaciones del expediente consolidado que siguen sin marcar (texto legible). */
+  onConfirmacionesExpedienteChange?: (pendientes: string[]) => void;
   /** Feature #11066 — marca dirty en el shell (p.ej. checklist de docs editado). */
   onMarkDirty?: () => void;
 }) {
-  switch (step.key) {
+  // Los datos comerciales dejaron de tener paso propio: viven en Requisitos. La clave `comercial`
+  // solo puede llegar desde un borrador antiguo que quedó apuntando ahí, así que se normaliza a
+  // `documentos` — el gestor encuentra lo que dejó a medias, en su nuevo sitio.
+  switch (step.key === 'comercial' ? 'documentos' : step.key) {
     // Consulta inicial: VIN (matrícula) o placa+propietario (traspaso).
     // Persiste el identificador en field_values ANTES de correr el preflight,
     // de lo contrario el backend consulta RUNT sin datos (DS-4B-1).
@@ -2973,7 +3363,8 @@ function StepBody({
           seedPlaca={seedPlaca}
           onPreviewDone={onPreviewDone}
           onPendingFieldValues={onPendingFieldValues}
-          onTipoServicioChange={onTipoServicioChange}
+          prioritario={prioritario}
+          onPrioritarioChange={onPrioritarioChange}
           esMigrado={esMigrado}
         />
       );
@@ -2981,22 +3372,53 @@ function StepBody({
     // Paso 2 de ambas modalidades = Datos y Documentos del Trámite (traspaso ya no usa 'validacion':
     // el semáforo del preflight vive en el paso 1). hideHeader: el h2 + subtítulo
     // ya pintan el título del paso.
-    // Orden: Prenda (radios) → Observaciones → Checklist documentos.
+    // Orden del repo de diseño (MatriculaInicial, Step 3): Tipo de servicio → Transformaciones y
+    // condiciones → Prenda (radios) → Observaciones → Checklist documentos.
     case 'documentos':
       return (
         <div className="space-y-4">
-          {/* R4 (HU #10596) — en matrícula la prenda es declarativa: se registra aquí
-              (informativa, no bloquea la radicación). En traspaso el gate va en el paso
-              comercial (HU #10598), no en documentos. Persistencia vía Continuar (embedded). */}
-          {modalidad !== 'traspaso' && (() => {
+          {/* Tipo de servicio (casilla 18) y transformaciones/condiciones del vehículo. Vivían en el
+              paso 1; aquí es donde las pone el diseño y donde tienen sentido: son requisitos que se
+              declaran sobre el vehículo ya consultado y ajustan el checklist de abajo. */}
+          <DeclaracionesTramite
+            instanceId={instanceId}
+            modalidad={modalidad}
+            onChanged={() => {
+              onMarkDirty?.();
+              onRefresh?.();
+            }}
+            onTipoServicioGateChange={onTipoServicioGateChange}
+          />
+          {/* Datos comerciales del traspaso. Tenían paso propio; ahora viven aquí, porque son
+              requisitos de la operación igual que el tipo de servicio o la prenda, y porque el
+              hueco que dejaban lo ocupa la validación de identidad de las dos partes. Así las dos
+              modalidades recorren los mismos cinco pasos. El guardado sigue colgando del pie
+              ("Continuar y guardar") vía `stepFormRef`, sin botón propio. */}
+          {modalidad === 'traspaso' && (
+            <CommercialForm
+              key="comercial-en-requisitos"
+              ref={stepFormRef}
+              instanceId={instanceId}
+              onSaved={onRefresh}
+              hideHeader={false}
+              embeddedInWizard
+            />
+          )}
+          {/* Prenda. La decisión es la misma pieza en las dos modalidades, con distinto alcance:
+              en matrícula es declarativa (informativa, no bloquea la radicación, HU #10596) y en
+              traspaso es un gate con decisiones de gestión (HU #10598, CF-06 #10881). Antes vivían
+              en pasos distintos; ahora comparten sitio, que es lo que el gestor espera. */}
+          {(() => {
             const gravamen = preflight?.checks?.find((c) => c.key === 'gravamenes');
+            const esTraspaso = modalidad === 'traspaso';
             return (
               <PrendaForm
                 ref={prendaFormRef}
                 instanceId={instanceId}
                 onSaved={onRefresh}
                 embeddedInWizard
-                modalidad="matricula_inicial"
+                modalidad={esTraspaso ? 'traspaso' : 'matricula_inicial'}
+                decisions={esTraspaso ? traspasoDecisions(prendaDocumentRequired) : undefined}
                 documentRequired={prendaDocumentRequired}
                 onDocumentGateChange={onPrendaDocumentGateChange}
                 runtHasGravamen={gravamen?.status === 'warn'}
@@ -3004,8 +3426,6 @@ function StepBody({
               />
             );
           })()}
-          {/* P6 — observaciones del trámite; escribe `fur_observations` (mismo campo que FirmaFurStep). */}
-          <TramiteObservacionesField instanceId={instanceId} />
           <DocumentChecklist
             instanceId={instanceId}
             onChanged={() => {
@@ -3015,6 +3435,11 @@ function StepBody({
             hideHeader
             modalidad={modalidad}
           />
+          {/* P6 — observaciones del trámite; escribe `fur_observations` (mismo campo que FirmaFurStep).
+              Van al final, como en la propuesta: es el cierre del paso, lo que el gestor escribe una
+              vez ya sabe qué documentos quedaron adjuntos. Antes salía entre la prenda y el
+              checklist y cortaba en dos la parte documental. */}
+          <TramiteObservacionesField instanceId={instanceId} />
         </div>
       );
 
@@ -3056,45 +3481,9 @@ function StepBody({
       );
     }
 
-    case 'comercial':
-      // hideHeader: el h2 + subtítulo ya cubren el título del paso. El guardado
-      // lo dispara el footer "Guardar y continuar" (vía save() del ref).
-      return (
-        <div className="space-y-4">
-          <CommercialForm
-            key={step.key}
-            ref={stepFormRef}
-            instanceId={instanceId}
-            onSaved={onRefresh}
-            hideHeader
-            embeddedInWizard
-          />
-          {/* R10 (HU #10598) — prenda como gate del traspaso: la decisión se registra en el paso
-              comercial. Con gravámenes en warn, el backend bloquea la preparación/radicación sin
-              decisión vigente (o sin su documento). "Omitir" es la vía "asumo el riesgo", y por eso
-              desaparece cuando el organismo exige el certificado (CF-06, HU #10881): ahí el riesgo
-              no es del gestor sino una regla del OT, y ofrecerla llevaba a guardar una decisión que
-              el backend luego rechaza. El PUT de prenda aplica la misma regla, esta lista solo evita
-              que el gestor llegue a intentarlo. */}
-          <PrendaForm
-            ref={prendaFormRef}
-            instanceId={instanceId}
-            decisions={traspasoDecisions(prendaDocumentRequired)}
-            onSaved={onRefresh}
-            embeddedInWizard
-            modalidad="traspaso"
-            documentRequired={prendaDocumentRequired}
-            onDocumentGateChange={onPrendaDocumentGateChange}
-            runtHasGravamen={
-              preflight?.checks?.find((c) => c.key === 'gravamenes')?.status === 'warn'
-            }
-            runtGravamenMessage={
-              preflight?.checks?.find((c) => c.key === 'gravamenes')?.message
-            }
-          />
-        </div>
-      );
-
+    // Los datos comerciales dejaron de tener paso propio: viven en Requisitos. Esta clave solo
+    // puede llegar desde un borrador antiguo que quedó apuntando aquí, así que cae en Requisitos,
+    // que es donde ahora están sus datos — el gestor encuentra lo que dejó a medias.
     // Matrícula paso 4 = Identidad (biométrica del comprador, parte única).
     // Título + subtítulo van dentro del panel blanco de BiometricStep.
     case 'identidad': {
@@ -3179,6 +3568,7 @@ function StepBody({
             onRefresh={onRefresh}
             rnmcEnabled={rnmcEnabled}
             onPaqueteStatusChange={onPaqueteStatusChange}
+            onConfirmacionesExpedienteChange={onConfirmacionesExpedienteChange}
             vaultCoveredPartes={vaultCoveredPartes}
             biometricForceEditable={identityOperable}
           />
