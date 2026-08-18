@@ -196,6 +196,55 @@ internal static class SchedulerEmailComposer
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Asunto + cuerpo del informe programado tipo "consulta" (Reportes 2.0, HU-D, segunda ola):
+    /// no comparte plantilla con <see cref="BuildScheduledReport"/> porque no hay overview/top
+    /// radicadores que mostrar — el contenido REAL va en el Excel adjunto, este cuerpo solo dice
+    /// qué consulta es y si se truncó por el tope de filas.
+    /// </summary>
+    public static (string Subject, string Html) BuildConsultaReport(
+        string scheduleName, string queryName, int total, bool truncated, int rowCap)
+    {
+        var subject = $"[FLIT] {scheduleName}";
+        var sb = new StringBuilder();
+        OpenLayout(sb, "Informe programado FLIT · Consulta personalizada", scheduleName);
+        sb.Append(CultureInfo.InvariantCulture,
+            $"<p style=\"margin:0 0 4px\"><strong>Consulta:</strong> {WebUtility.HtmlEncode(queryName)}</p>");
+        sb.Append(CultureInfo.InvariantCulture,
+            $"<p style=\"margin:0 0 16px\"><strong>Resultados:</strong> {total.ToString(Es)}</p>");
+        sb.Append(
+            "<p style=\"margin:0 0 16px\">El detalle va en el Excel adjunto. El rango de fechas de la "
+            + "consulta es relativo (p. ej. \"últimos 7 días\"), así que cada envío trae el periodo "
+            + "actual, no el que tenía cuando se guardó.</p>");
+        if (truncated)
+        {
+            sb.Append(
+                $"<p style=\"margin:0 0 16px;color:#B45309\"><strong>Aviso:</strong> el adjunto trae las "
+                + $"primeras {rowCap.ToString(Es)} de {total.ToString(Es)} filas. Entra a Consultas en la "
+                + "app para ver o exportar el resto.</p>");
+        }
+
+        CloseLayout(sb);
+        return (subject, sb.ToString());
+    }
+
+    /// <summary>
+    /// Cuerpo del correo cuando la SavedQuery de un informe tipo "consulta" ya no existe (se borró
+    /// después de programar el informe) — se avisa en vez de enviar un correo vacío sin explicación.
+    /// </summary>
+    public static (string Subject, string Html) BuildConsultaReportMissing(string scheduleName)
+    {
+        var subject = $"[FLIT] {scheduleName} — consulta no disponible";
+        var sb = new StringBuilder();
+        OpenLayout(sb, "Informe programado FLIT · Consulta personalizada", scheduleName);
+        sb.Append(
+            "<p style=\"margin:0\">La consulta guardada que alimentaba este informe ya no existe "
+            + "(se borró después de programarlo). Este informe no traerá adjunto hasta que se vuelva a "
+            + "programar sobre una consulta guardada vigente.</p>");
+        CloseLayout(sb);
+        return (subject, sb.ToString());
+    }
+
     /// <summary>Mensaje plano en español que se persiste en <c>alert_events.message</c>.</summary>
     public static string BuildAlertMessage(
         string metric, string @operator, decimal threshold, decimal value, int windowMinutes) =>

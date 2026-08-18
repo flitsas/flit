@@ -47,6 +47,17 @@ public interface ICompanyQueryRepository
         Guid userId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Una guardada por id, SIN filtrar por el usuario que la creó (a diferencia de
+    /// <see cref="ListSavedAsync"/>) — la usa el scheduler de informes programados (Reportes 2.0,
+    /// HU-D), que corre sin un usuario "actual" en contexto. Incluye las de fábrica. Null si no
+    /// existe o es de otro tenant.
+    /// </summary>
+    Task<SavedQueryDto?> GetSavedByIdAsync(
+        Guid tenantId,
+        Guid id,
+        CancellationToken cancellationToken = default);
+
     Task<SavedQueryDto> SaveAsync(
         Guid tenantId,
         Guid userId,

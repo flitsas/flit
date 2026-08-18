@@ -1,9 +1,11 @@
 using Flit.Analytics.Application.Abstractions;
+using Flit.Analytics.Application.CompanyQueries;
 using Flit.Analytics.Application.Dtos;
 using Flit.Analytics.Application.Queries;
 using Flit.Analytics.Application.Queries.Metrics;
 using Flit.Analytics.Application.Scheduling;
 using Flit.Infrastructure.Analytics.Scheduling;
+using Flit.Queries.Domain;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Analytics;
 using Flit.Modules.Security.Domain.Auth;
@@ -313,6 +315,81 @@ public sealed class AnalyticsSchedulerProcessorTests
     }
 
     // ------------------------------------------------------------------
+    // Informe tipo "consulta" (Reportes 2.0, HU-D, segunda ola)
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task Informe_tipo_consulta_ejecuta_la_savedQuery_y_adjunta_el_excel()
+    {
+        var dbName = NewDbName();
+        var savedQueryId = Guid.NewGuid();
+        await SeedScheduleAsync(
+            dbName, reportType: "consulta", format: "excel", savedQueryId: savedQueryId, savedQueryScope: "empresa");
+        var emailSender = Substitute.For<IEmailSender>();
+        var sent = new List<EmailMessage>();
+        emailSender.SendAsync(Arg.Do<EmailMessage>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
+
+        var savedQuery = new SavedQueryDto(
+            savedQueryId, "Pendientes de hoy", null, DeFabrica: false,
+            new QueryDefinition(new QueryDateFilter("creacion", QueryRangePreset.Ultimos7), [], ["referencia", "placa"]),
+            DateTimeOffset.UtcNow.AddDays(-1), null);
+        var companyQueries = Substitute.For<ICompanyQueryRepository>();
+        companyQueries.GetSavedByIdAsync(TenantId, savedQueryId, Arg.Any<CancellationToken>())
+            .Returns(savedQuery);
+        companyQueries.ExecuteAsync(TenantId, Arg.Any<QueryRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new CompanyQueryResultDto(
+                1, 1, 200, DateOnly.FromDateTime(NowUtc.Date), DateOnly.FromDateTime(NowUtc.Date), 0,
+                [Row(savedQueryId)], []));
+
+        var processor = NewProcessor(dbName, emailSender, Substitute.For<IAlertMetricsReadRepository>(),
+            companyQueryRepository: companyQueries);
+
+        await processor.ProcessSchedulesAsync(NowUtc, Ct);
+
+        sent.Should().ContainSingle();
+        sent[0].Subject.Should().Contain("Informe diario");
+        sent[0].HtmlBody.Should().Contain("Pendientes de hoy").And.Contain("Resultados:</strong> 1");
+        sent[0].Attachments.Should().ContainSingle();
+        sent[0].Attachments[0].FileName.Should().EndWith(".xlsx");
+        sent[0].Attachments[0].Content.Length.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task Informe_tipo_consulta_con_savedQuery_borrada_avisa_sin_adjunto()
+    {
+        var dbName = NewDbName();
+        var savedQueryId = Guid.NewGuid();
+        await SeedScheduleAsync(
+            dbName, reportType: "consulta", format: "excel", savedQueryId: savedQueryId, savedQueryScope: "empresa");
+        var emailSender = Substitute.For<IEmailSender>();
+        var sent = new List<EmailMessage>();
+        emailSender.SendAsync(Arg.Do<EmailMessage>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
+
+        var companyQueries = Substitute.For<ICompanyQueryRepository>();
+        companyQueries.GetSavedByIdAsync(TenantId, savedQueryId, Arg.Any<CancellationToken>())
+            .Returns((SavedQueryDto?)null);
+
+        var processor = NewProcessor(dbName, emailSender, Substitute.For<IAlertMetricsReadRepository>(),
+            companyQueryRepository: companyQueries);
+
+        await processor.ProcessSchedulesAsync(NowUtc, Ct);
+
+        sent.Should().ContainSingle();
+        sent[0].Attachments.Should().BeEmpty();
+        sent[0].Subject.Should().Contain("consulta no disponible");
+        sent[0].HtmlBody.Should().Contain("ya no existe");
+    }
+
+    private static CompanyQueryRowDto Row(Guid seed) => new(
+        Guid.NewGuid(), $"REF-{seed:N}", "ABC123", null, null, null,
+        Guid.NewGuid(), "Empresa Demo", Guid.NewGuid(), "Traspaso", "traspaso", "aprobado",
+        false, false, 0, null, null, false, null, false, [], false, null, "bilateral",
+        "Usuario Uno", NowUtc.AddDays(-2), NowUtc.AddDays(-1), NowUtc, NowUtc, NowUtc,
+        1.0, 0.5, 0);
+
+    // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
 
@@ -345,7 +422,8 @@ public sealed class AnalyticsSchedulerProcessorTests
     }
 
     private static async Task<Guid> SeedScheduleAsync(
-        string dbName, string reportType = "resumen", string format = "pdf")
+        string dbName, string reportType = "resumen", string format = "pdf",
+        Guid? savedQueryId = null, string? savedQueryScope = null)
     {
         var id = Guid.NewGuid();
         await using var db = NewContext(dbName);
@@ -361,6 +439,8 @@ public sealed class AnalyticsSchedulerProcessorTests
             Recipients = ["gerencia@empresa.co"],
             IsActive = true,
             CreatedAt = NowUtc.AddDays(-1),
+            SavedQueryId = savedQueryId,
+            SavedQueryScope = savedQueryScope,
         });
         await db.SaveChangesAsync(Ct);
         return id;
@@ -373,7 +453,8 @@ public sealed class AnalyticsSchedulerProcessorTests
         IExecutiveSummaryPdfGenerator? executiveSummaryPdfGenerator = null,
         IProcedureExcelExporter? procedureExcelExporter = null,
         IUsageMetricsReadRepository? usageMetricsReadRepository = null,
-        IAnalyticsMetricsReadRepository? analyticsMetricsReadRepository = null)
+        IAnalyticsMetricsReadRepository? analyticsMetricsReadRepository = null,
+        ICompanyQueryRepository? companyQueryRepository = null)
     {
         var analytics = Substitute.For<IAnalyticsReadRepository>();
         analytics.GetOverviewAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
@@ -411,6 +492,12 @@ public sealed class AnalyticsSchedulerProcessorTests
         {
             services.AddSingleton(analyticsMetricsReadRepository);
             services.AddScoped<OtReportDocumentBuilder>();
+        }
+
+        if (companyQueryRepository is not null)
+        {
+            services.AddSingleton(companyQueryRepository);
+            services.AddScoped<CompanyQueryReportDocumentBuilder>();
         }
 
         var provider = services.BuildServiceProvider();

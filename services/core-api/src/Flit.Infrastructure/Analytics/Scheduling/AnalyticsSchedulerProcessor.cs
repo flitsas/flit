@@ -211,22 +211,33 @@ internal sealed class AnalyticsSchedulerProcessor(
         // Scope PROPIO para lectura/envío: la lectura analítica abre su propia transacción (GUC RLS)
         // y no debe compartir el contexto que sostuvo el claim.
         await using var scope = scopeFactory.CreateAsyncScope();
-        var analytics = scope.ServiceProvider.GetRequiredService<IAnalyticsReadRepository>();
+
+        (string Subject, string Html, EmailAttachment? Attachment) message;
+        if (schedule.ReportType == "consulta")
+        {
+            // No hay overview/top radicadores que mostrar para una consulta arbitraria — plantilla
+            // y ejecución propias (ver SendConsultaReportAsync), sin el periodo vencido de los otros
+            // 5 tipos: el rango lo decide el filtro relativo de la propia SavedQuery.
+            message = await BuildConsultaMessageAsync(scope.ServiceProvider, schedule, ct);
+        }
+        else
+        {
+            var analytics = scope.ServiceProvider.GetRequiredService<IAnalyticsReadRepository>();
+            var nowLocal = TimeZoneInfo.ConvertTime(nowUtc, BogotaTimeZone);
+            var (from, to) = ScheduleDueEvaluator.GetElapsedPeriod(schedule.Frequency, nowLocal);
+            var periodLabel = ScheduleDueEvaluator.DescribePeriod(schedule.Frequency, from, to);
+
+            var overview = await analytics.GetOverviewAsync(schedule.TenantId, from, to, ct);
+            var topProducers = await analytics.GetTopProducersAsync(
+                schedule.TenantId, from, to, TopProducersLimit, ct);
+
+            var (subject, html) = SchedulerEmailComposer.BuildScheduledReport(
+                schedule.Name, schedule.ReportType, periodLabel, overview, topProducers);
+            var attachment = await BuildAttachmentAsync(scope.ServiceProvider, schedule, from, to, ct);
+            message = (subject, html, attachment);
+        }
+
         var emailSender = scope.ServiceProvider.GetRequiredService<IEmailSender>();
-
-        var nowLocal = TimeZoneInfo.ConvertTime(nowUtc, BogotaTimeZone);
-        var (from, to) = ScheduleDueEvaluator.GetElapsedPeriod(schedule.Frequency, nowLocal);
-        var periodLabel = ScheduleDueEvaluator.DescribePeriod(schedule.Frequency, from, to);
-
-        var overview = await analytics.GetOverviewAsync(schedule.TenantId, from, to, ct);
-        var topProducers = await analytics.GetTopProducersAsync(
-            schedule.TenantId, from, to, TopProducersLimit, ct);
-
-        var (subject, html) = SchedulerEmailComposer.BuildScheduledReport(
-            schedule.Name, schedule.ReportType, periodLabel, overview, topProducers);
-
-        var attachment = await BuildAttachmentAsync(scope.ServiceProvider, schedule, from, to, ct);
-
         foreach (var recipient in schedule.Recipients)
         {
             try
@@ -234,11 +245,13 @@ internal sealed class AnalyticsSchedulerProcessor(
                 // HU #11358 AC2/AC3 — el puerto ya no lanza por un fallo de transporte conocido;
                 // el resultado tipado reemplaza la interpretación "no lanzó == se envió".
                 // HU #11363 AC1 — id estable del catálogo (TemplateIds.ScheduledReport).
-                var message = new EmailMessage(schedule.TenantId, "analytics.scheduled-report", recipient, recipient, subject, html);
-                if (attachment is not null)
-                    message = message with { Attachments = [attachment] };
+                var email = new EmailMessage(
+                    schedule.TenantId, "analytics.scheduled-report", recipient, recipient,
+                    message.Subject, message.Html);
+                if (message.Attachment is not null)
+                    email = email with { Attachments = [message.Attachment] };
 
-                var result = await emailSender.SendAsync(message, ct);
+                var result = await emailSender.SendAsync(email, ct);
                 if (!result.Success)
                     SchedulerLog.ScheduleEmailFailed(logger, schedule.Id, recipient, result.Outcome);
             }
@@ -251,6 +264,39 @@ internal sealed class AnalyticsSchedulerProcessor(
         }
 
         SchedulerLog.ScheduleSent(logger, schedule.Id, schedule.Name, schedule.Recipients.Count);
+    }
+
+    /// <summary>
+    /// Resuelve la SavedQuery (empresa: siempre con tenant, §75 del DDL) y arma asunto+cuerpo+adjunto
+    /// del informe tipo "consulta". Un fallo de generación (BD/consulta inválida) degrada al mismo
+    /// aviso que una SavedQuery borrada — best-effort, igual criterio que el resto del scheduler.
+    /// </summary>
+    private async Task<(string Subject, string Html, EmailAttachment? Attachment)> BuildConsultaMessageAsync(
+        IServiceProvider services, ReportSchedule schedule, CancellationToken ct)
+    {
+        try
+        {
+            var builder = services.GetRequiredService<CompanyQueryReportDocumentBuilder>();
+            var result = await builder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
+            if (result is null)
+            {
+                var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name);
+                return (missingSubject, missingHtml, null);
+            }
+
+            var (subject, html) = SchedulerEmailComposer.BuildConsultaReport(
+                schedule.Name, result.QueryName, result.Total, result.Truncated, CompanyQueryReportDocumentBuilder.RowCap);
+            var fileName = $"informe-consulta-{schedule.Id:N}.xlsx";
+            var attachment = new EmailAttachment(
+                fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Bytes);
+            return (subject, html, attachment);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            SchedulerLog.AttachmentBuildError(logger, schedule.Id, schedule.ReportType, ex);
+            var (subject, html) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name);
+            return (subject, html, null);
+        }
     }
 
     /// <summary>
