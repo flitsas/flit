@@ -1,5 +1,7 @@
 using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.Dtos;
+using Flit.Analytics.Application.Queries;
+using Flit.Analytics.Application.Queries.Metrics;
 using Flit.Analytics.Application.Scheduling;
 using Flit.Infrastructure.Analytics.Scheduling;
 using Flit.Infrastructure.Persistence;
@@ -181,6 +183,136 @@ public sealed class AnalyticsSchedulerProcessorTests
     }
 
     // ------------------------------------------------------------------
+    // Adjuntos reales (Reportes 2.0 — cierra la limitación histórica de IEmailSender)
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task Informe_tipo_resumen_formato_pdf_adjunta_el_pdf_del_resumen_ejecutivo()
+    {
+        var dbName = NewDbName();
+        await SeedScheduleAsync(dbName, reportType: "resumen", format: "pdf");
+        var emailSender = Substitute.For<IEmailSender>();
+        var sent = new List<EmailMessage>();
+        emailSender.SendAsync(Arg.Do<EmailMessage>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
+        var pdfGenerator = Substitute.For<IExecutiveSummaryPdfGenerator>();
+        pdfGenerator.Generate(Arg.Any<ExecutiveSummaryData>()).Returns([1, 2, 3, 4]);
+        var processor = NewProcessor(dbName, emailSender, Substitute.For<IAlertMetricsReadRepository>(),
+            executiveSummaryPdfGenerator: pdfGenerator);
+
+        await processor.ProcessSchedulesAsync(NowUtc, Ct);
+
+        sent.Should().ContainSingle();
+        sent[0].Attachments.Should().ContainSingle();
+        sent[0].Attachments[0].ContentType.Should().Be("application/pdf");
+        sent[0].Attachments[0].Content.Should().Equal((byte)1, (byte)2, (byte)3, (byte)4);
+        sent[0].Attachments[0].FileName.Should().StartWith("informe-resumen-").And.EndWith(".pdf");
+    }
+
+    [Fact]
+    public async Task Informe_tipo_operacion_formato_excel_adjunta_el_excel_de_detalle()
+    {
+        var dbName = NewDbName();
+        await SeedScheduleAsync(dbName, reportType: "operacion", format: "excel");
+        var emailSender = Substitute.For<IEmailSender>();
+        var sent = new List<EmailMessage>();
+        emailSender.SendAsync(Arg.Do<EmailMessage>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
+        var excelExporter = Substitute.For<IProcedureExcelExporter>();
+        excelExporter.ExportAsync(Arg.Any<Stream>(), Arg.Any<ProcedureExportFilter>(), Arg.Any<CancellationToken>())
+            .Returns(ci => ci.Arg<Stream>().WriteAsync(new byte[] { 9, 9 }, CancellationToken.None).AsTask());
+        var processor = NewProcessor(dbName, emailSender, Substitute.For<IAlertMetricsReadRepository>(),
+            procedureExcelExporter: excelExporter);
+
+        await processor.ProcessSchedulesAsync(NowUtc, Ct);
+
+        sent.Should().ContainSingle();
+        sent[0].Attachments.Should().ContainSingle();
+        sent[0].Attachments[0].ContentType.Should()
+            .Be("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        sent[0].Attachments[0].FileName.Should().StartWith("informe-operacion-").And.EndWith(".xlsx");
+    }
+
+    [Fact]
+    public async Task Informe_tipo_uso_adjunta_el_excel_de_telemetria_de_uso_no_el_de_tramites()
+    {
+        var dbName = NewDbName();
+        await SeedScheduleAsync(dbName, reportType: "uso", format: "excel");
+        var emailSender = Substitute.For<IEmailSender>();
+        var sent = new List<EmailMessage>();
+        emailSender.SendAsync(Arg.Do<EmailMessage>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
+        var usage = Substitute.For<IUsageMetricsReadRepository>();
+        usage.GetWizardStepMetricsAsync(TenantId, Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(new List<WizardStepMetricDto> { new("datos_vehiculo", 10, 8, 20.0, 5000, 4500) });
+        usage.GetModuleUsageAsync(TenantId, Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(new List<ModuleUsageDto>());
+        usage.GetPeakHoursAsync(TenantId, Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(new List<PeakHourDto>());
+        usage.GetWizardDurationAsync(TenantId, Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            .Returns(new WizardDurationDto(5000, 4500));
+        var processor = NewProcessor(dbName, emailSender, Substitute.For<IAlertMetricsReadRepository>(),
+            usageMetricsReadRepository: usage);
+
+        await processor.ProcessSchedulesAsync(NowUtc, Ct);
+
+        sent.Should().ContainSingle();
+        sent[0].Attachments.Should().ContainSingle();
+        sent[0].Attachments[0].Content.Length.Should().BeGreaterThan(0);
+        sent[0].HtmlBody.Should().Contain("archivo adjunto").And.Contain("Uso del aplicativo");
+    }
+
+    [Fact]
+    public async Task Informe_tipo_ot_adjunta_el_excel_de_metricas_ot_no_el_de_tramites()
+    {
+        var dbName = NewDbName();
+        await SeedScheduleAsync(dbName, reportType: "ot", format: "excel");
+        var emailSender = Substitute.For<IEmailSender>();
+        var sent = new List<EmailMessage>();
+        emailSender.SendAsync(Arg.Do<EmailMessage>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
+        var metrics = Substitute.For<IAnalyticsMetricsReadRepository>();
+        metrics.GetOtMetricsAsync(Arg.Any<MetricsFilter>(), Arg.Any<CancellationToken>()).Returns(new OtMetricsDto(
+            new OtMetricsSummaryDto(10, 7, 3, 30.0, 12, 10, 20, 5.0, 2),
+            [], [], [], [], [],
+            new ReincidenceDto(3, 1, 1.2, 2),
+            new StuckDto(0, []),
+            [],
+            1.1,
+            new InternalCycleDto(4, 3, 6)));
+        var processor = NewProcessor(dbName, emailSender, Substitute.For<IAlertMetricsReadRepository>(),
+            analyticsMetricsReadRepository: metrics);
+
+        await processor.ProcessSchedulesAsync(NowUtc, Ct);
+
+        sent.Should().ContainSingle();
+        sent[0].Attachments.Should().ContainSingle();
+        sent[0].Attachments[0].Content.Length.Should().BeGreaterThan(0);
+        sent[0].HtmlBody.Should().Contain("Organismo de Tr").And.Contain("archivo adjunto");
+    }
+
+    [Fact]
+    public async Task Fallo_generando_el_adjunto_no_impide_el_envio_del_correo()
+    {
+        var dbName = NewDbName();
+        await SeedScheduleAsync(dbName, reportType: "resumen", format: "pdf");
+        var emailSender = Substitute.For<IEmailSender>();
+        var sent = new List<EmailMessage>();
+        emailSender.SendAsync(Arg.Do<EmailMessage>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
+        var pdfGenerator = Substitute.For<IExecutiveSummaryPdfGenerator>();
+        pdfGenerator.Generate(Arg.Any<ExecutiveSummaryData>())
+            .Returns(_ => throw new InvalidOperationException("QuestPDF caído (simulado)"));
+        var processor = NewProcessor(dbName, emailSender, Substitute.For<IAlertMetricsReadRepository>(),
+            executiveSummaryPdfGenerator: pdfGenerator);
+
+        await processor.ProcessSchedulesAsync(NowUtc, Ct);
+
+        sent.Should().ContainSingle("el fallo al generar el adjunto no debe cancelar el envío");
+        sent[0].Attachments.Should().BeEmpty();
+    }
+
+    // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
 
@@ -212,7 +344,8 @@ public sealed class AnalyticsSchedulerProcessorTests
         return id;
     }
 
-    private static async Task<Guid> SeedScheduleAsync(string dbName)
+    private static async Task<Guid> SeedScheduleAsync(
+        string dbName, string reportType = "resumen", string format = "pdf")
     {
         var id = Guid.NewGuid();
         await using var db = NewContext(dbName);
@@ -221,10 +354,10 @@ public sealed class AnalyticsSchedulerProcessorTests
             Id = id,
             TenantId = TenantId,
             Name = "Informe diario",
-            ReportType = "resumen",
+            ReportType = reportType,
             Frequency = "daily",
             SendHour = 7, // NowUtc = 07:30 en Bogotá → vencido
-            Format = "pdf",
+            Format = format,
             Recipients = ["gerencia@empresa.co"],
             IsActive = true,
             CreatedAt = NowUtc.AddDays(-1),
@@ -234,7 +367,13 @@ public sealed class AnalyticsSchedulerProcessorTests
     }
 
     private static AnalyticsSchedulerProcessor NewProcessor(
-        string dbName, IEmailSender emailSender, IAlertMetricsReadRepository metrics)
+        string dbName,
+        IEmailSender emailSender,
+        IAlertMetricsReadRepository metrics,
+        IExecutiveSummaryPdfGenerator? executiveSummaryPdfGenerator = null,
+        IProcedureExcelExporter? procedureExcelExporter = null,
+        IUsageMetricsReadRepository? usageMetricsReadRepository = null,
+        IAnalyticsMetricsReadRepository? analyticsMetricsReadRepository = null)
     {
         var analytics = Substitute.For<IAnalyticsReadRepository>();
         analytics.GetOverviewAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
@@ -250,6 +389,30 @@ public sealed class AnalyticsSchedulerProcessorTests
         services.AddSingleton(emailSender);
         services.AddSingleton(metrics);
         services.AddSingleton(analytics);
+
+        // Solo se registran cuando el test los necesita: así los tests que no los pasan ejercitan
+        // el camino "no se pudo generar el adjunto" (best-effort) sin tener que simularlo aparte.
+        if (executiveSummaryPdfGenerator is not null)
+        {
+            services.AddSingleton(executiveSummaryPdfGenerator);
+            services.AddScoped<ExportExecutivePdfHandler>();
+        }
+
+        if (procedureExcelExporter is not null)
+            services.AddSingleton(procedureExcelExporter);
+
+        if (usageMetricsReadRepository is not null)
+        {
+            services.AddSingleton(usageMetricsReadRepository);
+            services.AddScoped<UsageReportDocumentBuilder>();
+        }
+
+        if (analyticsMetricsReadRepository is not null)
+        {
+            services.AddSingleton(analyticsMetricsReadRepository);
+            services.AddScoped<OtReportDocumentBuilder>();
+        }
+
         var provider = services.BuildServiceProvider();
 
         return new AnalyticsSchedulerProcessor(

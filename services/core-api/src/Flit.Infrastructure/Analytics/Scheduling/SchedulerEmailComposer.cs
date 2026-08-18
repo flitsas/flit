@@ -7,9 +7,11 @@ namespace Flit.Infrastructure.Analytics.Scheduling;
 
 /// <summary>
 /// Plantillas HTML EN ESPAÑOL de los correos del scheduler (Reportes 2.0, HU-D). Paleta FLIT
-/// (#557EFF primario / #162744 tinta). <c>IEmailSender</c> solo soporta HtmlBody (sin adjuntos),
-/// por eso el informe viaja como RESUMEN de KPIs en el cuerpo — limitación documentada en §8
-/// del contrato (el archivo excel/pdf adjunto queda como mejora futura).
+/// (#557EFF primario / #162744 tinta). El cuerpo siempre lleva el resumen de KPIs de trámites
+/// (mismo dato para los 5 tipos — es lo único que <see cref="Abstractions.IAnalyticsReadRepository"/>
+/// resume sin filtrar por tipo); el archivo REAL del tipo (Excel/PDF) va adjunto — ver
+/// <see cref="AnalyticsSchedulerProcessor.BuildAttachmentAsync"/>. Para "uso"/"ot", cuyos datos no
+/// son trámites por categoría, el cuerpo lo aclara en vez de fingir que esa tabla les pertenece.
 /// </summary>
 internal static class SchedulerEmailComposer
 {
@@ -92,6 +94,15 @@ internal static class SchedulerEmailComposer
         sb.Append(CultureInfo.InvariantCulture,
             $"<p style=\"margin:0 0 16px\"><strong>Periodo:</strong> {WebUtility.HtmlEncode(periodLabel)}</p>");
 
+        if (reportType is "uso" or "ot")
+        {
+            sb.Append(
+                "<p style=\"margin:0 0 16px\">El detalle de este informe (\""
+                + WebUtility.HtmlEncode(ReportTypeLabel(reportType))
+                + "\") va en el archivo adjunto. Este correo agrega, además, el resumen general de "
+                + "trámites del periodo:</p>");
+        }
+
         sb.Append(CultureInfo.InvariantCulture, $"<h3 style=\"color:{Ink};margin:16px 0 8px\">Trámites por categoría</h3>");
         if (overview.Count == 0)
         {
@@ -132,7 +143,7 @@ internal static class SchedulerEmailComposer
             sb.Append("</table>");
         }
 
-        sb.Append("<p style=\"margin:16px 0 0;font-size:12px;color:#6b7a94\">El archivo adjunto (Excel/PDF) no está disponible por este canal; este correo incluye el resumen de indicadores del periodo.</p>");
+        sb.Append("<p style=\"margin:16px 0 0;font-size:12px;color:#6b7a94\">Revisa el archivo adjunto para el detalle completo del periodo.</p>");
         CloseLayout(sb);
         return sb.ToString();
     }

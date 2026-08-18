@@ -176,6 +176,8 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Analytics.Application.CompanyQueries.ISuperAdminSavedQueryRepository, SuperAdminSavedQueryRepository>();
         services.AddScoped<IProcedureExcelExporter, Documents.ProcedureExcelExporter>();
         services.AddSingleton<IExecutiveSummaryPdfGenerator, Documents.ExecutiveSummaryPdfGenerator>();
+        services.AddScoped<Analytics.Scheduling.UsageReportDocumentBuilder>(); // Reportes2 HU-D
+        services.AddScoped<Analytics.Scheduling.OtReportDocumentBuilder>(); // Reportes2 HU-D
 
         // Reportes2 HU-D — informes programados + alertas por umbral (scheduler y repos).
         services.AddScoped<Flit.Analytics.Application.Scheduling.IReportScheduleRepository, ReportScheduleRepository>(); // Reportes2 HU-D
