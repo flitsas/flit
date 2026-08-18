@@ -34,6 +34,17 @@ public interface IOtQueryRepository
         Guid? transitOfficeIdOverride = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Una guardada por id, SIN filtrar por usuario — la usa el scheduler de informes programados
+    /// (Reportes 2.0, HU-D), que corre sin un usuario "actual" en contexto. Incluye las de fábrica.
+    /// Null si no existe o es de otro organismo.
+    /// </summary>
+    Task<SavedQueryDto?> GetSavedByIdAsync(
+        Guid otTenantId,
+        Guid id,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
+
     Task<SavedQueryDto?> SaveAsync(
         Guid otTenantId,
         Guid userId,

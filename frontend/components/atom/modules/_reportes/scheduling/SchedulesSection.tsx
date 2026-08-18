@@ -49,7 +49,7 @@ interface SchedulesSectionProps {
   otTransitOfficeId?: string;
 }
 
-const OT_REPORT_TYPES: ReportType[] = ["ot_operativo"];
+const OT_REPORT_TYPES: ReportType[] = ["ot_analisis", "ot_informe", "ot_revisores"];
 
 function describeWhen(s: ReportSchedule): string {
   const hour = `${String(s.sendHour).padStart(2, "0")}:00`;

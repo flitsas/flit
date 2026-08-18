@@ -14,13 +14,20 @@ namespace Flit.Api.Endpoints.Analytics;
 /// <see cref="AdminOtSchedulingTenantResolver"/>) y la policy (<c>OtModule</c>: Admin OT sobre su
 /// propio organismo, o SuperAdmin con <c>?transitOfficeId=</c> sobre cualquiera).
 ///
-/// <para>Solo admite <c>reportType="ot_operativo"</c>: los otros 5 tipos leen trámites por
-/// <c>tenant_id</c> del RADICADOR (una empresa), y un tenant de organismo nunca radica nada —
-/// programarlos aquí produciría un informe vacío en silencio.</para>
+/// <para>Solo admite los 3 tipos propios del organismo (<c>ot_analisis</c>/<c>ot_informe</c>/
+/// <c>ot_revisores</c>, uno por pestaña con rango de <c>OtReportsConsole.tsx</c>) o
+/// <c>reportType="consulta"</c> con <c>savedQueryScope="ot"</c> (informe de una consulta guardada
+/// del organismo — "Programar este informe" desde «Consultas personalizadas»): los 5 tipos de
+/// compañía leen trámites por <c>tenant_id</c> del RADICADOR (una empresa), y un tenant de
+/// organismo nunca radica nada — programarlos aquí produciría un informe vacío en silencio.</para>
 /// </summary>
 public static class AdminOtReportSchedulesEndpoints
 {
-    private const string OtReportType = "ot_operativo";
+    private static readonly string[] OtReportTypes = ["ot_analisis", "ot_informe", "ot_revisores"];
+
+    private static bool IsValidOtSchedule(ReportScheduleInput input) =>
+        OtReportTypes.Contains(input.ReportType)
+        || (input.ReportType == "consulta" && input.SavedQueryScope == "ot");
 
     public static IEndpointRouteBuilder MapAdminOtReportSchedulesEndpoints(this IEndpointRouteBuilder app)
     {
@@ -92,9 +99,10 @@ public static class AdminOtReportSchedulesEndpoints
         CancellationToken ct,
         [FromQuery] Guid? transitOfficeId = null)
     {
-        if (input.ReportType != OtReportType)
+        if (!IsValidOtSchedule(input))
             return AdminOtSchedulingTenantResolver.ValidationProblem(
-                "El tipo de informe debe ser 'ot_operativo': aquí solo se programan informes del propio organismo.");
+                "El tipo de informe debe ser uno de: ot_analisis, ot_informe, ot_revisores; o 'consulta' " +
+                "con savedQueryScope 'ot'. Aquí solo se programan informes del propio organismo.");
 
         var (tenant, error) = await AdminOtSchedulingTenantResolver.ResolveAsync(
             httpContext.User, transitOfficeId, otMetrics, ct);
@@ -118,9 +126,10 @@ public static class AdminOtReportSchedulesEndpoints
         CancellationToken ct,
         [FromQuery] Guid? transitOfficeId = null)
     {
-        if (input.ReportType != OtReportType)
+        if (!IsValidOtSchedule(input))
             return AdminOtSchedulingTenantResolver.ValidationProblem(
-                "El tipo de informe debe ser 'ot_operativo': aquí solo se programan informes del propio organismo.");
+                "El tipo de informe debe ser uno de: ot_analisis, ot_informe, ot_revisores; o 'consulta' " +
+                "con savedQueryScope 'ot'. Aquí solo se programan informes del propio organismo.");
 
         var (tenant, error) = await AdminOtSchedulingTenantResolver.ResolveAsync(
             httpContext.User, transitOfficeId, otMetrics, ct);

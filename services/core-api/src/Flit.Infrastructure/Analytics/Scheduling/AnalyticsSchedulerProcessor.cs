@@ -276,21 +276,45 @@ internal sealed class AnalyticsSchedulerProcessor(
     {
         try
         {
-            var builder = services.GetRequiredService<CompanyQueryReportDocumentBuilder>();
-            var result = schedule.SavedQueryScope == "superadmin"
-                ? await builder.BuildForSuperAdminAsync(schedule.SavedQueryId!.Value, ct)
-                : await builder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
-            if (result is null)
+            string subject, html;
+            byte[] bytes;
+
+            if (schedule.SavedQueryScope == "ot")
             {
-                var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name);
-                return (missingSubject, missingHtml, null);
+                // Alcance OT (Reportes 2.0, HU-D, tercera ola): la SavedQuery del organismo, con el
+                // tenant_id ya siendo el dueño del organismo — mismo criterio que "empresa" (§76 del DDL).
+                var otBuilder = services.GetRequiredService<OtQueryReportDocumentBuilder>();
+                var otResult = await otBuilder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
+                if (otResult is null)
+                {
+                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name);
+                    return (missingSubject, missingHtml, null);
+                }
+
+                (subject, html) = SchedulerEmailComposer.BuildConsultaReport(
+                    schedule.Name, otResult.QueryName, otResult.Total, otResult.Truncated, OtQueryReportDocumentBuilder.RowCap);
+                bytes = otResult.Bytes;
+            }
+            else
+            {
+                var builder = services.GetRequiredService<CompanyQueryReportDocumentBuilder>();
+                var result = schedule.SavedQueryScope == "superadmin"
+                    ? await builder.BuildForSuperAdminAsync(schedule.SavedQueryId!.Value, ct)
+                    : await builder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
+                if (result is null)
+                {
+                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name);
+                    return (missingSubject, missingHtml, null);
+                }
+
+                (subject, html) = SchedulerEmailComposer.BuildConsultaReport(
+                    schedule.Name, result.QueryName, result.Total, result.Truncated, CompanyQueryReportDocumentBuilder.RowCap);
+                bytes = result.Bytes;
             }
 
-            var (subject, html) = SchedulerEmailComposer.BuildConsultaReport(
-                schedule.Name, result.QueryName, result.Total, result.Truncated, CompanyQueryReportDocumentBuilder.RowCap);
             var fileName = $"informe-consulta-{schedule.Id:N}.xlsx";
             var attachment = new EmailAttachment(
-                fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Bytes);
+                fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", bytes);
             return (subject, html, attachment);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -331,8 +355,12 @@ internal sealed class AnalyticsSchedulerProcessor(
                     .BuildAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
                 "ot" => await services.GetRequiredService<OtReportDocumentBuilder>()
                     .BuildAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
-                "ot_operativo" => await services.GetRequiredService<OtOwnReportDocumentBuilder>()
-                    .BuildAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
+                "ot_analisis" => await services.GetRequiredService<OtOwnReportDocumentBuilder>()
+                    .BuildAnalisisAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
+                "ot_informe" => await services.GetRequiredService<OtOwnReportDocumentBuilder>()
+                    .BuildInformeAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
+                "ot_revisores" => await services.GetRequiredService<OtOwnReportDocumentBuilder>()
+                    .BuildRevisoresAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
                 "resumen" or "operacion" or "productividad" =>
                     await BuildProcedureBasedAttachmentAsync(services, schedule, from, to, ct),
                 _ => null, // "consulta" (Reportes 2.0, HU-D — filas propias, ver rama dedicada) u otro tipo futuro.

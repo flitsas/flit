@@ -21,8 +21,9 @@ public static partial class SchedulingValidation
     public const int MaxCooldownMinutes = 10_080;
 
     private static readonly string[] ReportTypes =
-        ["resumen", "operacion", "ot", "uso", "productividad", "consulta", "ot_operativo"];
-    private static readonly string[] SavedQueryScopes = ["empresa", "superadmin"];
+        ["resumen", "operacion", "ot", "uso", "productividad", "consulta",
+            "ot_analisis", "ot_informe", "ot_revisores"];
+    private static readonly string[] SavedQueryScopes = ["empresa", "superadmin", "ot"];
     private static readonly string[] Frequencies = ["daily", "weekly", "monthly"];
     private static readonly string[] Formats = ["excel", "pdf"];
     private static readonly string[] Metrics =
@@ -50,7 +51,8 @@ public static partial class SchedulingValidation
             return (null, $"El nombre no puede superar los {MaxNameLength} caracteres.");
 
         if (input.ReportType is null || !ReportTypes.Contains(input.ReportType))
-            return (null, "El tipo de informe debe ser uno de: resumen, operacion, ot, uso, productividad, consulta, ot_operativo.");
+            return (null, "El tipo de informe debe ser uno de: resumen, operacion, ot, uso, productividad, " +
+                "consulta, ot_analisis, ot_informe, ot_revisores.");
 
         // Reportes 2.0 (HU-D, segunda ola) — un informe de tipo "consulta" apunta a una SavedQuery
         // en vez de a uno de los 5 tipos agregados; espejo del CHECK
@@ -60,7 +62,7 @@ public static partial class SchedulingValidation
             if (input.SavedQueryId is null)
                 return (null, "Un informe de tipo 'consulta' requiere indicar savedQueryId.");
             if (input.SavedQueryScope is null || !SavedQueryScopes.Contains(input.SavedQueryScope))
-                return (null, "El alcance de la consulta debe ser 'empresa' o 'superadmin'.");
+                return (null, "El alcance de la consulta debe ser 'empresa', 'ot' o 'superadmin'.");
             if (input.Format is not null && input.Format != "excel")
                 return (null, "Un informe de tipo 'consulta' solo se entrega en formato Excel.");
         }

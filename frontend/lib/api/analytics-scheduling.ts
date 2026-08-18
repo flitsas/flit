@@ -14,10 +14,14 @@ export type ReportType =
   | "uso"
   | "productividad"
   | "consulta"
-  /** Alcance Organismo de Tránsito (Reportes 2.0, HU-D, tercera ola): el panel propio del OT. */
-  | "ot_operativo";
-/** Solo aplica cuando reportType="consulta" (Reportes 2.0, HU-D, segunda ola). */
-export type SavedQueryScope = "empresa" | "superadmin";
+  // Alcance Organismo de Tránsito (Reportes 2.0, HU-D, tercera ola): uno por pestaña con rango de
+  // OtReportsConsole.tsx. "Ahora mismo" queda fuera (snapshot en vivo, sin rango).
+  | "ot_analisis"
+  | "ot_informe"
+  | "ot_revisores";
+/** Solo aplica cuando reportType="consulta". "ot" = consulta guardada del organismo de tránsito
+ * (Reportes 2.0, HU-D, tercera ola). */
+export type SavedQueryScope = "empresa" | "superadmin" | "ot";
 export type ScheduleFrequency = "daily" | "weekly" | "monthly";
 export type ScheduleFormat = "excel" | "pdf";
 export type AlertMetric =

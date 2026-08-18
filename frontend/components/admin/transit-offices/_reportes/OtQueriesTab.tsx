@@ -9,7 +9,7 @@
 
 import { useMemo } from "react";
 import { QueryConsole } from "@/components/consultas/QueryConsole";
-import type { QuerySource } from "@/lib/api/queries";
+import type { QuerySource, SavedQuery } from "@/lib/api/queries";
 import {
   deleteOtSavedQuery,
   fetchOtQueryFields,
@@ -24,9 +24,14 @@ import { defaultQueryColumns, QUERY_COLUMNS, QUERY_PRESETS } from "./query-colum
 
 export interface OtQueriesTabProps {
   transitOfficeId: string;
+  /**
+   * Reportes 2.0 (HU-D, tercera ola) — "Programar este informe" en una consulta guardada del
+   * organismo. Sin esto el botón no aparece (mismo criterio que Consultas de la empresa).
+   */
+  onScheduleQuery?: (query: SavedQuery) => void;
 }
 
-export function OtQueriesTab({ transitOfficeId }: OtQueriesTabProps) {
+export function OtQueriesTab({ transitOfficeId, onScheduleQuery }: OtQueriesTabProps) {
   // El origen se memoriza por organismo: la consola lo usa como dependencia de sus efectos, y una
   // identidad nueva en cada render relanzaría el catálogo y las guardadas sin parar.
   const source = useMemo<QuerySource<OtQueryRow>>(
@@ -42,8 +47,9 @@ export function OtQueriesTab({ transitOfficeId }: OtQueriesTabProps) {
       fetchSaved: (signal) => fetchOtSavedQueries(transitOfficeId, signal),
       save: (input) => saveOtQuery(input, transitOfficeId),
       remove: (id) => deleteOtSavedQuery(id, transitOfficeId),
+      onSchedule: onScheduleQuery,
     }),
-    [transitOfficeId],
+    [transitOfficeId, onScheduleQuery],
   );
 
   return (

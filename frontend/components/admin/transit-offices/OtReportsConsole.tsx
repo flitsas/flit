@@ -9,6 +9,7 @@ import {
   type OtReviewerOption,
 } from "@/lib/api/ot-metrics";
 import { SchedulingPanel } from "@/components/atom/modules/_reportes/scheduling/SchedulingPanel";
+import type { SchedulePresetConsulta } from "@/components/atom/modules/_reportes/scheduling/ScheduleForm";
 import { OtAnalysisTab } from "./_reportes/OtAnalysisTab";
 import { OtNowTab } from "./_reportes/OtNowTab";
 import { OtQueriesTab } from "./_reportes/OtQueriesTab";
@@ -101,6 +102,10 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
   const [companies, setCompanies] = useState<OtClientCompanyOption[]>([]);
   const [reviewers, setReviewers] = useState<OtReviewerOption[]>([]);
   const [schedulingOpen, setSchedulingOpen] = useState(false);
+  // "Programar este informe" en una consulta guardada (Reportes 2.0, HU-D, tercera ola): mismo
+  // mecanismo que Reportes.tsx (empresa), con savedQueryScope="ot" fijo — el organismo solo
+  // programa las suyas, no hay alcance cross-organismo equivalente al "superadmin" de compañía.
+  const [schedulePreset, setSchedulePreset] = useState<SchedulePresetConsulta | null>(null);
 
   // Los dos catálogos se resuelven UNA vez por organismo y se reparten a las pestañas: ninguno
   // cambia con el rango ni con la modalidad, y recargarlos en cada pestaña solo sumaría llamadas.
@@ -182,12 +187,25 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
           reviewers={reviewers}
         />
       )}
-      {tab === "consultas" && <OtQueriesTab transitOfficeId={transitOfficeId} />}
+      {tab === "consultas" && (
+        <OtQueriesTab
+          transitOfficeId={transitOfficeId}
+          onScheduleQuery={(query) => {
+            setSchedulePreset({ savedQueryId: query.id, savedQueryScope: "ot", queryName: query.nombre });
+            setSchedulingOpen(true);
+          }}
+        />
+      )}
 
       <SchedulingPanel
         open={schedulingOpen}
-        onClose={() => setSchedulingOpen(false)}
+        onClose={() => {
+          setSchedulingOpen(false);
+          setSchedulePreset(null);
+        }}
         otTransitOfficeId={transitOfficeId}
+        presetConsulta={schedulePreset}
+        onConsumePreset={() => setSchedulePreset(null)}
       />
     </div>
   );

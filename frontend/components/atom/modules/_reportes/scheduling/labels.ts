@@ -16,9 +16,12 @@ export const REPORT_TYPE_LABELS: Record<ReportType, string> = {
   // Solo se crea desde "Programar este informe" en una consulta guardada — no aparece en el
   // selector de "Nuevo informe programado" (ver ScheduleForm), pero sí en el listado.
   consulta: "Consulta personalizada",
-  // Alcance Organismo de Tránsito (Reportes 2.0, HU-D, tercera ola): único tipo que se ofrece
-  // en el panel de "Programación y alertas" del propio organismo (ver SchedulesSection).
-  ot_operativo: "Mi organismo de tránsito",
+  // Alcance Organismo de Tránsito (Reportes 2.0, HU-D, tercera ola): los 3 tipos que ofrece el
+  // panel de "Programación y alertas" del propio organismo (ver SchedulesSection), uno por
+  // pestaña con rango de OtReportsConsole.tsx.
+  ot_analisis: "Análisis (causales de rechazo)",
+  ot_informe: "Informe del periodo",
+  ot_revisores: "Revisores",
 };
 
 export const FREQUENCY_LABELS: Record<ScheduleFrequency, string> = {
