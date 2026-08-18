@@ -58,9 +58,16 @@ public sealed class GenerarFurHandler(
     IRepresentanteLegalDirectory? representanteDirectory = null,
     Certifications.ICertificationReader? certificationReader = null,
     IPersonalizedDocumentResolver? personalizedDocumentResolver = null,
-    IMandateCustomTemplateBlobReader? mandateTemplateBlobReader = null)
+    IMandateCustomTemplateBlobReader? mandateTemplateBlobReader = null,
+    ITransitOfficeResolver? transitOfficeResolver = null)
     : IExpedienteHotDocumentsRegenerator
 {
+    // Bug #11613 — respaldo del gate de organismo: resuelve el OT habilitado por id para rellenar los
+    // field_values `transit_office_*` cuando el trámite solo trae la COLUMNA transit_office_id. Default
+    // inerte (NUNCA resuelve) en tests/DI que no lo ejercitan ⇒ el gate se comporta como antes.
+    private readonly ITransitOfficeResolver _transitOfficeResolver =
+        transitOfficeResolver ?? NullTransitOfficeResolver.Instance;
+
     // HU #11198 (AC3) — respaldo del directorio para el nombre del representante cuando el trámite no lo
     // trajo. Default inerte (nunca responde) en los tests que no lo ejercitan: sin él, el hueco queda
     // como estaba, que es el comportamiento previo.
@@ -158,12 +165,37 @@ public sealed class GenerarFurHandler(
             repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy);
         var identidadValidada = BiometriaGateOk(identidadAprobada, esTraspaso);
 
-        var fv = instance.FieldValues
-            .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
+        // Dedup defensivo: `field_values` NO tiene índice único sobre (procedure_instance_id,
+        // field_key), así que un trámite con dos filas de la misma clave —escritas por dos caminos
+        // concurrentes en el pasado— hacía que ToDictionary lanzara ArgumentException y dejaba el
+        // trámite SIN poder generar documentos nunca más. Con el agrupado, gana la fila con valor no
+        // vacío más reciente y la generación sigue.
+        var fv = ProcedureFieldValues.ToDictionary(instance);
 
         // Gating organismo de tránsito: requiere transit_office_code no vacío en field_values.
-        if (string.IsNullOrWhiteSpace(Get(fv, "transit_office_code")))
+        //
+        // Bug #11613 — antes de rechazar, se rellena desde la COLUMNA instance.TransitOfficeId. Hay
+        // trámites con organismo real y sin field_values del organismo: CreateProcedureInstanceCommand
+        // escribe la columna a partir del request (es el camino de los borradores originados en ICT,
+        // que resuelven el OT por nombre) y NO escribe ninguna clave `transit_office_*`; y
+        // TramiteLifecycleService solo promueve field_values → columna al radicar, nunca al revés. En
+        // matrícula inicial el SubmitGate tampoco exige organismo, así que ese trámite se radica, llega
+        // a la bandeja del OT y al asignarle placa o aprobarlo la regeneración moría con
+        // `organismo_requerido` pese a tener organismo.
+        //
+        // El relleno es SOLO EN MEMORIA (alimenta `fv`, el diccionario que arma los documentos) y NO
+        // escribe `field_values`. La versión persistente reventaba en Postgres: el trigger
+        // `tramites.trg_field_value_immutable` (BEFORE INSERT OR UPDATE OR DELETE) solo admite escrituras
+        // en borrador, en rechazado con subsanación activa o sobre un puñado de claves del flujo de placa
+        // — y este camino corre SIEMPRE sobre trámites ya radicados. El INSERT abortaba la transacción y
+        // se perdía también el documento recién generado. Además, sin índice único sobre
+        // (procedure_instance_id, field_key), dos generaciones concurrentes podían dejar dos filas de la
+        // misma clave y romper para siempre el armado del diccionario. No persistir elimina las dos cosas.
+        if (string.IsNullOrWhiteSpace(Get(fv, "transit_office_code"))
+            && !await RellenarOrganismoEnMemoriaAsync(instance, tenantId, fv, ct))
+        {
             return (null, "organismo_requerido");
+        }
 
         // HU #11305 (Feature #11301, ADR-0041) — TODO lo certificado del expediente se resuelve aquí,
         // de una vez y CONTRA BASE DE DATOS. A partir de este punto generar el expediente no hace ni
@@ -1511,6 +1543,64 @@ public sealed class GenerarFurHandler(
         }
     }
 
+    /// <summary>
+    /// Bug #11613 — rellena EN MEMORIA las claves <c>transit_office_id/code/name/city</c> desde la
+    /// COLUMNA <c>instance.TransitOfficeId</c> cuando el trámite tiene organismo pero nunca escribió las
+    /// claves (borradores creados con OT explícito o resuelto por nombre, p. ej. los originados en ICT).
+    ///
+    /// <para>Devuelve <c>true</c> solo si quedó un <c>transit_office_code</c> utilizable. Si la columna
+    /// está vacía, o el OT ya no está habilitado para la empresa / está inactivo en el catálogo, NO se
+    /// inventa nada: el gate sigue devolviendo <c>organismo_requerido</c> (misma regla que
+    /// <c>PreflightCommand.AutoBindTransitOfficeForTraspasoAsync</c>).</para>
+    ///
+    /// <para><b>No escribe <c>field_values</c> a propósito.</b> El trigger
+    /// <c>tramites.trg_field_value_immutable</c> prohíbe insertar/actualizar/borrar filas de un trámite
+    /// radicado (solo deja borrador, rechazado con subsanación activa y unas claves puntuales del flujo
+    /// de placa), y este camino corre justamente sobre trámites radicados: el INSERT abortaba la
+    /// transacción y tumbaba también el documento recién generado. Los valores viajan por
+    /// <paramref name="fv"/>, el diccionario que alimenta a los generadores, y mueren con la petición.
+    /// La consecuencia asumida es que los demás lectores de la clave (checklist, config de mandato por
+    /// OT) siguen sin verla; leen la columna o vuelven a pasar por aquí.</para>
+    ///
+    /// <para>Nunca pisa un valor ya presente en <paramref name="fv"/>: lo que capturó el operador manda.</para>
+    /// </summary>
+    private async Task<bool> RellenarOrganismoEnMemoriaAsync(
+        ProcedureInstance instance,
+        Guid tenantId,
+        Dictionary<string, string?> fv,
+        CancellationToken ct)
+    {
+        if (instance.TransitOfficeId is not { } officeId || officeId == Guid.Empty)
+            return false;
+
+        var office = await _transitOfficeResolver.ResolveEnabledByIdAsync(tenantId, officeId, ct);
+        if (office is null || string.IsNullOrWhiteSpace(office.Code))
+            return false;
+
+        var rellenadas = 0;
+
+        void Rellenar(string key, string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || !string.IsNullOrWhiteSpace(Get(fv, key)))
+                return;
+
+            fv[key] = value;
+            rellenadas++;
+        }
+
+        Rellenar("transit_office_id", office.Id.ToString());
+        Rellenar("transit_office_code", office.Code);
+        Rellenar("transit_office_name", office.Name);
+        Rellenar("transit_office_city", office.CityCode);
+
+        // Solo se traza si de verdad se rellenó algo: un OT resuelto sin Name/CityCode y con el resto
+        // de claves ya presentes no es un relleno, y el log dejaba de distinguir un caso del otro.
+        if (rellenadas > 0)
+            GenerarFurLog.OrganismoRellenadoDesdeInstancia(logger, instance.Id, office.Id);
+
+        return !string.IsNullOrWhiteSpace(Get(fv, "transit_office_code"));
+    }
+
     private sealed record ActorMetadataDto(string? Ciudad, string? Direccion, ActorMetadataRl? RepresentanteLegal);
 
     /// <summary>Subconjunto del representante legal leído de <c>actor.metadata</c> (ADR-0036).</summary>
@@ -1577,6 +1667,10 @@ internal static partial class GenerarFurLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Sin datos de registro del RUES para un actor jurídico (instancia {InstanceId}); se omite su certificado en vez de emitirlo en blanco.")]
     public static partial void CertificadoRuesSinDatos(ILogger logger, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "El trámite {InstanceId} tenía organismo en la columna pero no en field_values; se rellenaron las claves transit_office_* desde el OT {TransitOfficeId} (Bug #11613).")]
+    public static partial void OrganismoRellenadoDesdeInstancia(ILogger logger, Guid instanceId, Guid transitOfficeId);
 
     // HU #11305 — se retiró CertificadoRuesConsultaEnVivo junto con la consulta que registraba. Esa
     // traza existía para medir cuántos trámites obligaban a pagar una consulta al generar el PDF y

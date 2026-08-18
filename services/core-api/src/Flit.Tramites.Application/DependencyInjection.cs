@@ -195,6 +195,9 @@ public static class DependencyInjection
         // HU #10860 (ADR-0032) — el consolidado del wizard regenera en cascada el FUR/documentos en
         // caliente vía este puerto, resuelto al mismo GenerarFurHandler (mismo scope/unidad de trabajo).
         services.AddScoped<IExpedienteHotDocumentsRegenerator>(sp => sp.GetRequiredService<GenerarFurHandler>());
+        // Bug #11613 — envoltura trazada de la regeneración en caliente para los flujos internos del OT
+        // (aprobar, asignar placa): inspecciona el resultado, loguea a Error y persiste evento.
+        services.AddScoped<RegenerarDocumentosTrazadoHandler>();
         services.AddScoped<GetFurTemplateFormatHandler>(); // HU #10924 — formato de FUR por clasificación
         services.AddScoped<GenerarConsolidadoHandler>();
         // HU #11051 — gate de generación documental del GESTOR (estado final ⇒ documentación definitiva).
