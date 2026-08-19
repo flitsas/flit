@@ -165,12 +165,14 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("muestra Log QX y Log ICT en el agrupador Integraciones", async () => {
+  it("muestra Log QX, Log ICT y Reportes ICT en el agrupador Integraciones", async () => {
     setDevSuperAdminToken();
     renderShell();
     await userEvent.click(screen.getByRole("button", { name: "Integraciones" }));
     expect(screen.getByRole("button", { name: "Log QX" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Log ICT" })).toBeInTheDocument();
+    // Reportes ICT (HU #11619): entrada separada de Log ICT, mismo agrupador.
+    expect(screen.getByRole("button", { name: "Reportes ICT" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Soporte" })).not.toBeInTheDocument();
   });
 
