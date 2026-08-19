@@ -1,9 +1,11 @@
 "use client";
 
 // Submódulo de observabilidad ICT (Integración con Terceros) — HU10893.
-// Dos pestañas: Logs (redactados/enmascarados por el backend) y Alertas ICT (métricas + eventos).
+// Tres pestañas: Logs (redactados/enmascarados por el backend), Alertas ICT (métricas + eventos)
+// y Consultas personalizadas (HU #11610), más un panel de "Programación" que reutiliza el mismo
+// componente que Reportes/Organismo — ver SchedulingPanel.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { Check } from "lucide-react";
+import { CalendarClock, Check } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   fetchIctAlerts,
@@ -18,27 +20,84 @@ import {
   fetchAlertEvents,
   fetchAlertRules,
   type AlertEvent,
+  type ReportType,
 } from "@/lib/api/analytics-scheduling";
 import { decodeJwtPayload, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import { SchedulingPanel } from "@/components/atom/modules/_reportes/scheduling/SchedulingPanel";
+import { IctQueriesTab } from "./_ict/IctQueriesTab";
 
-type Tab = "logs" | "alertas";
+type Tab = "logs" | "alertas" | "consultas";
 
 const LOG_TYPES: IctLogType[] = ["auth", "transaction", "webhook", "external"];
 const PAGE_SIZE = 25;
 
+/**
+ * Los 4 tipos de informe programado que ofrece este módulo (Reportes 2.0, HU-D, cuarta ola).
+ * "ict_jobs" queda fuera para quien no es SuperAdmin: `ict.job_runs` es platform-wide, sin
+ * `tenant_id`, así que el backend (`ReportSchedulesEndpoints`) lo rechaza para cualquier otro rol
+ * — mostrarlo igual solo llevaría a un 403 después de llenar el formulario.
+ */
+function ictReportTypes(isSuper: boolean): ReportType[] {
+  const base: ReportType[] = ["ict_novedades", "ict_atascados", "ict_webhooks"];
+  return isSuper ? [...base, "ict_jobs"] : base;
+}
+
+/**
+ * Compañía sobre la que corren las consultas y la programación de este módulo. El resto de
+ * usuarios va con la suya (el backend la resuelve del token); a SuperAdmin, sin un selector propio
+ * de compañía en este módulo, se le resuelve con el mismo criterio de degradación suave que ya
+ * usa `IctAlertEventsList` más abajo: su propio `tenant_id` del token.
+ */
+function useIctTenantId(): { tenantId: string | undefined; isSuper: boolean } {
+  return useMemo(() => {
+    if (typeof window === "undefined") return { tenantId: undefined, isSuper: false };
+    const payload = decodeJwtPayload(window.localStorage.getItem(TOKEN_STORAGE_KEY));
+    const isSuper = isSuperAdmin(payload);
+    return { tenantId: isSuper ? payload?.tenant_id : undefined, isSuper };
+  }, []);
+}
+
 export function IctLogs() {
   const [tab, setTab] = useState<Tab>("logs");
+  const [schedulingOpen, setSchedulingOpen] = useState(false);
+  const { tenantId, isSuper } = useIctTenantId();
+  const allowedReportTypes = useMemo(() => ictReportTypes(isSuper), [isSuper]);
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-[#162744] dark:text-white">Integración con Terceros — Observabilidad</h1>
-        <nav className="flex gap-2" role="tablist">
-          <TabButton active={tab === "logs"} onClick={() => setTab("logs")}>Logs</TabButton>
-          <TabButton active={tab === "alertas"} onClick={() => setTab("alertas")}>Alertas ICT</TabButton>
-        </nav>
+        <div className="flex flex-wrap items-center gap-2">
+          <nav className="flex gap-2" role="tablist">
+            <TabButton active={tab === "logs"} onClick={() => setTab("logs")}>Logs</TabButton>
+            <TabButton active={tab === "alertas"} onClick={() => setTab("alertas")}>Alertas ICT</TabButton>
+            <TabButton active={tab === "consultas"} onClick={() => setTab("consultas")}>Consultas</TabButton>
+          </nav>
+          <button
+            type="button"
+            onClick={() => setSchedulingOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-1.5 text-sm font-medium text-[#162744] hover:bg-[#F4F7FC] dark:border-slate-700 dark:text-white dark:hover:bg-white/5"
+            data-testid="ict-abrir-programacion"
+          >
+            <CalendarClock className="h-4 w-4" aria-hidden="true" />
+            Programación
+          </button>
+        </div>
       </header>
-      {tab === "logs" ? <LogsTab /> : <AlertsTab />}
+      {tab === "logs" && <LogsTab />}
+      {tab === "alertas" && <AlertsTab />}
+      {/* Sin `onScheduleQuery`: a diferencia de OT/empresa, el backend NO tiene un
+          SavedQueryScope="ict" (SchedulingValidation solo admite empresa/superadmin/ot), así que
+          "Programar este informe" sobre una consulta guardada de ICT no tiene a qué apuntar
+          todavía. El botón de calendario de SavedQueryList se queda oculto hasta que exista. */}
+      {tab === "consultas" && <IctQueriesTab tenantId={tenantId} />}
+
+      <SchedulingPanel
+        open={schedulingOpen}
+        onClose={() => setSchedulingOpen(false)}
+        tenantId={tenantId}
+        allowedReportTypes={allowedReportTypes}
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { BellRing, CalendarClock, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { ReportType } from "@/lib/api/analytics-scheduling";
 import { SchedulesSection } from "./SchedulesSection";
 import { AlertsSection } from "./AlertsSection";
 import type { SchedulePresetConsulta } from "./ScheduleForm";
@@ -25,6 +26,12 @@ export interface SchedulingPanelProps {
   /** Alcance Organismo de Tránsito (Reportes 2.0, HU-D, tercera ola): gestiona los informes y
    * alertas propios de ESE organismo — ver {@link SchedulesSection}/{@link AlertsSection}. */
   otTransitOfficeId?: string;
+  /**
+   * Restringe el selector "Tipo de informe" a estos (Reportes 2.0, HU-D, cuarta ola: el panel de
+   * ICT solo ofrece sus 4 tipos ict_*). Ignorado cuando se pasa `otTransitOfficeId`, que ya trae
+   * su propia restricción fija — ver {@link SchedulesSection}.
+   */
+  allowedReportTypes?: ReportType[];
 }
 
 type Tab = "schedules" | "alerts";
@@ -37,6 +44,7 @@ type Tab = "schedules" | "alerts";
  */
 export function SchedulingPanel({
   open, onClose, tenantId, needsCompany = false, presetConsulta, onConsumePreset, otTransitOfficeId,
+  allowedReportTypes,
 }: SchedulingPanelProps) {
   const [tab, setTab] = useState<Tab>("schedules");
 
@@ -119,6 +127,7 @@ export function SchedulingPanel({
               presetConsulta={presetConsulta ?? null}
               onConsumePreset={onConsumePreset}
               otTransitOfficeId={otTransitOfficeId}
+              allowedReportTypes={allowedReportTypes}
             />
           ) : (
             <AlertsSection

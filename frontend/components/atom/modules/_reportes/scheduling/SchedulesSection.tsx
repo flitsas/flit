@@ -47,6 +47,12 @@ interface SchedulesSectionProps {
    * sección gestiona los informes propios de ESE organismo (endpoint /admin/ot/report-schedules)
    * en vez de los de una compañía — mutuamente excluyente con `tenantId`/`needsCompany`. */
   otTransitOfficeId?: string;
+  /**
+   * Restringe el selector "Tipo de informe" del formulario (Reportes 2.0, HU-D, cuarta ola: el
+   * panel de ICT solo ofrece sus 4 tipos ict_*). Se ignora cuando hay `otTransitOfficeId`, que ya
+   * trae su propia restricción fija (`OT_REPORT_TYPES`).
+   */
+  allowedReportTypes?: ReportType[];
 }
 
 const OT_REPORT_TYPES: ReportType[] = ["ot_analisis", "ot_informe", "ot_revisores"];
@@ -66,6 +72,7 @@ function describeWhen(s: ReportSchedule): string {
  */
 export function SchedulesSection({
   tenantId, needsCompany = false, presetConsulta = null, onConsumePreset, otTransitOfficeId,
+  allowedReportTypes,
 }: SchedulesSectionProps) {
   const [items, setItems] = useState<ReportSchedule[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -195,7 +202,7 @@ export function SchedulesSection({
       {creating && (
         <ScheduleForm
           presetConsulta={activePreset ?? undefined}
-          allowedReportTypes={otTransitOfficeId ? OT_REPORT_TYPES : undefined}
+          allowedReportTypes={otTransitOfficeId ? OT_REPORT_TYPES : allowedReportTypes}
           onSubmit={handleCreate}
           onCancel={() => {
             setCreating(false);
@@ -206,7 +213,7 @@ export function SchedulesSection({
       {editing && (
         <ScheduleForm
           initial={editing}
-          allowedReportTypes={otTransitOfficeId ? OT_REPORT_TYPES : undefined}
+          allowedReportTypes={otTransitOfficeId ? OT_REPORT_TYPES : allowedReportTypes}
           onSubmit={handleUpdate}
           onCancel={() => setEditing(null)}
         />

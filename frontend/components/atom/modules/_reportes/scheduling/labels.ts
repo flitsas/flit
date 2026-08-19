@@ -22,6 +22,13 @@ export const REPORT_TYPE_LABELS: Record<ReportType, string> = {
   ot_analisis: "Análisis (causales de rechazo)",
   ot_informe: "Informe del periodo",
   ot_revisores: "Revisores",
+  // Alcance ICT (Reportes 2.0, HU-D, cuarta ola): los 4 tipos que ofrece el panel de
+  // "Programación" del módulo de Integración con Terceros. "ict_jobs" solo lo ofrece el
+  // selector a SuperAdmin — ver ICT_REPORT_TYPES en IctLogs.tsx.
+  ict_novedades: "ICT · Pre-trámites con novedades",
+  ict_atascados: "ICT · Atascados en validación",
+  ict_jobs: "ICT · Jobs fuera de SLA",
+  ict_webhooks: "ICT · Fallos de entrega de webhook",
 };
 
 export const FREQUENCY_LABELS: Record<ScheduleFrequency, string> = {
