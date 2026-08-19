@@ -484,6 +484,19 @@ export function TramiteWizard(props: Props) {
     referencia: string | null;
   } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  /**
+   * Observación de code review (Bug #11614) — salida de emergencia. Bloquear el cambio de paso
+   * cuando el guardado falla es correcto (desmontar el formulario perdería lo capturado, así que
+   * navegar avisando disfrazaría la pérdida en vez de evitarla), pero sin escape el gestor queda
+   * encerrado: con datos que el backend rechaza no puede ni avanzar ni retroceder, y su única
+   * salida sería recargar la página. Cuando el guardado falla se recuerda a dónde quería ir para
+   * ofrecerle, en el MISMO aviso, descartar lo capturado y salir — perder los datos deja de ser un
+   * accidente silencioso y pasa a ser una decisión suya, explícita.
+   */
+  const [descarteDisponible, setDescarteDisponible] = useState<{
+    index: number;
+    label: string;
+  } | null>(null);
   // Confirmación de "Cancelar trámite" (propuesta): salir pierde lo no guardado, y el botón vive
   // junto al de avance, donde un clic de más es fácil.
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -512,6 +525,21 @@ export function TramiteWizard(props: Props) {
   /** Prenda embebida en documentos (matrícula) o comercial (traspaso): save implícito al Continuar. */
   const prendaFormRef = useRef<WizardStepFormHandle>(null);
   const [continuing, setContinuing] = useState(false);
+  /**
+   * Observación de code review (Bug #11614) — `handleContinue` envuelve a `navigateToStep`, y ambos
+   * marcaban ocupado: al terminar el interno el botón se rehabilitaba mientras el externo seguía
+   * trabajando (identidad, refresh, avance), abriendo una ventana para el doble clic. Con un
+   * contador de profundidad, "ocupado" solo se apaga cuando se cierra la operación más externa.
+   */
+  const continuingDepthRef = useRef(0);
+  const beginContinuing = () => {
+    continuingDepthRef.current += 1;
+    setContinuing(true);
+  };
+  const endContinuing = () => {
+    continuingDepthRef.current = Math.max(0, continuingDepthRef.current - 1);
+    if (continuingDepthRef.current === 0) setContinuing(false);
+  };
   /**
    * Pasos comprador/vendedor: Continuar solo si la consulta RUNT/RUES del actor fue exitosa.
    * El formulario notifica el gate; al salir del paso se resetea.
@@ -650,8 +678,41 @@ export function TramiteWizard(props: Props) {
     scrollWizardToTop();
   }, [activeIndex, scrollWizardToTop]);
 
-  const goToStep = (index: number) => {
-    if (!canNavigateToStep(steps, index, navViewOnly)) return;
+  /**
+   * Bug #11614 — guarda lo capturado en el paso ACTIVO antes de abandonarlo.
+   *
+   * Los formularios embebidos (`ActorsForm`, `CommercialForm`, `PrendaForm`) solo persisten a través
+   * del `save()` que exponen por ref, y hasta ahora ese `save` únicamente lo disparaba "Continuar":
+   * cambiar de paso por el stepper superior (o por "Anterior") desmontaba el formulario y tiraba a la
+   * basura lo escrito. Aquí se cierra esa vía — para TODOS los formularios del paso, no solo la prenda.
+   *
+   * Solo guarda lo que tenga captura pendiente (`hasPendingChanges`): un paso que se abrió para mirar
+   * no paga una llamada de red ni choca contra las validaciones del formulario al navegar.
+   *
+   * Devuelve `'fallo'` si algo quedó sin persistir: el llamador NO debe cambiar de paso en ese caso.
+   */
+  const persistPendingStepForms = async (): Promise<'sin-cambios' | 'guardado' | 'fallo'> => {
+    const pendientes = [stepFormRef.current, prendaFormRef.current].filter(
+      (form): form is WizardStepFormHandle => !!form && form.hasPendingChanges(),
+    );
+    if (pendientes.length === 0) return 'sin-cambios';
+    for (const form of pendientes) {
+      let ok = false;
+      try {
+        ok = await form.save();
+      } catch {
+        // El formulario ya pinta su propio error de detalle; aquí solo interesa que NO persistió.
+        ok = false;
+      }
+      if (!ok) return 'fallo';
+    }
+    return 'guardado';
+  };
+
+  /** Cambio de paso propiamente dicho (telemetría + autosave del punto de retoma + índice). */
+  const commitStep = (index: number) => {
+    // Al cambiar de paso, la oferta de descarte pierde sentido (era del paso que se abandona).
+    setDescarteDisponible(null);
     // Reportes2 HU-A — retroceso o salto de paso = wizard_step_exit con duración
     // de permanencia (el avance +1 con éxito lo reporta handleContinue como complete).
     if (index < activeIndex || index > activeIndex + 1) telemetry.trackStepExit();
@@ -659,6 +720,73 @@ export function TramiteWizard(props: Props) {
     // reabrir un paso ya visitado: retroceder a revisar un paso no debe mover el punto de retoma.
     if (index > activeIndex && steps[index]) persistCurrentStep(steps[index].key);
     setActiveIndex(index);
+  };
+
+  /**
+   * Bug #11614 — navegación entre pasos: persiste primero lo capturado en el paso activo y solo
+   * entonces cambia de paso. Si el guardado falla NO se navega y se avisa: el formulario sigue
+   * montado con los datos en pantalla, que es la única forma de no perderlos (cambiar de paso lo
+   * desmontaría y la rehidratación traería del backend lo viejo). El guardado del contenido, a
+   * diferencia del autosave del punto de retoma, NO puede ser fire-and-forget.
+   */
+  const navegandoRef = useRef(false);
+  /** Contenedor del asistente: destino del foco tras descartar y salir de un paso bloqueado. */
+  const wizardRootRef = useRef<HTMLDivElement>(null);
+  const navigateToStep = async (index: number): Promise<boolean> => {
+    if (!canNavigateToStep(steps, index, navViewOnly)) return false;
+    if (index === activeIndex) return true;
+    // Un doble clic en el stepper no debe lanzar dos guardados del mismo paso.
+    if (navegandoRef.current) return false;
+    // En solo lectura no hay captura que guardar: la navegación no paga nada.
+    if (!editLocked) {
+      navegandoRef.current = true;
+      beginContinuing();
+      setSubmitError(null);
+      setDescarteDisponible(null);
+      let resultado: 'sin-cambios' | 'guardado' | 'fallo' = 'sin-cambios';
+      try {
+        resultado = await persistPendingStepForms();
+      } finally {
+        navegandoRef.current = false;
+        endContinuing();
+      }
+      if (resultado === 'fallo') {
+        const destino = steps[index]?.label ?? `paso ${index + 1}`;
+        setSubmitError(
+          'No se pudo guardar lo capturado en este paso, así que no se cambió de paso. Revisa los datos marcados y vuelve a intentarlo: la información sigue en pantalla. Si prefieres salir sin guardar, descarta lo capturado con el botón de abajo.',
+        );
+        // La salida de emergencia: el gestor puede irse a conciencia, perdiendo lo de este paso.
+        setDescarteDisponible({ index, label: destino });
+        show('No se pudo guardar: sigues en el mismo paso y la información está en pantalla.', 'error');
+        return false;
+      }
+      if (resultado === 'guardado') setHasUnsavedChanges(false);
+    }
+    commitStep(index);
+    return true;
+  };
+
+  const goToStep = (index: number) => {
+    void navigateToStep(index);
+  };
+
+  /**
+   * Salida de emergencia del paso cuyo guardado falla (observación de code review, Bug #11614).
+   * NO reintenta guardar: cambia de paso a sabiendas de que lo capturado en el formulario se pierde
+   * al desmontarse. Solo se ofrece tras un fallo explícito y siempre nombrando el destino, para que
+   * nadie lo confunda con «guardar y salir».
+   */
+  const descartarCambiosYSalir = () => {
+    if (!descarteDisponible) return;
+    const { index, label } = descarteDisponible;
+    setSubmitError(null);
+    setHasUnsavedChanges(false);
+    show(`Se descartó lo capturado en ese paso. Ahora estás en «${label}».`, 'success');
+    commitStep(index);
+    // El botón pulsado desaparece con el aviso: sin esto el foco caería al <body> y el gestor
+    // perdería el punto de lectura (WCAG 2.1 AA, 2.4.3). El contenedor del asistente es
+    // focalizable por programa (tabIndex -1) y no entra en el orden de tabulación.
+    wizardRootRef.current?.focus();
   };
 
   // Reanudar en el paso donde quedó el usuario: cuando los pasos llegan del
@@ -905,7 +1033,7 @@ export function TramiteWizard(props: Props) {
     // nada persistido; el operador puede reintentar sobre la misma consulta.
     if (deferredCreation) {
       if (!pendingConsulta || !entryModalidad) return;
-      setContinuing(true);
+      beginContinuing();
       setSubmitError(null);
       try {
         const created = await tramitesClient.createInstanceFromConsulta({
@@ -971,7 +1099,7 @@ export function TramiteWizard(props: Props) {
           err instanceof Error ? err.message : 'No se pudo crear el trámite. Reintenta.',
         );
       } finally {
-        setContinuing(false);
+        endContinuing();
       }
       return;
     }
@@ -979,7 +1107,7 @@ export function TramiteWizard(props: Props) {
     if (!isSavableStep) {
       // Matrícula: la prenda vive en el paso documentos; se persiste al Continuar (sin botón aparte).
       if (activeStep?.key === 'documentos' && modalidad !== 'traspaso') {
-        setContinuing(true);
+        beginContinuing();
         setSubmitError(null);
         try {
           const okPrenda = await prendaFormRef.current?.save();
@@ -988,20 +1116,20 @@ export function TramiteWizard(props: Props) {
             return;
           }
           if (canNavigateToStep(steps, activeIndex + 1, navViewOnly)) telemetry.trackStepComplete();
-          goToStep(activeIndex + 1);
+          await navigateToStep(activeIndex + 1);
           if (inSubsanacion) {
             setHasUnsavedChanges(false);
             setSubsanacionSavedEdits(true);
             show('Cambios guardados. Ya puedes re-radicar cuando termines.', 'success');
           }
         } finally {
-          setContinuing(false);
+          endContinuing();
         }
         return;
       }
       // Reportes2 HU-A — avance con éxito desde un paso sin form embebido.
       if (canNavigateToStep(steps, activeIndex + 1, navViewOnly)) telemetry.trackStepComplete();
-      goToStep(activeIndex + 1);
+      await navigateToStep(activeIndex + 1);
       // Subsanación: docs/checklist ya persisten al editar; Continuar confirma y habilita Re-radicar.
       if (inSubsanacion) {
         setHasUnsavedChanges(false);
@@ -1010,7 +1138,7 @@ export function TramiteWizard(props: Props) {
       }
       return;
     }
-    setContinuing(true);
+    beginContinuing();
     setSubmitError(null);
     try {
       const ok = await stepFormRef.current?.save();
@@ -1136,13 +1264,18 @@ export function TramiteWizard(props: Props) {
         err instanceof Error ? err.message : 'No se pudo guardar. Por favor, reintenta.',
       );
     } finally {
-      setContinuing(false);
+      endContinuing();
     }
   };
 
   return (
    <WizardReadOnlyProvider readOnly={editLocked}>
-    <div id="tramite-wizard-root" className="flex w-full flex-col gap-3 pb-2">
+    <div
+      id="tramite-wizard-root"
+      ref={wizardRootRef}
+      tabIndex={-1}
+      className="flex w-full flex-col gap-3 pb-2 focus:outline-none"
+    >
       {/* Radicar es la espera más larga del flujo y la que más ansiedad genera: mientras dura, el
           velo impide el doble envío y el mensaje nombra al organismo de tránsito, para que la
           demora se lea como lo que es —un tercero respondiendo— y no como un cuelgue. */}
@@ -1319,7 +1452,21 @@ export function TramiteWizard(props: Props) {
           role="alert"
           aria-live="polite"
         >
-          {wizardError ?? submitError ?? state.error}
+          <p>{wizardError ?? submitError ?? state.error}</p>
+          {/* Salida de emergencia del paso bloqueado: vive DENTRO del mismo aviso que explica el
+              bloqueo (sin superficie visual nueva) y nombra el destino en el propio texto del
+              botón, que es también su nombre accesible (WCAG 2.5.3). */}
+          {!wizardError && descarteDisponible && (
+            <button
+              type="button"
+              onClick={descartarCambiosYSalir}
+              className="mt-2 h-9 rounded-xl border px-4 text-[12px] font-semibold transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#FF4E00]"
+              style={{ borderColor: '#FF4E00', color: '#FF4E00' }}
+              title="Sales del paso sin guardar: lo capturado en este formulario se pierde"
+            >
+              Descartar lo capturado e ir a «{descarteDisponible.label}»
+            </button>
+          )}
         </div>
       )}
 
@@ -1482,7 +1629,7 @@ export function TramiteWizard(props: Props) {
                   type="button"
                   onClick={() => {
                     void (async () => {
-                      setContinuing(true);
+                      beginContinuing();
                       try {
                         if (stepFormRef.current?.save) {
                           const ok = await stepFormRef.current.save();
@@ -1499,7 +1646,7 @@ export function TramiteWizard(props: Props) {
                           'success',
                         );
                       } finally {
-                        setContinuing(false);
+                        endContinuing();
                       }
                     })();
                   }}

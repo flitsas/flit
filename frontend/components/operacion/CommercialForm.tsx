@@ -3,6 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { digitsOnly, groupThousands, sanitizeDecimalInput } from '@/lib/format/currency';
+import { usePendingChanges } from './pending-changes';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { AvaluoComercialCard } from './AvaluoComercialCard';
 import type { WizardStepFormHandle } from './wizard-step-form';
@@ -80,6 +81,19 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
   // Solo lectura (Track C): inputs deshabilitados + sin botón guardar.
   const readOnly = useWizardReadOnly();
   const [data, setData] = useState<CommercialData>(EMPTY);
+  /**
+   * Bug #11614 — captura del usuario sin persistir. Solo la edición del gestor la marca (nunca la
+   * carga desde el backend), y la shell la consulta vía `hasPendingChanges` antes de cambiar de
+   * paso por el stepper o por "Anterior", donde este formulario se desmonta. La marca se limpia
+   * siempre con `beginSettle()` tomado ANTES del await, para que una carga (o un PUT) que resuelve
+   * tarde no borre lo que el gestor escribió mientras tanto.
+   */
+  const pending = usePendingChanges();
+  /** Edición del usuario: muta el estado y marca pendiente de guardar. */
+  const editData = (updater: (d: CommercialData) => CommercialData) => {
+    pending.markDirty();
+    setData(updater);
+  };
   /** Borrador de tasa para permitir tipar "1." sin perder el separador. */
   const [tasaText, setTasaText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -94,11 +108,16 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
     // effect) para no disparar la regla react-hooks/set-state-in-effect.
     const load = async () => {
       setLoading(true);
+      // ANTES del await: si el gestor escribe mientras la carga viaja, la marca sobrevive.
+      const settle = pending.beginSettle();
       try {
         const d = await tramitesClient.getCommercial(instanceId);
         if (active && d) {
           setData({ ...EMPTY, ...d });
           setTasaText(d.tasaImpuesto != null ? String(d.tasaImpuesto) : '');
+          // Lo cargado ES lo persistido: no cuenta como cambio pendiente (salvo que el gestor
+          // haya capturado algo mientras la petición estaba en vuelo).
+          settle();
         }
       } catch {
         /* sin datos previos: se queda el form vacío */
@@ -110,7 +129,8 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
     return () => {
       active = false;
     };
-  }, [instanceId]);
+    // `pending` es estable (instancia única por montaje): no re-dispara la carga.
+  }, [instanceId, pending]);
 
   const valid =
     data.valorVenta != null && data.valorVenta > 0 && data.causal != null;
@@ -126,9 +146,12 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
     setSaving(true);
     setSaved(false);
     setError(null);
+    // El payload queda congelado aquí: lo que se teclee mientras el PUT viaja sigue pendiente.
+    const settle = pending.beginSettle();
     try {
       await tramitesClient.putCommercial(instanceId, data);
       setSaved(true);
+      settle();
       onSaved?.();
       return true;
     } catch (err) {
@@ -141,7 +164,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
     }
   };
 
-  useImperativeHandle(ref, () => ({ save: submit }));
+  useImperativeHandle(ref, () => ({ save: submit, hasPendingChanges: pending.hasPendingChanges }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,7 +228,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
               value={data.valorVenta != null ? groupThousands(String(data.valorVenta)) : ''}
               onChange={(e) => {
                 const digits = digitsOnly(e.target.value);
-                setData((d) => ({
+                editData((d) => ({
                   ...d,
                   valorVenta: digits === '' ? null : Number(digits),
                   // Edición manual: el valor deja de ser el sugerido (trazabilidad).
@@ -227,7 +250,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
             id="comercial-causal"
             value={data.causal ?? ''}
             onChange={(e) =>
-              setData((d) => ({
+              editData((d) => ({
                 ...d,
                 causal: (e.target.value || null) as CommercialCausal | null,
               }))
@@ -255,8 +278,9 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
             value={tasaText}
             onChange={(e) => {
               const raw = sanitizeDecimalInput(e.target.value);
+              pending.markDirty();
               setTasaText(raw);
-              setData((d) => ({ ...d, tasaImpuesto: decimalOrNull(raw) }));
+              editData((d) => ({ ...d, tasaImpuesto: decimalOrNull(raw) }));
             }}
             className={INPUT_BASE}
           />
@@ -274,7 +298,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
             autoComplete="off"
             value={data.derechos ?? ''}
             onChange={(e) =>
-              setData((d) => ({ ...d, derechos: integerOrNull(e.target.value) }))
+              editData((d) => ({ ...d, derechos: integerOrNull(e.target.value) }))
             }
             className={INPUT_BASE}
           />
@@ -289,7 +313,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
             type="text"
             value={data.metodoPago ?? ''}
             onChange={(e) =>
-              setData((d) => ({ ...d, metodoPago: e.target.value || null }))
+              editData((d) => ({ ...d, metodoPago: e.target.value || null }))
             }
             className={INPUT_BASE}
           />
@@ -305,7 +329,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
             disabled={readOnly}
             accepted={data.valueOrigin === 'suggestion'}
             onAccept={(value, source, sugerido) =>
-              setData((d) => ({
+              editData((d) => ({
                 ...d,
                 valorVenta: value,
                 valueOrigin: 'suggestion',

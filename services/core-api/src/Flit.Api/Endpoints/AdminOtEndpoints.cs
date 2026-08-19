@@ -900,7 +900,7 @@ public static class AdminOtEndpoints
         ApproveOtClientProcedureHandler handler,
         IOtClientProcedureRepository otRepository,
         MandatoApprovalHandler mandatoApproval,
-        GenerarFurHandler furHandler,
+        RegenerarDocumentosTrazadoHandler regeneracionTrazada,
         ILoggerFactory loggerFactory,
         ITransitOfficeCatalog transitOfficeCatalog,
         [FromQuery] Guid? transitOfficeId,
@@ -979,17 +979,36 @@ public static class AdminOtEndpoints
         // NO revierte la aprobación ya persistida.
         if (result.Status == ApproveOtClientProcedureStatus.Approved)
         {
+            // Bug #11613 — el retorno del generador es una tupla (Result, Error) y un error de negocio
+            // NO lanza excepción: descartarlo dejaba el trámite sin documentos regenerados, sin log y
+            // con 200 OK. El handler trazado inspecciona ese retorno, loguea a Error y persiste un
+            // evento consultable en la instancia. Sigue siendo best-effort: la aprobación NO se revierte.
             try
             {
-                await otRepository
+                // El retorno NO se descarta (es la forma exacta del defecto que originó este bug): si
+                // la regeneración falló y además no se pudo dejar la traza en la instancia, el único
+                // rastro posible es este log — sin él el fallo desaparecería por completo.
+                var regeneracion = await otRepository
                     .ExecuteInClientTenantScopeAsync(
                         procedure.ClientTenantId,
-                        () => furHandler.HandleAsync(id, procedure.ClientTenantId, cancellationToken),
+                        () => regeneracionTrazada.HandleAsync(
+                            id,
+                            procedure.ClientTenantId,
+                            RegeneracionDocumentalOrigen.AprobacionOt,
+                            cancellationToken),
                         cancellationToken)
                     .ConfigureAwait(false);
+
+                if (!regeneracion.Ok && !regeneracion.TrazaPersistida)
+                {
+                    AdminOtMandatoLog.RegeneracionSinTraza(
+                        loggerFactory.CreateLogger("AdminOt.ApproveMandato"), id, regeneracion.Error ?? "desconocido");
+                }
             }
             catch (Exception ex)
             {
+                // Red de seguridad: el handler trazado ya absorbe los fallos del generador; aquí solo
+                // caen los del propio scope RLS / conexión, que no tienen dónde persistirse.
                 AdminOtMandatoLog.RegeneracionMandatoOmitida(
                     loggerFactory.CreateLogger("AdminOt.ApproveMandato"), ex, id);
             }
@@ -2368,4 +2387,8 @@ internal static partial class AdminOtMandatoLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudo regenerar el mandato al aprobar el trámite {InstanceId}; se conserva el mandato previo.")]
     public static partial void RegeneracionMandatoOmitida(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "La regeneración documental al aprobar el trámite {InstanceId} falló con {CodigoError} y la traza NO quedó persistida; el diagnóstico solo existe en estos logs.")]
+    public static partial void RegeneracionSinTraza(ILogger logger, Guid instanceId, string codigoError);
 }

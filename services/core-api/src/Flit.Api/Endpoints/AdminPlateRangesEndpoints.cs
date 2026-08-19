@@ -71,7 +71,7 @@ public static class AdminPlateRangesEndpoints
 
     private static async Task<IResult> AssignPlateToProcedureAsync(
         Guid instanceId, AssignPlateToProcedureRequest request, HttpContext http,
-        IOtClientProcedureRepository otRepo, GenerarFurHandler furHandler,
+        IOtClientProcedureRepository otRepo, RegenerarDocumentosTrazadoHandler regeneracionTrazada,
         IPlateAssignmentEmailEnqueuer plateAssignmentEmailEnqueuer,
         ILoggerFactory loggerFactory, CancellationToken ct)
     {
@@ -159,17 +159,35 @@ public static class AdminPlateRangesEndpoints
         var procedure = await otRepo.GetByIdAsync(otTenantId, instanceId, ct).ConfigureAwait(false);
         if (procedure is not null)
         {
+            // Bug #11613 — el generador señala los errores de negocio POR RETORNO (tupla), no por
+            // excepción: descartarlo dejaba la placa asignada y los documentos sin regenerar, en
+            // silencio y con 200 OK. El handler trazado inspecciona el retorno, loguea a Error y deja
+            // un evento consultable. Best-effort intacto: la asignación de placa NO se revierte.
             try
             {
-                await otRepo
+                // El retorno NO se descarta (era justo la forma del defecto que originó este bug): si la
+                // regeneración falló y tampoco se pudo dejar la traza en la instancia, este log es el
+                // único rastro que queda del fallo.
+                var regeneracion = await otRepo
                     .ExecuteInClientTenantScopeAsync(
                         procedure.ClientTenantId,
-                        () => furHandler.HandleAsync(instanceId, procedure.ClientTenantId, ct),
+                        () => regeneracionTrazada.HandleAsync(
+                            instanceId,
+                            procedure.ClientTenantId,
+                            RegeneracionDocumentalOrigen.AsignacionPlaca,
+                            ct),
                         ct)
                     .ConfigureAwait(false);
+
+                if (!regeneracion.Ok && !regeneracion.TrazaPersistida)
+                {
+                    AdminPlateRegenLog.RegeneracionSinTraza(
+                        loggerFactory.CreateLogger("AdminPlate.AssignPlateRegen"), instanceId, regeneracion.Error ?? "desconocido");
+                }
             }
             catch (Exception ex)
             {
+                // Red de seguridad: solo los fallos del scope RLS / conexión llegan hasta aquí.
                 AdminPlateRegenLog.RegeneracionPlacaOmitida(
                     loggerFactory.CreateLogger("AdminPlate.AssignPlateRegen"), ex, instanceId);
             }
@@ -356,6 +374,10 @@ internal static partial class AdminPlateRegenLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudieron regenerar los documentos tras asignar la placa al trámite {InstanceId}; se conservan los previos.")]
     public static partial void RegeneracionPlacaOmitida(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Error,
+        Message = "La regeneración documental tras asignar la placa al trámite {InstanceId} falló con {CodigoError} y la traza NO quedó persistida; el diagnóstico solo existe en estos logs.")]
+    public static partial void RegeneracionSinTraza(ILogger logger, Guid instanceId, string codigoError);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Conflicto de persistencia al asignar la placa al trámite {InstanceId}; se responde 409 al OT.")]
