@@ -103,7 +103,7 @@ describe("IctLogs — pestaña Consultas y programación (HU #11610)", () => {
     expect(await screen.findByTestId("scheduling-panel")).toBeInTheDocument();
   });
 
-  it("no ofrece 'ICT · Jobs fuera de SLA' en el selector de tipo cuando el usuario no es SuperAdmin", async () => {
+  it("no ofrece 'ICT · Detalle de rendimiento de jobs' en el selector de tipo cuando el usuario no es SuperAdmin", async () => {
     mocks.isSuperAdmin.mockReturnValue(false);
     const user = userEvent.setup();
     render(<IctLogs />);
@@ -114,11 +114,11 @@ describe("IctLogs — pestaña Consultas y programación (HU #11610)", () => {
 
     const select = screen.getByLabelText("Tipo de informe");
     const options = within(select).getAllByRole("option").map((o) => o.textContent);
-    expect(options).toContain("ICT · Pre-trámites con novedades");
-    expect(options).not.toContain("ICT · Jobs fuera de SLA");
+    expect(options).toContain("ICT · Detalle de novedades por causa");
+    expect(options).not.toContain("ICT · Detalle de rendimiento de jobs");
   });
 
-  it("sí ofrece 'ICT · Jobs fuera de SLA' cuando el usuario es SuperAdmin", async () => {
+  it("sí ofrece 'ICT · Detalle de rendimiento de jobs' cuando el usuario es SuperAdmin", async () => {
     mocks.isSuperAdmin.mockReturnValue(true);
     const user = userEvent.setup();
     render(<IctLogs />);
@@ -129,6 +129,6 @@ describe("IctLogs — pestaña Consultas y programación (HU #11610)", () => {
 
     const select = screen.getByLabelText("Tipo de informe");
     const options = within(select).getAllByRole("option").map((o) => o.textContent);
-    expect(options).toContain("ICT · Jobs fuera de SLA");
+    expect(options).toContain("ICT · Detalle de rendimiento de jobs");
   });
 });
