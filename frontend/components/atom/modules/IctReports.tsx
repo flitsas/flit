@@ -384,11 +384,12 @@ function ExcelExportButton({
         onClick={() => void run()}
         disabled={disabled || busy}
         aria-busy={busy}
-        // Acción principal de la fila, así que va con el fondo de marca (el mismo de "Reintentar" y
-        // del PDF ejecutivo de empresa) en vez del borde neutro: aquí no compite con un segundo
-        // botón de exportación del que hubiera que distinguirla.
-        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg text-white disabled:opacity-50"
-        style={{ background: "#557EFF" }}
+        // Mismo tratamiento que el "Exportar Excel" de empresa (_reportes/ExportButtons): borde y
+        // texto neutro. El azul relleno está reservado en el producto para la acción primaria de la
+        // fila —allí, el PDF ejecutivo—, y una exportación a Excel no lo es en ninguno de los
+        // módulos: que ICT lo usara era la excepción, no la regla.
+        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border disabled:opacity-50"
+        style={{ color: "#162744" }}
         data-testid="ict-reportes-exportar-excel"
       >
         {busy ? (
