@@ -58,6 +58,14 @@ import {
   normalizeNitDigits,
   OWNER_NOT_TENANT_MESSAGE,
 } from '@/lib/tramites/vehicleOwnership';
+// HU #11628 — gate + traducción de UI del dígito de preferencia de placa, aisladas en funciones
+// puras para no duplicar la lógica entre el gate de "Continuar" y el `<select>` del paso.
+import {
+  isPlateDigitDecisionRequired,
+  isPlateDigitUndecided,
+  toPlateDigitFieldValues,
+  toPlateDigitUiValue,
+} from '@/lib/tramites/plate-digit-preference';
 import {
   sanitizeVin,
   validateVin,
@@ -349,6 +357,13 @@ export function TramiteWizard(props: Props) {
   // que es donde se captura desde el rediseño. Arranca en `true` — mientras el paso no se monta no
   // hay nada que gatear — y `DeclaracionesTramite` lo corrige en cuanto se abre.
   const [tipoServicioGateOk, setTipoServicioGateOk] = useState(true);
+
+  // HU #11628 — dígito de preferencia de placa: mientras el selector esté visible, habilitado y sin
+  // preasignación cerrada por otra vía, el gestor debe declarar explícitamente un dígito o "sin
+  // preferencia" antes de continuar. Arranca en `true` (gate abierto): mientras el paso no se monta,
+  // o no aplica (traspaso, VIN con placa RUNT, organismo sin preasignación activa), no hay nada que
+  // exigir. `ConsultaStep` es quien decide si aplica y en qué momento cierra el gate.
+  const [digitoPlacaGateOk, setDigitoPlacaGateOk] = useState(true);
 
   // Estado de la instancia existente + sello de borrador finalizado (HU #10350). Se derivan
   // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
@@ -1006,6 +1021,9 @@ export function TramiteWizard(props: Props) {
     (isActorStep && !actorsConsultationReady) ||
     // Certificado de prenda obligatorio sin adjuntar: no Continuar.
     (isPrendaStep && !prendaDocGateOk) ||
+    // HU #11628 — dígito de preferencia de placa sin declarar (ni dígito ni "sin preferencia") con
+    // preasignación activa: no Continuar. `digitoPlacaGateOk` ya contempla los casos donde no aplica.
+    (activeStep?.key === 'consulta_vin' && !digitoPlacaGateOk) ||
     // Tipo de servicio (casilla 18 del FUR, solo matrícula inicial): sin tipo elegido no se avanza
     // del paso de requisitos; si el tipo es PÚBLICO, tampoco hasta que la consulta devuelva la razón
     // social de la empresa vinculadora (casilla 19). Misma regla que antes gobernaba el paso 1, en el
@@ -1522,6 +1540,7 @@ export function TramiteWizard(props: Props) {
                 prioritario={pendingPrioritario}
                 onPrioritarioChange={setPendingPrioritario}
                 onTipoServicioGateChange={setTipoServicioGateOk}
+                onDigitoPlacaGateChange={setDigitoPlacaGateOk}
                 paqueteDocsStatus={paqueteDocsStatus}
                 onPaqueteStatusChange={setPaqueteDocsStatus}
                 onConfirmacionesExpedienteChange={setConfirmacionesExpediente}
@@ -2196,6 +2215,7 @@ function ConsultaStep({
   prioritario = false,
   onPrioritarioChange,
   esMigrado = false,
+  onDigitoPlacaGateChange,
 }: {
   step: WizardStep;
   instanceId: string | null;
@@ -2215,6 +2235,8 @@ function ConsultaStep({
   onPrioritarioChange?: (value: boolean) => void;
   /** Migración V1→V2 — explica en el panel por qué el pre-vuelo llega vacío. */
   esMigrado?: boolean;
+  /** HU #11628 — Gate Continuar: dígito de preferencia de placa declarado (dígito o "sin preferencia"). */
+  onDigitoPlacaGateChange?: (ok: boolean) => void;
 }) {
   const isVin = step.key === 'consulta_vin';
   // CF-02 (HU #10883, AC3) — sin trámite creado: la consulta no persiste nada y sus resultados viven
@@ -2331,6 +2353,29 @@ function ConsultaStep({
   )?.valueText?.trim() ?? '';
   const vehiculoConPlacaRunt = placaRunt !== '';
 
+  /**
+   * HU #11628 — el dígito de preferencia exige una elección consciente cuando el selector está
+   * realmente en juego: paso de matrícula (`muestraRadicacion`), sin placa del RUNT, organismo ya
+   * elegido y preasignación activa para ese organismo/compañía. `digitoPlaca === ''` es EXCLUSIVAMENTE
+   * "no decidido" (ver el esquema de valores en el `<select>`): con la preasignación apagada, sin
+   * organismo o mientras se consulta, el selector está deshabilitado y no hay nada que exigir —
+   * bloquearlo ahí dejaría trámites imposibles de continuar (AC4).
+   */
+  const digitoPlacaSinDecidir = isPlateDigitUndecided({
+    muestraRadicacion,
+    vehiculoConPlacaRunt,
+    transitOfficeId,
+    preasignacionActiva,
+    digitoPlacaUiValue: digitoPlaca,
+  });
+  const digitoPlacaGateOk = !digitoPlacaSinDecidir;
+
+  useEffect(() => {
+    onDigitoPlacaGateChange?.(digitoPlacaGateOk);
+    // `onDigitoPlacaGateChange` es un setState del shell recreado en cada render: incluirlo
+    // re-emitiría en bucle. Lo que gobierna la emisión es el propio resultado del gate.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [digitoPlacaGateOk]);
 
   // FEATURE 02 — política "solo vehículos propios" por familia (MATRICULAS | TRASPASO) y NIT del tenant.
   // En traspaso (placa) se autorrellena el documento del propietario con el NIT y, si se edita a otro,
@@ -2366,7 +2411,17 @@ function ConsultaStep({
     // aparecía vacía: los tres datos existen en el expediente pero el paso no los releía, así que
     // el organismo elegido hace un minuto se mostraba como "Aún no has seleccionado la secretaría".
     setTransitOfficeId((v) => v || byKey('transit_office_id'));
-    setDigitoPlaca((v) => v || byKey('plate_preferred_last_digit'));
+    // HU #11628 — el valor de UI distingue "no decidido" ('') de "declaró sin preferencia" ('none'):
+    // el contrato persistido (`plate_preferred_last_digit`) sigue siendo dígito o cadena vacía, así
+    // que la vacía por sí sola es ambigua. `plate_preferred_last_digit_declared` (marca aparte, NO
+    // consumida por el backend) es lo que resuelve la ambigüedad al rehidratar.
+    setDigitoPlaca((v) =>
+      v ||
+      toPlateDigitUiValue({
+        rawDigit: byKey('plate_preferred_last_digit'),
+        declared: byKey('plate_preferred_last_digit_declared') === 'true',
+      }),
+    );
     // La prioridad NO está en field_values (es una columna del expediente), por eso viaja aparte en
     // el detalle. Es la única de las tres que necesitó exponerse en el contrato.
     setPrioritarioInstancia(detail.prioritario ?? false);
@@ -2753,17 +2808,28 @@ function ConsultaStep({
       .catch(() => setPrioritarioInstancia(!value));
   };
 
-  const handleDigitoPlaca = (value: string) => {
-    setDigitoPlaca(value);
+  /**
+   * HU #11628 — `uiValue` distingue tres estados en el selector: `''` (no decidido, placeholder no
+   * seleccionable tras la primera elección), `'none'` (declaró explícitamente que no tiene
+   * preferencia) y `'0'..'9'` (dígito elegido). El CONTRATO persistido de `plate_preferred_last_digit`
+   * no cambia (dígito o cadena vacía — lo que lee el backend y su proyección al OT); `'none'` se
+   * traduce a cadena vacía ahí. La distinción vive en `plate_preferred_last_digit_declared`, un
+   * field_value aparte que el backend no consume: solo permite reconstruir, al rehidratar, si la
+   * cadena vacía es "no decidido" o "declaró sin preferencia".
+   */
+  const handleDigitoPlaca = (uiValue: string) => {
+    setDigitoPlaca(uiValue);
+    const items = toPlateDigitFieldValues(uiValue);
     if (deferred) {
-      upsertLocal([{ fieldKey: 'plate_preferred_last_digit', valueText: value }]);
+      upsertLocal(items);
       return;
     }
     if (!instanceId) return;
     void tramitesClient
-      .patchFieldValues(instanceId, [
-        { formFieldId: null, fieldKey: 'plate_preferred_last_digit', valueText: value, valueJson: null },
-      ])
+      .patchFieldValues(
+        instanceId,
+        items.map((i) => ({ formFieldId: null, fieldKey: i.fieldKey, valueText: i.valueText, valueJson: null })),
+      )
       .then(() => onRefresh())
       .catch(() => {});
   };
@@ -3172,29 +3238,52 @@ function ConsultaStep({
               </p>
             ) : (
               <>
+                {/* HU #11628 — el vacío deja de significar dos cosas a la vez: `''` es el placeholder
+                    "todavía no decidido" (no seleccionable de vuelta una vez elegida otra opción) y
+                    `'none'` es la elección explícita "sin preferencia". Solo estas dos difieren de un
+                    dígito; el contrato persistido (`plate_preferred_last_digit`) sigue siendo dígito o
+                    cadena vacía — la traducción ocurre en `handleDigitoPlaca`. */}
                 <select
                   id="consulta-digito-placa"
                   value={digitoPlaca}
                   onChange={(e) => handleDigitoPlaca(e.target.value)}
                   disabled={readOnly || !transitOfficeId || preasignacionActiva !== true}
+                  required={isPlateDigitDecisionRequired({
+                    muestraRadicacion,
+                    vehiculoConPlacaRunt,
+                    transitOfficeId,
+                    preasignacionActiva,
+                  })}
                   aria-describedby="consulta-digito-placa-nota"
+                  aria-invalid={digitoPlacaSinDecidir}
                   className={`${inputClass} disabled:opacity-60`}
                 >
-                  <option value="">Sin preferencia</option>
+                  <option value="" disabled hidden>
+                    Selecciona una opción
+                  </option>
+                  <option value="none">Sin preferencia</option>
                   {Array.from({ length: 10 }, (_, i) => (
                     <option key={i} value={String(i)}>{`Termina en ${i}`}</option>
                   ))}
                 </select>
-                {/* Cuatro estados más, porque un selector apagado sin explicación se lee como un
-                    fallo: falta el organismo · consultando · sin preasignación · disponible. */}
-                <p id="consulta-digito-placa-nota" className="mt-1 text-xs leading-tight opacity-70">
+                {/* Cinco estados, porque un selector apagado (o sin decidir) sin explicación se lee
+                    como un fallo: falta el organismo · consultando · sin preasignación · sin decidir
+                    (bloquea Continuar) · disponible. */}
+                <p
+                  id="consulta-digito-placa-nota"
+                  role={digitoPlacaSinDecidir ? 'alert' : undefined}
+                  className="mt-1 text-xs font-medium leading-tight"
+                  style={{ color: digitoPlacaSinDecidir ? '#B45309' : undefined, opacity: digitoPlacaSinDecidir ? 1 : 0.7 }}
+                >
                   {!transitOfficeId
                     ? 'Elige primero la secretaría: la preasignación depende del organismo donde radiques.'
                     : preasignacionActiva === null
                       ? 'Consultando si el organismo tiene preasignación de placa…'
                       : preasignacionActiva === false
                         ? 'Este organismo (o tu compañía) no tiene preasignación de placa activa: el trámite se entregará de forma estándar.'
-                        : 'Si radicas sin placa, indica el número en el que prefieres que termine. El organismo lo toma como guía; podrás cambiarlo en el paso final.'}
+                        : digitoPlacaSinDecidir
+                          ? 'Elige un dígito o indica que no tienes preferencia: es obligatorio para continuar.'
+                          : 'Si radicas sin placa, indica el número en el que prefieres que termine. El organismo lo toma como guía; podrás cambiarlo en el paso final.'}
                 </p>
               </>
             )}
@@ -3430,6 +3519,7 @@ function StepBody({
   prioritario = false,
   onPrioritarioChange,
   onTipoServicioGateChange,
+  onDigitoPlacaGateChange,
   paqueteDocsStatus = 'idle',
   onPaqueteStatusChange,
   onConfirmacionesExpedienteChange,
@@ -3453,6 +3543,8 @@ function StepBody({
   onPrioritarioChange?: (value: boolean) => void;
   /** Gate Continuar: tipo de servicio (+ empresa vinculadora si es PÚBLICO) completo en requisitos. */
   onTipoServicioGateChange?: (ok: boolean) => void;
+  /** HU #11628 — Gate Continuar: dígito de preferencia de placa declarado (dígito o "sin preferencia"). */
+  onDigitoPlacaGateChange?: (ok: boolean) => void;
   preflight: PreflightSnapshot | null;
   preflightLoading: boolean;
   onRunPreflight: () => Promise<void>;
@@ -3514,6 +3606,7 @@ function StepBody({
           prioritario={prioritario}
           onPrioritarioChange={onPrioritarioChange}
           esMigrado={esMigrado}
+          onDigitoPlacaGateChange={onDigitoPlacaGateChange}
         />
       );
 

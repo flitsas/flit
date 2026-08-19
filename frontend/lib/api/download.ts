@@ -1,7 +1,7 @@
 // Descarga de archivos binarios desde la API (HU #10249). El cliente JSON (`apiFetch`)
 // no sirve para respuestas binarias (Excel/PDF), así que este helper hace `fetch`,
 // adjunta el JWT, valida el status y dispara la descarga en el navegador.
-import { API_BASE_URL, getToken } from "./client";
+import { API_BASE_URL, friendlyErrorMessage, getToken } from "./client";
 import { ApiError } from "./types";
 
 export interface DownloadOptions {
@@ -66,7 +66,9 @@ export async function downloadFile(
     } catch {
       /* respuesta de error sin cuerpo JSON */
     }
-    throw new ApiError(response.status, `Error ${response.status} al exportar ${path}`, detail);
+    // El mensaje sale del ProblemDetails del backend (error/detail/title), nunca de la ruta
+    // interna del endpoint (Bug #11626 — este sitio interpolaba literalmente `path`).
+    throw new ApiError(response.status, friendlyErrorMessage(detail as Record<string, unknown> | null), detail);
   }
 
   const blob = await response.blob();

@@ -1,5 +1,5 @@
 // Cliente tipado de la API admin OT (HU #10215–#10220).
-import { API_BASE_URL, apiFetch, getToken } from "./client";
+import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client";
 import { downloadFile } from "./download";
 import { ApiError } from "./types";
 import type {
@@ -214,7 +214,8 @@ export async function adjuntarOtLicenciaTransito(
     } catch {
       /* error sin cuerpo JSON */
     }
-    throw new ApiError(response.status, `Error ${response.status} al adjuntar la LT`, detail);
+    // Mensaje desde el ProblemDetails del backend, nunca la ruta/status crudos (Bug #11626).
+    throw new ApiError(response.status, friendlyErrorMessage(detail as Record<string, unknown> | null), detail);
   }
 
   return (await response.json()) as OtProcedureAttachment;

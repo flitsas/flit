@@ -3,6 +3,7 @@ using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using QuestPDF;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -92,9 +93,12 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         // HU #11206 — el objeto del contrato incluye las transformaciones del trámite. Se compone aquí,
         // una sola vez, para que todas las familias de plantilla lo redacten idéntico (AC4). Sin
         // transformaciones queda exactamente el texto de siempre (AC3).
+        // HU #11627 — también nombra la prenda si el trámite la tiene (agregado ProcedureInstancePrenda,
+        // ya resuelto en FurDocumentData.PrendaMarking; no viaja por field_values a propósito).
         var nombreTramite = MandatoObjetoComposer.Componer(
             esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL",
-            data.Transformaciones);
+            data.Transformaciones,
+            tramite.PrendaMarking);
 
         var placa = Val(tramite.Placa, "___");
         var ot = Val(tramite.Organismo.Nombre, "___");
@@ -246,7 +250,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             tramite.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
         var nombreTramite = MandatoObjetoComposer.Componer(
             esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL",
-            data.Transformaciones);
+            data.Transformaciones,
+            tramite.PrendaMarking);
         var (mandNombre, mandDoc) = MandatarioTexto(data.Mandatario);
 
         var reemplazos = new (string Token, string Valor)[]

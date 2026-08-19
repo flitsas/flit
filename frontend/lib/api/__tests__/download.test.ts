@@ -2,9 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import { ApiError } from "../types";
 
-// Mock del cliente para controlar token y base URL sin tocar cookies/storage.
+// Mock del cliente para controlar token y base URL sin tocar cookies/storage. `friendlyErrorMessage`
+// se reexporta real (no mockeada): es la lógica bajo prueba en los tests del Bug #11626.
 const mocks = vi.hoisted(() => ({ getToken: vi.fn(() => "jwt-token") }));
-vi.mock("../client", () => ({ API_BASE_URL: "https://api.test", getToken: mocks.getToken }));
+vi.mock("../client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../client")>();
+  return { API_BASE_URL: "https://api.test", getToken: mocks.getToken, friendlyErrorMessage: actual.friendlyErrorMessage };
+});
 
 import { downloadFile } from "../download";
 
@@ -88,5 +92,40 @@ describe("downloadFile", () => {
     await expect(
       downloadFile("/api/v1/analytics/export/excel", { fallbackFilename: "f.xlsx" }),
     ).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("Bug #11626 — el mensaje sale del detail del backend, nunca interpola la ruta exportada", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: "El rango de fechas supera el máximo permitido." }), {
+        status: 422,
+      }),
+    ) as never;
+
+    let caught: unknown;
+    try {
+      await downloadFile("/api/v1/analytics/export/excel", { fallbackFilename: "f.xlsx" });
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(ApiError);
+    const err = caught as ApiError;
+    expect(err.message).toBe("El rango de fechas supera el máximo permitido.");
+    expect(err.message).not.toContain("/api/v1/analytics/export/excel");
+    expect(err.message).not.toMatch(/^Error \d+/);
+  });
+
+  it("Bug #11626 — sin cuerpo JSON cae al mensaje genérico, sin ruta ni status crudos", async () => {
+    global.fetch = vi.fn().mockResolvedValue(new Response("", { status: 500 })) as never;
+
+    let caught: unknown;
+    try {
+      await downloadFile("/api/v1/analytics/export/excel", { fallbackFilename: "f.xlsx" });
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(ApiError);
+    expect((caught as ApiError).message).toBe("No se pudo completar la solicitud. Inténtalo de nuevo.");
   });
 });

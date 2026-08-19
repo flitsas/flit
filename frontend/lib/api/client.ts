@@ -116,16 +116,30 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       emitSessionExpired();
       throw new ApiError(401, "SESSION_EXPIRED");
     }
-    // El backend ya manda el motivo en español cuando lo tiene ({ error } de los Results.Conflict/
-    // BadRequest/NotFound "a mano", o { detail } de un ProblemDetails con Results.Problem) — se
-    // prioriza ese texto. Sin uno, el mensaje NUNCA debe filtrar la ruta/status técnico a quien lo
-    // ve en pantalla: un componente que hace `catch { setError(e.message) }` sin más se volvería un
-    // "Error 500 al llamar /api/v1/..." ilegible para el usuario.
-    const friendly = data?.error ?? data?.detail ?? "No se pudo completar la solicitud. Inténtalo de nuevo.";
-    throw new ApiError(response.status, friendly, data);
+    throw new ApiError(response.status, friendlyErrorMessage(data), data);
   }
 
   return (await safeJson(response)) as T;
+}
+
+/**
+ * Precedencia única del mensaje amigable de un error HTTP no-ok, compartida por `apiFetch` y por
+ * los clientes ad-hoc que no pueden usarlo (multipart, descargas binarias): el motivo en español
+ * que ya manda el backend ({ error } de los Results.Conflict/BadRequest/NotFound "a mano",
+ * { detail } de un ProblemDetails con Results.Problem, o — a falta de ambos — { title } del
+ * propio ProblemDetails). Sin ninguno, cae a un mensaje genérico que NUNCA filtra la ruta/status
+ * técnico a quien lo ve en pantalla: un componente que hace `catch { setError(e.message) }` sin
+ * más se volvería un "Error 500 al llamar /api/v1/..." ilegible para el usuario (Bug #11626).
+ */
+export function friendlyErrorMessage(
+  data: { error?: unknown; detail?: unknown; title?: unknown } | null | undefined,
+): string {
+  for (const candidate of [data?.error, data?.detail, data?.title]) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate;
+    }
+  }
+  return "No se pudo completar la solicitud. Inténtalo de nuevo.";
 }
 
 async function safeJson(response: Response): Promise<unknown> {

@@ -38,6 +38,12 @@ vi.mock('@/lib/api/tramites-client', () => ({
   isTransitOfficeUnavailable: () => transitOfficeUnavailable.value,
 }));
 
+// HU #11628 — el dígito de preferencia de placa (mismo consumidor que HU #10805/#10806) exige
+// preasignación resuelta. Mockeada aquí para que las pruebas de esta HU no dependan del fallback
+// silencioso ante un fetch real fallido (que igual asume `enabled: true`).
+const plateMocks = vi.hoisted(() => ({ getPlatePreassignStatus: vi.fn() }));
+vi.mock('@/lib/api/admin-plate-ranges', () => plateMocks);
+
 vi.mock('@/components/admin/Toast', () => ({
   useToast: () => ({ show: vi.fn() }),
 }));
@@ -105,6 +111,7 @@ async function elegirSecretaria(user: ReturnType<typeof userEvent.setup>) {
 beforeEach(() => {
   vi.clearAllMocks();
   transitOfficeUnavailable.value = false;
+  plateMocks.getPlatePreassignStatus.mockResolvedValue({ enabled: true });
   mocks.runPreflightPreview.mockResolvedValue(PREVIEW_RESULT);
   mocks.getConsultationConfig.mockResolvedValue({ vehiclePlate: 'kyverum_runt', onlyOwnVehicles: false });
   mocks.listTransitOffices.mockResolvedValue(SECRETARIAS);
@@ -199,6 +206,11 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalled());
     await elegirSecretaria(user);
+    // HU #11628 — con preasignación activa, el dígito exige una elección consciente antes de
+    // "Continuar" (dígito o "sin preferencia" explícita).
+    const digito = await screen.findByLabelText('Dígito de preasignación de placa');
+    await waitFor(() => expect(digito).toBeEnabled());
+    await user.selectOptions(digito, 'none');
 
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
 
@@ -217,6 +229,9 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
     await waitFor(() => expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(1));
     await elegirSecretaria(user);
+    const digito = () => screen.getByLabelText('Dígito de preasignación de placa') as HTMLSelectElement;
+    await waitFor(() => expect(digito()).toBeEnabled());
+    await user.selectOptions(digito(), 'none');
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
 
     // La consulta ya no se corre contra el organismo, así que corregirlo no la invalida: borrarla
@@ -224,6 +239,10 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     await user.click(screen.getByRole('combobox', { name: /secretaría de tránsito/i }));
     await user.click(await screen.findByRole('option', { name: /Envigado/ }));
 
+    // El cambio de organismo reinicia la elección del dígito (HU #11628): hay que declararla de
+    // nuevo para el organismo nuevo antes de que "Continuar" vuelva a habilitarse.
+    await waitFor(() => expect(digito()).toBeEnabled());
+    await user.selectOptions(digito(), 'none');
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
     expect(mocks.runPreflightPreview).toHaveBeenCalledTimes(1);
   });

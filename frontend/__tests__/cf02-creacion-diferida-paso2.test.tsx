@@ -41,6 +41,14 @@ vi.mock('@/components/admin/Toast', () => ({
   useToast: () => ({ show: vi.fn() }),
 }));
 
+// HU #11628 — sin mock, la consulta real de preasignación de placa falla en jsdom y cae al
+// fallback `enabled: true`, lo que exigiría declarar el dígito de preferencia en cada test de este
+// archivo (que no versa sobre esa HU). Se mockea en `false`: mismo comportamiento de siempre, el
+// selector queda deshabilitado y "Continuar" no depende de él.
+vi.mock('@/lib/api/admin-plate-ranges', () => ({
+  getPlatePreassignStatus: vi.fn().mockResolvedValue({ enabled: false }),
+}));
+
 const routerReplace = vi.hoisted(() => vi.fn());
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: routerReplace, prefetch: vi.fn() }),
