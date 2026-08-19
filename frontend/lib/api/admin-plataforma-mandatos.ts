@@ -1,5 +1,5 @@
 // Cliente SuperAdmin — Plataforma → Mandatos (config por OT + plantilla propia + preview + extract).
-import { API_BASE_URL, apiFetch, getToken } from "./client";
+import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client";
 import { ApiError } from "./types";
 import type {
   MandateAssignmentMode,
@@ -142,7 +142,8 @@ export async function uploadMandateOtPdfTemplate(
     } catch {
       /* ignore */
     }
-    throw new ApiError(response.status, `Error ${response.status} al subir plantilla`, detail);
+    // Mensaje desde el ProblemDetails del backend, nunca la ruta/status crudos (Bug #11626).
+    throw new ApiError(response.status, friendlyErrorMessage(detail as Record<string, unknown> | null), detail);
   }
   const raw = (await response.json()) as Record<string, unknown>;
   return mapView(raw);
@@ -296,7 +297,8 @@ export async function extractMandateConfigFromFile(
     } catch {
       /* ignore */
     }
-    throw new ApiError(response.status, `Error ${response.status} al extraer mandato`, detail);
+    // Mensaje desde el ProblemDetails del backend, nunca la ruta/status crudos (Bug #11626).
+    throw new ApiError(response.status, friendlyErrorMessage(detail as Record<string, unknown> | null), detail);
   }
 
   const raw = (await response.json()) as Record<string, unknown>;
@@ -340,7 +342,8 @@ async function fetchPdf(path: string, signal?: AbortSignal): Promise<Blob> {
     } catch {
       /* ignore */
     }
-    throw new ApiError(response.status, `Error ${response.status} al previsualizar mandato`, detail);
+    // Mensaje desde el ProblemDetails del backend, nunca la ruta/status crudos (Bug #11626).
+    throw new ApiError(response.status, friendlyErrorMessage(detail as Record<string, unknown> | null), detail);
   }
 
   const blob = await response.blob();

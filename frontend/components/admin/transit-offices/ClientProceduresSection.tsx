@@ -53,8 +53,9 @@ export function readAssignPlateError(err: unknown): string {
     if (typeof body?.title === "string" && body.title.trim() && body.title !== "Conflict") {
       return body.title.trim();
     }
-    // apiFetch (422 ProblemDetails) ya pone el detail en message.
-    if (err.message && !/^Error \d+ al llamar /.test(err.message)) return err.message;
+    // apiFetch (422 ProblemDetails, o cualquier no-ok) ya prioriza detail/title/error en message
+    // y nunca filtra la ruta interna (Bug #11626) — se puede usar tal cual.
+    if (err.message) return err.message;
   }
   if (err instanceof Error && err.message && err.message !== "Validación fallida") {
     // Errores técnicos de red/fetch no ayudan al operador OT.
