@@ -22,8 +22,18 @@ public static partial class SchedulingValidation
 
     private static readonly string[] ReportTypes =
         ["resumen", "operacion", "ot", "uso", "productividad", "consulta",
-            "ot_analisis", "ot_informe", "ot_revisores"];
+            "ot_analisis", "ot_informe", "ot_revisores",
+            "ict_novedades", "ict_atascados", "ict_jobs", "ict_webhooks"];
     private static readonly string[] SavedQueryScopes = ["empresa", "superadmin", "ot"];
+
+    /// <summary>
+    /// Informes de alcance ICT (HU-D, cuarta ola): detalle fila a fila sin versión PDF con
+    /// sentido, mismo criterio que "consulta". "ict_jobs" además solo lo puede crear/editar
+    /// SuperAdmin — esa restricción vive en <c>ReportSchedulesEndpoints</c> (necesita el rol del
+    /// token, que esta validación pura no tiene) y no aquí.
+    /// </summary>
+    private static readonly string[] IctExcelOnlyReportTypes =
+        ["ict_novedades", "ict_atascados", "ict_jobs", "ict_webhooks"];
     private static readonly string[] Frequencies = ["daily", "weekly", "monthly"];
     private static readonly string[] Formats = ["excel", "pdf"];
     private static readonly string[] Metrics =
@@ -52,7 +62,11 @@ public static partial class SchedulingValidation
 
         if (input.ReportType is null || !ReportTypes.Contains(input.ReportType))
             return (null, "El tipo de informe debe ser uno de: resumen, operacion, ot, uso, productividad, " +
-                "consulta, ot_analisis, ot_informe, ot_revisores.");
+                "consulta, ot_analisis, ot_informe, ot_revisores, ict_novedades, ict_atascados, ict_jobs, " +
+                "ict_webhooks.");
+
+        if (IctExcelOnlyReportTypes.Contains(input.ReportType) && input.Format is not null && input.Format != "excel")
+            return (null, $"Un informe de tipo '{input.ReportType}' solo se entrega en formato Excel.");
 
         // Reportes 2.0 (HU-D, segunda ola) — un informe de tipo "consulta" apunta a una SavedQuery
         // en vez de a uno de los 5 tipos agregados; espejo del CHECK

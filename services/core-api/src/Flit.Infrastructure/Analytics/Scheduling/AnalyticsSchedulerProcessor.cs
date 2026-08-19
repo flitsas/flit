@@ -361,6 +361,17 @@ internal sealed class AnalyticsSchedulerProcessor(
                     .BuildInformeAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
                 "ot_revisores" => await services.GetRequiredService<OtOwnReportDocumentBuilder>()
                     .BuildRevisoresAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
+                "ict_novedades" => await services.GetRequiredService<IctOwnReportDocumentBuilder>()
+                    .BuildNovedadesAsync(schedule.TenantId!.Value, from, to, ct),
+                "ict_atascados" => await services.GetRequiredService<IctOwnReportDocumentBuilder>()
+                    .BuildAtascadosAsync(schedule.TenantId!.Value, from, to, ct),
+                // ict_jobs es platform-wide (ict.job_runs no tiene tenant_id) — TenantId! sigue
+                // siendo obligatorio por el CHECK de la fila (schedule de un SuperAdmin sobre una
+                // compañía concreta), pero el builder lo ignora; ver su XML doc.
+                "ict_jobs" => await services.GetRequiredService<IctOwnReportDocumentBuilder>()
+                    .BuildJobsAsync(schedule.TenantId!.Value, from, to, ct),
+                "ict_webhooks" => await services.GetRequiredService<IctOwnReportDocumentBuilder>()
+                    .BuildWebhooksAsync(schedule.TenantId!.Value, from, to, ct),
                 "resumen" or "operacion" or "productividad" =>
                     await BuildProcedureBasedAttachmentAsync(services, schedule, from, to, ct),
                 _ => null, // "consulta" (Reportes 2.0, HU-D — filas propias, ver rama dedicada) u otro tipo futuro.

@@ -182,6 +182,7 @@ public static class InfrastructureExtensions
         services.AddScoped<Analytics.Scheduling.OtOwnReportDocumentBuilder>(); // Reportes2 HU-D, alcance OT
         services.AddScoped<Analytics.Scheduling.OtQueryReportDocumentBuilder>(); // Reportes2 HU-D, alcance OT
         services.AddScoped<Analytics.Scheduling.CompanyQueryReportDocumentBuilder>(); // Reportes2 HU-D 2da ola
+        services.AddScoped<Analytics.Scheduling.IctOwnReportDocumentBuilder>(); // Reportes2 HU-D, alcance ICT
 
         // Reportes2 HU-D — informes programados + alertas por umbral (scheduler y repos).
         services.AddScoped<Flit.Analytics.Application.Scheduling.IReportScheduleRepository, ReportScheduleRepository>(); // Reportes2 HU-D

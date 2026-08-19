@@ -304,4 +304,35 @@ public sealed class ReportScheduleValidationTests
         result!.SavedQueryId.Should().Be(id);
         result.SavedQueryScope.Should().Be("ot");
     }
+
+    // ------------------------------------------------------------------
+    // Reportes 2.0 (HU-D, cuarta ola) — 4 tipos propios de ICT (alcance ICT, solo Excel)
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("ict_novedades")]
+    [InlineData("ict_atascados")]
+    [InlineData("ict_jobs")]
+    [InlineData("ict_webhooks")]
+    public void Tipos_de_alcance_ict_estan_en_el_vocabulario_y_no_exigen_saved_query(string reportType)
+    {
+        var (result, error) = SchedulingValidation.ValidateReportSchedule(Valid(reportType: reportType, format: "excel"));
+
+        error.Should().BeNull();
+        result!.ReportType.Should().Be(reportType);
+        result.SavedQueryId.Should().BeNull();
+        result.SavedQueryScope.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("ict_novedades")]
+    [InlineData("ict_atascados")]
+    [InlineData("ict_jobs")]
+    [InlineData("ict_webhooks")]
+    public void Tipos_de_alcance_ict_en_pdf_devuelven_error(string reportType)
+    {
+        var (_, error) = SchedulingValidation.ValidateReportSchedule(Valid(reportType: reportType, format: "pdf"));
+
+        error.Should().Be($"Un informe de tipo '{reportType}' solo se entrega en formato Excel.");
+    }
 }
