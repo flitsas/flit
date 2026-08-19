@@ -14,7 +14,17 @@ const mocks = vi.hoisted(() => ({
   fetchIctAtascadosReport: vi.fn(),
   fetchIctJobsReport: vi.fn(),
   fetchIctWebhooksReport: vi.fn(),
+  exportIctNovedadesReport: vi.fn(),
+  exportIctAtascadosReport: vi.fn(),
+  exportIctJobsReport: vi.fn(),
+  exportIctWebhooksReport: vi.fn(),
+  fetchCompaniesIndex: vi.fn(),
 }));
+
+vi.mock("@/lib/api/admin-companies", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/admin-companies")>();
+  return { ...actual, fetchCompaniesIndex: mocks.fetchCompaniesIndex };
+});
 
 vi.mock("@/lib/auth/jwt", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth/jwt")>();
@@ -40,6 +50,10 @@ vi.mock("@/lib/api/ict-reports", () => ({
   fetchIctAtascadosReport: mocks.fetchIctAtascadosReport,
   fetchIctJobsReport: mocks.fetchIctJobsReport,
   fetchIctWebhooksReport: mocks.fetchIctWebhooksReport,
+  exportIctNovedadesReport: mocks.exportIctNovedadesReport,
+  exportIctAtascadosReport: mocks.exportIctAtascadosReport,
+  exportIctJobsReport: mocks.exportIctJobsReport,
+  exportIctWebhooksReport: mocks.exportIctWebhooksReport,
 }));
 
 vi.mock("@/lib/api/analytics-scheduling", async (importOriginal) => {
@@ -71,7 +85,10 @@ describe("IctReports — pestañas en vivo, Consultas y Programación (HU #11619
       cobertura: [],
     });
     mocks.fetchIctNovedadesReport.mockResolvedValue({
-      resumenPorCausa: [{ causa: "Documento ilegible", cantidad: 3, porcentajeTexto: "60%" }],
+      // El backend manda el porcentaje SIN el símbolo (nació para una celda de Excel bajo una
+      // cabecera que ya decía "%"); la UI se lo pone.
+      resumenPorCausa: [{ causa: "Documento ilegible", cantidad: 3, porcentajeTexto: "60" }],
+      totalPeriodoAnterior: 2,
       detalle: [
         {
           placa: "ABC123",
@@ -85,8 +102,14 @@ describe("IctReports — pestañas en vivo, Consultas y Programación (HU #11619
       truncated: false,
     });
     mocks.fetchIctAtascadosReport.mockResolvedValue({ detalle: [], total: 0, truncated: false });
-    mocks.fetchIctJobsReport.mockResolvedValue({ resumenPorJob: [], corridasFueraDeSla: [], total: 0, truncated: false });
-    mocks.fetchIctWebhooksReport.mockResolvedValue({ detalle: [], total: 0, truncated: false });
+    mocks.fetchIctJobsReport.mockResolvedValue({
+      resumenPorJob: [], corridasFueraDeSla: [], total: 0, truncated: false, totalPeriodoAnterior: 0,
+    });
+    mocks.fetchIctWebhooksReport.mockResolvedValue({ detalle: [], total: 0, truncated: false, totalPeriodoAnterior: 0 });
+    mocks.exportIctNovedadesReport.mockResolvedValue(undefined);
+    mocks.exportIctJobsReport.mockResolvedValue(undefined);
+    mocks.fetchCompaniesIndex.mockResolvedValue({ data: [{ id: "t1", razonSocial: "Compañía Uno", nit: "900" }] });
+    window.history.replaceState({}, "", "/");
   });
 
   it("muestra Novedades/Atascados/Webhooks/Consultas para un usuario no SuperAdmin, sin Jobs", () => {
@@ -183,5 +206,104 @@ describe("IctReports — pestañas en vivo, Consultas y Programación (HU #11619
 
     const panel = await screen.findByTestId("scheduling-panel");
     expect(within(panel).getByText(/Mis pendientes/i)).toBeInTheDocument();
+  });
+
+  // ── Compañía para SuperAdmin ────────────────────────────────────────────────────────────────
+  // Antes el módulo usaba en silencio el tenant del propio SuperAdmin, que casi nunca es donde
+  // están los datos de ICT: el resultado era ver tres pestañas vacías sin ninguna pista del porqué.
+
+  it("SuperAdmin sin compañía elegida ve el aviso y NO consulta la API", async () => {
+    mocks.isSuperAdmin.mockReturnValue(true);
+    render(<IctReports />);
+
+    expect(await screen.findByTestId("aviso-selecciona-compania")).toBeInTheDocument();
+    expect(mocks.fetchIctNovedadesReport).not.toHaveBeenCalled();
+  });
+
+  it("SuperAdmin con compañía en la dirección sí consulta, y la manda como tenantId", async () => {
+    mocks.isSuperAdmin.mockReturnValue(true);
+    window.history.replaceState({}, "", "/?compania=t1");
+    render(<IctReports />);
+
+    await waitFor(() => expect(mocks.fetchIctNovedadesReport).toHaveBeenCalled());
+    expect(mocks.fetchIctNovedadesReport.mock.calls[0][1]).toBe("t1");
+    expect(screen.queryByTestId("aviso-selecciona-compania")).not.toBeInTheDocument();
+  });
+
+  it("Jobs no pide compañía: es de plataforma y carga aunque el SuperAdmin no haya elegido", async () => {
+    mocks.isSuperAdmin.mockReturnValue(true);
+    const user = userEvent.setup();
+    render(<IctReports />);
+
+    await user.click(screen.getByRole("tab", { name: "Jobs" }));
+
+    await waitFor(() => expect(mocks.fetchIctJobsReport).toHaveBeenCalled());
+    expect(screen.queryByTestId("aviso-selecciona-compania")).not.toBeInTheDocument();
+  });
+
+  // ── Formato de las cifras ───────────────────────────────────────────────────────────────────
+
+  it("las duraciones de los jobs se muestran en milisegundos, no aplastadas a '0 s'", async () => {
+    mocks.isSuperAdmin.mockReturnValue(true);
+    mocks.fetchIctJobsReport.mockResolvedValue({
+      // 11,5 ms de promedio: con un decimal de segundo esto se veía como "0 s".
+      resumenPorJob: [
+        {
+          job: "orchestrator",
+          corridas: 365,
+          duracionPromedioSeg: 0.0115,
+          duracionMaximaSeg: 0.4129,
+          porcentajeFueraDeSlaTexto: "0",
+        },
+      ],
+      corridasFueraDeSla: [],
+      total: 365,
+      truncated: false,
+      totalPeriodoAnterior: 300,
+    });
+    const user = userEvent.setup();
+    render(<IctReports />);
+
+    await user.click(screen.getByRole("tab", { name: "Jobs" }));
+
+    // Se redondea al milisegundo entero: por debajo de eso ya es ruido de medición.
+    expect(await screen.findByText("12 ms")).toBeInTheDocument();
+    expect(screen.getByText("413 ms")).toBeInTheDocument();
+    expect(screen.queryByText("0 s")).not.toBeInTheDocument();
+  });
+
+  it("los porcentajes llevan el símbolo que el backend no manda", async () => {
+    render(<IctReports />);
+    // "60" del resumen por causa se pinta como "60%" junto a la cantidad.
+    expect(await screen.findByText(/3 · 60%/)).toBeInTheDocument();
+  });
+
+  it("la tarjeta muestra la variación frente al periodo anterior", async () => {
+    render(<IctReports />);
+    // 3 novedades frente a 2 del periodo previo = +50%.
+    expect(await screen.findByLabelText(/Variación de 50% frente al periodo comparado/)).toBeInTheDocument();
+  });
+
+  // ── Exportación ─────────────────────────────────────────────────────────────────────────────
+
+  it("exporta a Excel el informe de la pestaña activa con el rango y la compañía vigentes", async () => {
+    const user = userEvent.setup();
+    render(<IctReports />);
+    await waitFor(() => expect(mocks.fetchIctNovedadesReport).toHaveBeenCalled());
+
+    await user.click(screen.getByTestId("ict-reportes-exportar-excel"));
+
+    await waitFor(() => expect(mocks.exportIctNovedadesReport).toHaveBeenCalled());
+    const [range] = mocks.exportIctNovedadesReport.mock.calls[0];
+    expect(range).toEqual(expect.objectContaining({ from: expect.any(String), to: expect.any(String) }));
+  });
+
+  it("no ofrece el botón de exportar en Consultas: esa consola ya trae el suyo", async () => {
+    const user = userEvent.setup();
+    render(<IctReports />);
+
+    await user.click(screen.getByRole("tab", { name: "Consultas" }));
+
+    expect(screen.queryByTestId("ict-reportes-exportar-excel")).not.toBeInTheDocument();
   });
 });

@@ -20,7 +20,8 @@ public sealed record IctCausaResumenDto(string Causa, int Cantidad, string Porce
 public sealed record IctNovedadDetalleDto(string? Placa, string? Vin, string? Radicado, string? Comentarios, DateTimeOffset RegistradoEn);
 
 public sealed record IctNovedadesReportDto(
-    IReadOnlyList<IctCausaResumenDto> ResumenPorCausa, IReadOnlyList<IctNovedadDetalleDto> Detalle, int Total, bool Truncated);
+    IReadOnlyList<IctCausaResumenDto> ResumenPorCausa, IReadOnlyList<IctNovedadDetalleDto> Detalle, int Total, bool Truncated,
+    int TotalPeriodoAnterior);
 
 public sealed record IctAtascadoDto(string? Placa, string? Vin, string? Radicado, string Esperando, double DiasTranscurridos);
 
@@ -32,11 +33,13 @@ public sealed record IctJobResumenDto(
 public sealed record IctJobIncumplidoDto(string Job, string Resultado, double DuracionSeg, DateTimeOffset Inicio);
 
 public sealed record IctJobsReportDto(
-    IReadOnlyList<IctJobResumenDto> ResumenPorJob, IReadOnlyList<IctJobIncumplidoDto> CorridasFueraDeSla, int Total, bool Truncated);
+    IReadOnlyList<IctJobResumenDto> ResumenPorJob, IReadOnlyList<IctJobIncumplidoDto> CorridasFueraDeSla, int Total, bool Truncated,
+    int TotalPeriodoAnterior);
 
 public sealed record IctWebhookDto(string Radicado, string Estado, int Intentos, string? UrlDestino, DateTimeOffset RegistradoEn);
 
-public sealed record IctWebhooksReportDto(IReadOnlyList<IctWebhookDto> Detalle, int Total, bool Truncated);
+public sealed record IctWebhooksReportDto(
+    IReadOnlyList<IctWebhookDto> Detalle, int Total, bool Truncated, int TotalPeriodoAnterior);
 
 /// <summary>
 /// Reportes 2.0 (HU-D) — calcula y arma el adjunto Excel de los 4 informes de alcance ICT
@@ -84,7 +87,10 @@ public sealed class IctOwnReportDocumentBuilder(FlitDbContext context)
         Guid tenantId, DateOnly from, DateOnly to, CancellationToken ct)
     {
         var (fromUtc, toUtc) = BogotaDays.Range(from, to);
+        var prev = PreviousRange(from, to);
+        var (prevFromUtc, prevToUtc) = BogotaDays.Range(prev.From, prev.To);
         var rows = new List<(string? Placa, string? Vin, string? Radicado, string? Comentarios, DateTimeOffset CreatedAt)>();
+        var previo = 0;
 
         await WithTenantAsync(tenantId, async (cmd, token) =>
         {
@@ -102,27 +108,39 @@ public sealed class IctOwnReportDocumentBuilder(FlitDbContext context)
             AddParam(cmd, "to", toUtc);
             AddParam(cmd, "limite", MaxRows);
 
-            await using var reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false);
-            while (await reader.ReadAsync(token).ConfigureAwait(false))
+            await using (var reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
             {
-                var comentarios = IctQueryRepository.CombineComentarios(
-                    GetStringOrNull(reader, "business_comments_validation"),
-                    GetStringOrNull(reader, "external_comments_validation"));
+                while (await reader.ReadAsync(token).ConfigureAwait(false))
+                {
+                    var comentarios = IctQueryRepository.CombineComentarios(
+                        GetStringOrNull(reader, "business_comments_validation"),
+                        GetStringOrNull(reader, "external_comments_validation"));
 
-                rows.Add((
-                    GetStringOrNull(reader, "plate"),
-                    GetStringOrNull(reader, "vin"),
-                    GetStringOrNull(reader, "manager_id_transaction"),
-                    comentarios,
-                    reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at"))));
+                    rows.Add((
+                        GetStringOrNull(reader, "plate"),
+                        GetStringOrNull(reader, "vin"),
+                        GetStringOrNull(reader, "manager_id_transaction"),
+                        comentarios,
+                        reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at"))));
+                }
             }
+
+            // Solo el CONTEO del periodo anterior, no sus filas: la variación necesita un número, y
+            // traerse el detalle de un periodo que nadie va a mirar dobla el costo de cada carga.
+            previo = await CountAsync(cmd, """
+                SELECT count(*)
+                FROM ict.external_integration_master
+                WHERE tenant_id = @tenant AND deleted_at IS NULL AND process_status_id = 4
+                  AND created_at >= @from AND created_at <= @to
+                """, tenantId, prevFromUtc, prevToUtc, token).ConfigureAwait(false);
         }, ct).ConfigureAwait(false);
 
-        return BuildNovedadesReport(rows);
+        return BuildNovedadesReport(rows, previo);
     }
 
     private static IctNovedadesReportDto BuildNovedadesReport(
-        List<(string? Placa, string? Vin, string? Radicado, string? Comentarios, DateTimeOffset CreatedAt)> rows)
+        List<(string? Placa, string? Vin, string? Radicado, string? Comentarios, DateTimeOffset CreatedAt)> rows,
+        int totalPeriodoAnterior)
     {
         // Sin taxonomía de códigos: se clasifica por coincidencia de subcadena (mayúsculas, sin
         // acentos) contra una lista fija de causas conocidas; lo que no matchea cae en "Otra/sin
@@ -149,7 +167,7 @@ public sealed class IctOwnReportDocumentBuilder(FlitDbContext context)
             .Select(r => new IctNovedadDetalleDto(r.Placa, r.Vin, r.Radicado, r.Comentarios, r.CreatedAt))
             .ToList();
 
-        return new IctNovedadesReportDto(resumen, detalle, total, Truncated: total >= MaxRows);
+        return new IctNovedadesReportDto(resumen, detalle, total, Truncated: total >= MaxRows, totalPeriodoAnterior);
     }
 
     public async Task<byte[]> BuildNovedadesAsync(
@@ -271,7 +289,10 @@ public sealed class IctOwnReportDocumentBuilder(FlitDbContext context)
     public async Task<IctJobsReportDto> LoadJobsAsync(DateOnly from, DateOnly to, CancellationToken ct)
     {
         var (fromUtc, toUtc) = BogotaDays.Range(from, to);
+        var prev = PreviousRange(from, to);
+        var (prevFromUtc, prevToUtc) = BogotaDays.Range(prev.From, prev.To);
         var rows = new List<(string JobName, string Outcome, bool BreachedSla, int DurationMs, DateTimeOffset StartedAt)>();
+        var previo = 0;
 
         var strategy = context.Database.CreateExecutionStrategy();
         await strategy.ExecuteAsync(async () =>
@@ -294,16 +315,27 @@ public sealed class IctOwnReportDocumentBuilder(FlitDbContext context)
                 AddParam(cmd, "to", toUtc);
                 AddParam(cmd, "limite", MaxRows);
 
-                await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-                while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                await using (var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
                 {
-                    rows.Add((
-                        reader.GetString(reader.GetOrdinal("job_name")),
-                        reader.GetString(reader.GetOrdinal("outcome")),
-                        reader.GetBoolean(reader.GetOrdinal("breached_sla")),
-                        reader.GetInt32(reader.GetOrdinal("duration_ms")),
-                        reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("started_at"))));
+                    while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                    {
+                        rows.Add((
+                            reader.GetString(reader.GetOrdinal("job_name")),
+                            reader.GetString(reader.GetOrdinal("outcome")),
+                            reader.GetBoolean(reader.GetOrdinal("breached_sla")),
+                            reader.GetInt32(reader.GetOrdinal("duration_ms")),
+                            reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("started_at"))));
+                    }
                 }
+
+                cmd.Parameters.Clear();
+                cmd.CommandText = """
+                    SELECT count(*) FROM ict.job_runs
+                    WHERE started_at >= @from AND started_at <= @to
+                    """;
+                AddParam(cmd, "from", prevFromUtc);
+                AddParam(cmd, "to", prevToUtc);
+                previo = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false), Es);
             }
             finally
             {
@@ -312,11 +344,12 @@ public sealed class IctOwnReportDocumentBuilder(FlitDbContext context)
             }
         }).ConfigureAwait(false);
 
-        return BuildJobsReport(rows);
+        return BuildJobsReport(rows, previo);
     }
 
     private static IctJobsReportDto BuildJobsReport(
-        List<(string JobName, string Outcome, bool BreachedSla, int DurationMs, DateTimeOffset StartedAt)> rows)
+        List<(string JobName, string Outcome, bool BreachedSla, int DurationMs, DateTimeOffset StartedAt)> rows,
+        int totalPeriodoAnterior)
     {
         var porJob = rows
             .GroupBy(r => r.JobName, StringComparer.Ordinal)
@@ -335,7 +368,7 @@ public sealed class IctOwnReportDocumentBuilder(FlitDbContext context)
             .Select(r => new IctJobIncumplidoDto(r.JobName, r.Outcome, Math.Round(r.DurationMs / 1000d, 2), r.StartedAt))
             .ToList();
 
-        return new IctJobsReportDto(porJob, incumplidas, rows.Count, Truncated: rows.Count >= MaxRows);
+        return new IctJobsReportDto(porJob, incumplidas, rows.Count, Truncated: rows.Count >= MaxRows, totalPeriodoAnterior);
     }
 
     public async Task<byte[]> BuildJobsAsync(
@@ -377,8 +410,11 @@ public sealed class IctOwnReportDocumentBuilder(FlitDbContext context)
         Guid tenantId, DateOnly from, DateOnly to, CancellationToken ct)
     {
         var (fromUtc, toUtc) = BogotaDays.Range(from, to);
+        var prev = PreviousRange(from, to);
+        var (prevFromUtc, prevToUtc) = BogotaDays.Range(prev.From, prev.To);
         var rows = new List<(Guid IdTransaction, string? Radicado, bool IsNotified, bool ResponseOk,
             int Attempts, string? TargetUrl, DateTimeOffset CreatedAt)>();
+        var previo = 0;
 
         await WithTenantAsync(tenantId, async (cmd, token) =>
         {
@@ -395,26 +431,35 @@ public sealed class IctOwnReportDocumentBuilder(FlitDbContext context)
             AddParam(cmd, "to", toUtc);
             AddParam(cmd, "limite", MaxRows);
 
-            await using var reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false);
-            while (await reader.ReadAsync(token).ConfigureAwait(false))
+            await using (var reader = await cmd.ExecuteReaderAsync(token).ConfigureAwait(false))
             {
-                rows.Add((
-                    reader.GetGuid(reader.GetOrdinal("id_transaction")),
-                    GetStringOrNull(reader, "manager_id_transaction"),
-                    reader.GetBoolean(reader.GetOrdinal("is_notified")),
-                    reader.GetBoolean(reader.GetOrdinal("response_ok")),
-                    reader.GetInt16(reader.GetOrdinal("attempts")),
-                    GetStringOrNull(reader, "target_url"),
-                    reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at"))));
+                while (await reader.ReadAsync(token).ConfigureAwait(false))
+                {
+                    rows.Add((
+                        reader.GetGuid(reader.GetOrdinal("id_transaction")),
+                        GetStringOrNull(reader, "manager_id_transaction"),
+                        reader.GetBoolean(reader.GetOrdinal("is_notified")),
+                        reader.GetBoolean(reader.GetOrdinal("response_ok")),
+                        reader.GetInt16(reader.GetOrdinal("attempts")),
+                        GetStringOrNull(reader, "target_url"),
+                        reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("created_at"))));
+                }
             }
+
+            previo = await CountAsync(cmd, """
+                SELECT count(*)
+                FROM ict.external_integration_webhook_master
+                WHERE tenant_id = @tenant AND created_at >= @from AND created_at <= @to
+                """, tenantId, prevFromUtc, prevToUtc, token).ConfigureAwait(false);
         }, ct).ConfigureAwait(false);
 
-        return BuildWebhooksReport(rows);
+        return BuildWebhooksReport(rows, previo);
     }
 
     private static IctWebhooksReportDto BuildWebhooksReport(
         List<(Guid IdTransaction, string? Radicado, bool IsNotified, bool ResponseOk,
-            int Attempts, string? TargetUrl, DateTimeOffset CreatedAt)> rows)
+            int Attempts, string? TargetUrl, DateTimeOffset CreatedAt)> rows,
+        int totalPeriodoAnterior)
     {
         var detalle = rows
             .Select(r => new IctWebhookDto(
@@ -425,7 +470,7 @@ public sealed class IctOwnReportDocumentBuilder(FlitDbContext context)
                 r.CreatedAt))
             .ToList();
 
-        return new IctWebhooksReportDto(detalle, rows.Count, Truncated: rows.Count >= MaxRows);
+        return new IctWebhooksReportDto(detalle, rows.Count, Truncated: rows.Count >= MaxRows, totalPeriodoAnterior);
     }
 
     public async Task<byte[]> BuildWebhooksAsync(
@@ -526,4 +571,30 @@ public sealed class IctOwnReportDocumentBuilder(FlitDbContext context)
 
     internal static string Pct(int part, int total) =>
         total == 0 ? "0" : Math.Round(part * 100d / total, 2).ToString("0.##", Es);
+
+    /// <summary>
+    /// Ventana inmediatamente anterior, de la MISMA longitud en días, para la variación de las
+    /// tarjetas ("vs comparado"). Se compara contra el periodo previo y no contra el año anterior
+    /// porque ICT lleva meses, no años, de historia: un "vs año anterior" saldría siempre sin base.
+    /// Ambos extremos son inclusivos, igual que el rango que elige el usuario.
+    /// </summary>
+    internal static (DateOnly From, DateOnly To) PreviousRange(DateOnly from, DateOnly to)
+    {
+        var dias = to.DayNumber - from.DayNumber + 1;
+        var prevTo = from.AddDays(-1);
+        return (prevTo.AddDays(-(dias - 1)), prevTo);
+    }
+
+    /// <summary>Cuenta filas del periodo anterior reutilizando el comando (y la transacción con el
+    /// GUC de tenant ya fijado) de la consulta principal.</summary>
+    private static async Task<int> CountAsync(
+        DbCommand cmd, string sql, Guid tenantId, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct)
+    {
+        cmd.Parameters.Clear();
+        cmd.CommandText = sql;
+        AddParam(cmd, "tenant", tenantId);
+        AddParam(cmd, "from", fromUtc);
+        AddParam(cmd, "to", toUtc);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false), Es);
+    }
 }
