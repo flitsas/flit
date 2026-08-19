@@ -64,7 +64,8 @@ export type ModuleId =
   | "rbac"
   | "auditoria"
   | "log-qx"
-  | "ict-logs";
+  | "ict-logs"
+  | "ict-reportes";
 
 const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   // Dashboard no va en el dock: el FAB central (Inicio FLIT) abre el mismo módulo.
@@ -414,6 +415,19 @@ export function Shell({
       icon: Network,
       active: !onAdminRoute && active === "ict-logs",
       onClick: () => onNav("ict-logs"),
+    });
+  }
+
+  // Reportes ICT (HU #11619) — informes en vivo, consultas y programación de Integración con
+  // Terceros. Entrada separada de "Log ICT" (que se queda solo con Logs + Alertas técnicas), mismo
+  // gate de permiso que ese módulo (`ict.logs.read` o SuperAdmin — es el mismo público).
+  if (currentUser?.canReadIctLogs) {
+    entries.push({
+      key: "ict-reportes",
+      label: "Reportes ICT",
+      icon: BarChart3,
+      active: !onAdminRoute && active === "ict-reportes",
+      onClick: () => onNav("ict-reportes"),
     });
   }
 

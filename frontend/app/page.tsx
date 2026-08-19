@@ -14,6 +14,7 @@ import { RbacAdmin } from "@/components/atom/modules/RbacAdmin";
 import { Auditoria } from "@/components/atom/modules/Auditoria";
 import { LogQx } from "@/components/atom/modules/LogQx";
 import { IctLogs } from "@/components/atom/modules/IctLogs";
+import { IctReports } from "@/components/atom/modules/IctReports";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { useAccessibleModules } from "@/hooks/useAccessibleModules";
 import { useAuthGate } from "@/hooks/useAuthGate";
@@ -162,6 +163,7 @@ function HomeContent() {
         <LogQx initialInstanceId={params.get("instanceId") ?? undefined} />
       )}
       {moduleReady && module === "ict-logs" && canIctLogs && <IctLogs />}
+      {moduleReady && module === "ict-reportes" && canIctLogs && <IctReports />}
     </Shell>
   );
 }

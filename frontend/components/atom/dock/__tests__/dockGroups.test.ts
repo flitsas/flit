@@ -99,13 +99,14 @@ describe("buildDockGroups", () => {
     expect(flat.map((i) => i.label)).toEqual(["Compañías", "Mandatos", "Notificaciones"]);
   });
 
-  it("Integraciones agrupa Log QX y Log ICT", () => {
+  it("Integraciones agrupa Log QX, Log ICT y Reportes ICT", () => {
     const groups = buildDockGroups([
       entry("log-qx", "Log QX"),
       entry("ict-logs", "Log ICT"),
+      entry("ict-reportes", "Reportes ICT"),
     ]);
     expect(groups).toHaveLength(1);
     expect(groups[0].label).toBe("Integraciones");
-    expect(groups[0].items.map((i) => i.label)).toEqual(["Log QX", "Log ICT"]);
+    expect(groups[0].items.map((i) => i.label)).toEqual(["Log QX", "Log ICT", "Reportes ICT"]);
   });
 });

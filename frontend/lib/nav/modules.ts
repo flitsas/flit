@@ -14,6 +14,7 @@ export const ALL_MODULE_IDS: ModuleId[] = [
   "auditoria",
   "log-qx",
   "ict-logs",
+  "ict-reportes",
 ];
 
 /**
@@ -43,7 +44,7 @@ export const OT_ADMIN_SPA_OMIT: ReadonlySet<string> = new Set([
 
 /**
  * Único módulo universal de navegación: soporte real para cualquier usuario.
- * `auditoria` / `log-qx` / `ict-logs` NO son universales — solo si claims/permisos
+ * `auditoria` / `log-qx` / `ict-logs` / `ict-reportes` NO son universales — solo si claims/permisos
  * del dock los mostrarían (SuperAdmin / logqx.read / ict.logs.read).
  */
 export const UNIVERSAL_MODULE_IDS: ModuleId[] = ["ayuda"];
@@ -87,6 +88,8 @@ export function resolveNavigableModuleIds(ctx: NavigableModulesContext): ModuleI
 
   if (ctx.canReadIctLogs) {
     ids.add("ict-logs");
+    // Reportes ICT (HU #11619) comparte el gate de Log ICT: mismo público, distinto espacio.
+    ids.add("ict-reportes");
   }
 
   return Array.from(ids);
