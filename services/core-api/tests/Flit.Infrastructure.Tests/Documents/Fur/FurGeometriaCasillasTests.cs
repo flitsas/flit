@@ -140,6 +140,45 @@ public sealed class FurGeometriaCasillasTests
             "los ocho combustibles comparten fila en el formulario");
     }
 
+    /// <summary>
+    /// HU #11641 — las casillas de subtrámite simultáneo caen en su celda del formulario, situadas
+    /// por relación con las de prenda, que son las que la HU #11640 dejó ancladas:
+    /// «5 CAMBIO DE COLOR» comparte columna con «11 INSCRIPC. PRENDA» y está una fila ARRIBA;
+    /// «17 CAMBIO DE CARROCERÍA» comparte esa misma columna y está una fila ABAJO;
+    /// «18 OTROS» comparte columna con «12 LEVANTA PRENDA» y está una fila abajo.
+    /// («6 CAMBIO DE SERVICIO» no se declara: ver FurFieldMapper.MarkTramite.)
+    ///
+    /// <para>Sin esto, declarar las casillas nuevas repetiría el error que originó el Feature: una
+    /// coordenada plausible que aterriza en la celda del vecino y produce un formulario bien formado
+    /// y falso.</para>
+    /// </summary>
+    [Fact]
+    public void Transformaciones_CaenEnSuCeldaRelativaALasDePrenda()
+    {
+        const FurTemplateFormat formato = FurTemplateFormat.Automotor;
+        var constitucion = CeldaDe(formato, "requested_process_11");
+        var levantamiento = CeldaDe(formato, "requested_process_12");
+
+        var color = CeldaDe(formato, "requested_process_5");
+        var carroceria = CeldaDe(formato, "requested_process_17");
+        var otros = CeldaDe(formato, "requested_process_18");
+
+        color.X0.Should().BeApproximately(constitucion.X0, 1.0, "«5 CAMBIO DE COLOR» está sobre «11 INSCRIPC. PRENDA»");
+        color.Y1.Should().BeApproximately(constitucion.Y0, 1.0, "«5» está en la fila inmediatamente anterior a «11»");
+
+        carroceria.X0.Should().BeApproximately(constitucion.X0, 1.0, "«17 CAMBIO DE CARROCERÍA» está bajo «11»");
+        carroceria.Y0.Should().BeApproximately(constitucion.Y1, 1.0, "«17» está en la fila inmediatamente posterior a «11»");
+
+        otros.X0.Should().BeApproximately(levantamiento.X0, 1.0, "«18 OTROS» está bajo «12 LEVANTA PRENDA»");
+        otros.Y0.Should().BeApproximately(levantamiento.Y1, 1.0, "«18» está en la fila inmediatamente posterior a «12»");
+
+        new[] { color, carroceria, otros, constitucion, levantamiento }
+            .Select(c => (Math.Round(c.X0, 1), Math.Round(c.Y0, 1)))
+            .Distinct().Should().HaveCount(5,
+                "las seis casillas de la rejilla ocupan celdas distintas: dos marcas en la misma celda " +
+                "harían imposible saber qué trámite se solicitó");
+    }
+
     // ── Auditoría del barrido de recalibración (AC5) ──────────────────────────
 
     /// <summary>

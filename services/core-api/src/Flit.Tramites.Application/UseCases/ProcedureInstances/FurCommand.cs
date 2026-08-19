@@ -642,6 +642,24 @@ public sealed class GenerarFurHandler(
             ? identidadAprobadaPartes.Contains("comprador") && identidadAprobadaPartes.Contains("vendedor")
             : identidadAprobadaPartes.Contains("comprador");
 
+    /// <summary>
+    /// HU #11641 — ¿el trámite incluye esta transformación? La bandera <c>cambio_*</c> es la
+    /// declaración explícita del gestor; el diff snapshot-RUNT vs efectivo la deduce cuando la
+    /// bandera no viaja (trámites anteriores a que existiera). Cualquiera de las dos basta.
+    /// </summary>
+    private static bool Declarada(
+        Dictionary<string, string?> fv, string bandera, string claveRunt, string claveEfectiva)
+    {
+        if (string.Equals(Get(fv, bandera)?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var runt = Get(fv, claveRunt);
+        var efectivo = Get(fv, claveEfectiva);
+        return !string.IsNullOrWhiteSpace(runt)
+            && !string.IsNullOrWhiteSpace(efectivo)
+            && !string.Equals(runt.Trim(), efectivo.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
     private static FurDocumentData AssembleData(
         ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv,
         bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad,
@@ -735,7 +753,18 @@ public sealed class GenerarFurHandler(
             // Casilla 19 "EMPRESA VINCULADORA" del FUR: opcional, mismo canal field_values que el resto
             // del paso de vehículo/comercial. Get() ya devuelve null si la llave no existe.
             EmpresaVinculadoraRazonSocial: Get(fv, "empresa_vinculadora_razon_social"),
-            EmpresaVinculadoraNit: Get(fv, "empresa_vinculadora_nit"))
+            EmpresaVinculadoraNit: Get(fv, "empresa_vinculadora_nit"),
+            // HU #11641 — subtrámites simultáneos que marcan casilla propia. Se toma la bandera
+            // DECLARADA por el gestor o, en su defecto, el diff RUNT vs efectivo: son dos formas de
+            // enterarse de lo mismo y hasta ahora el FUR solo miraba la segunda, de modo que un
+            // cambio declarado sobre un vehículo del que el RUNT no devolvió el dato original no se
+            // marcaba en ninguna parte. Es el mismo criterio (`bandera || diff`) que ya usa el
+            // wizard para pintar el subtrámite como activo, así que documento y pantalla dejan de
+            // contradecirse.
+            Transformaciones: new FurTransformacionesDeclaradas(
+                Color: Declarada(fv, MandatoObjetoComposer.CambioColor, "vehicle_color_runt", "vehicle_color"),
+                Carroceria: Declarada(fv, MandatoObjetoComposer.CambioCarroceria, "vehicle_body_type_runt", "vehicle_body_type"),
+                Combustible: Declarada(fv, MandatoObjetoComposer.CambioCombustible, "vehicle_fuel_runt", "vehicle_fuel")))
         {
             // HU #11030 — tenant contra el que se resuelve el baúl del mandatario.
             TenantIdParaFirmas = instance.TenantId,

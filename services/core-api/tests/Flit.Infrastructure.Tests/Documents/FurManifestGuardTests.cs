@@ -44,6 +44,95 @@ public sealed class FurManifestGuardTests
 
     // ── Integridad estructural ────────────────────────────────────────────────
 
+    /// <summary>
+    /// Casillas del "documento de origen" (sección 5 del FUR) declaradas en el manifiesto desde su
+    /// calibración inicial y que el mapper NUNCA ha emitido: el trámite no captura si el vehículo
+    /// entró por importación o por remate, así que no hay dato con el que marcarlas.
+    ///
+    /// <para>Se listan de forma explícita, y no se ignoran por categoría, para que la guardia siga
+    /// detectando cualquier casilla huérfana NUEVA. Detectadas al introducir la guardia (HU #11641):
+    /// son deuda previa, no una regresión, y conectarlas exige antes decidir en producto cómo se
+    /// declara el origen del vehículo.</para>
+    /// </summary>
+    private static readonly HashSet<string> HuerfanasConocidas = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "importacion_manifest",
+        "importacion_declaracion",
+        "remate_acta",
+        "remate_entidad",
+        "remate_lugar",
+    };
+
+    /// <summary>
+    /// HU #11641 (AC6) — la dirección INVERSA de <see cref="Mapper_EmitsOnlyTokensDefinedInManifest"/>:
+    /// ninguna casilla puede quedar declarada en el manifiesto sin que el mapper la emita nunca.
+    ///
+    /// <para>Una casilla huérfana es configuración muerta que aparenta cobertura: alguien la lee en el
+    /// manifiesto y da por hecho que el formulario la marca. Peor aún, ocupa una celda —si más adelante
+    /// se declara otra casilla sobre la misma celda, dos marcas se pisan y el formulario deja de decir
+    /// qué trámite se solicitó—. El comentario del manifiesto de maquinaria ya advierte de ese riesgo.</para>
+    /// </summary>
+    [Fact]
+    public void Manifest_NoDeclaraCasillasHuerfanas()
+    {
+        var emitidos = new HashSet<string>(
+            FurFieldMapper.Map(SampleMatricula()).Keys.Concat(FurFieldMapper.Map(SampleTraspaso()).Keys),
+            StringComparer.OrdinalIgnoreCase);
+
+        var huerfanas = Manifest().Fields
+            .Where(f => f.Type == FurFieldType.Checkbox && !emitidos.Contains(f.Id))
+            .Select(f => f.Id)
+            .Where(id => !HuerfanasConocidas.Contains(id))
+            .ToList();
+
+        huerfanas.Should().BeEmpty(
+            "toda casilla declarada debe tener quien la emita, o es configuración muerta: {0}",
+            string.Join(", ", huerfanas));
+    }
+
+    /// <summary>
+    /// HU #11641 (AC6) — ningún campo que el mapper CALCULA puede descartarse en silencio por no estar
+    /// declarado en el manifiesto del formato.
+    ///
+    /// <para><see cref="FurOverlayRenderer"/> recorre los campos del manifiesto, no las claves del
+    /// diccionario: un token sin placement se tira sin log ni excepción. Así es como los formatos de
+    /// maquinaria y remolques llevan tiempo imprimiéndose sin tipo de servicio ni empresa vinculadora
+    /// pese a que el sistema los calcula.</para>
+    ///
+    /// <para>Para AUTOMOTOR la ausencia es un FALLO. Para maquinaria y remolques la corrección está
+    /// diferida (decisión del supervisor, 2026-08-19: esos formatos aún no están en operación), así que
+    /// la prueba se salta DECLARANDO la brecha en el motivo, en vez de desaparecer. Es la diferencia
+    /// entre una deuda visible en cada ejecución y un descarte silencioso.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(FurTemplateFormat.Automotor)]
+    [InlineData(FurTemplateFormat.Maquinaria)]
+    [InlineData(FurTemplateFormat.Remolques)]
+    public void Manifest_DeclaraTodoLoQueElMapperCalcula(FurTemplateFormat format)
+    {
+        var declarados = new HashSet<string>(
+            Manifest(format).Fields.Select(f => f.Id), StringComparer.OrdinalIgnoreCase);
+
+        var descartados = FurFieldMapper.Map(SampleMatricula()).Keys
+            .Concat(FurFieldMapper.Map(SampleTraspaso()).Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(t => !declarados.Contains(t))
+            .OrderBy(t => t, StringComparer.Ordinal)
+            .ToList();
+
+        if (format != FurTemplateFormat.Automotor && descartados.Count > 0)
+        {
+            Assert.Skip(
+                $"DEUDA CONOCIDA ({format}): el manifiesto descarta en silencio {descartados.Count} " +
+                $"campos que el mapper calcula — {string.Join(", ", descartados)}. Corrección diferida " +
+                "hasta que el formato entre en operación (HU #11641, AC5 diferido).");
+        }
+
+        descartados.Should().BeEmpty(
+            "el formato {0} descarta en silencio campos ya calculados: {1}",
+            format, string.Join(", ", descartados));
+    }
+
     [Fact]
     public void Manifest_HasNoDuplicateFieldIds()
     {
@@ -278,6 +367,14 @@ public sealed class FurManifestGuardTests
     // de prenda caen en la celda correcta de su propio formulario. Solo AUTOMOTOR estaba descuadrado,
     // que es el formato de la inmensa mayoría de los trámites.
     //
+    // Regenerada 2026-08-19 (HU #11641) al declarar las casillas de subtrámite simultáneo
+    // `requested_process_5` (CAMBIO DE COLOR), `_17` (CAMBIO DE CARROCERÍA) y `_18` (OTROS, donde por
+    // decisión de negocio se marca el cambio de combustible). Situadas por relación con las casillas
+    // de prenda, ya ancladas al blank en la HU #11640, y verificadas contra los trazos impresos en
+    // FurGeometriaCasillasTests: comparten columna con 11/12 y ocupan la fila inmediatamente anterior
+    // o posterior. La casilla 6 (CAMBIO DE SERVICIO) NO se declara: no hay dato que la alimente (ver
+    // FurFieldMapper.MarkTramite).
+    //
     // Regenerar SOLO de forma deliberada vía EmitBaseline tras recalibrar el manifest.
     private const string Baseline = """
         traffic_secretary_name=Text:525,64,175,11.9,6.5,Left,False,null
@@ -290,6 +387,9 @@ public sealed class FurManifestGuardTests
         plate_number=Text:734.1,76,23.7,11.8,9.7,Center,False,null
         requested_process_1=cb:71.3,119.2,9.9
         requested_process_2=cb:119.5,121.1,9.8
+        requested_process_5=cb:286.9,124,10.1
+        requested_process_17=cb:286.9,177,10.1
+        requested_process_18=cb:343.3,177,10.1
         requested_process_11=cb:286.9,150.2,10.1
         requested_process_12=cb:343.3,150.2,10.1
         vehicle_class_1=cb:53.6,222.4,9.9

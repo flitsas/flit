@@ -402,6 +402,89 @@ public sealed class FurHandlerTests
         instance.Events.Should().ContainSingle(e => e.Tipo == "fur_generado");
     }
 
+    /// <summary>
+    /// HU #11641 — la casilla de subtrámite se marca con la BANDERA declarada aunque no haya diff que
+    /// calcular. Es el caso que dejaba el FUR mudo: si el RUNT no devolvió el valor original no hay
+    /// snapshot contra el que comparar, pero el gestor declaró el cambio y el wizard se lo muestra
+    /// como subtrámite activo. El formulario debe decir lo mismo que la pantalla.
+    /// </summary>
+    [Fact]
+    public async Task Generar_TransformacionDeclaradaSinSnapshotRunt_MarcaLaCasilla()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        AddFieldValue(instance, "vehicle_color", "AZUL");   // sin vehicle_color_runt: no hay diff
+        AddFieldValue(instance, "cambio_color", "true");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured!.Transformaciones.Color.Should().BeTrue(
+            "el gestor declaró el cambio de color: sin snapshot RUNT no hay diff, pero el trámite lo incluye igual");
+        capturing.Captured.Observaciones.Should().BeNull(
+            "el TEXTO de observaciones sigue derivándose del diff (ADR-0029): sin snapshot no hay a qué " +
+            "transformación referirse, aunque la casilla sí se marque");
+    }
+
+    /// <summary>
+    /// Sin bandera pero CON diff (trámites anteriores a que la bandera existiera) la casilla también
+    /// se marca: son dos formas de enterarse de lo mismo.
+    /// </summary>
+    [Fact]
+    public async Task Generar_TransformacionSoloPorDiff_MarcaLaCasilla()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        AddFieldValue(instance, "vehicle_body_type_runt", "ESTACAS");
+        AddFieldValue(instance, "vehicle_body_type", "FURGON");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured!.Transformaciones.Carroceria.Should().BeTrue();
+        capturing.Captured.Transformaciones.Color.Should().BeFalse("no se declaró ni difiere");
+        capturing.Captured.Transformaciones.Combustible.Should().BeFalse();
+    }
+
+    /// <summary>Un trámite sin transformaciones no marca ninguna casilla de subtrámite.</summary>
+    [Fact]
+    public async Task Generar_SinTransformaciones_NoMarcaSubtramites()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        AddFieldValue(instance, "vehicle_color_runt", "AZUL");
+        AddFieldValue(instance, "vehicle_color", "AZUL");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured!.Transformaciones.Should().Be(default(FurTransformacionesDeclaradas));
+    }
+
     /// <summary>Generador FUR que captura el <see cref="FurDocumentData"/> ensamblado para aserciones.</summary>
     private sealed class CapturingFurGenerator : IFurDocumentGenerator
     {

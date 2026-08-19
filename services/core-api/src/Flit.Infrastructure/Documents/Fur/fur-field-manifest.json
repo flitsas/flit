@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-19-hu11640-prenda-geometria",
+  "version": "2026-08-19-hu11641-casillas-transformaciones",
   "pageWidth": 792,
   "pageHeight": 612,
   "coordinateOrigin": "top-left",
@@ -116,6 +116,30 @@
       "x": 119.5,
       "y": 121.1,
       "size": 9.8
+    },
+    {
+      "id": "requested_process_5",
+      "page": 1,
+      "type": "checkbox",
+      "x": 286.9,
+      "y": 124.0,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_17",
+      "page": 1,
+      "type": "checkbox",
+      "x": 286.9,
+      "y": 177.0,
+      "size": 10.1
+    },
+    {
+      "id": "requested_process_18",
+      "page": 1,
+      "type": "checkbox",
+      "x": 343.3,
+      "y": 177.0,
+      "size": 10.1
     },
     {
       "id": "requested_process_11",
