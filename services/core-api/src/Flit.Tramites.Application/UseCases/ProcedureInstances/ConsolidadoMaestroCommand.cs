@@ -22,8 +22,15 @@ public sealed class GenerarConsolidadoMaestroHandler(
     IProcedureInstanceRepository repo,
     IExpedienteConsolidadoMerger merger,
     IAttachmentStorage storage,
-    IOtConfiguredDocumentOrderProvider? otOrderProvider = null)
+    IOtConfiguredDocumentOrderProvider? otOrderProvider = null,
+    Domain.Integration.ICompaniaRadicadoraDirectory? companiaRadicadoraDirectory = null)
 {
+    // Bug #11612 — nombre de la compañía radicadora para la portada, resuelto desde el tenant dueño
+    // del trámite. Default inerte (NUNCA resuelve) en tests/composiciones que no lo cablean ⇒ la
+    // portada queda como estaba.
+    private readonly Domain.Integration.ICompaniaRadicadoraDirectory _companiaRadicadoraDirectory =
+        companiaRadicadoraDirectory ?? Domain.Integration.NullCompaniaRadicadoraDirectory.Instance;
+
     private static readonly HashSet<string> ConsolidadoTipos = new(StringComparer.OrdinalIgnoreCase)
     {
         "consolidado",
@@ -53,6 +60,12 @@ public sealed class GenerarConsolidadoMaestroHandler(
         // (transición de estado o adjuntar la LT), forzando la regeneración en la próxima petición.
         var vigente = instance.Attachments
             .FirstOrDefault(a => string.Equals(a.Tipo, "consolidado_maestro", StringComparison.OrdinalIgnoreCase));
+
+        // Bug #11612 — el atajo de caché queda EXACTAMENTE como estaba: la compañía radicadora ya no
+        // deja marcador persistido (ver CompaniaRadicadoraResolver) y condicionar el atajo a "falta la
+        // compañía" regeneraría el maestro en CADA acceso, no una sola vez. Limitación asumida (AC4 del
+        // Bug #11612): un trámite antiguo con el maestro vigente conserva el guión hasta que se
+        // invalide por las vías normales.
         if (instance.ConsolidadoMaestroVigente && vigente is not null)
         {
             var vigenteDto = new ConsolidadoDocumentDto(vigente.Id, vigente.Tipo, vigente.Filename, vigente.Sha256);
@@ -106,10 +119,16 @@ public sealed class GenerarConsolidadoMaestroHandler(
             }
         }
 
+        // Bug #11612 — se resuelve solo cuando se va a componer el PDF y viaja a la portada por
+        // parámetro: NO se escribe en field_values (trigger de inmutabilidad en trámites radicados).
+        var companiaRadicadora = await CompaniaRadicadoraResolver
+            .ResolverAsync(instance, tenantId, _companiaRadicadoraDirectory, ct)
+            .ConfigureAwait(false);
+
         // HU #10857 — expediente maestro con portada institucional (primera página).
         var mergeRequest = new MergeRequest(
             Parts: ordered.Zip(pdfParts, (a, pdf) => new MergePart(pdf, DocumentLabels.Display(a.Tipo))).ToList(),
-            Cover: ExpedienteCoverInfoBuilder.FromInstance(instance),
+            Cover: ExpedienteCoverInfoBuilder.FromInstance(instance, companiaRadicadora),
             EstadoTramite: instance.Status);
         var merged = merger.Compose(mergeRequest);
         var now = DateTimeOffset.UtcNow;

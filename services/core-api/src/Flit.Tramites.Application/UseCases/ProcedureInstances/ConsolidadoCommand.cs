@@ -67,8 +67,15 @@ public sealed class GenerarConsolidadoHandler(
     ChecklistMatrixCompleteness? matrixCompleteness = null,
     IExpedienteHotDocumentsRegenerator? hotDocsRegenerator = null,
     IImprontaAutoGenerator? improntaGenerator = null,
-    IOtConfiguredDocumentOrderProvider? otOrderProvider = null)
+    IOtConfiguredDocumentOrderProvider? otOrderProvider = null,
+    Flit.Tramites.Domain.Integration.ICompaniaRadicadoraDirectory? companiaRadicadoraDirectory = null)
 {
+    // Bug #11612 — nombre de la compañía radicadora para la portada, resuelto desde el tenant dueño
+    // del trámite. Default inerte (NUNCA resuelve) en tests/composiciones que no lo cablean ⇒ la
+    // portada queda como estaba.
+    private readonly Flit.Tramites.Domain.Integration.ICompaniaRadicadoraDirectory _companiaRadicadoraDirectory =
+        companiaRadicadoraDirectory ?? Flit.Tramites.Domain.Integration.NullCompaniaRadicadoraDirectory.Instance;
+
     public Task<(GenerarConsolidadoResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -138,6 +145,12 @@ public sealed class GenerarConsolidadoHandler(
                 .FirstOrDefault(a => string.Equals(a.Tipo, "consolidado", StringComparison.OrdinalIgnoreCase));
         }
 
+        // Bug #11612 — el atajo de caché queda EXACTAMENTE como estaba. La compañía radicadora ya
+        // no deja marcador persistido (ver CompaniaRadicadoraResolver), así que condicionar el atajo a
+        // "falta la compañía" no sería "regenerar una vez por trámite" sino regenerar en CADA acceso.
+        // Limitación asumida (AC4 del Bug #11612): un trámite antiguo con el consolidado vigente
+        // conserva el guión en la portada hasta que se invalide por las vías normales (regenerar el
+        // FUR, cambiar de estado, adjuntar documentos o forzar la regeneración).
         if (!force && instance.ConsolidadoWizardVigente && consolidadoVigente is not null)
         {
             var vigenteDto = new ConsolidadoDocumentDto(
@@ -221,10 +234,17 @@ public sealed class GenerarConsolidadoHandler(
             }
         }
 
+        // Bug #11612 — se resuelve aquí, después de los posibles ReloadAsync de la cascada (FUR /
+        // impronta) y solo cuando de verdad se va a componer el PDF. Viaja a la portada por parámetro:
+        // NO se escribe en field_values (el trigger de inmutabilidad lo prohíbe en trámites radicados).
+        var companiaRadicadora = await CompaniaRadicadoraResolver
+            .ResolverAsync(instance, tenantId, _companiaRadicadoraDirectory, ct)
+            .ConfigureAwait(false);
+
         // HU #10857 — expediente con portada institucional (primera página) para todos los tipos.
         var mergeRequest = new MergeRequest(
             Parts: ordered.Zip(pdfParts, (a, pdf) => new MergePart(pdf, DocumentLabels.Display(a.Tipo))).ToList(),
-            Cover: ExpedienteCoverInfoBuilder.FromInstance(instance),
+            Cover: ExpedienteCoverInfoBuilder.FromInstance(instance, companiaRadicadora),
             EstadoTramite: instance.Status);
         var merged = merger.Compose(mergeRequest);
         var now = DateTimeOffset.UtcNow;

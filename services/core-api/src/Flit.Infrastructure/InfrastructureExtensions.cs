@@ -702,6 +702,10 @@ public static class InfrastructureExtensions
         // placa). Escribe con SQL parametrizado, sin pasar por el change tracker del intento fallido.
         services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.IRegeneracionDocumentalTrazaWriter,
             RegeneracionDocumentalTrazaWriter>();
+        // Bug #11612 — compañía radicadora de la portada del consolidado: razón social del tenant
+        // dueño del trámite (identity.tenants.legal_name), resuelta siempre por id.
+        services.AddScoped<Flit.Tramites.Domain.Integration.ICompaniaRadicadoraDirectory,
+            CompaniaRadicadoraDirectory>();
         // HU #11485 (Feature #11482, ADR-0046) — sink post-asignación de placa (Flujo B).
         services.AddScoped<Flit.Tramites.Application.Notifications.IPlateAssignmentEmailEnqueuer,
             PlateAssignmentEmailEnqueuer>();
