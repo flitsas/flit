@@ -120,6 +120,16 @@ async function elegirSecretaria(
 
 const digito = () => screen.getByLabelText('Dígito de preasignación de placa') as HTMLSelectElement;
 
+/**
+ * HU #11628 — con preasignación activa el dígito exige una elección consciente antes de "Continuar"
+ * (dígito o "sin preferencia" explícita); el placeholder ('') ya no vale como respuesta. Los tests que
+ * no versan sobre esta regla concreta declaran "sin preferencia" aquí, igual que haría el gestor.
+ */
+async function declararSinPreferenciaDigito(user: ReturnType<typeof userEvent.setup>) {
+  await waitFor(() => expect(digito()).toBeEnabled());
+  await user.selectOptions(digito(), 'none');
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.runPreflightPreview.mockResolvedValue(PREVIEW_RESULT);
@@ -154,6 +164,7 @@ describe('Trámite prioritario — paso 1', () => {
 
     await consultarVehiculo(user);
     await elegirSecretaria(user);
+    await declararSinPreferenciaDigito(user);
 
     const toggle = await screen.findByRole('button', { name: 'Trámite prioritario' });
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
@@ -176,6 +187,7 @@ describe('Trámite prioritario — paso 1', () => {
 
     await consultarVehiculo(user);
     await elegirSecretaria(user);
+    await declararSinPreferenciaDigito(user);
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
 
     await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
@@ -199,6 +211,7 @@ describe('Trámite prioritario — paso 1', () => {
 
     await consultarVehiculo(user);
     await elegirSecretaria(user);
+    await declararSinPreferenciaDigito(user);
     await user.click(await screen.findByRole('button', { name: 'Trámite prioritario' }));
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
 
@@ -294,7 +307,7 @@ describe('Dígito de preasignación de placa — paso 1', () => {
 
     await consultarVehiculo(user);
     await elegirSecretaria(user);
-    await waitFor(() => expect(digito()).toBeEnabled());
+    await declararSinPreferenciaDigito(user);
 
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
 
@@ -339,10 +352,13 @@ describe('Dígito de preasignación de placa — paso 1', () => {
 
     await elegirSecretaria(user, /Envigado/);
 
+    // HU #11628 — el reinicio deja el selector en "no decidido" (placeholder), no en "sin
+    // preferencia": son estados distintos y el segundo exige una elección nueva del gestor.
     await waitFor(() => expect(digito()).toHaveValue(''));
     await waitFor(() =>
       expect(plateMocks.getPlatePreassignStatus).toHaveBeenLastCalledWith('ot-envigado'),
     );
+    await declararSinPreferenciaDigito(user);
 
     await user.click(screen.getByRole('button', { name: /Continuar/ }));
     await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
@@ -350,6 +366,127 @@ describe('Dígito de preasignación de placa — paso 1', () => {
     const patches = mocks.patchFieldValues.mock.calls.flatMap((c) => c[1] as { fieldKey: string; valueText: string }[]);
     const digitoPersistido = patches.find((i) => i.fieldKey === 'plate_preferred_last_digit');
     expect(digitoPersistido?.valueText ?? '').toBe('');
+  });
+});
+
+/**
+ * HU #11628 — el dígito de preferencia de placa exige una elección consciente. El valor vacío dejaba
+ * de significar dos cosas indistinguibles: "no lo he tocado" y "no tengo preferencia".
+ */
+describe('HU #11628 — elección consciente del dígito de preferencia', () => {
+  it('AC1 — sin decidir, con preasignación activa, "Continuar" no avanza y explica qué falta', async () => {
+    const user = userEvent.setup();
+    renderNuevo();
+
+    await consultarVehiculo(user);
+    await elegirSecretaria(user);
+    await waitFor(() => expect(digito()).toBeEnabled());
+
+    // Ni dígito ni "sin preferencia": el selector queda en el placeholder ("no decidido").
+    expect(digito()).toHaveValue('');
+
+    const continuarBtn = screen.getByRole('button', { name: /Continuar/ });
+    expect(continuarBtn).toBeDisabled();
+    expect(
+      screen.getByText(/Elige un dígito o indica que no tienes preferencia/),
+    ).toBeInTheDocument();
+
+    // Clic sobre el botón deshabilitado: no avanza (no crea el trámite).
+    await user.click(continuarBtn);
+    expect(mocks.createInstanceFromConsulta).not.toHaveBeenCalled();
+  });
+
+  it('AC2 — declarar "sin preferencia" avanza y queda registrado como declarado (no como no-decidido)', async () => {
+    const user = userEvent.setup();
+    renderNuevo();
+
+    await consultarVehiculo(user);
+    await elegirSecretaria(user);
+    await declararSinPreferenciaDigito(user);
+
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: /Continuar/ }));
+
+    await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
+    await waitFor(() => {
+      const patches = mocks.patchFieldValues.mock.calls.flatMap(
+        (c) => c[1] as { fieldKey: string; valueText: string }[],
+      );
+      // Contrato SIN CAMBIOS: sigue siendo cadena vacía (ausencia), igual que antes de la HU.
+      expect(
+        patches.find((i) => i.fieldKey === 'plate_preferred_last_digit')?.valueText,
+      ).toBe('');
+      // La señal aparte SÍ distingue "declaró sin preferencia" de "no decidido".
+      expect(
+        patches.find((i) => i.fieldKey === 'plate_preferred_last_digit_declared')?.valueText,
+      ).toBe('true');
+    });
+  });
+
+  it('AC3 — elegir un dígito avanza y persiste el mismo contrato de siempre', async () => {
+    const user = userEvent.setup();
+    renderNuevo();
+
+    await consultarVehiculo(user);
+    await elegirSecretaria(user);
+    await waitFor(() => expect(digito()).toBeEnabled());
+    await user.selectOptions(digito(), '3');
+
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: /Continuar/ }));
+
+    await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
+    await waitFor(() => {
+      const patches = mocks.patchFieldValues.mock.calls.flatMap(
+        (c) => c[1] as { fieldKey: string; valueText: string }[],
+      );
+      expect(
+        patches.find((i) => i.fieldKey === 'plate_preferred_last_digit')?.valueText,
+      ).toBe('3');
+      expect(
+        patches.find((i) => i.fieldKey === 'plate_preferred_last_digit_declared')?.valueText,
+      ).toBe('true');
+    });
+  });
+
+  it('AC4 — organismo sin preasignación activa: "Continuar" avanza sin exigir nada (no se puede bloquear)', async () => {
+    plateMocks.getPlatePreassignStatus.mockResolvedValue({ enabled: false });
+    const user = userEvent.setup();
+    renderNuevo();
+
+    await consultarVehiculo(user);
+    await elegirSecretaria(user);
+    await waitFor(() => expect(digito()).toBeDisabled());
+
+    // El selector deshabilitado no exige elección: el botón sigue habilitado.
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: /Continuar/ }));
+    await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
+  });
+
+  it('AC5 — sin placa y sin dígito declarado, la ruta de preasignación sigue activándose igual que antes', async () => {
+    const user = userEvent.setup();
+    renderNuevo();
+
+    await consultarVehiculo(user);
+    await elegirSecretaria(user);
+    await declararSinPreferenciaDigito(user);
+    await user.click(screen.getByRole('button', { name: /Continuar/ }));
+
+    // `plate_route_active` (lo que gobierna la ruta de preasignación al radicar sin placa) sigue
+    // dependiendo únicamente de `getPlatePreassignStatus`, no del dígito — mismo comportamiento que
+    // antes de la HU #11628.
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith(
+        'inst-1',
+        expect.arrayContaining([
+          expect.objectContaining({ fieldKey: 'plate_route_active', valueText: 'true' }),
+        ]),
+        'tenant-1',
+      ),
+    );
   });
 });
 
