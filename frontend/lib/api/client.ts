@@ -107,14 +107,22 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   if (!response.ok) {
     // Se lee el cuerpo una sola vez y se adjunta al ApiError para que el caller pueda
     // reaccionar a errores con detalle (p. ej. el 409 del soft-delete con `procedureTypes`).
-    const data = (await safeJson(response)) as { code?: string } | null;
+    const data = (await safeJson(response)) as
+      | { code?: string; error?: string; detail?: string; title?: string }
+      | null;
     if (response.status === 401 && data?.code === "SESSION_EXPIRED") {
       // HU #10172 AC2 — sesión expirada: limpia el token y avisa al modal global.
       clearToken();
       emitSessionExpired();
       throw new ApiError(401, "SESSION_EXPIRED");
     }
-    throw new ApiError(response.status, `Error ${response.status} al llamar ${path}`, data);
+    // El backend ya manda el motivo en español cuando lo tiene ({ error } de los Results.Conflict/
+    // BadRequest/NotFound "a mano", o { detail } de un ProblemDetails con Results.Problem) — se
+    // prioriza ese texto. Sin uno, el mensaje NUNCA debe filtrar la ruta/status técnico a quien lo
+    // ve en pantalla: un componente que hace `catch { setError(e.message) }` sin más se volvería un
+    // "Error 500 al llamar /api/v1/..." ilegible para el usuario.
+    const friendly = data?.error ?? data?.detail ?? "No se pudo completar la solicitud. Inténtalo de nuevo.";
+    throw new ApiError(response.status, friendly, data);
   }
 
   return (await safeJson(response)) as T;
