@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarClock, FileSpreadsheet, Loader2 } from "lucide-react";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
+import { Pagination } from "@/components/atom/Pagination";
 import {
   CARDLIST_CELL,
   CARDLIST_HEAD_ROW,
@@ -32,6 +33,8 @@ import {
   exportIctJobsReport,
   exportIctNovedadesReport,
   exportIctWebhooksReport,
+  ICT_EXCEL_MAX_ROWS,
+  ICT_REPORT_PAGE_SIZE,
   fetchIctAtascadosReport,
   fetchIctJobsReport,
   fetchIctNovedadesReport,
@@ -47,7 +50,7 @@ import { ModuleTitle } from "./ModuleTitle";
 import { CompanyNotice } from "./_reportes/CompanyNotice";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { DateRangeFilter } from "./_reportes/DateRangeFilter";
-import { formatDurationMs, formatInt, formatNumber } from "./_reportes/format";
+import { formatDurationMs, formatInt, formatNumber, formatPct } from "./_reportes/format";
 import { KpiCard } from "./_reportes/KpiCard";
 import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
 import { ReportesTabBar } from "./_reportes/ReportesTabBar";
@@ -99,6 +102,16 @@ const CAUSA_COLOR: Record<string, string> = {
   "Otra/sin clasificar": "#162744",
 };
 
+/**
+ * Color por estado de entrega de webhook, con los mismos verdes/naranjas que el resto de Reportes
+ * usa para "bien"/"falló". Los tres estados los define el backend (`EstadoWebhook`).
+ */
+const ESTADO_WEBHOOK_COLOR: Record<string, string> = {
+  Entregado: "#8CC63F",
+  Fallido: "#FF4E00",
+  Pendiente: "#F9AC00",
+};
+
 /** La pestaña activa vive en la dirección, igual que en empresa (`reportesTab`) y OT (`tab`). */
 const TAB_QUERY_PARAM = "ictReportesTab";
 /** La compañía también, para que un enlace copiado llegue mirando lo mismo. */
@@ -121,6 +134,25 @@ function useIsSuperAdmin(): boolean {
 function initialParam(name: string): string {
   if (typeof window === "undefined") return "";
   return new URLSearchParams(window.location.search).get(name) ?? "";
+}
+
+/**
+ * Página del detalle, atada a los filtros vigentes.
+ *
+ * NO se persiste en la dirección, a diferencia de la pestaña (`ictReportesTab`) y la compañía
+ * (`compania`): esas dos deciden QUÉ se está mirando y por eso un enlace copiado tiene que
+ * conservarlas; la página es solo por dónde vas dentro de esa misma vista, y además significa una
+ * cosa distinta en cada pestaña — persistirla obligaría a cuatro parámetros o a uno ambiguo.
+ *
+ * La página se deriva de `filtersKey` en vez de reponerse desde un efecto: al cambiar el rango o la
+ * compañía, la clave deja de coincidir y la página vuelve a 1 en el mismo render, sin un paso
+ * intermedio pidiendo la página 7 de un periodo que ya no es el elegido.
+ */
+function usePagedFilters(filtersKey: string): [number, (page: number) => void] {
+  const [state, setState] = useState({ key: filtersKey, page: 1 });
+  const page = state.key === filtersKey ? state.page : 1;
+  const setPage = useCallback((next: number) => setState({ key: filtersKey, page: next }), [filtersKey]);
+  return [page, setPage];
 }
 
 /** Refleja un valor en la dirección sin recargar ni apilar historial. */
@@ -196,6 +228,16 @@ export function IctReports() {
   // OtReportsConsole/Reportes.tsx, con savedQueryScope="ict" fijo.
   const [schedulePreset, setSchedulePreset] = useState<SchedulePresetConsulta | null>(null);
 
+  /**
+   * Universo de la pestaña, tal como lo reporta cada consulta. Solo existe para saber si hay algo
+   * que exportar: "Exportar Excel" con 0 resultados descargaba un archivo con la cabecera y nada
+   * más (se veía en Atascados vacío). `undefined` = todavía no se sabe, y ahí el botón no estorba.
+   */
+  const [tabTotals, setTabTotals] = useState<Partial<Record<TabId, number>>>({});
+  const reportTotal = useCallback((tab: TabId, total: number) => {
+    setTabTotals((prev) => (prev[tab] === total ? prev : { ...prev, [tab]: total }));
+  }, []);
+
   const exportCurrentTab = useCallback(() => {
     switch (activeTab) {
       case "novedades":
@@ -212,6 +254,7 @@ export function IctReports() {
   }, [activeTab, range, tenantId]);
 
   const blocked = needsCompany || (usesRange && !rangeValid);
+  const nothingToExport = tabTotals[activeTab] === 0;
 
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
@@ -251,7 +294,7 @@ export function IctReports() {
         {/* «Consultas» ya trae su propio "Exportar a Excel" dentro de la consola. */}
         {activeTab !== "consultas" && (
           <div className="ml-auto">
-            <ExcelExportButton onExport={exportCurrentTab} disabled={blocked} />
+            <ExcelExportButton onExport={exportCurrentTab} disabled={blocked || nothingToExport} />
           </div>
         )}
       </div>
@@ -268,10 +311,14 @@ export function IctReports() {
         </div>
       ) : (
         <div className="pr-1">
-          {activeTab === "novedades" && <NovedadesTab range={range} tenantId={tenantId} />}
-          {activeTab === "atascados" && <AtascadosTab tenantId={tenantId} />}
-          {activeTab === "jobs" && <JobsTab range={range} />}
-          {activeTab === "webhooks" && <WebhooksTab range={range} tenantId={tenantId} />}
+          {activeTab === "novedades" && (
+            <NovedadesTab range={range} tenantId={tenantId} onTotal={reportTotal} />
+          )}
+          {activeTab === "atascados" && <AtascadosTab tenantId={tenantId} onTotal={reportTotal} />}
+          {activeTab === "jobs" && <JobsTab range={range} onTotal={reportTotal} />}
+          {activeTab === "webhooks" && (
+            <WebhooksTab range={range} tenantId={tenantId} onTotal={reportTotal} />
+          )}
           {activeTab === "consultas" && (
             <IctQueriesTab
               tenantId={tenantId}
@@ -427,14 +474,49 @@ function DetailTable({
   );
 }
 
-/** Aviso de corte del detalle: el backend limita las filas del reporte en vivo. */
-function TruncatedNotice({ what }: { what: string }) {
+/**
+ * Aviso de corte DEL EXCEL. Ya no habla de la pantalla: el detalle en vivo se pagina, así que
+ * siempre se puede llegar a la última fila. Lo que sigue topándose es el archivo exportado, y eso
+ * es lo que hay que advertir antes de que alguien lo dé por completo.
+ */
+function ExcelTruncatedNotice({ what }: { what: string }) {
   return (
-    <p className="mt-3 text-[11px] opacity-70">
-      El detalle se limitó a las primeras filas: hay más {what} de los que se muestran. Exporta el
-      informe o prográmalo para recibirlo completo.
+    <p className="mt-3 text-[11px] opacity-70" data-testid="ict-aviso-excel-truncado">
+      El Excel de este informe se corta en las primeras {formatInt(ICT_EXCEL_MAX_ROWS)} filas y hay
+      más {what} en el periodo. En pantalla puedes recorrerlos todos con la paginación.
     </p>
   );
+}
+
+/** Barra de paginación del detalle, con el mismo paginador del resto del producto. */
+function DetailPagination({
+  page,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  return (
+    <Pagination
+      page={page}
+      pageSize={ICT_REPORT_PAGE_SIZE}
+      totalCount={total}
+      onPageChange={onPageChange}
+    />
+  );
+}
+
+/**
+ * Avisa al módulo del universo de la pestaña para que sepa si hay algo que exportar. Va en un
+ * efecto y no en el render porque `onTotal` toca estado del padre; el propio `onTotal` corta la
+ * re-notificación cuando el valor no cambió.
+ */
+function useReportTotal(tab: TabId, total: number | undefined, onTotal: (tab: TabId, total: number) => void) {
+  useEffect(() => {
+    if (total !== undefined) onTotal(tab, total);
+  }, [tab, total, onTotal]);
 }
 
 const dateTimeFmt = new Intl.DateTimeFormat("es-CO", { dateStyle: "short", timeStyle: "short" });
@@ -453,28 +535,38 @@ function withPct(texto: string): string {
   return `${texto}%`;
 }
 
+/**
+ * Valor de una tarjeta de estado de webhook: "4.810 · 92,3%". El reparto viene del periodo
+ * completo y los tres estados suman el total, así que el porcentaje se saca directo; solo se
+ * protege la división por cero de un periodo sin webhooks.
+ */
+function estadoValor(cantidad: number, total: number): string {
+  return `${formatInt(cantidad)} · ${total === 0 ? "0%" : formatPct((cantidad / total) * 100)}`;
+}
+
 /** Duración en segundos → texto legible. Las corridas de ICT duran milisegundos: mostrarlas con un
  * decimal de segundo ("0 s") escondía el dato entero. */
 function fmtSeconds(segundos: number): string {
   return formatDurationMs(segundos * 1000);
 }
 
-/**
- * Total de la tarjeta. El backend corta el detalle en <c>MaxRows</c> filas, así que en un periodo
- * grande el total es un piso, no una cifra exacta: se marca con "+" para no presentar como definitivo
- * un número que en realidad dice "al menos esto".
- */
-function fmtTotal(total: number, truncated: boolean): string {
-  return truncated ? `${formatInt(total)}+` : formatInt(total);
-}
-
-function NovedadesTab({ range, tenantId }: { range: DateRange; tenantId?: string }) {
+function NovedadesTab({
+  range,
+  tenantId,
+  onTotal,
+}: {
+  range: DateRange;
+  tenantId?: string;
+  onTotal: (tab: TabId, total: number) => void;
+}) {
+  const [page, setPage] = usePagedFilters(`${range.from}|${range.to}|${tenantId ?? ""}`);
   const q = useAnalyticsQuery<IctNovedadesReport>(
-    (signal) => fetchIctNovedadesReport(range, tenantId, signal),
-    [range.from, range.to, tenantId],
+    (signal) => fetchIctNovedadesReport(range, tenantId, { page, pageSize: ICT_REPORT_PAGE_SIZE }, signal),
+    [range.from, range.to, tenantId, page],
     { isEmpty: (r) => r.total === 0 },
   );
   const report = q.data;
+  useReportTotal("novedades", report?.total, onTotal);
 
   return (
     <UiStateBoundary
@@ -486,30 +578,34 @@ function NovedadesTab({ range, tenantId }: { range: DateRange; tenantId?: string
     >
       {report && (
         <div className="flex flex-col gap-4" data-testid="ict-novedades-tab">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {/* Seis tarjetas (el total + las cinco causas) en filas de tres: antes se cortaban a las
+              tres primeras y en dev eso enseñaba tres ceros mientras el 100% de las novedades
+              estaba en "Otra/sin clasificar", sin nada en pantalla que dijera dónde estaba el
+              resto. Con las cinco visibles, las causas suman exactamente el total. */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             {/* La cifra que duele va en el naranja de "rechazado" del resto de Reportes: una
                 novedad es trabajo que vuelve, no un indicador neutro. */}
             <KpiCard
               label="Novedades en el periodo"
-              value={fmtTotal(report.total, report.truncated)}
+              value={formatInt(report.total)}
               tooltip="Novedades registradas por el organismo sobre los pre-trámites enviados por ICT en el rango elegido. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
               invertVariationColor
               color="#FF4E00"
             />
-            {report.resumenPorCausa.slice(0, 3).map((c) => (
+            {report.resumenPorCausa.map((c) => (
               <KpiCard
                 key={c.causa}
                 label={c.causa}
                 value={`${formatInt(c.cantidad)} · ${withPct(c.porcentajeTexto)}`}
-                tooltip="Novedades de esta causa y su peso sobre el total del periodo."
+                tooltip="Novedades de esta causa y su peso sobre el total del periodo. Las causas cubren el 100% de las novedades: lo que no se puede clasificar cuenta en «Otra/sin clasificar»."
                 color={CAUSA_COLOR[c.causa] ?? "#162744"}
               />
             ))}
           </div>
 
           <ReportSection
-            title={`Detalle de novedades (${formatInt(report.detalle.length)})`}
+            title={`Detalle de novedades (${formatInt(report.total)})`}
             hint="Cada novedad registrada en el periodo, con el trámite al que corresponde."
           >
             <DetailTable
@@ -525,7 +621,8 @@ function NovedadesTab({ range, tenantId }: { range: DateRange; tenantId?: string
                 ],
               }))}
             />
-            {report.truncated && <TruncatedNotice what="novedades" />}
+            <DetailPagination page={report.page} total={report.total} onPageChange={setPage} />
+            {report.truncated && <ExcelTruncatedNotice what="novedades" />}
           </ReportSection>
         </div>
       )}
@@ -533,13 +630,21 @@ function NovedadesTab({ range, tenantId }: { range: DateRange; tenantId?: string
   );
 }
 
-function AtascadosTab({ tenantId }: { tenantId?: string }) {
+function AtascadosTab({
+  tenantId,
+  onTotal,
+}: {
+  tenantId?: string;
+  onTotal: (tab: TabId, total: number) => void;
+}) {
+  const [page, setPage] = usePagedFilters(tenantId ?? "");
   const q = useAnalyticsQuery<IctAtascadosReport>(
-    (signal) => fetchIctAtascadosReport(tenantId, signal),
-    [tenantId],
+    (signal) => fetchIctAtascadosReport(tenantId, { page, pageSize: ICT_REPORT_PAGE_SIZE }, signal),
+    [tenantId, page],
     { isEmpty: (r) => r.total === 0 },
   );
   const report = q.data;
+  useReportTotal("atascados", report?.total, onTotal);
 
   return (
     <UiStateBoundary
@@ -557,14 +662,14 @@ function AtascadosTab({ tenantId }: { tenantId?: string }) {
             {/* Ámbar de "esperando": un atascado no es un fallo, es algo detenido. */}
             <KpiCard
               label="Atascados ahora"
-              value={fmtTotal(report.total, report.truncated)}
+              value={formatInt(report.total)}
               tooltip="Pre-trámites detenidos en validación en este momento. Esta pestaña no usa rango de fechas: siempre muestra el estado actual."
               color="#F9AC00"
             />
           </div>
 
           <ReportSection
-            title={`Detalle de atascados (${formatInt(report.detalle.length)})`}
+            title={`Detalle de atascados (${formatInt(report.total)})`}
             hint="Qué está esperando cada pre-trámite detenido y desde hace cuánto."
           >
             <DetailTable
@@ -580,7 +685,8 @@ function AtascadosTab({ tenantId }: { tenantId?: string }) {
                 ],
               }))}
             />
-            {report.truncated && <TruncatedNotice what="atascados" />}
+            <DetailPagination page={report.page} total={report.total} onPageChange={setPage} />
+            {report.truncated && <ExcelTruncatedNotice what="atascados" />}
           </ReportSection>
         </div>
       )}
@@ -588,13 +694,21 @@ function AtascadosTab({ tenantId }: { tenantId?: string }) {
   );
 }
 
-function JobsTab({ range }: { range: DateRange }) {
+function JobsTab({
+  range,
+  onTotal,
+}: {
+  range: DateRange;
+  onTotal: (tab: TabId, total: number) => void;
+}) {
+  const [page, setPage] = usePagedFilters(`${range.from}|${range.to}`);
   const q = useAnalyticsQuery<IctJobsReport>(
-    (signal) => fetchIctJobsReport(range, signal),
-    [range.from, range.to],
+    (signal) => fetchIctJobsReport(range, { page, pageSize: ICT_REPORT_PAGE_SIZE }, signal),
+    [range.from, range.to, page],
     { isEmpty: (r) => r.resumenPorJob.length === 0 },
   );
   const report = q.data;
+  useReportTotal("jobs", report?.total, onTotal);
 
   return (
     <UiStateBoundary
@@ -609,18 +723,19 @@ function JobsTab({ range }: { range: DateRange }) {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiCard
               label="Corridas en el periodo"
-              value={fmtTotal(report.total, report.truncated)}
+              value={formatInt(report.total)}
               tooltip="Corridas de los jobs del pipeline de ICT en el rango elegido, en toda la plataforma. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
               color="#557EFF"
             />
             {/* Cero incumplimientos es buena noticia y se pinta como tal; en cuanto hay uno, pasa
                 al naranja. Un rojo permanente en una tarjeta que dice "0" enseña a ignorarla. */}
+            {/* `totalFueraDeSla` y no `corridasFueraDeSla.length`: la lista es una página. */}
             <KpiCard
               label="Corridas fuera de SLA"
-              value={formatInt(report.corridasFueraDeSla.length)}
-              tooltip="Corridas que superaron el tiempo esperado para su job."
-              color={report.corridasFueraDeSla.length > 0 ? "#FF4E00" : "#8CC63F"}
+              value={formatInt(report.totalFueraDeSla)}
+              tooltip="Corridas que superaron el tiempo esperado para su job, en todo el periodo."
+              color={report.totalFueraDeSla > 0 ? "#FF4E00" : "#8CC63F"}
             />
           </div>
 
@@ -641,12 +756,13 @@ function JobsTab({ range }: { range: DateRange }) {
                 ],
               }))}
             />
-            {report.truncated && <TruncatedNotice what="corridas" />}
+            {/* Sin aviso de truncamiento aquí: el resumen por job trae una fila por job, no se
+                pagina ni cabe cortarlo. El aviso va abajo, con la lista que sí puede cortarse. */}
           </ReportSection>
 
-          {report.corridasFueraDeSla.length > 0 && (
+          {report.totalFueraDeSla > 0 && (
             <ReportSection
-              title={`Corridas fuera de SLA (${formatInt(report.corridasFueraDeSla.length)})`}
+              title={`Corridas fuera de SLA (${formatInt(report.totalFueraDeSla)})`}
               hint="Cada corrida que superó el tiempo esperado para su job."
             >
               <DetailTable
@@ -656,6 +772,12 @@ function JobsTab({ range }: { range: DateRange }) {
                   cells: [c.job, c.resultado, fmtSeconds(c.duracionSeg), fmtDateTime(c.inicio)],
                 }))}
               />
+              <DetailPagination
+                page={report.page}
+                total={report.totalFueraDeSla}
+                onPageChange={setPage}
+              />
+              {report.truncated && <ExcelTruncatedNotice what="corridas fuera de SLA" />}
             </ReportSection>
           )}
         </div>
@@ -664,13 +786,23 @@ function JobsTab({ range }: { range: DateRange }) {
   );
 }
 
-function WebhooksTab({ range, tenantId }: { range: DateRange; tenantId?: string }) {
+function WebhooksTab({
+  range,
+  tenantId,
+  onTotal,
+}: {
+  range: DateRange;
+  tenantId?: string;
+  onTotal: (tab: TabId, total: number) => void;
+}) {
+  const [page, setPage] = usePagedFilters(`${range.from}|${range.to}|${tenantId ?? ""}`);
   const q = useAnalyticsQuery<IctWebhooksReport>(
-    (signal) => fetchIctWebhooksReport(range, tenantId, signal),
-    [range.from, range.to, tenantId],
+    (signal) => fetchIctWebhooksReport(range, tenantId, { page, pageSize: ICT_REPORT_PAGE_SIZE }, signal),
+    [range.from, range.to, tenantId, page],
     { isEmpty: (r) => r.total === 0 },
   );
   const report = q.data;
+  useReportTotal("webhooks", report?.total, onTotal);
 
   return (
     <UiStateBoundary
@@ -682,18 +814,39 @@ function WebhooksTab({ range, tenantId }: { range: DateRange; tenantId?: string 
     >
       {report && (
         <div className="flex flex-col gap-4" data-testid="ict-webhooks-tab">
+          {/* El conteo total no dice lo único que importa de un webhook: si llegó. Los tres
+              estados son del PERIODO COMPLETO (no de la página) y suman exactamente el total, así
+              que la fila se lee entera: cuántas se intentaron y en qué acabaron. */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiCard
               label="Webhooks en el periodo"
-              value={fmtTotal(report.total, report.truncated)}
+              value={formatInt(report.total)}
               tooltip="Notificaciones que ICT intentó entregar al sistema del cliente en el rango elegido. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
               color="#00DBD5"
             />
+            <KpiCard
+              label="Entregados"
+              value={estadoValor(report.totalEntregados, report.total)}
+              tooltip="Entregas que el sistema del cliente confirmó en el periodo. Entregados + fallidos + pendientes suman el total."
+              color={ESTADO_WEBHOOK_COLOR.Entregado}
+            />
+            <KpiCard
+              label="Fallidos"
+              value={estadoValor(report.totalFallidos, report.total)}
+              tooltip="Entregas que se intentaron y el sistema del cliente rechazó o no respondió, en el periodo."
+              color={ESTADO_WEBHOOK_COLOR.Fallido}
+            />
+            <KpiCard
+              label="Pendientes"
+              value={estadoValor(report.totalPendientes, report.total)}
+              tooltip="Notificaciones que todavía no se han intentado entregar, en el periodo."
+              color={ESTADO_WEBHOOK_COLOR.Pendiente}
+            />
           </div>
 
           <ReportSection
-            title={`Detalle de entregas (${formatInt(report.detalle.length)})`}
+            title={`Detalle de entregas (${formatInt(report.total)})`}
             hint="En qué acabó cada entrega y cuántos intentos costó."
           >
             <DetailTable
@@ -709,7 +862,8 @@ function WebhooksTab({ range, tenantId }: { range: DateRange; tenantId?: string 
                 ],
               }))}
             />
-            {report.truncated && <TruncatedNotice what="webhooks" />}
+            <DetailPagination page={report.page} total={report.total} onPageChange={setPage} />
+            {report.truncated && <ExcelTruncatedNotice what="webhooks" />}
           </ReportSection>
         </div>
       )}
