@@ -295,6 +295,23 @@ internal sealed class AnalyticsSchedulerProcessor(
                     schedule.Name, otResult.QueryName, otResult.Total, otResult.Truncated, OtQueryReportDocumentBuilder.RowCap);
                 bytes = otResult.Bytes;
             }
+            else if (schedule.SavedQueryScope == "ict")
+            {
+                // Alcance ICT (Reportes 2.0, HU-D, cuarta ola): consulta propia de la empresa sobre
+                // sus pre-trámites de Integración con Terceros — siempre con tenant, mismo criterio
+                // que "empresa" (§75 del DDL, ampliado a este cuarto valor de SavedQueryScope).
+                var ictBuilder = services.GetRequiredService<IctQueryReportDocumentBuilder>();
+                var ictResult = await ictBuilder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
+                if (ictResult is null)
+                {
+                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name);
+                    return (missingSubject, missingHtml, null);
+                }
+
+                (subject, html) = SchedulerEmailComposer.BuildConsultaReport(
+                    schedule.Name, ictResult.QueryName, ictResult.Total, ictResult.Truncated, IctQueryReportDocumentBuilder.RowCap);
+                bytes = ictResult.Bytes;
+            }
             else
             {
                 var builder = services.GetRequiredService<CompanyQueryReportDocumentBuilder>();
@@ -361,6 +378,17 @@ internal sealed class AnalyticsSchedulerProcessor(
                     .BuildInformeAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
                 "ot_revisores" => await services.GetRequiredService<OtOwnReportDocumentBuilder>()
                     .BuildRevisoresAsync(schedule.TenantId!.Value, from, to, schedule.Format, ct),
+                "ict_novedades" => await services.GetRequiredService<IctOwnReportDocumentBuilder>()
+                    .BuildNovedadesAsync(schedule.TenantId!.Value, from, to, ct),
+                "ict_atascados" => await services.GetRequiredService<IctOwnReportDocumentBuilder>()
+                    .BuildAtascadosAsync(schedule.TenantId!.Value, from, to, ct),
+                // ict_jobs es platform-wide (ict.job_runs no tiene tenant_id) — TenantId! sigue
+                // siendo obligatorio por el CHECK de la fila (schedule de un SuperAdmin sobre una
+                // compañía concreta), pero el builder lo ignora; ver su XML doc.
+                "ict_jobs" => await services.GetRequiredService<IctOwnReportDocumentBuilder>()
+                    .BuildJobsAsync(schedule.TenantId!.Value, from, to, ct),
+                "ict_webhooks" => await services.GetRequiredService<IctOwnReportDocumentBuilder>()
+                    .BuildWebhooksAsync(schedule.TenantId!.Value, from, to, ct),
                 "resumen" or "operacion" or "productividad" =>
                     await BuildProcedureBasedAttachmentAsync(services, schedule, from, to, ct),
                 _ => null, // "consulta" (Reportes 2.0, HU-D — filas propias, ver rama dedicada) u otro tipo futuro.

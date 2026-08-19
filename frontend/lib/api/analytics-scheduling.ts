@@ -18,10 +18,19 @@ export type ReportType =
   // OtReportsConsole.tsx. "Ahora mismo" queda fuera (snapshot en vivo, sin rango).
   | "ot_analisis"
   | "ot_informe"
-  | "ot_revisores";
+  | "ot_revisores"
+  // Alcance ICT (Reportes 2.0, HU-D, cuarta ola): detalle fila a fila del pipeline de
+  // Integración con Terceros, sin versión PDF con sentido (mismo criterio que "consulta"). Solo
+  // se entregan en Excel — validado también en el backend (SchedulingValidation). "ict_jobs" es
+  // el único de los cuatro restringido a SuperAdmin: ict.job_runs es platform-wide, sin tenant_id.
+  | "ict_novedades"
+  | "ict_atascados"
+  | "ict_jobs"
+  | "ict_webhooks";
 /** Solo aplica cuando reportType="consulta". "ot" = consulta guardada del organismo de tránsito
- * (Reportes 2.0, HU-D, tercera ola). */
-export type SavedQueryScope = "empresa" | "superadmin" | "ot";
+ * (Reportes 2.0, HU-D, tercera ola). "ict" = consulta guardada de Integración con Terceros
+ * (Reportes 2.0, HU-D, cuarta ola). */
+export type SavedQueryScope = "empresa" | "superadmin" | "ot" | "ict";
 export type ScheduleFrequency = "daily" | "weekly" | "monthly";
 export type ScheduleFormat = "excel" | "pdf";
 export type AlertMetric =

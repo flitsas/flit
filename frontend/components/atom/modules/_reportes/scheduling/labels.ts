@@ -22,6 +22,17 @@ export const REPORT_TYPE_LABELS: Record<ReportType, string> = {
   ot_analisis: "Análisis (causales de rechazo)",
   ot_informe: "Informe del periodo",
   ot_revisores: "Revisores",
+  // Alcance ICT (Reportes 2.0, HU-D, cuarta ola): los 4 tipos que ofrece el panel de
+  // "Programación" del módulo de Integración con Terceros. "ict_jobs" solo lo ofrece el
+  // selector a SuperAdmin — ver ICT_REPORT_TYPES en IctLogs.tsx.
+  // Nombres deliberadamente distintos de METRIC_LABELS (más abajo): son dos selectores que
+  // pueden verse en el mismo panel ("Informes"/"Alertas") — un informe entrega el detalle
+  // periódico completo, una alerta solo avisa cuando un número cruza el umbral. Repetir el
+  // mismo texto en los dos haría parecer que activan lo mismo.
+  ict_novedades: "ICT · Detalle de novedades por causa",
+  ict_atascados: "ICT · Detalle de atascados en validación",
+  ict_jobs: "ICT · Detalle de rendimiento de jobs",
+  ict_webhooks: "ICT · Detalle de entrega de webhooks",
 };
 
 export const FREQUENCY_LABELS: Record<ScheduleFrequency, string> = {

@@ -2,6 +2,8 @@
 
 // Submódulo de observabilidad ICT (Integración con Terceros) — HU10893.
 // Dos pestañas: Logs (redactados/enmascarados por el backend) y Alertas ICT (métricas + eventos).
+// Las Consultas personalizadas y la Programación de informes viven en su propio módulo, "Reportes
+// ICT" (HU #11619) — separar los logs técnicos de los reportes de autoservicio.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -31,14 +33,15 @@ export function IctLogs() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-[#162744] dark:text-white">Integración con Terceros — Observabilidad</h1>
         <nav className="flex gap-2" role="tablist">
           <TabButton active={tab === "logs"} onClick={() => setTab("logs")}>Logs</TabButton>
           <TabButton active={tab === "alertas"} onClick={() => setTab("alertas")}>Alertas ICT</TabButton>
         </nav>
       </header>
-      {tab === "logs" ? <LogsTab /> : <AlertsTab />}
+      {tab === "logs" && <LogsTab />}
+      {tab === "alertas" && <AlertsTab />}
     </div>
   );
 }

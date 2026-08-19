@@ -293,6 +293,8 @@ app.MapAdminOtAlertRulesEndpoints(); // Reportes2 HU-D 3ra ola — alertas por u
 app.MapAnalyticsMetricsEndpoints(); // Reportes2 HU-B
 app.MapCompanyQueriesEndpoints(); // Consultas propias de la empresa
 app.MapSuperAdminQueriesEndpoints(); // Consultas de SuperAdmin sobre todas las compañías
+app.MapIctQueriesEndpoints(); // Consultas propias de la empresa sobre sus pre-trámites de ICT
+app.MapIctReportsEndpoints(); // Reportes de ICT en vivo (HU #11617)
 app.MapUsageEventsEndpoints(); // Reportes2 HU-A
 
 app.Run();

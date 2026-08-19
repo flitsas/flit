@@ -165,6 +165,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // el equipo de SuperAdmin.
     public DbSet<SuperAdminSavedQueryEntity> SuperAdminSavedQueries => Set<SuperAdminSavedQueryEntity>();
 
+    // Consultas que un usuario de la empresa arma y guarda sobre sus propios pre-trámites de ICT.
+    public DbSet<IctSavedQueryEntity> IctSavedQueries => Set<IctSavedQueryEntity>();
+
     // HU #10545 — requisitos configurables por OT (RNMC, ruta de placa, validación de identidad).
     public DbSet<OtRequirementsEntity> OtRequirements => Set<OtRequirementsEntity>();
 

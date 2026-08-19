@@ -85,6 +85,8 @@ public static class ReportSchedulesEndpoints
             return error!;
         if (input.SavedQueryScope == "superadmin")
             return SchedulingTenantResolver.SuperAdminScopeNotHere();
+        if (input.ReportType == "ict_jobs" && !httpContext.User.IsInRole(AdminAuthorization.SuperAdminRole))
+            return SchedulingTenantResolver.IctJobsSuperAdminOnly();
 
         var (result, err) = await handler.HandleAsync(
             tenant, SchedulingTenantResolver.TryResolveUserId(httpContext.User), input, ct);
@@ -106,6 +108,8 @@ public static class ReportSchedulesEndpoints
             return error!;
         if (input.SavedQueryScope == "superadmin")
             return SchedulingTenantResolver.SuperAdminScopeNotHere();
+        if (input.ReportType == "ict_jobs" && !httpContext.User.IsInRole(AdminAuthorization.SuperAdminRole))
+            return SchedulingTenantResolver.IctJobsSuperAdminOnly();
 
         var (result, err) = await handler.HandleAsync(tenant, id, input, ct);
         return err switch
@@ -208,6 +212,13 @@ internal static class SchedulingTenantResolver
     public static IResult SuperAdminScopeNotHere() =>
         Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
             detail: "El alcance 'superadmin' se programa desde /report-schedules/superadmin, sin tenant.");
+
+    /// <summary>"ict_jobs" agrega <c>ict.job_runs</c>, una tabla GLOBAL de plataforma sin
+    /// <c>tenant_id</c> — dejar que cualquier admin de compañía la programe expondría el rendimiento
+    /// de los jobs de TODOS los tenants a través de un schedule con su propio nombre.</summary>
+    public static IResult IctJobsSuperAdminOnly() =>
+        Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Forbidden",
+            detail: "El informe 'ict_jobs' es de plataforma: solo SuperAdmin puede programarlo.");
 
     public static IResult AlertRuleNotFound() =>
         Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Not Found",

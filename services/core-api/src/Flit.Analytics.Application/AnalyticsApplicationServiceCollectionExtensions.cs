@@ -1,5 +1,6 @@
 using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.CompanyQueries;
+using Flit.Analytics.Application.IctQueries;
 using Flit.Analytics.Application.Queries;
 using Flit.Analytics.Application.Queries.Metrics;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,6 +39,13 @@ public static class AnalyticsApplicationServiceCollectionExtensions
         services.AddScoped<ListSuperAdminSavedQueriesHandler>();
         services.AddScoped<SaveSuperAdminQueryHandler>();
         services.AddScoped<DeleteSuperAdminSavedQueryHandler>();
+
+        // Consultas sobre pre-trámites de ICT (HU #11608): mismo patrón que las de compañía.
+        services.AddScoped<ExecuteIctQueryHandler>();
+        services.AddScoped<GetIctQueryFieldsHandler>();
+        services.AddScoped<ListIctSavedQueriesHandler>();
+        services.AddScoped<SaveIctQueryHandler>();
+        services.AddScoped<DeleteIctSavedQueryHandler>();
         // Reportes2 HU-B — fallback sin datos de la telemetría HU-A: TryAdd cede ante la
         // implementación real (Flit.Infrastructure) cuando se integre; sin ella el host arranca
         // y los endpoints devuelven listas vacías (§4.3/§4.4).

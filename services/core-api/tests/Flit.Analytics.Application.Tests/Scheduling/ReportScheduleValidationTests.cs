@@ -193,6 +193,23 @@ public sealed class ReportScheduleValidationTests
     }
 
     [Fact]
+    public void Tipo_consulta_valido_con_scope_ict_normaliza_savedQueryId_y_scope()
+    {
+        var id = Guid.NewGuid();
+        var input = Valid(reportType: "consulta", format: "excel") with
+        {
+            SavedQueryId = id,
+            SavedQueryScope = "ict",
+        };
+
+        var (result, error) = SchedulingValidation.ValidateReportSchedule(input);
+
+        error.Should().BeNull();
+        result!.SavedQueryId.Should().Be(id);
+        result.SavedQueryScope.Should().Be("ict");
+    }
+
+    [Fact]
     public void Tipo_consulta_sin_savedQueryId_devuelve_error()
     {
         var input = Valid(reportType: "consulta", format: "excel") with { SavedQueryScope = "empresa" };
@@ -209,7 +226,7 @@ public sealed class ReportScheduleValidationTests
 
         var (_, error) = SchedulingValidation.ValidateReportSchedule(input);
 
-        error.Should().Be("El alcance de la consulta debe ser 'empresa', 'ot' o 'superadmin'.");
+        error.Should().Be("El alcance de la consulta debe ser 'empresa', 'ot', 'ict' o 'superadmin'.");
     }
 
     [Fact]
@@ -223,7 +240,7 @@ public sealed class ReportScheduleValidationTests
 
         var (_, error) = SchedulingValidation.ValidateReportSchedule(input);
 
-        error.Should().Be("El alcance de la consulta debe ser 'empresa', 'ot' o 'superadmin'.");
+        error.Should().Be("El alcance de la consulta debe ser 'empresa', 'ot', 'ict' o 'superadmin'.");
     }
 
     [Fact]
@@ -303,5 +320,36 @@ public sealed class ReportScheduleValidationTests
         error.Should().BeNull();
         result!.SavedQueryId.Should().Be(id);
         result.SavedQueryScope.Should().Be("ot");
+    }
+
+    // ------------------------------------------------------------------
+    // Reportes 2.0 (HU-D, cuarta ola) — 4 tipos propios de ICT (alcance ICT, solo Excel)
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("ict_novedades")]
+    [InlineData("ict_atascados")]
+    [InlineData("ict_jobs")]
+    [InlineData("ict_webhooks")]
+    public void Tipos_de_alcance_ict_estan_en_el_vocabulario_y_no_exigen_saved_query(string reportType)
+    {
+        var (result, error) = SchedulingValidation.ValidateReportSchedule(Valid(reportType: reportType, format: "excel"));
+
+        error.Should().BeNull();
+        result!.ReportType.Should().Be(reportType);
+        result.SavedQueryId.Should().BeNull();
+        result.SavedQueryScope.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("ict_novedades")]
+    [InlineData("ict_atascados")]
+    [InlineData("ict_jobs")]
+    [InlineData("ict_webhooks")]
+    public void Tipos_de_alcance_ict_en_pdf_devuelven_error(string reportType)
+    {
+        var (_, error) = SchedulingValidation.ValidateReportSchedule(Valid(reportType: reportType, format: "pdf"));
+
+        error.Should().Be($"Un informe de tipo '{reportType}' solo se entrega en formato Excel.");
     }
 }

@@ -64,7 +64,8 @@ export type ModuleId =
   | "rbac"
   | "auditoria"
   | "log-qx"
-  | "ict-logs";
+  | "ict-logs"
+  | "ict-reportes";
 
 const DOCK: { id: ModuleId; label: string; icon: typeof LayoutGrid }[] = [
   // Dashboard no va en el dock: el FAB central (Inicio FLIT) abre el mismo módulo.
@@ -407,13 +408,35 @@ export function Shell({
 
   // ICT (Integración con Terceros, HU10893) — gate por el permiso `ict.logs.read` (o SuperAdmin).
   // Vive en el agrupador "Integraciones" junto a LOG QX.
+  //
+  // Es contenedor, no destino (mismo patrón que Tránsito y Plataforma): cuelga "Log ICT" —los logs
+  // técnicos y sus alertas— y "Reportes ICT" —informes en vivo, consultas y programación (HU
+  // #11619)—. Separarlos en dos píldoras hermanas dejaba dos entradas sueltas sin decir que hablan
+  // del mismo sistema; anidarlas bajo "ICT" nombra primero el sistema y luego qué se quiere de él.
+  // Ambas hojas comparten gate: es el mismo público.
   if (currentUser?.canReadIctLogs) {
     entries.push({
-      key: "ict-logs",
-      label: "Log ICT",
+      key: "ict",
+      label: "ICT",
       icon: Network,
-      active: !onAdminRoute && active === "ict-logs",
-      onClick: () => onNav("ict-logs"),
+      active: !onAdminRoute && (active === "ict-logs" || active === "ict-reportes"),
+      onClick: () => undefined,
+      children: [
+        {
+          key: "ict-logs",
+          label: "Log ICT",
+          icon: Network,
+          active: !onAdminRoute && active === "ict-logs",
+          onClick: () => onNav("ict-logs"),
+        },
+        {
+          key: "ict-reportes",
+          label: "Reportes ICT",
+          icon: BarChart3,
+          active: !onAdminRoute && active === "ict-reportes",
+          onClick: () => onNav("ict-reportes"),
+        },
+      ],
     });
   }
 
