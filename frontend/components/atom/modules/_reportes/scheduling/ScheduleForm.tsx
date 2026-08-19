@@ -143,7 +143,7 @@ export function ScheduleForm({
           maxLength={120}
           onChange={(e) => setName(e.target.value)}
           className={inputClass}
-          placeholder="Ej. Informe semanal OT"
+          placeholder="Ej. Informe semanal"
         />
       </div>
 
