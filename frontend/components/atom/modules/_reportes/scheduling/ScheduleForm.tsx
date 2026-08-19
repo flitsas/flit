@@ -47,6 +47,12 @@ const inputClass =
 
 const labelClass = "block text-xs font-semibold text-[#162744] dark:text-slate-200 mb-1";
 
+/** Tipos que el backend solo entrega en Excel (espejo de SchedulingValidation): "consulta" y los
+ * 4 propios de ICT — un detalle fila a fila no tiene una versión PDF con sentido. */
+const EXCEL_ONLY_TYPES = new Set<ReportType>([
+  "consulta", "ict_novedades", "ict_atascados", "ict_jobs", "ict_webhooks",
+]);
+
 /**
  * Formulario de creación/edición de un informe programado (Reportes 2.0, HU-D):
  * nombre, tipo, periodicidad con día condicional, hora (Bogotá), formato, destinatarios
@@ -64,7 +70,7 @@ export function ScheduleForm({
   const [dayOfMonth, setDayOfMonth] = useState<number>(initial?.dayOfMonth ?? 1);
   const [sendHour, setSendHour] = useState<number>(initial?.sendHour ?? 7);
   const [format, setFormat] = useState<ScheduleFormat>(
-    initial?.format ?? (presetConsulta ? "excel" : "pdf"),
+    initial?.format ?? (presetConsulta || EXCEL_ONLY_TYPES.has(reportType) ? "excel" : "pdf"),
   );
   const [recipients, setRecipients] = useState<string[]>(initial?.recipients ?? []);
   const [isActive, setIsActive] = useState<boolean>(initial?.isActive ?? true);
@@ -74,6 +80,10 @@ export function ScheduleForm({
   // Fijo desde que se abre el formulario, no se re-elige: cambiar de tipo a mitad de edición
   // dejaría savedQueryId apuntando a una consulta que ya no corresponde con "Tipo de informe".
   const isConsulta = reportType === "consulta";
+  // "Formato" se bloquea en Excel para consulta Y para los 4 tipos ICT (mismo motivo: el backend
+  // los rechaza en PDF — ver EXCEL_ONLY_TYPES). isConsulta se queda aparte porque además esconde
+  // el selector de "Tipo de informe" (por el savedQueryId fijo), cosa que ICT no necesita.
+  const isExcelOnly = EXCEL_ONLY_TYPES.has(reportType);
   const savedQueryId = presetConsulta?.savedQueryId ?? initial?.savedQueryId ?? null;
   const savedQueryScope = presetConsulta?.savedQueryScope ?? initial?.savedQueryScope ?? null;
   const consultaQueryName = presetConsulta?.queryName ?? initial?.name;
@@ -98,7 +108,7 @@ export function ScheduleForm({
       dayOfWeek: frequency === "weekly" ? dayOfWeek : null,
       dayOfMonth: frequency === "monthly" ? dayOfMonth : null,
       sendHour,
-      format: isConsulta ? "excel" : format,
+      format: isExcelOnly ? "excel" : format,
       recipients,
       isActive,
       ...(isConsulta ? { savedQueryId, savedQueryScope } : {}),
@@ -155,7 +165,11 @@ export function ScheduleForm({
               <select
                 id="schedule-type"
                 value={reportType}
-                onChange={(e) => setReportType(e.target.value as ReportType)}
+                onChange={(e) => {
+                  const next = e.target.value as ReportType;
+                  setReportType(next);
+                  if (EXCEL_ONLY_TYPES.has(next)) setFormat("excel");
+                }}
                 className={inputClass}
               >
                 {Object.entries(REPORT_TYPE_LABELS)
@@ -233,7 +247,7 @@ export function ScheduleForm({
 
         <div>
           <label htmlFor="schedule-format" className={labelClass}>Formato</label>
-          {isConsulta ? (
+          {isExcelOnly ? (
             <p className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-[#162744] dark:text-slate-100">
               Excel
             </p>
@@ -252,7 +266,9 @@ export function ScheduleForm({
           <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
             {isConsulta
               ? "El resultado de la consulta va como Excel adjunto (hasta 5.000 filas)."
-              : "El correo trae el resumen de indicadores en el cuerpo y el archivo real adjunto."}
+              : isExcelOnly
+                ? "El correo trae el detalle completo como Excel adjunto."
+                : "El correo trae el resumen de indicadores en el cuerpo y el archivo real adjunto."}
           </p>
         </div>
       </div>
