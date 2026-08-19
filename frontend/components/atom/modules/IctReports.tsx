@@ -84,6 +84,21 @@ const TAB_DEFS: ReadonlyArray<{
  */
 const RANGE_TABS: ReadonlyArray<TabId> = ["novedades", "jobs", "webhooks"];
 
+/**
+ * Color de marca por causa de novedad, con la misma paleta del resto de Reportes
+ * (`_reportes/categories.ts`). Se asigna por NOMBRE y no por posición: si mañana cambia el orden
+ * del resumen, cada causa conserva su color en vez de que las tarjetas se intercambien el suyo.
+ * El catch-all va en el azul oscuro neutro — no nombra un problema concreto, así que no se lleva
+ * un color de marca.
+ */
+const CAUSA_COLOR: Record<string, string> = {
+  SOAT: "#557EFF",
+  RTM: "#00DBD5",
+  RNMC: "#9B8AFB",
+  "Documento faltante": "#F9AC00",
+  "Otra/sin clasificar": "#162744",
+};
+
 /** La pestaña activa vive en la dirección, igual que en empresa (`reportesTab`) y OT (`tab`). */
 const TAB_QUERY_PARAM = "ictReportesTab";
 /** La compañía también, para que un enlace copiado llegue mirando lo mismo. */
@@ -322,8 +337,11 @@ function ExcelExportButton({
         onClick={() => void run()}
         disabled={disabled || busy}
         aria-busy={busy}
-        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border disabled:opacity-50"
-        style={{ color: "#162744" }}
+        // Acción principal de la fila, así que va con el fondo de marca (el mismo de "Reintentar" y
+        // del PDF ejecutivo de empresa) en vez del borde neutro: aquí no compite con un segundo
+        // botón de exportación del que hubiera que distinguirla.
+        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg text-white disabled:opacity-50"
+        style={{ background: "#557EFF" }}
         data-testid="ict-reportes-exportar-excel"
       >
         {busy ? (
@@ -469,12 +487,15 @@ function NovedadesTab({ range, tenantId }: { range: DateRange; tenantId?: string
       {report && (
         <div className="flex flex-col gap-4" data-testid="ict-novedades-tab">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {/* La cifra que duele va en el naranja de "rechazado" del resto de Reportes: una
+                novedad es trabajo que vuelve, no un indicador neutro. */}
             <KpiCard
               label="Novedades en el periodo"
               value={fmtTotal(report.total, report.truncated)}
               tooltip="Novedades registradas por el organismo sobre los pre-trámites enviados por ICT en el rango elegido. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
               invertVariationColor
+              color="#FF4E00"
             />
             {report.resumenPorCausa.slice(0, 3).map((c) => (
               <KpiCard
@@ -482,6 +503,7 @@ function NovedadesTab({ range, tenantId }: { range: DateRange; tenantId?: string
                 label={c.causa}
                 value={`${formatInt(c.cantidad)} · ${withPct(c.porcentajeTexto)}`}
                 tooltip="Novedades de esta causa y su peso sobre el total del periodo."
+                color={CAUSA_COLOR[c.causa] ?? "#162744"}
               />
             ))}
           </div>
@@ -532,10 +554,12 @@ function AtascadosTab({ tenantId }: { tenantId?: string }) {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {/* Sin variación: esta pestaña es una foto del momento, no de un periodo, así que no
                 hay un "antes" con el que compararla. */}
+            {/* Ámbar de "esperando": un atascado no es un fallo, es algo detenido. */}
             <KpiCard
               label="Atascados ahora"
               value={fmtTotal(report.total, report.truncated)}
               tooltip="Pre-trámites detenidos en validación en este momento. Esta pestaña no usa rango de fechas: siempre muestra el estado actual."
+              color="#F9AC00"
             />
           </div>
 
@@ -588,11 +612,15 @@ function JobsTab({ range }: { range: DateRange }) {
               value={fmtTotal(report.total, report.truncated)}
               tooltip="Corridas de los jobs del pipeline de ICT en el rango elegido, en toda la plataforma. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
+              color="#557EFF"
             />
+            {/* Cero incumplimientos es buena noticia y se pinta como tal; en cuanto hay uno, pasa
+                al naranja. Un rojo permanente en una tarjeta que dice "0" enseña a ignorarla. */}
             <KpiCard
               label="Corridas fuera de SLA"
               value={formatInt(report.corridasFueraDeSla.length)}
               tooltip="Corridas que superaron el tiempo esperado para su job."
+              color={report.corridasFueraDeSla.length > 0 ? "#FF4E00" : "#8CC63F"}
             />
           </div>
 
@@ -660,6 +688,7 @@ function WebhooksTab({ range, tenantId }: { range: DateRange; tenantId?: string 
               value={fmtTotal(report.total, report.truncated)}
               tooltip="Notificaciones que ICT intentó entregar al sistema del cliente en el rango elegido. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
+              color="#00DBD5"
             />
           </div>
 
