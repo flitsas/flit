@@ -19,7 +19,7 @@ import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
  * `administracion` / `preasignacion`: Admin OT (pestañas hub → dock).
  * SuperAdmin: Compañías/Tránsito/Documental/Improntas/Quipux/RBAC/Auditoría y el
  * submenú anidado Plataforma (Mandatos, …) viven en `administradores`.
- * `integraciones` = Log QX + Log ICT + Reportes ICT.
+ * `integraciones` = Log QX + ICT (que a su vez anida Log ICT y Reportes ICT).
  * AdminCompany: la píldora "Administración" también cae en `administradores` (ítem único →
  * label del ítem, no del grupo).
  */
@@ -101,8 +101,8 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   rbac: "administradores",
   auditoria: "administradores",
   "log-qx": "integraciones",
-  "ict-logs": "integraciones",
-  "ict-reportes": "integraciones",
+  // ICT anida Log ICT y Reportes ICT; solo el padre necesita grupo (mismo patrón que Tránsito).
+  ict: "integraciones",
   ayuda: "ayuda",
 };
 

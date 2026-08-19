@@ -6,10 +6,18 @@
 // como adjunto de un correo programado: no había forma de verlos en pantalla sin programar nada y
 // esperar. Aquí se muestran en vivo, con la misma agregación que ya arma el Excel (HU #11617), más
 // las Consultas personalizadas (HU #11608) y su Programación — todo lo que antes vivía apretujado
-// dentro de "Log ICT" y ahora tiene su propio espacio de navegación ("Reportes ICT"), separado de
-// los logs técnicos (que se quedan en Log ICT).
-import { useCallback, useEffect, useMemo, useState } from "react";
+// dentro de "Log ICT" y ahora tiene su propio espacio de navegación, separado de los logs técnicos.
+//
+// La consola se arma con las MISMAS piezas que las de empresa (`Reportes.tsx`) y organismo
+// (`OtReportsConsole.tsx`): `ModuleTitle`, `ReportesTabBar`, el `DateRangeFilter` compartido y
+// `useAnalyticsQuery` + `UiStateBoundary` para los cuatro estados de carga. No es una preferencia
+// estética: quien ya sabe leer los reportes de su empresa no debería tener que reaprender dónde
+// está el rango de fechas ni qué significa una pestaña activa al entrar a ICT. Por eso aquí no hay
+// tabs de píldora, ni botón "Actualizar" —el rango recarga solo, como en el resto—, ni un `<h1>`
+// propio compitiendo con el encabezado de módulo.
+import { useCallback, useMemo, useState } from "react";
 import { CalendarClock } from "lucide-react";
+import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import {
   CARDLIST_CELL,
   CARDLIST_HEAD_ROW,
@@ -18,7 +26,7 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
-import { Empty, ErrorNotice, PrimaryButton, Section } from "@/components/consultas/ui";
+import type { ReportType } from "@/lib/api/analytics-scheduling";
 import {
   fetchIctAtascadosReport,
   fetchIctJobsReport,
@@ -29,20 +37,45 @@ import {
   type IctNovedadesReport,
   type IctWebhooksReport,
 } from "@/lib/api/ict-reports";
-import type { ReportType } from "@/lib/api/analytics-scheduling";
 import { decodeJwtPayload, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
-import { SchedulingPanel } from "@/components/atom/modules/_reportes/scheduling/SchedulingPanel";
-import type { SchedulePresetConsulta } from "@/components/atom/modules/_reportes/scheduling/ScheduleForm";
+import { ModuleTitle } from "./ModuleTitle";
+import { DateRangeFilter } from "./_reportes/DateRangeFilter";
+import { formatInt, formatNumber } from "./_reportes/format";
+import { KpiCard } from "./_reportes/KpiCard";
+import { defaultRange, isValidRange, type DateRange } from "./_reportes/range";
+import { ReportesTabBar } from "./_reportes/ReportesTabBar";
+import { useAnalyticsQuery } from "./_reportes/useAnalyticsQuery";
+import { SchedulingPanel } from "./_reportes/scheduling/SchedulingPanel";
+import type { SchedulePresetConsulta } from "./_reportes/scheduling/ScheduleForm";
 import { IctQueriesTab } from "./_ict/IctQueriesTab";
 
-type Tab = "novedades" | "atascados" | "jobs" | "webhooks" | "consultas";
+type TabId = "novedades" | "atascados" | "jobs" | "webhooks" | "consultas";
 
 /**
- * Los 4 tipos de informe programado que ofrece este módulo (Reportes 2.0, HU-D, cuarta ola).
- * "ict_jobs" queda fuera para quien no es SuperAdmin: `ict.job_runs` es platform-wide, sin
- * `tenant_id`, así que el backend (`ReportSchedulesEndpoints`) lo rechaza para cualquier otro rol
- * — mostrarlo igual solo llevaría a un 403 después de llenar el formulario.
+ * Pestañas de la consola. "Jobs" es `superOnly`: `ict.job_runs` es una tabla de plataforma, sin
+ * `tenant_id`, así que el backend la reserva a SuperAdmin — enseñarla a los demás solo llevaría a
+ * un 403 después de esperar la carga.
  */
+const TAB_DEFS: ReadonlyArray<{ id: TabId; label: string; superOnly?: boolean }> = [
+  { id: "novedades", label: "Novedades" },
+  { id: "atascados", label: "Atascados" },
+  { id: "jobs", label: "Jobs", superOnly: true },
+  { id: "webhooks", label: "Webhooks" },
+  { id: "consultas", label: "Consultas" },
+];
+
+/**
+ * Pestañas gobernadas por el rango de fechas. "Atascados" mira el estado de este momento y
+ * "Consultas" trae sus propios filtros, así que en esas dos el selector se retira en vez de
+ * quedarse presidiendo una vista donde no cambia ni un número — la misma corrección que ya se hizo
+ * en la consola del organismo.
+ */
+const RANGE_TABS: ReadonlyArray<TabId> = ["novedades", "jobs", "webhooks"];
+
+/** La pestaña activa vive en la dirección, igual que en empresa (`reportesTab`) y OT (`tab`). */
+const TAB_QUERY_PARAM = "ictReportesTab";
+
+/** Los 4 tipos de informe programado que ofrece este módulo (Reportes 2.0, HU-D, cuarta ola). */
 function ictReportTypes(isSuper: boolean): ReportType[] {
   const base: ReportType[] = ["ict_novedades", "ict_atascados", "ict_webhooks"];
   return isSuper ? [...base, "ict_jobs"] : base;
@@ -62,62 +95,103 @@ function useIctTenantId(): { tenantId: string | undefined; isSuper: boolean } {
   }, []);
 }
 
-function toIsoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-/** Rango por defecto: últimos 30 días, mismo criterio que el resto de Reportes. */
-function defaultRange(reference: Date = new Date()): { from: string; to: string } {
-  const start = new Date(reference);
-  start.setDate(start.getDate() - 29);
-  return { from: toIsoDate(start), to: toIsoDate(reference) };
+function initialTab(): string {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get(TAB_QUERY_PARAM) ?? "";
 }
 
 export function IctReports() {
-  const [tab, setTab] = useState<Tab>("novedades");
-  const [schedulingOpen, setSchedulingOpen] = useState(false);
-  // "Programar este informe" en una consulta guardada de ICT (Reportes 2.0, HU-D, cuarta ola):
-  // mismo mecanismo que OtReportsConsole/Reportes.tsx, con savedQueryScope="ict" fijo.
-  const [schedulePreset, setSchedulePreset] = useState<SchedulePresetConsulta | null>(null);
   const { tenantId, isSuper } = useIctTenantId();
   const allowedReportTypes = useMemo(() => ictReportTypes(isSuper), [isSuper]);
 
-  return (
-    <div className="flex flex-col gap-4 p-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-[#162744] dark:text-white">Integración con Terceros — Reportes</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <nav className="flex flex-wrap gap-2" role="tablist">
-            <TabButton active={tab === "novedades"} onClick={() => setTab("novedades")}>Novedades</TabButton>
-            <TabButton active={tab === "atascados"} onClick={() => setTab("atascados")}>Atascados</TabButton>
-            {isSuper && <TabButton active={tab === "jobs"} onClick={() => setTab("jobs")}>Jobs</TabButton>}
-            <TabButton active={tab === "webhooks"} onClick={() => setTab("webhooks")}>Webhooks</TabButton>
-            <TabButton active={tab === "consultas"} onClick={() => setTab("consultas")}>Consultas</TabButton>
-          </nav>
-          <button
-            type="button"
-            onClick={() => setSchedulingOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-1.5 text-sm font-medium text-[#162744] hover:bg-[#F4F7FC] dark:border-slate-700 dark:text-white dark:hover:bg-white/5"
-            data-testid="ict-reportes-abrir-programacion"
-          >
-            <CalendarClock className="h-4 w-4" aria-hidden="true" />
-            Programación
-          </button>
-        </div>
-      </header>
+  const visibleTabs = useMemo(() => TAB_DEFS.filter((t) => isSuper || !t.superOnly), [isSuper]);
+  const [requestedTab, setRequestedTab] = useState<string>(() => initialTab());
+  // Una pestaña que ya no existe —un enlace viejo, o "Jobs" abierto por quien dejó de ser
+  // SuperAdmin— no puede dejar la consola en blanco: cae en la primera visible.
+  const activeTab: TabId = visibleTabs.some((t) => t.id === requestedTab)
+    ? (requestedTab as TabId)
+    : visibleTabs[0]!.id;
 
-      {tab === "novedades" && <NovedadesTab tenantId={tenantId} />}
-      {tab === "atascados" && <AtascadosTab tenantId={tenantId} />}
-      {tab === "jobs" && isSuper && <JobsTab />}
-      {tab === "webhooks" && <WebhooksTab tenantId={tenantId} />}
-      {tab === "consultas" && (
-        <IctQueriesTab
-          tenantId={tenantId}
-          onScheduleQuery={(query) => {
-            setSchedulePreset({ savedQueryId: query.id, savedQueryScope: "ict", queryName: query.nombre });
-            setSchedulingOpen(true);
-          }}
-        />
+  const selectTab = useCallback((id: string) => {
+    setRequestedTab(id);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set(TAB_QUERY_PARAM, id);
+      // `replaceState` y no `pushState`: recorrer las cinco pestañas no debe costar cinco «atrás»
+      // para salir del módulo. Se conserva el resto de la dirección — «Consultas» guarda la suya.
+      window.history.replaceState(window.history.state, "", url);
+    } catch {
+      /* entorno sin history (tests/SSR): el estado local basta */
+    }
+  }, []);
+
+  // El rango es del módulo, no de la pestaña: cambiar de Novedades a Webhooks conserva el periodo
+  // que el usuario acaba de elegir, como los filtros globales de la consola de empresa.
+  const [range, setRange] = useState<DateRange>(() => defaultRange());
+  const rangeValid = isValidRange(range);
+  const usesRange = RANGE_TABS.includes(activeTab);
+
+  const [schedulingOpen, setSchedulingOpen] = useState(false);
+  // "Programar este informe" sobre una consulta guardada de ICT: mismo mecanismo que
+  // OtReportsConsole/Reportes.tsx, con savedQueryScope="ict" fijo.
+  const [schedulePreset, setSchedulePreset] = useState<SchedulePresetConsulta | null>(null);
+
+  return (
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+      <ModuleTitle
+        title="Reportes de Integración con Terceros"
+        subtitle="Novedades, atascados y entregas de ICT, con consultas propias y envío programado."
+      />
+
+      <ReportesTabBar
+        tabs={visibleTabs.map(({ id, label }) => ({ id, label }))}
+        activeId={activeTab}
+        onChange={selectTab}
+        ariaLabel="Pestañas de reportes de ICT"
+      />
+
+      {/* Filtros debajo de las pestañas: primero se elige qué mirar, luego sobre qué periodo. */}
+      <div className="flex flex-wrap items-end gap-3 shrink-0">
+        {usesRange && <DateRangeFilter value={range} onChange={setRange} />}
+        <button
+          type="button"
+          onClick={() => setSchedulingOpen(true)}
+          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-[#F4F7FC] dark:hover:bg-white/5"
+          data-testid="ict-reportes-abrir-programacion"
+        >
+          <CalendarClock className="h-4 w-4" aria-hidden="true" />
+          Programación y alertas
+        </button>
+      </div>
+
+      {usesRange && !rangeValid ? (
+        <div
+          role="alert"
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
+        >
+          <p className="text-sm font-medium">La fecha inicial no puede ser posterior a la fecha final.</p>
+          <p className="text-xs opacity-70">Corrige el rango de fechas para volver a consultar el reporte.</p>
+        </div>
+      ) : (
+        <div className="pr-1">
+          {activeTab === "novedades" && <NovedadesTab range={range} tenantId={tenantId} />}
+          {activeTab === "atascados" && <AtascadosTab tenantId={tenantId} />}
+          {activeTab === "jobs" && <JobsTab range={range} />}
+          {activeTab === "webhooks" && <WebhooksTab range={range} tenantId={tenantId} />}
+          {activeTab === "consultas" && (
+            <IctQueriesTab
+              tenantId={tenantId}
+              onScheduleQuery={(query) => {
+                setSchedulePreset({
+                  savedQueryId: query.id,
+                  savedQueryScope: "ict",
+                  queryName: query.nombre,
+                });
+                setSchedulingOpen(true);
+              }}
+            />
+          )}
+        </div>
       )}
 
       <SchedulingPanel
@@ -135,31 +209,45 @@ export function IctReports() {
   );
 }
 
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+/** Sección de contenido: misma tarjeta blanca con título que usan las pestañas de empresa. */
+function ReportSection({
+  title,
+  hint,
+  children,
+  testId,
+}: {
+  title: string;
+  hint: string;
+  children: React.ReactNode;
+  testId?: string;
+}) {
   return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-        active ? "bg-[#557EFF] text-white" : "bg-transparent text-[#557EFF] hover:bg-[#557EFF]/10"
-      }`}
-    >
+    <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" data-testid={testId}>
+      <h2 className="text-sm font-bold mb-3" title={hint}>
+        {title}
+      </h2>
       {children}
-    </button>
+    </section>
   );
 }
 
-/** Tabla genérica de detalle: misma receta visual "lista de tarjetas" que el resto de Reportes. */
-function Table({ headers, rows }: { headers: string[]; rows: { key: string; cells: string[] }[] }) {
+/** Tabla de detalle: misma receta "lista de tarjetas" que el resto de Reportes. */
+function DetailTable({
+  headers,
+  rows,
+}: {
+  headers: string[];
+  rows: { key: string; cells: string[] }[];
+}) {
   return (
     <div className={CARDLIST_SCROLL}>
-      <table className={`min-w-[34rem] ${CARDLIST_TABLE}`}>
+      <table className={CARDLIST_TABLE}>
         <thead>
           <tr className={CARDLIST_HEAD_ROW}>
             {headers.map((h) => (
-              <th key={h} className={CARDLIST_TH}>{h}</th>
+              <th key={h} className={CARDLIST_TH}>
+                {h}
+              </th>
             ))}
           </tr>
         </thead>
@@ -167,7 +255,9 @@ function Table({ headers, rows }: { headers: string[]; rows: { key: string; cell
           {rows.map((row) => (
             <tr key={row.key} className={CARDLIST_ROW}>
               {row.cells.map((cell, i) => (
-                <td key={headers[i]} className={`${CARDLIST_CELL} ${i === 0 ? "" : "tabular-nums"}`}>{cell}</td>
+                <td key={headers[i]} className={CARDLIST_CELL}>
+                  {cell}
+                </td>
               ))}
             </tr>
           ))}
@@ -177,324 +267,243 @@ function Table({ headers, rows }: { headers: string[]; rows: { key: string; cell
   );
 }
 
-function SummaryCard({ label, value }: { label: string; value: number | string }) {
+/** Aviso de corte del detalle: el backend limita las filas del reporte en vivo. */
+function TruncatedNotice({ what }: { what: string }) {
   return (
-    <div className="rounded-xl border border-[#DFE5ED] px-3 py-2 dark:border-white/10">
-      <p className="text-xl font-semibold tabular-nums text-[#162744] dark:text-white">{value}</p>
-      <p className="text-[11px] text-[#6B7280] dark:text-white/50">{label}</p>
-    </div>
+    <p className="mt-3 text-[11px] opacity-70">
+      El detalle se limitó a las primeras filas: hay más {what} de los que se muestran. Programa el
+      informe para recibirlo completo en Excel.
+    </p>
   );
 }
 
-function fmt(iso: string): string {
+const dateTimeFmt = new Intl.DateTimeFormat("es-CO", { dateStyle: "short", timeStyle: "short" });
+
+function fmtDateTime(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? "—" : dateTimeFmt.format(d);
 }
 
-function DateRangeFilter({
-  from,
-  to,
-  onChange,
-  onApply,
-  busy,
-}: {
-  from: string;
-  to: string;
-  onChange: (range: { from: string; to: string }) => void;
-  onApply: () => void;
-  busy: boolean;
-}) {
-  return (
-    <div className="flex flex-wrap items-end gap-3">
-      <label className="flex flex-col gap-1 text-xs text-slate-500">
-        Desde
-        <input
-          type="date"
-          value={from}
-          onChange={(e) => onChange({ from: e.target.value, to })}
-          className="rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:bg-slate-800 dark:text-white"
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-slate-500">
-        Hasta
-        <input
-          type="date"
-          value={to}
-          onChange={(e) => onChange({ from, to: e.target.value })}
-          className="rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:bg-slate-800 dark:text-white"
-        />
-      </label>
-      <PrimaryButton onClick={onApply} disabled={busy}>
-        {busy ? "Cargando…" : "Actualizar"}
-      </PrimaryButton>
-    </div>
+function NovedadesTab({ range, tenantId }: { range: DateRange; tenantId?: string }) {
+  const q = useAnalyticsQuery<IctNovedadesReport>(
+    (signal) => fetchIctNovedadesReport(range, tenantId, signal),
+    [range.from, range.to, tenantId],
+    { isEmpty: (r) => r.total === 0 },
   );
-}
-
-function NovedadesTab({ tenantId }: { tenantId?: string }) {
-  const [range, setRange] = useState(defaultRange);
-  const [report, setReport] = useState<IctNovedadesReport | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      setReport(await fetchIctNovedadesReport(range, tenantId));
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "No se pudo cargar el reporte de novedades.");
-    } finally {
-      setBusy(false);
-    }
-  }, [range, tenantId]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar; "Actualizar" relanza con el rango vigente
-  }, []);
+  const report = q.data;
 
   return (
-    <section className="flex flex-col gap-4" data-testid="ict-novedades-tab">
-      <Section title="Novedades por causa" testId="ict-novedades-filtros">
-        <DateRangeFilter from={range.from} to={range.to} onChange={setRange} onApply={() => void load()} busy={busy} />
-      </Section>
-
-      {error && <ErrorNotice message={error} />}
-
+    <UiStateBoundary
+      status={q.status}
+      errorMessage={q.errorMessage}
+      onRetry={q.retry}
+      emptyMessage="Sin novedades en el periodo seleccionado."
+      skeletonRows={3}
+    >
       {report && (
-        <>
+        <div className="flex flex-col gap-4" data-testid="ict-novedades-tab">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <SummaryCard label="Novedades en el periodo" value={report.total} />
-            {report.resumenPorCausa.slice(0, 3).map((r) => (
-              <SummaryCard key={r.causa} label={r.causa} value={`${r.cantidad} (${r.porcentajeTexto})`} />
+            <KpiCard
+              label="Novedades en el periodo"
+              value={formatInt(report.total)}
+              tooltip="Novedades registradas por el organismo sobre los pre-trámites enviados por ICT en el rango elegido."
+            />
+            {report.resumenPorCausa.slice(0, 3).map((c) => (
+              <KpiCard
+                key={c.causa}
+                label={c.causa}
+                value={`${formatInt(c.cantidad)} · ${c.porcentajeTexto}`}
+                tooltip="Novedades de esta causa y su peso sobre el total del periodo."
+              />
             ))}
           </div>
 
-          {report.detalle.length === 0 ? (
-            <Empty>Sin novedades en el rango seleccionado.</Empty>
-          ) : (
-            <Table
+          <ReportSection
+            title={`Detalle de novedades (${formatInt(report.detalle.length)})`}
+            hint="Cada novedad registrada en el periodo, con el trámite al que corresponde."
+          >
+            <DetailTable
               headers={["Placa", "VIN", "Radicado", "Comentarios", "Registrado"]}
               rows={report.detalle.map((d, i) => ({
-                key: `${d.radicado ?? d.placa ?? d.vin ?? i}`,
-                cells: [d.placa ?? "—", d.vin ?? "—", d.radicado ?? "—", d.comentarios ?? "—", fmt(d.registradoEn)],
+                key: `${d.radicado ?? d.placa ?? d.vin ?? ""}-${i}`,
+                cells: [
+                  d.placa ?? "—",
+                  d.vin ?? "—",
+                  d.radicado ?? "—",
+                  d.comentarios ?? "—",
+                  fmtDateTime(d.registradoEn),
+                ],
               }))}
             />
-          )}
-          {report.truncated && (
-            <p className="text-[11px] text-amber-700 dark:text-amber-400">
-              El detalle se limitó a las primeras filas del periodo; hay más novedades de las mostradas.
-            </p>
-          )}
-        </>
+            {report.truncated && <TruncatedNotice what="novedades" />}
+          </ReportSection>
+        </div>
       )}
-    </section>
+    </UiStateBoundary>
   );
 }
 
 function AtascadosTab({ tenantId }: { tenantId?: string }) {
-  const [report, setReport] = useState<IctAtascadosReport | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      setReport(await fetchIctAtascadosReport(tenantId));
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "No se pudo cargar el reporte de atascados.");
-    } finally {
-      setBusy(false);
-    }
-  }, [tenantId]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await
-    void load();
-  }, [load]);
+  const q = useAnalyticsQuery<IctAtascadosReport>(
+    (signal) => fetchIctAtascadosReport(tenantId, signal),
+    [tenantId],
+    { isEmpty: (r) => r.total === 0 },
+  );
+  const report = q.data;
 
   return (
-    <section className="flex flex-col gap-4" data-testid="ict-atascados-tab">
-      <Section
-        title="Atascados en validación ahora mismo"
-        testId="ict-atascados-filtros"
-        hint="Esta pestaña no lleva rango de fechas: siempre enseña el estado de este momento."
-      >
-        <PrimaryButton onClick={() => void load()} disabled={busy}>
-          {busy ? "Cargando…" : "Actualizar"}
-        </PrimaryButton>
-      </Section>
-
-      {error && <ErrorNotice message={error} />}
-
+    <UiStateBoundary
+      status={q.status}
+      errorMessage={q.errorMessage}
+      onRetry={q.retry}
+      emptyMessage="No hay pre-trámites atascados en validación."
+      skeletonRows={3}
+    >
       {report && (
-        <>
+        <div className="flex flex-col gap-4" data-testid="ict-atascados-tab">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <SummaryCard label="Atascados" value={report.total} />
+            <KpiCard
+              label="Atascados ahora"
+              value={formatInt(report.total)}
+              tooltip="Pre-trámites detenidos en validación en este momento. Esta pestaña no usa rango de fechas: siempre muestra el estado actual."
+            />
           </div>
 
-          {report.detalle.length === 0 ? (
-            <Empty>No hay pre-trámites atascados en validación.</Empty>
-          ) : (
-            <Table
-              headers={["Placa", "VIN", "Radicado", "Esperando", "Días transcurridos"]}
+          <ReportSection
+            title={`Detalle de atascados (${formatInt(report.detalle.length)})`}
+            hint="Qué está esperando cada pre-trámite detenido y desde hace cuánto."
+          >
+            <DetailTable
+              headers={["Placa", "VIN", "Radicado", "Esperando", "Días detenido"]}
               rows={report.detalle.map((d, i) => ({
-                key: `${d.radicado ?? d.placa ?? d.vin ?? i}`,
-                cells: [d.placa ?? "—", d.vin ?? "—", d.radicado ?? "—", d.esperando, d.diasTranscurridos.toFixed(1)],
+                key: `${d.radicado ?? d.placa ?? d.vin ?? ""}-${i}`,
+                cells: [
+                  d.placa ?? "—",
+                  d.vin ?? "—",
+                  d.radicado ?? "—",
+                  d.esperando,
+                  formatNumber(d.diasTranscurridos),
+                ],
               }))}
             />
-          )}
-          {report.truncated && (
-            <p className="text-[11px] text-amber-700 dark:text-amber-400">
-              El detalle se limitó a las primeras filas; hay más atascados de los mostrados.
-            </p>
-          )}
-        </>
+            {report.truncated && <TruncatedNotice what="atascados" />}
+          </ReportSection>
+        </div>
       )}
-    </section>
+    </UiStateBoundary>
   );
 }
 
-function JobsTab() {
-  const [range, setRange] = useState(defaultRange);
-  const [report, setReport] = useState<IctJobsReport | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      setReport(await fetchIctJobsReport(range));
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "No se pudo cargar el reporte de jobs.");
-    } finally {
-      setBusy(false);
-    }
-  }, [range]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar; "Actualizar" relanza con el rango vigente
-  }, []);
+function JobsTab({ range }: { range: DateRange }) {
+  const q = useAnalyticsQuery<IctJobsReport>(
+    (signal) => fetchIctJobsReport(range, signal),
+    [range.from, range.to],
+    { isEmpty: (r) => r.resumenPorJob.length === 0 },
+  );
+  const report = q.data;
 
   return (
-    <section className="flex flex-col gap-4" data-testid="ict-jobs-tab">
-      <Section
-        title="Rendimiento de los jobs del pipeline"
-        testId="ict-jobs-filtros"
-        hint="Reporte de plataforma: cubre todas las compañías, no solo la suya."
-      >
-        <DateRangeFilter from={range.from} to={range.to} onChange={setRange} onApply={() => void load()} busy={busy} />
-      </Section>
-
-      {error && <ErrorNotice message={error} />}
-
+    <UiStateBoundary
+      status={q.status}
+      errorMessage={q.errorMessage}
+      onRetry={q.retry}
+      emptyMessage="Sin corridas de jobs en el periodo seleccionado."
+      skeletonRows={3}
+    >
       {report && (
-        <>
-          {report.resumenPorJob.length === 0 ? (
-            <Empty>Sin corridas de jobs en el rango seleccionado.</Empty>
-          ) : (
-            <Table
-              headers={["Job", "Corridas", "Duración prom. (s)", "Duración máx. (s)", "% fuera de SLA"]}
+        <div className="flex flex-col gap-4" data-testid="ict-jobs-tab">
+          <ReportSection
+            title="Rendimiento por job"
+            hint="Reporte de plataforma: cubre todas las compañías, no solo la suya."
+          >
+            <DetailTable
+              headers={["Job", "Corridas", "Duración prom.", "Duración máx.", "% fuera de SLA"]}
               rows={report.resumenPorJob.map((r) => ({
                 key: r.job,
                 cells: [
                   r.job,
-                  String(r.corridas),
-                  r.duracionPromedioSeg.toFixed(1),
-                  r.duracionMaximaSeg.toFixed(1),
+                  formatInt(r.corridas),
+                  `${formatNumber(r.duracionPromedioSeg)} s`,
+                  `${formatNumber(r.duracionMaximaSeg)} s`,
                   r.porcentajeFueraDeSlaTexto,
                 ],
               }))}
             />
-          )}
+          </ReportSection>
 
           {report.corridasFueraDeSla.length > 0 && (
-            <>
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280] dark:text-white/50">
-                Corridas fuera de SLA
-              </p>
-              <Table
-                headers={["Job", "Resultado", "Duración (s)", "Inicio"]}
+            <ReportSection
+              title={`Corridas fuera de SLA (${formatInt(report.corridasFueraDeSla.length)})`}
+              hint="Cada corrida que superó el tiempo esperado para su job."
+            >
+              <DetailTable
+                headers={["Job", "Resultado", "Duración", "Inicio"]}
                 rows={report.corridasFueraDeSla.map((c, i) => ({
                   key: `${c.job}-${c.inicio}-${i}`,
-                  cells: [c.job, c.resultado, c.duracionSeg.toFixed(1), fmt(c.inicio)],
+                  cells: [
+                    c.job,
+                    c.resultado,
+                    `${formatNumber(c.duracionSeg)} s`,
+                    fmtDateTime(c.inicio),
+                  ],
                 }))}
               />
-            </>
+              {report.truncated && <TruncatedNotice what="corridas" />}
+            </ReportSection>
           )}
-          {report.truncated && (
-            <p className="text-[11px] text-amber-700 dark:text-amber-400">
-              El detalle se limitó a las primeras corridas; hay más de las mostradas.
-            </p>
-          )}
-        </>
+        </div>
       )}
-    </section>
+    </UiStateBoundary>
   );
 }
 
-function WebhooksTab({ tenantId }: { tenantId?: string }) {
-  const [range, setRange] = useState(defaultRange);
-  const [report, setReport] = useState<IctWebhooksReport | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      setReport(await fetchIctWebhooksReport(range, tenantId));
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "No se pudo cargar el reporte de webhooks.");
-    } finally {
-      setBusy(false);
-    }
-  }, [range, tenantId]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga async: los setState ocurren tras el await
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar; "Actualizar" relanza con el rango vigente
-  }, []);
+function WebhooksTab({ range, tenantId }: { range: DateRange; tenantId?: string }) {
+  const q = useAnalyticsQuery<IctWebhooksReport>(
+    (signal) => fetchIctWebhooksReport(range, tenantId, signal),
+    [range.from, range.to, tenantId],
+    { isEmpty: (r) => r.total === 0 },
+  );
+  const report = q.data;
 
   return (
-    <section className="flex flex-col gap-4" data-testid="ict-webhooks-tab">
-      <Section title="Trazabilidad de entrega de webhooks" testId="ict-webhooks-filtros">
-        <DateRangeFilter from={range.from} to={range.to} onChange={setRange} onApply={() => void load()} busy={busy} />
-      </Section>
-
-      {error && <ErrorNotice message={error} />}
-
+    <UiStateBoundary
+      status={q.status}
+      errorMessage={q.errorMessage}
+      onRetry={q.retry}
+      emptyMessage="Sin webhooks en el periodo seleccionado."
+      skeletonRows={3}
+    >
       {report && (
-        <>
+        <div className="flex flex-col gap-4" data-testid="ict-webhooks-tab">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <SummaryCard label="Webhooks en el periodo" value={report.total} />
+            <KpiCard
+              label="Webhooks en el periodo"
+              value={formatInt(report.total)}
+              tooltip="Notificaciones que ICT intentó entregar al sistema del cliente en el rango elegido."
+            />
           </div>
 
-          {report.detalle.length === 0 ? (
-            <Empty>Sin webhooks en el rango seleccionado.</Empty>
-          ) : (
-            <Table
+          <ReportSection
+            title={`Detalle de entregas (${formatInt(report.detalle.length)})`}
+            hint="En qué acabó cada entrega y cuántos intentos costó."
+          >
+            <DetailTable
               headers={["Radicado", "Estado", "Intentos", "URL destino", "Registrado"]}
               rows={report.detalle.map((w, i) => ({
                 key: `${w.radicado}-${i}`,
-                cells: [w.radicado, w.estado, String(w.intentos), w.urlDestino ?? "—", fmt(w.registradoEn)],
+                cells: [
+                  w.radicado,
+                  w.estado,
+                  formatInt(w.intentos),
+                  w.urlDestino ?? "—",
+                  fmtDateTime(w.registradoEn),
+                ],
               }))}
             />
-          )}
-          {report.truncated && (
-            <p className="text-[11px] text-amber-700 dark:text-amber-400">
-              El detalle se limitó a las primeras filas del periodo; hay más webhooks de los mostrados.
-            </p>
-          )}
-        </>
+            {report.truncated && <TruncatedNotice what="webhooks" />}
+          </ReportSection>
+        </div>
       )}
-    </section>
+    </UiStateBoundary>
   );
 }

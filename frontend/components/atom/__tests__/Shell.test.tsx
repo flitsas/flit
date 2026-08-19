@@ -165,15 +165,20 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("muestra Log QX, Log ICT y Reportes ICT en el agrupador Integraciones", async () => {
+  it("muestra Log QX e ICT en Integraciones, con Log ICT y Reportes ICT anidados bajo ICT", async () => {
     setDevSuperAdminToken();
     renderShell();
     await userEvent.click(screen.getByRole("button", { name: "Integraciones" }));
     expect(screen.getByRole("button", { name: "Log QX" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Log ICT" })).toBeInTheDocument();
-    // Reportes ICT (HU #11619): entrada separada de Log ICT, mismo agrupador.
-    expect(screen.getByRole("button", { name: "Reportes ICT" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Soporte" })).not.toBeInTheDocument();
+
+    // ICT es contenedor, no destino (HU #11619): sus dos hojas aparecen al abrirlo, mismo patrón
+    // que Administradores → Plataforma.
+    expect(screen.queryByRole("button", { name: "Log ICT" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "ICT" }));
+    const dockNav = screen.getByRole("navigation", { name: "Navegación principal" });
+    expect(within(dockNav).getByRole("button", { name: "Log ICT" })).toBeInTheDocument();
+    expect(within(dockNav).getByRole("button", { name: "Reportes ICT" })).toBeInTheDocument();
   });
 
   it("no muestra la entrada 'Improntas' sin sesión SuperAdmin", () => {
