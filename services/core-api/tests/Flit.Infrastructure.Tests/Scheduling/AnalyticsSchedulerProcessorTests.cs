@@ -420,6 +420,48 @@ public sealed class AnalyticsSchedulerProcessorTests
         sent[0].HtmlBody.Should().Contain("ya no existe");
     }
 
+    [Fact]
+    public async Task Informe_tipo_consulta_alcance_ict_ejecuta_la_savedQuery_y_adjunta_el_excel()
+    {
+        var dbName = NewDbName();
+        var savedQueryId = Guid.NewGuid();
+        await SeedScheduleAsync(
+            dbName, reportType: "consulta", format: "excel", savedQueryId: savedQueryId, savedQueryScope: "ict");
+        var emailSender = Substitute.For<IEmailSender>();
+        var sent = new List<EmailMessage>();
+        emailSender.SendAsync(Arg.Do<EmailMessage>(sent.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(EmailSendResult.Sent));
+
+        var savedQuery = new SavedQueryDto(
+            savedQueryId, "Novedades de hoy", null, DeFabrica: false,
+            new QueryDefinition(new QueryDateFilter("registro", QueryRangePreset.Ultimos7), [], ["radicado", "placa"]),
+            DateTimeOffset.UtcNow.AddDays(-1), null);
+        var ictQueries = Substitute.For<Flit.Analytics.Application.IctQueries.IIctQueryRepository>();
+        ictQueries.GetSavedByIdAsync(TenantId, savedQueryId, Arg.Any<CancellationToken>())
+            .Returns(savedQuery);
+        ictQueries.ExecuteAsync(TenantId, Arg.Any<QueryRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new Flit.Analytics.Application.IctQueries.IctQueryResultDto(
+                1, 1, 200, DateOnly.FromDateTime(NowUtc.Date), DateOnly.FromDateTime(NowUtc.Date), 0,
+                [IctRow(savedQueryId)], []));
+
+        var processor = NewProcessor(dbName, emailSender, Substitute.For<IAlertMetricsReadRepository>(),
+            ictQueryRepository: ictQueries);
+
+        await processor.ProcessSchedulesAsync(NowUtc, Ct);
+
+        sent.Should().ContainSingle();
+        sent[0].Subject.Should().Contain("Informe diario");
+        sent[0].HtmlBody.Should().Contain("Novedades de hoy").And.Contain("Resultados:</strong> 1");
+        sent[0].Attachments.Should().ContainSingle();
+        sent[0].Attachments[0].FileName.Should().EndWith(".xlsx");
+        sent[0].Attachments[0].Content.Length.Should().BeGreaterThan(0);
+    }
+
+    private static Flit.Analytics.Application.IctQueries.IctQueryRowDto IctRow(Guid seed) => new(
+        Guid.NewGuid(), 1000, $"REF-{seed:N}", "ABC123", null,
+        Guid.NewGuid(), "Empresa Demo", "Matrícula", "recibido", false, false, false,
+        null, null, null, null, NowUtc.AddDays(-1), null, null);
+
     private static CompanyQueryRowDto Row(Guid seed) => new(
         Guid.NewGuid(), $"REF-{seed:N}", "ABC123", null, null, null,
         Guid.NewGuid(), "Empresa Demo", Guid.NewGuid(), "Traspaso", "traspaso", "aprobado",
@@ -495,7 +537,8 @@ public sealed class AnalyticsSchedulerProcessorTests
         IUsageMetricsReadRepository? usageMetricsReadRepository = null,
         IAnalyticsMetricsReadRepository? analyticsMetricsReadRepository = null,
         ICompanyQueryRepository? companyQueryRepository = null,
-        ISuperAdminSavedQueryRepository? superAdminSavedQueryRepository = null)
+        ISuperAdminSavedQueryRepository? superAdminSavedQueryRepository = null,
+        Flit.Analytics.Application.IctQueries.IIctQueryRepository? ictQueryRepository = null)
     {
         var analytics = Substitute.For<IAnalyticsReadRepository>();
         analytics.GetOverviewAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
@@ -544,6 +587,12 @@ public sealed class AnalyticsSchedulerProcessorTests
             // test real que se quiere cubrir en los que solo ejercitan "empresa".
             services.AddSingleton(superAdminSavedQueryRepository ?? Substitute.For<ISuperAdminSavedQueryRepository>());
             services.AddScoped<CompanyQueryReportDocumentBuilder>();
+        }
+
+        if (ictQueryRepository is not null)
+        {
+            services.AddSingleton(ictQueryRepository);
+            services.AddScoped<IctQueryReportDocumentBuilder>();
         }
 
         var provider = services.BuildServiceProvider();

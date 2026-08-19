@@ -193,6 +193,23 @@ public sealed class ReportScheduleValidationTests
     }
 
     [Fact]
+    public void Tipo_consulta_valido_con_scope_ict_normaliza_savedQueryId_y_scope()
+    {
+        var id = Guid.NewGuid();
+        var input = Valid(reportType: "consulta", format: "excel") with
+        {
+            SavedQueryId = id,
+            SavedQueryScope = "ict",
+        };
+
+        var (result, error) = SchedulingValidation.ValidateReportSchedule(input);
+
+        error.Should().BeNull();
+        result!.SavedQueryId.Should().Be(id);
+        result.SavedQueryScope.Should().Be("ict");
+    }
+
+    [Fact]
     public void Tipo_consulta_sin_savedQueryId_devuelve_error()
     {
         var input = Valid(reportType: "consulta", format: "excel") with { SavedQueryScope = "empresa" };
@@ -209,7 +226,7 @@ public sealed class ReportScheduleValidationTests
 
         var (_, error) = SchedulingValidation.ValidateReportSchedule(input);
 
-        error.Should().Be("El alcance de la consulta debe ser 'empresa', 'ot' o 'superadmin'.");
+        error.Should().Be("El alcance de la consulta debe ser 'empresa', 'ot', 'ict' o 'superadmin'.");
     }
 
     [Fact]
@@ -223,7 +240,7 @@ public sealed class ReportScheduleValidationTests
 
         var (_, error) = SchedulingValidation.ValidateReportSchedule(input);
 
-        error.Should().Be("El alcance de la consulta debe ser 'empresa', 'ot' o 'superadmin'.");
+        error.Should().Be("El alcance de la consulta debe ser 'empresa', 'ot', 'ict' o 'superadmin'.");
     }
 
     [Fact]

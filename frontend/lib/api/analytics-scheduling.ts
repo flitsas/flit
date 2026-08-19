@@ -28,8 +28,9 @@ export type ReportType =
   | "ict_jobs"
   | "ict_webhooks";
 /** Solo aplica cuando reportType="consulta". "ot" = consulta guardada del organismo de tránsito
- * (Reportes 2.0, HU-D, tercera ola). */
-export type SavedQueryScope = "empresa" | "superadmin" | "ot";
+ * (Reportes 2.0, HU-D, tercera ola). "ict" = consulta guardada de Integración con Terceros
+ * (Reportes 2.0, HU-D, cuarta ola). */
+export type SavedQueryScope = "empresa" | "superadmin" | "ot" | "ict";
 export type ScheduleFrequency = "daily" | "weekly" | "monthly";
 export type ScheduleFormat = "excel" | "pdf";
 export type AlertMetric =

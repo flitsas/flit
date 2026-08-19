@@ -24,7 +24,7 @@ public static partial class SchedulingValidation
         ["resumen", "operacion", "ot", "uso", "productividad", "consulta",
             "ot_analisis", "ot_informe", "ot_revisores",
             "ict_novedades", "ict_atascados", "ict_jobs", "ict_webhooks"];
-    private static readonly string[] SavedQueryScopes = ["empresa", "superadmin", "ot"];
+    private static readonly string[] SavedQueryScopes = ["empresa", "superadmin", "ot", "ict"];
 
     /// <summary>
     /// Informes de alcance ICT (HU-D, cuarta ola): detalle fila a fila sin versión PDF con
@@ -76,7 +76,7 @@ public static partial class SchedulingValidation
             if (input.SavedQueryId is null)
                 return (null, "Un informe de tipo 'consulta' requiere indicar savedQueryId.");
             if (input.SavedQueryScope is null || !SavedQueryScopes.Contains(input.SavedQueryScope))
-                return (null, "El alcance de la consulta debe ser 'empresa', 'ot' o 'superadmin'.");
+                return (null, "El alcance de la consulta debe ser 'empresa', 'ot', 'ict' o 'superadmin'.");
             if (input.Format is not null && input.Format != "excel")
                 return (null, "Un informe de tipo 'consulta' solo se entrega en formato Excel.");
         }

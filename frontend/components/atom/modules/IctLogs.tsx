@@ -24,6 +24,7 @@ import {
 } from "@/lib/api/analytics-scheduling";
 import { decodeJwtPayload, isSuperAdmin, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
 import { SchedulingPanel } from "@/components/atom/modules/_reportes/scheduling/SchedulingPanel";
+import type { SchedulePresetConsulta } from "@/components/atom/modules/_reportes/scheduling/ScheduleForm";
 import { IctQueriesTab } from "./_ict/IctQueriesTab";
 
 type Tab = "logs" | "alertas" | "consultas";
@@ -60,6 +61,9 @@ function useIctTenantId(): { tenantId: string | undefined; isSuper: boolean } {
 export function IctLogs() {
   const [tab, setTab] = useState<Tab>("logs");
   const [schedulingOpen, setSchedulingOpen] = useState(false);
+  // "Programar este informe" en una consulta guardada de ICT (Reportes 2.0, HU-D, cuarta ola):
+  // mismo mecanismo que OtReportsConsole/Reportes.tsx, con savedQueryScope="ict" fijo.
+  const [schedulePreset, setSchedulePreset] = useState<SchedulePresetConsulta | null>(null);
   const { tenantId, isSuper } = useIctTenantId();
   const allowedReportTypes = useMemo(() => ictReportTypes(isSuper), [isSuper]);
 
@@ -86,16 +90,25 @@ export function IctLogs() {
       </header>
       {tab === "logs" && <LogsTab />}
       {tab === "alertas" && <AlertsTab />}
-      {/* Sin `onScheduleQuery`: a diferencia de OT/empresa, el backend NO tiene un
-          SavedQueryScope="ict" (SchedulingValidation solo admite empresa/superadmin/ot), así que
-          "Programar este informe" sobre una consulta guardada de ICT no tiene a qué apuntar
-          todavía. El botón de calendario de SavedQueryList se queda oculto hasta que exista. */}
-      {tab === "consultas" && <IctQueriesTab tenantId={tenantId} />}
+      {tab === "consultas" && (
+        <IctQueriesTab
+          tenantId={tenantId}
+          onScheduleQuery={(query) => {
+            setSchedulePreset({ savedQueryId: query.id, savedQueryScope: "ict", queryName: query.nombre });
+            setSchedulingOpen(true);
+          }}
+        />
+      )}
 
       <SchedulingPanel
         open={schedulingOpen}
-        onClose={() => setSchedulingOpen(false)}
+        onClose={() => {
+          setSchedulingOpen(false);
+          setSchedulePreset(null);
+        }}
         tenantId={tenantId}
+        presetConsulta={schedulePreset}
+        onConsumePreset={() => setSchedulePreset(null)}
         allowedReportTypes={allowedReportTypes}
       />
     </div>

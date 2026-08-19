@@ -295,6 +295,23 @@ internal sealed class AnalyticsSchedulerProcessor(
                     schedule.Name, otResult.QueryName, otResult.Total, otResult.Truncated, OtQueryReportDocumentBuilder.RowCap);
                 bytes = otResult.Bytes;
             }
+            else if (schedule.SavedQueryScope == "ict")
+            {
+                // Alcance ICT (Reportes 2.0, HU-D, cuarta ola): consulta propia de la empresa sobre
+                // sus pre-trámites de Integración con Terceros — siempre con tenant, mismo criterio
+                // que "empresa" (§75 del DDL, ampliado a este cuarto valor de SavedQueryScope).
+                var ictBuilder = services.GetRequiredService<IctQueryReportDocumentBuilder>();
+                var ictResult = await ictBuilder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
+                if (ictResult is null)
+                {
+                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name);
+                    return (missingSubject, missingHtml, null);
+                }
+
+                (subject, html) = SchedulerEmailComposer.BuildConsultaReport(
+                    schedule.Name, ictResult.QueryName, ictResult.Total, ictResult.Truncated, IctQueryReportDocumentBuilder.RowCap);
+                bytes = ictResult.Bytes;
+            }
             else
             {
                 var builder = services.GetRequiredService<CompanyQueryReportDocumentBuilder>();
