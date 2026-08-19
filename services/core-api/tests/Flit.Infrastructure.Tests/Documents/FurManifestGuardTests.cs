@@ -260,6 +260,24 @@ public sealed class FurManifestGuardTests
     // real: ninguna línea alcanza el borde, el texto sale entero y el margen no se puede volver a
     // perder sin que el test lo diga.
     //
+    // Regenerada 2026-08-19 (HU #11640) para CORREGIR un descuadre que esta misma línea base había
+    // congelado. `requested_process_11`/`_12` estaban en y=170,9. La rejilla "3. TRÁMITE SOLICITADO"
+    // del blank AUTOMOTOR es de 6 columnas × 3 filas, y sus bordes horizontales vectoriales están en
+    // y=116,1 / 141,9 / 168,6 / 195,4: y=170,9 cae en la FILA 3, donde el formulario imprime «17 CAMBIO
+    // DE CARROCERÍA» y «18 OTROS». Es decir, toda constitución de prenda se estampaba como cambio de
+    // carrocería y todo levantamiento como «otros». El descuadre entró en la recalibración automática
+    // por anclas (MLS) del blank oficial (2026-07-24) y se propagó a `_12` al derivarlo por offset
+    // desde `_11` (HU #11257): ninguna de las dos veces se contrastó contra el rótulo impreso, y al
+    // regenerar esta línea base el error quedó fijado como esperado. Las columnas (x) siempre
+    // estuvieron bien; solo cambia y → 150,2, que centra la tinta en la FILA 2 (celdas «11 INSCRIPC.
+    // PRENDA» y «12 LEVANTA PRENDA»): con size 10,1 y cuerpo 10 negrita, la X rinde en y 150,4–160,9,
+    // holgada dentro de 141,9–168,6. Verificado generando el PDF con `tools/fur-preview` y midiendo la
+    // tinta resultante con PyMuPDF, no por cálculo.
+    //
+    // MAQUINARIA y REMOLQUES se verificaron con el mismo método y NO estaban afectados: sus casillas
+    // de prenda caen en la celda correcta de su propio formulario. Solo AUTOMOTOR estaba descuadrado,
+    // que es el formato de la inmensa mayoría de los trámites.
+    //
     // Regenerar SOLO de forma deliberada vía EmitBaseline tras recalibrar el manifest.
     private const string Baseline = """
         traffic_secretary_name=Text:525,64,175,11.9,6.5,Left,False,null
@@ -272,8 +290,8 @@ public sealed class FurManifestGuardTests
         plate_number=Text:734.1,76,23.7,11.8,9.7,Center,False,null
         requested_process_1=cb:71.3,119.2,9.9
         requested_process_2=cb:119.5,121.1,9.8
-        requested_process_11=cb:286.9,170.9,10.1
-        requested_process_12=cb:343.3,170.9,10.1
+        requested_process_11=cb:286.9,150.2,10.1
+        requested_process_12=cb:343.3,150.2,10.1
         vehicle_class_1=cb:53.6,222.4,9.9
         vehicle_class_5=cb:231.5,221.5,10
         vehicle_class_9=cb:101.7,232.7,10
