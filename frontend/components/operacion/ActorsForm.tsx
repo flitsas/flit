@@ -12,6 +12,7 @@ import { AlertTriangle, Info, Search } from 'lucide-react';
 import { INLINE_ALERT_TONES, type InlineAlertTone } from '@/components/atom/InlineAlert';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { Modal } from '@/components/atom/Modal';
+import { usePendingChanges } from './pending-changes';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import { FineDetailList } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
@@ -568,6 +569,15 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   const [actors, setActors] = useState<ProcedureActor[]>(() =>
     roles.map(emptyActor),
   );
+  /**
+   * Bug #11614 — captura del usuario sin persistir. Se marca en las vías de edición (`updateActor`,
+   * `updateRepLegal`, fecha de expedición) y NO en la rehidratación desde el backend: así una
+   * navegación por el stepper sobre un paso que solo se abrió para mirar no dispara un PUT que,
+   * además, chocaría contra el gate de consulta RUNT/RUES. La shell la consulta antes de cambiar
+   * de paso, porque al hacerlo este formulario se desmonta y lo capturado se perdía.
+   */
+  const pending = usePendingChanges();
+  const markDirty = pending.markDirty;
   const [showErrors, setShowErrors] = useState(false);
   // Estado de la consulta de identidad por índice de actor (RUNT o RUES, autopoblado).
   const [runt, setRunt] = useState<Record<number, LookupState>>({});
@@ -664,7 +674,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       const value = result[field];
       if (value && value.trim()) patch[field] = value.trim();
     }
-    if (Object.keys(patch).length > 0) updateActor(index, patch);
+    // Autocompletado del contacto tras la consulta: mismo criterio que el resto del autopoblado
+    // (Bug #11614) — no es captura del gestor, así que no obliga a guardar al cambiar de paso.
+    if (Object.keys(patch).length > 0)
+      updateActor(index, patch, { preserveConsultation: true });
   };
 
   // Dispara el lookup de contacto (HU #10956, AC2) tras resolver la identidad del actor. Nunca
@@ -761,6 +774,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       return !!merged && !validateActors([merged], modalidad).valid;
     });
     if (hasIncompleteExistingActor) setShowErrors(true);
+    // Aquí NO se limpia la marca de pendiente, aunque lo rehidratado sea lo persistido: los actores
+    // llegan de una carga asíncrona de la shell y esta rama corre cuando aterrizan, que puede ser
+    // DESPUÉS de que el gestor empezara a escribir. La marca solo puede estar puesta si él editó,
+    // así que limpiarla aquí únicamente podría borrar captura viva (la carrera que reintroducía la
+    // pérdida del Bug #11614). Lo persistido limpia la marca donde corresponde: al guardar.
   }
 
   // El seed puede llegar después de la rehidratación (fetch async). Cuando
@@ -847,6 +865,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       patch = rest;
       if (Object.keys(patch).length === 0 && !identityChanged) return;
     }
+    // El autopoblado que sigue a una consulta (RUNT/RUES/directorio) NO es captura del gestor: si
+    // llegó ahí fue porque él escribió el documento (eso ya marcó pendiente) o porque la consulta
+    // automática se disparó sola al abrir el paso. Marcar esta vía obligaría a guardar un paso que
+    // el gestor solo abrió para mirar — y con un actor persistido incompleto lo dejaría atrapado.
+    if (!opts?.preserveConsultation) markDirty();
     setActors((prev) =>
       prev.map((a, i) => {
         if (i !== index) return a;
@@ -877,8 +900,13 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     setRlRunt((prev) => ({ ...prev, [index]: value }));
 
   // Actualiza el representante legal (persona jurídica) de un actor, embebido en el propio actor.
-  const updateRepLegal = (index: number, patch: Partial<RepresentanteLegal>) =>
-    setActors((prev) =>
+  const updateRepLegal = (
+    index: number,
+    patch: Partial<RepresentanteLegal>,
+    opts?: { preserveConsultation?: boolean },
+  ) => {
+    if (!opts?.preserveConsultation) markDirty();
+    return setActors((prev) =>
       prev.map((a, i) => {
         if (i !== index) return a;
         const rl = { ...a.representanteLegal, ...patch };
@@ -892,17 +920,22 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         return { ...a, representanteLegal: rl };
       }),
     );
+  };
 
   // HU #10937 — precarga en el actor el representante ELEGIDO (su documento + contacto). El actor
   // guarda este representante embebido; el backend firma/valida identidad por SU documento.
-  const applySelectedRep = (index: number, rep: LegalRepresentativeOption) =>
+  const applySelectedRep = (
+    index: number,
+    rep: LegalRepresentativeOption,
+    opts?: { preserveConsultation?: boolean },
+  ) =>
     updateRepLegal(index, {
       tipoDocumento: (rep.tipoDoc as ActorDocumentType) || 'CC',
       numeroDocumento: rep.documento,
       nombreCompleto: repFullName(rep),
       email: rep.email ?? undefined,
       telefono: rep.telefono ?? undefined,
-    });
+    }, opts);
 
   // Cambia el representante elegido del actor jurídico (selector cuando la compañía tiene varios) y
   // reprecarga sus datos. Las banderas mostradas se derivan del representante elegido.
@@ -960,7 +993,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           // previo (auto-seleccionado). El representante elegido queda embebido en el actor.
           const reps = repsOf(preload);
           setSelectedRepIdx((prev) => ({ ...prev, [index]: 0 }));
-          if (reps[0]) applySelectedRep(index, reps[0]);
+          if (reps[0]) applySelectedRep(index, reps[0], { preserveConsultation: true });
           const foundPreload = { status: 'found' as const, kind: 'preload' as const, result: preload };
           setRuntFor(index, foundPreload);
           rememberActorConsultation(instanceId, {
@@ -1234,8 +1267,12 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       if (!confirmed) return false;
     }
 
+    // ANTES del await: lo que el gestor escriba mientras el guardado viaja no va en `normalized`,
+    // así que sigue pendiente y la marca debe sobrevivir.
+    const settle = pending.beginSettle();
     const ok = await save(normalized);
     if (ok) {
+      settle();
       // Fecha de expedición (RNMC) — persistencia best-effort tras guardar los actores.
       await persistIssueDates();
       onSaved?.(normalized);
@@ -1243,7 +1280,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     return ok;
   };
 
-  useImperativeHandle(ref, () => ({ save: submitActors }));
+  useImperativeHandle(ref, () => ({ save: submitActors, hasPendingChanges: pending.hasPendingChanges }));
 
   // Notifica al wizard si Continuar puede habilitarse (consulta exitosa en todos los actores).
   const consultationReady = actors.every((_, i) =>
@@ -1843,7 +1880,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           id={`${actor.rol}-fechaExpedicion`}
           type="date"
           value={issueDates[index] ?? ''}
-          onChange={(e) => setIssueDates((prev) => ({ ...prev, [index]: e.target.value }))}
+          onChange={(e) => {
+            markDirty();
+            setIssueDates((prev) => ({ ...prev, [index]: e.target.value }));
+          }}
           className={INPUT_BASE}
         />
         <p className="text-xs mt-1 opacity-60">

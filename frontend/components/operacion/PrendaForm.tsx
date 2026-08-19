@@ -4,6 +4,7 @@ import { forwardRef, useEffect, useId, useImperativeHandle, useState } from 'rea
 import { ChevronDown } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { digitsOnly } from '@/lib/format/currency';
+import { usePendingChanges } from './pending-changes';
 import { formatDateOnly } from '@/lib/format/date-only';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
@@ -242,6 +243,14 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   const [decision, setDecision] = useState<PrendaDecision | ''>('');
   const [acreedorNombre, setAcreedorNombre] = useState('');
   const [acreedorDocumento, setAcreedorDocumento] = useState('');
+  /**
+   * Bug #11614 — captura del usuario sin persistir. Se marca en los manejadores de edición (no
+   * comparando estados) para que ni la rehidratación desde el backend ni las precargas del RUNT
+   * cuenten como cambio pendiente: solo lo que el gestor tocó obliga a guardar antes de salir del
+   * paso. No pinta nada: la consulta la hace la shell vía `hasPendingChanges`. La marca solo se
+   * limpia si el gestor NO editó mientras la carga (o el PUT) viajaba — ver `pending-changes.ts`.
+   */
+  const pending = usePendingChanges();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -273,6 +282,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     let active = true;
     const load = async () => {
       setLoading(true);
+      // ANTES del await: si el gestor elige decisión mientras la carga viaja, la marca sobrevive.
+      const settle = pending.beginSettle();
       try {
         const [p, detail] = await Promise.all([
           tramitesClient.getPrenda(instanceId),
@@ -306,14 +317,21 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
       } catch {
         /* sin decisión previa: el form queda vacío */
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          // Lo rehidratado/precargado ES lo persistido (o una sugerencia que el gestor aún no ha
+          // tocado): no cuenta como cambio pendiente. Pero si el gestor eligió decisión mientras
+          // la carga estaba en vuelo, esa captura manda y la marca sobrevive.
+          settle();
+          setLoading(false);
+        }
       }
     };
     void load();
     return () => {
       active = false;
     };
-  }, [instanceId, runtHasGravamen, offersRegistrar]);
+    // `pending` es estable (instancia única por montaje): no re-dispara la carga.
+  }, [instanceId, runtHasGravamen, offersRegistrar, pending]);
 
   const capturaAcreedor = decision !== '' && CAPTURA_ACREEDOR.has(decision);
   const requiereDocumento = decision !== '' && REQUIERE_DOCUMENTO.has(decision);
@@ -324,6 +342,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   }, [documentGateReady, onDocumentGateChange]);
 
   const selectDecision = (d: PrendaDecision) => {
+    pending.markDirty();
     setDecision(d);
     setError(null);
     // La decisión nueva no exige acreedor (HU #11594): descarta los errores de campo de la
@@ -375,6 +394,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     setSaving(true);
     setSaved(false);
     setError(null);
+    // El payload queda congelado aquí: lo que se capture mientras el PUT viaja sigue pendiente.
+    const settle = pending.beginSettle();
     try {
       await tramitesClient.putPrenda(instanceId, {
         decision,
@@ -382,6 +403,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
         acreedorDocumento: capturaAcreedor ? acreedorDocumento.trim() || null : null,
       });
       setSaved(true);
+      settle();
       onSaved?.();
       return true;
     } catch (err) {
@@ -396,7 +418,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     }
   };
 
-  useImperativeHandle(ref, () => ({ save: submit }));
+  useImperativeHandle(ref, () => ({ save: submit, hasPendingChanges: pending.hasPendingChanges }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -579,6 +601,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                   required
                   value={acreedorNombre}
                   onChange={(e) => {
+                    pending.markDirty();
                     setAcreedorNombre(e.target.value);
                     if (fieldErrors.nombre) setFieldErrors((f) => ({ ...f, nombre: undefined }));
                   }}
@@ -609,6 +632,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                   autoComplete="off"
                   value={acreedorDocumento}
                   onChange={(e) => {
+                    pending.markDirty();
                     setAcreedorDocumento(digitsOnly(e.target.value));
                     if (fieldErrors.documento) setFieldErrors((f) => ({ ...f, documento: undefined }));
                   }}
