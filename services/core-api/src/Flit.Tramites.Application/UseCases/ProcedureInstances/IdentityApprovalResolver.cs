@@ -38,11 +38,13 @@ internal static class IdentityApprovalResolver
             // la firma se resuelve por el documento del REPRESENTANTE LEGAL seleccionado (el sujeto de
             // identidad = tipoDoc/documento), no por el NIT. Solo actores jurídicos; las personas naturales
             // caen a los pasos 1/2. Null-safe: sin baúl habilitado devuelve null.
-            // HU #11661: el predicado de "actor jurídico" para la ruta del baúl es UNO
-            // (FirmaBaulCobertura.EsJuridico). La copia local que vivía aquí es la que ADR-0039 señala
-            // como la forma en que nació el Bug #11141: dos definiciones de la misma pregunta que
-            // divergen en cuanto una se actualiza y la otra no.
-            if (actor is not null && FirmaBaulCobertura.EsJuridico(actor.DocumentType)
+            // HU #11661/#11660: el predicado es UNO —FirmaBaulCobertura.Aplica— y además del tipo de
+            // documento tiene en cuenta el MECANISMO DE FIRMA elegido por el gestor (HU #11061). Sin
+            // esa segunda mitad, una parte con «sello de validación de identidad» seleccionado y firma
+            // de baúl vigente se daba por aprobada aquí, y el trámite se radicaba sin que la biométrica
+            // se hubiera hecho: el documento se firmaba con un sello que no existía. ADR-0039 prescribe
+            // literalmente este cambio y nombra el Bug #11141 como causa.
+            if (FirmaBaulCobertura.Aplica(actor)
                 && !string.IsNullOrWhiteSpace(tipoDoc) && !string.IsNullOrWhiteSpace(documento)
                 && await vault.ResolveAsync(instance.TenantId, tipoDoc.Trim(), documento.Trim(), ct) is not null)
             {
