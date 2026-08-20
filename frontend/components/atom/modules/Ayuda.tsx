@@ -16,7 +16,7 @@ export function Ayuda() {
         {[
           { l: "Chat en vivo", d: "Respuesta < 2 min", i: MessageCircle },
           { l: "Base de conocimiento", d: "+120 artículos", i: BookOpen },
-          { l: "Email soporte", d: "soporte@flit.io", i: Mail },
+          { l: "Email soporte", d: "soporte@flitsas.com", i: Mail },
           { l: "Soporte prioritario", d: "Plan Enterprise", i: LifeBuoy },
         ].map((k) => {
           const Icon = k.i;

@@ -38,7 +38,7 @@ public static class TramiteCambioEstadoEmailComposer
     private const string PqrsUrl = "https://usadosrentingcolombia.com";
     private const string RentingSupportEmail = "servicio@rentingcolombia.com";
     private const string PrivacyPolicyUrl = "https://flitsas.com/politica-de-privacidad";
-    private const string SupportEmail = "soporte@flit.com";
+    private const string SupportEmail = "soporte@flitsas.com";
 
     public const string DefaultHeaderFileName = "tramite-cambio-estado-header.png";
     public const string DefaultLogoFileName = "flit-logo.png";
