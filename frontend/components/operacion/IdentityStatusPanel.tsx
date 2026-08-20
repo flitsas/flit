@@ -1,12 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, AlertTriangle, Clock, XCircle } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Clock, Info, XCircle } from 'lucide-react';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
+import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { presentarMotivoNoEnvio } from './envio-validacion-motivos';
 import type {
   BiometricParte,
   BiometricValidation,
+  EnvioValidacionMotivo,
   IdentityValidationAlert,
   IdentityValidationAlertKind,
   ProcedureActor,
@@ -129,6 +132,9 @@ export function IdentityStatusPanel({
   const [actors, setActors] = useState<ProcedureActor[] | null>(null);
   const [validations, setValidations] = useState<BiometricValidation[] | null>(null);
   const [alerts, setAlerts] = useState<IdentityValidationAlert[] | null>(null);
+  // HU #11666 — motivos tipificados de no envío del estado biométrico (derivados al vuelo por el
+  // backend). Se refrescan con cada carga, igual que las validaciones.
+  const [motivos, setMotivos] = useState<EnvioValidacionMotivo[]>([]);
   const [wizardModalidad, setWizardModalidad] = useState<WizardModalidad | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -150,6 +156,7 @@ export function IdentityStatusPanel({
       setWizardModalidad(wizardRes?.modalidad ?? null);
       setActors(actorsRes);
       setValidations(biometricRes.validations);
+      setMotivos(biometricRes.motivosNoEnvio ?? []);
       setAlerts(alertsRes.alerts);
       loadedOnceRef.current = true;
     } catch (err) {
@@ -291,6 +298,14 @@ export function IdentityStatusPanel({
                 <AlertsBanner alerts={accionables} reminders={reminders} />
               )}
 
+              {/* HU #11666 — por qué no se envió la validación de identidad de una parte. Se lista
+                  junto a las alertas porque responde la misma pregunta del gestor («¿por qué este
+                  trámite no avanza?»), pero cada motivo conserva su naturaleza: los informativos
+                  no son alertas. */}
+              {motivos.map((m) => (
+                <MotivoNoEnvioRow key={`${m.parte}-${m.codigo}`} motivo={m} />
+              ))}
+
               {outcomes.length === 0 ? (
                 <p className="text-xs opacity-60">
                   Aún no hay aprobaciones ni rechazos registrados.
@@ -351,6 +366,37 @@ export function IdentityStatusPanel({
         </div>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * HU #11666 — una línea por motivo de no envío, con la misma división que la tarjeta del paso de
+ * identidad: bloqueo (se anuncia, hay algo que corregir) frente a información (ausencia legítima,
+ * tono neutro y sin sugerir corrección). El texto sale del mismo mapa de copy que la tarjeta, para
+ * que el gestor no lea dos explicaciones distintas del mismo código.
+ */
+function MotivoNoEnvioRow({ motivo }: { motivo: EnvioValidacionMotivo }) {
+  const parte = parteLabel(motivo.parte);
+  const copy = presentarMotivoNoEnvio(motivo.codigo, parte);
+  const bloqueo = !motivo.informativo && copy.naturaleza === 'bloqueo';
+  const { color, background, border } = INLINE_ALERT_TONES[bloqueo ? 'error' : 'info'];
+  const Icono = bloqueo ? AlertTriangle : Info;
+
+  return (
+    <div
+      className="flex items-start gap-2 rounded-xl border p-3 text-xs"
+      style={{ borderColor: border, background, color }}
+      role={bloqueo ? 'alert' : 'status'}
+      aria-live="polite"
+    >
+      <Icono className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <div className="space-y-0.5">
+        <p className="font-semibold">
+          {parte}: {copy.titulo}
+        </p>
+        <p>{copy.detalle}</p>
+      </div>
+    </div>
   );
 }
 
