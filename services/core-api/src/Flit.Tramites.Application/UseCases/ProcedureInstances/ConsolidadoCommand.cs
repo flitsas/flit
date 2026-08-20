@@ -243,7 +243,7 @@ public sealed class GenerarConsolidadoHandler(
 
         // HU #10857 — expediente con portada institucional (primera página) para todos los tipos.
         var mergeRequest = new MergeRequest(
-            Parts: ordered.Zip(pdfParts, (a, pdf) => new MergePart(pdf, DocumentLabels.Display(a.Tipo))).ToList(),
+            Parts: ordered.Zip(pdfParts, (a, pdf) => new MergePart(pdf, DocumentLabels.Display(a.Tipo), DocumentLabels.ProfileFor(a.Tipo))).ToList(),
             Cover: ExpedienteCoverInfoBuilder.FromInstance(instance, companiaRadicadora),
             EstadoTramite: instance.Status);
         var merged = merger.Compose(mergeRequest);
