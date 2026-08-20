@@ -78,7 +78,7 @@ public static class AsignacionPlacaEmailComposer
     private static string BuildFlitHtml(
         AsignacionPlacaEmailModel model, string estado, string assetsBaseUrl)
     {
-        var body = BuildSharedBody(model, estado);
+        var body = BuildSharedBody(model, estado, estadoColor: PrimaryBlue);
         var headerUrl = EncAttr(ResolveFlitHeaderUrl(assetsBaseUrl));
         var logoUrl = EncAttr(ResolveFlitLogoUrl(assetsBaseUrl));
         var support = Enc(FlitSupportEmail);
@@ -98,7 +98,9 @@ public static class AsignacionPlacaEmailComposer
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" class=\"placa-bg\" bgcolor=\"#ffffff\" style=\"max-width:640px;margin:0 auto;background-color:#ffffff !important;\">");
         sb.Append("<tr><td style=\"padding:0;\"><img src=\"").Append(headerUrl)
             .Append("\" alt=\"FLIT\" width=\"640\" style=\"display:block;width:100%;max-width:640px;height:auto;border:0;\"/></td></tr>");
-        sb.Append("<tr><td style=\"padding:24px 28px 8px;font-family:Arial,Helvetica,sans-serif;color:")
+        sb.Append("<tr><td style=\"padding:28px 28px 8px;text-align:center;\"><h1 style=\"margin:0;font-size:20px;letter-spacing:0.02em;color:")
+            .Append(PrimaryBlue).Append(";\">¡NOTIFICACIÓN ASIGNACIÓN DE PLACA!</h1></td></tr>");
+        sb.Append("<tr><td style=\"padding:16px 28px 8px;font-family:Arial,Helvetica,sans-serif;color:")
             .Append(Ink).Append(";font-size:14px;line-height:1.5;\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">");
         sb.Append(body);
@@ -122,7 +124,7 @@ public static class AsignacionPlacaEmailComposer
     private static string BuildRentingHtml(
         AsignacionPlacaEmailModel model, string estado, string assetsBaseUrl)
     {
-        var body = BuildSharedBody(model, estado);
+        var body = BuildSharedBody(model, estado, estadoColor: null);
         var headerUrl = EncAttr(ResolveRentingHeaderUrl(assetsBaseUrl));
         var footerUrl = EncAttr(ResolveRentingFooterUrl(assetsBaseUrl));
         var support = Enc(RentingSupportEmail);
@@ -182,7 +184,7 @@ public static class AsignacionPlacaEmailComposer
         return sb.ToString();
     }
 
-    private static string BuildSharedBody(AsignacionPlacaEmailModel model, string estado)
+    private static string BuildSharedBody(AsignacionPlacaEmailModel model, string estado, string? estadoColor)
     {
         var cliente = Enc(model.ClienteNombre);
         var placa = Enc(model.Placa);
@@ -212,8 +214,18 @@ public static class AsignacionPlacaEmailComposer
                 .Append(Enc(model.SecretariaTransito)).Append("</td></tr>");
         }
 
-        sb.Append("<tr><td style=\"padding:0 0 20px;\">Estado Actual: <strong>")
-            .Append(estadoEnc).Append("</strong></td></tr>");
+        if (HasText(estadoColor))
+        {
+            sb.Append("<tr><td style=\"padding:0 0 20px;\"><strong style=\"color:")
+                .Append(estadoColor).Append(";\">Estado Actual:</strong> <span style=\"color:")
+                .Append(estadoColor).Append(";font-weight:700;\">")
+                .Append(estadoEnc).Append("</span></td></tr>");
+        }
+        else
+        {
+            sb.Append("<tr><td style=\"padding:0 0 20px;\">Estado Actual: <strong>")
+                .Append(estadoEnc).Append("</strong></td></tr>");
+        }
         sb.Append("<tr><td style=\"padding:0 0 20px;\">Le informamos que, como comprador, debe adquirir el SOAT (Seguro Obligatorio de Accidentes de Tránsito) para continuar con el trámite.</td></tr>");
         sb.Append("<tr><td style=\"padding:0 0 20px;\">Nuestro compromiso es asegurar un proceso sin contratiempos. Les proporcionaremos cualquier novedad y estamos disponibles para responder sus preguntas a través de nuestros canales de contacto.</td></tr>");
         return sb.ToString();
