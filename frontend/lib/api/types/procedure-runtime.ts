@@ -1197,6 +1197,28 @@ export interface BiometricValidationsResponse {
    * una validación biométrica. Se rotulan como «firmado desde el baúl»: no hay certificado que mostrar.
    */
   firmaBaulPartes?: string[] | null;
+  /**
+   * HU #11665 — por qué NO se envió la validación de identidad a una parte jurídica. Derivado al
+   * vuelo por el backend (`EnvioValidacionBloqueoRules`), nunca persistido: desaparece en cuanto el
+   * gestor corrige el dato. `null`/ausente cuando no hay ningún motivo que reportar.
+   */
+  motivosNoEnvio?: EnvioValidacionMotivo[] | null;
+}
+
+/**
+ * HU #11665 — motivo tipificado de no envío, por parte (espejo de `EnvioValidacionMotivoDto`).
+ *
+ * `codigo` se deja como `string` a propósito: el backend puede tipificar un motivo nuevo antes de
+ * que esta pantalla lo conozca y eso no debe romper el tipado ni la vista (ver
+ * `presentarMotivoNoEnvio`). `informativo: true` NO es un fallo — explica una ausencia legítima
+ * (la parte ya está cubierta) y la UI no debe pintarlo como bloqueo.
+ */
+export interface EnvioValidacionMotivo {
+  /** Rol de la parte: `comprador` | `vendedor`. */
+  parte: string;
+  /** Código estable del motivo (`proveedor_no_envia`, `rl_sin_documento`, …). */
+  codigo: string;
+  informativo: boolean;
 }
 
 export interface LinkedProcedureRef {

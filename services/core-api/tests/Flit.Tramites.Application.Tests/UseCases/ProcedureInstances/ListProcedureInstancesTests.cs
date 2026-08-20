@@ -1,4 +1,4 @@
-using Flit.Tramites.Application.UseCases.ProcedureInstances;
+﻿using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
@@ -575,17 +575,20 @@ public sealed class ListProcedureInstancesTests
     [Fact]
     public async Task Firmado_FirmaDelBaulVigente_EsFirmado()
     {
+        // Bug #11670: el baúl solo acredita a un actor JURÍDICO (y sin mecanismo de firma que lo
+        // excluya). Con cédula, la misma llave vigente se ignora —caso cubierto en
+        // ColumnaFirmadoMecanismoFirmaTests—.
         var ct = TestContext.Current.CancellationToken;
         var tenant = Guid.NewGuid();
         var instance = Traspaso(tenant);
-        instance.Actors.Add(Actor("vendedor", doc: "111"));
+        instance.Actors.Add(Actor("vendedor", tipoDoc: "NIT", doc: "111"));
         instance.Actors.Add(Actor("comprador", doc: "222"));
         _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
         _repo.ListFirmaBaulVigenciaKeysAsync(
                 Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), ct)
             .Returns(new Dictionary<string, bool>
             {
-                [BiometricRules.IdentidadKey(tenant, "CC", "111")] = true,
+                [BiometricRules.IdentidadKey(tenant, "NIT", "111")] = true,
             });
 
         var result = await _sut.HandleAsync(tenant, ct);
@@ -601,13 +604,13 @@ public sealed class ListProcedureInstancesTests
         var ct = TestContext.Current.CancellationToken;
         var tenant = Guid.NewGuid();
         var instance = Traspaso(tenant);
-        instance.Actors.Add(Actor("vendedor", doc: "111"));
+        instance.Actors.Add(Actor("vendedor", tipoDoc: "NIT", doc: "111"));
         _repo.ListWithSummaryGraphAsync(Arg.Any<Guid?>(), Arg.Any<int>(), ct).Returns([instance]);
         _repo.ListFirmaBaulVigenciaKeysAsync(
                 Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), ct)
             .Returns(new Dictionary<string, bool>
             {
-                [BiometricRules.IdentidadKey(tenant, "CC", "111")] = false,
+                [BiometricRules.IdentidadKey(tenant, "NIT", "111")] = false,
             });
 
         var result = await _sut.HandleAsync(tenant, ct);

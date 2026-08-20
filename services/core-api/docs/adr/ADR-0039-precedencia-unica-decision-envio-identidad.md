@@ -1,8 +1,10 @@
 # ADR-0039: Precedencia única de decisión de envío de validación de identidad
 
 **Fecha**: 2026-08-05
-**Status**: Propuesto
-**Deciders**: Líder Técnico FLIT, equipo core-api, equipo tramites
+**Status**: Aceptado
+**Fecha de aceptación**: 2026-08-20
+**Status previo**: Propuesto (2026-08-05)
+**Deciders**: Juan Felipe Montoya Garcia (Líder Técnico) — aceptado 2026-08-20; equipo core-api, equipo tramites
 **Tags**: arquitectura, backend, frontend, seguridad, identidad, tramites, feature-11260
 **Supersedes**: —
 **Relacionado**: `ADR-0025-baul-firmas-custodia-y-consumo.md` (Aceptado), `ADR-0034-validacion-identidad-admin-desacoplada.md` (Aceptado), `ADR-0030-persona-entidad-tenant-prevalidacion.md` (Propuesto)

@@ -786,6 +786,21 @@ export function TramiteWizard(props: Props) {
   };
 
   /**
+   * HU #11666 — acción correctiva de los motivos de no envío de la validación de identidad
+   * (`rl_sin_documento`, `rl_sin_correo`, `sujeto_no_es_representante`): lleva al paso de actores de
+   * ESA parte, que es donde se capturan los datos del representante legal. En traspaso vendedor y
+   * comprador son pasos distintos del servidor (se unifican solo en el rótulo del asistente), así
+   * que se busca por la clave del rol; en matrícula inicial solo existe `comprador`. Si ninguna
+   * clave aparece —flujo sin paso de actores— no se navega a ciegas.
+   */
+  const irAPasoActor = (parte: BiometricParte) => {
+    const index = steps.findIndex((s) => s.key === parte);
+    const destino =
+      index >= 0 ? index : steps.findIndex((s) => s.key === 'comprador' || s.key === 'vendedor');
+    if (destino >= 0) goToStep(destino);
+  };
+
+  /**
    * Salida de emergencia del paso cuyo guardado falla (observación de code review, Bug #11614).
    * NO reintenta guardar: cambia de paso a sabiendas de que lo capturado en el formulario se pierde
    * al desmontarse. Solo se ofrece tras un fallo explícito y siempre nombrando el destino, para que
@@ -1525,6 +1540,7 @@ export function TramiteWizard(props: Props) {
                 stepFormRef={stepFormRef}
                 prendaFormRef={prendaFormRef}
                 onActorsConsultationGateChange={setActorsConsultationReady}
+                onIrAActores={irAPasoActor}
                 identityOperable={draftFinalized}
                 identityApproved={identityApproved}
                 vaultCoveredPartes={vaultCoveredPartes}
@@ -3504,6 +3520,7 @@ function StepBody({
   stepFormRef,
   prendaFormRef,
   onActorsConsultationGateChange,
+  onIrAActores,
   identityOperable = false,
   identityApproved = false,
   vaultCoveredPartes = [],
@@ -3553,6 +3570,8 @@ function StepBody({
   prendaFormRef: RefObject<WizardStepFormHandle | null>;
   /** Gate Continuar en pasos de actores (consulta RUNT/RUES exitosa). */
   onActorsConsultationGateChange?: (ready: boolean) => void;
+  /** HU #11666 — navega al paso de actores de una parte (acción correctiva de los motivos de no envío). */
+  onIrAActores?: (parte: BiometricParte) => void;
   /** FEATURE 05 — el RNMC aplica al trámite: los actores muestran la fecha de expedición. */
   rnmcEnabled?: boolean;
   /** Migración V1→V2 — el trámite viene de V1; el paso de consulta lo explica en el pre-vuelo. */
@@ -3738,6 +3757,7 @@ function StepBody({
           heading="Identidad"
           headingSubtitle={STEP_SUBTITLE.identidad}
           vaultCoveredPartes={vaultCoveredPartes}
+          onIrAActores={onIrAActores}
         />
       );
       // Borrador finalizado: reabre la captura SOLO para la biométrica (provider readOnly=false).

@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -110,22 +112,17 @@ public sealed class PutActorsHandler(
     BiometricsProviderOptions providerOptions,
     IniciarKyverumVerifyHandler kyverumHandler,
     IPersonDataConsentRepository consentRepo,
-    IRepresentanteLegalDirectory? representanteDirectory = null,
-    ISignatureVaultPolicy? vaultPolicy = null)
+    ISignatureVaultPolicy? vaultPolicy = null,
+    ILogger<PutActorsHandler>? logger = null)
 {
-    // HU #11195 — directorio de representantes de Admin. Default inerte (responde SIEMPRE "sí tiene
-    // representante utilizable") para que los tests que no ejercitan la compuerta conserven el
-    // comportamiento previo: el default seguro es no enviar de más.
-    private readonly IRepresentanteLegalDirectory _representanteDirectory =
-        representanteDirectory ?? NullRepresentanteLegalDirectory.Instance;
+    // HU #11665 — traza del disparador de identidad. Default inerte para no obligar a los tests que no
+    // la ejercitan a inyectarlo. NUNCA se loguea PII: ni correo, ni documento, ni nombre.
+    private readonly ILogger _logger = logger ?? NullLogger<PutActorsHandler>.Instance;
 
-    // Baúl de firmas: hace falta para no pedirle una validación de identidad a quien ya tiene con qué
-    // firmar. Default inerte (nunca resuelve firma) ⇒ los tests que no lo inyectan conservan su
-    // comportamiento.
+    // Baúl de firmas: lo consume el reenvío por cambio de correo (HU #10880), que no puede expirar la
+    // validación en curso de una parte que va a firmar con el baúl. Default inerte (nunca resuelve
+    // firma) ⇒ los tests que no lo inyectan conservan su comportamiento.
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
-
-    // Colombia no tiene horario de verano: UTC-5 fijo (coherente con BiometricRules / el baúl).
-    private static readonly TimeSpan ColombiaUtcOffset = TimeSpan.FromHours(-5);
 
     // Documentos válidos del contrato congelado (front consume el mismo set).
     private static readonly HashSet<string> ValidDocumentTypes =
@@ -302,71 +299,81 @@ public sealed class PutActorsHandler(
         // IniciarKyverumVerifyHandler recargue la instancia.
         await ResendIdentityOnEmailChangeAsync(instance, tenantId, previousSubjectsByRol, newActorsByRol, ct);
 
-        // HU #11195: compuerta del NIT sin representante utilizable. Corre DESPUÉS del reenvío por cambio
-        // de correo para que, si ese ya creó una validación nueva, esta compuerta la vea activa y no
-        // duplique el envío.
-        await EnviarValidacionSiElNitNoTieneRepresentanteUtilizableAsync(instance, tenantId, newActorsByRol, ct);
+        // HU #11662: validación de identidad del representante legal de una parte jurídica. Corre DESPUÉS
+        // del reenvío por cambio de correo para que, si ese ya creó una validación nueva, la precedencia
+        // río abajo la vea en vuelo y no duplique el envío.
+        await EnviarValidacionAlRepresentanteDeLaParteJuridicaAsync(instance, tenantId, newActorsByRol, ct);
 
         return (ToResponse(instance), null);
     }
 
     /// <summary>
-    /// HU #11195 — al registrar el actor, si la parte es una empresa (NIT) cuya compañía NO tiene un
-    /// representante utilizable en el directorio (registrado, con escritura vigente y con firma o
-    /// identidad vigente), se dispara la validación de identidad del <b>representante legal declarado en
-    /// el trámite</b>. Sin esta compuerta el gestor se quedaba sin salida: el trámite exige la firma de
-    /// alguien que la configuración de la compañía no puede aportar, y nadie le pedía a esa persona que
-    /// validara su identidad.
+    /// HU #11195/#11662 — al registrar el actor, si la parte es una persona jurídica se encamina la
+    /// validación de identidad del <b>representante legal declarado en el trámite</b>. Sin este
+    /// disparador el gestor se quedaba sin salida: el trámite exige la firma de alguien a quien nadie le
+    /// había pedido validar su identidad.
+    ///
+    /// <para><b>Aquí solo se filtran DATOS, no se decide el envío.</b> Lo que queda es: proveedor
+    /// Kyverum, actor jurídico, y un sujeto que sea el representante legal con tipo y número de documento
+    /// y correo. Si falta cualquiera de esos, no hay a quién escribirle ni a quién validar (el NIT no es
+    /// validable biométricamente) y se omite, igual que hace <c>EnsureIdentityHandler</c> con
+    /// <c>sin_actor</c>.</para>
+    ///
+    /// <para><b>Por qué ya no hay compuertas de negocio (HU #11662).</b> Este método llegó a descartar
+    /// envíos por su cuenta —cobertura del baúl, y si la COMPAÑÍA tenía algún representante utilizable en
+    /// el directorio—. Lo segundo respondía por la empresa y no por la persona elegida para este trámite:
+    /// bastaba que otro representante acreditado tuviera firma para que al representante elegido no le
+    /// llegara nada, dejando el trámite sin identidad y sin vía para conseguirla. Y ambas comprobaciones
+    /// eran redundantes: <see cref="IniciarKyverumVerifyHandler"/> evalúa río abajo la precedencia única
+    /// de envío (ADR-0039: baúl → identidad vigente → validación en vuelo → enviar), de la cual la
+    /// cobertura del baúl es literalmente el primer paso. Un prechequeo solo puede suprimir envíos
+    /// legítimos; nunca añade uno que la precedencia no fuera a hacer.</para>
     ///
     /// <para><b>Por qué la validación del trámite y no <c>POST identity/send</c> de Admin:</b> ese
     /// endpoint exige un representante YA REGISTRADO en el directorio, que es justo lo que no existe en
-    /// el caso principal (AC1). El RL vive declarado en <c>actor.metadata</c>, así que se usa la misma
+    /// el caso principal. El RL vive declarado en <c>actor.metadata</c>, así que se usa la misma
     /// maquinaria que el reenvío por cambio de correo (HU #10880) sobre el sujeto de identidad de la
     /// parte. La validación queda en el trámite y los gates de identidad la ven.</para>
     ///
-    /// <para><b>AC3:</b> con representante completo no se envía nada. <b>AC4:</b> las personas naturales
-    /// ni siquiera entran (la compuerta solo mira actores jurídicos). Si el RL declarado no trae
-    /// documento, no hay a quién validar biométricamente (el NIT no es validable) y se omite, igual que
-    /// hace <c>EnsureIdentityHandler</c> con <c>sin_actor</c>.</para>
+    /// <para>Las personas naturales ni siquiera entran. Solo actúa con Kyverum: el proveedor mock no
+    /// emite CaptureUrl ni envía correos, mismo criterio que
+    /// <see cref="ResendIdentityOnEmailChangeAsync"/>.</para>
     ///
-    /// <para>Solo actúa con Kyverum: el proveedor mock no emite CaptureUrl ni envía correos, mismo
-    /// criterio que <see cref="ResendIdentityOnEmailChangeAsync"/>.</para>
+    /// <para><b>HU #11665 — ninguna omisión es muda.</b> Cada salida sin envío deja un motivo tipificado
+    /// (<see cref="EnvioValidacionBloqueoRules"/>) en un log de negocio, y el listado de biometría
+    /// publica el mismo código calculado con la misma regla. El motivo no se persiste: se deriva del
+    /// estado, así que desaparece solo en cuanto el gestor corrige el dato.</para>
     /// </summary>
-    private async Task EnviarValidacionSiElNitNoTieneRepresentanteUtilizableAsync(
+    private async Task EnviarValidacionAlRepresentanteDeLaParteJuridicaAsync(
         ProcedureInstance instance,
         Guid tenantId,
         Dictionary<ParteRol, ProcedureInstanceActor> newActorsByRol,
         CancellationToken ct)
     {
-        if (!providerOptions.IsKyverum)
-            return;
-
-        var hoy = DateOnly.FromDateTime(DateTimeOffset.UtcNow.ToOffset(ColombiaUtcOffset).Date);
-
         foreach (var (rol, actor) in newActorsByRol)
         {
-            if (!ActorPersonTypes.IsJuridical(actor.PersonType))
-                continue; // AC4: persona natural, sin cambios.
-
             var subject = IdentitySubjectResolver.For(actor);
-            if (!subject.EsRepresentanteLegal
-                || string.IsNullOrWhiteSpace(subject.NumeroDocumento)
-                || string.IsNullOrWhiteSpace(subject.TipoDocumento)
-                || string.IsNullOrWhiteSpace(subject.Email))
-                continue; // RL sin documento o sin correo: no hay a quién enviarle la validación.
 
-            // El sujeto de ESTE trámite ya puede firmar: no hay nada que validar.
-            if (await LaFirmaDelBaulYaCubreAsync(tenantId, actor, subject, ct))
+            // HU #11665 — el filtrado de datos vive en la regla compartida, no en una condición
+            // compuesta local. Las tres omisiones por datos incompletos eran UN SOLO `continue`, así
+            // que ni el código sabía cuál de las tres había ocurrido; y el corte por proveedor mock
+            // hacía `return` del método entero, con lo que las partes siguientes ni se miraban.
+            var estado = EnvioValidacionBloqueoRules.EstadoDe(actor, subject, providerOptions.IsKyverum);
+            if (!estado.ActorEsJuridico)
+                continue; // Persona natural: no entra al disparador y no reporta motivo.
+
+            var motivo = EnvioValidacionBloqueoRules.Evaluar(estado);
+            if (motivo is not null)
+            {
+                PutActorsLog.ValidacionNoEnviada(_logger, instance.Id, RolToCode(rol), motivo.Codigo);
                 continue;
+            }
 
-            var utilizable = await _representanteDirectory
-                .TieneRepresentanteUtilizableAsync(tenantId, actor.DocumentNumber, hoy, ct);
-            if (utilizable)
-                continue; // AC3.
-
-            // El handler es idempotente por parte: si ya hay una validación activa devuelve
-            // "biometria_activa" y no crea otra. Ese error se ignora a propósito.
-            await kyverumHandler.HandleAsync(
+            // Quién decide si de verdad se envía: el handler, que evalúa la precedencia única
+            // (ADR-0039). Si la persona ya está cubierta por el baúl, ya tiene identidad vigente o ya
+            // tiene una validación en vuelo, devuelve la decisión y no crea nada. De ESA decisión —no
+            // de un pre-chequeo local, que la HU #11662 retiró— salen los motivos informativos.
+            var (_, _, conflicto) = await kyverumHandler.HandleAsync(
                 instance.Id,
                 tenantId,
                 new IniciarBiometriaInput(
@@ -376,6 +383,10 @@ public sealed class PutActorsHandler(
                     subject.NumeroDocumento!,
                     subject.Email!),
                 ct);
+
+            var informativo = EnvioValidacionBloqueoRules.DesdeDecision(conflicto);
+            if (informativo is not null)
+                PutActorsLog.ValidacionNoEnviada(_logger, instance.Id, RolToCode(rol), informativo.Codigo);
         }
     }
 
@@ -504,18 +515,19 @@ public sealed class PutActorsHandler(
     /// ¿La firma del baúl ya cubre a esta parte, de modo que pedirle una validación de identidad sería
     /// pedirle algo que no necesita?
     ///
-    /// <para><b>Por qué hace falta.</b> El Bug #11141 fijó que el mecanismo de firma elegido por el
-    /// gestor es la única fuente de verdad, y lo aplicó a la vista y al documento. Las rutas que
-    /// disparan el correo de validación se quedaron sin enterarse: con «Firma del baúl» seleccionada y
-    /// firma vigente, al representante le seguía llegando un correo para validar identidad que nadie
-    /// iba a usar. Peor aún, el correo se disparaba también cuando el representante SÍ tenía firma
-    /// vigente pero su compañía no tenía escritura vigente, porque la compuerta de la HU #11195
-    /// pregunta por la COMPAÑÍA y no por la persona que va a firmar este trámite.</para>
+    /// <para>Lo consume el <b>reenvío por cambio de correo</b> (HU #10880), y ahí no es redundante con
+    /// la precedencia única: antes de llamar al handler, ese camino EXPIRA la validación en curso. Sin
+    /// esta comprobación, corregirle el correo a una parte que va a firmar con el baúl le tumbaría una
+    /// validación que el gestor inició a propósito.</para>
     ///
     /// <para>Se comprueban las dos cosas: que la firma del baúl proceda para esta parte
     /// (<see cref="FirmaBaulCobertura.Aplica"/>, que es el predicado único del Bug #11141 e incluye el
     /// mecanismo elegido) y que exista de verdad. Sin firma real no basta con haberla elegido: ahí la
     /// validación de identidad sigue siendo la única salida.</para>
+    ///
+    /// <para><b>HU #11662:</b> el disparador de la parte jurídica ya NO lo usa. Ahí sí era redundante —
+    /// la cobertura del baúl es el primer paso de la precedencia que evalúa
+    /// <see cref="IniciarKyverumVerifyHandler"/>— y solo servía para suprimir envíos legítimos.</para>
     /// </summary>
     private async Task<bool> LaFirmaDelBaulYaCubreAsync(
         Guid tenantId, ProcedureInstanceActor actor, IdentitySubject subject, CancellationToken ct)
@@ -654,4 +666,17 @@ public sealed class GetActorsHandler(IProcedureInstanceRepository repo)
 
         return (PutActorsHandler.ToResponse(instance), null);
     }
+}
+
+/// <summary>
+/// Logging source-generated (CA1848) del disparador de validación de identidad (HU #11665).
+/// <b>Sin PII (Ley 1581):</b> solo el id de la instancia, el rol de la parte y el código del motivo.
+/// Ni correo, ni número de documento, ni nombre del representante.
+/// </summary>
+internal static partial class PutActorsLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se envió la validación de identidad a la parte {Parte} del trámite {InstanceId}: {Motivo}.")]
+    public static partial void ValidacionNoEnviada(
+        ILogger logger, Guid instanceId, string? parte, string motivo);
 }

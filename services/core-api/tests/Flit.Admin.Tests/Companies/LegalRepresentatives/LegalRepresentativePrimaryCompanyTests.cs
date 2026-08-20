@@ -224,6 +224,10 @@ public sealed class LegalRepresentativePrimaryCompanyTests
         public Task<SignatureVaultAggregate?> FindActiveByDocumentAsync(Guid tenantId, string documentType, string documentNumber, CancellationToken cancellationToken = default) =>
             Task.FromResult<SignatureVaultAggregate?>(null);
 
+        public Task<SignatureVaultAggregate?> FindActiveByNumberAsync(
+            Guid tenantId, string documentNumber, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SignatureVaultAggregate?>(null);
+
         public Task<IReadOnlyList<SignatureVaultItem>> ListByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<SignatureVaultItem>>([]);
 

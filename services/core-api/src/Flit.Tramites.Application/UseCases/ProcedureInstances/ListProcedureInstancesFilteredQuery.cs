@@ -123,7 +123,7 @@ public sealed class ListProcedureInstancesFilteredHandler(IProcedureInstanceRepo
         var items = instances
             .Select(e => ListProcedureInstancesHandler.ToSummary(
                 e,
-                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now),
+                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
                 nombres.GetValueOrDefault(e.TenantId),
                 gestores.GetValueOrDefault(e.CreatedByUserId),
                 firmaBaul))
