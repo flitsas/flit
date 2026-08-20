@@ -18,10 +18,13 @@ import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { WizardCardHeader } from './wizard-atoms';
 import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
+import { motivoDeParte, presentarMotivoNoEnvio } from './envio-validacion-motivos';
+import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import type {
   BiometricEstado,
   BiometricParte,
   BiometricValidation,
+  EnvioValidacionMotivo,
   MecanismoFirma,
   ProcedureActor,
   WizardModalidad,
@@ -67,6 +70,14 @@ interface Props {
    * En su propio paso (`onlyPartes` ausente / `heading` presente) esta prop no se usa.
    */
   embedded?: boolean;
+  /**
+   * HU #11666 — lleva al gestor al paso de actores de esa parte para completar los datos del
+   * representante legal. Es la acción correctiva de los motivos de no envío que SÍ dependen de él
+   * (`rl_sin_documento`, `rl_sin_correo`, `sujeto_no_es_representante`). Ausente cuando el paso se
+   * embebe fuera del asistente (resumen del trámite): entonces el aviso explica el motivo pero no
+   * ofrece un botón que no podría navegar a ninguna parte.
+   */
+  onIrAActores?: (parte: BiometricParte) => void;
 }
 
 /**
@@ -234,6 +245,7 @@ export function BiometricStep({
   headingSubtitle,
   vaultCoveredPartes = [],
   embedded = false,
+  onIrAActores,
 }: Props) {
   const partes = onlyPartes?.length
     ? partesFor(modalidad).filter((p) => onlyPartes.includes(p))
@@ -246,6 +258,9 @@ export function BiometricStep({
   // Partes cubiertas por el baúl según el BACKEND. Se consulta en vez de depender solo de la prop
   // porque esta última solo existe durante el registro; al reabrir el trámite llegaba vacía.
   const [firmaBaulServidor, setFirmaBaulServidor] = useState<string[]>([]);
+  // HU #11666 — motivos tipificados de NO envío por parte. El backend los calcula al vuelo, así que
+  // llegan y desaparecen con cada refresco: nunca se acumulan en este estado.
+  const [motivosNoEnvio, setMotivosNoEnvio] = useState<EnvioValidacionMotivo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Actores del trámite: solo se usan para el recuadro "quién es la persona" cuando una parte
@@ -280,6 +295,7 @@ export function BiometricStep({
       setValidations(state.validations);
       setProvider(state.provider);
       setFirmaBaulServidor(state.firmaBaulPartes ?? []);
+      setMotivosNoEnvio(state.motivosNoEnvio ?? []);
       setError(() => null);
       return state;
     } catch (err) {
@@ -397,6 +413,8 @@ export function BiometricStep({
             vaultCovered={
               firmaBaulServidor.includes(parte) || vaultCoveredPartes.includes(parte)
             }
+            motivoNoEnvio={motivoDeParte(motivosNoEnvio, parte)}
+            onIrAActores={onIrAActores}
             onChanged={() => void handleRefresh()}
             embedded={embedded}
           />
@@ -491,6 +509,8 @@ function ParteBlock({
   actor,
   historial,
   vaultCovered,
+  motivoNoEnvio,
+  onIrAActores,
   onChanged,
   embedded = false,
 }: {
@@ -501,6 +521,8 @@ function ParteBlock({
   actor: ProcedureActor | null;
   historial: BiometricValidation[];
   vaultCovered: boolean;
+  motivoNoEnvio: EnvioValidacionMotivo | null;
+  onIrAActores?: (parte: BiometricParte) => void;
   onChanged: () => void;
   embedded?: boolean;
 }) {
@@ -531,6 +553,8 @@ function ParteBlock({
             actor={actor}
             historial={historial}
             vaultCovered={vaultCovered}
+            motivoNoEnvio={motivoNoEnvio}
+            onIrAActores={onIrAActores}
             onChanged={onChanged}
             embedded={embedded}
           />
@@ -617,6 +641,8 @@ function ParteCard({
   actor,
   historial,
   vaultCovered,
+  motivoNoEnvio,
+  onIrAActores,
   onChanged,
   embedded = false,
 }: {
@@ -630,6 +656,9 @@ function ParteCard({
   /** CF-08 (Feature #11004, HU #11009) — todas las validaciones de la parte, orden cronológico. */
   historial: BiometricValidation[];
   vaultCovered: boolean;
+  /** HU #11666 — motivo tipificado de no envío de ESTA parte; `null` cuando no hay ninguno. */
+  motivoNoEnvio: EnvioValidacionMotivo | null;
+  onIrAActores?: (parte: BiometricParte) => void;
   onChanged: () => void;
   embedded?: boolean;
 }) {
@@ -662,6 +691,18 @@ function ParteCard({
           vistas de estado — se está validando la identidad DE ALGUIEN y ese alguien debe verse
           siempre. */}
       <PartyIdentityBox parte={parte} validation={validation} actor={actor} />
+
+      {/* HU #11666 — por qué no salió la validación de identidad de esta parte. Va ANTES de la
+          vista de estado: es la explicación de lo que el gestor está a punto de leer ("Sin
+          iniciar" sin motivo aparente). Si no hay motivo no se pinta nada — una parte sin
+          incidencias se ve exactamente igual que antes de esta HU. */}
+      {motivoNoEnvio && (
+        <MotivoNoEnvioAviso
+          parte={parte}
+          motivo={motivoNoEnvio}
+          onIrAActores={onIrAActores}
+        />
+      )}
 
       {/* HU #10646 — actor jurídico (NIT) cubierto por la firma del baúl: la identidad ya está
           satisfecha server-side; se presenta como firma electrónica y se omite toda la biométrica. */}
@@ -720,6 +761,70 @@ function ParteCard({
       {/* CF-08 (Feature #11004, HU #11009) — historial completo de la parte (ya NO se limita a
           matches[matches.length-1]); no aplica a la cobertura por baúl (no hay biométrica que auditar). */}
       {!vaultCovered && <HistorialValidaciones historial={historial} vigenteId={validation?.id ?? null} />}
+    </div>
+  );
+}
+
+/**
+ * HU #11666 — aviso del motivo por el que NO se envió la validación de identidad de una parte.
+ *
+ * El gestor veía la tarjeta en "Sin iniciar" sin ninguna explicación: ni el propio código sabía
+ * cuál de las omisiones había ocurrido (HU #11665). Aquí se pinta el motivo tipificado que el
+ * backend calcula al vuelo, con dos tratamientos distintos:
+ *
+ *  • BLOQUEO (`informativo: false`): tono de alerta, se anuncia a lectores de pantalla y —cuando
+ *    depende del gestor— ofrece la acción que lleva al paso de actores. `proveedor_no_envia` es la
+ *    excepción: es una condición del ambiente y NO se le ofrece corrección, porque no la tiene.
+ *  • INFORMACIÓN (`informativo: true`): tono neutro, sin sugerir corrección. No es un error —
+ *    `cubierto_por_baul` y `representante_utilizable` explican una ausencia legítima.
+ *
+ * El significado nunca depende solo del color (WCAG 2.1 AA, 1.4.1): el título nombra la situación
+ * y el icono es decorativo.
+ */
+function MotivoNoEnvioAviso({
+  parte,
+  motivo,
+  onIrAActores,
+}: {
+  parte: BiometricParte;
+  motivo: EnvioValidacionMotivo;
+  onIrAActores?: (parte: BiometricParte) => void;
+}) {
+  const copy = presentarMotivoNoEnvio(motivo.codigo, PARTE_LABEL[parte]);
+  // El flag del backend manda sobre el mapa local: si tipifica un motivo nuevo como informativo,
+  // no debe pintarse como bloqueo por no estar todavía en el `switch` del copy.
+  const bloqueo = !motivo.informativo && copy.naturaleza === 'bloqueo';
+  const { color, background, border, Icon } = INLINE_ALERT_TONES[bloqueo ? 'error' : 'info'];
+  const ofreceAccion = bloqueo && copy.accion === 'actores' && typeof onIrAActores === 'function';
+
+  return (
+    <div
+      // `alert` + `aria-live="polite"`: el aviso aparece al cargar el paso, no interrumpe una
+      // acción en curso, así que no debe cortar la lectura del gestor.
+      role={bloqueo ? 'alert' : 'status'}
+      aria-live="polite"
+      className="mb-3 flex items-start gap-3 rounded-xl p-3"
+      style={{ background, border: `1px solid ${border}` }}
+    >
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color }} aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold" style={{ color }}>
+          {copy.titulo}
+        </p>
+        <p className="mt-0.5 text-xs leading-relaxed" style={{ color }}>
+          {copy.detalle}
+        </p>
+        {ofreceAccion && (
+          <button
+            type="button"
+            onClick={() => onIrAActores?.(parte)}
+            className="mt-2 inline-flex items-center rounded-xl border px-3 py-1.5 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            style={{ borderColor: color, color }}
+          >
+            {copy.accionLabel}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-using Flit.Tramites.Domain.Entities;
+﻿using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
@@ -115,8 +115,10 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
 
         // Ajuste del PO sobre HU #11056 — las columnas "Firmado" acreditan por identidad O por firma del
-        // baúl, y tienen que distinguir «baúl vigente» de «baúl vencido». La ruta de lote de la identidad
-        // no consulta el baúl a propósito (evitar N+1), así que se trae en su propia consulta única.
+        // baúl, y tienen que distinguir «baúl vigente» de «baúl vencido». UNA consulta para todos los
+        // tenants del listado, con la MISMA llave que la identidad (tenant|TIPO|NÚMERO).
+        // HU #11667 — ese mismo diccionario alimenta ahora la acreditación por baúl de los chips: sin él,
+        // el chip contradecía al gate de radicación y al FUR. Pasarlo no cuesta ninguna consulta.
         var hoy = DateOnly.FromDateTime(now.ToOffset(ColombiaUtcOffset).DateTime);
         IReadOnlyDictionary<string, bool> firmaBaul = await repo.ListFirmaBaulVigenciaKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), hoy, ct) ?? EmptyFirmaBaul;
@@ -124,7 +126,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         return instances
             .Select(e => ToSummary(
                 e,
-                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now),
+                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
                 nombres.GetValueOrDefault(e.TenantId),
                 gestores.GetValueOrDefault(e.CreatedByUserId),
                 firmaBaul))
@@ -214,6 +216,21 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
     ///   <item><b>pendiente</b> — no hay nada hecho todavía.</item>
     /// </list>
     /// <c>null</c> = NO APLICA: la parte no existe en esta modalidad (el vendedor en matrícula inicial).
+    ///
+    /// <para><b>Bug #11670 — el baúl solo cuenta si <see cref="FirmaBaulCobertura.Aplica"/> lo permite.</b>
+    /// Esta columna resolvía el baúl por su cuenta: bastaba con encontrar la llave de la persona en el
+    /// diccionario, sin mirar si el actor era jurídico ni qué mecanismo de firma eligió el gestor. Con la
+    /// HU #11667 el chip de identidad de la MISMA fila pasó a respetar el mecanismo, y las dos superficies
+    /// contiguas se contradecían: chip «pendiente» y columna «firmado» para un actor jurídico con
+    /// <c>mecanismoFirma = identidad</c> y baúl vigente. Es la raíz del Bug #11141 — consumidores que
+    /// resuelven el baúl por su cuenta en vez de delegar en el predicado único—, así que aquí también se
+    /// delega. Cuando el baúl no procede, no cuenta <i>en ninguno de los dos sentidos</i>: ni acredita ni
+    /// rechaza, y la parte queda a merced de su validación de identidad. Coste: cero consultas nuevas.</para>
+    ///
+    /// <para>La asimetría documentada en la HU #11667 se mantiene: el diccionario se materializa sin mirar
+    /// el flag <c>signature_vault_enabled</c> del tenant. Filtrarlo aquí exigiría una consulta de
+    /// configuración por tenant en la ruta de lote; la corrección pertenece al origen de las claves, que
+    /// sirve a la columna y al chip a la vez.</para>
     /// </summary>
     private static string? DeriveFirmaParte(
         ProcedureInstance e,
@@ -231,11 +248,14 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
 
         // Firma del baúl de la PERSONA que acredita a esta parte (el representante legal cuando el
-        // actor es jurídico), resuelta con la misma llave que la identidad.
+        // actor es jurídico), resuelta con la misma llave que la identidad. Bug #11670: solo se mira si
+        // el baúl PROCEDE para este actor —actor jurídico y mecanismo de firma compatible—, el mismo
+        // predicado que usan el gate de radicación, el chip del listado y el FUR.
         bool? baulVigente = null;
-        if (actor is not null)
+        if (FirmaBaulCobertura.Aplica(actor))
         {
-            var subject = IdentitySubjectResolver.For(actor);
+            // Aplica() ya descartó el actor nulo.
+            var subject = IdentitySubjectResolver.For(actor!);
             if (!string.IsNullOrWhiteSpace(subject.TipoDocumento)
                 && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
             {

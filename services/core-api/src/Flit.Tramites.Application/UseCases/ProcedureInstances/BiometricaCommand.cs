@@ -67,7 +67,19 @@ public sealed record BiometricValidationsResponse(
     // referenciada de otro trámite): rechazados, expirados o en vuelo. Salen de `validations` para no
     // suplantar al estado vigente según la posición en que quedaran, pero siguen viajando aquí para
     // que el histórico esté disponible sin volver a consultar. Null cuando no hay ninguno.
-    IReadOnlyList<BiometricValidationDto>? SupersededValidations = null);
+    IReadOnlyList<BiometricValidationDto>? SupersededValidations = null,
+    // HU #11665 — por qué NO se envió la validación de identidad a una parte jurídica. Derivado al
+    // vuelo con la MISMA regla que usa el disparador (EnvioValidacionBloqueoRules), nunca persistido:
+    // en cuanto el gestor corrige el dato, el motivo desaparece. Null cuando no hay ninguno.
+    IReadOnlyList<EnvioValidacionMotivoDto>? MotivosNoEnvio = null);
+
+/// <summary>
+/// HU #11665 — motivo tipificado de no envío de la validación de identidad, por parte.
+/// <c>informativo = true</c> no es un fallo: explica una ausencia legítima (la parte ya está cubierta)
+/// y la UI no debe pintarlo como bloqueo. Es un derivado calculado del estado, igual que
+/// <c>firmaBaulPartes</c>; no existe ninguna columna que lo guarde.
+/// </summary>
+public sealed record EnvioValidacionMotivoDto(string Parte, string Codigo, bool Informativo);
 
 // NOTA: estos DOS contratos quedan en ESPAÑOL a propósito (request de iniciar + vista pública de
 // captura). El renombrado a inglés (HU10350) cubre SOLO la tabla y sus respuestas (grilla/wizard/stuck);
@@ -363,6 +375,10 @@ public sealed class ListBiometriaHandler(
         // Documento del sujeto de identidad de cada parte: sin él, el emparejamiento de las filas SIN
         // ROL (matrícula) le atribuiría a la parte intentos de otra persona y los sacaría de la vista.
         var documentoPorParte = new Dictionary<string, ParteDocumento>(StringComparer.OrdinalIgnoreCase);
+        // HU #11665 — motivo tipificado de no envío por parte. `partesJuridicas` acota la segunda
+        // pasada (los motivos informativos): una persona natural no reporta motivos.
+        var motivosNoEnvio = new List<EnvioValidacionMotivoDto>(partes.Length);
+        var partesJuridicas = new List<string>(partes.Length);
         foreach (var parte in partes)
         {
             var actor = instance.Actors.FirstOrDefault(a =>
@@ -372,6 +388,20 @@ public sealed class ListBiometriaHandler(
 
             // Documento del SUJETO de identidad (HU #10688): el RL en PJ, el actor en PN.
             var subject = IdentitySubjectResolver.For(actor);
+
+            // HU #11665 — el motivo lo calcula la MISMA regla que usa el disparador al escribir
+            // (EnvioValidacionBloqueoRules): una sola fuente, así el listado no puede explicar el no
+            // envío de una forma distinta a como se decidió. Se registra ANTES de los `continue` de
+            // abajo, porque el caso «RL sin documento» es justamente uno de los que cortan aquí.
+            var estadoEnvio = EnvioValidacionBloqueoRules.EstadoDe(actor, subject, providerOptions.IsKyverum);
+            if (estadoEnvio.ActorEsJuridico)
+            {
+                partesJuridicas.Add(parte);
+                var motivoDatos = EnvioValidacionBloqueoRules.Evaluar(estadoEnvio);
+                if (motivoDatos is not null)
+                    motivosNoEnvio.Add(new EnvioValidacionMotivoDto(parte, motivoDatos.Codigo, motivoDatos.Informativo));
+            }
+
             if (string.IsNullOrWhiteSpace(subject.TipoDocumento) || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
                 continue;
 
@@ -443,6 +473,22 @@ public sealed class ListBiometriaHandler(
             vigentesPorParte[parte] = new HashSet<Guid> { source.Id };
         }
 
+        // HU #11665 — motivos INFORMATIVOS: la parte jurídica está completa, pero no se le envía nada
+        // porque ya está cubierta. Se derivan de lo que este handler YA resolvió —la cobertura del baúl
+        // y la identidad aprobada vigente (propia o referenciada)—, que son los pasos 1 y 2 de la
+        // precedencia que evalúa el disparador río abajo. Cero consultas nuevas.
+        foreach (var parte in partesJuridicas)
+        {
+            if (motivosNoEnvio.Exists(m => string.Equals(m.Parte, parte, StringComparison.OrdinalIgnoreCase)))
+                continue; // Ya hay un motivo de datos: ese manda, es el que el gestor debe corregir.
+
+            var informativo = EnvioValidacionBloqueoRules.DesdeCobertura(
+                firmaBaulPartes.Contains(parte, StringComparer.OrdinalIgnoreCase),
+                prevalecientePorParte.ContainsKey(parte));
+            if (informativo is not null)
+                motivosNoEnvio.Add(new EnvioValidacionMotivoDto(parte, informativo.Codigo, informativo.Informativo));
+        }
+
         // Bug #11615 — la entrada aprobada y vigente de cada parte prevalece sobre sus intentos
         // rechazados / expirados / en vuelo, que pasan a `supersededValidations`.
         var (validations, superseded) = BiometricListPrevalence.Apply(
@@ -452,7 +498,8 @@ public sealed class ListBiometriaHandler(
             validations,
             providerOptions.Provider,
             firmaBaulPartes,
-            superseded.Count > 0 ? superseded : null), null);
+            superseded.Count > 0 ? superseded : null,
+            motivosNoEnvio.Count > 0 ? motivosNoEnvio : null), null);
     }
 
     /// <summary>

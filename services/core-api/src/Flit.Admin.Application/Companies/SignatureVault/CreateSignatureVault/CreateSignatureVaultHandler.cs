@@ -141,9 +141,12 @@ public sealed class CreateSignatureVaultHandler
             return null;
         }
 
+        // Bug #11659 — la fila que hay que revocar es la que BLOQUEA el índice, y ese índice es
+        // (tenant, document_number): mira el número, no el tipo. Con la lectura de acreditación
+        // —que desde el Bug #11659 exige tipo Y número— una firma histórica registrada con otro
+        // tipo no se resolvería y la sustitución degradaría a 422 con el artefacto ya subido.
         var activa = await _reader
-            .FindActiveByDocumentAsync(
-                command.TenantId, command.DocumentType!.Trim(), command.DocumentNumber!.Trim(), cancellationToken)
+            .FindActiveByNumberAsync(command.TenantId, command.DocumentNumber!.Trim(), cancellationToken)
             .ConfigureAwait(false);
 
         return activa?.Id;

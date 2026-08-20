@@ -24,10 +24,38 @@ public interface ISignatureVaultReader
     /// Devuelve la más reciente rehidratada para que el llamador aplique
     /// <see cref="SignatureVault.EstaVigente"/>; <c>null</c> si no hay ninguna activa.
     /// <c>documentNumber</c> es PII (Ley 1581): no loguear.
+    /// <para>
+    /// <b>Bug #11659 — el empate es por tipo Y número.</b> Esta lectura ACREDITA a una persona como
+    /// firmante; el par (tipo, número) es su identidad, igual que en la validación biométrica. El
+    /// empate se hace con la normalización canónica única (<c>Trim</c> + mayúsculas invariantes en
+    /// AMBAS partes): una <c>TI 123</c> nunca acredita a la <c>CC 123</c>, y una cédula de extranjería
+    /// capturada como <c>ab123</c> sí acredita a <c>AB123</c>.
+    /// </para>
     /// </summary>
     Task<SignatureVault?> FindActiveByDocumentAsync(
         Guid tenantId,
         string documentType,
+        string documentNumber,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Firma 'activa' del baúl por NÚMERO de documento, sin mirar el tipo (Bug #11659).
+    /// <para>
+    /// <b>No es una lectura de acreditación y no debe usarse como tal:</b> existe solo para el camino
+    /// de ESCRITURA, que necesita ver exactamente lo que ve el índice único parcial
+    /// <c>uq_signature_vault_activa</c>, definido sobre <c>(tenant_id, document_number)</c> con filtro
+    /// <c>estado = 'activa'</c>. Cuando el alta choca contra ese índice (HU #11193: la última firma
+    /// capturada sustituye a la anterior), hay que poder resolver la fila que ocupa el sitio aunque su
+    /// <c>document_type</c> difiera del que trae el alta; si no, la sustitución degrada a un 422 que
+    /// deja al usuario sin salida dentro del formulario.
+    /// </para>
+    /// <para>
+    /// Empate por igualdad exacta tras <c>Trim</c> (sin mayúsculas), que es la semántica del índice.
+    /// <c>documentNumber</c> es PII (Ley 1581): no loguear.
+    /// </para>
+    /// </summary>
+    Task<SignatureVault?> FindActiveByNumberAsync(
+        Guid tenantId,
         string documentNumber,
         CancellationToken cancellationToken = default);
 
