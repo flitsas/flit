@@ -48,7 +48,6 @@ public sealed class ValidacionIdentidadParteJuridicaTests
     private readonly BiometricsProviderOptions _providerOptions = new() { Provider = BiometricProviders.Kyverum };
     private readonly IKyverumVerifyClient _kyverumClient = Substitute.For<IKyverumVerifyClient>();
     private readonly IPersonDataConsentRepository _consentRepo = Substitute.For<IPersonDataConsentRepository>();
-    private readonly IRepresentanteLegalDirectory _directorio = Substitute.For<IRepresentanteLegalDirectory>();
     private readonly ISignatureVaultPolicy _baul = Substitute.For<ISignatureVaultPolicy>();
     private readonly PutActorsHandler _put;
 
@@ -76,7 +75,7 @@ public sealed class ValidacionIdentidadParteJuridicaTests
             _baul);
 
         _put = new PutActorsHandler(
-            _repo, _catalogRepo, _providerOptions, kyverumHandler, _consentRepo, _directorio, _baul);
+            _repo, _catalogRepo, _providerOptions, kyverumHandler, _consentRepo, _baul);
 
         _catalogRepo.GetProcedureEntityByCodeAsync("BUYER", Arg.Any<CancellationToken>())
             .Returns(new ProcedureEntity { Id = BuyerEntityId, Code = "BUYER", Name = "Comprador" });
@@ -122,36 +121,6 @@ public sealed class ValidacionIdentidadParteJuridicaTests
         validacion.DocumentNumber.Should().Be(RlDocumento);
         validacion.DocumentType.Should().Be(RlTipoDocumento);
         validacion.DocumentNumber.Should().NotBe("900123456");
-    }
-
-    [Fact]
-    public async Task A_ConOtroRepresentanteUtilizableEnLaCompania_TambienEnviaAlDelTramite()
-    {
-        // El defecto que motiva la HU. El directorio responde por la COMPAÑÍA: le basta que cualquier
-        // representante acreditado del NIT tenga con qué firmar. Si el gestor eligió a otro, esa persona
-        // se quedaba sin correo y el trámite sin identidad. La compañía ya no decide por él.
-        var ct = TestContext.Current.CancellationToken;
-        var (id, tenant, _) = NuevoTramite();
-        ConRepresentanteUtilizableEnElDirectorio();
-
-        await _put.HandleAsync(id, tenant, new PutActorsRequest([CompradorJuridico()]), ct);
-
-        await _kyverumClient.Received(1).StartVerificationAsync(
-            Arg.Is<KyverumVerifyStartRequest>(r => r.Documento == RlDocumento), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task ElDirectorioDeLaCompaniaYaNoSeConsultaParaDecidirElEnvio()
-    {
-        // La decisión mira a la persona del trámite, no al registro de la empresa. Que no se consulte es
-        // parte del contrato: mientras la llamada exista, alguien puede volver a colgar una regla de ella.
-        var ct = TestContext.Current.CancellationToken;
-        var (id, tenant, _) = NuevoTramite();
-
-        await _put.HandleAsync(id, tenant, new PutActorsRequest([CompradorJuridico()]), ct);
-
-        await _directorio.DidNotReceive().TieneRepresentanteUtilizableAsync(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>());
     }
 
     // ── Regla B.I — baúl vigente Y validación de identidad vigente ────────────────────────────
@@ -412,12 +381,6 @@ public sealed class ValidacionIdentidadParteJuridicaTests
                 CreatedAt = now.AddDays(-1),
             });
     }
-
-    /// <summary>La compañía SÍ tiene un representante utilizable registrado — pero no es el del trámite.</summary>
-    private void ConRepresentanteUtilizableEnElDirectorio() =>
-        _directorio.TieneRepresentanteUtilizableAsync(
-            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
-            .Returns(true);
 
     private static ActorInput CompradorJuridico(
         ActorRepresentanteLegal? rl = null, string? mecanismo = null) =>

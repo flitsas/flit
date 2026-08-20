@@ -110,15 +110,8 @@ public sealed class PutActorsHandler(
     BiometricsProviderOptions providerOptions,
     IniciarKyverumVerifyHandler kyverumHandler,
     IPersonDataConsentRepository consentRepo,
-    IRepresentanteLegalDirectory? representanteDirectory = null,
     ISignatureVaultPolicy? vaultPolicy = null)
 {
-    // HU #11195 — directorio de representantes de Admin. Default inerte (responde SIEMPRE "sí tiene
-    // representante utilizable") para que los tests que no ejercitan la compuerta conserven el
-    // comportamiento previo: el default seguro es no enviar de más.
-    private readonly IRepresentanteLegalDirectory _representanteDirectory =
-        representanteDirectory ?? NullRepresentanteLegalDirectory.Instance;
-
     // Baúl de firmas: lo consume el reenvío por cambio de correo (HU #10880), que no puede expirar la
     // validación en curso de una parte que va a firmar con el baúl. Default inerte (nunca resuelve
     // firma) ⇒ los tests que no lo inyectan conservan su comportamiento.
