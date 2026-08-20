@@ -226,22 +226,113 @@ public sealed class SignatureVaultHandlerTests
         detalleBlanco!.CodigoHash.Should().BeNull();
     }
 
+    // ───────── Bug #11659 — el baúl empata por TIPO y NÚMERO, con normalización canónica ─────────
+
     [Fact]
-    public async Task FindActiveByDocument_EncuentraActivaAunqueElTipoNoCoincida()
+    public async Task Bug11659_FindActiveByDocument_NoAcreditaAQuienSoloCompartExElNumero()
     {
-        // uq_signature_vault_activa es (tenant, document_number): si el finder exigía también el
-        // tipo, un 23505 no se podía resolver (HU #11193) y el alta devolvía firma_activa_existente.
+        // El tipo no participaba en el WHERE: solo desempataba, y como el índice único deja UNA fila
+        // por (tenant, número), el desempate era decorativo. Resultado: la firma de la CC 123
+        // acreditaba como firmante a la TI 123, que es otra persona. Falso positivo de firma frente
+        // al gate de radicación, que exige tipo Y número (DocumentCanonicalNormalization).
         await using var ctx = NewContext();
         var (create, _, _, _) = Handlers(ctx, out _);
         var reader = new DbSignatureVaultReader(ctx);
 
-        var created = await create.HandleAsync(NewCreate(documentNumber: "1193552679"), Ct);
+        var created = await create.HandleAsync(
+            NewCreate(documentType: "CC", documentNumber: "1193552679"), Ct);
         created.IsValid.Should().BeTrue();
 
-        var found = await reader.FindActiveByDocumentAsync(Tenant, "CE", "1193552679", Ct);
+        var otraPersona = await reader.FindActiveByDocumentAsync(Tenant, "TI", "1193552679", Ct);
+
+        otraPersona.Should().BeNull("la TI 1193552679 no es la CC 1193552679");
+    }
+
+    [Theory]
+    [InlineData("cc", "CC")]  // tipo en minúsculas capturado por el admin.
+    [InlineData("CC", "cc")]  // tipo en minúsculas consultado por el trámite.
+    public async Task Bug11659_FindActiveByDocument_ElTipoEmpataSinImportarLaCaja(
+        string tipoGuardado, string tipoConsultado)
+    {
+        await using var ctx = NewContext();
+        var (create, _, _, _) = Handlers(ctx, out _);
+        var reader = new DbSignatureVaultReader(ctx);
+
+        var created = await create.HandleAsync(
+            NewCreate(documentType: tipoGuardado, documentNumber: "555000111"), Ct);
+        created.IsValid.Should().BeTrue();
+
+        var found = await reader.FindActiveByDocumentAsync(Tenant, tipoConsultado, "555000111", Ct);
 
         found.Should().NotBeNull();
         found!.Id.Should().Be(created.SignatureVaultId!.Value);
+    }
+
+    [Fact]
+    public async Task Bug11659_FindActiveByDocument_ElNumeroConLetrasEmpataSinImportarLaCaja()
+    {
+        // Divergencia secundaria: el número se comparaba con Trim() pero SIN mayúsculas. Solo muerde
+        // en documentos con letras (cédula de extranjería, pasaporte), donde la identidad biométrica
+        // empataba —normaliza a mayúsculas— y el baúl no.
+        await using var ctx = NewContext();
+        var (create, _, _, _) = Handlers(ctx, out _);
+        var reader = new DbSignatureVaultReader(ctx);
+
+        var created = await create.HandleAsync(
+            NewCreate(documentType: "CE", documentNumber: "ab123"), Ct);
+        created.IsValid.Should().BeTrue();
+
+        var found = await reader.FindActiveByDocumentAsync(Tenant, "CE", "AB123", Ct);
+
+        found.Should().NotBeNull();
+        found!.Id.Should().Be(created.SignatureVaultId!.Value);
+    }
+
+    [Fact]
+    public async Task Bug11659_FindActiveByNumber_SigueViendoLoQueVeElIndiceUnico()
+    {
+        // El camino de ESCRITURA no puede endurecerse: uq_signature_vault_activa es
+        // (tenant, document_number) y la sustitución de firma (HU #11193) necesita resolver la fila
+        // que bloquea el índice aunque su tipo difiera del que trae el alta.
+        await using var ctx = NewContext();
+        var (create, _, _, _) = Handlers(ctx, out _);
+        var reader = new DbSignatureVaultReader(ctx);
+
+        var created = await create.HandleAsync(
+            NewCreate(documentType: "CC", documentNumber: "1193552679"), Ct);
+        created.IsValid.Should().BeTrue();
+
+        var found = await reader.FindActiveByNumberAsync(Tenant, "1193552679", Ct);
+
+        found.Should().NotBeNull();
+        found!.Id.Should().Be(created.SignatureVaultId!.Value);
+    }
+
+    [Fact]
+    public async Task Bug11659_SustitucionDeFirma_SigueFuncionandoConTipoDistintoAlGuardado()
+    {
+        // Regresión que este bug podía introducir: endurecer el finder de acreditación dejaba la
+        // sustitución sin resolver la activa y devolvía firma_activa_existente con el artefacto ya
+        // subido. El handler consume ahora FindActiveByNumberAsync, alineado con el índice.
+        await using var ctx = NewContext();
+        var (create, list, _, _) = Handlers(ctx, out _);
+
+        var anterior = await create.HandleAsync(
+            NewCreate(documentType: "CC", documentNumber: "1193552679"), Ct);
+        anterior.IsValid.Should().BeTrue();
+
+        var conRevocacion = new CreateSignatureVaultHandler(
+            new FakeArtifactStorage(),
+            new ConflictOnFirstCallRepository(new SignatureVaultRepository(ctx)),
+            new DbSignatureVaultReader(ctx));
+
+        var nueva = await conRevocacion.HandleAsync(
+            NewCreate(documentType: "CE", documentNumber: "1193552679"), Ct);
+
+        nueva.IsValid.Should().BeTrue("la activa que ocupa el sitio se resuelve por número, como el índice");
+        var rows = await list.HandleAsync(new ListSignatureVaultQuery { TenantId = Tenant }, Ct);
+        rows.Single(r => r.Id == anterior.SignatureVaultId!.Value).Estado.Should().Be("revocada");
+        rows.Single(r => r.Id == nueva.SignatureVaultId!.Value).Estado.Should().Be("activa");
     }
 
     [Fact]
@@ -338,11 +429,12 @@ public sealed class SignatureVaultHandlerTests
         DateOnly? hasta = null,
         string? nit = "900000000-1",
         string? codigoHash = null,
-        string? documentNumber = "123456789") =>
+        string? documentNumber = "123456789",
+        string? documentType = "CC") =>
         new()
         {
             TenantId = Tenant,
-            DocumentType = "CC",
+            DocumentType = documentType,
             DocumentNumber = documentNumber,
             NitEmpresa = nit,
             FullName = "Apoderada Renting S.A.S.",
