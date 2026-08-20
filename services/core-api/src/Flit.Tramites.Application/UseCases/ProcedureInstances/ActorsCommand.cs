@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -110,8 +112,13 @@ public sealed class PutActorsHandler(
     BiometricsProviderOptions providerOptions,
     IniciarKyverumVerifyHandler kyverumHandler,
     IPersonDataConsentRepository consentRepo,
-    ISignatureVaultPolicy? vaultPolicy = null)
+    ISignatureVaultPolicy? vaultPolicy = null,
+    ILogger<PutActorsHandler>? logger = null)
 {
+    // HU #11665 — traza del disparador de identidad. Default inerte para no obligar a los tests que no
+    // la ejercitan a inyectarlo. NUNCA se loguea PII: ni correo, ni documento, ni nombre.
+    private readonly ILogger _logger = logger ?? NullLogger<PutActorsHandler>.Instance;
+
     // Baúl de firmas: lo consume el reenvío por cambio de correo (HU #10880), que no puede expirar la
     // validación en curso de una parte que va a firmar con el baúl. Default inerte (nunca resuelve
     // firma) ⇒ los tests que no lo inyectan conservan su comportamiento.
@@ -331,6 +338,11 @@ public sealed class PutActorsHandler(
     /// <para>Las personas naturales ni siquiera entran. Solo actúa con Kyverum: el proveedor mock no
     /// emite CaptureUrl ni envía correos, mismo criterio que
     /// <see cref="ResendIdentityOnEmailChangeAsync"/>.</para>
+    ///
+    /// <para><b>HU #11665 — ninguna omisión es muda.</b> Cada salida sin envío deja un motivo tipificado
+    /// (<see cref="EnvioValidacionBloqueoRules"/>) en un log de negocio, y el listado de biometría
+    /// publica el mismo código calculado con la misma regla. El motivo no se persiste: se deriva del
+    /// estado, así que desaparece solo en cuanto el gestor corrige el dato.</para>
     /// </summary>
     private async Task EnviarValidacionAlRepresentanteDeLaParteJuridicaAsync(
         ProcedureInstance instance,
@@ -338,27 +350,30 @@ public sealed class PutActorsHandler(
         Dictionary<ParteRol, ProcedureInstanceActor> newActorsByRol,
         CancellationToken ct)
     {
-        if (!providerOptions.IsKyverum)
-            return;
-
         foreach (var (rol, actor) in newActorsByRol)
         {
-            if (!ActorPersonTypes.IsJuridical(actor.PersonType))
-                continue; // AC4: persona natural, sin cambios.
-
             var subject = IdentitySubjectResolver.For(actor);
-            if (!subject.EsRepresentanteLegal
-                || string.IsNullOrWhiteSpace(subject.NumeroDocumento)
-                || string.IsNullOrWhiteSpace(subject.TipoDocumento)
-                || string.IsNullOrWhiteSpace(subject.Email))
-                continue; // RL sin documento o sin correo: no hay a quién enviarle la validación.
+
+            // HU #11665 — el filtrado de datos vive en la regla compartida, no en una condición
+            // compuesta local. Las tres omisiones por datos incompletos eran UN SOLO `continue`, así
+            // que ni el código sabía cuál de las tres había ocurrido; y el corte por proveedor mock
+            // hacía `return` del método entero, con lo que las partes siguientes ni se miraban.
+            var estado = EnvioValidacionBloqueoRules.EstadoDe(actor, subject, providerOptions.IsKyverum);
+            if (!estado.ActorEsJuridico)
+                continue; // Persona natural: no entra al disparador y no reporta motivo.
+
+            var motivo = EnvioValidacionBloqueoRules.Evaluar(estado);
+            if (motivo is not null)
+            {
+                PutActorsLog.ValidacionNoEnviada(_logger, instance.Id, RolToCode(rol), motivo.Codigo);
+                continue;
+            }
 
             // Quién decide si de verdad se envía: el handler, que evalúa la precedencia única
             // (ADR-0039). Si la persona ya está cubierta por el baúl, ya tiene identidad vigente o ya
-            // tiene una validación en vuelo, devuelve el motivo y no crea nada. Ese error se ignora a
-            // propósito: aquí no hay a quién reportárselo (la observabilidad de estos retornos es el
-            // Feature #11658).
-            await kyverumHandler.HandleAsync(
+            // tiene una validación en vuelo, devuelve la decisión y no crea nada. De ESA decisión —no
+            // de un pre-chequeo local, que la HU #11662 retiró— salen los motivos informativos.
+            var (_, _, conflicto) = await kyverumHandler.HandleAsync(
                 instance.Id,
                 tenantId,
                 new IniciarBiometriaInput(
@@ -368,6 +383,10 @@ public sealed class PutActorsHandler(
                     subject.NumeroDocumento!,
                     subject.Email!),
                 ct);
+
+            var informativo = EnvioValidacionBloqueoRules.DesdeDecision(conflicto);
+            if (informativo is not null)
+                PutActorsLog.ValidacionNoEnviada(_logger, instance.Id, RolToCode(rol), informativo.Codigo);
         }
     }
 
@@ -647,4 +666,17 @@ public sealed class GetActorsHandler(IProcedureInstanceRepository repo)
 
         return (PutActorsHandler.ToResponse(instance), null);
     }
+}
+
+/// <summary>
+/// Logging source-generated (CA1848) del disparador de validación de identidad (HU #11665).
+/// <b>Sin PII (Ley 1581):</b> solo el id de la instancia, el rol de la parte y el código del motivo.
+/// Ni correo, ni número de documento, ni nombre del representante.
+/// </summary>
+internal static partial class PutActorsLog
+{
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se envió la validación de identidad a la parte {Parte} del trámite {InstanceId}: {Motivo}.")]
+    public static partial void ValidacionNoEnviada(
+        ILogger logger, Guid instanceId, string? parte, string motivo);
 }
