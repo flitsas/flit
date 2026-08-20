@@ -100,13 +100,40 @@ const estadoChip = (
 type Chip = { label: string; bg: string; color: string; border: string };
 
 /**
+ * HU #11668 — ayuda del chip de identidad del listado.
+ *
+ * <p><b>Qué acredita.</b> Desde la HU #11667 la ruta de LOTE que alimenta estos chips acredita
+ * también por firma del baúl, no solo por validación biométrica. El gestor que veía «Identidad
+ * validada» iba a buscar un certificado de validación que, cuando la acreditación viene del baúl,
+ * no existe.</p>
+ *
+ * <p><b>Qué NO dice el resumen del listado.</b> El origen concreto de cada parte no viaja en
+ * <c>InstanceSummary</c>: la fila trae el estado agregado (<c>identityValidationStatus</c>) y la
+ * acreditación por parte (<c>firmaVendedorEstado</c> / <c>firmaCompradorEstado</c>), y ninguno de
+ * los dos distingue biométrica de baúl — los dos caminos producen exactamente el mismo valor. Por
+ * eso la ayuda nombra las DOS vías posibles y remite al trámite, en vez de afirmar una que la fila
+ * no puede saber. Inventar aquí el origen sería peor que no decirlo.</p>
+ */
+const AYUDA_ORIGEN =
+  'La identidad puede quedar acreditada por validación biométrica o por la firma del baúl de la parte; cuando la acredita el baúl no hay certificado de validación que descargar. Abre el trámite para ver el origen de cada parte.';
+
+/**
+ * HU #11668 — alcance de los estados no terminales. La acreditación aprobada se resuelve por
+ * persona (identidad vigente de cualquier trámite del tenant, o firma del baúl), pero «en proceso»
+ * y «rechazado» salen únicamente de las validaciones de ESTE trámite: las claves en lote solo
+ * traen identidades aprobadas y vigentes.
+ */
+const AYUDA_NO_TERMINALES =
+  'Los estados en curso y rechazado se calculan solo con las validaciones propias de este trámite.';
+
+/**
  * HU #10350 (AC3) — chip de estado async para borradores FINALIZADOS (draft + draftFinalizedAt). El
  * trámite cerró la captura y espera la validación de identidad del cliente; la firma se procesa sola
  * al aprobarse. Precedencia: rechazo → aprobado (firma pendiente / listo para radicar) → pendiente de
  * validación. Devuelve además `ready` cuando ya se puede radicar (identidad aprobada + gates), para que
  * la acción de la fila pase de "Continuar" a "Radicar". Null si no es un borrador finalizado (chip base).
  */
-function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean } | null {
+function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean; ayuda: string } | null {
   if (item.estado !== 'borrador' || !item.draftFinalizedAt) return null;
   const idv = item.identityValidationStatus;
 
@@ -114,25 +141,32 @@ function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean } | nu
     return {
       chip: { label: 'Validación rechazada', bg: 'rgba(255,78,0,0.10)', color: '#c2410c', border: 'rgba(255,78,0,0.3)' },
       ready: false,
+      ayuda: AYUDA_NO_TERMINALES,
     };
   }
 
   if (idv === 'aprobado') {
+    // HU #11668 — los tres chips de esta rama nacen de una identidad ACREDITADA, que desde la
+    // HU #11667 puede venir de la biométrica o del baúl: los tres llevan la ayuda del origen.
+    const ayuda = `${AYUDA_ORIGEN} ${AYUDA_NO_TERMINALES}`;
     if (item.signaturePending) {
       return {
         chip: { label: 'Pendiente firma', bg: 'rgba(99,102,241,0.12)', color: '#4f46e5', border: 'rgba(99,102,241,0.3)' },
         ready: false,
+        ayuda,
       };
     }
     if (item.canSubmit) {
       return {
         chip: { label: 'Listo para radicar', bg: 'rgba(140,198,63,0.15)', color: 'var(--flit-success-ink)', border: 'rgba(140,198,63,0.4)' },
         ready: true,
+        ayuda,
       };
     }
     return {
       chip: { label: 'Identidad validada', bg: 'rgba(140,198,63,0.12)', color: 'var(--flit-success-ink)', border: 'rgba(140,198,63,0.35)' },
       ready: false,
+      ayuda,
     };
   }
 
@@ -140,7 +174,46 @@ function asyncStatus(item: InstanceSummary): { chip: Chip; ready: boolean } | nu
   return {
     chip: { label: 'Pendiente validación', bg: 'rgba(245,158,11,0.14)', color: '#b45309', border: 'rgba(245,158,11,0.35)' },
     ready: false,
+    ayuda: AYUDA_NO_TERMINALES,
   };
+}
+
+/**
+ * HU #11668 — chip de identidad con su ayuda. El chip en sí es el mismo `StatusBadge` de siempre
+ * (mismo texto, mismo nombre accesible): lo que se agrega es un envoltorio ALCANZABLE POR TECLADO
+ * que expone la ayuda como descripción (`aria-describedby`) y la muestra al enfocar o al pasar el
+ * puntero — el mismo patrón del indicador de OCR del checklist de documentos.
+ *
+ * El envoltorio no es un botón: no hay acción que ejecutar, solo información. Por eso tampoco
+ * intercepta el clic de la fila, que sigue abriendo el trámite.
+ */
+function IdentidadChip({ chip, ayuda, tipId }: { chip: Chip; ayuda: string; tipId: string }) {
+  const [tipOpen, setTipOpen] = useState(false);
+  return (
+    <span className="relative inline-flex">
+      <span
+        tabIndex={0}
+        aria-describedby={tipOpen ? tipId : undefined}
+        className="inline-flex rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-1"
+        onMouseEnter={() => setTipOpen(true)}
+        onMouseLeave={() => setTipOpen(false)}
+        onFocus={() => setTipOpen(true)}
+        onBlur={() => setTipOpen(false)}
+      >
+        <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+      </span>
+      {tipOpen ? (
+        <span
+          id={tipId}
+          role="tooltip"
+          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border bg-white p-2.5 text-left text-xs leading-snug text-[#162744] shadow-lg dark:bg-[#162744] dark:text-white/90"
+          style={{ borderColor: '#DFE5ED' }}
+        >
+          {ayuda}
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 // HU #11018 — formato de negocio unico: AÑO/MES/DIA, sin hora.
@@ -1632,6 +1705,9 @@ function TramiteRow({
   // "Radicar" cuando la identidad ya quedó aprobada y los gates están listos.
   const async = asyncStatus(item);
   const chip = async?.chip ?? estadoChip(item.estado);
+  // HU #11668 — solo los chips derivados de la identidad llevan ayuda; el chip base de estado
+  // (radicado, entregado…) no habla de acreditación y no debe crecerle un tooltip.
+  const ayudaIdentidad = async?.ayuda ?? null;
   const isDraft = item.estado === 'borrador';
   const actionLabel = async?.ready ? 'Radicar' : isDraft ? 'Continuar' : 'Ver';
   const actionIcon = async?.ready ? FileCheck : isDraft ? Play : Eye;
@@ -1877,7 +1953,15 @@ function TramiteRow({
     estado: (
       <span className="relative flex min-w-0 flex-col items-start gap-1">
         <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+          {ayudaIdentidad ? (
+            <IdentidadChip
+              chip={chip}
+              ayuda={ayudaIdentidad}
+              tipId={`identidad-ayuda-${item.id}`}
+            />
+          ) : (
+            <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
+          )}
           {showRejectPopover ? (
           <div ref={popoverRef} className="relative shrink-0">
             <button
