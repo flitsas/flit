@@ -38,7 +38,11 @@ internal static class IdentityApprovalResolver
             // la firma se resuelve por el documento del REPRESENTANTE LEGAL seleccionado (el sujeto de
             // identidad = tipoDoc/documento), no por el NIT. Solo actores jurídicos; las personas naturales
             // caen a los pasos 1/2. Null-safe: sin baúl habilitado devuelve null.
-            if (actor is not null && EsActorJuridico(actor.DocumentType)
+            // HU #11661: el predicado de "actor jurídico" para la ruta del baúl es UNO
+            // (FirmaBaulCobertura.EsJuridico). La copia local que vivía aquí es la que ADR-0039 señala
+            // como la forma en que nació el Bug #11141: dos definiciones de la misma pregunta que
+            // divergen en cuanto una se actualiza y la otra no.
+            if (actor is not null && FirmaBaulCobertura.EsJuridico(actor.DocumentType)
                 && !string.IsNullOrWhiteSpace(tipoDoc) && !string.IsNullOrWhiteSpace(documento)
                 && await vault.ResolveAsync(instance.TenantId, tipoDoc.Trim(), documento.Trim(), ct) is not null)
             {
@@ -101,14 +105,6 @@ internal static class IdentityApprovalResolver
         }
 
         return approved;
-    }
-
-    /// <summary>¿El actor es persona JURÍDICA (NIT/N)? Solo estos consumen el baúl de firmas (ADR-0025 §4).</summary>
-    private static bool EsActorJuridico(string? documentType)
-    {
-        var t = documentType?.Trim();
-        return string.Equals(t, "NIT", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(t, "N", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Actor de la parte (comprador/vendedor) del trámite, o <c>null</c> si no existe.</summary>
