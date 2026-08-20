@@ -72,6 +72,13 @@ internal static class FurTextFitter
 
     private const string Ellipsis = "…";
 
+    /// <summary>
+    /// La elipsis que marca un truncado, expuesta para que el renderer pueda DETECTARLO en la ruta de
+    /// campos `text`, que no admite callback (HU #11643). Debe seguir siendo la misma en las dos rutas
+    /// de encaje: si divergieran, el aviso de truncado dejaría de dispararse en silencio.
+    /// </summary>
+    internal const string EllipsisChar = Ellipsis;
+
     /// <param name="measure">Mide el ancho de un texto para un cuerpo dado.</param>
     /// <param name="minFontSize">
     /// HU sin ADO 2026-08-11 (tercera tanda, casilla 19 del FUR) — piso ABSOLUTO opcional, distinto

@@ -22,7 +22,7 @@ import { ActorsForm } from './ActorsForm';
 import { DocumentChecklist } from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
 import { PrendaForm, traspasoDecisions } from './PrendaForm';
-import { furObservationsPreview } from './fur-auto-observations';
+import { furObservationsPreview, furObservacionesDisponibles } from './fur-auto-observations';
 import { SubsanacionPanel } from './SubsanacionPanel';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
@@ -2163,6 +2163,26 @@ function TramiteObservacionesField({ instanceId }: { instanceId: string | null }
         placeholder="Ingresa observaciones relevantes para el FUR…"
         className={`${WIZARD_INPUT} resize-none`}
       />
+      {/* HU #11643 — el recuadro del FUR tiene sitio contado y lo automático entra primero, así que
+          lo que le queda al texto libre depende de cuánto ocupe aquello. Se avisa aquí, mientras se
+          escribe, en vez de dejar que el gestor lo descubra con el PDF delante: el backend recorta
+          el sobrante y lo que se pierde es lo que él escribió. */}
+      {(() => {
+        const disponibles = furObservacionesDisponibles(preview.auto);
+        const excedido = observaciones.trim().length > disponibles;
+        if (!observaciones.trim() && !excedido) return null;
+        return (
+          <p
+            className={`text-xs ${excedido ? 'font-bold text-[#C0392B] dark:text-[#FF8A7A]' : 'opacity-55'}`}
+            role={excedido ? 'alert' : 'status'}
+            aria-live="polite"
+          >
+            {excedido
+              ? `Te has pasado por ${observaciones.trim().length - disponibles} caracteres: el FUR solo imprimirá los primeros ${disponibles} de tus observaciones.`
+              : `${observaciones.trim().length} de ${disponibles} caracteres disponibles.`}
+          </p>
+        );
+      })()}
       {saving && (
         <p className="text-xs opacity-50" role="status" aria-live="polite">
           Guardando…

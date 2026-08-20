@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { furAutoObservations, furObservationsPreview } from '../fur-auto-observations';
+import {
+  FUR_OBSERVACIONES_PRESUPUESTO,
+  furAutoObservations,
+  furObservacionesDisponibles,
+  furObservationsPreview,
+} from '../fur-auto-observations';
 import type { FieldValue } from '@/lib/api/types/procedure-runtime';
 
 /**
@@ -138,5 +143,34 @@ describe('furObservationsPreview', () => {
 
   it('conserva los saltos de línea que escribe el gestor', () => {
     expect(furObservationsPreview('Línea 1\nLínea 2', []).manual).toBe('Línea 1\nLínea 2');
+  });
+});
+
+/**
+ * HU #11643 — el recuadro del FUR tiene sitio contado y el bloque automático entra primero, así que
+ * lo que le queda al texto libre depende de cuánto ocupe aquello. El gestor tiene que enterarse
+ * MIENTRAS escribe: antes lo descubría con el PDF ya generado, y lo que se perdía era justo lo suyo.
+ */
+describe('furObservacionesDisponibles', () => {
+  it('sin texto automático, el presupuesto entero es para el gestor', () => {
+    expect(furObservacionesDisponibles([])).toBe(FUR_OBSERVACIONES_PRESUPUESTO);
+  });
+
+  it('descuenta el bloque automático y su espacio separador', () => {
+    // 30 caracteres + 1 de separación.
+    expect(furObservacionesDisponibles(['Cambio de color: NEGRO MATE.'])).toBe(
+      FUR_OBSERVACIONES_PRESUPUESTO - 'Cambio de color: NEGRO MATE.'.length - 1,
+    );
+  });
+
+  it('varias declaraciones reducen más el espacio disponible', () => {
+    const una = furObservacionesDisponibles(['Cambio de color: NEGRO.']);
+    const dos = furObservacionesDisponibles(['Cambio de color: NEGRO.', 'Cambio de carrocería: FURGON.']);
+    expect(dos).toBeLessThan(una);
+  });
+
+  it('si lo automático agota el presupuesto, no queda nada y nunca es negativo', () => {
+    const enorme = 'X'.repeat(FUR_OBSERVACIONES_PRESUPUESTO + 100);
+    expect(furObservacionesDisponibles([enorme])).toBe(0);
   });
 });

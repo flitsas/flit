@@ -721,7 +721,11 @@ public sealed class GenerarFurHandler(
             Causal: instance.Commercial?.Causal,
             SellosFirma: sellos,
             FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
-            // El recuadro OBSERVACIONES del FUR reúne tres cosas, en este orden:
+            // HU #11643 — el recuadro OBSERVACIONES reúne cuatro bloques y NO cabe todo. El orden es
+            // ahora de PRIORIDAD, no de aparición: primero lo automático (entra íntegro) y al final el
+            // texto libre del gestor (recortado a lo que quede). Antes el texto libre iba delante y sin
+            // tope, así que al desbordar el auto-encaje eliminaba con la elipsis justo lo obligatorio.
+            // Los bloques automáticos, en orden:
             //   1. HU #10989, CF11 (HU #11257) — el beneficiario del gravamen, en constitución o en
             //      levantamiento.
             //   2. HU #10987 — las observaciones que escribe el gestor (fur_observations).
@@ -729,20 +733,21 @@ public sealed class GenerarFurHandler(
             //      color/combustible declaradas (diff snapshot RUNT vs efectivo).
             //   4. El tipo de servicio con la empresa vinculadora que lo respalda, por el mismo
             //      canal automático que las transformaciones (solo si hay vinculadora).
-            Observaciones: FurPrendaObservation.Join(
-                FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento),
-                FurPrendaObservation.Join(
-                    FurTransformationObservations.Compose(
-                        Get(fv, "fur_observations"),
-                        Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
-                        Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel"),
-                        Get(fv, "vehicle_body_type_runt"), Get(fv, "vehicle_body_type")),
-                    // `vehicle_service` guarda el CÓDIGO elegido en matrícula inicial (y el texto
-                    // libre del RUNT en traspaso, que aquí no llega: el bloque exige vinculadora).
-                    FurServicioVinculadoraObservation.Compose(
-                        Get(fv, "vehicle_service"),
-                        Get(fv, "empresa_vinculadora_razon_social"),
-                        Get(fv, "empresa_vinculadora_nit")))),
+            Observaciones: FurObservacionesComposer.Componer(
+                automatico: FurPrendaObservation.Join(
+                    FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento),
+                    FurPrendaObservation.Join(
+                        FurTransformationObservations.ComposeAuto(
+                            Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
+                            Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel"),
+                            Get(fv, "vehicle_body_type_runt"), Get(fv, "vehicle_body_type")),
+                        // `vehicle_service` guarda el CÓDIGO elegido en matrícula inicial (y el texto
+                        // libre del RUNT en traspaso, que aquí no llega: el bloque exige vinculadora).
+                        FurServicioVinculadoraObservation.Compose(
+                            Get(fv, "vehicle_service"),
+                            Get(fv, "empresa_vinculadora_razon_social"),
+                            Get(fv, "empresa_vinculadora_nit")))),
+                manual: Get(fv, "fur_observations")),
             FirmaImagenes: firmaImagenes,
             FirmaBaulMetadatos: firmaBaulMetadatos,
             IdentidadValidada: identidadValidada,
