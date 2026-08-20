@@ -96,3 +96,23 @@ export function furObservationsPreview(
   const escrito = manual?.trim();
   return { manual: escrito ? escrito : null, auto: furAutoObservations(fields) };
 }
+
+/**
+ * HU #11643 — presupuesto de caracteres del recuadro OBSERVACIONES del FUR.
+ *
+ * <p>Espejo de `FurObservacionesComposer.PresupuestoCaracteres` (backend), medido allí con la fuente
+ * real sobre la geometría del manifiesto. Se replica aquí para poder avisar al gestor MIENTRAS
+ * escribe, en vez de que descubra el recorte con el PDF ya generado.</p>
+ *
+ * <p>Lo automático tiene prioridad y entra íntegro, así que lo que le queda al texto libre depende
+ * de cuánto ocupe aquello: declarar una transformación reduce el espacio disponible, y el contador
+ * lo refleja en vivo.</p>
+ */
+export const FUR_OBSERVACIONES_PRESUPUESTO = 500;
+
+/** Caracteres que le quedan al texto libre una vez reservado el bloque automático. */
+export function furObservacionesDisponibles(auto: string[]): number {
+  const autoLen = auto.join(' ').trim().length;
+  if (autoLen === 0) return FUR_OBSERVACIONES_PRESUPUESTO;
+  return Math.max(0, FUR_OBSERVACIONES_PRESUPUESTO - autoLen - 1);
+}

@@ -70,6 +70,22 @@ public sealed record FirmaBaulMetadata(
 /// Datos del trámite ensamblados para generar los documentos. Vehículo (atributos completos),
 /// partes (comprador/vendedor), organismo de tránsito, valor, causal y referencias del sello de firma.
 /// </summary>
+/// <summary>
+/// HU #11641 — transformaciones que el trámite declara como subtrámite simultáneo, para marcar sus
+/// casillas en la rejilla "3. TRÁMITE SOLICITADO" del FUR.
+///
+/// <para>Es información distinta de la que va a OBSERVACIONES. El texto de observaciones se DERIVA
+/// del diff snapshot RUNT vs efectivo (ADR-0029) y declara a qué se transformó; la casilla declara
+/// QUÉ TRÁMITE se está solicitando. Por eso aquí basta con que el gestor lo haya declarado: si el
+/// RUNT no devolvió el valor original no hay diff que calcular, pero el trámite de cambio de color
+/// se solicitó igual y el formulario debe decirlo. Antes de esta HU el FUR quedaba mudo en ese caso,
+/// mientras el wizard mostraba el subtrámite como activo.</para>
+/// </summary>
+public readonly record struct FurTransformacionesDeclaradas(
+    bool Color = false,
+    bool Carroceria = false,
+    bool Combustible = false);
+
 public sealed record FurDocumentData(
     Guid ProcedureInstanceId,
     string ReferenceNumber,
@@ -111,7 +127,11 @@ public sealed record FurDocumentData(
     // una empresa habilitada); en particular/matrícula sin vinculación queda null y la casilla sale en
     // blanco (comportamiento por defecto, sin romper trámites existentes que no traen este dato).
     string? EmpresaVinculadoraRazonSocial = null,
-    string? EmpresaVinculadoraNit = null)
+    string? EmpresaVinculadoraNit = null,
+    // HU #11641 — subtrámites simultáneos declarados (color / carrocería / combustible), que marcan
+    // sus casillas propias en la rejilla de trámite solicitado. Por defecto ninguno, así que un
+    // trámite que no declare transformaciones sale exactamente igual que antes.
+    FurTransformacionesDeclaradas Transformaciones = default)
 {
     public string? Vin => Vehiculo.Vin;
     public string? Placa => Vehiculo.Placa;

@@ -642,6 +642,24 @@ public sealed class GenerarFurHandler(
             ? identidadAprobadaPartes.Contains("comprador") && identidadAprobadaPartes.Contains("vendedor")
             : identidadAprobadaPartes.Contains("comprador");
 
+    /// <summary>
+    /// HU #11641 — ¿el trámite incluye esta transformación? La bandera <c>cambio_*</c> es la
+    /// declaración explícita del gestor; el diff snapshot-RUNT vs efectivo la deduce cuando la
+    /// bandera no viaja (trámites anteriores a que existiera). Cualquiera de las dos basta.
+    /// </summary>
+    private static bool Declarada(
+        Dictionary<string, string?> fv, string bandera, string claveRunt, string claveEfectiva)
+    {
+        if (string.Equals(Get(fv, bandera)?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var runt = Get(fv, claveRunt);
+        var efectivo = Get(fv, claveEfectiva);
+        return !string.IsNullOrWhiteSpace(runt)
+            && !string.IsNullOrWhiteSpace(efectivo)
+            && !string.Equals(runt.Trim(), efectivo.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
     private static FurDocumentData AssembleData(
         ProcedureInstance instance, string? codigo, bool esTraspaso, Dictionary<string, string?> fv,
         bool identidadValidada, IReadOnlyDictionary<string, string> sellosIdentidad,
@@ -703,7 +721,11 @@ public sealed class GenerarFurHandler(
             Causal: instance.Commercial?.Causal,
             SellosFirma: sellos,
             FechaTramite: ParseFechaTramite(Get(fv, "fur_processing_date")),
-            // El recuadro OBSERVACIONES del FUR reúne tres cosas, en este orden:
+            // HU #11643 — el recuadro OBSERVACIONES reúne cuatro bloques y NO cabe todo. El orden es
+            // ahora de PRIORIDAD, no de aparición: primero lo automático (entra íntegro) y al final el
+            // texto libre del gestor (recortado a lo que quede). Antes el texto libre iba delante y sin
+            // tope, así que al desbordar el auto-encaje eliminaba con la elipsis justo lo obligatorio.
+            // Los bloques automáticos, en orden:
             //   1. HU #10989, CF11 (HU #11257) — el beneficiario del gravamen, en constitución o en
             //      levantamiento.
             //   2. HU #10987 — las observaciones que escribe el gestor (fur_observations).
@@ -711,20 +733,21 @@ public sealed class GenerarFurHandler(
             //      color/combustible declaradas (diff snapshot RUNT vs efectivo).
             //   4. El tipo de servicio con la empresa vinculadora que lo respalda, por el mismo
             //      canal automático que las transformaciones (solo si hay vinculadora).
-            Observaciones: FurPrendaObservation.Join(
-                FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento),
-                FurPrendaObservation.Join(
-                    FurTransformationObservations.Compose(
-                        Get(fv, "fur_observations"),
-                        Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
-                        Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel"),
-                        Get(fv, "vehicle_body_type_runt"), Get(fv, "vehicle_body_type")),
-                    // `vehicle_service` guarda el CÓDIGO elegido en matrícula inicial (y el texto
-                    // libre del RUNT en traspaso, que aquí no llega: el bloque exige vinculadora).
-                    FurServicioVinculadoraObservation.Compose(
-                        Get(fv, "vehicle_service"),
-                        Get(fv, "empresa_vinculadora_razon_social"),
-                        Get(fv, "empresa_vinculadora_nit")))),
+            Observaciones: FurObservacionesComposer.Componer(
+                automatico: FurPrendaObservation.Join(
+                    FurPrendaObservation.Compose(prendaMarking, acreedorPrenda, acreedorPrendaDocumento),
+                    FurPrendaObservation.Join(
+                        FurTransformationObservations.ComposeAuto(
+                            Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
+                            Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel"),
+                            Get(fv, "vehicle_body_type_runt"), Get(fv, "vehicle_body_type")),
+                        // `vehicle_service` guarda el CÓDIGO elegido en matrícula inicial (y el texto
+                        // libre del RUNT en traspaso, que aquí no llega: el bloque exige vinculadora).
+                        FurServicioVinculadoraObservation.Compose(
+                            Get(fv, "vehicle_service"),
+                            Get(fv, "empresa_vinculadora_razon_social"),
+                            Get(fv, "empresa_vinculadora_nit")))),
+                manual: Get(fv, "fur_observations")),
             FirmaImagenes: firmaImagenes,
             FirmaBaulMetadatos: firmaBaulMetadatos,
             IdentidadValidada: identidadValidada,
@@ -735,7 +758,18 @@ public sealed class GenerarFurHandler(
             // Casilla 19 "EMPRESA VINCULADORA" del FUR: opcional, mismo canal field_values que el resto
             // del paso de vehículo/comercial. Get() ya devuelve null si la llave no existe.
             EmpresaVinculadoraRazonSocial: Get(fv, "empresa_vinculadora_razon_social"),
-            EmpresaVinculadoraNit: Get(fv, "empresa_vinculadora_nit"))
+            EmpresaVinculadoraNit: Get(fv, "empresa_vinculadora_nit"),
+            // HU #11641 — subtrámites simultáneos que marcan casilla propia. Se toma la bandera
+            // DECLARADA por el gestor o, en su defecto, el diff RUNT vs efectivo: son dos formas de
+            // enterarse de lo mismo y hasta ahora el FUR solo miraba la segunda, de modo que un
+            // cambio declarado sobre un vehículo del que el RUNT no devolvió el dato original no se
+            // marcaba en ninguna parte. Es el mismo criterio (`bandera || diff`) que ya usa el
+            // wizard para pintar el subtrámite como activo, así que documento y pantalla dejan de
+            // contradecirse.
+            Transformaciones: new FurTransformacionesDeclaradas(
+                Color: Declarada(fv, MandatoObjetoComposer.CambioColor, "vehicle_color_runt", "vehicle_color"),
+                Carroceria: Declarada(fv, MandatoObjetoComposer.CambioCarroceria, "vehicle_body_type_runt", "vehicle_body_type"),
+                Combustible: Declarada(fv, MandatoObjetoComposer.CambioCombustible, "vehicle_fuel_runt", "vehicle_fuel")))
         {
             // HU #11030 — tenant contra el que se resuelve el baúl del mandatario.
             TenantIdParaFirmas = instance.TenantId,

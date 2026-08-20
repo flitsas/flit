@@ -606,10 +606,22 @@ public sealed class ConsolidadoHandlerTests
         instance.ConsolidadoWizardVigente.Should().BeTrue();
     }
 
+    /// <summary>
+    /// HU #11642 — INVIERTE lo que esta prueba afirmaba. Se llamaba
+    /// <c>HandleAsync_ForceTrue_ConDocsExistentes_NoRegeneraHotDocs</c> y exigía <c>Calls == 0</c>:
+    /// congelaba como esperado el defecto que el gestor reportó. Con el FUR ya persistido, forzar la
+    /// regeneración invalidaba la caché y volvía a fusionar LA MISMA página, de modo que cualquier
+    /// corrección posterior a la primera generación no llegaba nunca al expediente. El caso reportado
+    /// fue un cambio de color de negro a azul sobre un borrador: el dato se guardaba, pero el
+    /// consolidado seguía diciendo negro por muchas veces que se pulsara regenerar.
+    ///
+    /// <para>Que el consolidado solo FUSIONE lo persistido sigue siendo cierto sin <c>force</c> (lo
+    /// fija <see cref="HandleAsync_SinForce_ConFurExistente_NoRegeneraHotDocs"/>). Lo que cambia es el
+    /// significado de <c>force</c>: pedir explícitamente una regeneración ahora rehace el FUR.</para>
+    /// </summary>
     [Fact]
-    public async Task HandleAsync_ForceTrue_ConDocsExistentes_NoRegeneraHotDocs()
+    public async Task HandleAsync_ForceTrue_ConDocsExistentes_RegeneraElFur()
     {
-        // Re-generar consolidado: invalida caché y reconstruye el PDF; no regenera documentos previos.
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         var instance = MatriculaInstance(id, tenantId);
@@ -625,7 +637,62 @@ public sealed class ConsolidadoHandlerTests
 
         error.Should().BeNull();
         result!.Regenerado.Should().BeTrue();
+        regenerator.Calls.Should().Be(1,
+            "forzar la regeneración debe rehacer el FUR: si solo se refunde el expediente, el gestor " +
+            "recibe el documento anterior y sus correcciones no aparecen nunca");
+        result.AvisosCascada.Should().BeNull("la regeneración fue correcta: no hay nada que advertir");
+    }
+
+    /// <summary>
+    /// Sin <c>force</c> el contrato del Feature #11066 no cambia: el consolidado solo fusiona lo ya
+    /// persistido y no arrastra el coste de rehacer el paquete en caliente. Es la mitad que la HU
+    /// #11642 NO toca, y separarla evita que una futura simplificación regenere en cada acceso.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_SinForce_ConFurExistente_NoRegeneraHotDocs()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var regenerator = new FakeRegenerator();
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, regenerator);
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, userId: null, force: false, CancellationToken.None);
+
+        error.Should().BeNull();
+        result!.Regenerado.Should().BeTrue();
         regenerator.Calls.Should().Be(0);
+    }
+
+    /// <summary>
+    /// HU #11642 (AC2) — la regeneración forzada falla pero el FUR anterior sigue en pie: el
+    /// consolidado se entrega igual (misma decisión que el resto de la cascada, HU #11050) CON un
+    /// aviso. Devolverlo en silencio dejaría al gestor creyendo que el documento recoge su último
+    /// cambio, que es exactamente el defecto que esta HU corrige.
+    /// </summary>
+    [Fact]
+    public async Task HandleAsync_ForceTrue_RegeneracionFallaConFurPrevio_EntregaConAviso()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.ConsolidadoWizardVigente = true;
+        AddAttachment(instance, "consolidado", "consolidado.pdf", "%PDF-cons");
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var handler = new GenerarConsolidadoHandler(
+            _repo, _merger, _storage, null, new FakeFailingRegenerator("organismo_requerido"));
+
+        var (result, error) = await handler.HandleAsync(id, tenantId, userId: null, force: true, CancellationToken.None);
+
+        error.Should().BeNull("el expediente se entrega igual: el FUR anterior sigue disponible");
+        result!.AvisosCascada.Should().ContainSingle()
+            .Which.Should().Contain("fur").And.Contain("organismo_requerido",
+                "el gestor debe poder saber que lo que ve NO recoge su último cambio, y por qué");
     }
 
     [Fact]

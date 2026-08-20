@@ -42,6 +42,29 @@ public sealed class FurTruncationLoggingTests
         FechaTramite: new DateTime(2026, 8, 5),
         Observaciones: observaciones);
 
+    /// <summary>
+    /// HU #11643 (AC4) — casilla 19 «EMPRESA VINCULADORA». Es un campo <c>text</c>, no multilínea, y
+    /// su ruta de encaje no admite callback: una razón social larga se recortaba y se imprimía a
+    /// medias sin dejar rastro en ninguna parte. El comentario del propio renderer afirmaba desde
+    /// 2026-08-11 que este campo ya disparaba el aviso; no era cierto.
+    /// </summary>
+    [Fact]
+    public void RazonSocialDesmedidaEnCasilla19_DejaAdvertencia()
+    {
+        var logger = new CapturingLogger();
+        var razonSocial = string.Join(" ", Enumerable.Repeat("COOPERATIVA DE TRANSPORTADORES", 12));
+        var data = Sample("SIN OBSERVACIONES.") with { EmpresaVinculadoraRazonSocial = razonSocial };
+
+        new FurOverlayDocumentGenerator(logger: logger).GenerateFur(data);
+
+        logger.Warnings.Should().Contain(w => w.Contains("linked_company_name", StringComparison.Ordinal),
+            "un dato recortado sin traza es un dato perdido en silencio: nadie puede enterarse después");
+        logger.Warnings.Should().Contain(w => w.Contains(Referencia, StringComparison.Ordinal),
+            "el aviso debe identificar el trámite para poder ir a mirarlo");
+        logger.Warnings.Should().NotContain(w => w.Contains("COOPERATIVA", StringComparison.OrdinalIgnoreCase),
+            "el log no puede llevar el dato: se registra CUÁNTO se elidió, nunca QUÉ");
+    }
+
     [Fact]
     public void ObservacionDesmedida_DejaAdvertenciaConLaReferenciaDelTramite()
     {

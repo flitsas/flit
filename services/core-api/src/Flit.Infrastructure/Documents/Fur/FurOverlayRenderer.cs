@@ -159,6 +159,21 @@ public static partial class FurOverlayRenderer
                 field.MinFontSize);
             lines = [.. fit.Lines];
             fontSize = fit.FontSize;
+
+            // HU #11643 (AC4) — el aviso de truncado también para los campos `text`. El comentario de
+            // LogTextTruncated ya afirmaba que `linked_company_name` (casilla 19) lo disparaba, pero
+            // era falso: el callback solo se engancha en la rama multilínea con auto-encaje, y ese
+            // campo es de tipo `text`. Una razón social recortada se imprimía a medias sin dejar el
+            // menor rastro, que es la peor forma de perder un dato: nadie puede enterarse después.
+            // `FurTextFitter.Fit` no admite callback, así que el truncado se detecta por la elipsis
+            // que el propio fitter inserta —misma constante en ambas rutas— sin cambiarle la firma.
+            var truncado = lines.Any(l => l.Contains(FurTextFitter.EllipsisChar, StringComparison.Ordinal));
+            if (truncado && !text.Contains(FurTextFitter.EllipsisChar, StringComparison.Ordinal))
+            {
+                var impresos = lines.Sum(l => l.Length) - 1; // -1 por la elipsis añadida
+                LogTextTruncated(
+                    logger, referenceNumber ?? "(sin id)", field.Id, Math.Max(1, text.Length - impresos));
+            }
         }
 
         var font = CreateFont(fontSize, field.Bold);
@@ -295,8 +310,8 @@ public static partial class FurOverlayRenderer
     // HU #11256 (R4), generalizado HU sin ADO 2026-08-11 (cuarta tanda) — último recurso de
     // FurTextFitter.FitMultiline: el texto no cupo ni al piso de cuerpo y se truncó con elipsis. Se
     // deja constancia del trámite y de cuánto se elidió; nunca se dibuja fuera de la caja. Antes solo
-    // lo disparaba `observations`; ahora también `linked_company_name` (casilla 19), de ahí el nombre
-    // genérico "texto" en vez de "observaciones".
+    // lo disparaba `observations`; desde la HU #11643 también los campos `text` con auto-encaje, entre
+    // ellos `linked_company_name` (casilla 19), de ahí el nombre genérico "texto".
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "FUR {ReferenceNumber}: texto truncado en el campo {FieldId} — {ElidedChars} caracteres elididos")]
     private static partial void LogTextTruncated(ILogger logger, string referenceNumber, string fieldId, int elidedChars);

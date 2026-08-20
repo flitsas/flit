@@ -25,6 +25,31 @@ public static class FurTransformationObservations
         string? bodyTypeRunt = null,
         string? bodyTypeEfectivo = null)
     {
+        var auto = ComposeAuto(colorRunt, colorEfectivo, fuelRunt, fuelEfectivo, bodyTypeRunt, bodyTypeEfectivo);
+        if (string.IsNullOrEmpty(auto))
+            return manualObservations;
+
+        return string.IsNullOrWhiteSpace(manualObservations)
+            ? auto
+            : $"{manualObservations.Trim()} {auto}";
+    }
+
+    /// <summary>
+    /// HU #11643 — SOLO el texto automático, sin las observaciones manuales delante.
+    ///
+    /// <para>El recuadro tiene sitio contado y el texto libre del gestor no tiene tope, así que
+    /// componerlos juntos aquí obligaba a que el recorte cayera sobre lo automático (iba al final de
+    /// la cola). Separarlos permite a <see cref="FurObservacionesComposer"/> darle prioridad a lo que
+    /// tiene consecuencias legales y recortar lo demás.</para>
+    /// </summary>
+    public static string? ComposeAuto(
+        string? colorRunt,
+        string? colorEfectivo,
+        string? fuelRunt,
+        string? fuelEfectivo,
+        string? bodyTypeRunt = null,
+        string? bodyTypeEfectivo = null)
+    {
         var segments = new List<string>(3);
         if (HasChanged(colorRunt, colorEfectivo))
             segments.Add($"Cambio de color: {Display(colorEfectivo)}.");
@@ -33,13 +58,7 @@ public static class FurTransformationObservations
         if (HasChanged(bodyTypeRunt, bodyTypeEfectivo))
             segments.Add($"Cambio de carrocería: {Display(bodyTypeEfectivo)}.");
 
-        if (segments.Count == 0)
-            return manualObservations;
-
-        var auto = string.Join(" ", segments);
-        return string.IsNullOrWhiteSpace(manualObservations)
-            ? auto
-            : $"{manualObservations.Trim()} {auto}";
+        return segments.Count == 0 ? null : string.Join(" ", segments);
     }
 
     /// <summary>

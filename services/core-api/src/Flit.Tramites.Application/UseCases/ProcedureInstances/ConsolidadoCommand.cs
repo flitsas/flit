@@ -158,6 +158,8 @@ public sealed class GenerarConsolidadoHandler(
             return (new GenerarConsolidadoResult(vigenteDto, Regenerado: false), null);
         }
 
+        var avisosCascada = new List<string>();
+
         // Feature #11066 — el consolidado SOLO fusiona el expediente ya persistido.
         // NO regenera certificados / mandato / compraventa / etc.: esos se generan en Preparar
         // (generarFur). Solo si falta el FUR se produce aquí (sin eso no hay qué consolidar).
@@ -168,16 +170,37 @@ public sealed class GenerarConsolidadoHandler(
         // HU #11017 — cascada: si falta el FUR se genera aquí, en vez de devolver `fur_requerido` y
         // dejar al gestor adivinando el orden correcto. Si aun así no aparece, se responde con el
         // motivo REAL del generador (p. ej. organismo_requerido) y no con "falta el FUR".
-        if (!TieneFur(instance))
+        // HU #11642 — `force` REGENERA el FUR, no solo lo produce cuando falta.
+        //
+        // El atajo anterior era `if (!TieneFur(instance))`: como el consolidado solo fusiona lo ya
+        // persistido, un trámite que ya tenía FUR se reconstruía SIEMPRE con la página vieja. El
+        // gestor corregía un dato en el wizard, pulsaba regenerar y recibía el mismo documento; el
+        // caso reportado fue un cambio de color de negro a azul sobre un borrador, donde el dato sí
+        // se había guardado. `InvalidarConsolidados()` baja las banderas pero no borra el adjunto
+        // `fur`, así que invalidar la caché no bastaba.
+        //
+        // La corrección va aquí y no en el botón del frontend a propósito: la ruta del wizard ya
+        // llamaba a `generarFur` antes de consolidar y por eso funcionaba, mientras que las dos
+        // entradas de `ExpedienteVisor` no. Arreglarlo en el llamador habría dejado el mismo defecto
+        // latente para cualquier consumidor futuro; arreglarlo aquí cierra la clase, no la instancia.
+        var faltaFur = !TieneFur(instance);
+        if (force || faltaFur)
         {
-            if (hotDocsRegenerator is null)
+            // Sin regenerador inyectado solo se puede fallar si además NO hay FUR: con el FUR en pie
+            // se sigue adelante y se fusiona lo que hay, que es el comportamiento de siempre. (Cortar
+            // aquí devolvería "ni resultado ni error", que el llamador lee como éxito con documento
+            // nulo.)
+            if (hotDocsRegenerator is null && faltaFur)
                 return (null, SubmitGate.FurRequerido);
 
-            string? errorFur;
+            string? errorFur = null;
             try
             {
-                errorFur = await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct);
-                instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+                if (hotDocsRegenerator is not null)
+                {
+                    errorFur = await hotDocsRegenerator.RegenerateHotDocumentsAsync(id, tenantId, ct);
+                    instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -190,6 +213,13 @@ public sealed class GenerarConsolidadoHandler(
 
             if (!TieneFur(instance))
                 return (null, errorFur ?? SubmitGate.FurRequerido);
+
+            // Regeneración forzada que falló pero dejó en pie el FUR anterior: el consolidado se
+            // entrega igual —misma decisión que el resto de la cascada (HU #11050)— pero el gestor
+            // tiene que enterarse de que lo que está viendo NO recoge su último cambio. Devolverlo en
+            // silencio es justamente el defecto que esta HU corrige.
+            if (errorFur is not null)
+                avisosCascada.Add($"fur: {errorFur}");
         }
 
         // HU #11017 — impronta en cascada. Best-effort y solo con usuario conocido: depende del RUNT
@@ -315,7 +345,8 @@ public sealed class GenerarConsolidadoHandler(
 
         var dto = new ConsolidadoDocumentDto(newAttachment.Id, doc.Tipo, doc.Filename, stored.Sha256);
         return (new GenerarConsolidadoResult(
-            dto, Regenerado: true, Incompleto: faltantes.Count > 0, DocumentosFaltantes: faltantes), null);
+            dto, Regenerado: true, Incompleto: faltantes.Count > 0, DocumentosFaltantes: faltantes,
+            AvisosCascada: avisosCascada.Count > 0 ? avisosCascada : null), null);
     }
 
     /// <summary>

@@ -204,6 +204,26 @@ public static class FurFieldMapper
         // matrícula con prenda sigue saliendo 1 + 11, no 2 + 11 (son casillas independientes).
         MarkCheckbox(dict, "requested_process_11", data.PrendaMarking == FurPrendaMarking.Constitucion);
         MarkCheckbox(dict, "requested_process_12", data.PrendaMarking == FurPrendaMarking.Levantamiento);
+
+        // HU #11641 — subtrámites simultáneos. Hasta ahora el mapper solo emitía cuatro casillas
+        // (1, 2, 11, 12): un trámite de matrícula CON cambio de color declaraba la transformación
+        // únicamente en el texto de observaciones, y la rejilla de trámite solicitado no lo decía en
+        // ninguna parte, de modo que el organismo tenía que deducir el alcance real leyendo el
+        // recuadro. Son casillas INDEPENDIENTES de 1/2 y de 11/12: una matrícula inicial con cambio
+        // de color y constitución de prenda marca 1 + 5 + 11.
+        MarkCheckbox(dict, "requested_process_5", data.Transformaciones.Color);
+        MarkCheckbox(dict, "requested_process_17", data.Transformaciones.Carroceria);
+        // El formulario oficial no tiene casilla de «cambio de combustible»: por decisión de negocio
+        // (supervisor, 2026-08-19) se marca en la 18 «OTROS». La 18 quedó libre al corregir la
+        // geometría de la HU #11640 — antes la ocupaba por error el levantamiento de prenda.
+        MarkCheckbox(dict, "requested_process_18", data.Transformaciones.Combustible);
+        // La casilla 6 «CAMBIO DE SERVICIO» NO se declara en el manifiesto, a propósito: el trámite
+        // no captura el cambio de servicio como subtrámite (no existe bandera `cambio_servicio` ni
+        // snapshot `vehicle_service_runt` en ninguna capa), de modo que marcarla exigiría inventarse
+        // el dato. Declararla sin emisor sería configuración muerta y obligaría a exceptuarla en la
+        // guardia de casillas huérfanas, debilitándola. Cuando producto decida capturarlo, la celda
+        // ya está medida: x 343,3 / y 124,0 / size 10,1 (columna de «12 LEVANTA PRENDA», fila de
+        // «1 MATRÍCULA»), verificado contra los trazos del blank oficial.
     }
 
     private static void MarkClase(Dictionary<string, FurFieldValue> dict, string? clase)
@@ -218,9 +238,16 @@ public static class FurFieldMapper
     {
         var n = Norm(combustible);
         MarkCheckbox(dict, "vehicle_fuel_type_1", n.Contains("GASOLINA") || n.Contains("GASOL"));
-        MarkCheckbox(dict, "vehicle_fuel_type_2", n.Contains("DIESEL"));
+        // HU #11641 — BIODIESEL contiene "DIESEL": el Contains suelto marcaba las casillas 2 y 8 a la
+        // vez y el formulario dejaba de decir con qué se mueve el vehículo. Mismo defecto que ya se
+        // corrigió en MarkServicio con "SERVICIO PUBLICO ESPECIAL".
+        MarkCheckbox(dict, "vehicle_fuel_type_2", n.Contains("DIESEL") && !n.Contains("BIODIESEL"));
         MarkCheckbox(dict, "vehicle_fuel_type_3", IsGasFuel(n));
-        MarkCheckbox(dict, "vehicle_fuel_type_4", n.Contains("MIXTO"));
+        // HU #11641 — HIBRIDO comparte casilla con MIXTO. El formulario oficial no tiene casilla de
+        // híbrido, y «MIXTO» es literalmente su caso: el vehículo se mueve con más de una fuente de
+        // energía. El catálogo del wizard ofrecía HIBRIDO desde su creación sin que ninguna casilla
+        // lo recogiera, así que estos vehículos salían con la sección 7 en blanco.
+        MarkCheckbox(dict, "vehicle_fuel_type_4", n.Contains("MIXTO") || n.Contains("HIBRID"));
         MarkCheckbox(dict, "vehicle_fuel_type_5", n.Contains("ELECTRIC"));
         MarkCheckbox(dict, "vehicle_fuel_type_6", n.Contains("HIDROGEN"));
         MarkCheckbox(dict, "vehicle_fuel_type_7", n.Contains("ETANOL"));

@@ -490,6 +490,34 @@ describe('FirmaFurStep — FUR / consolidado (Feature #11066 + HU #11052)', () =
     expect(aviso).toHaveTextContent(/proveedor no está disponible/i);
   });
 
+  it('si el FUR no se pudo regenerar, avisa que el expediente conserva la versión anterior', async () => {
+    // HU #11642 — el aviso de FUR NO puede leerse como "falta el FUR": el documento existe, lo que
+    // falló fue rehacerlo, así que lo que el gestor tiene delante puede no recoger su último cambio.
+    // Es el desenlace del defecto que motivó la HU (cambio de color que no llegaba al consolidado).
+    mocks.getAttachments.mockResolvedValue([]);
+    mocks.generarConsolidado.mockResolvedValue({
+      attachmentId: 'att-consolidado',
+      tipo: 'consolidado',
+      filename: 'consolidado.pdf',
+      sha256: 'cns123',
+      regenerado: true,
+      incompleto: false,
+      documentosFaltantes: [],
+      avisosCascada: ['fur: organismo_requerido'],
+    });
+    const user = userEvent.setup();
+    render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
+    await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' });
+
+    await user.click(screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }));
+
+    const aviso = await screen.findByRole('alert');
+    expect(aviso).toHaveTextContent(/No se pudo regenerar el FUR/i);
+    expect(aviso).toHaveTextContent(/falta el organismo de tránsito/i);
+    expect(aviso).toHaveTextContent(/conserva la versión anterior/i);
+    expect(aviso).not.toHaveTextContent(/No se pudo generar el FUR/i);
+  });
+
   it('en trámite aprobado no ofrece generar y lo explica', async () => {
     mocks.getAttachments.mockResolvedValue([FUR_DOC]);
     mocks.getInstance.mockResolvedValue({ ...INSTANCE_DETAIL, status: 'aprobado' });
