@@ -115,8 +115,10 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
 
         // Ajuste del PO sobre HU #11056 — las columnas "Firmado" acreditan por identidad O por firma del
-        // baúl, y tienen que distinguir «baúl vigente» de «baúl vencido». La ruta de lote de la identidad
-        // no consulta el baúl a propósito (evitar N+1), así que se trae en su propia consulta única.
+        // baúl, y tienen que distinguir «baúl vigente» de «baúl vencido». UNA consulta para todos los
+        // tenants del listado, con la MISMA llave que la identidad (tenant|TIPO|NÚMERO).
+        // HU #11667 — ese mismo diccionario alimenta ahora la acreditación por baúl de los chips: sin él,
+        // el chip contradecía al gate de radicación y al FUR. Pasarlo no cuesta ninguna consulta.
         var hoy = DateOnly.FromDateTime(now.ToOffset(ColombiaUtcOffset).DateTime);
         IReadOnlyDictionary<string, bool> firmaBaul = await repo.ListFirmaBaulVigenciaKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), hoy, ct) ?? EmptyFirmaBaul;
@@ -124,7 +126,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         return instances
             .Select(e => ToSummary(
                 e,
-                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now),
+                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
                 nombres.GetValueOrDefault(e.TenantId),
                 gestores.GetValueOrDefault(e.CreatedByUserId),
                 firmaBaul))
