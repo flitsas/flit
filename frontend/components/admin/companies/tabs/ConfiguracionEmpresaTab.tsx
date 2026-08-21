@@ -29,12 +29,6 @@ export interface ConfiguracionEmpresaTabProps {
   /** Tabla consolidada de Organismos de Tránsito (grant + bloqueos + restricciones). */
   otSlot?: ReactNode;
   fieldErrors?: Record<string, string>;
-  /**
-   * HU #11315 (Feature #11309) — compañía en configuración. El panel de documentos
-   * personalizados vive AQUÍ, justo debajo del selector de canal del que depende su
-   * visibilidad (CF-01 del Feature #11309): quien cambia el canal ve de inmediato qué habilita.
-   */
-  tenantId: string;
 }
 
 export function ConfiguracionEmpresaTab({
@@ -42,7 +36,6 @@ export function ConfiguracionEmpresaTab({
   onChange,
   otSlot,
   fieldErrors,
-  tenantId,
 }: ConfiguracionEmpresaTabProps) {
   const toggleMetodo = (metodo: string, on: boolean) => {
     const next = on
