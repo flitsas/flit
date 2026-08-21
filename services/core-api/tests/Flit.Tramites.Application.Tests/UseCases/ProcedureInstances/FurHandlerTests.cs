@@ -429,9 +429,8 @@ public sealed class FurHandlerTests
         error.Should().BeNull();
         capturing.Captured!.Transformaciones.Color.Should().BeTrue(
             "el gestor declaró el cambio de color: sin snapshot RUNT no hay diff, pero el trámite lo incluye igual");
-        capturing.Captured.Observaciones.Should().BeNull(
-            "el TEXTO de observaciones sigue derivándose del diff (ADR-0029): sin snapshot no hay a qué " +
-            "transformación referirse, aunque la casilla sí se marque");
+        capturing.Captured.Observaciones.Should().Be("Color nuevo(NUEVO COLOR: AZUL)",
+            "si el gestor declaró la transformación, el párrafo 23 lleva el valor nuevo aunque no haya snapshot RUNT");
     }
 
     /// <summary>
@@ -542,7 +541,7 @@ public sealed class FurHandlerTests
         capturing.Captured.Should().NotBeNull();
         capturing.Captured!.Vehiculo.Color.Should().Be("PLATA");         // campo del FUR = RUNT original
         capturing.Captured.Vehiculo.Combustible.Should().Be("GASOLINA"); // campo del FUR = RUNT original
-        capturing.Captured.Observaciones.Should().Be("Cambio de color: NEGRO. Cambio de combustible: DIESEL.");
+        capturing.Captured.Observaciones.Should().Be("Color nuevo(NUEVO COLOR: NEGRO) COMBUSTIBLE_NUEVO: DIESEL");
     }
 
     [Fact]
@@ -594,7 +593,7 @@ public sealed class FurHandlerTests
         error.Should().BeNull();
         capturing.Captured.Should().NotBeNull();
         capturing.Captured!.Vehiculo.TipoCarroceria.Should().Be("SEDAN");  // campo del FUR = RUNT original
-        capturing.Captured.Observaciones.Should().Be("Cambio de carrocería: PICKUP.");
+        capturing.Captured.Observaciones.Should().Be("Carroceria nueva(NUEVA CARROCERIA: PICKUP)");
     }
 
     [Fact]

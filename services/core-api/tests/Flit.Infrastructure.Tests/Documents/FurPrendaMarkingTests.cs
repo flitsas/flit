@@ -35,7 +35,7 @@ public sealed class FurPrendaMarkingTests
     public static IEnumerable<object[]> DecisionPorFormato()
     {
         foreach (var format in new[] { FurTemplateFormat.Automotor, FurTemplateFormat.Maquinaria, FurTemplateFormat.Remolques })
-        foreach (var marking in new[] { FurPrendaMarking.Constitucion, FurPrendaMarking.Levantamiento, FurPrendaMarking.Ninguna })
+        foreach (var marking in new[] { FurPrendaMarking.Constitucion, FurPrendaMarking.Levantamiento, FurPrendaMarking.Ninguna, FurPrendaMarking.Ambos })
             yield return [marking, format];
     }
 
@@ -45,8 +45,8 @@ public sealed class FurPrendaMarkingTests
     {
         var campos = FurFieldMapper.Map(Data(marking, format));
 
-        var esperado11 = marking == FurPrendaMarking.Constitucion ? "X" : "";
-        var esperado12 = marking == FurPrendaMarking.Levantamiento ? "X" : "";
+        var esperado11 = marking is FurPrendaMarking.Constitucion or FurPrendaMarking.Ambos ? "X" : "";
+        var esperado12 = marking is FurPrendaMarking.Levantamiento or FurPrendaMarking.Ambos ? "X" : "";
 
         campos["requested_process_11"].Text.Should().Be(esperado11,
             "marking={0} en {1}", marking, format);

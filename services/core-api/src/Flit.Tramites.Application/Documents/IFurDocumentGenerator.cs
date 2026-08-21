@@ -84,7 +84,8 @@ public sealed record FirmaBaulMetadata(
 public readonly record struct FurTransformacionesDeclaradas(
     bool Color = false,
     bool Carroceria = false,
-    bool Combustible = false);
+    bool Combustible = false,
+    bool Blindaje = false);
 
 public sealed record FurDocumentData(
     Guid ProcedureInstanceId,
@@ -128,9 +129,9 @@ public sealed record FurDocumentData(
     // blanco (comportamiento por defecto, sin romper trámites existentes que no traen este dato).
     string? EmpresaVinculadoraRazonSocial = null,
     string? EmpresaVinculadoraNit = null,
-    // HU #11641 — subtrámites simultáneos declarados (color / carrocería / combustible), que marcan
-    // sus casillas propias en la rejilla de trámite solicitado. Por defecto ninguno, así que un
-    // trámite que no declare transformaciones sale exactamente igual que antes.
+    // HU #11641 — subtrámites simultáneos declarados (color / carrocería / combustible / blindaje),
+    // que marcan sus casillas propias. Blindaje usa SI/NO de vehículo blindado; las otras tres van
+    // a la rejilla de trámite solicitado. Por defecto ninguno.
     FurTransformacionesDeclaradas Transformaciones = default)
 {
     public string? Vin => Vehiculo.Vin;

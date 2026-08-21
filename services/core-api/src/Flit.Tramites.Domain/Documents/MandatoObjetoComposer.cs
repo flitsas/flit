@@ -79,6 +79,10 @@ public static class MandatoObjetoComposer
             case FurPrendaMarking.Levantamiento:
                 etiquetas.Add(LevantamientoPrenda);
                 break;
+            case FurPrendaMarking.Ambos:
+                etiquetas.Add(LevantamientoPrenda);
+                etiquetas.Add(Prenda);
+                break;
         }
 
         if (transformaciones is not null)

@@ -228,6 +228,7 @@ app.MapOtIntegrationEndpoints();
 app.MapAdminTransitOfficesEndpoints();
 app.MapAdminQuipuxEndpoints();
 app.MapAdminPlataformaMandatosEndpoints();
+app.MapAdminPlataformaFurEndpoints();
 app.MapAdminPlataformaNotificacionesEndpoints();
 app.MapAdminPlataformaNotificacionesPlantillasEndpoints();
 app.MapAdminLogQxEndpoints();

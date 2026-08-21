@@ -387,11 +387,19 @@ public sealed class FurManifestGuardTests
         plate_number=Text:734.1,76,23.7,11.8,9.7,Center,False,null
         requested_process_1=cb:71.3,119.2,9.9
         requested_process_2=cb:119.5,121.1,9.8
+        requested_process_3=cb:167.7,121.1,10.1
+        requested_process_4=cb:215.9,121.1,10.1
         requested_process_5=cb:286.9,124,10.1
+        requested_process_7=cb:71.3,150.2,10.1
+        requested_process_8=cb:119.5,150.2,10.1
+        requested_process_10=cb:215.9,150.2,10.1
         requested_process_17=cb:286.9,177,10.1
         requested_process_18=cb:343.3,177,10.1
         requested_process_11=cb:286.9,150.2,10.1
         requested_process_12=cb:343.3,150.2,10.1
+        requested_process_13=cb:71.3,177,10.1
+        requested_process_15=cb:167.7,177,10.1
+        requested_process_16=cb:215.9,177,10.1
         vehicle_class_1=cb:53.6,222.4,9.9
         vehicle_class_5=cb:231.5,221.5,10
         vehicle_class_9=cb:101.7,232.7,10
@@ -409,6 +417,7 @@ public sealed class FurManifestGuardTests
         vehicle_fuel_type_6=cb:689.8,130,8
         vehicle_fuel_type_7=cb:716.6,130,8
         vehicle_fuel_type_8=cb:743.4,130,8
+        is_armored_vehicle_yes=cb:504,168,8
         is_armored_vehicle_no=cb:536,168,8
         is_dismantling_armor_no=cb:670,168,8
         vehicle_bodywork_type=Text:382.3,245,176.7,16.7,7.8,Left,False,null

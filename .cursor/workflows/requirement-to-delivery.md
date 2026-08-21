@@ -45,6 +45,7 @@ flowchart TD
 |---|------|--------|-------------|
 | 1 | Crear Feature en ADO | `tech-lead-agent` (modo A) | Aprobación del Feature antes de avanzar |
 | 2 | Diseño técnico | `architecture-agent` | Aprobación del diseño antes de descomponer |
+| 2n | *(si el requerimiento es RNA/FUR/trámites de tránsito)* Dictamen normativo | `expert-doc-engine` | — (insumo del diseño; no sustituye la aprobación del diseño) |
 | 2b | Schema y migraciones (si hay entidades nuevas) | `database-agent` (modo A/B) | — (automático si diseño aprobado) |
 | 3 | Descomponer en HUs | `tech-lead-agent` (modo B) | Aprobación de las HUs antes de crearlas en ADO |
 | 4 | Implementar cada HU | `backend-agent` / `frontend-agent` / `database-agent` *(schema)* | Confirmación de activar cada HU en ADO |

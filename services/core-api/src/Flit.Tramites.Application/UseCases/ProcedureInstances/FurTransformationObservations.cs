@@ -1,4 +1,5 @@
 using System.Globalization;
+using Flit.Tramites.Application.Documents;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -8,7 +9,7 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// entre el snapshot RUNT (<c>*_runt</c>) y el valor efectivo, pero SOLO se imprime el valor NUEVO
 /// (efectivo): en el FUR los campos del vehículo conservan el dato original del RUNT, así que la
 /// observación solo debe declarar a qué se transformó. Se anexa (append) a las observaciones manuales sin
-/// borrarlas. Ejemplo: <c>Cambio de color: ROJO. Cambio de combustible: DIESEL.</c>
+/// borrarlas. Ejemplo: <c>Color nuevo(NUEVO COLOR: ROJO) COMBUSTIBLE_NUEVO: DIESEL</c>.
 /// </summary>
 public static class FurTransformationObservations
 {
@@ -52,14 +53,44 @@ public static class FurTransformationObservations
     {
         var segments = new List<string>(3);
         if (HasChanged(colorRunt, colorEfectivo))
-            segments.Add($"Cambio de color: {Display(colorEfectivo)}.");
-        if (HasChanged(fuelRunt, fuelEfectivo))
-            segments.Add($"Cambio de combustible: {Display(fuelEfectivo)}.");
+            segments.Add(ColorNuevo(colorEfectivo));
         if (HasChanged(bodyTypeRunt, bodyTypeEfectivo))
-            segments.Add($"Cambio de carrocería: {Display(bodyTypeEfectivo)}.");
+            segments.Add(CarroceriaNueva(bodyTypeEfectivo));
+        if (HasChanged(fuelRunt, fuelEfectivo))
+            segments.Add(CombustibleNuevo(fuelEfectivo));
 
         return segments.Count == 0 ? null : string.Join(" ", segments);
     }
+
+    /// <summary>
+    /// Texto de transformaciones cuando el trámite ya declaró el cambio (bandera o tipo base).
+    /// Concatena color, carrocería y combustible; no reemplaza bloques previos.
+    /// </summary>
+    public static string? ComposeDeclaradas(
+        FurTransformacionesDeclaradas declaradas,
+        string? colorNuevo,
+        string? combustibleNuevo,
+        string? carroceriaNueva)
+    {
+        var segments = new List<string>(3);
+        if (declaradas.Color && !string.IsNullOrWhiteSpace(colorNuevo))
+            segments.Add(ColorNuevo(colorNuevo));
+        if (declaradas.Carroceria && !string.IsNullOrWhiteSpace(carroceriaNueva))
+            segments.Add(CarroceriaNueva(carroceriaNueva));
+        if (declaradas.Combustible && !string.IsNullOrWhiteSpace(combustibleNuevo))
+            segments.Add(CombustibleNuevo(combustibleNuevo));
+
+        return segments.Count == 0 ? null : string.Join(" ", segments);
+    }
+
+    public static string ColorNuevo(string? valor) =>
+        $"Color nuevo(NUEVO COLOR: {Display(valor)})";
+
+    public static string CarroceriaNueva(string? valor) =>
+        $"Carroceria nueva(NUEVA CARROCERIA: {Display(valor)})";
+
+    public static string CombustibleNuevo(string? valor) =>
+        $"COMBUSTIBLE_NUEVO: {Display(valor)}";
 
     /// <summary>
     /// Hay cambio declarado si el snapshot RUNT existe y el valor efectivo (no vacío) difiere de él
