@@ -28,6 +28,7 @@ import {
   resolveTipoNegocio,
   suggestedFamilyForTipo,
   systemTemplateLabel,
+  terceroAjenoEnPlantilla,
   type MandatoTipoNegocio,
 } from "@/lib/plataforma/mandato-templates";
 
@@ -95,6 +96,7 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
   const hasCustom = view.hasCustomTemplate;
   // Redacción que se emite hoy: con "auto" elegido, la del sistema para este organismo.
   const effectiveTemplate = view.templateCode || "generico";
+  const terceroAjeno = terceroAjenoEnPlantilla(templateCode, office.code);
   const showInstitutionalMeta =
     effectiveTemplate === "sabaneta" ||
     effectiveTemplate === "bello" ||
@@ -563,6 +565,28 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
                 {mandatoTemplateOptions().find((o) => o.code === templateCode)?.summary ?? ""}
               </span>
             </label>
+
+            {/* HU #11718 — la redacción elegida puede nombrar a un tercero ajeno al organismo:
+                las plantillas del sistema llevan su municipio y su mandatario institucional
+                quemados. Advierte, no bloquea: restringir contradiría la libertad que introdujo
+                el Feature #11702. */}
+            {terceroAjeno ? (
+              <div
+                className="rounded-2xl border px-4 py-3"
+                style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)" }}
+                data-testid="mandato-template-ajena-warning"
+                role="alert"
+              >
+                <p className="text-[11px] font-semibold leading-relaxed text-[#8a6000]">
+                  Esta redacción es de otro organismo.
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-[#8a6000]">
+                  El contrato de {office.name} quedaría nombrando a{" "}
+                  <span className="font-semibold">{terceroAjeno}</span>, que no interviene en sus
+                  trámites. Puedes guardarlo igual si es lo que quieres.
+                </p>
+              </div>
+            ) : null}
 
             {templateCode === "auto" ? (
               <div

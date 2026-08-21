@@ -91,6 +91,9 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     await user.click(await screen.findByRole("button", { name: "Nuevo mandatario" }));
     await user.type(screen.getByLabelText("Nombre completo"), "Ana Restrepo");
     await user.type(screen.getByLabelText("Número de documento"), "1020304050");
+    // Desde la HU #11715 no se habilita en un organismo a quien no puede firmar ante él: con correo
+    // la validación de identidad sale al registrarlo.
+    await user.type(screen.getByLabelText("Correo"), "ana@ejemplo.com");
     await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
 
     // La empresa se identifica por NIT, no solo por razón social.
@@ -121,6 +124,9 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     await user.click(await screen.findByRole("button", { name: "Nuevo mandatario" }));
     await user.type(screen.getByLabelText("Nombre completo"), "Ana Restrepo");
     await user.type(screen.getByLabelText("Número de documento"), "1020304050");
+    // Desde la HU #11715 no se habilita en un organismo a quien no puede firmar ante él: con correo
+    // la validación de identidad sale al registrarlo.
+    await user.type(screen.getByLabelText("Correo"), "ana@ejemplo.com");
     await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
     await user.click(screen.getByRole("button", { name: "Guardar" }));
 
@@ -172,6 +178,7 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
     // Selección múltiple: los dos a la vez.
     await user.type(screen.getByLabelText("Nombre completo"), "Carlos Pérez");
     await user.type(screen.getByLabelText("Número de documento"), "9080706050");
+    await user.type(screen.getByLabelText("Correo"), "carlos@ejemplo.com");
     await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
     await user.click(screen.getByRole("checkbox", { name: "Tránsito de Envigado" }));
     await user.click(screen.getByRole("button", { name: "Guardar" }));
@@ -224,6 +231,44 @@ describe("HU #11202 — mandatarios desde el configurador de la compañía", () 
         expect.objectContaining({ transitOfficeIds: ["ot-medellin"] }),
       ),
     );
+  });
+
+  it("HU #11715: sin medio de firma no se puede guardar, y se explica por qué", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Nuevo mandatario" }));
+    await user.type(screen.getByLabelText("Nombre completo"), "Ana Restrepo");
+    await user.type(screen.getByLabelText("Número de documento"), "1020304050");
+    await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
+
+    expect(
+      screen.getByText(/no está en condiciones de firmar/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Guardar" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(mocks.createCompanyMandateSigner).not.toHaveBeenCalled();
+  });
+
+  it("HU #11715: con firma de forma física sí se guarda, porque la línea en blanco es lo correcto", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Nuevo mandatario" }));
+    await user.type(screen.getByLabelText("Nombre completo"), "Ana Restrepo");
+    await user.type(screen.getByLabelText("Número de documento"), "1020304050");
+    await user.click(screen.getByRole("checkbox", { name: "Secretaría de Movilidad de Medellín" }));
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Firma de forma física · Secretaría de Movilidad de Medellín",
+      }),
+    );
+
+    expect(screen.queryByText(/no está en condiciones de firmar/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(mocks.createCompanyMandateSigner).toHaveBeenCalled());
   });
 
   it("AC4: el perfil del organismo ya no ofrece la gestión de mandatarios", () => {
