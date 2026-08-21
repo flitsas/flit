@@ -246,12 +246,34 @@ public static class AdminPlataformaMandatosEndpoints
         var view = await service.GetAsync(officeId, ct).ConfigureAwait(false);
         if (view is null) return Results.NotFound();
 
-        var sample = MandatoPreviewSample.Build(view.TemplateCode);
         byte[]? customPdf = null;
         if (view.CustomTemplateKind == MandatoCustomTemplateKindCodes.Pdf)
             customPdf = await service.OpenCustomPdfAsync(officeId, ct).ConfigureAwait(false);
 
-        var data = sample with
+        var doc = generator.GenerateMandato(BuildOtPreviewData(view, customPdf));
+        return Results.File(doc.Content, contentType: "application/pdf");
+    }
+
+    /// <summary>
+    /// Arma la muestra de la vista previa de UN organismo. Está separado del endpoint para poder
+    /// comprobar por pruebas que el organismo viaja (HU #11719): el defecto que corrige no se ve en
+    /// el PDF renderizado, solo en qué datos se le pasan al generador.
+    /// </summary>
+    public static MandatoData BuildOtPreviewData(MandateOtConfigView view, byte[]? customPdf)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+
+        // HU #11719 — el organismo va explícito. Sin él, la muestra se arma con el OT CANÓNICO de la
+        // plantilla (municipio ⇒ Envigado, genérico ⇒ Medellín), así que la vista previa de Bogotá
+        // decía «SECRETARIA DE MOVILIDAD DE MEDELLIN … en la ciudad de Medellín». Es la única vista
+        // que el administrador tiene por OT desde la HU #11705, y le mostraba otro municipio.
+        // La ciudad va como marcador, igual que en el simulador: catalogs.transit_offices solo guarda
+        // el código DIVIPOLA y el generador lo descarta a propósito (HU #11016).
+        var sample = MandatoPreviewSample.Build(
+            view.TemplateCode,
+            organismo: new OrganismoTransito(view.Code, view.Name, MandatoPreviewSample.PhCiudadOrganismo));
+
+        return sample with
         {
             InstitutionalMandataryName = view.InstitutionalMandataryName ?? sample.InstitutionalMandataryName,
             InstitutionalMandataryNit = view.InstitutionalMandataryNit ?? sample.InstitutionalMandataryNit,
@@ -272,9 +294,6 @@ public static class AdminPlataformaMandatosEndpoints
             CustomTemplateBody = view.CustomTemplateBody,
             CustomTemplatePdf = customPdf,
         };
-
-        var doc = generator.GenerateMandato(data);
-        return Results.File(doc.Content, contentType: "application/pdf");
     }
 
     private static async Task<IResult> ListSimulatorSignersAsync(

@@ -242,3 +242,41 @@ export interface MandatoOtApplicationRow {
   templateCode: MandatoTemplateCode;
   hasExplicitConfig: boolean;
 }
+
+/**
+ * HU #11718 — qué tercero ajeno quedaría citado en el contrato si se aplica `templateCode` al
+ * organismo `officeCode`, o `null` si la combinación es coherente.
+ *
+ * <p>Las redacciones del sistema llevan datos quemados en `MandatoPdfGenerator`: la de Bello cierra
+ * con su municipio y nombra a la UT-MAB; la de Sabaneta nombra a UT-SETSA como mandatario y la
+ * Cámara de Comercio de Medellín. Desde que la plantilla se elige por OT (Feature #11702) se puede
+ * aplicar cualquiera a cualquier organismo, y el documento sale nombrando a alguien que no tiene
+ * nada que ver — Bello aplicado a Bogotá cierra «en el municipio de Bello, Antioquia».</p>
+ *
+ * <p><b>Advierte, no bloquea</b> (decisión de producto del 2026-08-21): restringir contradiría la
+ * libertad de parametrización que introdujo el Feature #11702.</p>
+ */
+export function terceroAjenoEnPlantilla(
+  templateCode: string | null | undefined,
+  officeCode: string | null | undefined,
+): string | null {
+  const code = (templateCode ?? "").trim().toLowerCase();
+
+  // La automática nunca advierte: por definición aplica la redacción propia del organismo.
+  if (code === "" || code === MANDATO_TEMPLATE_AUTO.code) return null;
+
+  const template = MANDATO_TEMPLATES.find((t) => t.code === code);
+  if (!template) return null;
+
+  // La genérica no nombra a ningún organismo concreto: es el respaldo de todos.
+  if (template.bindings.some((b) => b.officeCode === "*")) return null;
+
+  const ot = (officeCode ?? "").trim();
+  if (ot !== "" && template.bindings.some((b) => b.officeCode === ot)) return null;
+
+  // Es de otro. Se nombra a quién, que es lo que el gestor necesita para juzgar.
+  const nombres = template.bindings.map(
+    (b) => b.institutionalMandataryName ?? b.chamberCity ?? b.officeName,
+  );
+  return [...new Set(nombres)].join(", ");
+}

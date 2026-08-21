@@ -5,6 +5,7 @@ import {
   suggestedFamilyForTipo,
   systemTemplateLabel,
   tipoNegocioLabel,
+  terceroAjenoEnPlantilla,
 } from "@/lib/plataforma/mandato-templates";
 
 describe("mandato-templates tipos de negocio", () => {
@@ -40,5 +41,31 @@ describe("mandato-templates tipos de negocio", () => {
     expect(systemTemplateLabel("bello")).toBe("Bello");
     expect(systemTemplateLabel("municipio")).toMatch(/Envigado.*Funza.*Medellín/i);
     expect(systemTemplateLabel(null)).toBe("Genérico");
+  });
+});
+
+describe("terceroAjenoEnPlantilla (HU #11718)", () => {
+  it("la automática nunca advierte", () => {
+    expect(terceroAjenoEnPlantilla("auto", "11001000")).toBeNull();
+    expect(terceroAjenoEnPlantilla(null, "11001000")).toBeNull();
+  });
+
+  it("la genérica no nombra a ningún organismo concreto", () => {
+    expect(terceroAjenoEnPlantilla("generico", "11001000")).toBeNull();
+  });
+
+  it("la redacción propia del organismo no advierte", () => {
+    expect(terceroAjenoEnPlantilla("sabaneta", "5631000")).toBeNull();
+    expect(terceroAjenoEnPlantilla("municipio", "25286000")).toBeNull();
+  });
+
+  it("una redacción de otro organismo advierte y nombra al tercero", () => {
+    // Es el caso que se vio en vivo: Bello aplicado a Bogotá cierra «en el municipio de Bello».
+    expect(terceroAjenoEnPlantilla("bello", "11001000")).toContain("BELLO");
+    expect(terceroAjenoEnPlantilla("sabaneta", "25286000")).toContain("SABANETA");
+  });
+
+  it("municipio advierte fuera de sus tres organismos", () => {
+    expect(terceroAjenoEnPlantilla("municipio", "11001000")).not.toBeNull();
   });
 });

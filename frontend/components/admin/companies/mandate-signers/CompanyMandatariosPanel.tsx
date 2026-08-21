@@ -17,6 +17,10 @@ import {
   type MandateSigner,
 } from "@/lib/api/admin-mandate-signers";
 import { formatDocumentWithType } from "@/lib/display/document-number";
+import {
+  motivoSinFirma,
+  organismosSinMedioDeFirma,
+} from "@/lib/plataforma/mandatario-firma";
 import { CompanyMandatarioForm } from "./CompanyMandatarioForm";
 
 /**
@@ -109,6 +113,18 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
     setFormOpen(true);
   };
 
+  /**
+   * HU #11717 — organismos donde el mandatario está habilitado pero no podría firmar. Se calcula con
+   * la misma regla que impone el backend al parametrizar, para que la consola no diga una cosa y el
+   * guardado otra.
+   */
+  const sinFirmaPorSigner = (signer: MandateSigner) =>
+    organismosSinMedioDeFirma(
+      signer.transitOfficeIds ?? [],
+      signer.physicalSignatureOfficeIds ?? [],
+      signer,
+    );
+
   const sinOrganismos = offices.length === 0;
 
   return (
@@ -173,6 +189,22 @@ export function CompanyMandatariosPanel({ tenantId }: { tenantId: string }) {
                       : (signer.transitOfficeIds ?? [])
                           .map((id) => officeNameById.get(id) ?? id)
                           .join(", ")}
+                    {/* HU #11717 — se SEÑALA, no se inhabilita: los trámites en curso siguen
+                        emitiendo su mandato como hoy. Los organismos de firma física quedan fuera,
+                        porque ahí la línea en blanco es el resultado correcto. */}
+                    {sinFirmaPorSigner(signer).length > 0 && (
+                      <div
+                        className="mt-1 text-[11px] leading-tight"
+                        style={{ color: "#E5484D" }}
+                        title={motivoSinFirma(signer)}
+                      >
+                        No puede firmar en{" "}
+                        {sinFirmaPorSigner(signer)
+                          .map((id) => officeNameById.get(id) ?? id)
+                          .join(", ")}
+                        : {motivoSinFirma(signer).toLowerCase()}
+                      </div>
+                    )}
                   </td>
                   <td className="rounded-r-xl border-y border-r px-4 py-3 text-right">
                     <button

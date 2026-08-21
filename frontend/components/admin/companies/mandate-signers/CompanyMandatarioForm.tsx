@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
+import {
+  motivoSinFirma,
+  organismosSinMedioDeFirma,
+} from "@/lib/plataforma/mandatario-firma";
 import { ApiValidationError } from "@/lib/api/types";
 import { SignatureVaultSelector } from "@/components/admin/companies/legal-representatives/SignatureVaultSelector";
 import { MandatarioIdentidadBlock } from "./MandatarioIdentidadBlock";
@@ -99,6 +103,17 @@ export function CompanyMandatarioForm({
     setError(null);
     setFisicos((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
+
+  // HU #11716 — organismos en los que el mandatario quedaría sin poder firmar. La regla la impone el
+  // backend; esto la explica antes de que el guardado falle, y ofrece los dos caminos para resolverla.
+  const sinFirma = organismosSinMedioDeFirma(selected, fisicos, {
+    signatureVaultId,
+    email,
+    identityStatus: editing?.identityStatus,
+  });
+  const nombresSinFirma = offices
+    .filter((o) => sinFirma.includes(o.transitOfficeId))
+    .map((o) => o.name);
 
   const handleSave = async () => {
     if (!fullName.trim() || !documentNumber.trim()) {
@@ -326,6 +341,34 @@ export function CompanyMandatarioForm({
               datos debajo para firmarla a mano, en vez de estampar su firma del baúl o su sello de
               identidad.
             </p>
+
+            {sinFirma.length > 0 && (
+              <div
+                className="mt-2 rounded-xl border p-3 text-[11px] leading-tight"
+                style={{ borderColor: "#E5484D", color: "#E5484D" }}
+                role="alert"
+              >
+                <p className="font-semibold">
+                  Este mandatario no está en condiciones de firmar en{" "}
+                  {nombresSinFirma.length === 1
+                    ? nombresSinFirma[0]
+                    : `${nombresSinFirma.length} organismos`}
+                  .
+                </p>
+                <p className="mt-1">
+                  {motivoSinFirma({ identityStatus: editing?.identityStatus })} Captúrale la firma del
+                  baúl, registra un correo para enviarle la validación de identidad, o marca esos
+                  organismos como de firma física.
+                </p>
+                {nombresSinFirma.length > 1 && (
+                  <ul className="mt-1 list-disc pl-4 opacity-90">
+                    {nombresSinFirma.map((n) => (
+                      <li key={n}>{n}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </fieldset>
 
           {error && (
@@ -346,7 +389,7 @@ export function CompanyMandatarioForm({
           <button
             type="button"
             onClick={() => void handleSave()}
-            disabled={saving}
+            disabled={saving || sinFirma.length > 0}
             className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
             style={{ background: "#557EFF" }}
           >
