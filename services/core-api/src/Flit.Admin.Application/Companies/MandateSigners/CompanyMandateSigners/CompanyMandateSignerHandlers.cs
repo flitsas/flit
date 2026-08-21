@@ -81,6 +81,17 @@ public sealed class CreateCompanyMandateSignerHandler
             return CreateMandateSignerResult.Invalid([firmaError]);
         }
 
+        // HU #11715 — no se habilita en un organismo a quien no puede firmar ante él.
+        var sinFirmaError = MandateSignerSigningCapability.Validate(
+            offices,
+            request.PhysicalSignatureOfficeIds,
+            request.SignatureVaultId,
+            request.Email);
+        if (sinFirmaError is not null)
+        {
+            return CreateMandateSignerResult.Invalid([sinFirmaError]);
+        }
+
         return await _inner.HandleAsync(
             new CreateMandateSignerCommand
             {
@@ -235,6 +246,22 @@ public sealed class UpdateCompanyMandateSignerHandler
         if (firmaError is not null)
         {
             return UpdateMandateSignerResult.Invalid([firmaError]);
+        }
+
+        // HU #11715 AC6 — solo se valida lo que se está AGREGANDO. Un mandatario con organismos
+        // previos que hoy no cumplirían se puede seguir editando: esos vínculos quedan señalados
+        // (HU #11717), no inhabilitados, para no romper los trámites en curso.
+        var yaHabilitados = new HashSet<Guid>(signer.TransitOfficeIds);
+        var nuevos = offices.Where(o => !yaHabilitados.Contains(o)).ToList();
+        var sinFirmaError = MandateSignerSigningCapability.Validate(
+            nuevos,
+            request.PhysicalSignatureOfficeIds,
+            request.SignatureVaultId,
+            request.Email,
+            signer);
+        if (sinFirmaError is not null)
+        {
+            return UpdateMandateSignerResult.Invalid([sinFirmaError]);
         }
 
         var primarioActual = signer.TransitOfficeId;

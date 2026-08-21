@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Companies.MandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
@@ -150,8 +151,12 @@ public sealed class CompanyMandateSignerHandlerTests
         ListCompanyMandateSignersHandler list, CancellationToken ct) =>
         (await list.HandleAsync(Compania, ct)).Single().Id;
 
+    /// <summary>
+    /// El correo va siempre: desde la HU #11715 no se habilita en un organismo a quien no puede firmar
+    /// ante él, y con correo la validación de identidad sale al registrarlo.
+    /// </summary>
     private static CompanyMandateSignerRequest Alta(params Guid[] organismos) =>
-        new("Ana Restrepo", "1020304050", organismos, "CC", null);
+        new("Ana Restrepo", "1020304050", organismos, "CC", "ana@x.com");
 
     // ── AC1 — alta desde la compañía ──────────────────────────────────────────
 
@@ -234,7 +239,7 @@ public sealed class CompanyMandateSignerHandlerTests
         await create.HandleAsync(Compania, Alta(OtMedellin), null, ct);
         await create.HandleAsync(
             Compania,
-            new CompanyMandateSignerRequest("Carlos Pérez", "9080706050", [OtEnvigado], "CC", null),
+            new CompanyMandateSignerRequest("Carlos Pérez", "9080706050", [OtEnvigado], "CC", "carlos@x.com"),
             null,
             ct);
 
@@ -438,5 +443,100 @@ public sealed class CompanyMandateSignerHandlerTests
             null, ct);
 
         result.Outcome.Should().Be(UpdateMandateSignerOutcome.NotFound);
+    }
+
+    // ── HU #11715 — no se habilita a quien no puede firmar ────────────────────
+
+    [Fact]
+    public async Task Alta_SinMedioDeFirma_SeRechaza()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, list) = Handlers(ctx);
+
+        var result = await create.HandleAsync(
+            Compania,
+            new CompanyMandateSignerRequest("Ana Restrepo", "1020304050", [OtMedellin], "CC", null),
+            null,
+            ct);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Message.Should().Be(MandateSignerSigningCapability.SinMedioDeFirmaMessage);
+        (await list.HandleAsync(Compania, ct)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Alta_SinMedioDeFirma_PeroConFirmaFisica_SeAcepta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        // El gestor eligió que ante ese organismo se firme a mano: la línea en blanco es correcta.
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, list) = Handlers(ctx);
+
+        var result = await create.HandleAsync(
+            Compania,
+            new CompanyMandateSignerRequest(
+                "Ana Restrepo", "1020304050", [OtMedellin], "CC", null,
+                PhysicalSignatureOfficeIds: [OtMedellin]),
+            null,
+            ct);
+
+        result.IsValid.Should().BeTrue();
+        (await list.HandleAsync(Compania, ct)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Editar_AgregandoUnOrganismoSinMedioDeFirma_SeRechaza()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, list) = Handlers(ctx);
+        await create.HandleAsync(
+            Compania,
+            new CompanyMandateSignerRequest(
+                "Ana Restrepo", "1020304050", [OtMedellin], "CC", null,
+                PhysicalSignatureOfficeIds: [OtMedellin]),
+            null,
+            ct);
+        var id = await IdDelUnicoAsync(list, ct);
+
+        var result = await Editor(ctx).HandleAsync(
+            Compania, id,
+            new CompanyMandateSignerRequest(
+                "Ana Restrepo", "1020304050", [OtMedellin, OtEnvigado], "CC", null,
+                PhysicalSignatureOfficeIds: [OtMedellin]),
+            null, ct);
+
+        result.Outcome.Should().Be(UpdateMandateSignerOutcome.ValidationFailed);
+    }
+
+    [Fact]
+    public async Task Editar_SinAgregarOrganismos_NoObligaAArreglarLosPrevios()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        // AC6 — los vínculos previos que hoy no cumplirían se señalan (HU #11717), no se inhabilitan,
+        // y editar cualquier otro dato del mandatario no puede quedar bloqueado por ellos.
+        await using var ctx = NewContext();
+        await SeedAsync(ctx, ct);
+        var (create, list) = Handlers(ctx);
+        await create.HandleAsync(
+            Compania,
+            new CompanyMandateSignerRequest(
+                "Ana Restrepo", "1020304050", [OtMedellin], "CC", null,
+                PhysicalSignatureOfficeIds: [OtMedellin]),
+            null,
+            ct);
+        var id = await IdDelUnicoAsync(list, ct);
+
+        var result = await Editor(ctx).HandleAsync(
+            Compania, id,
+            new CompanyMandateSignerRequest("Ana Restrepo Gómez", "1020304050", [OtMedellin], "CC", null),
+            null, ct);
+
+        result.Outcome.Should().Be(UpdateMandateSignerOutcome.Updated);
     }
 }
