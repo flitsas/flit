@@ -315,6 +315,35 @@ ser **radicables sin biométrica nueva**. Es un cambio de veredicto, no un refac
 
 ---
 
+## Enmienda 2026-08-21 (HU #11754)
+
+**No se reabre la decisión de este ADR.** Se enmienda únicamente la premisa de la sección
+*"Por qué la identidad administrativa queda fuera de alcance"* (arriba), que daba por sentado que
+`ADR-0034-validacion-identidad-admin-desacoplada.md` seguiría vigente indefinidamente y que la ruta
+admin conservaría su propio almacén (`admin.admin_identity_validations`).
+
+`ADR-0050-identidad-fuente-unica-y-disparo-unico.md` (Propuesto) supersede al `ADR-0034` y retira el
+disparo de identidad del área admin: representantes legales y mandatarios pasan a resolverse contra
+`tramites.procedure_instance_biometric_validations` — el MISMO almacén que este ADR ya gobierna. Eso
+significa que:
+
+- La frase "la ruta admin queda deliberadamente sin guard, y este ADR no la toca" sigue siendo cierta en
+  la letra (este documento no cambia su decisión), pero la premisa que la sostenía —"vive en otro
+  agregado"— ya no aplica: tras el `ADR-0050`, la identidad administrativa vive en el MISMO agregado que
+  la precedencia de este ADR gobierna.
+- Esto **no** extiende automáticamente la precedencia de envío (D1–D5 de este documento) a los disparadores
+  de identidad administrativa: esos disparadores se **retiran** (responden `410 Gone`), no se re-priorizan.
+  No hay, por tanto, un sexto disparador que unificar — el `ADR-0050` lo cierra por eliminación, no por
+  adopción de esta precedencia.
+- La normalización canónica del documento (`Trim` + mayúsculas invariantes) que este ADR fija en D2 es la
+  MISMA que usa `IdentityVigenciaPorDocumentoResolver` del `ADR-0050` (HU #11751): no hay una segunda
+  normalización que reconciliar.
+
+En síntesis: la acotación original de este ADR fue correcta para su fecha; el `ADR-0050` cambia el terreno
+(desaparece el segundo almacén), no la regla de precedencia que este documento estableció.
+
+---
+
 ## Referencias externas
 
 - Plan técnico v2: `docs/plan-tecnico-ajustes-validacion-identidad.md` (CF-01 a CF-04; decisiones D2, D3, D4, D8–D13)
