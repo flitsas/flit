@@ -89,6 +89,30 @@ public sealed class MandateSignerBugReproTests
             Task.FromResult<(string Url, DateTimeOffset ExpiresAt)?>(null);
     }
 
+    /// <summary>Storage que SÍ devuelve la imagen de la firma del baúl.</summary>
+    private sealed class StorageConFirma : IAttachmentStorage
+    {
+        public Task<StoredFile> SaveAsync(
+            Guid procedureInstanceId, string tipo, string originalFilename, Stream content,
+            CancellationToken ct = default) =>
+            Task.FromResult(new StoredFile($"{procedureInstanceId:D}/{tipo}", $"sha-{tipo}", 10));
+
+        public Task<PresignedUpload> CreatePresignedUploadAsync(
+            Guid procedureInstanceId, string tipo, string originalFilename, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public void Delete(string storagePath)
+        {
+        }
+
+        public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>
+            Task.FromResult<Stream?>(new MemoryStream(Encoding.UTF8.GetBytes("PNG-FIRMA")));
+
+        public Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(
+            string storagePath, CancellationToken ct = default) =>
+            Task.FromResult<(string Url, DateTimeOffset ExpiresAt)?>(null);
+    }
+
     /// <summary>
     /// Misma "foto" de trámite para pantalla y documento: matrícula inicial, borrador, mismo OT (columna
     /// TransitOfficeId, como queda tras radicar) y SIN elección explícita de mandatario.
@@ -205,6 +229,95 @@ public sealed class MandateSignerBugReproTests
             mandatoGenerator: mandatoGenerator,
             mandatePolicy: policy,
             mandateDirectory: directorio);
+
+    [Fact]
+    public async Task ElMandatoSaleFIRMADO_ConLaImagenDelBaulDelMandatarioDeEsaCompaniaYOt()
+    {
+        // Feature #11702 — no basta con NOMBRAR al mandatario: el contrato tiene que salir firmado por
+        // él. Precedencia (HU #11030, hoy en MandatarioFirmaResolver): imagen del baúl → sello de
+        // identidad → línea en blanco.
+        var ct = TestContext.Current.CancellationToken;
+
+        var directorio = new Directorio(
+            new MandateSignerCandidate(
+                Carlos, "Carlos Pérez Demo", "222000222", null,
+                IdentityVigente: true, TipoDocumento: "CC"));
+
+        var policy = Substitute.For<IMandateRequirementPolicy>();
+        policy.ResolveByOfficeIdAsync(Ot, Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(DefaultCarlosConfig());
+
+        var vault = Substitute.For<ISignatureVaultPolicy>();
+        vault.ResolveAsync(TenantId, "CC", "222000222", Arg.Any<CancellationToken>())
+            .Returns(new SignatureVaultMatch(
+                SignatureVaultId: Guid.NewGuid(),
+                FullName: "Carlos Pérez Demo",
+                SignatureHash: "sig-hash",
+                StoragePath: "firmas/carlos.png",
+                StorageSha256: "sha-firma",
+                VigenciaDesde: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(-1)),
+                VigenciaHasta: DateOnly.FromDateTime(DateTime.UtcNow.AddYears(1)),
+                DocumentNumber: "222000222",
+                CodigoHash: "ABC123"));
+
+        var instance = NewInstance();
+        _repo.GetByIdWithFurGraphAsync(InstanceId, TenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var mandatoGenerator = new CapturingMandatoGenerator();
+        var handler = new GenerarFurHandler(
+            _repo,
+            new MockFurDocumentGenerator(),
+            Substitute.For<IKyverumCertificateClient>(),
+            Substitute.For<IRuesCertificateGenerator>(),
+            Substitute.For<IRnmcCertificateGenerator>(),
+            Substitute.For<IProcedureInstancePrendaRepository>(),
+            new StorageConFirma(),
+            NullLogger<GenerarFurHandler>.Instance,
+            vaultPolicy: vault,
+            mandatoGenerator: mandatoGenerator,
+            mandatePolicy: policy,
+            mandateDirectory: directorio);
+
+        var (_, error) = await handler.HandleAsync(InstanceId, TenantId, ct);
+
+        error.Should().BeNull();
+        var mandatario = mandatoGenerator.Captured!.Mandatario;
+        mandatario.Should().NotBeNull();
+        mandatario!.FirmaImagen.Should().NotBeNullOrEmpty("el mandato debe salir con la firma del mandatario estampada");
+        mandatario.FirmaBaulMetadatos.Should().NotBeNull("la firma estampada viaja con su trazabilidad (HU #11170)");
+        mandatoGenerator.Captured.ModoFirmaMandatario.Should().Be(MandatarioFirmaModo.Estampada);
+    }
+
+    [Fact]
+    public async Task ElOrganismoSeResuelvePorId_AunqueElCodigoGuardadoNoCoteje()
+    {
+        // HU #11704 — el bug de Matrícula Inicial. El trámite trae "11001000" en field_values, pero la
+        // configuración se llavea por el ID del organismo: aunque ese código no cotejara contra el
+        // catálogo, el mandato debe salir con la plantilla y el mandatario del OT.
+        var ct = TestContext.Current.CancellationToken;
+
+        var directorio = new Directorio(
+            new MandateSignerCandidate(Carlos, "Carlos Pérez Demo", "222000222", null));
+
+        var policy = Substitute.For<IMandateRequirementPolicy>();
+        // Por código NO resuelve nada (simula el código que no coteja); por id sí.
+        policy.ResolveAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns((MandateOtConfig?)null);
+        policy.ResolveByOfficeIdAsync(Ot, Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(DefaultCarlosConfig() with { TemplateCode = "municipio" });
+
+        var instance = NewInstance();
+        _repo.GetByIdWithFurGraphAsync(InstanceId, TenantId, Arg.Any<CancellationToken>()).Returns(instance);
+
+        var mandatoGenerator = new CapturingMandatoGenerator();
+        var (_, error) = await NewFurHandler(directorio, policy, mandatoGenerator)
+            .HandleAsync(InstanceId, TenantId, ct);
+
+        error.Should().BeNull();
+        mandatoGenerator.Captured!.TemplateCode.Should().Be(
+            "municipio", "la plantilla sale de la configuración del OT, no de la genérica");
+        mandatoGenerator.Captured.Mandatario!.Documento.Should().Be("222000222");
+    }
 
     [Fact]
     public async Task SinDefaultYVariosCandidatos_ElDocumentoQuedaSinFirmante_YNoPersisteNada()

@@ -29,11 +29,13 @@ public sealed class MandatoSystemOfficeTemplatesTests
     }
 
     [Fact]
-    public void ResolveTemplateCode_SabanetaConfigGenericoSinCustom_IgualSistema()
+    public void ResolveTemplateCode_SabanetaConfigGenerico_GanaLaEleccion()
     {
+        // HU #11703 — la elección explícita del OT pasó a mandar sobre el builtin: antes esto
+        // devolvía "sabaneta" y hacía inerte lo que se configurara para los cinco organismos.
         MandatoSystemOfficeTemplates
             .ResolveTemplateCode("5631000", "generico", MandatoCustomTemplateKindCodes.None)
-            .Should().Be("sabaneta");
+            .Should().Be("generico");
     }
 
     [Fact]
@@ -45,10 +47,51 @@ public sealed class MandatoSystemOfficeTemplatesTests
     }
 
     [Fact]
-    public void ResolveTemplateCode_EnvigadoConfigGenericoSinCustom_IgualSistema()
+    public void ResolveTemplateCode_EnvigadoConfigGenerico_GanaLaEleccion()
     {
         MandatoSystemOfficeTemplates
             .ResolveTemplateCode("5266000", "generico", MandatoCustomTemplateKindCodes.None)
+            .Should().Be("generico");
+    }
+
+    [Theory]
+    [InlineData("5631000", MandatoTemplateResolver.Sabaneta)]
+    [InlineData("25286000", MandatoTemplateResolver.Municipio)]
+    [InlineData("9999999", MandatoTemplateResolver.Generico)]
+    public void ResolveTemplateCode_Auto_DelegaEnElBuiltinDelOrganismo(string office, string expected)
+    {
+        MandatoSystemOfficeTemplates
+            .ResolveTemplateCode(office, MandatoTemplateResolver.Auto, MandatoCustomTemplateKindCodes.None)
+            .Should().Be(expected);
+    }
+
+    [Fact]
+    public void ResolveTemplateCode_FunzaConfigMunicipio_MantieneLoQueEmiteHoy()
+    {
+        // AC5 — las filas de los cinco organismos ya traen el código de su builtin: invertir la
+        // precedencia no cambia lo que emiten.
+        MandatoSystemOfficeTemplates
+            .ResolveTemplateCode("25286000", "municipio", MandatoCustomTemplateKindCodes.None)
             .Should().Be("municipio");
+    }
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData("", true)]
+    [InlineData("   ", true)]
+    [InlineData("auto", true)]
+    [InlineData("AUTO", true)]
+    [InlineData("generico", false)]
+    public void IsAuto_ReconoceLaAusenciaDeEleccion(string? code, bool expected)
+    {
+        MandatoTemplateResolver.IsAuto(code).Should().Be(expected);
+    }
+
+    [Fact]
+    public void Resolve_Auto_NoEsUnaRedaccion_CaeAGenerico()
+    {
+        // "auto" nunca debería llegar al generador; si llega, no puede reventar.
+        MandatoTemplateResolver.Resolve(MandatoTemplateResolver.Auto)
+            .Should().Be(MandatoVariante.Generico);
     }
 }

@@ -792,50 +792,19 @@ public sealed class GenerarFurHandler(
     private async Task<(byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos)> ResolveMandatarioFirmaAsync(
         FurDocumentData data, MandateSignerCandidate signer, CancellationToken ct)
     {
-        var tipoDoc = string.IsNullOrWhiteSpace(signer.TipoDocumento) ? "CC" : signer.TipoDocumento!.Trim();
+        // La precedencia vive en MandatarioFirmaResolver: el simulador de mandatos la comparte para
+        // mostrar el documento tal como saldría del trámite (Feature #11702).
+        var (firma, sello, metadatos) = await MandatarioFirmaResolver
+            .ResolveAsync(
+                _vaultPolicy,
+                storage,
+                data.TenantIdParaFirmas,
+                signer,
+                ex => GenerarFurLog.FirmaBaulNoDisponible(logger, ex, data.ProcedureInstanceId),
+                ct)
+            .ConfigureAwait(false);
 
-        try
-        {
-            var match = await _vaultPolicy
-                .ResolveAsync(data.TenantIdParaFirmas, tipoDoc, signer.Documento.Trim(), ct)
-                .ConfigureAwait(false);
-
-            if (match is not null && !string.IsNullOrWhiteSpace(match.StoragePath))
-            {
-                var stream = await storage.OpenReadAsync(match.StoragePath, ct).ConfigureAwait(false);
-                if (stream is not null)
-                {
-                    await using (stream.ConfigureAwait(false))
-                    {
-                        using var ms = new MemoryStream();
-                        await stream.CopyToAsync(ms, ct).ConfigureAwait(false);
-                        if (ms.Length > 0)
-                        {
-                            // HU #11170 — la imagen viaja con su trazabilidad (vigencia y hash), igual
-                            // que la de las partes: una firma estampada que no se puede verificar leyendo
-                            // el documento no sirve de nada.
-                            var metadatos = new FirmaBaulMetadata(
-                                match.DocumentNumber,
-                                match.FullName,
-                                match.VigenciaDesde,
-                                match.VigenciaHasta,
-                                match.SignatureVaultId,
-                                match.CodigoHash);
-                            return (ms.ToArray(), null, metadatos);
-                        }
-                    }
-                }
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            GenerarFurLog.FirmaBaulNoDisponible(logger, ex, data.ProcedureInstanceId);
-        }
-
-        // Sin firma del baúl: sello con el certificado de su identidad vigente, si lo hay.
-        return signer.IdentityVigente && !string.IsNullOrWhiteSpace(signer.CertificadoIdentidad)
-            ? (null, $"Validación de identidad\nFirma {signer.CertificadoIdentidad}", null)
-            : (null, null, null);
+        return (firma, sello, metadatos);
     }
 
     private async Task<(IReadOnlyDictionary<string, byte[]>? Images, IReadOnlyDictionary<string, FirmaBaulMetadata>? Metadata)> ResolveVaultSignaturesAsync(
@@ -1014,7 +983,18 @@ public sealed class GenerarFurHandler(
         if (_mandatoGenerator is null || string.IsNullOrWhiteSpace(transitOfficeCode))
             return null;
 
-        var config = await _mandatePolicy.ResolveAsync(transitOfficeCode, data.TenantIdParaFirmas, ct);
+        // El ORGANISMO se llavea por id cuando el trámite lo tiene, y solo si no, por el código. El
+        // código de field_values no es una llave confiable —conviven RUNT de 7 dígitos con DIVIPOLA de
+        // 5— y cuando no coteja exacto contra el catálogo NO se encuentra ni la fila de configuración ni
+        // la plantilla de sistema: el mandato salía GENÉRICO y sin mandatario con el OT bien
+        // parametrizado. Ver IMandateRequirementPolicy.ResolveByOfficeIdAsync.
+        var transitOfficeId = MandateSignerSelectionResolver.ResolveTransitOfficeId(instance);
+        var config = transitOfficeId is { } officeIdParaConfig
+            ? await _mandatePolicy.ResolveByOfficeIdAsync(officeIdParaConfig, data.TenantIdParaFirmas, ct)
+                .ConfigureAwait(false)
+            : null;
+        config ??= await _mandatePolicy.ResolveAsync(transitOfficeCode, data.TenantIdParaFirmas, ct)
+            .ConfigureAwait(false);
         // Producto: el mandato se emite siempre (PN y PJ). La plantilla/familia vienen de la config del OT.
 
         // HU #10916, corregido por el bug DEV de la pantalla/documento divergentes — MISMO resolvedor
@@ -1027,7 +1007,6 @@ public sealed class GenerarFurHandler(
         var assignmentMode = config?.AssignmentMode;
         if (!MandatoAssignmentModeCodes.SkipsPersonSigner(assignmentMode))
         {
-            var transitOfficeId = MandateSignerSelectionResolver.ResolveTransitOfficeId(instance);
             if (transitOfficeId is { } officeId)
             {
                 var candidatos = await _mandateDirectory

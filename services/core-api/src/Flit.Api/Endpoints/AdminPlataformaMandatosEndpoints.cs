@@ -13,6 +13,11 @@ namespace Flit.Api.Endpoints;
 /// </summary>
 public static class AdminPlataformaMandatosEndpoints
 {
+    /// <summary>
+    /// Redacciones previsualizables por código. <c>auto</c> NO entra: no es una redacción sino una
+    /// delegación en la plantilla de sistema del organismo, y sin organismo no hay nada que resolver
+    /// (para eso está la vista previa por OT).
+    /// </summary>
     private static readonly HashSet<string> AllowedTemplates = new(StringComparer.OrdinalIgnoreCase)
     {
         MandatoTemplateResolver.Generico,
@@ -79,6 +84,25 @@ public static class AdminPlataformaMandatosEndpoints
             .WithName("AdminPlataformaMandatosPreviewOt")
             .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
             .Produces(StatusCodes.Status404NotFound);
+
+        // Simulador (HU #11706): arma el escenario y genera / envía el PDF SIN tocar ningún trámite.
+        group.MapGet("/simulador/ot/{officeId:guid}/mandatarios", ListSimulatorSignersAsync)
+            .WithName("AdminPlataformaMandatosSimuladorSigners")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPost("/simulador/preview", SimulatePreviewAsync)
+            .WithName("AdminPlataformaMandatosSimuladorPreview")
+            .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPost("/simulador/enviar", SimulateSendAsync)
+            .WithName("AdminPlataformaMandatosSimuladorEnviar")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status502BadGateway);
 
         group.MapPost("/extract", ExtractAsync)
             .WithName("AdminPlataformaMandatosExtract")
@@ -252,6 +276,57 @@ public static class AdminPlataformaMandatosEndpoints
         var doc = generator.GenerateMandato(data);
         return Results.File(doc.Content, contentType: "application/pdf");
     }
+
+    private static async Task<IResult> ListSimulatorSignersAsync(
+        Guid officeId,
+        [FromServices] IMandateSimulatorService simulator,
+        [FromServices] IMandateConfigAdminService service,
+        CancellationToken ct)
+    {
+        if (await service.GetAsync(officeId, ct).ConfigureAwait(false) is null)
+            return Results.NotFound();
+
+        var items = await simulator.ListSignersAsync(officeId, ct).ConfigureAwait(false);
+        return Results.Ok(new { items });
+    }
+
+    private static async Task<IResult> SimulatePreviewAsync(
+        [FromBody] MandateSimulationRequest request,
+        [FromServices] IMandateSimulatorService simulator,
+        CancellationToken ct)
+    {
+        var result = await simulator.PreviewAsync(request, ct).ConfigureAwait(false);
+        return result.Success
+            ? Results.File(result.Content!, contentType: "application/pdf")
+            : MapSimulation(result);
+    }
+
+    private static async Task<IResult> SimulateSendAsync(
+        [FromBody] MandateSimulationSendRequest request,
+        [FromServices] IMandateSimulatorService simulator,
+        CancellationToken ct)
+    {
+        var result = await simulator.SendAsync(request, ct).ConfigureAwait(false);
+        return result.Success
+            ? Results.Ok(new { message = result.Message })
+            : MapSimulation(result);
+    }
+
+    /// <summary>
+    /// Un fallo del proveedor de correo NO es culpa de quien pidió el envío: sale como 502, no como
+    /// 400. El mensaje ya viene en lenguaje de negocio desde el servicio.
+    /// </summary>
+    private static IResult MapSimulation(MandateSimulationResult result) => result.Outcome switch
+    {
+        MandateSimulationOutcome.OfficeNotFound => Results.NotFound(new { error = "ot_no_encontrado", message = result.Message }),
+        MandateSimulationOutcome.SignerNotFound => Results.NotFound(new { error = "mandatario_no_encontrado", message = result.Message }),
+        MandateSimulationOutcome.InvalidAssignmentMode => Results.BadRequest(new { error = "assignment_mode_invalido", message = result.Message }),
+        MandateSimulationOutcome.InvalidRecipient => Results.BadRequest(new { error = "destinatario_invalido", message = result.Message }),
+        MandateSimulationOutcome.SendFailed => Results.Json(
+            new { error = "envio_fallido", message = result.Message },
+            statusCode: StatusCodes.Status502BadGateway),
+        _ => Results.BadRequest(new { error = "simulacion_invalida", message = result.Message }),
+    };
 
     private static async Task<IResult> ExtractAsync(
         HttpRequest http,

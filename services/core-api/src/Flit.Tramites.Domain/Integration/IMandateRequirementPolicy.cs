@@ -38,6 +38,21 @@ public interface IMandateRequirementPolicy
         string transitOfficeCode,
         Guid? companyTenantId = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Igual que <see cref="ResolveAsync"/> pero llaveando por el <b>id</b> del organismo.
+    ///
+    /// <para>El código de OT que viaja en <c>field_values.transit_office_code</c> no es confiable como
+    /// llave: en la misma tabla conviven códigos RUNT de 7 dígitos (<c>25286000</c>) con códigos DIVIPOLA
+    /// de 5 (<c>11001</c>, <c>05266</c>), y el cotejo es por igualdad exacta. Cuando el código guardado no
+    /// coincide con el del catálogo NO se encuentra ni la fila de configuración ni la plantilla de
+    /// sistema, y el trámite emite el mandato GENÉRICO y sin mandatario aunque el OT esté bien
+    /// parametrizado. El id no tiene ese problema.</para>
+    /// </summary>
+    Task<MandateOtConfig?> ResolveByOfficeIdAsync(
+        Guid transitOfficeId,
+        Guid? companyTenantId = null,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>Política inerte para tests (siempre null).</summary>
@@ -47,6 +62,12 @@ public sealed class NullMandateRequirementPolicy : IMandateRequirementPolicy
 
     public Task<MandateOtConfig?> ResolveAsync(
         string transitOfficeCode,
+        Guid? companyTenantId = null,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<MandateOtConfig?>(null);
+
+    public Task<MandateOtConfig?> ResolveByOfficeIdAsync(
+        Guid transitOfficeId,
         Guid? companyTenantId = null,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<MandateOtConfig?>(null);

@@ -124,6 +124,9 @@ public static class AdminInfrastructureExtensions
             Flit.Infrastructure.OtRules.MandateConfigAdminService>();
         services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateTemplateStorage,
             Flit.Infrastructure.Storage.MandateTemplateStorage>();
+        // Simulador de mandatos (HU #11706): reusa la política del trámite, no una propia.
+        services.AddScoped<Flit.Admin.Application.Plataforma.Mandatos.IMandateSimulatorService,
+            Flit.Infrastructure.OtRules.MandateSimulatorService>();
         services.AddScoped<Flit.Tramites.Domain.Integration.IMandateCustomTemplateBlobReader,
             Flit.Infrastructure.Storage.MandateCustomTemplateBlobReader>();
 

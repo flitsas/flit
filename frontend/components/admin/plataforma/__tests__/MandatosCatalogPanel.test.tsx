@@ -22,6 +22,11 @@ vi.mock("@/lib/api/admin-plataforma-mandatos", () => ({
   listCompanyOtMandateRules: vi.fn().mockResolvedValue([]),
   upsertCompanyOtMandateRule: vi.fn(),
   deleteCompanyOtMandateRule: vi.fn(),
+  // El panel monta el simulador (HU #11707); sin estas entradas el módulo mockeado las deja
+  // indefinidas y el componente revienta al montar.
+  listMandateSimulatorSigners: vi.fn().mockResolvedValue([]),
+  fetchMandateSimulationPreview: vi.fn(),
+  sendMandateSimulation: vi.fn(),
 }));
 
 vi.mock("@/lib/documents/open-document-tab", () => ({

@@ -9,6 +9,7 @@ import {
   MandatoOtConfigForm,
   type MandatoOtConfigPanelMode,
 } from "@/components/admin/plataforma/MandatoOtConfigForm";
+import { MandatoSimuladorPanel } from "@/components/admin/plataforma/MandatoSimuladorPanel";
 import {
   deleteMandateOtConfig,
   fetchMandatoTemplatePreview,
@@ -268,6 +269,8 @@ export function MandatosCatalogPanel() {
           }}
         />
       </section>
+
+      <MandatoSimuladorPanel offices={rows} />
 
       {editing ? (
         <MandatoOtConfigForm

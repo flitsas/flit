@@ -19,6 +19,9 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
 
     private static readonly HashSet<string> Templates = new(StringComparer.OrdinalIgnoreCase)
     {
+        // "auto" no es una redacción: delega en la plantilla de sistema del organismo. Es la forma de
+        // devolverle la decisión al builtin ahora que la elección explícita le gana (HU #11703).
+        MandatoTemplateResolver.Auto,
         MandatoTemplateResolver.Generico,
         MandatoTemplateResolver.Sabaneta,
         MandatoTemplateResolver.Bello,
@@ -707,7 +710,9 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
                 MandatoCustomTemplateKindCodes.None,
                 null,
                 null,
-                HasCustomTemplate: false);
+                HasCustomTemplate: false,
+                // Sin fila no hay elección: el organismo sigue a su plantilla de sistema.
+                ConfiguredTemplateCode: MandatoTemplateResolver.Auto);
         }
 
         var kind = MandatoCustomTemplateKindCodes.Resolve(cfg.CustomTemplateKind);
@@ -734,7 +739,10 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
             kind,
             cfg.CustomTemplateFileName,
             cfg.CustomTemplateBody,
-            hasCustom);
+            hasCustom,
+            ConfiguredTemplateCode: MandatoTemplateResolver.IsAuto(cfg.TemplateCode)
+                ? MandatoTemplateResolver.Auto
+                : cfg.TemplateCode.Trim().ToLowerInvariant());
     }
 
     private static string? NullIfEmpty(string? value) =>

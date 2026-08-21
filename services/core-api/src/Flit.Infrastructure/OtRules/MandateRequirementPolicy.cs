@@ -30,11 +30,53 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
         }
 
         var code = transitOfficeCode.Trim();
+        var office = await _context.TransitOffices.AsNoTracking()
+            .Where(o => o.Code == code)
+            .Select(o => new { o.Id, o.Code })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
 
+        return office is null
+            ? null
+            : await ResolveCoreAsync(office.Id, office.Code, companyTenantId, cancellationToken)
+                .ConfigureAwait(false);
+    }
+
+    public async Task<MandateOtConfig?> ResolveByOfficeIdAsync(
+        Guid transitOfficeId,
+        Guid? companyTenantId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (transitOfficeId == Guid.Empty)
+        {
+            return null;
+        }
+
+        var office = await _context.TransitOffices.AsNoTracking()
+            .Where(o => o.Id == transitOfficeId)
+            .Select(o => new { o.Id, o.Code })
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return office is null
+            ? null
+            : await ResolveCoreAsync(office.Id, office.Code, companyTenantId, cancellationToken)
+                .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Núcleo compartido: el organismo ya está identificado (id + código canónico del catálogo), así que
+    /// el builtin se coteja contra el código del CATÁLOGO y no contra el que venga del trámite.
+    /// </summary>
+    private async Task<MandateOtConfig?> ResolveCoreAsync(
+        Guid officeId,
+        string code,
+        Guid? companyTenantId,
+        CancellationToken cancellationToken)
+    {
         var otRow = await (
             from cfg in _context.TransitOfficeMandateConfigs.AsNoTracking()
-            join ot in _context.TransitOffices.AsNoTracking() on cfg.TransitOfficeId equals ot.Id
-            where ot.Code == code
+            where cfg.TransitOfficeId == officeId
             select new
             {
                 cfg.TransitOfficeId,
@@ -53,16 +95,8 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        Guid officeId;
         if (otRow is null)
         {
-            var office = await _context.TransitOffices.AsNoTracking()
-                .FirstOrDefaultAsync(o => o.Code == code, cancellationToken)
-                .ConfigureAwait(false);
-            if (office is null)
-                return null;
-
-            officeId = office.Id;
             var ruleOnly = await LoadCompanyRuleAsync(officeId, companyTenantId, cancellationToken)
                 .ConfigureAwait(false);
             var builtin = MandatoSystemOfficeTemplates.TryGetByOfficeCode(code);
@@ -80,7 +114,6 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
                 DefaultMandateSignerId: SignerDefaultOrNull(ruleOnly));
         }
 
-        officeId = otRow.TransitOfficeId;
         var rule = await LoadCompanyRuleAsync(officeId, companyTenantId, cancellationToken)
             .ConfigureAwait(false);
         var hasCustom = MandatoCustomTemplateKindCodes.HasCustom(otRow.CustomTemplateKind);

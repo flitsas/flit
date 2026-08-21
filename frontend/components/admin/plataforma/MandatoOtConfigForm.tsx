@@ -23,6 +23,7 @@ import { ApiError } from "@/lib/api/types";
 import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 import {
   MANDATO_TIPOS,
+  mandatoTemplateOptions,
   resolveAssignmentMode,
   resolveTipoNegocio,
   suggestedFamilyForTipo,
@@ -41,6 +42,17 @@ Las firmas se agregan automáticamente al pie del documento.`;
 /** Filas por página en reglas compañía×OT (DataTable + Pagination del design system). */
 const COMPANY_PAGE_SIZE = 10;
 
+/**
+ * HU #11705 — el cargue de un PDF propio y el editor de texto libre quedan OCULTOS: cargar un
+ * contrato ajeno al estándar se presta para malas prácticas, y la parametrización debe limitarse a
+ * escoger cuál de las redacciones del sistema aplica cada organismo.
+ *
+ * <p>Es un interruptor de interfaz, no un borrado: los endpoints, el almacenamiento y el generador
+ * siguen intactos, de modo que los OT que YA tienen plantilla propia la conservan y se siguen
+ * mostrando como tal. Volver a exponer la función es cambiar esta constante a `true`.</p>
+ */
+const MOSTRAR_PLANTILLA_PROPIA = false;
+
 export type MandatoOtConfigPanelMode = "mandato" | "mandatario";
 
 export interface MandatoOtConfigFormProps {
@@ -55,7 +67,9 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
   const pdfRef = useRef<HTMLInputElement>(null);
 
   const [view, setView] = useState(office);
-  const [templateCode, setTemplateCode] = useState(office.templateCode || "generico");
+  // La ELEGIDA (puede ser "auto"), no la efectiva: si se preseleccionara con la efectiva, abrir y
+  // guardar sin tocar nada convertiría un "automática" en una redacción fija.
+  const [templateCode, setTemplateCode] = useState(office.configuredTemplateCode || "auto");
   const [family, setFamily] = useState(office.mandataryFamily || "individuo");
   const [instName, setInstName] = useState(office.institutionalMandataryName ?? "");
   const [instNit, setInstNit] = useState(office.institutionalMandataryNit ?? "");
@@ -79,9 +93,11 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
   const [error, setError] = useState<string | null>(null);
 
   const hasCustom = view.hasCustomTemplate;
+  // Redacción que se emite hoy: con "auto" elegido, la del sistema para este organismo.
+  const effectiveTemplate = view.templateCode || "generico";
   const showInstitutionalMeta =
-    templateCode === "sabaneta" ||
-    templateCode === "bello" ||
+    effectiveTemplate === "sabaneta" ||
+    effectiveTemplate === "bello" ||
     family === "organismo_transito";
 
   const filteredCompanyRules = useMemo(() => {
@@ -146,7 +162,7 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
   const applyView = (next: MandateOtConfigView) => {
     setView(next);
     setRowVersion(next.rowVersion);
-    setTemplateCode(next.templateCode || "generico");
+    setTemplateCode(next.configuredTemplateCode || "auto");
     setFamily(next.mandataryFamily || "individuo");
     setInstName(next.institutionalMandataryName ?? "");
     setInstNit(next.institutionalMandataryNit ?? "");
@@ -526,7 +542,29 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
               Plantilla del mandato (por OT)
             </h3>
 
-            {!hasCustom ? (
+            <label className="block space-y-1.5">
+              <span className="text-xs font-semibold text-[#162244] dark:text-white">
+                Redacción que aplica este OT
+              </span>
+              <select
+                value={templateCode}
+                onChange={(e) => setTemplateCode(e.target.value)}
+                disabled={busy}
+                data-testid="mandato-template-select"
+                className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+              >
+                {mandatoTemplateOptions().map((opt) => (
+                  <option key={opt.code} value={opt.code}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <span className="block text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
+                {mandatoTemplateOptions().find((o) => o.code === templateCode)?.summary ?? ""}
+              </span>
+            </label>
+
+            {templateCode === "auto" ? (
               <div
                 className="relative overflow-hidden rounded-2xl border border-[#DFE5ED] bg-gradient-to-br from-[#F4F7FC] via-white to-[rgba(0,219,213,0.08)] px-4 py-3 dark:border-white/10 dark:from-white/5 dark:via-[#0B0F14] dark:to-[rgba(85,126,255,0.12)]"
                 data-testid="mandato-system-template-badge"
@@ -537,19 +575,20 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
                     Sistema
                   </span>
                   <span className="inline-flex items-center rounded-full border border-[#557EFF]/35 bg-white/80 px-2.5 py-0.5 text-[11px] font-semibold text-[#162244] dark:border-[#00DBD5]/40 dark:bg-white/10 dark:text-white">
-                    {systemTemplateLabel(templateCode)}
+                    {systemTemplateLabel(effectiveTemplate)}
                   </span>
                 </div>
                 <p className="mt-2 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                  Este OT usa la redacción{" "}
+                  En automática, este OT emite hoy la redacción{" "}
                   <span className="font-semibold text-[#162244] dark:text-white">
-                    {systemTemplateLabel(templateCode)}
+                    {systemTemplateLabel(effectiveTemplate)}
                   </span>{" "}
-                  del sistema para todas las compañías. Sube un PDF o abre el editor para plantilla
-                  propia.
+                  para todas las compañías.
                 </p>
               </div>
-            ) : (
+            ) : null}
+
+            {hasCustom ? (
               <div
                 className="rounded-2xl border border-[#557EFF]/35 bg-[rgba(85,126,255,0.06)] px-4 py-3 dark:border-[#00DBD5]/35 dark:bg-[rgba(0,219,213,0.08)]"
                 data-testid="mandato-custom-template-banner"
@@ -566,8 +605,8 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
                   </span>
                 </div>
                 <p className="mt-2 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
-                  En el trámite se usa este documento del OT (no la redacción del sistema). Las firmas
-                  van al pie con layout FLIT.
+                  Este OT tiene un documento propio cargado y es el que se usa en el trámite, por
+                  encima de la redacción seleccionada arriba. Las firmas van al pie con layout FLIT.
                 </p>
                 <button
                   type="button"
@@ -576,11 +615,12 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
                   className="mt-2.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#FF4E00] disabled:opacity-50"
                 >
                   <Trash2 className="h-3 w-3" aria-hidden="true" />
-                  Quitar y volver a {systemTemplateLabel(templateCode)}
+                  Quitar y volver a {systemTemplateLabel(effectiveTemplate)}
                 </button>
               </div>
-            )}
+            ) : null}
 
+            {MOSTRAR_PLANTILLA_PROPIA ? (
             <div className="space-y-3 rounded-xl border border-dashed border-[#DFE5ED] p-3 dark:border-white/15">
               <p className="text-[11px] text-[#59677D] dark:text-white/65">
                 {hasCustom
@@ -645,6 +685,7 @@ export function MandatoOtConfigForm({ office, mode, onClose, onSaved }: MandatoO
                 </div>
               ) : null}
             </div>
+            ) : null}
           </section>
 
           {showInstitutionalMeta ? (
