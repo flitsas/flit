@@ -146,6 +146,18 @@ public static class MandatoTemplateResolver
     /// <summary>Código de la redacción corta municipal (Envigado / Funza / Medellín).</summary>
     public const string Municipio = "municipio";
 
+    /// <summary>
+    /// "Automática": el OT no fija redacción y delega en la plantilla de sistema de su código
+    /// (<see cref="MandatoSystemOfficeTemplates"/>), o en la genérica si no tiene ninguna. NO es una
+    /// redacción: nunca llega al generador, lo consume <see cref="MandatoSystemOfficeTemplates.ResolveTemplateCode"/>.
+    /// </summary>
+    public const string Auto = "auto";
+
+    /// <summary>True si el código NO fija redacción (ausente, en blanco o <see cref="Auto"/>).</summary>
+    public static bool IsAuto(string? templateCode) =>
+        string.IsNullOrWhiteSpace(templateCode)
+        || string.Equals(templateCode.Trim(), Auto, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Mapea el <paramref name="templateCode"/> del OT a su variante; desconocido ⇒ genérico.</summary>
     public static MandatoVariante Resolve(string? templateCode) =>
         (templateCode?.Trim().ToLowerInvariant()) switch
@@ -162,10 +174,17 @@ public static class MandatoTemplateResolver
 /// Prioridad de redacción en trámite:
 /// <list type="number">
 ///   <item>Plantilla propia cargada (PDF/editor).</item>
+///   <item><b>Redacción elegida para el OT</b> (<c>template_code</c> distinto de <c>auto</c>).</item>
 ///   <item>Builtin por código de OT (Sabaneta, Bello, Envigado, Funza, Medellín).</item>
-///   <item>Config explícita de otro OT (<c>template_code</c>).</item>
 ///   <item>Genérica.</item>
 /// </list>
+///
+/// <para><b>La elección explícita pasó por encima del builtin.</b> Antes el builtin ganaba, así que
+/// para esos cinco organismos la plantilla configurada en Plataforma → Mandatos era inerte: se podía
+/// guardar cualquier código y el trámite seguía emitiendo la redacción quemada. Quien parametriza el OT
+/// manda; <see cref="MandatoTemplateResolver.Auto"/> es la forma de devolverle la decisión al builtin.
+/// Las filas existentes de los cinco organismos ya traen exactamente el código de su builtin, así que
+/// el cambio de orden no altera lo que emiten hoy.</para>
 /// </summary>
 public static class MandatoSystemOfficeTemplates
 {
@@ -241,17 +260,18 @@ public static class MandatoSystemOfficeTemplates
         // prioriza el artefacto custom. Si no hay código, cae a genérico.
         if (MandatoCustomTemplateKindCodes.HasCustom(customTemplateKind))
         {
-            return string.IsNullOrWhiteSpace(configuredTemplateCode)
+            return MandatoTemplateResolver.IsAuto(configuredTemplateCode)
                 ? MandatoTemplateResolver.Generico
-                : configuredTemplateCode.Trim().ToLowerInvariant();
+                : configuredTemplateCode!.Trim().ToLowerInvariant();
         }
+
+        // La elección del OT manda sobre el builtin: ver la nota de precedencia del tipo.
+        if (!MandatoTemplateResolver.IsAuto(configuredTemplateCode))
+            return configuredTemplateCode!.Trim().ToLowerInvariant();
 
         var builtin = TryGetByOfficeCode(officeCode);
         if (builtin is not null)
             return builtin.TemplateCode;
-
-        if (!string.IsNullOrWhiteSpace(configuredTemplateCode))
-            return configuredTemplateCode.Trim().ToLowerInvariant();
 
         return MandatoTemplateResolver.Generico;
     }

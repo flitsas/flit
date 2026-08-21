@@ -18,7 +18,18 @@ public sealed record MandateOtConfigView(
     string CustomTemplateKind = "none",
     string? CustomTemplateFileName = null,
     string? CustomTemplateBody = null,
-    bool HasCustomTemplate = false);
+    bool HasCustomTemplate = false,
+    /// <summary>
+    /// Redacción ELEGIDA para el OT, tal cual está guardada (<c>auto</c> cuando no fija ninguna). Es
+    /// distinta de <see cref="TemplateCode"/>, que ya es la EFECTIVA: con <c>auto</c> esa trae la
+    /// plantilla de sistema del organismo. El selector de la pantalla necesita la elegida — si se
+    /// preseleccionara con la efectiva, abrir y guardar sin tocar nada convertiría un "automática" en
+    /// una redacción fija, y el organismo dejaría de seguir a su plantilla de sistema en silencio.
+    ///
+    /// <para>Literal en vez de <c>MandatoTemplateResolver.Auto</c>: este proyecto no referencia el
+    /// dominio de Trámites, donde vive la constante.</para>
+    /// </summary>
+    string ConfiguredTemplateCode = "auto");
 
 public sealed record UpsertMandateOtConfigRequest(
     string TemplateCode,
