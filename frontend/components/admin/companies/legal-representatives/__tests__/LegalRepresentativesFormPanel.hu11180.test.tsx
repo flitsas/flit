@@ -417,14 +417,78 @@ describe("HU #11755 — la ficha del RL retira los controles de escritura de ide
     expect(screen.queryByTestId("rl-identity-link")).not.toBeInTheDocument();
   });
 
-  it("contrato: el panel en modo view sigue mostrando el estado y la vigencia (solo consulta)", async () => {
+  it("contrato: el panel en modo view sigue mostrando los dos rótulos (solo consulta, HU #11756)", async () => {
     vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_VALID_IDENTITY);
     renderPanel("view");
     await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
 
     expect(await screen.findByTestId("rl-identity-status-badge")).toHaveTextContent(
-      /identidad validada/i,
+      /identidad: aprobada y vigente/i,
     );
-    expect(screen.getByTestId("rl-identity-vigencia")).toHaveTextContent(/válida hasta/i);
+    expect(screen.getByTestId("rl-identity-firma-baul-badge")).toHaveTextContent(
+      /firma del baúl: vigente hasta/i,
+    );
+  });
+});
+
+// ── HU #11756 (ADR-0050) — copy por estado + matriz de rótulos ───────────────
+
+describe("HU #11756 — la ficha del RL muestra los dos rótulos y el copy por estado", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(fetchSignatureVaultByDocument).mockResolvedValue([]);
+  });
+
+  it("happy path: sin validación y sin firma vigente muestra el enlace al módulo Identidad", async () => {
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_NONE);
+    renderPanel("view");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+
+    expect(await screen.findByTestId("rl-identity-status-badge")).toHaveTextContent(
+      /identidad: sin validación/i,
+    );
+    expect(screen.getByTestId("rl-identity-firma-baul-badge")).toHaveTextContent(
+      /firma del baúl: sin firma vigente/i,
+    );
+    expect(screen.getByTestId("rl-identity-module-link")).toBeInTheDocument();
+  });
+
+  it("edge case: con firma de baúl vigente NO se invita a prevalidar (D8 ADR-0025 manda)", async () => {
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue(ITEM_VALID_IDENTITY);
+    renderPanel("view");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+
+    await screen.findByTestId("rl-identity-firma-baul-badge");
+    expect(screen.queryByTestId("rl-identity-copy")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rl-identity-module-link")).not.toBeInTheDocument();
+  });
+
+  it("contrato: identidad vencida sin firma vigente invita a renovar (copy distinto de «sin validación»)", async () => {
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue({
+      ...ITEM_NONE,
+      identityStatus: "expired",
+    });
+    renderPanel("view");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+
+    expect(await screen.findByTestId("rl-identity-status-badge")).toHaveTextContent(
+      /identidad: vencida/i,
+    );
+    expect(screen.getByTestId("rl-identity-copy")).toHaveTextContent(/venció/i);
+    expect(screen.getByTestId("rl-identity-module-link")).toBeInTheDocument();
+  });
+
+  it("contrato: persona jurídica (NIT) sin firma vigente ve «no aplica», no el enlace", async () => {
+    vi.mocked(fetchLegalRepresentative).mockResolvedValue({
+      ...ITEM_NONE,
+      documentType: "NIT",
+    });
+    renderPanel("view");
+    await waitFor(() => expect(fetchLegalRepresentative).toHaveBeenCalled());
+
+    expect(await screen.findByTestId("rl-identity-copy")).toHaveTextContent(
+      /no aplica prevalidación/i,
+    );
+    expect(screen.queryByTestId("rl-identity-module-link")).not.toBeInTheDocument();
   });
 });

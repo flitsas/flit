@@ -601,6 +601,7 @@ export function LegalRepresentativesFormPanel({
               identityValidUntil={detail.identityValidUntil}
               firmaBaulVigente={detail.firmaBaulVigente}
               firmaBaulVigenteHasta={detail.firmaBaulVigenteHasta}
+              documentType={detail.documentType}
             />
           </div>
         </div>
@@ -871,6 +872,7 @@ export function LegalRepresentativesFormPanel({
                 identityValidUntil={detail?.identityValidUntil}
                 firmaBaulVigente={detail?.firmaBaulVigente}
                 firmaBaulVigenteHasta={detail?.firmaBaulVigenteHasta}
+                documentType={detail?.documentType ?? form.documentType}
               />
             ) : (
               <IdentityActionsBlock representativeId={null} />
