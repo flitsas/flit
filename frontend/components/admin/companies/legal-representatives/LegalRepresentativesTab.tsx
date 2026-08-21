@@ -17,13 +17,12 @@ import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBounda
 import { useToast } from "@/components/admin/Toast";
 import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import { ApiValidationError } from "@/lib/api/types";
+import { IDENTITY_MODULE_HREF } from "@/lib/admin/identity-vigencia";
 import {
   createLegalRepresentative,
   deleteLegalRepresentative,
   fetchAssignableProcedureTypes,
   fetchLegalRepresentatives,
-  sendLegalRepresentativeIdentity,
   updateLegalRepresentative,
   SIGNAL_SIN_FIRMA_NI_IDENTIDAD,
   type AssignableProcedureType,
@@ -72,7 +71,6 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
 
   const [toDelete, setToDelete] = useState<LegalRepresentativeItem | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [sendingIdentityId, setSendingIdentityId] = useState<string | null>(null);
   const [pendingSignatureId, setPendingSignatureId] = useState<string | null>(null);
 
   const load = useCallback(
@@ -184,27 +182,6 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
     }
   };
 
-  const handleSendIdentity = async (item: LegalRepresentativeItem) => {
-    setSendingIdentityId(item.id);
-    try {
-      await sendLegalRepresentativeIdentity(tenantId, item.id);
-      show(`Correo de validación de identidad enviado a ${fullName(item)}.`, "success");
-    } catch (err) {
-      if (err instanceof ApiValidationError) {
-        const emailErr = err.errors.find((e) => e.field === "email");
-        show(
-          emailErr?.message ??
-            "No se pudo enviar el correo: revisa el correo del representante.",
-          "error",
-        );
-      } else {
-        show("No se pudo enviar el correo de validación de identidad. Intenta de nuevo.", "error");
-      }
-    } finally {
-      setSendingIdentityId(null);
-    }
-  };
-
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const pendingItem = pendingSignatureId
     ? items.find((i) => i.id === pendingSignatureId) ?? null
@@ -249,15 +226,18 @@ export function LegalRepresentativesTab({ tenantId }: { tenantId: string }) {
         >
           <p className="text-[11px] font-medium" style={{ color: RL_COLOR.pendingText }}>
             <strong>{fullName(pendingItem)}</strong> quedó guardado sin firma ni validación de
-            identidad vigente. Vincula una para que pueda firmar sus trámites.
+            identidad vigente. Valida su identidad desde el módulo Identidad o vincula una firma
+            para que pueda firmar sus trámites.
           </p>
           <div className="flex shrink-0 gap-2">
-            <SignatureAction
-              icon={MailCheck}
-              label="Enviar correo de validación"
-              busy={sendingIdentityId === pendingItem.id}
-              onClick={() => void handleSendIdentity(pendingItem)}
-            />
+            <a
+              href={IDENTITY_MODULE_HREF}
+              className={rlPrimaryCtaClass}
+              style={rlPrimaryCtaStyle}
+            >
+              <MailCheck className="h-3.5 w-3.5" />
+              Ir al módulo Identidad
+            </a>
             <SignatureAction
               icon={Vault}
               label="Asociar firma"

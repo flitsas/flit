@@ -172,15 +172,6 @@ export interface LegalRepresentativeSaved {
   signals: string[];
 }
 
-/** Respuesta del envío de validación de identidad (POST .../identity/send, HU #10907). */
-export interface IdentityValidationSent {
-  id: string;
-  status: string;
-  captureUrl?: string | null;
-  validUntil?: string | null;
-  reused: boolean;
-}
-
 function base(tenantId: string): string {
   return `/api/v1/admin/companies/${tenantId}/legal-representatives`;
 }
@@ -244,22 +235,7 @@ export function fetchAssignableProcedureTypes(
   return apiFetch<AssignableProcedureType[]>(`${base(tenantId)}/procedure-types`, { signal });
 }
 
-/**
- * POST "/{id}/identity/send" — inicia la validación de identidad por correo (HU #10907). Lanza
- * ApiValidationError en 422 (`email_requerido`) y ApiError en 502/503 (proveedor no disponible).
- */
-export function sendLegalRepresentativeIdentity(
-  tenantId: string,
-  id: string,
-): Promise<IdentityValidationSent> {
-  return apiFetch<IdentityValidationSent>(`${base(tenantId)}/${id}/identity/send`, {
-    method: "POST",
-  });
-}
-
-// HU #11755 (ADR-0050) — `resendLegalRepresentativeIdentity` y `linkLegalRepresentativeIdentity` se
-// RETIRARON: el área admin pasa a ser solo consulta y estas rutas responderán 410 Gone (HU #11758).
-// `sendLegalRepresentativeIdentity` se conserva porque `LegalRepresentativesTab.tsx` todavía la invoca
-// desde el aviso "quedó guardado sin firma ni validación" del listado; ese punto de disparo NO está en
-// el alcance de esta HU (que solo cubre `IdentityActionsBlock.tsx`) y queda documentado como hallazgo
-// pendiente para una futura HU de cierre total del disparo admin.
+// HU #11755/#11758 (ADR-0050) — `resendLegalRepresentativeIdentity`, `linkLegalRepresentativeIdentity`
+// y `sendLegalRepresentativeIdentity` se RETIRARON: el área admin pasa a ser solo consulta y las tres
+// rutas responden 410 Gone. El aviso "quedó guardado sin firma ni validación" de
+// `LegalRepresentativesTab.tsx` ahora remite al módulo Identidad en vez de disparar el correo.

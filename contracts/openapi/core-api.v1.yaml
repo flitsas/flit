@@ -6240,7 +6240,12 @@ paths:
         "401": { description: "No autenticado." }
         "403": { description: "Sin permiso (requiere SuperAdmin)." }
 
-  # ── Admin · Identidad de Representantes (HU #11176) ──────────────────────────
+  # ── Admin · Identidad de Representantes (HU #11758, ADR-0050) ────────────────
+  # Retirado: el módulo Identidad es la única fuente que puede originar una validación de
+  # identidad. Esta ruta (antes HU #11176) y las otras nueve de disparo/vinculación admin
+  # (representante legal send/resend; mandatario por OT send/resend/link/mock; mandatario por
+  # compañía send/resend/link) responden 410 Gone con `code: endpoint_deprecado` — nunca 404
+  # (decisión DA-1: el recurso existió y se retiró a propósito).
   /api/v1/admin/companies/{tenantId}/legal-representatives/{id}/identity/link:
     parameters:
       - name: tenantId
@@ -6258,34 +6263,28 @@ paths:
       tags: ["Admin · Identidad de Representantes"]
       security:
         - bearerAuth: []
-      summary: "Vincula al representante una validación de identidad ya existente y vigente"
+      summary: "Retirado (410) — la identidad se origina en el módulo Identidad, ADR-0050"
       description: |
-        Vincula al representante legal una identidad que la persona ya validó en el tenant
-        (HU #11176). NO envía correo ni crea validaciones nuevas. Si la persona no tiene
-        ninguna identidad aprobada y vigente en el tenant, responde 409 con
-        `sin_identidad_vigente`. Si el representante ya la tiene vigente, responde 200 con
-        `reused=true` (idempotente). Las respuestas NUNCA exponen el documento ni el correo
-        del representante (PII, Ley 1581).
+        HU #11758 (ADR-0050) — ruta RETIRADA. El módulo Identidad
+        (`tramites.procedure_instance_biometric_validations`) es la única fuente que puede
+        originar una validación de identidad; el área admin deja de disparar y de vincular.
+        Responde siempre 410 Gone con `code: endpoint_deprecado`.
       responses:
-        "200":
-          description: "Identidad vinculada (o reutilizada si ya estaba vigente)."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AdminIdentityLinkResponse"
-        "401": { description: "No autenticado." }
-        "403": { description: "Sin permiso (requiere SuperAdmin)." }
-        "404": { description: "Representante no encontrado en esta compañía." }
-        "409":
-          description: "La persona no tiene ninguna identidad aprobada y vigente en el tenant."
+        "410":
+          description: "Retirado: el módulo Identidad es la única fuente de verdad (ADR-0050)."
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  error: { type: string, example: sin_identidad_vigente }
-                required: [error]
-        "422": { description: "Solicitud inválida." }
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        field: { type: string, nullable: true }
+                        code: { type: string, example: endpoint_deprecado }
+                        message: { type: string }
 
   /api/v1/admin/companies/{tenantId}/identity-validations/by-document:
     parameters:
@@ -6659,21 +6658,8 @@ components:
           type: object
           additionalProperties: true
           description: "{} si el usuario nunca guardó una preferencia para ese scope."
-    # ── Admin · Identidad de Representantes (HU #11176) ──────────────────────
-    AdminIdentityLinkResponse:
-      type: object
-      description: >
-        Resultado de vincular una identidad ya existente al representante legal.
-        `reused=true` indica que ya estaba vigente (idempotente, AC3).
-        NUNCA expone documento ni correo del representante (PII, Ley 1581).
-      properties:
-        id: { type: string, format: uuid, description: "Id de la validación de identidad." }
-        status: { type: string, description: "Estado de la validación (aprobado, etc.)." }
-        captureUrl: { type: string, nullable: true, description: "URL de captura biométrica (null en vinculación)." }
-        validUntil: { type: string, format: date-time, nullable: true, description: "Fecha hasta la que es válida la identidad." }
-        reused: { type: boolean, description: "true si se reutilizó una identidad ya vigente." }
-        provider: { type: string, description: "Proveedor de validación biométrica." }
-      required: [id, status, reused, provider]
+    # AdminIdentityLinkResponse (HU #11176) se retiró: la ruta que lo usaba responde 410 Gone
+    # desde la HU #11758 (ADR-0050).
 
     AdminIdentityVigenciaByDocumentResponse:
       type: object

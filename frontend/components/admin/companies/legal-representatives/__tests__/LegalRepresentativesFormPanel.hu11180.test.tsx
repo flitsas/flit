@@ -28,7 +28,6 @@ vi.mock("@/lib/api/admin-legal-representatives", async (importOriginal) => {
   return {
     ...actual,
     fetchLegalRepresentative: vi.fn(),
-    sendLegalRepresentativeIdentity: vi.fn(),
   };
 });
 
