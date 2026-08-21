@@ -345,8 +345,16 @@ export interface MandateSimulationBody {
   assignmentMode?: MandateAssignmentMode | string | null;
   /** Nulo ⇒ el mandatario sale como dato de muestra. */
   mandateSignerId?: string | null;
-  /** `matricula_inicial` | `traspaso_standard` — cambia el objeto del contrato. */
+  /** Código de `tramites.procedure_types` (`MATRICULA_NUEVA`, `TRASPASO_STANDARD`, …). */
+  procedureTypeCode?: string | null;
+  /** Alias wizard; el backend lo acepta si no llega `procedureTypeCode`. */
   tipologia?: string | null;
+  /** Mismo vocabulario que el simulador FUR. */
+  prenda?: "ninguna" | "inscripcion" | "levantamiento" | "ambas" | null;
+  cambioColor?: boolean;
+  cambioCombustible?: boolean;
+  cambioCarroceria?: boolean;
+  blindaje?: boolean;
 }
 
 export interface MandateSimulatorSignerOption {

@@ -169,4 +169,14 @@ public sealed class MandatoObjetoComposerTests
             .Should().Be(
                 "TRASPASO DE PROPIEDAD, CAMBIO DE COLOR, CAMBIO DE CARROCERÍA Y CAMBIO DE COMBUSTIBLE");
     }
+
+    [Fact]
+    public void Blindaje_SeNombraEnElObjetoComoLasDemasTransformaciones()
+    {
+        MandatoObjetoComposer.Componer(
+                "TRASPASO",
+                [MandatoObjetoComposer.Blindaje],
+                FurPrendaMarking.Ninguna)
+            .Should().Be("TRASPASO Y BLINDAJE");
+    }
 }

@@ -29,6 +29,12 @@ vi.mock("@/lib/api/admin-plataforma-mandatos", () => ({
   sendMandateSimulation: vi.fn(),
 }));
 
+vi.mock("@/lib/api/tramites-client", () => ({
+  tramitesClient: {
+    listPublishedProcedureTypes: vi.fn().mockResolvedValue([]),
+  },
+}));
+
 vi.mock("@/lib/documents/open-document-tab", () => ({
   openPdfBlobInNewTab: (...a: unknown[]) => openPdfBlobInNewTab(...a),
 }));

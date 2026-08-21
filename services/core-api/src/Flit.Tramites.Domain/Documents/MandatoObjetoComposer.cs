@@ -22,6 +22,7 @@ public static class MandatoObjetoComposer
     public const string CambioColor = "cambio_color";
     public const string CambioCarroceria = "cambio_carroceria";
     public const string CambioCombustible = "cambio_combustible";
+    public const string Blindaje = "blindaje";
 
     /// <summary>
     /// HU #11627 — etiqueta de la prenda en el objeto del contrato cuando el FUR marca constitución
@@ -46,6 +47,7 @@ public static class MandatoObjetoComposer
         (CambioColor, "CAMBIO DE COLOR"),
         (CambioCarroceria, "CAMBIO DE CARROCERÍA"),
         (CambioCombustible, "CAMBIO DE COMBUSTIBLE"),
+        (Blindaje, "BLINDAJE"),
     ];
 
     /// <summary>

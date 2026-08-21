@@ -9,11 +9,18 @@ const listMandateSimulatorSigners = vi.fn();
 const fetchMandateSimulationPreview = vi.fn();
 const sendMandateSimulation = vi.fn();
 const openPdfBlobInNewTab = vi.fn();
+const listPublishedProcedureTypes = vi.fn();
 
 vi.mock("@/lib/api/admin-plataforma-mandatos", () => ({
   listMandateSimulatorSigners: (...a: unknown[]) => listMandateSimulatorSigners(...a),
   fetchMandateSimulationPreview: (...a: unknown[]) => fetchMandateSimulationPreview(...a),
   sendMandateSimulation: (...a: unknown[]) => sendMandateSimulation(...a),
+}));
+
+vi.mock("@/lib/api/tramites-client", () => ({
+  tramitesClient: {
+    listPublishedProcedureTypes: (...a: unknown[]) => listPublishedProcedureTypes(...a),
+  },
 }));
 
 vi.mock("@/lib/documents/open-document-tab", () => ({
@@ -43,6 +50,26 @@ function renderPanel() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  listPublishedProcedureTypes.mockResolvedValue([
+    {
+      id: "pt-mat",
+      code: "MATRICULA_NUEVA",
+      name: "Matrícula inicial",
+      family: "MATRICULAS",
+      publicationStatus: "published",
+      isActive: true,
+      publishedAt: null,
+    },
+    {
+      id: "pt-tra",
+      code: "TRASPASO_STANDARD",
+      name: "Traspaso",
+      family: "TRASPASO",
+      publicationStatus: "published",
+      isActive: true,
+      publishedAt: null,
+    },
+  ]);
   listMandateSimulatorSigners.mockResolvedValue([
     {
       id: "signer-1",
@@ -68,6 +95,12 @@ describe("MandatoSimuladorPanel — armado del escenario (HU #11707)", () => {
     expect(await screen.findByRole("option", { name: /Ana Gestora/ })).toBeInTheDocument();
   });
 
+  it("el tipo de trámite muestra el nombre y el code del catálogo", async () => {
+    renderPanel();
+
+    expect(await screen.findByRole("option", { name: /Traspaso \(TRASPASO_STANDARD\)/ })).toBeInTheDocument();
+  });
+
   it("AC5: la vista previa pide el PDF con el escenario armado y lo abre", async () => {
     const user = userEvent.setup();
     const blob = new Blob(["%PDF-1.4"], { type: "application/pdf" });
@@ -77,7 +110,10 @@ describe("MandatoSimuladorPanel — armado del escenario (HU #11707)", () => {
     await user.selectOptions(screen.getByTestId("simulador-ot"), "ot-funza");
     await screen.findByRole("option", { name: /Ana Gestora/ });
     await user.selectOptions(screen.getByTestId("simulador-persona"), "natural");
-    await user.selectOptions(screen.getByTestId("simulador-tramite"), "matricula_inicial");
+    await user.selectOptions(screen.getByTestId("simulador-familia"), "MATRICULAS");
+    await waitFor(() =>
+      expect(screen.getByTestId("simulador-tramite")).toHaveValue("MATRICULA_NUEVA"),
+    );
     await user.selectOptions(screen.getByTestId("simulador-mandatario"), "signer-1");
     await user.click(screen.getByRole("button", { name: /Ver PDF/ }));
 
@@ -85,9 +121,14 @@ describe("MandatoSimuladorPanel — armado del escenario (HU #11707)", () => {
       expect(fetchMandateSimulationPreview).toHaveBeenCalledWith({
         officeId: "ot-funza",
         personType: "natural",
-        tipologia: "matricula_inicial",
+        procedureTypeCode: "MATRICULA_NUEVA",
         assignmentMode: null,
         mandateSignerId: "signer-1",
+        prenda: "ninguna",
+        cambioColor: false,
+        cambioCombustible: false,
+        cambioCarroceria: false,
+        blindaje: false,
       }),
     );
     expect(openPdfBlobInNewTab).toHaveBeenCalledWith(blob);
@@ -99,11 +140,14 @@ describe("MandatoSimuladorPanel — armado del escenario (HU #11707)", () => {
     renderPanel();
 
     await user.selectOptions(screen.getByTestId("simulador-ot"), "ot-funza");
+    await waitFor(() =>
+      expect(screen.getByTestId("simulador-tramite")).toHaveValue("TRASPASO_STANDARD"),
+    );
     await user.click(screen.getByRole("button", { name: /Ver PDF/ }));
 
     await waitFor(() =>
       expect(fetchMandateSimulationPreview).toHaveBeenCalledWith(
-        expect.objectContaining({ personType: "juridica", tipologia: "traspaso_standard" }),
+        expect.objectContaining({ personType: "juridica", procedureTypeCode: "TRASPASO_STANDARD" }),
       ),
     );
   });
@@ -116,6 +160,9 @@ describe("MandatoSimuladorPanel — armado del escenario (HU #11707)", () => {
     await user.selectOptions(screen.getByTestId("simulador-ot"), "ot-funza");
 
     expect(await screen.findByTestId("simulador-sin-mandatarios")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("simulador-tramite")).toHaveValue("TRASPASO_STANDARD"),
+    );
     expect(screen.getByRole("button", { name: /Ver PDF/ })).toBeEnabled();
   });
 
@@ -140,6 +187,9 @@ describe("MandatoSimuladorPanel — armado del escenario (HU #11707)", () => {
     renderPanel();
 
     await user.selectOptions(screen.getByTestId("simulador-ot"), "ot-funza");
+    await waitFor(() =>
+      expect(screen.getByTestId("simulador-tramite")).toHaveValue("TRASPASO_STANDARD"),
+    );
     await user.click(screen.getByRole("button", { name: /Ver PDF/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -156,5 +206,31 @@ describe("MandatoSimuladorPanel — armado del escenario (HU #11707)", () => {
     await user.selectOptions(screen.getByTestId("simulador-tipo"), "institucional");
 
     expect(screen.getByTestId("simulador-mandatario")).toBeDisabled();
+  });
+
+  it("envía prenda y transformaciones al generar el PDF", async () => {
+    const user = userEvent.setup();
+    fetchMandateSimulationPreview.mockResolvedValue(new Blob(["%PDF-1.4"], { type: "application/pdf" }));
+    renderPanel();
+
+    await user.selectOptions(screen.getByTestId("simulador-ot"), "ot-funza");
+    await waitFor(() =>
+      expect(screen.getByTestId("simulador-tramite")).toHaveValue("TRASPASO_STANDARD"),
+    );
+    await user.selectOptions(screen.getByTestId("simulador-prenda"), "inscripcion");
+    await user.click(screen.getByTestId("simulador-cambio-color"));
+    await user.click(screen.getByRole("button", { name: /Ver PDF/ }));
+
+    await waitFor(() =>
+      expect(fetchMandateSimulationPreview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prenda: "inscripcion",
+          cambioColor: true,
+          cambioCombustible: false,
+          cambioCarroceria: false,
+          blindaje: false,
+        }),
+      ),
+    );
   });
 });

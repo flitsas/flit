@@ -9,7 +9,11 @@ import {
   type MandateOtConfigView,
   type MandateSimulatorSignerOption,
 } from "@/lib/api/admin-plataforma-mandatos";
+
+import { tramitesClient } from "@/lib/api/tramites-client";
 import { ApiError } from "@/lib/api/types";
+import type { FurPrendaKind } from "@/lib/api/admin-plataforma-fur";
+import type { ProcedureFamily, ProcedureTypeSummary } from "@/lib/api/types/procedure-parametrization";
 import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 import { MANDATO_TIPOS, resolveAssignmentMode, type MandatoTipoNegocio } from "@/lib/plataforma/mandato-templates";
 import { useToast } from "@/components/admin/Toast";
@@ -23,11 +27,45 @@ import { useToast } from "@/components/admin/Toast";
  */
 const MOSTRAR_ENVIO_POR_CORREO = false;
 
-/** Tipologías simulables: lo que cambia es el objeto del contrato. */
-const TIPOLOGIAS = [
-  { value: "traspaso_standard", label: "Traspaso de propiedad" },
-  { value: "matricula_inicial", label: "Matrícula inicial" },
-] as const;
+const FAMILIAS: { value: ProcedureFamily; label: string }[] = [
+  { value: "MATRICULAS", label: "Matrículas" },
+  { value: "TRASPASO", label: "Traspaso" },
+  { value: "OTROS", label: "Otros trámites" },
+];
+
+const PRENDA: { value: FurPrendaKind; label: string }[] = [
+  { value: "ninguna", label: "No aplica" },
+  { value: "inscripcion", label: "Inscripción de prenda" },
+  { value: "levantamiento", label: "Levantamiento de prenda" },
+  { value: "ambas", label: "Ambas (inscripción y levantamiento)" },
+];
+
+function inferFromType(type: ProcedureTypeSummary | undefined) {
+  const code = (type?.code ?? "").toUpperCase();
+  const prenda: FurPrendaKind =
+    code === "LEVANTAR_INSCRIBIR_PRENDA"
+      ? "ambas"
+      : code.includes("LEVANTAMIENTO_PRENDA")
+        ? "levantamiento"
+        : code.includes("PRENDA_INSCRIPCION") || code.includes("INSCRIBIR_PRENDA")
+          ? "inscripcion"
+          : "ninguna";
+  return {
+    color: code === "CAMBIO_COLOR",
+    combustible: code === "CONVERSION_COMBUSTIBLE",
+    carroceria: code === "CAMBIO_CARROCERIA",
+    blindaje: code.includes("BLINDAJE"),
+    prenda,
+    lockColor: code === "CAMBIO_COLOR",
+    lockCombustible: code === "CONVERSION_COMBUSTIBLE",
+    lockCarroceria: code === "CAMBIO_CARROCERIA",
+    lockBlindaje: code.includes("BLINDAJE"),
+    lockPrenda:
+      code === "PRENDA_INSCRIPCION" ||
+      code === "LEVANTAMIENTO_PRENDA" ||
+      code === "LEVANTAR_INSCRIBIR_PRENDA",
+  };
+}
 
 export interface MandatoSimuladorPanelProps {
   /** Organismos disponibles, ya cargados por el catálogo (no se vuelven a pedir). */
@@ -38,21 +76,29 @@ export interface MandatoSimuladorPanelProps {
  * Simulador de mandatos (HU #11707): muestra el contrato que emitiría un organismo según el tipo de
  * persona del mandante y el trámite.
  *
- * <p>El mandante, la placa y el trámite se rellenan con <b>datos de muestra</b> generados en el
- * momento —no se le piden al usuario—, porque lo que se juzga aquí es la redacción, no los datos.</p>
+ * <p>El mandante y la placa se rellenan con <b>datos de muestra</b>. El trámite sí se elige: familia
+ * y tipo salen de <c>tramites.procedure_types</c> (los mismos que radica el wizard).</p>
  */
 export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
   const { show: showToast } = useToast();
 
   const [officeId, setOfficeId] = useState("");
   const [personType, setPersonType] = useState<"natural" | "juridica">("juridica");
-  const [tipologia, setTipologia] = useState<string>("traspaso_standard");
+  const [family, setFamily] = useState<ProcedureFamily | "">("TRASPASO");
+  const [procedureTypeCode, setProcedureTypeCode] = useState("");
+  const [prenda, setPrenda] = useState<FurPrendaKind>("ninguna");
+  const [cambioColor, setCambioColor] = useState(false);
+  const [cambioCombustible, setCambioCombustible] = useState(false);
+  const [cambioCarroceria, setCambioCarroceria] = useState(false);
+  const [blindaje, setBlindaje] = useState(false);
   const [tipo, setTipo] = useState<MandatoTipoNegocio | "config">("config");
   const [signerId, setSignerId] = useState("");
   const [toEmail, setToEmail] = useState("");
 
   const [signers, setSigners] = useState<MandateSimulatorSignerOption[]>([]);
   const [signersStatus, setSignersStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [procedureTypes, setProcedureTypes] = useState<ProcedureTypeSummary[]>([]);
+  const [typesStatus, setTypesStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [previewing, setPreviewing] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,13 +133,71 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
     setSignerId("");
   }, [officeId, loadSigners]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setTypesStatus("loading");
+    void tramitesClient
+      .listPublishedProcedureTypes()
+      .then((items) => {
+        if (cancelled) return;
+        setProcedureTypes(items);
+        setTypesStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setProcedureTypes([]);
+        setTypesStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const typesInFamily = useMemo(
+    () => procedureTypes.filter((t) => t.family === family).sort((a, b) => a.name.localeCompare(b.name, "es")),
+    [procedureTypes, family],
+  );
+
+  useEffect(() => {
+    if (typesStatus !== "ready") return;
+    if (!family) {
+      setProcedureTypeCode("");
+      return;
+    }
+    const stillValid = typesInFamily.some((t) => t.code === procedureTypeCode);
+    if (stillValid) return;
+    const preferred =
+      family === "TRASPASO"
+        ? typesInFamily.find((t) => t.code === "TRASPASO_STANDARD")
+        : family === "MATRICULAS"
+          ? typesInFamily.find((t) => t.code === "MATRICULA_NUEVA")
+          : undefined;
+    setProcedureTypeCode(preferred?.code ?? typesInFamily[0]?.code ?? "");
+  }, [family, typesInFamily, typesStatus, procedureTypeCode]);
+
+  const selectedType = typesInFamily.find((t) => t.code === procedureTypeCode);
+  const inferredLocks = inferFromType(selectedType);
+
+  useEffect(() => {
+    const inferred = inferFromType(selectedType);
+    setCambioColor(inferred.color);
+    setCambioCombustible(inferred.combustible);
+    setCambioCarroceria(inferred.carroceria);
+    setBlindaje(inferred.blindaje);
+    setPrenda(inferred.prenda);
+  }, [procedureTypeCode, selectedType]);
+
   const body = () => ({
     officeId,
     personType,
-    tipologia,
-    // "config" ⇒ no se manda modo y el backend aplica el configurado para el organismo.
+    procedureTypeCode: procedureTypeCode || null,
     assignmentMode: tipo === "config" ? null : resolveAssignmentMode(tipo),
     mandateSignerId: signerId || null,
+    prenda,
+    cambioColor,
+    cambioCombustible,
+    cambioCarroceria,
+    blindaje,
   });
 
   const handlePreview = async () => {
@@ -152,8 +256,8 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
         </h3>
         <p className="mt-0.5 text-[11px] leading-relaxed text-[#59677D] dark:text-white/65">
           Mira cómo queda el contrato que emitiría cada organismo según el tipo de persona y el
-          trámite. El mandante, la placa y el trámite se rellenan con datos de muestra: no
-          corresponde a ningún trámite real.
+          trámite. El mandante y la placa se rellenan con datos de muestra; el tipo de trámite es el
+          del catálogo publicado.
         </p>
       </div>
 
@@ -204,21 +308,124 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
         </label>
 
         <label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-[#162244] dark:text-white">Trámite</span>
+          <span className="text-xs font-semibold text-[#162244] dark:text-white">
+            Tipo de trámite padre (familia)
+          </span>
           <select
-            value={tipologia}
-            onChange={(e) => setTipologia(e.target.value)}
-            disabled={busy}
-            data-testid="simulador-tramite"
+            value={family}
+            onChange={(e) => setFamily(e.target.value as ProcedureFamily | "")}
+            disabled={busy || typesStatus === "loading"}
+            data-testid="simulador-familia"
             className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
           >
-            {TIPOLOGIAS.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
+            <option value="">Selecciona una familia</option>
+            {FAMILIAS.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
               </option>
             ))}
           </select>
         </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-xs font-semibold text-[#162244] dark:text-white">Tipo de trámite</span>
+          <select
+            value={procedureTypeCode}
+            onChange={(e) => setProcedureTypeCode(e.target.value)}
+            disabled={busy || !family || typesInFamily.length === 0}
+            data-testid="simulador-tramite"
+            className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+          >
+            <option value="">Selecciona un tipo</option>
+            {typesInFamily.map((t) => (
+              <option key={t.id} value={t.code}>
+                {t.name} ({t.code})
+              </option>
+            ))}
+          </select>
+          {typesStatus === "error" ? (
+            <span className="block text-xs text-[#FF4E00]">
+              No se pudieron cargar los tipos de trámite publicados.
+            </span>
+          ) : null}
+          {typesStatus === "ready" && family && typesInFamily.length === 0 ? (
+            <span className="block text-xs text-[#59677D] dark:text-white/65">
+              Esta familia no tiene tipos publicados.
+            </span>
+          ) : null}
+        </label>
+
+        <label className="block space-y-1.5">
+          <span className="text-xs font-semibold text-[#162244] dark:text-white">Prenda</span>
+          <select
+            value={prenda}
+            onChange={(e) => setPrenda(e.target.value as FurPrendaKind)}
+            disabled={busy || inferredLocks.lockPrenda}
+            data-testid="simulador-prenda"
+            className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+          >
+            {PRENDA.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <fieldset
+          className="sm:col-span-2 flex flex-col gap-2 rounded-xl border border-[#DFE5ED] p-3 dark:border-white/10"
+          data-testid="simulador-transformaciones"
+        >
+          <legend className="px-1 text-xs font-semibold text-[#162244] dark:text-white">
+            Transformaciones
+          </legend>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="flex items-center gap-2 text-sm text-[#162244] dark:text-white">
+              <input
+                type="checkbox"
+                checked={cambioColor}
+                disabled={busy || inferredLocks.lockColor}
+                onChange={(e) => setCambioColor(e.target.checked)}
+                data-testid="simulador-cambio-color"
+                className="h-4 w-4 rounded border-[#DFE5ED] disabled:cursor-not-allowed disabled:opacity-60"
+              />
+              Cambio de color
+            </label>
+            <label className="flex items-center gap-2 text-sm text-[#162244] dark:text-white">
+              <input
+                type="checkbox"
+                checked={cambioCombustible}
+                disabled={busy || inferredLocks.lockCombustible}
+                onChange={(e) => setCambioCombustible(e.target.checked)}
+                data-testid="simulador-cambio-combustible"
+                className="h-4 w-4 rounded border-[#DFE5ED] disabled:cursor-not-allowed disabled:opacity-60"
+              />
+              Cambio de combustible
+            </label>
+            <label className="flex items-center gap-2 text-sm text-[#162244] dark:text-white">
+              <input
+                type="checkbox"
+                checked={cambioCarroceria}
+                disabled={busy || inferredLocks.lockCarroceria}
+                onChange={(e) => setCambioCarroceria(e.target.checked)}
+                data-testid="simulador-cambio-carroceria"
+                className="h-4 w-4 rounded border-[#DFE5ED] disabled:cursor-not-allowed disabled:opacity-60"
+              />
+              Cambio de carrocería
+            </label>
+            <label className="flex items-center gap-2 text-sm text-[#162244] dark:text-white">
+              <input
+                type="checkbox"
+                checked={blindaje}
+                disabled={busy || inferredLocks.lockBlindaje}
+                onChange={(e) => setBlindaje(e.target.checked)}
+                data-testid="simulador-blindaje"
+                className="h-4 w-4 rounded border-[#DFE5ED] disabled:cursor-not-allowed disabled:opacity-60"
+              />
+              Blindaje
+            </label>
+          </div>
+        </fieldset>
 
         <label className="block space-y-1.5">
           <span className="text-xs font-semibold text-[#162244] dark:text-white">
@@ -295,7 +502,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
             </label>
             <button
               type="button"
-              disabled={busy || !officeId}
+              disabled={busy || !officeId || !procedureTypeCode}
               onClick={() => void handleSend()}
               className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
               style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}
@@ -308,7 +515,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
 
         <button
           type="button"
-          disabled={busy || !officeId}
+          disabled={busy || !officeId || !procedureTypeCode}
           onClick={() => void handlePreview()}
           className="ml-auto inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
           style={{ background: "linear-gradient(90deg,#557EFF 0%,#00DBD5 100%)" }}

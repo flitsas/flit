@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Domain.Documents;
-using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using QuestPDF;
 using QuestPDF.Fluent;
@@ -88,15 +87,15 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         var esJuridica = parte?.EsJuridica ?? false;
         var variante = MandatoTemplateResolver.Resolve(data.TemplateCode);
 
-        var esTraspaso = string.Equals(
-            tramite.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
-        // HU #11206 — el objeto del contrato incluye las transformaciones del trámite. Se compone aquí,
-        // una sola vez, para que todas las familias de plantilla lo redacten idéntico (AC4). Sin
-        // transformaciones queda exactamente el texto de siempre (AC3).
-        // HU #11627 — también nombra la prenda si el trámite la tiene (agregado ProcedureInstancePrenda,
-        // ya resuelto en FurDocumentData.PrendaMarking; no viaja por field_values a propósito).
+        // El objeto cita procedure_types.name cuando viene; si no, la redacción legal según
+        // MATRICULA_NUEVA / TRASPASO_STANDARD (o sus alias de wizard).
         var nombreTramite = MandatoObjetoComposer.Componer(
-            esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL",
+            MandatoTramiteIdentity.NombreObjeto(
+                tramite.ProcedureTypeName,
+                tramite.ProcedureTypeCode,
+                tramite.ProcedureFamily,
+                tramite.TipologiaCodigo,
+                tramite.Modalidad),
             data.Transformaciones,
             tramite.PrendaMarking);
 
@@ -246,10 +245,13 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     {
         var tramite = data.Tramite;
         var parte = tramite.Mandante;
-        var esTraspaso = string.Equals(
-            tramite.TipologiaCodigo, TramiteTipologiaCatalog.CodigoTraspasoStandard, StringComparison.OrdinalIgnoreCase);
         var nombreTramite = MandatoObjetoComposer.Componer(
-            esTraspaso ? "TRASPASO DE PROPIEDAD" : "MATRÍCULA INICIAL",
+            MandatoTramiteIdentity.NombreObjeto(
+                tramite.ProcedureTypeName,
+                tramite.ProcedureTypeCode,
+                tramite.ProcedureFamily,
+                tramite.TipologiaCodigo,
+                tramite.Modalidad),
             data.Transformaciones,
             tramite.PrendaMarking);
         var (mandNombre, mandDoc) = MandatarioTexto(data.Mandatario);
