@@ -923,6 +923,85 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
     expect(compradorDoc).toBeTruthy();
     expect(compradorDoc).toHaveValue('');
   });
+
+  // Novedad nov.41 — antes la precarga era invisible (unos segundos con el campo vacío,
+  // autocompletado sin aviso) y el catch silencioso escondía cualquier fallo.
+  it('muestra un indicador de carga (role=status) mientras precarga el documento del vendedor', async () => {
+    let resolveGetInstance!: (value: unknown) => void;
+    mocks.getInstance.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGetInstance = resolve;
+      }),
+    );
+
+    render(
+      <ActorsForm
+        instanceId={INSTANCE}
+        modalidad="traspaso"
+        roles={['vendedor', 'comprador']}
+        embeddedInWizard
+        seedDocumentoFromOwner
+      />,
+    );
+
+    const status = await screen.findByText(/Cargando el documento del propietario/);
+    expect(status.closest('[role="status"]') ?? status).toHaveAttribute('role', 'status');
+    const numero = document.getElementById('actor-vendedor-numeroDoc');
+    expect(numero).toHaveAttribute('aria-busy', 'true');
+    expect(numero).toHaveAttribute('readonly');
+
+    resolveGetInstance({
+      fieldValues: [
+        { fieldKey: 'owner_document_type', valueText: 'CC' },
+        { fieldKey: 'owner_document_number', valueText: '1090123456' },
+      ],
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/Cargando el documento del propietario/),
+      ).not.toBeInTheDocument(),
+    );
+    // El seed se aplica en un efecto encadenado (depende de `ownerSeed`): necesita otra vuelta
+    // de `waitFor` para que ese segundo commit se refleje en el valor del input.
+    await waitFor(() => expect(numero).toHaveValue('1090123456'));
+  });
+
+  it('si la precarga falla, muestra un error explícito con reintento (antes lo silenciaba el catch)', async () => {
+    mocks.getInstance.mockRejectedValueOnce(new Error('500'));
+
+    render(
+      <ActorsForm
+        instanceId={INSTANCE}
+        modalidad="traspaso"
+        roles={['vendedor', 'comprador']}
+        embeddedInWizard
+        seedDocumentoFromOwner
+      />,
+    );
+
+    const alert = await screen.findByText(
+      /No se pudo cargar el documento del propietario/,
+    );
+    expect(alert.closest('[role="alert"]')).toBeInTheDocument();
+
+    const numero = document.getElementById('actor-vendedor-numeroDoc');
+    // El campo queda editable a mano: el fallo de la precarga no bloquea la captura.
+    expect(numero).not.toHaveAttribute('readonly');
+
+    mocks.getInstance.mockResolvedValueOnce({
+      fieldValues: [
+        { fieldKey: 'owner_document_type', valueText: 'CC' },
+        { fieldKey: 'owner_document_number', valueText: '1090123456' },
+      ],
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'reintenta' }));
+
+    await waitFor(() => expect(numero).toHaveValue('1090123456'));
+    expect(
+      screen.queryByText(/No se pudo cargar el documento del propietario/),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe('validateActors — unidad', () => {

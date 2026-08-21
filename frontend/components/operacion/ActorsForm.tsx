@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { AlertTriangle, Info, Search } from 'lucide-react';
+import { AlertTriangle, Info, Loader2, Search } from 'lucide-react';
 import { INLINE_ALERT_TONES, type InlineAlertTone } from '@/components/atom/InlineAlert';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { Modal } from '@/components/atom/Modal';
@@ -712,16 +712,25 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     tipo: ActorDocumentType;
     numero: string;
   } | null>(null);
+  // Novedad nov.41 — la precarga es asíncrona y antes no tenía ningún indicador visible: el
+  // campo se veía vacío unos segundos y luego se autocompletaba solo, sin explicación. Se
+  // expone el estado para mostrar carga y, si falla, un error explícito con reintento (antes
+  // el `.catch` lo silenciaba).
+  const [ownerSeedStatus, setOwnerSeedStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [ownerSeedRetry, setOwnerSeedRetry] = useState(0);
 
   // Carga el documento del propietario desde los field_values de la instancia.
   // Solo aplica cuando `seedDocumentoFromOwner` (paso vendedor del traspaso).
   useEffect(() => {
     if (!seedDocumentoFromOwner || !instanceId) return;
     let active = true;
+    setOwnerSeedStatus('loading');
     tramitesClient
       .getInstance(instanceId)
       .then((detail) => {
-        if (!active || !detail?.fieldValues) return;
+        if (!active) return;
+        setOwnerSeedStatus('idle');
+        if (!detail?.fieldValues) return;
         const byKey = (key: string) =>
           detail.fieldValues.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
         const numero = byKey('owner_document_number');
@@ -729,11 +738,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
         const tipoRaw = byKey('owner_document_type') as ActorDocumentType;
         setOwnerSeed({ numero, tipo: DOC_VALUES.has(tipoRaw) ? tipoRaw : 'CC' });
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!active) return;
+        setOwnerSeedStatus('error');
+      });
     return () => {
       active = false;
     };
-  }, [seedDocumentoFromOwner, instanceId]);
+  }, [seedDocumentoFromOwner, instanceId, ownerSeedRetry]);
 
   // Aplica el documento del propietario (paso 1) SOLO al vendedor sin documento.
   // No pisa un documento ya escrito/persistido y nunca siembra al comprador (en el
@@ -1950,6 +1962,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const razonLocked = isRazonSocialLocked(actor, 0);
     const ciudades = filterCiudades(actor.ciudad ?? '');
     const showCiudades = !!ciudadOpen[0] && ciudades.length > 0;
+    // Novedad nov.41 — este actor es el que recibe la precarga silenciosa del documento del
+    // propietario (paso 1). Solo aplica al vendedor del traspaso.
+    const seedingOwnerDoc = seedDocumentoFromOwner && actor.rol === 'vendedor';
     return (
       <>
       {/* El velo va en los DOS layouts. Estaba solo en el de traspaso, que es el que cierra el
@@ -2015,7 +2030,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   id="comprador-numeroDoc"
                   type="text"
                   value={actor.numeroDocumento}
-                  readOnly={docLocked}
+                  readOnly={docLocked || (seedingOwnerDoc && ownerSeedStatus === 'loading')}
                   onChange={(e) => updateActor(0, { numeroDocumento: e.target.value })}
                   onKeyDown={(e) => {
                     if (docLocked) return;
@@ -2026,7 +2041,14 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   }}
                   aria-label="Número de documento"
                   aria-invalid={!!errors.numeroDocumento}
-                  aria-describedby={errors.numeroDocumento ? 'comprador-numeroDoc-err' : undefined}
+                  aria-describedby={
+                    errors.numeroDocumento
+                      ? 'comprador-numeroDoc-err'
+                      : seedingOwnerDoc && ownerSeedStatus !== 'idle'
+                        ? 'comprador-numeroDoc-seed-status'
+                        : undefined
+                  }
+                  aria-busy={seedingOwnerDoc && ownerSeedStatus === 'loading'}
                   placeholder={`Número de documento del ${actor.rol}…`}
                   className={`${INPUT_BASE} font-mono${docLocked ? ' opacity-80' : ''}`}
                   style={docLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
@@ -2034,6 +2056,40 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 {errors.numeroDocumento && (
                   <p id="comprador-numeroDoc-err" className="text-xs mt-1" style={{ color: '#FF4E00' }}>
                     {errors.numeroDocumento}
+                  </p>
+                )}
+                {/* Novedad nov.41 — indicador de la precarga silenciosa del documento del
+                    propietario. Un `role="status"` inline (no modal): es una espera corta de
+                    fondo, no una consulta que el gestor disparó a mano (esa usa CarLoaderModal). */}
+                {seedingOwnerDoc && ownerSeedStatus === 'loading' && (
+                  <p
+                    id="comprador-numeroDoc-seed-status"
+                    role="status"
+                    aria-live="polite"
+                    aria-busy="true"
+                    className="mt-1 flex items-center gap-1.5 text-xs opacity-70"
+                  >
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+                    Cargando el documento del propietario…
+                  </p>
+                )}
+                {seedingOwnerDoc && ownerSeedStatus === 'error' && (
+                  <p
+                    id="comprador-numeroDoc-seed-status"
+                    role="alert"
+                    className="mt-1 flex items-center gap-1.5 text-xs"
+                    style={{ color: '#FF4E00' }}
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    No se pudo cargar el documento del propietario. Escríbelo manualmente o{' '}
+                    <button
+                      type="button"
+                      onClick={() => setOwnerSeedRetry((n) => n + 1)}
+                      className="font-semibold underline"
+                    >
+                      reintenta
+                    </button>
+                    .
                   </p>
                 )}
               </div>
@@ -2310,6 +2366,9 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             autoConsultRunt &&
             actor.rol === 'vendedor' &&
             !!actor.numeroDocumento.trim();
+          // Novedad nov.41 — este actor es el que recibe la precarga silenciosa del documento
+          // del propietario (paso 1). Solo aplica al vendedor del traspaso.
+          const seedingOwnerDoc = seedDocumentoFromOwner && actor.rol === 'vendedor';
           // HU #10956 — ciudad con autocomplete, misma lógica que el layout SPLIT pero por índice.
           const ciudadesSuggestions = filterCiudades(actor.ciudad ?? '');
           const showCiudadSuggestions = !!ciudadOpen[index] && ciudadesSuggestions.length > 0;
@@ -2383,15 +2442,55 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     type="text"
                     value={actor.numeroDocumento}
                     onChange={(e) => updateActor(index, { numeroDocumento: e.target.value })}
-                    readOnly={docLocked}
+                    readOnly={docLocked || (seedingOwnerDoc && ownerSeedStatus === 'loading')}
                     aria-invalid={!!errors.numeroDocumento}
-                    aria-describedby={errors.numeroDocumento ? `${prefix}-numeroDoc-err` : undefined}
+                    aria-describedby={
+                      errors.numeroDocumento
+                        ? `${prefix}-numeroDoc-err`
+                        : seedingOwnerDoc && ownerSeedStatus !== 'idle'
+                          ? `${prefix}-numeroDoc-seed-status`
+                          : undefined
+                    }
+                    aria-busy={seedingOwnerDoc && ownerSeedStatus === 'loading'}
                     className={`${INPUT_BASE}${docLocked ? ' opacity-80' : ''}`}
                     style={docLocked ? { background: 'rgba(223,229,237,0.35)' } : undefined}
                   />
                   {errors.numeroDocumento && (
                     <p id={`${prefix}-numeroDoc-err`} className="text-xs mt-1" style={{ color: '#FF4E00' }}>
                       {errors.numeroDocumento}
+                    </p>
+                  )}
+                  {/* Novedad nov.41 — indicador de la precarga silenciosa del documento del
+                      propietario (velo NO modal: es una espera corta de fondo). */}
+                  {seedingOwnerDoc && ownerSeedStatus === 'loading' && (
+                    <p
+                      id={`${prefix}-numeroDoc-seed-status`}
+                      role="status"
+                      aria-live="polite"
+                      aria-busy="true"
+                      className="mt-1 flex items-center gap-1.5 text-xs opacity-70"
+                    >
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+                      Cargando el documento del propietario…
+                    </p>
+                  )}
+                  {seedingOwnerDoc && ownerSeedStatus === 'error' && (
+                    <p
+                      id={`${prefix}-numeroDoc-seed-status`}
+                      role="alert"
+                      className="mt-1 flex items-center gap-1.5 text-xs"
+                      style={{ color: '#FF4E00' }}
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      No se pudo cargar el documento del propietario. Escríbelo manualmente o{' '}
+                      <button
+                        type="button"
+                        onClick={() => setOwnerSeedRetry((n) => n + 1)}
+                        className="font-semibold underline"
+                      >
+                        reintenta
+                      </button>
+                      .
                     </p>
                   )}
                   {/* Consultar identidad: RUES (jurídica) o RUNT (natural). Autopobla el actor. */}

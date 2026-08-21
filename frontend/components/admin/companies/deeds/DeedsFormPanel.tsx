@@ -95,6 +95,9 @@ export function DeedsFormPanel({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [banner, setBanner] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Marca que el usuario intentó enviar el formulario: habilita los mensajes de error
+  // por campo obligatorio sin necesidad de deshabilitar el botón de envío.
+  const [attempted, setAttempted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -104,6 +107,7 @@ export function DeedsFormPanel({
     setForm(editing ? fromEditing(editing) : EMPTY);
     setFieldErrors({});
     setBanner(null);
+    setAttempted(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, [open, editing]);
 
@@ -117,10 +121,22 @@ export function DeedsFormPanel({
     company !== null &&
     (editing !== null || form.file !== null);
 
-  const canSubmit = isValid && !submitting;
+  // El PDF solo es obligatorio en alta (en edición se conserva el custodiado si no se reemplaza).
+  const filaRequired = editing === null;
+  const missingDescription = attempted && form.description.trim() === "";
+  const missingDesde = attempted && form.vigenciaDesde === "";
+  const missingHasta = attempted && form.vigenciaHasta === "";
+  const missingFile = attempted && filaRequired && form.file === null;
+
+  const canSubmit = !submitting;
 
   const handleSubmit = async () => {
     if (!company) return;
+    if (!isValid) {
+      // No hay envío al backend: solo revela los mensajes de obligatoriedad por campo.
+      setAttempted(true);
+      return;
+    }
     setSubmitting(true);
     setBanner(null);
     setFieldErrors({});
@@ -206,25 +222,46 @@ export function DeedsFormPanel({
           </div>
         </div>
 
-        <Field id="deed-description" label="Descripción" error={fieldErrors.description}>
+        <Field
+          id="deed-description"
+          label="Descripción"
+          required
+          error={fieldErrors.description || (missingDescription ? "La descripción es obligatoria." : undefined)}
+        >
           <input
             id="deed-description"
             value={form.description}
             onChange={(e) => patch({ description: e.target.value })}
             className={OT_INPUT_CLS}
-            style={errStyle("description")}
+            style={errStyle("description") || (missingDescription ? { borderColor: "#FF4E00" } : undefined)}
             placeholder="Escritura de constitución, poder general…"
+            aria-required="true"
+            aria-invalid={Boolean(fieldErrors.description) || missingDescription}
+            aria-describedby={
+              fieldErrors.description || missingDescription ? "deed-description-error" : undefined
+            }
           />
         </Field>
 
         <div>
           <span className="mb-1 block text-xs font-semibold">
-            Documento PDF{editing ? " (opcional: reemplaza el actual)" : ""}
+            Documento PDF
+            {filaRequired ? (
+              <span aria-hidden="true"> *</span>
+            ) : (
+              " (opcional: reemplaza el actual)"
+            )}
           </span>
           <label
             htmlFor="deed-file"
             className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed px-3 py-3 text-xs"
-            style={form.file ? { borderColor: "#557EFF" } : undefined}
+            style={
+              form.file
+                ? { borderColor: "#557EFF" }
+                : missingFile
+                  ? { borderColor: "#FF4E00" }
+                  : undefined
+            }
           >
             {form.file ? (
               <FileText className="h-4 w-4 shrink-0" style={{ color: "#557EFF" }} />
@@ -246,28 +283,56 @@ export function DeedsFormPanel({
             accept="application/pdf"
             className="sr-only"
             onChange={(e) => patch({ file: e.target.files?.[0] ?? null })}
+            aria-required={filaRequired ? "true" : undefined}
+            aria-invalid={missingFile}
+            aria-describedby={missingFile ? "deed-file-error" : undefined}
           />
+          {missingFile && (
+            <p id="deed-file-error" role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+              El documento PDF es obligatorio.
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field id="deed-desde" label="Vigencia desde" error={fieldErrors.vigenciaDesde}>
+          <Field
+            id="deed-desde"
+            label="Vigencia desde"
+            required
+            error={fieldErrors.vigenciaDesde || (missingDesde ? "La vigencia desde es obligatoria." : undefined)}
+          >
             <input
               id="deed-desde"
               type="date"
               value={form.vigenciaDesde}
               onChange={(e) => patch({ vigenciaDesde: e.target.value })}
               className={OT_INPUT_CLS}
-              style={errStyle("vigenciaDesde")}
+              style={errStyle("vigenciaDesde") || (missingDesde ? { borderColor: "#FF4E00" } : undefined)}
+              aria-required="true"
+              aria-invalid={Boolean(fieldErrors.vigenciaDesde) || missingDesde}
+              aria-describedby={
+                fieldErrors.vigenciaDesde || missingDesde ? "deed-desde-error" : undefined
+              }
             />
           </Field>
-          <Field id="deed-hasta" label="Vigencia hasta" error={fieldErrors.vigenciaHasta}>
+          <Field
+            id="deed-hasta"
+            label="Vigencia hasta"
+            required
+            error={fieldErrors.vigenciaHasta || (missingHasta ? "La vigencia hasta es obligatoria." : undefined)}
+          >
             <input
               id="deed-hasta"
               type="date"
               value={form.vigenciaHasta}
               onChange={(e) => patch({ vigenciaHasta: e.target.value })}
               className={OT_INPUT_CLS}
-              style={errStyle("vigenciaHasta")}
+              style={errStyle("vigenciaHasta") || (missingHasta ? { borderColor: "#FF4E00" } : undefined)}
+              aria-required="true"
+              aria-invalid={Boolean(fieldErrors.vigenciaHasta) || missingHasta}
+              aria-describedby={
+                fieldErrors.vigenciaHasta || missingHasta ? "deed-hasta-error" : undefined
+              }
             />
           </Field>
         </div>
@@ -280,21 +345,35 @@ function Field({
   id,
   label,
   error,
+  required,
   children,
 }: {
   id: string;
   label: string;
   error?: string;
+  /** Marca visualmente el campo como obligatorio (asterisco junto al label). */
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div>
       <label htmlFor={id} className="mb-1 block text-xs font-semibold">
         {label}
+        {required && (
+          <span aria-hidden="true" style={{ color: "#FF4E00" }}>
+            {" "}
+            *
+          </span>
+        )}
       </label>
       {children}
       {error && (
-        <p className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p
+          id={`${id}-error`}
+          className="mt-1 text-[11px] font-medium"
+          style={{ color: "#FF4E00" }}
+          role="alert"
+        >
           {error}
         </p>
       )}
