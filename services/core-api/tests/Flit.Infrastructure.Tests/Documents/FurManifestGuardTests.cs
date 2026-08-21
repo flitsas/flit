@@ -375,6 +375,22 @@ public sealed class FurManifestGuardTests
     // o posterior. La casilla 6 (CAMBIO DE SERVICIO) NO se declara: no hay dato que la alimente (ver
     // FurFieldMapper.MarkTramite).
     //
+    // Regenerada 2026-08-21 para recalibrar el numeral 20 "DATOS DE ALERTA", declarado el mismo día
+    // con coordenadas heredadas de una zona equivocada: las cuatro casillas caían en y=343 y x=406..530,
+    // que en el blank AUTOMOTOR es la banda de los numerales 17-18 (una fila por encima del numeral 20 y
+    // corrida a la derecha), y `alert_data_code_5` escribía el acreedor en x=595,6 — dentro del recuadro
+    // de la casilla 19 "EMPRESA VINCULADORA". Medido sobre los trazos Y los rótulos impresos del propio
+    // blank: la fila del numeral 20 va de y=393,6 a y=435,6 y sus columnas son 370,7 | 398,2 | 448,5 |
+    // 479,2 | 507,1 | 561,1 (HURTO, LIM. PROPIEDAD, EMBARGO, OTRO y A FAVOR DE). Cada X queda centrada en
+    // su columna y en y=411,5, entre el rótulo (línea base 408,7) y el dígito identificador de la casilla
+    // (línea base 425,8), sin tocar ninguno de los dos.
+    //
+    // `alert_data_code_5` pasa de `text` a `multiline` con `autoFit`: su columna mide ~54 pt de ancho
+    // —el campo más estrecho del formulario en el que se escribe un nombre propio— y el hueco libre bajo
+    // el rótulo es alto, así que la razón social del acreedor tiene que crecer HACIA ABAJO en vez de a lo
+    // ancho. El cuerpo baja de 7,2 a 4,2 (los 3 pt que pidió el coordinador) con piso en 3,4, que es lo
+    // que permite entrar entera una razón social bancaria de ~35 caracteres en 2-3 renglones.
+    //
     // Regenerar SOLO de forma deliberada vía EmitBaseline tras recalibrar el manifest.
     private const string Baseline = """
         traffic_secretary_name=Text:525,64,175,11.9,6.5,Left,False,null
@@ -438,7 +454,11 @@ public sealed class FurManifestGuardTests
         linked_company_nit=Text:705.3,411,48,14,7.6,Left,False,null
         vehicle_serial_number=Text:570,286.5,124.7,14.5,7.8,Left,False,null
         vehicle_vin_number=Text:569.1,313.7,124.5,14.5,7.8,Left,False,null
-        alert_data_code_5=Text:595.6,338.6,142.1,14.4,7.2,Left,False,null
+        alert_data_code_1=cb:380.8,411.5,8
+        alert_data_code_2=cb:419.7,411.5,8
+        alert_data_code_3=cb:460.2,411.5,8
+        alert_data_code_4=cb:489.5,411.5,8
+        alert_data_code_5=Multiline:509.5,411.5,50,23,4.2,Left,True,3.4
         vehicle_owner_first_last_name=Text:30,303.8,128.4,14.3,7.7,Left,False,null
         vehicle_owner_second_last_name=Text:158.9,304.3,113.6,14.4,7.8,Left,False,null
         vehicle_owner_name=Text:276.4,303.6,93.5,14.4,7.7,Left,False,null
