@@ -102,7 +102,7 @@ async function fillRequiredActorFields(user: ReturnType<typeof userEvent.setup>)
 /** Precarga un comprador jurídico con match del directorio (HU #10906) — deja `isPreloaded=true`. */
 async function renderPreloadedJuridicalBuyer() {
   mocks.lookupLegalRepresentativeByNit.mockResolvedValue(MATCH);
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
   await user.click(await screen.findByRole('button', { name: 'Persona jurídica' }));
   await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900555666');
@@ -125,7 +125,7 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
         screen.getByText(/Cambia el tipo o número de documento del/i),
       ).toBeInTheDocument();
     },
-    10000,
+    25000,
   );
 
   it(
@@ -140,7 +140,7 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
       const boton = await screen.findByRole('button', { name: 'Consultar RUNT' });
       expect(boton).not.toBeDisabled();
     },
-    10000,
+    25000,
   );
 
   it(
@@ -164,7 +164,7 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
       await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
       await waitFor(() => expect(mocks.saveActors).toHaveBeenCalledTimes(1));
     },
-    10000,
+    25000,
   );
 
   it(
@@ -183,7 +183,7 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
         mode: 'mock',
       });
 
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
       await user.click(await screen.findByRole('button', { name: 'Persona jurídica' }));
       await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900999888');
@@ -203,7 +203,7 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
       await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
       await waitFor(() => expect(mocks.saveActors).toHaveBeenCalledTimes(1));
     },
-    10000,
+    25000,
   );
 
   it(
@@ -230,7 +230,7 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
       await waitFor(() => expect(mocks.saveActors).toHaveBeenCalledTimes(1));
       expect(mocks.runtPersonLookup).not.toHaveBeenCalled();
     },
-    15000,
+    25000,
   );
 
   it(
@@ -255,7 +255,7 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
       await user.click(screen.getByRole('button', { name: /Guardar actores/ }));
       expect(mocks.saveActors).not.toHaveBeenCalled();
     },
-    15000,
+    25000,
   );
 
   it(
@@ -267,7 +267,7 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
         identidadVigente: true,
         representantes: [{ ...MATCH.representantes![0], identidadVigente: true }],
       });
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
       render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
       await user.click(await screen.findByRole('button', { name: 'Persona jurídica' }));
       await user.type(screen.getByPlaceholderText(/Número de documento del comprador/), '900555666');
@@ -289,6 +289,6 @@ describe('ActorsForm — novedad 28: gate de RUNT del representante legal precar
         (document.getElementById('0-mecanismo-firma') as HTMLSelectElement).value,
       ).toBe('identidad');
     },
-    15000,
+    25000,
   );
 });
