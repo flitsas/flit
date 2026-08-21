@@ -18,7 +18,7 @@ public static class FlitBrandedEmailLayout
     public const string DefaultHeaderFileName = "tramite-cambio-estado-header.png";
     public const string DefaultLogoFileName = "flit-logo.png";
     public const string PrivacyPolicyUrl = "https://flitsas.com/politica-de-privacidad";
-    public const string SupportEmail = "soporte@flit.com";
+    public const string SupportEmail = "soporte@flitsas.com";
 
     private const string PrimaryBlue = "#6080F0";
     private const string TitleHighlight = "#E8EEFF";

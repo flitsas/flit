@@ -401,10 +401,15 @@ describe('CommercialForm — inventario: tarjeta de avalúo comercial sugerido',
     expect(within(avaluo).getAllByRole('button', { name: 'Usar' })).toHaveLength(2);
   });
 
-  it('aceptar el sugerido lleva el valor al campo de venta', async () => {
+  it('"Usar" de la fuente principal (sugerida) lleva ese valor al campo de venta', async () => {
+    // HU novedad nov.33: se retiró el botón duplicado "Aceptar valor sugerido"; "Usar" en la
+    // fila de la fuente principal (Fasecolda, la sugerida) cubre el mismo caso.
     const user = await renderForm();
 
-    await user.click(await screen.findByRole('button', { name: 'Aceptar valor sugerido' }));
+    const avaluo = await screen.findByRole('region', { name: 'Avalúo comercial sugerido' });
+    const filas = within(avaluo).getAllByRole('listitem');
+    const fasecolda = filas.find((li) => within(li).queryByText('Fasecolda'))!;
+    await user.click(within(fasecolda).getByRole('button', { name: 'Usar' }));
 
     expect(screen.getByLabelText(/^Valor de venta/)).toHaveValue('48.000.000');
     // Aceptado: ya no hay nada que elegir, la tarjeta pasa a informativa.

@@ -245,4 +245,16 @@ public class TramiteCambioEstadoEmailComposerTests
         html.Should().NotContain("Motivo de rechazo");
         html.Should().NotContain(">Observación");
     }
+
+    // --- Bug nov. 26: correo de soporte errado (soporte@flit.com → soporte@flitsas.com) ----
+
+    [Fact]
+    public void ComposeFlit_UsaCorreoDeSoporteFlitsas()
+    {
+        var (_, html) = TramiteCambioEstadoEmailComposer.ComposeFlit(
+            TraspasoAprobado, "https://cdn.example/email-assets");
+
+        html.Should().Contain("soporte@flitsas.com");
+        html.Should().NotContain("soporte@flit.com");
+    }
 }
