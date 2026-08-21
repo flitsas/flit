@@ -43,6 +43,21 @@ Bloques automáticos separados por un espacio. Si faltan datos (nombre del locat
 
 ---
 
+## Numeral 20 — DATOS DE ALERTA (gravamen)
+
+Se llena **junto** a las casillas 11/12 del numeral 3 cuando hay inscripción, registro o levantamiento de prenda. No sustituye el párrafo 23.
+
+| Acción de prenda | Marca en 20 | A FAVOR DE |
+|------------------|-------------|------------|
+| Inscribir / registrar / constituir | **LIM. PROPIEDAD** (columna 2) | Nombre del acreedor |
+| Levantar | **OTRO** (columna 4) | Nombre del acreedor |
+| Levantar e inscribir (mismo FUR) | LIM. PROPIEDAD **y** OTRO | Nombre del acreedor |
+| Sin gravamen | Nada | Vacío |
+
+HURTO (1) y EMBARGO (3) no se marcan por prenda. Sin nombre de acreedor: **sí X en la columna, A FAVOR DE vacío**. Overlay: `alert_data_code_2` / `_4` / `_5`.
+
+---
+
 ## Tabla 1 — Trámite base (familia + tipo)
 
 Define `tramites.procedure_types.family` + `code`. Sin prenda ni transformaciones extra.
@@ -82,8 +97,8 @@ Se **suma** al tipo de la tabla 1 cuando el expediente trae gravamen (wizard / s
 | Tipo de acción | Debe marcar (numeral 3) | Observación — estructura |
 |----------------|-------------------------|--------------------------|
 | Ninguna / no aplica | No suma | No imprime bloque de gravamen. |
-| Inscribir / registrar / constituir | **+11** Inscrip. prenda | Si hay nombre: `Inscripción de prenda a favor de {NOMBRE_ACREEDOR}`. Sin nombre: **sí casilla, no texto**. No se imprime NIT. |
-| Levantar | **+12** Levanta prenda | Si hay nombre: `Levantamiento de prenda a favor de {NOMBRE_ACREEDOR}`. Sin nombre: **sí casilla, no texto**. |
+| Inscribir / registrar / constituir | **+11** Inscrip. prenda | Si hay nombre: `Inscripción de prenda a favor de {NOMBRE_ACREEDOR}`. Sin nombre: **sí casilla, no texto**. No se imprime NIT. **Numeral 20:** LIM. PROPIEDAD + A FAVOR DE. |
+| Levantar | **+12** Levanta prenda | Si hay nombre: `Levantamiento de prenda a favor de {NOMBRE_ACREEDOR}`. Sin nombre: **sí casilla, no texto**. **Numeral 20:** OTRO + A FAVOR DE. |
 | Levantar e inscribir (mismo FUR) | **+11 +12** | Las dos frases, un espacio. El simulador admite `ambas`; el wizard operativo puede no capturar las dos a la vez. |
 
 Constantes de código: `FurPrendaObservation.Etiqueta` y `EtiquetaLevantamiento`. El nombre del acreedor se imprime tal cual (trim); no se inventa contenido.

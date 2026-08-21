@@ -438,6 +438,10 @@ public sealed class FurManifestGuardTests
         linked_company_nit=Text:705.3,411,48,14,7.6,Left,False,null
         vehicle_serial_number=Text:570,286.5,124.7,14.5,7.8,Left,False,null
         vehicle_vin_number=Text:569.1,313.7,124.5,14.5,7.8,Left,False,null
+        alert_data_code_1=cb:406,343,8
+        alert_data_code_2=cb:460,343,8
+        alert_data_code_3=cb:489,343,8
+        alert_data_code_4=cb:530,343,8
         alert_data_code_5=Text:595.6,338.6,142.1,14.4,7.2,Left,False,null
         vehicle_owner_first_last_name=Text:30,303.8,128.4,14.3,7.7,Left,False,null
         vehicle_owner_second_last_name=Text:158.9,304.3,113.6,14.4,7.8,Left,False,null

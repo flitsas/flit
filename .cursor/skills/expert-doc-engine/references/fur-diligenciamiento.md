@@ -51,6 +51,8 @@ Casillas = tipo base ∪ prenda ∪ transformaciones. Detalle y literales del p�
 
 El mapper emite X en las casillas 1–5, 7, 8, 10–13, 15–18 que el resolver marque. **No** declara 6 ni 14.
 
+**Numeral 20 DATOS DE ALERTA:** inscripción/registro → LIM. PROPIEDAD + A FAVOR DE (acreedor). Levantamiento → OTRO + A FAVOR DE. Detalle en `REGLAS-NUMERAL-3-TRES-CAPAS.md`.
+
 Blindaje: SI/NO en características (`is_armored_vehicle_*`), no una casilla 3–18 dedicada.
 
 Firmas: matrícula → solo propietario. Traspaso estándar → vendedor + comprador. Traspaso unilateral (art. 5.3.2.2) → **no** firma del locatario.

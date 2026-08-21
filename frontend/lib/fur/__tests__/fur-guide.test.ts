@@ -30,6 +30,21 @@ describe("buildFurGuide", () => {
     expect(g.observaciones[0]).toContain("Inscripción de prenda a favor de");
     expect(g.observaciones).toContain("Color nuevo(NUEVO COLOR: {COLOR_NUEVO})");
     expect(g.observaciones).toContain("Carroceria nueva(NUEVA CARROCERIA: {CARROCERIA_NUEVA})");
+    expect(g.notas.some((n) => n.includes("LIM. PROPIEDAD"))).toBe(true);
+  });
+
+  it("levantamiento indica OTRO en el numeral 20", () => {
+    const g = buildFurGuide({
+      code: "TRASPASO_STANDARD",
+      family: "TRASPASO",
+      prenda: "levantamiento",
+      color: false,
+      carroceria: false,
+      combustible: false,
+      blindaje: false,
+    });
+    expect(g.casillas.map((c) => c.n)).toEqual([2, 12]);
+    expect(g.notas.some((n) => n.includes("OTRO"))).toBe(true);
   });
 
   it("leasing declara observación de locatario", () => {

@@ -175,6 +175,7 @@ public static class FurPreviewSample
             FirmaBaulMetadatos: firmas.Metadatos,
             IdentidadValidada: true,
             PrendaMarking: prendaMarking,
+            AcreedorPrenda: prendaMarking is FurPrendaMarking.Ninguna ? null : PhAcreedor,
             TemplateFormat: template,
             Transformaciones: transformaciones);
     }

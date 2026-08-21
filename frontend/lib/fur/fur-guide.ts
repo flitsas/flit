@@ -129,6 +129,12 @@ export function buildFurGuide(input: FurGuideInput): FurGuideResult {
   }
 
   const notas: string[] = [];
+  if (prendaInscribe) {
+    notas.push("Numeral 20: marcar LIM. PROPIEDAD y escribir el acreedor en A FAVOR DE.");
+  }
+  if (prendaLevanta) {
+    notas.push("Numeral 20: marcar OTRO y escribir el acreedor en A FAVOR DE.");
+  }
   if (input.blindaje || code.includes("BLINDAJE")) {
     notas.push("Vehículo blindado: SI (características, no casilla del numeral 3).");
   }

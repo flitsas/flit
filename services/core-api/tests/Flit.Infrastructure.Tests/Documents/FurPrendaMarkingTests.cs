@@ -30,6 +30,7 @@ public sealed class FurPrendaMarkingTests
         Partes: [new DocumentParte("comprador", "DANIEL AMADO", "1193552679", null, DocumentType: "CC")],
         ValorVenta: null, Causal: null, SellosFirma: [],
         PrendaMarking: marking,
+        AcreedorPrenda: marking is FurPrendaMarking.Ninguna ? null : "FONDEICON",
         TemplateFormat: format);
 
     public static IEnumerable<object[]> DecisionPorFormato()
@@ -93,5 +94,47 @@ public sealed class FurPrendaMarkingTests
         campos["requested_process_1"].Text.Should().Be("X", "es matrícula, no traspaso");
         campos["requested_process_2"].Text.Should().Be("");
         campos["requested_process_11"].Text.Should().Be("X");
+    }
+
+    [Fact]
+    public void Constitucion_MarcaLimPropiedadYAcreedorEnAlerta()
+    {
+        var campos = FurFieldMapper.Map(Data(FurPrendaMarking.Constitucion, FurTemplateFormat.Automotor));
+
+        campos["alert_data_code_1"].Text.Should().BeEmpty();
+        campos["alert_data_code_2"].Text.Should().Be("X", "inscripción/registro marca LIM. PROPIEDAD");
+        campos["alert_data_code_3"].Text.Should().BeEmpty();
+        campos["alert_data_code_4"].Text.Should().BeEmpty();
+        campos["alert_data_code_5"].Text.Should().Be("FONDEICON");
+    }
+
+    [Fact]
+    public void Levantamiento_MarcaOtroYAcreedorEnAlerta()
+    {
+        var campos = FurFieldMapper.Map(Data(FurPrendaMarking.Levantamiento, FurTemplateFormat.Automotor));
+
+        campos["alert_data_code_2"].Text.Should().BeEmpty();
+        campos["alert_data_code_4"].Text.Should().Be("X", "levantamiento marca OTRO");
+        campos["alert_data_code_5"].Text.Should().Be("FONDEICON");
+    }
+
+    [Fact]
+    public void Ninguna_DejaAlertaEnBlanco()
+    {
+        var campos = FurFieldMapper.Map(Data(FurPrendaMarking.Ninguna, FurTemplateFormat.Automotor));
+
+        campos["alert_data_code_2"].Text.Should().BeEmpty();
+        campos["alert_data_code_4"].Text.Should().BeEmpty();
+        campos["alert_data_code_5"].Text.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Ambos_MarcaLimPropiedadYOtro()
+    {
+        var campos = FurFieldMapper.Map(Data(FurPrendaMarking.Ambos, FurTemplateFormat.Automotor));
+
+        campos["alert_data_code_2"].Text.Should().Be("X");
+        campos["alert_data_code_4"].Text.Should().Be("X");
+        campos["alert_data_code_5"].Text.Should().Be("FONDEICON");
     }
 }

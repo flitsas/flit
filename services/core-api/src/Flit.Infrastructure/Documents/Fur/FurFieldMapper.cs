@@ -69,6 +69,7 @@ public static class FurFieldMapper
                 esTraspaso ? ["vendedor", "propietario"] : ["comprador", "propietario"]));
 
         MarkTramite(dict, data);
+        MarkAlertas(dict, data);
         MarkClase(dict, data.Vehiculo.Clase);
         MarkCombustible(dict, data.Vehiculo.Combustible);
         MarkServicio(dict, data.Vehiculo.TipoServicio);
@@ -206,6 +207,22 @@ public static class FurFieldMapper
         foreach (var n in FurNumeral3Marks.Emittable)
             MarkCheckbox(dict, FurNumeral3Marks.FieldId(n), marks.Contains(n));
         // Casillas 6 y 14 no se declaran: no hay tipo en el catálogo (REGLAS-NUMERAL-3).
+    }
+
+    /// <summary>
+    /// Numeral 20 DATOS DE ALERTA. Inscripción/registro de prenda → LIM. PROPIEDAD (2) + A FAVOR DE.
+    /// Levantamiento → OTRO (4) + A FAVOR DE. Hurto (1) y embargo (3) no se marcan desde el gravamen.
+    /// </summary>
+    private static void MarkAlertas(Dictionary<string, FurFieldValue> dict, FurDocumentData data)
+    {
+        var marking = data.PrendaMarking;
+        var inscribe = marking is FurPrendaMarking.Constitucion or FurPrendaMarking.Ambos;
+        var levanta = marking is FurPrendaMarking.Levantamiento or FurPrendaMarking.Ambos;
+        MarkCheckbox(dict, "alert_data_code_1", false);
+        MarkCheckbox(dict, "alert_data_code_2", inscribe);
+        MarkCheckbox(dict, "alert_data_code_3", false);
+        MarkCheckbox(dict, "alert_data_code_4", levanta);
+        dict["alert_data_code_5"] = Text(inscribe || levanta ? Upper(data.AcreedorPrenda) : "");
     }
 
     private static void MarkClase(Dictionary<string, FurFieldValue> dict, string? clase)
